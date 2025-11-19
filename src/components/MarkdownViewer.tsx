@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo } from 'react';
 
 interface MarkdownViewerProps {
-    content: string
+    content: string;
 }
 
 export function MarkdownViewer({ content }: MarkdownViewerProps) {
