@@ -4,40 +4,50 @@
 
 **SniperSight Backend** should be built in **Python** following the architecture in `ARCHITECTURE.md` and `PROJECT_STRUCTURE.md`.
 
-**This Spark App** is a **TypeScript/React documentation viewer and progress tracker** to help you manage the Python implementation.
+**This workspace** contains both the TypeScript/React frontend (in `src/`) and the Python backend (in `backend/`) as a **monorepo**.
 
 ## Quick Start Guide
 
-### Step 1: Set Up Python Repository
+### Step 1: Set Up Python Environment in This Workspace
 
-Create a new Python repository separate from this Spark app:
+You're already in the correct workspace. Set up Python here:
 
 ```bash
-# Create new directory for Python backend
-mkdir snipersight-backend
-cd snipersight-backend
-
-# Initialize Python project
+# Initialize Python virtual environment
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Create pyproject.toml
+# Create Python configuration files
+touch requirements.txt
 touch pyproject.toml
 ```
 
 ### Step 2: Initial Project Structure
 
-Create the base folder structure as defined in `PROJECT_STRUCTURE.md`:
+Create the backend folder structure in this workspace:
 
 ```bash
-# Core packages
-mkdir -p contracts shared/{config,models,utils}
-mkdir -p data/adapters indicators
-mkdir -p strategy/{smc,confluence,planner}
-mkdir -p risk bot/{executor,notifications,ui,telemetry}
-mkdir -p engine/plugins ml devtools
-mkdir -p tests/{fixtures/{ohlcv,signals},unit,integration,backtest}
-mkdir -p docs scripts examples
+# Create backend directory and all subdirectories
+mkdir -p backend/{contracts,shared/{config/profiles,models,utils},data/adapters,indicators}
+mkdir -p backend/strategy/{smc,confluence,planner}
+mkdir -p backend/{risk,engine/plugins,ml,devtools}
+mkdir -p backend/bot/{executor,notifications,ui,telemetry}
+mkdir -p backend/tests/{fixtures/{ohlcv,signals},unit,integration,backtest}
+mkdir -p backend/{scripts,examples}
+
+# Create __init__.py files for Python packages
+find backend -type d -exec touch {}/__init__.py \;
+```
+
+**Final structure:**
+```
+/workspaces/snipersight-trading/
+├── backend/           # Python backend (NEW)
+├── src/              # TypeScript frontend (existing)
+├── docs/             # Shared documentation (existing)
+├── requirements.txt  # Python dependencies
+├── pyproject.toml    # Python configuration
+└── package.json      # TypeScript dependencies
 ```
 
 ### Step 3: Install Core Dependencies
@@ -308,17 +318,19 @@ if __name__ == "__main__":
 - [ ] Add verification checklist
 - [ ] Performance profiling
 
-## Using This Spark App
+## Using This Workspace
 
-This TypeScript/React Spark app serves as your **Implementation Dashboard**:
+This is a **monorepo** containing both frontend and backend:
 
-1. **📊 Progress Tracker** - Track which phases/modules are complete
-2. **📖 Documentation Viewer** - Read PRD, Architecture, and API specs
-3. **✅ Verification Checklist** - Mark off implementation milestones
-4. **🎯 Next Steps Suggestions** - Get guidance on what to build next
+1. **📊 Progress Tracker** - TypeScript frontend in `src/` tracks implementation
+2. **📖 Documentation** - Shared docs in `docs/` for both frontend and backend
+3. **🐍 Python Backend** - Core trading engine in `backend/`
+4. **🎯 Build Guide** - See `COPILOT_BUILD_GUIDE.md` for detailed Copilot prompts
 
-The Python backend is the actual SniperSight implementation.
-This Spark app helps you organize and track that work.
+**Advantages:**
+- All context in one place for Copilot
+- Frontend can immediately consume backend APIs
+- Single source of truth for documentation
 
 ## Key Architecture Principles to Remember
 
@@ -337,11 +349,13 @@ This Spark app helps you organize and track that work.
 
 ## Next Immediate Steps
 
-1. Create Python repository: `snipersight-backend/`
-2. Set up virtual environment and install dependencies
-3. Create base folder structure
-4. Implement `shared/models/data.py` with data classes
-5. Build first exchange adapter for Binance
-6. Test fetching OHLCV data for BTC/USDT across timeframes
+1. ✅ **Review `COPILOT_BUILD_GUIDE.md`** - Detailed step-by-step prompts for Copilot
+2. Set up Python virtual environment: `python -m venv venv && source venv/bin/activate`
+3. Create `requirements.txt` and `pyproject.toml` (prompts in build guide)
+4. Create backend folder structure (command in Step 2 above)
+5. Follow Phase 1 in COPILOT_BUILD_GUIDE.md to build foundation
+6. Use the exact Copilot prompts provided - they reference your architecture docs
+
+**For Copilot implementation, use:** `COPILOT_BUILD_GUIDE.md`
 
 Good luck! 🎯
