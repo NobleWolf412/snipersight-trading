@@ -56,30 +56,39 @@ The interface should feel institutional, precise, and data-dense while maintaini
 
 const architectureOverview = `# SniperSight Architecture Overview
 
+## Dual Operation Modes
+
+SniperSight operates in **two primary modes** sharing the same core engine:
+
+### Scanner Mode (Recon / Manual)
+- User-triggered scans for manual review
+- Read-only exchange access (no API keys needed)
+- Endpoints: \`/api/scan\`, \`/api/signals/{run_id}\`, \`/api/signal/{signal_id}\`
+- User reviews "Target Board" and "Target Intel" before trading manually
+
+### SniperBot Mode (Automated)
+- Scheduled/continuous scanning with optional execution
+- Three modes: OFF, PAPER (Training), LIVE (Live Ammunition)
+- Endpoints: \`/api/bot/start\`, \`/api/bot/stop\`, \`/api/bot/status\`, \`/api/bot/positions\`
+- Quality-gated execution with strict risk controls
+- Server-side API keys (never exposed to frontend)
+
+**Both modes use identical**: Same \`SniperContext\` and \`SignalPayload\` models, same quality gates and SMC detection, same risk validation. Difference is trigger (user vs scheduled) and execution authority (manual vs automated).
+
 ## System Architecture
 
 \`\`\`
-┌─────────────────────────────────────────────────────────────┐
-│                         CLI / API Layer                      │
-│                    (sniper_sight_cli.py)                     │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Engine Orchestrator                       │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │   Pipeline   │  │   Context    │  │    Hooks     │      │
-│  │  Controller  │  │   Manager    │  │   System     │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-         ┌───────────────┼───────────────┐
-         │               │               │
-         ▼               ▼               ▼
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│    Data     │  │ Indicators  │  │  Strategy   │
-│   Package   │  │   Package   │  │   Package   │
-└─────────────┘  └─────────────┘  └─────────────┘
+API Layer: Scanner Endpoints + Bot Endpoints
+    ↓
+Engine Orchestrator (Pipeline, Context, Hooks, Bot Loop)
+    ↓
+Data Package → Indicators Package → Strategy Package
+    ↓
+Risk Package (Position Sizing, Exposure Limits, Compliance)
+    ↓
+Bot Executor + Telemetry + Audit Pipeline
+    ↓
+Exchange Profile Manager (Server-side API keys)
 \`\`\`
 
 ## Core Architecture Principles
@@ -97,7 +106,10 @@ Deterministic fixtures, strong typing, schema validation, and comprehensive test
 Missing indicators, incomplete SMC data, or blank rationale trigger hard errors.
 
 ### 5. Plugin-Friendly & ML-Ready
-Pluggable indicators, strategies, and hooks support future ML scoring.`
+Pluggable indicators, strategies, and hooks support future ML scoring.
+
+### 6. Security-First Design
+API keys stored server-side only (never in frontend). Exchange profiles with capability flags. RBAC for bot operations.`
 
 const projectStructureOverview = `# Project Structure
 
@@ -149,13 +161,20 @@ const implementationGuide = `# Implementation Guide
 
 ## Getting Started
 
-This is a **reference implementation** for the SniperSight architecture. The documents provided serve as a comprehensive blueprint for building an institutional-grade crypto market scanner.
+This is a **reference implementation** for the SniperSight architecture. The documents provided serve as a comprehensive blueprint for building an institutional-grade crypto market scanner with dual operation modes:
+
+- **Scanner Mode (Recon)**: User-triggered scans for manual signal review and trading
+- **SniperBot Mode**: Automated scanning with optional paper/live execution
 
 ## What You Have
 
 ✅ **PRD.md** - Complete product requirements and design specifications
-✅ **ARCHITECTURE.md** - System architecture, data flow, and design principles
+✅ **ARCHITECTURE.md** - Full system architecture including Scanner + Bot modes
 ✅ **PROJECT_STRUCTURE.md** - Detailed package structure with module responsibilities
+✅ **docs/api_contract.md** - Complete API endpoint specifications
+✅ **docs/exchange_profiles.md** - Exchange profile system and security
+✅ **docs/security.md** - API key handling and security architecture
+✅ **docs/sniper_ui_theme.md** - UI terminology and sniper-themed design
 
 ## Implementation Approach
 
