@@ -4,8 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { FileText, SquaresFour, Tree, Lightbulb } from '@phosphor-icons/react'
+import { FileText, SquaresFour, Tree, Lightbulb, ChartLineUp } from '@phosphor-icons/react'
 import { MarkdownViewer } from '@/components/MarkdownViewer'
+import { ProgressTracker } from '@/components/ProgressTracker'
 
 const prdContent = `# SniperSight – Institutional-Grade Crypto Market Scanner
 
@@ -250,10 +251,14 @@ function App() {
 
             <div className="container mx-auto px-4 py-8">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <TabsList className="grid w-full grid-cols-4 mb-8">
+                    <TabsList className="grid w-full grid-cols-5 mb-8">
                         <TabsTrigger value="overview" className="gap-2">
                             <Lightbulb size={18} />
                             <span className="hidden sm:inline">Overview</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="progress" className="gap-2">
+                            <ChartLineUp size={18} />
+                            <span className="hidden sm:inline">Progress</span>
                         </TabsTrigger>
                         <TabsTrigger value="prd" className="gap-2">
                             <FileText size={18} />
@@ -283,7 +288,18 @@ function App() {
                                 </CardContent>
                             </Card>
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <Card className="border-accent/30 hover:border-accent/50 transition-colors cursor-pointer"
+                                    onClick={() => setActiveTab('progress')}>
+                                    <CardHeader>
+                                        <ChartLineUp size={32} className="text-accent mb-2" />
+                                        <CardTitle className="text-lg">Progress Tracker</CardTitle>
+                                        <CardDescription>
+                                            Monitor implementation phases and completion status
+                                        </CardDescription>
+                                    </CardHeader>
+                                </Card>
+
                                 <Card className="border-success/30 hover:border-success/50 transition-colors cursor-pointer"
                                     onClick={() => setActiveTab('prd')}>
                                     <CardHeader>
@@ -318,6 +334,10 @@ function App() {
                                 </Card>
                             </div>
                         </div>
+                    </TabsContent>
+
+                    <TabsContent value="progress">
+                        <ProgressTracker />
                     </TabsContent>
 
                     <TabsContent value="prd">
