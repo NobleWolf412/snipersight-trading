@@ -13,10 +13,10 @@ export function getCurrentTradingSession(): TradingSession {
 
 export function getSessionColor(session: TradingSession): string {
   const colors = {
-    ASIA: 'text-yellow-500',
-    LONDON: 'text-blue-500',
-    NEW_YORK: 'text-green-500',
-    SYDNEY: 'text-purple-500',
+    ASIA: 'text-accent',
+    LONDON: 'text-accent',
+    NEW_YORK: 'text-accent',
+    SYDNEY: 'text-accent',
   };
   return colors[session];
 }
