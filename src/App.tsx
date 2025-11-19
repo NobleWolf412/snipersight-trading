@@ -6,7 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { FileText, SquaresFour, Tree, Lightbulb, ChartLineUp } from '@phosphor-icons/react'
 import { MarkdownViewer } from '@/components/MarkdownViewer'
-import { ProgressTracker } from '@/components/ProgressTracker'
+import { ProgressTrackerDetailed } from '@/components/ProgressTrackerDetailed'
 
 const prdContent = `# SniperSight – Institutional-Grade Crypto Market Scanner
 
@@ -159,90 +159,134 @@ Pipeline orchestration, context management, and plugin coordination.`
 
 const implementationGuide = `# Implementation Guide
 
-## Getting Started
+## 🎯 Quick Start: Where to Begin
 
-This is a **reference implementation** for the SniperSight architecture. The documents provided serve as a comprehensive blueprint for building an institutional-grade crypto market scanner with dual operation modes:
+This **Spark app** is your **Implementation Dashboard** for building SniperSight.
 
-- **Scanner Mode (Recon)**: User-triggered scans for manual signal review and trading
-- **SniperBot Mode**: Automated scanning with optional paper/live execution
+**SniperSight backend** = Python crypto scanner (what you'll build)
+**This Spark app** = TypeScript/React documentation viewer & progress tracker (what you're looking at now)
 
-## What You Have
+## Step-by-Step Implementation Path
 
-✅ **PRD.md** - Complete product requirements and design specifications
-✅ **ARCHITECTURE.md** - Full system architecture including Scanner + Bot modes
-✅ **PROJECT_STRUCTURE.md** - Detailed package structure with module responsibilities
-✅ **docs/api_contract.md** - Complete API endpoint specifications
-✅ **docs/exchange_profiles.md** - Exchange profile system and security
-✅ **docs/security.md** - API key handling and security architecture
-✅ **docs/sniper_ui_theme.md** - UI terminology and sniper-themed design
+### 1️⃣ Create Python Repository (5 minutes)
 
-## Implementation Approach
+\`\`\`bash
+# Outside this Spark directory, create Python backend
+mkdir snipersight-backend
+cd snipersight-backend
+python -m venv venv
+source venv/bin/activate  # Windows: venv\\Scripts\\activate
+\`\`\`
 
-### Phase 1: Foundation
-1. Set up Python project structure
-2. Implement \`shared/models/\` data structures
-3. Create \`contracts/\` API definitions
-4. Build \`shared/config/\` system
+### 2️⃣ Set Up Project Structure (10 minutes)
 
-### Phase 2: Data Layer
-1. Implement exchange adapters (\`data/adapters/\`)
-2. Build caching system (\`data/cache.py\`)
-3. Create ingestion pipeline (\`data/ingestion_pipeline.py\`)
-4. Add deterministic test fixtures
+\`\`\`bash
+# Create core package folders
+mkdir -p contracts shared/{config,models,utils}
+mkdir -p data/adapters indicators
+mkdir -p strategy/{smc,confluence,planner}
+mkdir -p risk bot/{executor,notifications,ui,telemetry}
+mkdir -p engine/plugins ml devtools
+mkdir -p tests/{fixtures,unit,integration,backtest}
+mkdir -p docs scripts examples
 
-### Phase 3: Analysis Layer
-1. Build indicator computation (\`indicators/\`)
-2. Implement SMC detection (\`strategy/smc/\`)
-3. Create confluence scoring (\`strategy/confluence/\`)
-4. Build trade planner (\`strategy/planner/\`)
+# Create entry point
+touch sniper_sight_cli.py
+\`\`\`
 
-### Phase 4: Risk & Execution
-1. Implement risk management (\`risk/\`)
-2. Build notification system (\`bot/notifications/\`)
-3. Create executor layer (\`bot/executor/\`)
-4. Add telemetry (\`bot/telemetry/\`)
+### 3️⃣ Install Dependencies (15 minutes)
 
-### Phase 5: Orchestration
-1. Build pipeline controller (\`engine/pipeline.py\`)
-2. Implement context management (\`engine/context.py\`)
-3. Create hook system (\`engine/hooks.py\`)
-4. Build CLI (\`sniper_sight_cli.py\`)
+Create \`requirements.txt\`:
+\`\`\`
+pandas>=2.0.0
+numpy>=1.24.0
+ccxt>=4.0.0
+python-binance>=1.0.0
+ta-lib>=0.4.0
+fastapi>=0.104.0
+uvicorn>=0.24.0
+pydantic>=2.0.0
+python-telegram-bot>=20.0
+typer>=0.9.0
+loguru>=0.7.0
+\`\`\`
 
-### Phase 6: Quality & Testing
-1. Implement quality gates
-2. Build backtest framework
-3. Create verification checklist
-4. Add comprehensive test coverage
+Install: \`pip install -r requirements.txt\`
 
-## Key Design Decisions
+### 4️⃣ Start Building (Follow Progress Tracker)
 
-### No-Null Outputs
-Every signal must have complete trade plans with zero null fields.
+Go to the **Progress** tab and check off tasks as you complete them!
 
-### Deterministic Verification
-All components must be testable with deterministic fixtures.
+#### Week 1: Foundation
+- Create data models in \`shared/models/data.py\`
+- Define contracts in \`contracts/\`
+- Build config system in \`shared/config/\`
 
-### Contract-Driven Development
-Respect API contracts defined in \`contracts/\` package.
+#### Week 2: Data Layer
+- Implement \`BinanceAdapter\` in \`data/adapters/binance.py\`
+- Build \`IngestionPipeline\` in \`data/ingestion_pipeline.py\`
+- Test fetching multi-timeframe OHLCV data
 
-### Quality Gates
-Multi-layered gating ensures only high-quality signals proceed.
+#### Week 3-4: Analysis
+- Compute indicators (RSI, ATR, volume)
+- Detect order blocks and FVGs
+- Build confluence scoring engine
 
-## Next Steps
+#### Week 5+: Risk, Bot, Testing
+- Add risk management
+- Build Telegram notifications
+- Create backtest framework
 
-1. **Review the documentation** in PRD.md, ARCHITECTURE.md, and PROJECT_STRUCTURE.md
-2. **Set up your Python environment** with required dependencies
-3. **Start with \`shared/\` package** to establish data models
-4. **Follow the phase-by-phase approach** outlined above
-5. **Maintain verification-first mindset** with tests at every layer
+## 📚 Resources Available in This Spark App
 
-## Important Notes
+### Overview Tab (You Are Here)
+Quick start guide and navigation to other sections
 
-⚠️ This is a **TypeScript/React Spark application** serving as a **documentation viewer** for the Python-based SniperSight architecture.
+### Progress Tab ⭐
+Interactive checklist of all 30 implementation tasks
+Check off tasks as you complete them (persists between sessions)
 
-⚠️ The actual SniperSight implementation should be built in **Python** following the architectural blueprint provided.
+### PRD Tab
+Product requirements and design specifications
 
-⚠️ Use this interface to **explore the architecture**, understand the design principles, and reference the detailed specifications.`
+### Architecture Tab
+System design, data flow, dual operation modes (Scanner vs Bot)
+
+### Structure Tab
+Detailed module breakdown and package responsibilities
+
+## 🔗 External Documentation Files
+
+After reviewing this Spark app, check these files in the project root:
+
+- \`PRD.md\` - Complete product requirements
+- \`ARCHITECTURE.md\` - Full system architecture
+- \`PROJECT_STRUCTURE.md\` - Package structure details
+- \`IMPLEMENTATION_ROADMAP.md\` - Detailed code examples & setup guide
+
+## 💡 Key Architecture Principles
+
+1. **Preserve Smart-Money Edge** - Multi-timeframe context drives everything
+2. **No-Null Outputs** - Every signal must be complete with all fields populated
+3. **Verification-Ready** - Build tests alongside code, use deterministic fixtures
+4. **Zero Silent Failures** - Fail loudly when critical data is missing
+5. **Plugin-Friendly** - Easy to add new indicators, strategies, exchanges
+
+## 🎯 Your Next 3 Actions
+
+1. **Review the Progress tab** to see all 30 implementation tasks
+2. **Read IMPLEMENTATION_ROADMAP.md** for detailed code examples
+3. **Create your Python repo** and start with Phase 1: Foundation
+
+## ⚠️ Important Notes
+
+This **Spark app** (TypeScript/React) is NOT the trading system.
+
+The **Python backend** you'll create is the actual SniperSight scanner.
+
+Use this app as your **command center** to track progress and review architecture while you build.
+
+Good luck, sniper! 🎯`
 
 function App() {
     const [activeTab, setActiveTab] = useState('overview')
@@ -295,6 +339,64 @@ function App() {
 
                     <TabsContent value="overview">
                         <div className="grid gap-6">
+                            <Card className="border-accent/30 bg-accent/5">
+                                <CardHeader>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-12 h-12 bg-accent rounded-lg flex items-center justify-center">
+                                            <Lightbulb size={28} weight="fill" className="text-accent-foreground" />
+                                        </div>
+                                        <div>
+                                            <CardTitle>Getting Started: Your Next Steps</CardTitle>
+                                            <CardDescription>Quick actions to begin implementing SniperSight</CardDescription>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid gap-3">
+                                        <div className="flex items-start gap-3 p-3 rounded-lg bg-background border border-border">
+                                            <div className="w-6 h-6 bg-accent rounded flex items-center justify-center shrink-0 mt-0.5">
+                                                <span className="text-xs font-bold text-accent-foreground">1</span>
+                                            </div>
+                                            <div>
+                                                <div className="font-medium text-sm text-foreground mb-1">Review the Progress Tracker</div>
+                                                <div className="text-sm text-muted-foreground">Click the <strong>Progress</strong> tab to see all 30 implementation tasks organized by phase</div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-start gap-3 p-3 rounded-lg bg-background border border-border">
+                                            <div className="w-6 h-6 bg-accent rounded flex items-center justify-center shrink-0 mt-0.5">
+                                                <span className="text-xs font-bold text-accent-foreground">2</span>
+                                            </div>
+                                            <div>
+                                                <div className="font-medium text-sm text-foreground mb-1">Read the Implementation Roadmap</div>
+                                                <div className="text-sm text-muted-foreground">Open <code className="text-accent px-1">IMPLEMENTATION_ROADMAP.md</code> for detailed code examples and setup instructions</div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-start gap-3 p-3 rounded-lg bg-background border border-border">
+                                            <div className="w-6 h-6 bg-accent rounded flex items-center justify-center shrink-0 mt-0.5">
+                                                <span className="text-xs font-bold text-accent-foreground">3</span>
+                                            </div>
+                                            <div>
+                                                <div className="font-medium text-sm text-foreground mb-1">Create Python Repository</div>
+                                                <div className="text-sm text-muted-foreground mb-2">Set up your Python backend in a separate directory</div>
+                                                <code className="block text-xs bg-muted p-2 rounded monospace text-foreground">
+                                                    mkdir snipersight-backend && cd snipersight-backend<br />
+                                                    python -m venv venv && source venv/bin/activate
+                                                </code>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-start gap-3 p-3 rounded-lg bg-background border border-border">
+                                            <div className="w-6 h-6 bg-accent rounded flex items-center justify-center shrink-0 mt-0.5">
+                                                <span className="text-xs font-bold text-accent-foreground">4</span>
+                                            </div>
+                                            <div>
+                                                <div className="font-medium text-sm text-foreground mb-1">Start Building Phase 1</div>
+                                                <div className="text-sm text-muted-foreground">Begin with shared models, contracts, and configuration - the foundation of SniperSight</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
                             <Card className="border-accent/30">
                                 <CardHeader>
                                     <CardTitle>Implementation Guide</CardTitle>
@@ -356,7 +458,7 @@ function App() {
                     </TabsContent>
 
                     <TabsContent value="progress">
-                        <ProgressTracker />
+                        <ProgressTrackerDetailed />
                     </TabsContent>
 
                     <TabsContent value="prd">
