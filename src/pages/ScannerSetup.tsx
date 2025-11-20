@@ -78,6 +78,7 @@ export function ScannerSetup() {
                   <SelectItem value="Coinbase">Coinbase</SelectItem>
                   <SelectItem value="Kraken">Kraken</SelectItem>
                   <SelectItem value="Bybit">Bybit</SelectItem>
+                  <SelectItem value="Phemex">Phemex</SelectItem>
                 </SelectContent>
               </Select>
             </div>
