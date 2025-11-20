@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Robot, Shield, Lightning, Wallet } from '@phosphor-icons/react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { WalletGate } from '@/components/WalletGate';
+import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
+import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
 
 export function BotSetup() {
   const navigate = useNavigate();
@@ -19,6 +21,8 @@ export function BotSetup() {
   const { wallet, isConnected: isWalletConnected } = useWallet();
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+
+  const marketRegimeProps = useMockMarketRegime('bot');
 
   const handleConnectExchange = () => {
     setTimeout(() => {
@@ -40,6 +44,13 @@ export function BotSetup() {
             DEPLOY AUTONOMOUS SNIPER
           </h1>
           <p className="text-muted-foreground">Configure automated trading parameters</p>
+        </div>
+
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <h2 className="text-sm font-bold text-muted-foreground tracking-wider">MARKET CONTEXT</h2>
+          </div>
+          <MarketRegimeLens {...marketRegimeProps} />
         </div>
 
         <WalletGate message="Connect your wallet to authenticate before deploying trading bots">

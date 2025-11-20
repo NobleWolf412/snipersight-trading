@@ -13,6 +13,8 @@ import { Crosshair, Lightning } from '@phosphor-icons/react';
 import { useKV } from '@github/spark/hooks';
 import type { ScanResult } from '@/utils/mockData';
 import { generateMockScanResults } from '@/utils/mockData';
+import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
+import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
@@ -21,6 +23,8 @@ export function ScannerSetup() {
   const [isScanning, setIsScanning] = useState(false);
 
   const timeframes = ['1W', '1D', '4H', '1H', '15m', '5m'];
+
+  const marketRegimeProps = useMockMarketRegime('scanner');
 
   const handleTimeframeToggle = (tf: string) => {
     const currentTimeframes = scanConfig.timeframes;
@@ -54,6 +58,13 @@ export function ScannerSetup() {
             ACQUIRE TARGETS
           </h1>
           <p className="text-muted-foreground">Configure scanner parameters for market reconnaissance</p>
+        </div>
+
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <h2 className="text-sm font-bold text-muted-foreground tracking-wider">MARKET CONTEXT</h2>
+          </div>
+          <MarketRegimeLens {...marketRegimeProps} />
         </div>
 
         <Card className="bg-card/50 border-accent/30">
