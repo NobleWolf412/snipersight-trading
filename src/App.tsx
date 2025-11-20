@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ScannerProvider } from '@/context/ScannerContext';
+import { WalletProvider } from '@/context/WalletContext';
 import { Navigation } from '@/components/Navigation/Navigation';
 import { Landing } from '@/pages/Landing';
 import { ScannerSetup } from '@/pages/ScannerSetup';
@@ -13,21 +14,23 @@ import { Toaster } from '@/components/ui/sonner';
 function App() {
   return (
     <BrowserRouter>
-      <ScannerProvider>
-        <div className="min-h-screen bg-background text-foreground">
-          <Navigation />
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/scan" element={<ScannerSetup />} />
-            <Route path="/results" element={<ScanResults />} />
-            <Route path="/bot" element={<BotSetup />} />
-            <Route path="/bot/status" element={<BotStatus />} />
-            <Route path="/training" element={<TrainingGround />} />
-            <Route path="/intel" element={<Intel />} />
-          </Routes>
-          <Toaster />
-        </div>
-      </ScannerProvider>
+      <WalletProvider>
+        <ScannerProvider>
+          <div className="min-h-screen bg-background text-foreground">
+            <Navigation />
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/scan" element={<ScannerSetup />} />
+              <Route path="/results" element={<ScanResults />} />
+              <Route path="/bot" element={<BotSetup />} />
+              <Route path="/bot/status" element={<BotStatus />} />
+              <Route path="/training" element={<TrainingGround />} />
+              <Route path="/intel" element={<Intel />} />
+            </Routes>
+            <Toaster />
+          </div>
+        </ScannerProvider>
+      </WalletProvider>
     </BrowserRouter>
   );
 }

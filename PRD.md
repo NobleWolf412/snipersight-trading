@@ -47,6 +47,13 @@ A modular, institution-grade crypto market scanner designed to evolve into a ful
 - **Progression**: Chart data generation → Candlestick rendering → Level overlay → Interactive controls → Multi-tab analysis (Chart/AI/Stats/Levels)
 - **Success criteria**: Smooth rendering of 30-96 candles, accurate price level visualization, responsive toggles, AI analysis generation within 3s, comprehensive trading statistics display
 
+### Crypto Wallet Authentication
+- **Functionality**: Web3 wallet integration (MetaMask, WalletConnect, Coinbase Wallet) for secure, non-custodial user authentication without traditional credentials
+- **Purpose**: Provides secure, decentralized authentication using public wallet addresses while maintaining complete user sovereignty over private keys
+- **Trigger**: User clicks "Connect Wallet" in navigation or attempts to access wallet-gated features
+- **Progression**: Provider selection → Wallet connection request → Address retrieval → Session persistence → Network monitoring → Authenticated state
+- **Success criteria**: Successful connection with MetaMask, persistent session across reloads using KV storage, automatic network change detection, secure read-only address access, zero private key exposure, graceful disconnection handling
+
 ### AI-Powered Trade Analysis
 - **Functionality**: Generates comprehensive markdown-formatted technical analysis reports using LLM, covering market structure, key levels, risk assessment, execution plan, and potential challenges
 - **Purpose**: Augments technical indicators with contextual insights and human-readable strategic guidance
