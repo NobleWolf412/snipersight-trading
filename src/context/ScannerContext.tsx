@@ -11,6 +11,7 @@ export interface ScanConfig {
     memeMode: boolean;
   };
   timeframes: string[];
+  leverage: number;
 }
 
 export interface BotConfig {
@@ -45,6 +46,7 @@ const defaultScanConfig: ScanConfig = {
     memeMode: false,
   },
   timeframes: ['1D', '4H', '1H'],
+  leverage: 1,
 };
 
 const defaultBotConfig: BotConfig = {

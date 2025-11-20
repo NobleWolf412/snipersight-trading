@@ -98,6 +98,31 @@ export function ScannerSetup() {
               />
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="leverage">Leverage</Label>
+              <Select
+                value={scanConfig.leverage.toString()}
+                onValueChange={(value) =>
+                  setScanConfig({ ...scanConfig, leverage: parseInt(value) })
+                }
+              >
+                <SelectTrigger id="leverage" className="bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1x (No Leverage)</SelectItem>
+                  <SelectItem value="2">2x</SelectItem>
+                  <SelectItem value="3">3x</SelectItem>
+                  <SelectItem value="5">5x</SelectItem>
+                  <SelectItem value="10">10x</SelectItem>
+                  <SelectItem value="20">20x</SelectItem>
+                  <SelectItem value="50">50x</SelectItem>
+                  <SelectItem value="100">100x</SelectItem>
+                  <SelectItem value="125">125x</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-3">
               <Label>Asset Categories</Label>
               <div className="space-y-2">
