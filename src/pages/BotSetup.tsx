@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useScanner } from '@/context/ScannerContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -12,13 +13,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export function BotSetup() {
   const navigate = useNavigate();
+  const { botConfig, setBotConfig } = useScanner();
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [pair, setPair] = useState('BTC/USDT');
-  const [swingMode, setSwingMode] = useState(true);
-  const [scalpMode, setScalpMode] = useState(false);
-  const [maxTrades, setMaxTrades] = useState(3);
-  const [duration, setDuration] = useState(24);
 
   const handleConnectExchange = () => {
     setTimeout(() => {
@@ -56,6 +53,27 @@ export function BotSetup() {
             <CardDescription>Secure API authentication</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="exchange">Exchange</Label>
+              <Select
+                value={botConfig.exchange}
+                onValueChange={(value) =>
+                  setBotConfig({ ...botConfig, exchange: value })
+                }
+              >
+                <SelectTrigger id="exchange" className="bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Binance">Binance</SelectItem>
+                  <SelectItem value="Coinbase">Coinbase</SelectItem>
+                  <SelectItem value="Kraken">Kraken</SelectItem>
+                  <SelectItem value="Bybit">Bybit</SelectItem>
+                  <SelectItem value="Phemex">Phemex</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {!isConnected ? (
               <Button
                 onClick={() => setShowConnectModal(true)}
@@ -71,7 +89,7 @@ export function BotSetup() {
                   <div className="w-3 h-3 bg-success rounded-full scan-pulse" />
                   <div>
                     <div className="font-bold text-success">CONNECTED</div>
-                    <div className="text-xs text-muted-foreground">Binance · Secure Backend Storage</div>
+                    <div className="text-xs text-muted-foreground">{botConfig.exchange} · Secure Backend Storage</div>
                   </div>
                 </div>
                 <Button
@@ -96,7 +114,12 @@ export function BotSetup() {
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="pair">Trading Pair</Label>
-                <Select value={pair} onValueChange={setPair}>
+                <Select
+                  value={botConfig.pair}
+                  onValueChange={(value) =>
+                    setBotConfig({ ...botConfig, pair: value })
+                  }
+                >
                   <SelectTrigger id="pair" className="bg-background">
                     <SelectValue />
                   </SelectTrigger>
@@ -114,11 +137,29 @@ export function BotSetup() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between p-3 bg-background rounded border border-border">
                     <Label htmlFor="swing" className="cursor-pointer">Swing Trading</Label>
-                    <Switch id="swing" checked={swingMode} onCheckedChange={setSwingMode} />
+                    <Switch
+                      id="swing"
+                      checked={botConfig.modes.swing}
+                      onCheckedChange={(checked) =>
+                        setBotConfig({
+                          ...botConfig,
+                          modes: { ...botConfig.modes, swing: checked },
+                        })
+                      }
+                    />
                   </div>
                   <div className="flex items-center justify-between p-3 bg-background rounded border border-border">
                     <Label htmlFor="scalp" className="cursor-pointer">Scalp Trading</Label>
-                    <Switch id="scalp" checked={scalpMode} onCheckedChange={setScalpMode} />
+                    <Switch
+                      id="scalp"
+                      checked={botConfig.modes.scalp}
+                      onCheckedChange={(checked) =>
+                        setBotConfig({
+                          ...botConfig,
+                          modes: { ...botConfig.modes, scalp: checked },
+                        })
+                      }
+                    />
                   </div>
                 </div>
               </div>
@@ -130,8 +171,13 @@ export function BotSetup() {
                   type="number"
                   min="1"
                   max="10"
-                  value={maxTrades}
-                  onChange={(e) => setMaxTrades(parseInt(e.target.value) || 1)}
+                  value={botConfig.maxTrades}
+                  onChange={(e) =>
+                    setBotConfig({
+                      ...botConfig,
+                      maxTrades: parseInt(e.target.value) || 1,
+                    })
+                  }
                   className="bg-background"
                 />
               </div>
@@ -143,8 +189,13 @@ export function BotSetup() {
                   type="number"
                   min="1"
                   max="168"
-                  value={duration}
-                  onChange={(e) => setDuration(parseInt(e.target.value) || 1)}
+                  value={botConfig.duration}
+                  onChange={(e) =>
+                    setBotConfig({
+                      ...botConfig,
+                      duration: parseInt(e.target.value) || 1,
+                    })
+                  }
                   className="bg-background"
                 />
               </div>
@@ -155,7 +206,7 @@ export function BotSetup() {
         {isConnected && (
           <Button
             onClick={handleDeployBot}
-            disabled={!swingMode && !scalpMode}
+            disabled={!botConfig.modes.swing && !botConfig.modes.scalp}
             className="w-full bg-warning hover:bg-warning/90 text-warning-foreground h-14 text-lg font-bold"
             size="lg"
           >
