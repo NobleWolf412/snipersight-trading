@@ -13,6 +13,7 @@ import { Robot, Shield, Lightning } from '@phosphor-icons/react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
 import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export function BotSetup() {
   const navigate = useNavigate();
@@ -119,118 +120,146 @@ export function BotSetup() {
         </Card>
 
         {isConnected && (
-          <Card className={`bg-card/50 border-warning/30 ${!isWalletConnected ? 'opacity-40 pointer-events-none' : ''}`}>
-            <CardHeader>
-              <CardTitle>Bot Configuration</CardTitle>
-              <CardDescription>Trading parameters and limits</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="pair">Trading Pair</Label>
-                <Select
-                  value={botConfig.pair}
-                  onValueChange={(value) =>
-                    setBotConfig({ ...botConfig, pair: value })
-                  }
-                  disabled={!isWalletConnected}
-                >
-                  <SelectTrigger id="pair" className="bg-background">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BTC/USDT">BTC/USDT</SelectItem>
-                    <SelectItem value="ETH/USDT">ETH/USDT</SelectItem>
-                    <SelectItem value="SOL/USDT">SOL/USDT</SelectItem>
-                    <SelectItem value="MATIC/USDT">MATIC/USDT</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          <TooltipProvider>
+            <Tooltip open={!isWalletConnected ? undefined : false}>
+              <TooltipTrigger asChild>
+                <div>
+                  <Card className={`bg-card/50 border-warning/30 ${!isWalletConnected ? 'opacity-40 pointer-events-none' : ''}`}>
+                    <CardHeader>
+                      <CardTitle>Bot Configuration</CardTitle>
+                      <CardDescription>Trading parameters and limits</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="pair">Trading Pair</Label>
+                        <Select
+                          value={botConfig.pair}
+                          onValueChange={(value) =>
+                            setBotConfig({ ...botConfig, pair: value })
+                          }
+                          disabled={!isWalletConnected}
+                        >
+                          <SelectTrigger id="pair" className="bg-background">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="BTC/USDT">BTC/USDT</SelectItem>
+                            <SelectItem value="ETH/USDT">ETH/USDT</SelectItem>
+                            <SelectItem value="SOL/USDT">SOL/USDT</SelectItem>
+                            <SelectItem value="MATIC/USDT">MATIC/USDT</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-              <div className="space-y-3">
-                <Label>Trading Modes</Label>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between p-3 bg-background rounded border border-border">
-                    <Label htmlFor="swing" className="cursor-pointer">Swing Trading</Label>
-                    <Switch
-                      id="swing"
-                      checked={botConfig.modes.swing}
-                      onCheckedChange={(checked) =>
-                        setBotConfig({
-                          ...botConfig,
-                          modes: { ...botConfig.modes, swing: checked },
-                        })
-                      }
-                      disabled={!isWalletConnected}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-background rounded border border-border">
-                    <Label htmlFor="scalp" className="cursor-pointer">Scalp Trading</Label>
-                    <Switch
-                      id="scalp"
-                      checked={botConfig.modes.scalp}
-                      onCheckedChange={(checked) =>
-                        setBotConfig({
-                          ...botConfig,
-                          modes: { ...botConfig.modes, scalp: checked },
-                        })
-                      }
-                      disabled={!isWalletConnected}
-                    />
-                  </div>
+                      <div className="space-y-3">
+                        <Label>Trading Modes</Label>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between p-3 bg-background rounded border border-border">
+                            <Label htmlFor="swing" className="cursor-pointer">Swing Trading</Label>
+                            <Switch
+                              id="swing"
+                              checked={botConfig.modes.swing}
+                              onCheckedChange={(checked) =>
+                                setBotConfig({
+                                  ...botConfig,
+                                  modes: { ...botConfig.modes, swing: checked },
+                                })
+                              }
+                              disabled={!isWalletConnected}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between p-3 bg-background rounded border border-border">
+                            <Label htmlFor="scalp" className="cursor-pointer">Scalp Trading</Label>
+                            <Switch
+                              id="scalp"
+                              checked={botConfig.modes.scalp}
+                              onCheckedChange={(checked) =>
+                                setBotConfig({
+                                  ...botConfig,
+                                  modes: { ...botConfig.modes, scalp: checked },
+                                })
+                              }
+                              disabled={!isWalletConnected}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="max-trades">Max Trades Per Run</Label>
+                        <Input
+                          id="max-trades"
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={botConfig.maxTrades}
+                          onChange={(e) =>
+                            setBotConfig({
+                              ...botConfig,
+                              maxTrades: parseInt(e.target.value) || 1,
+                            })
+                          }
+                          className="bg-background"
+                          disabled={!isWalletConnected}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="duration">Mission Duration (Hours)</Label>
+                        <Input
+                          id="duration"
+                          type="number"
+                          min="1"
+                          max="168"
+                          value={botConfig.duration}
+                          onChange={(e) =>
+                            setBotConfig({
+                              ...botConfig,
+                              duration: parseInt(e.target.value) || 1,
+                            })
+                          }
+                          className="bg-background"
+                          disabled={!isWalletConnected}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="max-trades">Max Trades Per Run</Label>
-                <Input
-                  id="max-trades"
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={botConfig.maxTrades}
-                  onChange={(e) =>
-                    setBotConfig({
-                      ...botConfig,
-                      maxTrades: parseInt(e.target.value) || 1,
-                    })
-                  }
-                  className="bg-background"
-                  disabled={!isWalletConnected}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="duration">Mission Duration (Hours)</Label>
-                <Input
-                  id="duration"
-                  type="number"
-                  min="1"
-                  max="168"
-                  value={botConfig.duration}
-                  onChange={(e) =>
-                    setBotConfig({
-                      ...botConfig,
-                      duration: parseInt(e.target.value) || 1,
-                    })
-                  }
-                  className="bg-background"
-                  disabled={!isWalletConnected}
-                />
-              </div>
-            </CardContent>
-          </Card>
+              </TooltipTrigger>
+              {!isWalletConnected && (
+                <TooltipContent side="top" className="max-w-xs">
+                  <p className="font-semibold mb-1">Wallet Connection Required</p>
+                  <p className="text-xs">Connect your wallet at the top of the page to configure and deploy the trading bot.</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
         )}
 
         {isConnected && (
-          <Button
-            onClick={handleDeployBot}
-            disabled={!isWalletConnected || (!botConfig.modes.swing && !botConfig.modes.scalp)}
-            className="w-full bg-warning hover:bg-warning/90 text-warning-foreground h-14 text-lg font-bold disabled:opacity-50"
-            size="lg"
-          >
-            <Lightning size={24} weight="bold" />
-            DEPLOY BOT
-          </Button>
+          <TooltipProvider>
+            <Tooltip open={!isWalletConnected ? undefined : false}>
+              <TooltipTrigger asChild>
+                <div>
+                  <Button
+                    onClick={handleDeployBot}
+                    disabled={!isWalletConnected || (!botConfig.modes.swing && !botConfig.modes.scalp)}
+                    className="w-full bg-warning hover:bg-warning/90 text-warning-foreground h-14 text-lg font-bold disabled:opacity-50"
+                    size="lg"
+                  >
+                    <Lightning size={24} weight="bold" />
+                    DEPLOY BOT
+                  </Button>
+                </div>
+              </TooltipTrigger>
+              {!isWalletConnected && (
+                <TooltipContent side="top" className="max-w-xs">
+                  <p className="font-semibold mb-1">Wallet Connection Required</p>
+                  <p className="text-xs">Connect your wallet at the top of the page to deploy the trading bot.</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
         )}
       </div>
 

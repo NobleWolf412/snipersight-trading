@@ -8,6 +8,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useWallet } from '@/context/WalletContext';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -107,72 +108,82 @@ export function WalletConnect() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="default" className="gap-2">
-          <Wallet weight="bold" />
-          Connect Wallet
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="border-primary/20">
-        <DialogHeader>
-          <DialogTitle className="text-primary">Connect Your Wallet</DialogTitle>
-          <DialogDescription>
-            Choose a wallet provider to securely authenticate with SniperSight
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <Card
-            className="p-4 cursor-pointer hover:bg-primary/10 border-primary/20 transition-colors"
-            onClick={() => handleConnect('metamask')}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                <Wallet size={24} className="text-orange-500" weight="fill" />
+    <TooltipProvider>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DialogTrigger asChild>
+              <Button variant="default" className="gap-2">
+                <Wallet weight="bold" />
+                Connect Wallet
+              </Button>
+            </DialogTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-xs">
+            <p className="font-semibold mb-1">Wallet Required for Trading</p>
+            <p className="text-xs">Connect your wallet to configure and deploy trading bots. Your wallet is used for secure authentication only.</p>
+          </TooltipContent>
+        </Tooltip>
+        <DialogContent className="border-primary/20">
+          <DialogHeader>
+            <DialogTitle className="text-primary">Connect Your Wallet</DialogTitle>
+            <DialogDescription>
+              Choose a wallet provider to securely authenticate with SniperSight
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Card
+              className="p-4 cursor-pointer hover:bg-primary/10 border-primary/20 transition-colors"
+              onClick={() => handleConnect('metamask')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                  <Wallet size={24} className="text-orange-500" weight="fill" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">MetaMask</h3>
+                  <p className="text-xs text-muted-foreground">Connect using MetaMask wallet</p>
+                </div>
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold">MetaMask</h3>
-                <p className="text-xs text-muted-foreground">Connect using MetaMask wallet</p>
-              </div>
-            </div>
-          </Card>
+            </Card>
 
-          <Card
-            className="p-4 cursor-not-allowed opacity-50 border-primary/20"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                <Wallet size={24} className="text-blue-500" weight="fill" />
+            <Card
+              className="p-4 cursor-not-allowed opacity-50 border-primary/20"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                  <Wallet size={24} className="text-blue-500" weight="fill" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">WalletConnect</h3>
+                  <p className="text-xs text-muted-foreground">Coming soon</p>
+                </div>
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold">WalletConnect</h3>
-                <p className="text-xs text-muted-foreground">Coming soon</p>
-              </div>
-            </div>
-          </Card>
+            </Card>
 
-          <Card
-            className="p-4 cursor-not-allowed opacity-50 border-primary/20"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-600/20 flex items-center justify-center">
-                <Wallet size={24} className="text-blue-600" weight="fill" />
+            <Card
+              className="p-4 cursor-not-allowed opacity-50 border-primary/20"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-blue-600/20 flex items-center justify-center">
+                  <Wallet size={24} className="text-blue-600" weight="fill" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">Coinbase Wallet</h3>
+                  <p className="text-xs text-muted-foreground">Coming soon</p>
+                </div>
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold">Coinbase Wallet</h3>
-                <p className="text-xs text-muted-foreground">Coming soon</p>
-              </div>
-            </div>
-          </Card>
+            </Card>
 
-          <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border">
-            <p className="text-xs text-muted-foreground">
-              🔒 <strong>Secure Connection:</strong> Your private keys never leave your wallet. 
-              SniperSight only requests your public address for authentication.
-            </p>
+            <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border">
+              <p className="text-xs text-muted-foreground">
+                🔒 <strong>Secure Connection:</strong> Your private keys never leave your wallet. 
+                SniperSight only requests your public address for authentication.
+              </p>
+            </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </TooltipProvider>
   );
 }
