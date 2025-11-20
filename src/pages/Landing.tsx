@@ -45,9 +45,7 @@ export function Landing() {
               <p className="text-sm text-foreground/80">
                 Execute multi-timeframe analysis across crypto pairs. Identify high-conviction setups with Smart Money Concepts.
               </p>
-              <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" size="lg">
-                ACQUIRE TARGETS
-              </Button>
+              <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" size="lg">ACQUIRE TARGETS</Button>
             </div>
           </Card>
 
@@ -68,9 +66,7 @@ export function Landing() {
               <p className="text-sm text-foreground/80">
                 Activate automated sniper for continuous market surveillance and precision trade execution.
               </p>
-              <Button className="w-full bg-warning hover:bg-warning/90 text-warning-foreground" size="lg">
-                ACTIVATE AUTOMATION
-              </Button>
+              <Button className="w-full bg-warning hover:bg-warning/90 text-warning-foreground" size="lg">ACTIVATE AUTOMATION</Button>
             </div>
           </Card>
         </div>
