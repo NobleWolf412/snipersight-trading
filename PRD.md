@@ -40,6 +40,20 @@ A modular, institution-grade crypto market scanner designed to evolve into a ful
 - **Progression**: Entry zone calculation → Stop placement → Target ladder generation → R:R validation → Style classification → Rationale synthesis
 - **Success criteria**: Zero null fields, all entries/stops/targets populated, R:R > 2.0, human-readable rationale with specific price levels
 
+### Interactive Chart Analysis & Visualization
+- **Functionality**: Provides TradingView-style interactive candlestick charts with D3.js, overlaying entry zones, stop losses, take profits, order blocks, and fair value gaps with toggleable visibility controls and multi-timeframe switching
+- **Purpose**: Enables visual confirmation of technical setups, pattern recognition, and level validation for high-conviction trade decisions
+- **Trigger**: User clicks "View Chart" on any scan result
+- **Progression**: Chart data generation → Candlestick rendering → Level overlay → Interactive controls → Multi-tab analysis (Chart/AI/Stats/Levels)
+- **Success criteria**: Smooth rendering of 30-96 candles, accurate price level visualization, responsive toggles, AI analysis generation within 3s, comprehensive trading statistics display
+
+### AI-Powered Trade Analysis
+- **Functionality**: Generates comprehensive markdown-formatted technical analysis reports using LLM, covering market structure, key levels, risk assessment, execution plan, and potential challenges
+- **Purpose**: Augments technical indicators with contextual insights and human-readable strategic guidance
+- **Trigger**: User requests analysis from Chart Modal AI Analysis tab
+- **Progression**: Market data aggregation → LLM prompt construction → Analysis generation → Markdown rendering → Risk metrics display
+- **Success criteria**: Complete analysis with all sections populated, actionable recommendations, clear profit/risk projections, regeneration capability
+
 ### Risk Management & Exposure Control
 - **Functionality**: Validates position sizing, per-asset exposure limits, aggregate risk caps, and compliance checks before any execution or notification
 - **Purpose**: Enforces institutional-grade risk discipline and prevents over-leverage
