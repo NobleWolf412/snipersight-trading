@@ -4,6 +4,7 @@ numpy>=1.24.0
 ccxt>=4.0.0  # Multi-exchange crypto library
 python-binance>=1.0.0
 polars>=0.19.0  # Optional: faster dataframes
+TA-Lib>=0.4.28  # Technical analysis library for validation
 
 # API & Web
 fastapi>=0.104.0
