@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useScanner } from '@/context/ScannerContext';
+import { useWallet } from '@/context/WalletContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -16,6 +17,7 @@ import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
 export function BotSetup() {
   const navigate = useNavigate();
   const { botConfig, setBotConfig } = useScanner();
+  const { isConnected: isWalletConnected } = useWallet();
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -117,7 +119,7 @@ export function BotSetup() {
         </Card>
 
         {isConnected && (
-          <Card className="bg-card/50 border-warning/30">
+          <Card className={`bg-card/50 border-warning/30 ${!isWalletConnected ? 'opacity-40 pointer-events-none' : ''}`}>
             <CardHeader>
               <CardTitle>Bot Configuration</CardTitle>
               <CardDescription>Trading parameters and limits</CardDescription>
@@ -130,6 +132,7 @@ export function BotSetup() {
                   onValueChange={(value) =>
                     setBotConfig({ ...botConfig, pair: value })
                   }
+                  disabled={!isWalletConnected}
                 >
                   <SelectTrigger id="pair" className="bg-background">
                     <SelectValue />
@@ -157,6 +160,7 @@ export function BotSetup() {
                           modes: { ...botConfig.modes, swing: checked },
                         })
                       }
+                      disabled={!isWalletConnected}
                     />
                   </div>
                   <div className="flex items-center justify-between p-3 bg-background rounded border border-border">
@@ -170,6 +174,7 @@ export function BotSetup() {
                           modes: { ...botConfig.modes, scalp: checked },
                         })
                       }
+                      disabled={!isWalletConnected}
                     />
                   </div>
                 </div>
@@ -190,6 +195,7 @@ export function BotSetup() {
                     })
                   }
                   className="bg-background"
+                  disabled={!isWalletConnected}
                 />
               </div>
 
@@ -208,6 +214,7 @@ export function BotSetup() {
                     })
                   }
                   className="bg-background"
+                  disabled={!isWalletConnected}
                 />
               </div>
             </CardContent>
@@ -217,8 +224,8 @@ export function BotSetup() {
         {isConnected && (
           <Button
             onClick={handleDeployBot}
-            disabled={!botConfig.modes.swing && !botConfig.modes.scalp}
-            className="w-full bg-warning hover:bg-warning/90 text-warning-foreground h-14 text-lg font-bold"
+            disabled={!isWalletConnected || (!botConfig.modes.swing && !botConfig.modes.scalp)}
+            className="w-full bg-warning hover:bg-warning/90 text-warning-foreground h-14 text-lg font-bold disabled:opacity-50"
             size="lg"
           >
             <Lightning size={24} weight="bold" />
