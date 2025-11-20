@@ -37,6 +37,8 @@
   --ring: oklch(52.7% 0.154 150.069);
 
   --radius: 0.5rem;
+
+  --spacing: 0.20rem;
 }
 
 @theme {
