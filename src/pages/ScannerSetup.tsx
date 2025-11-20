@@ -90,7 +90,7 @@ export function ScannerSetup() {
                 type="number"
                 min="1"
                 max="100"
-                value={scanConfig.topPairs}
+                value={scanConfig.topPairs ?? 20}
                 onChange={(e) =>
                   setScanConfig({ ...scanConfig, topPairs: parseInt(e.target.value) || 20 })
                 }
@@ -101,7 +101,7 @@ export function ScannerSetup() {
             <div className="space-y-2">
               <Label htmlFor="leverage">Leverage</Label>
               <Select
-                value={scanConfig.leverage.toString()}
+                value={(scanConfig.leverage ?? 1).toString()}
                 onValueChange={(value) =>
                   setScanConfig({ ...scanConfig, leverage: parseInt(value) })
                 }
