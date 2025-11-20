@@ -225,28 +225,33 @@ export function MarketRegimeLens({
             </div>
 
             {(btcDominance !== undefined || usdtDominance !== undefined || altDominance !== undefined) && (
-              <div className="flex gap-3 md:gap-4 text-xs flex-wrap">
-                {btcDominance !== undefined && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">BTC.D:</span>
-                    <span className="font-mono font-bold">{btcDominance.toFixed(1)}%</span>
-                    <DominanceTrend current={btcDominance} previous={previousBtcDominance} />
-                  </div>
-                )}
-                {usdtDominance !== undefined && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">USDT.D:</span>
-                    <span className="font-mono font-bold">{usdtDominance.toFixed(1)}%</span>
-                    <DominanceTrend current={usdtDominance} previous={previousUsdtDominance} />
-                  </div>
-                )}
-                {altDominance !== undefined && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">ALT.D:</span>
-                    <span className="font-mono font-bold">{altDominance.toFixed(1)}%</span>
-                    <DominanceTrend current={altDominance} previous={previousAltDominance} />
-                  </div>
-                )}
+              <div className="space-y-1">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-bold">
+                  Market Dominance (24h)
+                </div>
+                <div className="flex gap-3 md:gap-4 text-xs flex-wrap">
+                  {btcDominance !== undefined && (
+                    <div className="flex items-center gap-1">
+                      <span className="text-muted-foreground">BTC.D:</span>
+                      <span className="font-mono font-bold">{btcDominance.toFixed(1)}%</span>
+                      <DominanceTrend current={btcDominance} previous={previousBtcDominance} />
+                    </div>
+                  )}
+                  {usdtDominance !== undefined && (
+                    <div className="flex items-center gap-1">
+                      <span className="text-muted-foreground">USDT.D:</span>
+                      <span className="font-mono font-bold">{usdtDominance.toFixed(1)}%</span>
+                      <DominanceTrend current={usdtDominance} previous={previousUsdtDominance} />
+                    </div>
+                  )}
+                  {altDominance !== undefined && (
+                    <div className="flex items-center gap-1">
+                      <span className="text-muted-foreground">ALT.D:</span>
+                      <span className="font-mono font-bold">{altDominance.toFixed(1)}%</span>
+                      <DominanceTrend current={altDominance} previous={previousAltDominance} />
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
