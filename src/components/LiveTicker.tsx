@@ -1,5 +1,4 @@
 import { useMultiplePrices } from '@/hooks/usePriceData';
-import { Card, CardContent } from '@/components/ui/card';
 import { ArrowUp, ArrowDown } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 
@@ -12,9 +11,23 @@ const DEFAULT_SYMBOLS = [
   'BTC/USDT',
   'ETH/USDT',
   'SOL/USDT',
+  'BNB/USDT',
+  'XRP/USDT',
+  'ADA/USDT',
+  'DOGE/USDT',
   'MATIC/USDT',
+  'DOT/USDT',
   'AVAX/USDT',
   'LINK/USDT',
+  'UNI/USDT',
+  'ATOM/USDT',
+  'LTC/USDT',
+  'APT/USDT',
+  'ARB/USDT',
+  'OP/USDT',
+  'NEAR/USDT',
+  'IMX/USDT',
+  'FIL/USDT',
 ];
 
 export function LiveTicker({ symbols = DEFAULT_SYMBOLS, className }: LiveTickerProps) {
@@ -26,55 +39,49 @@ export function LiveTicker({ symbols = DEFAULT_SYMBOLS, className }: LiveTickerP
     return price.toFixed(6);
   };
 
-  if (isLoading) {
+  const renderTickerItem = (symbol: string, index: number) => {
+    const priceData = prices.get(symbol);
+    if (!priceData) {
+      return (
+        <div key={`${symbol}-${index}`} className="flex items-center gap-3 px-6 min-w-[220px]">
+          <div className="text-sm font-bold text-muted-foreground">{symbol.split('/')[0]}</div>
+          <div className="h-4 w-20 bg-muted/30 animate-pulse rounded" />
+        </div>
+      );
+    }
+
+    const isPositive = priceData.changePercent24h >= 0;
+    const changeColor = isPositive ? 'text-success' : 'text-destructive';
+
     return (
-      <Card className={cn('bg-card/50 border-border/50', className)}>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-6 overflow-x-auto">
-            {symbols.map((symbol) => (
-              <div key={symbol} className="flex items-center gap-2 min-w-[160px]">
-                <div className="text-sm font-bold text-muted-foreground">{symbol.split('/')[0]}</div>
-                <div className="h-4 w-20 bg-muted animate-pulse rounded" />
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <div key={`${symbol}-${index}`} className="flex items-center gap-3 px-6 min-w-[220px] border-r border-border/30">
+        <div className="text-sm font-bold text-foreground">
+          {symbol.split('/')[0]}
+        </div>
+        <div className="text-sm font-bold tabular-nums">
+          ${formatPrice(priceData.price)}
+        </div>
+        <div className={cn('flex items-center gap-1 text-xs font-medium tabular-nums', changeColor)}>
+          {isPositive ? (
+            <ArrowUp size={12} weight="bold" />
+          ) : (
+            <ArrowDown size={12} weight="bold" />
+          )}
+          {Math.abs(priceData.changePercent24h).toFixed(2)}%
+        </div>
+      </div>
     );
-  }
+  };
 
   return (
-    <Card className={cn('bg-card/50 border-border/50', className)}>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-6 overflow-x-auto scrollbar-hide">
-          {symbols.map((symbol) => {
-            const priceData = prices.get(symbol);
-            if (!priceData) return null;
-
-            const isPositive = priceData.changePercent24h >= 0;
-            const changeColor = isPositive ? 'text-success' : 'text-destructive';
-
-            return (
-              <div key={symbol} className="flex items-center gap-3 min-w-[200px]">
-                <div className="text-sm font-bold text-foreground">
-                  {symbol.split('/')[0]}
-                </div>
-                <div className="text-sm font-bold tabular-nums">
-                  ${formatPrice(priceData.price)}
-                </div>
-                <div className={cn('flex items-center gap-1 text-xs font-medium tabular-nums', changeColor)}>
-                  {isPositive ? (
-                    <ArrowUp size={12} weight="bold" />
-                  ) : (
-                    <ArrowDown size={12} weight="bold" />
-                  )}
-                  {Math.abs(priceData.changePercent24h).toFixed(2)}%
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
+    <div className={cn('bg-card/50 border-y border-border/50 overflow-hidden relative', className)}>
+      <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-card/50 to-transparent z-10 pointer-events-none" />
+      <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-card/50 to-transparent z-10 pointer-events-none" />
+      
+      <div className="flex animate-scroll-left py-3">
+        {symbols.map((symbol, idx) => renderTickerItem(symbol, idx))}
+        {symbols.map((symbol, idx) => renderTickerItem(symbol, idx + symbols.length))}
+      </div>
+    </div>
   );
 }
