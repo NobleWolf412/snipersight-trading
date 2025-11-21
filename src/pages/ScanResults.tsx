@@ -9,6 +9,8 @@ import type { ScanResult } from '@/utils/mockData';
 import { useState } from 'react';
 import { ChartModal } from '@/components/ChartModal/ChartModal';
 import { DetailsModal } from '@/components/DetailsModal/DetailsModal';
+import { LiveTicker } from '@/components/LiveTicker';
+import { PriceDisplay } from '@/components/PriceDisplay';
 
 export function ScanResults() {
   const navigate = useNavigate();
@@ -76,6 +78,8 @@ export function ScanResults() {
           </Button>
         </div>
 
+        <LiveTicker symbols={results.slice(0, 6).map(r => r.pair)} />
+
         <Card className="bg-card/50 border-accent/30">
           <CardHeader>
             <CardTitle>Scan Results</CardTitle>
@@ -85,6 +89,7 @@ export function ScanResults() {
               <TableHeader>
                 <TableRow>
                   <TableHead>PAIR</TableHead>
+                  <TableHead>LIVE PRICE</TableHead>
                   <TableHead>TREND</TableHead>
                   <TableHead>CONFIDENCE</TableHead>
                   <TableHead>RISK</TableHead>
@@ -96,6 +101,9 @@ export function ScanResults() {
                 {results.map((result) => (
                   <TableRow key={result.id}>
                     <TableCell className="font-bold">{result.pair}</TableCell>
+                    <TableCell>
+                      <PriceDisplay symbol={result.pair} size="sm" />
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={getTrendColor(result.trendBias)}>
                         <span className="flex items-center gap-1">

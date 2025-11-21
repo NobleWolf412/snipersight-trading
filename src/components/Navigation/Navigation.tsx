@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Crosshair, MagnifyingGlass, Robot, Target, ChartLine } from '@phosphor-icons/react';
+import { Crosshair, MagnifyingGlass, Robot, Target, ChartLine, ChartLineUp } from '@phosphor-icons/react';
 import { SessionIndicator } from '@/components/SessionIndicator/SessionIndicator';
 import { WalletConnect } from '@/components/WalletConnect';
 import { NotificationStatus } from '@/components/NotificationStatus';
@@ -11,6 +11,7 @@ export function Navigation() {
     { path: '/', label: 'Command Center', icon: Crosshair },
     { path: '/scan', label: 'Scan', icon: MagnifyingGlass },
     { path: '/bot', label: 'Bot', icon: Robot },
+    { path: '/market', label: 'Market', icon: ChartLineUp },
     { path: '/training', label: 'Training Ground', icon: Target },
     { path: '/intel', label: 'Intel', icon: ChartLine },
   ];

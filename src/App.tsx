@@ -9,6 +9,7 @@ import { BotSetup } from '@/pages/BotSetup';
 import { BotStatus } from '@/pages/BotStatus';
 import { TrainingGround } from '@/pages/TrainingGround';
 import { Intel } from '@/pages/Intel';
+import { MarketOverview } from '@/pages/MarketOverview';
 import { Toaster } from '@/components/ui/sonner';
 import { useEffect } from 'react';
 import { notificationManager } from '@/utils/notifications';
@@ -49,6 +50,7 @@ function App() {
               <Route path="/results" element={<ScanResults />} />
               <Route path="/bot" element={<BotSetup />} />
               <Route path="/bot/status" element={<BotStatus />} />
+              <Route path="/market" element={<MarketOverview />} />
               <Route path="/training" element={<TrainingGround />} />
               <Route path="/intel" element={<Intel />} />
             </Routes>

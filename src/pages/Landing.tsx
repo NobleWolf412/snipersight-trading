@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MagnifyingGlass, Robot, Target, ListBullets, Crosshair } from '@phosphor-icons/react';
+import { LiveTicker } from '@/components/LiveTicker';
 
 export function Landing() {
   const navigate = useNavigate();
@@ -26,6 +27,8 @@ export function Landing() {
             <span>SYSTEMS ONLINE</span>
           </div>
         </div>
+
+        <LiveTicker />
 
         <div className="grid md:grid-cols-2 gap-4">
           <Card

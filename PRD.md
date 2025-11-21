@@ -12,6 +12,13 @@ A modular, institution-grade crypto market scanner designed to evolve into a ful
 
 ## Essential Features
 
+### Real-Time Price Data Integration
+- **Functionality**: WebSocket-powered live price feeds from Binance for all major crypto pairs with automatic reconnection, caching, and real-time updates across the entire application
+- **Purpose**: Provides operators with live market context for trade validation, entry timing, and position monitoring
+- **Trigger**: Automatic connection on app load, continuous updates via WebSocket stream
+- **Progression**: Connection establishment → Stream subscription → Price caching → Component distribution → Real-time UI updates → Reconnection on failure
+- **Success criteria**: Sub-second price updates, <100ms UI responsiveness, automatic reconnection within 5 attempts, zero stale data, complete 24h statistics (price, change, volume, high/low)
+
 ### Multi-Timeframe Market Scanning
 - **Functionality**: Ingests and analyzes OHLCV data across 1W, 1D, 4H, 1H, 15m, 5m timeframes from multiple exchanges
 - **Purpose**: Captures institutional Smart-Money footprints across all relevant timeframes for complete market context

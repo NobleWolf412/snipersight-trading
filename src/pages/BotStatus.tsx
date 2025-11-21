@@ -8,6 +8,8 @@ import { Robot, StopCircle, CheckCircle, Warning, Info } from '@phosphor-icons/r
 import { generateMockBotActivity } from '@/utils/mockData';
 import { useState, useEffect } from 'react';
 import type { BotActivity } from '@/utils/mockData';
+import { PriceDisplay } from '@/components/PriceDisplay';
+import { LiveTicker } from '@/components/LiveTicker';
 
 export function BotStatus() {
   const navigate = useNavigate();
@@ -109,6 +111,8 @@ export function BotStatus() {
           </Card>
         </div>
 
+        <LiveTicker symbols={['BTC/USDT', 'ETH/USDT', 'SOL/USDT']} />
+
         <Card className="bg-card/50 border-accent/30">
           <CardHeader>
             <CardTitle>Current Targets</CardTitle>
@@ -117,7 +121,10 @@ export function BotStatus() {
             <div className="space-y-3">
               <div className="p-4 bg-background rounded border border-accent/50">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="font-bold">BTC/USDT</div>
+                  <div className="space-y-1">
+                    <div className="font-bold">BTC/USDT</div>
+                    <PriceDisplay symbol="BTC/USDT" size="sm" />
+                  </div>
                   <Badge className="bg-success/20 text-success border-success/50">MONITORING</Badge>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs">
@@ -138,7 +145,10 @@ export function BotStatus() {
 
               <div className="p-4 bg-background rounded border border-accent/50">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="font-bold">ETH/USDT</div>
+                  <div className="space-y-1">
+                    <div className="font-bold">ETH/USDT</div>
+                    <PriceDisplay symbol="ETH/USDT" size="sm" />
+                  </div>
                   <Badge className="bg-warning/20 text-warning border-warning/50">ENTRY PENDING</Badge>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs">
