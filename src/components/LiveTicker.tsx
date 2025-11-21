@@ -1,7 +1,7 @@
 import { useMultiplePrices } from '@/hooks/usePriceData';
 import { ArrowUp, ArrowDown } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
-import { memo } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 
 interface LiveTickerProps {
   symbols?: string[];
@@ -38,6 +38,19 @@ const formatPrice = (price: number) => {
 };
 
 const TickerItem = memo(({ symbol, price, changePercent24h }: { symbol: string; price?: number; changePercent24h?: number }) => {
+  const [flash, setFlash] = useState<'up' | 'down' | null>(null);
+  const prevPriceRef = useRef(price);
+
+  useEffect(() => {
+    if (price !== undefined && prevPriceRef.current !== undefined && price !== prevPriceRef.current) {
+      setFlash(price > prevPriceRef.current ? 'up' : 'down');
+      const timer = setTimeout(() => setFlash(null), 300);
+      prevPriceRef.current = price;
+      return () => clearTimeout(timer);
+    }
+    prevPriceRef.current = price;
+  }, [price]);
+
   if (!price) {
     return (
       <div className="flex items-center gap-3 px-6 min-w-[220px]">
@@ -55,7 +68,11 @@ const TickerItem = memo(({ symbol, price, changePercent24h }: { symbol: string; 
       <div className="text-sm font-bold text-foreground">
         {symbol.split('/')[0]}
       </div>
-      <div className="text-sm font-bold tabular-nums">
+      <div className={cn(
+        'text-sm font-bold tabular-nums transition-colors duration-300',
+        flash === 'up' && 'text-success',
+        flash === 'down' && 'text-destructive'
+      )}>
         ${formatPrice(price)}
       </div>
       <div className={cn('flex items-center gap-1 text-xs font-medium tabular-nums', changeColor)}>

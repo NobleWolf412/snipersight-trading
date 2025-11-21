@@ -112,7 +112,7 @@ export function useMultiplePrices(symbols: string[]) {
         updateTimerRef.current = window.setTimeout(() => {
           flushUpdates();
           updateTimerRef.current = null;
-        }, 100);
+        }, 50);
       })
     );
 

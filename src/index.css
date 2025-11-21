@@ -113,7 +113,7 @@ body {
 }
 
 .animate-scroll-left {
-  animation: scroll-left 40s linear infinite;
+  animation: scroll-left 20s linear infinite;
   will-change: transform;
 }
 
