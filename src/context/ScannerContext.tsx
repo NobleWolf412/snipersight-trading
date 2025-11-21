@@ -13,6 +13,8 @@ export interface ScanConfig {
   };
   timeframes: string[];
   leverage: number;
+  sniperMode: SniperMode;
+  customTimeframes?: string[];
 }
 
 export interface BotConfig {
@@ -50,6 +52,8 @@ const defaultScanConfig: ScanConfig = {
   },
   timeframes: ['1D', '4H', '1H'],
   leverage: 1,
+  sniperMode: 'recon',
+  customTimeframes: [],
 };
 
 const defaultBotConfig: BotConfig = {
