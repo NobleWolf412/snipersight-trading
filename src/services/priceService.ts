@@ -84,6 +84,10 @@ class PriceService {
   private processTicker(ticker: any) {
     const symbol = this.normalizeSymbol(ticker.s);
     
+    if (!this.subscribedSymbols.has(symbol)) {
+      return;
+    }
+    
     const priceData: PriceData = {
       symbol,
       price: parseFloat(ticker.c),
@@ -99,12 +103,12 @@ class PriceService {
     this.priceCache.set(symbol, priceData);
 
     const subscribers = this.subscribers.get(symbol);
-    if (subscribers) {
+    if (subscribers && subscribers.size > 0) {
       subscribers.forEach((callback) => callback(priceData));
     }
 
     const tickSubscribers = this.tickSubscribers.get(symbol);
-    if (tickSubscribers) {
+    if (tickSubscribers && tickSubscribers.size > 0) {
       const tick: PriceTick = {
         symbol,
         price: priceData.price,
