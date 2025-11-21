@@ -269,13 +269,4 @@ class NotificationPollingService {
   }
 }
 
-// Create singleton instance
 export const notificationPollingService = new NotificationPollingService();
-
-// Auto-start polling when module loads
-if (typeof window !== 'undefined') {
-  // Start polling after a short delay to ensure everything is initialized
-  setTimeout(() => {
-    notificationPollingService.startPolling();
-  }, 1000);
-}

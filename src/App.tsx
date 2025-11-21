@@ -12,7 +12,7 @@ import { Intel } from '@/pages/Intel';
 import { Toaster } from '@/components/ui/sonner';
 import { useEffect } from 'react';
 import { notificationManager } from '@/utils/notifications';
-import '@/utils/notificationPolling'; // Auto-start polling
+import { notificationPollingService } from '@/utils/notificationPolling';
 
 function App() {
   // Initialize notification system
@@ -21,12 +21,20 @@ function App() {
       try {
         await notificationManager.initialize();
         console.log('✅ Notification system initialized');
+        
+        setTimeout(() => {
+          notificationPollingService.startPolling();
+        }, 1000);
       } catch (error) {
         console.log('⚠️ Notification system failed to initialize:', error);
       }
     };
 
     initNotifications();
+    
+    return () => {
+      notificationPollingService.stopPolling();
+    };
   }, []);
 
   return (
