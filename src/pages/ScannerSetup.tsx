@@ -211,7 +211,7 @@ export function ScannerSetup() {
         <Button
           onClick={handleArmScanner}
           disabled={isScanning || scanConfig.timeframes.length === 0}
-          className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-14 text-lg font-bold"
+          className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-14 text-lg font-bold disabled:opacity-50"
           size="lg"
         >
           {isScanning ? (
