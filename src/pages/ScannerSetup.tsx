@@ -20,6 +20,7 @@ import type { SniperMode } from '@/types/sniperMode';
 import { SNIPER_MODES } from '@/types/sniperMode';
 import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
+import { useQuickNotifications } from '@/hooks/useNotifications';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ export function ScannerSetup() {
   const [, setScanResults] = useKV<ScanResult[]>('scan-results', []);
   const [isScanning, setIsScanning] = useState(false);
   const { toast } = useToast();
+  const { notifySignal, notifySystem } = useQuickNotifications();
 
   const marketRegimeProps = useMockMarketRegime('scanner');
 
@@ -67,6 +69,14 @@ export function ScannerSetup() {
           description: 'Backend unavailable, displaying simulated results',
           variant: 'default',
         });
+        
+        // Send system notification about fallback
+        notifySystem({
+          title: '⚠️ Backend Unavailable',
+          body: 'Using simulated data for demonstration',
+          priority: 'normal'
+        });
+        
         // Fallback to mock data
         const results = generateMockScanResults(8);
         setScanResults(results);
@@ -80,6 +90,26 @@ export function ScannerSetup() {
           description: `${results.length} high-conviction setups identified`,
           variant: 'default',
         });
+
+        // Send notifications for high-confidence signals
+        const highConfidenceSignals = results.filter(result => result.confluence >= 80);
+        highConfidenceSignals.forEach(signal => {
+          notifySignal({
+            symbol: signal.symbol,
+            direction: signal.direction,
+            confidence: signal.confluence,
+            entry: signal.entry,
+            riskReward: signal.risk_reward
+          });
+        });
+
+        if (highConfidenceSignals.length > 0) {
+          notifySystem({
+            title: '🎯 High-Confidence Signals Found',
+            body: `${highConfidenceSignals.length} premium setups identified`,
+            priority: 'high'
+          });
+        }
       }
 
       setIsScanning(false);
@@ -91,6 +121,14 @@ export function ScannerSetup() {
         description: 'Failed to fetch signals, using mock data',
         variant: 'destructive',
       });
+
+      // Send error notification
+      notifySystem({
+        title: '❌ Scanner Error',
+        body: 'Connection failed, using simulated results',
+        priority: 'normal'
+      });
+
       // Fallback to mock data
       const results = generateMockScanResults(8);
       setScanResults(results);
