@@ -54,9 +54,10 @@ export function BotSetup() {
 
   const getEffectiveTimeframes = () => {
     if (botConfig.sniperMode === 'custom') {
-      return botConfig.customTimeframes;
+      return botConfig.customTimeframes || [];
     }
-    return SNIPER_MODES[botConfig.sniperMode].timeframes;
+    const mode = SNIPER_MODES[botConfig.sniperMode];
+    return mode?.timeframes || [];
   };
 
   const isValidConfig = () => {

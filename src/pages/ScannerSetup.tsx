@@ -54,9 +54,10 @@ export function ScannerSetup() {
 
   const getEffectiveTimeframes = () => {
     if (scanConfig.sniperMode === 'custom') {
-      return scanConfig.customTimeframes;
+      return scanConfig.customTimeframes || [];
     }
-    return SNIPER_MODES[scanConfig.sniperMode].timeframes;
+    const mode = SNIPER_MODES[scanConfig.sniperMode];
+    return mode?.timeframes || [];
   };
 
   const isValidConfig = () => {
