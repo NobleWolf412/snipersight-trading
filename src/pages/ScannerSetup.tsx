@@ -15,6 +15,9 @@ import type { ScanResult } from '@/utils/mockData';
 import { generateMockScanResults } from '@/utils/mockData';
 import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
 import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
+import { SniperModeSelector } from '@/components/SniperModeSelector';
+import { SNIPER_MODES } from '@/types/sniperMode';
+import type { SniperMode } from '@/types/sniperMode';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
@@ -22,19 +25,19 @@ export function ScannerSetup() {
   const [, setScanResults] = useKV<ScanResult[]>('scan-results', []);
   const [isScanning, setIsScanning] = useState(false);
 
-  const timeframes = ['1W', '1D', '4H', '1H', '15m', '5m'];
-
   const marketRegimeProps = useMockMarketRegime('scanner');
 
-  const handleTimeframeToggle = (tf: string) => {
-    const currentTimeframes = scanConfig.timeframes;
-    const newTimeframes = currentTimeframes.includes(tf)
-      ? currentTimeframes.filter((t) => t !== tf)
-      : [...currentTimeframes, tf];
-    
+  const handleModeSelect = (mode: SniperMode) => {
     setScanConfig({
       ...scanConfig,
-      timeframes: newTimeframes,
+      sniperMode: mode,
+    });
+  };
+
+  const handleCustomTimeframesChange = (timeframes: string[]) => {
+    setScanConfig({
+      ...scanConfig,
+      customTimeframes: timeframes,
     });
   };
 
@@ -47,6 +50,18 @@ export function ScannerSetup() {
       setIsScanning(false);
       navigate('/results');
     }, 2500);
+  };
+
+  const getEffectiveTimeframes = () => {
+    if (scanConfig.sniperMode === 'custom') {
+      return scanConfig.customTimeframes;
+    }
+    return SNIPER_MODES[scanConfig.sniperMode].timeframes;
+  };
+
+  const isValidConfig = () => {
+    const effectiveTimeframes = getEffectiveTimeframes();
+    return effectiveTimeframes.length > 0;
   };
 
   return (
@@ -191,30 +206,19 @@ export function ScannerSetup() {
             </div>
 
             <div className="space-y-3">
-              <Label>Timeframe Selection</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {timeframes.map((tf) => (
-                  <Button
-                    key={tf}
-                    variant={scanConfig.timeframes.includes(tf) ? 'default' : 'outline'}
-                    className={
-                      scanConfig.timeframes.includes(tf)
-                        ? 'bg-accent hover:bg-accent/90 text-accent-foreground'
-                        : ''
-                    }
-                    onClick={() => handleTimeframeToggle(tf)}
-                  >
-                    {tf}
-                  </Button>
-                ))}
-              </div>
+              <SniperModeSelector
+                selectedMode={scanConfig.sniperMode}
+                onModeSelect={handleModeSelect}
+                customTimeframes={scanConfig.customTimeframes}
+                onCustomTimeframesChange={handleCustomTimeframesChange}
+              />
             </div>
           </CardContent>
         </Card>
 
         <Button
           onClick={handleArmScanner}
-          disabled={isScanning || scanConfig.timeframes.length === 0}
+          disabled={isScanning || !isValidConfig()}
           className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-14 text-lg font-bold"
           size="lg"
         >
