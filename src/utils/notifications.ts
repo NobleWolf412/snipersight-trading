@@ -16,7 +16,7 @@ interface NotificationConfig {
   data?: any;
 }
 
-interface NotificationPermission {
+interface NotificationPermissionState {
   granted: boolean;
   denied: boolean;
   default: boolean;
@@ -35,7 +35,7 @@ interface TradingNotification {
 
 class BrowserNotificationManager {
   private isEnabled: boolean = false;
-  private permission: NotificationPermission = {
+  private permission: NotificationPermissionState = {
     granted: false,
     denied: false,
     default: true
@@ -132,7 +132,7 @@ class BrowserNotificationManager {
         badge: '/icons/badge.png',
         tag: `signal-${signal.symbol}`,
         requireInteraction: true,
-        data: { type: 'signal', symbol: signal.symbol, ...signal }
+        data: { signalType: 'signal', ...signal }
       }
     };
 
@@ -160,7 +160,7 @@ class BrowserNotificationManager {
         badge: '/icons/badge.png',
         tag: `risk-${alert.type}`,
         requireInteraction: alert.severity === 'critical',
-        data: { type: 'risk_alert', ...alert }
+        data: { alertType: 'risk_alert', ...alert }
       }
     };
 
@@ -458,7 +458,7 @@ class BrowserNotificationManager {
   /**
    * Get notification permission status
    */
-  getPermissionStatus(): NotificationPermission {
+  getPermissionStatus(): NotificationPermissionState {
     return this.permission;
   }
 
@@ -490,6 +490,6 @@ export const notificationManager = new BrowserNotificationManager();
 export type { 
   TradingNotification, 
   NotificationConfig, 
-  NotificationPermission, 
+  NotificationPermissionState, 
   NotificationPriority 
 };

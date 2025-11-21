@@ -6,12 +6,12 @@
  */
 
 import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { Switch } from '../ui/switch';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Bell, BellOff, Volume2, VolumeX, Settings, Shield, TrendingUp, Activity } from 'lucide-react';
-import { useNotifications } from '../../hooks/useNotifications';
+import { useNotifications } from '@/hooks/useNotifications';
 
 interface NotificationSettingsProps {
   className?: string;
@@ -22,7 +22,7 @@ export function NotificationSettings({ className = '' }: NotificationSettingsPro
 
   const getPermissionBadge = () => {
     if (notificationState.permission.granted) {
-      return <Badge variant="success" className="gap-1"><Bell size={12} />Enabled</Badge>;
+      return <Badge variant="default" className="gap-1 bg-green-500 text-white"><Bell size={12} />Enabled</Badge>;
     }
     if (notificationState.permission.denied) {
       return <Badge variant="destructive" className="gap-1"><BellOff size={12} />Denied</Badge>;

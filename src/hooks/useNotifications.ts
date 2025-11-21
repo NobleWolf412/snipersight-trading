@@ -6,16 +6,16 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { notificationManager, type NotificationPermission, type TradingNotification } from '../utils/notifications';
+import { notificationManager, type NotificationPermissionState, type TradingNotification } from '../utils/notifications';
 
 interface NotificationState {
   isEnabled: boolean;
-  permission: NotificationPermission;
+  permission: NotificationPermissionState;
   isInitialized: boolean;
   error: string | null;
   stats: {
     enabled: boolean;
-    permission: NotificationPermission;
+    permission: NotificationPermissionState;
     activeCount: number;
     queuedCount: number;
     soundEnabled: boolean;

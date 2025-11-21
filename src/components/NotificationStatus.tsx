@@ -7,12 +7,12 @@
 
 import React, { useState } from 'react';
 import { Bell, BellOff, Settings } from 'lucide-react';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { useNotifications } from '../../hooks/useNotifications';
-import { NotificationSettings } from '../NotificationSettings';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useNotifications } from '@/hooks/useNotifications';
+import { NotificationSettings } from '@/components/NotificationSettings';
 
 interface NotificationStatusProps {
   className?: string;

@@ -19,7 +19,7 @@ import { SniperModeSelector } from '@/components/SniperModeSelector';
 import type { SniperMode } from '@/types/sniperMode';
 import { SNIPER_MODES } from '@/types/sniperMode';
 import { api } from '@/utils/api';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { useQuickNotifications } from '@/hooks/useNotifications';
 
 export function ScannerSetup() {
@@ -27,7 +27,6 @@ export function ScannerSetup() {
   const { scanConfig, setScanConfig } = useScanner();
   const [, setScanResults] = useKV<ScanResult[]>('scan-results', []);
   const [isScanning, setIsScanning] = useState(false);
-  const { toast } = useToast();
   const { notifySignal, notifySystem } = useQuickNotifications();
 
   const marketRegimeProps = useMockMarketRegime('scanner');
@@ -58,16 +57,14 @@ export function ScannerSetup() {
       const modeConfig = SNIPER_MODES[scanConfig.sniperMode];
       const response = await api.getSignals({
         limit: scanConfig.topPairs || 20,
-        min_score: modeConfig?.min_confluence || 60,
+        min_score: modeConfig?.minConfluence || 60,
         sniper_mode: scanConfig.sniperMode.toUpperCase(),
       });
 
       if (response.error) {
         console.error('API error, falling back to mock data:', response.error);
-        toast({
-          title: 'Using Mock Data',
+        toast('Using Mock Data', {
           description: 'Backend unavailable, displaying simulated results',
-          variant: 'default',
         });
         
         // Send system notification about fallback
@@ -85,21 +82,19 @@ export function ScannerSetup() {
         const results = response.data.signals.map(convertSignalToScanResult);
         setScanResults(results);
         
-        toast({
-          title: 'Targets Acquired',
+        toast('Targets Acquired', {
           description: `${results.length} high-conviction setups identified`,
-          variant: 'default',
         });
 
         // Send notifications for high-confidence signals
-        const highConfidenceSignals = results.filter(result => result.confluence >= 80);
+        const highConfidenceSignals = results.filter(result => result.confidenceScore >= 80);
         highConfidenceSignals.forEach(signal => {
           notifySignal({
-            symbol: signal.symbol,
-            direction: signal.direction,
-            confidence: signal.confluence,
-            entry: signal.entry,
-            riskReward: signal.risk_reward
+            symbol: signal.pair,
+            direction: signal.trendBias,
+            confidence: signal.confidenceScore,
+            entry: signal.entryZone.high,
+            riskReward: signal.riskScore
           });
         });
 
@@ -116,10 +111,8 @@ export function ScannerSetup() {
       navigate('/results');
     } catch (error) {
       console.error('Scanner error:', error);
-      toast({
-        title: 'Scanner Error',
+      toast.error('Scanner Error', {
         description: 'Failed to fetch signals, using mock data',
-        variant: 'destructive',
       });
 
       // Send error notification
