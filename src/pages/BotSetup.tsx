@@ -14,6 +14,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { WalletGate } from '@/components/WalletGate';
 import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
 import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
+import { SniperModeSelector } from '@/components/SniperModeSelector';
+import { SNIPER_MODES } from '@/types/sniperMode';
+import type { SniperMode } from '@/types/sniperMode';
 
 export function BotSetup() {
   const navigate = useNavigate();
@@ -24,6 +27,20 @@ export function BotSetup() {
 
   const marketRegimeProps = useMockMarketRegime('bot');
 
+  const handleModeSelect = (mode: SniperMode) => {
+    setBotConfig({
+      ...botConfig,
+      sniperMode: mode,
+    });
+  };
+
+  const handleCustomTimeframesChange = (timeframes: string[]) => {
+    setBotConfig({
+      ...botConfig,
+      customTimeframes: timeframes,
+    });
+  };
+
   const handleConnectExchange = () => {
     setTimeout(() => {
       setIsConnected(true);
@@ -33,6 +50,19 @@ export function BotSetup() {
 
   const handleDeployBot = () => {
     navigate('/bot/status');
+  };
+
+  const getEffectiveTimeframes = () => {
+    if (botConfig.sniperMode === 'custom') {
+      return botConfig.customTimeframes || [];
+    }
+    const mode = SNIPER_MODES[botConfig.sniperMode];
+    return mode?.timeframes || [];
+  };
+
+  const isValidConfig = () => {
+    const effectiveTimeframes = getEffectiveTimeframes();
+    return effectiveTimeframes.length > 0 && (botConfig.modes.swing || botConfig.modes.scalp);
   };
 
   return (
@@ -188,6 +218,15 @@ export function BotSetup() {
                   </div>
                 </div>
 
+                <div className="space-y-3">
+                  <SniperModeSelector
+                    selectedMode={botConfig.sniperMode}
+                    onModeSelect={handleModeSelect}
+                    customTimeframes={botConfig.customTimeframes}
+                    onCustomTimeframesChange={handleCustomTimeframesChange}
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="max-trades">Max Trades Per Run</Label>
                   <Input
@@ -230,7 +269,7 @@ export function BotSetup() {
           {isConnected && (
             <Button
               onClick={handleDeployBot}
-              disabled={!botConfig.modes.swing && !botConfig.modes.scalp}
+              disabled={!isValidConfig()}
               className="w-full bg-warning hover:bg-warning/90 text-warning-foreground h-14 text-lg font-bold"
               size="lg"
             >

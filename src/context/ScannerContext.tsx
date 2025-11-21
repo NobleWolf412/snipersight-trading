@@ -1,5 +1,6 @@
 import { createContext, useContext, ReactNode } from 'react';
 import { useKV } from '@github/spark/hooks';
+import type { SniperMode } from '@/types/sniperMode';
 
 export interface ScanConfig {
   exchange: string;
@@ -21,6 +22,8 @@ export interface BotConfig {
     swing: boolean;
     scalp: boolean;
   };
+  sniperMode: SniperMode;
+  customTimeframes?: string[];
   maxTrades: number;
   duration: number;
 }
@@ -56,6 +59,8 @@ const defaultBotConfig: BotConfig = {
     swing: true,
     scalp: false,
   },
+  sniperMode: 'recon',
+  customTimeframes: [],
   maxTrades: 3,
   duration: 24,
 };
