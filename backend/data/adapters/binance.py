@@ -11,6 +11,51 @@ import ccxt
 from loguru import logger
 
 
+def _retry_on_rate_limit(max_retries: int = 3, backoff: float = 1.0):
+    """
+    Decorator to retry function calls on rate limit errors.
+
+    Args:
+        max_retries: Maximum number of retry attempts
+        backoff: Initial backoff time in seconds (doubles on each retry)
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            retries = 0
+            current_backoff = backoff
+
+            while retries < max_retries:
+                try:
+                    return func(*args, **kwargs)
+                except ccxt.RateLimitExceeded as e:
+                    retries += 1
+                    if retries >= max_retries:
+                        logger.error(f"Rate limit exceeded after {max_retries} retries")
+                        raise
+                    
+                    logger.warning(
+                        f"Rate limit hit, retrying in {current_backoff}s "
+                        f"(attempt {retries}/{max_retries})"
+                    )
+                    time.sleep(current_backoff)
+                    current_backoff *= 2
+                except ccxt.NetworkError as e:
+                    retries += 1
+                    if retries >= max_retries:
+                        logger.error(f"Network error after {max_retries} retries: {e}")
+                        raise
+                    
+                    logger.warning(f"Network error, retrying in {current_backoff}s: {e}")
+                    time.sleep(current_backoff)
+                    current_backoff *= 2
+            
+            return func(*args, **kwargs)
+        
+        return wrapper
+    return decorator
+
+
 class BinanceAdapter:
     """
     Adapter for Binance exchange using ccxt library.
@@ -37,50 +82,6 @@ class BinanceAdapter:
             logger.info("Binance adapter initialized in TESTNET mode")
         else:
             logger.info("Binance adapter initialized in PRODUCTION mode")
-
-    def _retry_on_rate_limit(self, max_retries: int = 3, backoff: float = 1.0):
-        """
-        Decorator to retry function calls on rate limit errors.
-
-        Args:
-            max_retries: Maximum number of retry attempts
-            backoff: Initial backoff time in seconds (doubles on each retry)
-        """
-        def decorator(func):
-            @wraps(func)
-            def wrapper(*args, **kwargs):
-                retries = 0
-                current_backoff = backoff
-
-                while retries < max_retries:
-                    try:
-                        return func(*args, **kwargs)
-                    except ccxt.RateLimitExceeded as e:
-                        retries += 1
-                        if retries >= max_retries:
-                            logger.error(f"Rate limit exceeded after {max_retries} retries")
-                            raise
-                        
-                        logger.warning(
-                            f"Rate limit hit, retrying in {current_backoff}s "
-                            f"(attempt {retries}/{max_retries})"
-                        )
-                        time.sleep(current_backoff)
-                        current_backoff *= 2
-                    except ccxt.NetworkError as e:
-                        retries += 1
-                        if retries >= max_retries:
-                            logger.error(f"Network error after {max_retries} retries: {e}")
-                            raise
-                        
-                        logger.warning(f"Network error, retrying in {current_backoff}s: {e}")
-                        time.sleep(current_backoff)
-                        current_backoff *= 2
-                
-                return func(*args, **kwargs)
-            
-            return wrapper
-        return decorator
 
     @_retry_on_rate_limit(max_retries=3)
     def fetch_ohlcv(

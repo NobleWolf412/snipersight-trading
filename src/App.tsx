@@ -10,8 +10,25 @@ import { BotStatus } from '@/pages/BotStatus';
 import { TrainingGround } from '@/pages/TrainingGround';
 import { Intel } from '@/pages/Intel';
 import { Toaster } from '@/components/ui/sonner';
+import { useEffect } from 'react';
+import { notificationManager } from '@/utils/notifications';
+import '@/utils/notificationPolling'; // Auto-start polling
 
 function App() {
+  // Initialize notification system
+  useEffect(() => {
+    const initNotifications = async () => {
+      try {
+        await notificationManager.initialize();
+        console.log('✅ Notification system initialized');
+      } catch (error) {
+        console.log('⚠️ Notification system failed to initialize:', error);
+      }
+    };
+
+    initNotifications();
+  }, []);
+
   return (
     <BrowserRouter>
       <WalletProvider>

@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Crosshair, MagnifyingGlass, Robot, Target, ChartLine } from '@phosphor-icons/react';
 import { SessionIndicator } from '@/components/SessionIndicator/SessionIndicator';
 import { WalletConnect } from '@/components/WalletConnect';
+import { NotificationStatus } from '@/components/NotificationStatus';
 
 export function Navigation() {
   const location = useLocation();
@@ -51,6 +52,7 @@ export function Navigation() {
           </div>
 
           <div className="flex items-center gap-4">
+            <NotificationStatus />
             <WalletConnect />
             <SessionIndicator />
           </div>

@@ -12,18 +12,23 @@ import { Badge } from '@/components/ui/badge';
 import { Crosshair, Lightning } from '@phosphor-icons/react';
 import { useKV } from '@github/spark/hooks';
 import type { ScanResult } from '@/utils/mockData';
-import { generateMockScanResults } from '@/utils/mockData';
+import { generateMockScanResults, convertSignalToScanResult } from '@/utils/mockData';
 import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
 import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
 import { SniperModeSelector } from '@/components/SniperModeSelector';
 import type { SniperMode } from '@/types/sniperMode';
 import { SNIPER_MODES } from '@/types/sniperMode';
+import { api } from '@/utils/api';
+import { useToast } from '@/hooks/use-toast';
+import { useQuickNotifications } from '@/hooks/useNotifications';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
   const { scanConfig, setScanConfig } = useScanner();
   const [, setScanResults] = useKV<ScanResult[]>('scan-results', []);
   const [isScanning, setIsScanning] = useState(false);
+  const { toast } = useToast();
+  const { notifySignal, notifySystem } = useQuickNotifications();
 
   const marketRegimeProps = useMockMarketRegime('scanner');
 
@@ -48,12 +53,88 @@ export function ScannerSetup() {
   const handleArmScanner = async () => {
     setIsScanning(true);
 
-    setTimeout(() => {
+    try {
+      // Call the real backend API
+      const modeConfig = SNIPER_MODES[scanConfig.sniperMode];
+      const response = await api.getSignals({
+        limit: scanConfig.topPairs || 20,
+        min_score: modeConfig?.min_confluence || 60,
+        sniper_mode: scanConfig.sniperMode.toUpperCase(),
+      });
+
+      if (response.error) {
+        console.error('API error, falling back to mock data:', response.error);
+        toast({
+          title: 'Using Mock Data',
+          description: 'Backend unavailable, displaying simulated results',
+          variant: 'default',
+        });
+        
+        // Send system notification about fallback
+        notifySystem({
+          title: '⚠️ Backend Unavailable',
+          body: 'Using simulated data for demonstration',
+          priority: 'normal'
+        });
+        
+        // Fallback to mock data
+        const results = generateMockScanResults(8);
+        setScanResults(results);
+      } else if (response.data) {
+        // Convert backend signals to frontend ScanResult format
+        const results = response.data.signals.map(convertSignalToScanResult);
+        setScanResults(results);
+        
+        toast({
+          title: 'Targets Acquired',
+          description: `${results.length} high-conviction setups identified`,
+          variant: 'default',
+        });
+
+        // Send notifications for high-confidence signals
+        const highConfidenceSignals = results.filter(result => result.confluence >= 80);
+        highConfidenceSignals.forEach(signal => {
+          notifySignal({
+            symbol: signal.symbol,
+            direction: signal.direction,
+            confidence: signal.confluence,
+            entry: signal.entry,
+            riskReward: signal.risk_reward
+          });
+        });
+
+        if (highConfidenceSignals.length > 0) {
+          notifySystem({
+            title: '🎯 High-Confidence Signals Found',
+            body: `${highConfidenceSignals.length} premium setups identified`,
+            priority: 'high'
+          });
+        }
+      }
+
+      setIsScanning(false);
+      navigate('/results');
+    } catch (error) {
+      console.error('Scanner error:', error);
+      toast({
+        title: 'Scanner Error',
+        description: 'Failed to fetch signals, using mock data',
+        variant: 'destructive',
+      });
+
+      // Send error notification
+      notifySystem({
+        title: '❌ Scanner Error',
+        body: 'Connection failed, using simulated results',
+        priority: 'normal'
+      });
+
+      // Fallback to mock data
       const results = generateMockScanResults(8);
       setScanResults(results);
       setIsScanning(false);
       navigate('/results');
-    }, 2500);
+    }
   };
 
   return (

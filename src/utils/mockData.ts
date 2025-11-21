@@ -76,3 +76,50 @@ export function generateMockBotActivity(): BotActivity[] {
     status: ['success', 'warning', 'info'][Math.floor(Math.random() * 3)] as BotActivity['status'],
   }));
 }
+
+/**
+ * Convert backend Signal to frontend ScanResult format
+ */
+export function convertSignalToScanResult(signal: any): ScanResult {
+  const trendBias: ScanResult['trendBias'] = 
+    signal.direction === 'LONG' ? 'BULLISH' : 
+    signal.direction === 'SHORT' ? 'BEARISH' : 'NEUTRAL';
+
+  // Determine classification based on setup_type or timeframe
+  const classification: ScanResult['classification'] = 
+    signal.setup_type === 'intraday' || ['5m', '15m', '30m'].includes(signal.timeframe) 
+      ? 'SCALP' 
+      : 'SWING';
+
+  // Calculate risk score from analysis (inverse of risk:reward, scaled 1-10)
+  const riskScore = signal.analysis?.risk_reward 
+    ? Math.max(1, Math.min(10, 10 / signal.analysis.risk_reward))
+    : 5;
+
+  return {
+    id: `signal-${signal.symbol}-${Date.now()}`,
+    pair: signal.symbol.replace('USDT', '/USDT'),
+    trendBias,
+    confidenceScore: signal.score,
+    riskScore,
+    classification,
+    entryZone: { low: signal.entry_far, high: signal.entry_near },
+    stopLoss: signal.stop_loss,
+    takeProfits: signal.targets.map((t: any) => t.level),
+    orderBlocks: signal.analysis?.order_blocks 
+      ? Array(signal.analysis.order_blocks).fill(null).map((_, i) => ({
+          type: trendBias === 'BULLISH' ? 'bullish' as const : 'bearish' as const,
+          price: signal.entry_near * (trendBias === 'BULLISH' ? 0.98 - i * 0.01 : 1.02 + i * 0.01),
+          timeframe: signal.timeframe,
+        }))
+      : [],
+    fairValueGaps: signal.analysis?.fvgs
+      ? Array(signal.analysis.fvgs).fill(null).map((_, i) => ({
+          low: signal.entry_near * (0.96 - i * 0.01),
+          high: signal.entry_near * (0.98 - i * 0.01),
+          type: 'bullish' as const,
+        }))
+      : [],
+    timestamp: new Date().toISOString(),
+  };
+}
