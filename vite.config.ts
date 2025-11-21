@@ -22,6 +22,9 @@ export default defineConfig({
       '@': resolve(projectRoot, 'src')
     }
   },
+  optimizeDeps: {
+    include: ['react', 'react-dom'],
+  },
   server: {
     proxy: {
       '/api': {
