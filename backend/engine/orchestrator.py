@@ -1,0 +1,493 @@
+"""
+SniperSight Orchestrator
+
+The main pipeline controller that wires together all components:
+1. Data ingestion (multi-timeframe)
+2. Indicator computation
+3. SMC detection
+4. Confluence scoring
+5. Trade planning
+6. Risk validation
+7. Signal generation
+
+Orchestrates the complete flow from symbols to actionable trading signals.
+"""
+
+import uuid
+from datetime import datetime, timezone
+from typing import List, Dict, Optional, Any
+import logging
+
+from backend.shared.config.defaults import ScanConfig
+from backend.shared.models.data import MultiTimeframeData
+from backend.shared.models.indicators import IndicatorSet
+from backend.shared.models.smc import SMCSnapshot
+from backend.shared.models.scoring import ConfluenceBreakdown
+from backend.shared.models.planner import TradePlan
+
+from backend.engine.context import SniperContext
+from backend.data.ingestion_pipeline import IngestionPipeline
+from backend.data.adapters.binance import BinanceAdapter
+from backend.indicators.momentum import compute_rsi, compute_stoch_rsi, compute_mfi
+from backend.indicators.volatility import compute_atr, compute_bollinger_bands
+from backend.indicators.volume import detect_volume_spike, compute_obv, compute_vwap
+from backend.strategy.smc.order_blocks import detect_order_blocks
+from backend.strategy.smc.fvg import detect_fvgs
+from backend.strategy.smc.bos_choch import detect_structural_breaks
+from backend.strategy.smc.liquidity_sweeps import detect_liquidity_sweeps
+from backend.strategy.confluence.scorer import calculate_confluence_score
+from backend.strategy.planner.planner_service import generate_trade_plan
+from backend.risk.risk_manager import RiskManager
+from backend.risk.position_sizer import PositionSizer
+
+logger = logging.getLogger(__name__)
+
+
+class Orchestrator:
+    """
+    Main pipeline orchestrator.
+    
+    Coordinates all components to produce complete trading signals.
+    Each scan produces a list of TradePlan objects with full context.
+    
+    Usage:
+        orchestrator = Orchestrator(config)
+        signals = orchestrator.scan(['BTC/USDT', 'ETH/USDT'])
+        
+        for signal in signals:
+            print(f"{signal.symbol}: {signal.confidence_score:.1f}% confidence")
+            print(f"Entry: {signal.entry_zone.near_entry} - {signal.entry_zone.far_entry}")
+    """
+    
+    def __init__(
+        self,
+        config: ScanConfig,
+        exchange_adapter: Optional[BinanceAdapter] = None,
+        risk_manager: Optional[RiskManager] = None,
+        position_sizer: Optional[PositionSizer] = None
+    ):
+        """
+        Initialize orchestrator.
+        
+        Args:
+            config: Scan configuration
+            exchange_adapter: Exchange data adapter (creates default if None)
+            risk_manager: Risk manager (creates default if None)
+            position_sizer: Position sizer (creates default if None)
+        """
+        self.config = config
+        
+        # Initialize components
+        self.exchange_adapter = exchange_adapter or BinanceAdapter(testnet=False)
+        self.ingestion_pipeline = IngestionPipeline(self.exchange_adapter)
+        
+        # Risk management components
+        self.risk_manager = risk_manager or RiskManager(
+            account_balance=10000,  # Default balance
+            max_open_positions=5
+        )
+        self.position_sizer = position_sizer or PositionSizer(
+            account_balance=10000,  # Default balance
+            max_risk_pct=2.0
+        )
+        
+        logger.info("Orchestrator initialized with SniperSight pipeline")
+    
+    def scan(self, symbols: List[str]) -> List[TradePlan]:
+        """
+        Execute complete scan pipeline for symbols.
+        
+        Args:
+            symbols: List of trading pairs to scan
+            
+        Returns:
+            List of TradePlan objects for qualifying setups
+            
+        Raises:
+            Exception: If critical pipeline stage fails
+        """
+        run_id = str(uuid.uuid4())[:8]
+        timestamp = datetime.now(timezone.utc)
+        
+        logger.info(f"🎯 Starting scan {run_id} for {len(symbols)} symbols")
+        
+        signals = []
+        
+        for symbol in symbols:
+            try:
+                signal = self._process_symbol(symbol, run_id, timestamp)
+                if signal:
+                    signals.append(signal)
+                    logger.info(f"✅ {symbol}: Signal generated ({signal.confidence_score:.1f}%)")
+                else:
+                    logger.debug(f"⚪ {symbol}: No qualifying setup")
+                    
+            except Exception as e:
+                logger.error(f"❌ {symbol}: Pipeline error - {e}")
+                continue
+        
+        logger.info(f"🎯 Scan {run_id} complete: {len(signals)}/{len(symbols)} signals generated")
+        return signals
+    
+    def _process_symbol(
+        self, 
+        symbol: str, 
+        run_id: str, 
+        timestamp: datetime
+    ) -> Optional[TradePlan]:
+        """
+        Process single symbol through complete pipeline.
+        
+        Args:
+            symbol: Trading pair to process
+            run_id: Unique scan run identifier  
+            timestamp: Scan timestamp
+            
+        Returns:
+            TradePlan if qualifying setup found, None otherwise
+        """
+        # Stage 1: Initialize context
+        context = SniperContext(
+            symbol=symbol,
+            profile=self.config.profile,
+            run_id=run_id,
+            timestamp=timestamp
+        )
+        
+        # Stage 2: Data ingestion
+        logger.debug(f"{symbol}: Fetching multi-timeframe data")
+        context.multi_tf_data = self._ingest_data(symbol)
+        
+        if not context.multi_tf_data or not context.multi_tf_data.timeframes:
+            logger.warning(f"{symbol}: No data available")
+            return None
+        
+        # Stage 3: Indicator computation
+        logger.debug(f"{symbol}: Computing indicators")
+        context.multi_tf_indicators = self._compute_indicators(context.multi_tf_data)
+        
+        # Stage 4: SMC detection
+        logger.debug(f"{symbol}: Detecting SMC patterns")
+        context.smc_snapshot = self._detect_smc_patterns(context.multi_tf_data)
+        
+        # Stage 5: Confluence scoring
+        logger.debug(f"{symbol}: Computing confluence score")
+        context.confluence_breakdown = self._compute_confluence_score(context)
+        
+        # Check quality gate
+        if context.confluence_breakdown.total_score < self.config.min_confluence_score:
+            logger.debug(f"{symbol}: Below minimum confluence ({context.confluence_breakdown.total_score:.1f} < {self.config.min_confluence_score})")
+            return None
+        
+        # Stage 6: Trade planning
+        logger.debug(f"{symbol}: Generating trade plan")
+        current_price = self._get_current_price(context.multi_tf_data)
+        context.plan = self._generate_trade_plan(context, current_price)
+        
+        # Stage 7: Risk validation
+        logger.debug(f"{symbol}: Validating risk parameters")
+        if not self._validate_risk(context.plan):
+            logger.debug(f"{symbol}: Failed risk validation")
+            return None
+        
+        return context.plan
+    
+    def _ingest_data(self, symbol: str) -> Optional[MultiTimeframeData]:
+        """
+        Ingest multi-timeframe data for symbol.
+        
+        Args:
+            symbol: Trading pair
+            
+        Returns:
+            MultiTimeframeData or None if failed
+        """
+        try:
+            return self.ingestion_pipeline.fetch_multi_timeframe(
+                symbol=symbol,
+                timeframes=list(self.config.timeframes)
+            )
+        except Exception as e:
+            logger.error(f"Data ingestion failed for {symbol}: {e}")
+            return None
+    
+    def _compute_indicators(self, multi_tf_data: MultiTimeframeData) -> IndicatorSet:
+        """
+        Compute technical indicators across all timeframes.
+        
+        Args:
+            multi_tf_data: Multi-timeframe OHLCV data
+            
+        Returns:
+            IndicatorSet with computed indicators
+        """
+        from backend.shared.models.indicators import IndicatorSnapshot
+        
+        by_timeframe = {}
+        
+        for timeframe, df in multi_tf_data.timeframes.items():
+            if df.empty or len(df) < 50:  # Need minimum data for indicators
+                continue
+            
+            try:
+                # Momentum indicators
+                rsi = compute_rsi(df)
+                stoch_rsi = compute_stoch_rsi(df)
+                mfi = compute_mfi(df)
+                
+                # Volatility indicators  
+                atr = compute_atr(df)
+                bb_upper, bb_middle, bb_lower = compute_bollinger_bands(df)
+                
+                # Volume indicators
+                volume_spike = detect_volume_spike(df)
+                obv = compute_obv(df)
+                vwap = compute_vwap(df)
+                
+                # Create indicator snapshot
+                snapshot = IndicatorSnapshot(
+                    # Momentum (required)
+                    rsi=rsi.iloc[-1],
+                    stoch_rsi=stoch_rsi[0].iloc[-1] if isinstance(stoch_rsi, tuple) else stoch_rsi.iloc[-1],
+                    # Mean Reversion (required)  
+                    bb_upper=bb_upper.iloc[-1],
+                    bb_middle=bb_middle.iloc[-1],
+                    bb_lower=bb_lower.iloc[-1],
+                    # Volatility (required)
+                    atr=atr.iloc[-1],
+                    # Volume (required)
+                    volume_spike=bool(volume_spike.iloc[-1]),
+                    # Optional fields
+                    mfi=mfi.iloc[-1],
+                    obv=obv.iloc[-1]
+                )
+                
+                by_timeframe[timeframe] = snapshot
+                
+            except Exception as e:
+                logger.warning(f"Indicator computation failed for {timeframe}: {e}")
+                continue
+        
+        return IndicatorSet(by_timeframe=by_timeframe)
+    
+    def _detect_smc_patterns(self, multi_tf_data: MultiTimeframeData) -> SMCSnapshot:
+        """
+        Detect Smart Money Concept patterns.
+        
+        Args:
+            multi_tf_data: Multi-timeframe OHLCV data
+            
+        Returns:
+            SMCSnapshot with detected patterns
+        """
+        all_order_blocks = []
+        all_fvgs = []
+        all_structure_breaks = []
+        all_liquidity_sweeps = []
+        
+        for timeframe, df in multi_tf_data.timeframes.items():
+            if df.empty or len(df) < 20:
+                continue
+            
+            try:
+                # Order blocks
+                obs = detect_order_blocks(df, {})
+                all_order_blocks.extend(obs)
+                
+                # Fair value gaps
+                fvgs = detect_fvgs(df, {})
+                all_fvgs.extend(fvgs)
+                
+                # Structure breaks
+                breaks = detect_structural_breaks(df, {})
+                all_structure_breaks.extend(breaks)
+                
+                # Liquidity sweeps
+                sweeps = detect_liquidity_sweeps(df, {})
+                all_liquidity_sweeps.extend(sweeps)
+                
+            except Exception as e:
+                logger.warning(f"SMC detection failed for {timeframe}: {e}")
+                continue
+        
+        return SMCSnapshot(
+            order_blocks=all_order_blocks,
+            fvgs=all_fvgs,
+            structural_breaks=all_structure_breaks,
+            liquidity_sweeps=all_liquidity_sweeps
+        )
+    
+    def _compute_confluence_score(self, context: SniperContext) -> ConfluenceBreakdown:
+        """
+        Compute confluence score from all available data.
+        
+        Args:
+            context: SniperContext with data and indicators
+            
+        Returns:
+            ConfluenceBreakdown with scoring details
+        """
+        return calculate_confluence_score(
+            smc_snapshot=context.smc_snapshot,
+            indicators=context.multi_tf_indicators,
+            config=self.config,
+            direction="LONG"  # We'll determine this properly later
+        )
+    
+    def _generate_trade_plan(self, context: SniperContext, current_price: float) -> Optional[TradePlan]:
+        """
+        Generate complete trade plan from analysis.
+        
+        Args:
+            context: SniperContext with complete analysis
+            current_price: Current market price
+            
+        Returns:
+            TradePlan or None if unable to generate
+        """
+        if not all([context.smc_snapshot, context.multi_tf_indicators, context.confluence_breakdown]):
+            logger.warning("Missing required data for trade planning")
+            return None
+        
+        # Determine trade direction from confluence analysis
+        direction = "LONG" if context.confluence_breakdown.regime in ["trend", "bullish"] else "SHORT"
+        
+        # Determine setup type based on SMC patterns
+        setup_type = self._classify_setup_type(context.smc_snapshot)
+        
+        try:
+            plan = generate_trade_plan(
+                symbol=context.symbol,
+                direction=direction,
+                setup_type=setup_type,
+                smc_snapshot=context.smc_snapshot,
+                indicators=context.multi_tf_indicators,
+                confluence_breakdown=context.confluence_breakdown,
+                config=self.config,
+                current_price=current_price
+            )
+            
+            return plan
+            
+        except Exception as e:
+            logger.error(f"Trade plan generation failed: {e}")
+            return None
+    
+    def _classify_setup_type(self, smc_snapshot: SMCSnapshot) -> str:
+        """
+        Classify setup type based on SMC patterns.
+        
+        Args:
+            smc_snapshot: Detected SMC patterns
+            
+        Returns:
+            Setup type string
+        """
+        # Count pattern types
+        ob_count = len(smc_snapshot.order_blocks)
+        fvg_count = len(smc_snapshot.fvgs)
+        break_count = len(smc_snapshot.structural_breaks)
+        
+        # Simple classification logic
+        if ob_count > 0 and fvg_count > 0:
+            return "OB_FVG_Confluence"
+        elif ob_count > 0 and break_count > 0:
+            return "OB_StructureBreak"
+        elif fvg_count > 0:
+            return "FVG_Setup"
+        elif ob_count > 0:
+            return "OrderBlock_Setup"
+        else:
+            return "Generic_Setup"
+    
+    def _validate_risk(self, plan: TradePlan) -> bool:
+        """
+        Validate trade plan against risk parameters.
+        
+        Args:
+            plan: Generated trade plan
+            
+        Returns:
+            True if plan passes risk validation
+        """
+        if not plan:
+            return False
+        
+        # Calculate position size
+        try:
+            position_size = self.position_sizer.calculate_fixed_fractional(
+                risk_pct=self.config.max_risk_pct,
+                entry_price=plan.entry_zone.near_entry,
+                stop_price=plan.stop_loss.level
+            )
+        except Exception as e:
+            logger.warning(f"Position sizing failed: {e}")
+            return False
+        
+        # Validate with risk manager
+        risk_check = self.risk_manager.validate_new_trade(
+            symbol=plan.symbol,
+            direction=plan.direction,
+            position_value=position_size.notional_value,
+            risk_amount=position_size.risk_amount
+        )
+        
+        if not risk_check.passed:
+            logger.debug(f"Risk validation failed: {risk_check.reason}")
+            return False
+        
+        return True
+    
+    def _get_current_price(self, multi_tf_data: MultiTimeframeData) -> float:
+        """
+        Get current price from most recent data.
+        
+        Args:
+            multi_tf_data: Multi-timeframe data
+            
+        Returns:
+            Current price (close of most recent candle)
+        """
+        # Use highest frequency timeframe (last in sorted list)
+        timeframes = sorted(multi_tf_data.timeframes.keys())
+        if timeframes:
+            df = multi_tf_data.timeframes[timeframes[-1]]
+            if not df.empty:
+                return float(df['close'].iloc[-1])
+        
+        return 0.0
+    
+    def update_configuration(self, config: ScanConfig) -> None:
+        """
+        Update scan configuration.
+        
+        Args:
+            config: New configuration
+        """
+        self.config = config
+        logger.info("Configuration updated")
+    
+    def get_pipeline_status(self) -> Dict[str, Any]:
+        """
+        Get status of all pipeline components.
+        
+        Returns:
+            Status dictionary
+        """
+        return {
+            'exchange_adapter': 'connected' if self.exchange_adapter else 'disconnected',
+            'risk_manager': {
+                'account_balance': self.risk_manager.account_balance,
+                'open_positions': len(self.risk_manager.positions),
+                'max_positions': self.risk_manager.max_open_positions
+            },
+            'position_sizer': {
+                'account_balance': self.position_sizer.account_balance,
+                'max_risk_pct': self.position_sizer.max_risk_pct
+            },
+            'config': {
+                'timeframes': self.config.timeframes,
+                'min_confluence_score': self.config.min_confluence_score,
+                'profile': self.config.profile
+            }
+        }

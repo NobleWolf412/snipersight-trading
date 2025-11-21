@@ -32,14 +32,57 @@ def scan(
     typer.echo(f"Profile: {profile} | Universe: {symbols} | Exchange: {exchange}")
     typer.echo()
     
-    # TODO: Implement orchestrator call
-    # from backend.engine.orchestrator import Orchestrator
-    # config = load_profile(profile)
-    # orchestrator = Orchestrator(config)
-    # results = orchestrator.scan(symbol_list)
-    
-    typer.echo("⚠️  Orchestrator not yet implemented")
-    typer.echo("✅ Phase 1 Foundation complete - ready for Phase 2 implementation")
+    try:
+        from backend.engine.orchestrator import Orchestrator
+        from backend.shared.config.defaults import ScanConfig
+        
+        # Load configuration based on profile
+        config = ScanConfig(
+            profile=profile,
+            timeframes=['1W', '1D', '4H', '1H', '15m'] if profile == "balanced" else ['4H', '1H', '15m'],
+            min_confluence_score=65.0 if profile == "balanced" else 70.0
+        )
+        
+        # Parse symbol list
+        if symbols == "top20":
+            symbol_list = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'MATIC/USDT'][:5]  # Limited for demo
+        elif symbols == "top10":
+            symbol_list = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT']
+        else:
+            symbol_list = symbols.split(',')
+        
+        # Initialize orchestrator
+        typer.echo("🔧 Initializing orchestrator...")
+        orchestrator = Orchestrator(config)
+        
+        # Run scan
+        typer.echo(f"📡 Scanning {len(symbol_list)} symbols...")
+        results = orchestrator.scan(symbol_list)
+        
+        # Display results
+        if results:
+            typer.echo(f"\n🎯 {len(results)} high-conviction setups found:")
+            typer.echo("=" * 60)
+            
+            for i, plan in enumerate(results, 1):
+                typer.echo(f"\n{i}. {plan.symbol} - {plan.direction} ({plan.setup_type})")
+                typer.echo(f"   Confidence: {plan.confidence_score:.1f}%")
+                typer.echo(f"   Entry: ${plan.entry_zone.near_entry:.2f} - ${plan.entry_zone.far_entry:.2f}")
+                typer.echo(f"   Stop: ${plan.stop_loss.level:.2f}")
+                typer.echo(f"   Risk:Reward: {plan.risk_reward:.2f}:1")
+                
+                if output == "json":
+                    import json
+                    typer.echo(f"   JSON: {json.dumps(plan.__dict__, default=str, indent=2)}")
+        else:
+            typer.echo("📭 No qualifying setups found in current market conditions")
+            
+    except ImportError as e:
+        typer.echo(f"❌ Missing dependencies: {e}")
+        typer.echo("✅ Backend components need to be completed")
+    except Exception as e:
+        typer.echo(f"❌ Scan failed: {e}")
+        typer.echo("📋 Check logs for details")
 
 
 @app.command()

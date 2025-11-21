@@ -12,18 +12,21 @@ import { Badge } from '@/components/ui/badge';
 import { Crosshair, Lightning } from '@phosphor-icons/react';
 import { useKV } from '@github/spark/hooks';
 import type { ScanResult } from '@/utils/mockData';
-import { generateMockScanResults } from '@/utils/mockData';
+import { generateMockScanResults, convertSignalToScanResult } from '@/utils/mockData';
 import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
 import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
 import { SniperModeSelector } from '@/components/SniperModeSelector';
 import type { SniperMode } from '@/types/sniperMode';
 import { SNIPER_MODES } from '@/types/sniperMode';
+import { api } from '@/utils/api';
+import { useToast } from '@/hooks/use-toast';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
   const { scanConfig, setScanConfig } = useScanner();
   const [, setScanResults] = useKV<ScanResult[]>('scan-results', []);
   const [isScanning, setIsScanning] = useState(false);
+  const { toast } = useToast();
 
   const marketRegimeProps = useMockMarketRegime('scanner');
 
@@ -48,12 +51,52 @@ export function ScannerSetup() {
   const handleArmScanner = async () => {
     setIsScanning(true);
 
-    setTimeout(() => {
+    try {
+      // Call the real backend API
+      const modeConfig = SNIPER_MODES[scanConfig.sniperMode];
+      const response = await api.getSignals({
+        limit: scanConfig.topPairs || 20,
+        min_score: modeConfig?.min_confluence || 60,
+        sniper_mode: scanConfig.sniperMode.toUpperCase(),
+      });
+
+      if (response.error) {
+        console.error('API error, falling back to mock data:', response.error);
+        toast({
+          title: 'Using Mock Data',
+          description: 'Backend unavailable, displaying simulated results',
+          variant: 'default',
+        });
+        // Fallback to mock data
+        const results = generateMockScanResults(8);
+        setScanResults(results);
+      } else if (response.data) {
+        // Convert backend signals to frontend ScanResult format
+        const results = response.data.signals.map(convertSignalToScanResult);
+        setScanResults(results);
+        
+        toast({
+          title: 'Targets Acquired',
+          description: `${results.length} high-conviction setups identified`,
+          variant: 'default',
+        });
+      }
+
+      setIsScanning(false);
+      navigate('/results');
+    } catch (error) {
+      console.error('Scanner error:', error);
+      toast({
+        title: 'Scanner Error',
+        description: 'Failed to fetch signals, using mock data',
+        variant: 'destructive',
+      });
+      // Fallback to mock data
       const results = generateMockScanResults(8);
       setScanResults(results);
       setIsScanning(false);
       navigate('/results');
-    }, 2500);
+    }
   };
 
   return (
