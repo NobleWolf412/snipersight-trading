@@ -63,9 +63,7 @@ export function Landing() {
                   <p className="text-sm text-muted-foreground">Autonomous execution</p>
                 </div>
               </div>
-              <p className="text-sm text-foreground/80">
-                Activate automated sniper for continuous market surveillance and precision trade execution.
-              </p>
+              <p className="text-sm text-foreground/80">Activate automated sniper for continuous market surveillance and precision trade execution.</p>
               <Button className="w-full bg-warning hover:bg-warning/90 text-warning-foreground" size="lg">ACTIVATE AUTOMATION</Button>
             </div>
           </Card>
