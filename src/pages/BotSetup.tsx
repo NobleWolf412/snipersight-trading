@@ -66,56 +66,56 @@ export function BotSetup() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-            <Robot size={32} weight="bold" className="text-warning" />
+    <div className="container mx-auto px-6 py-12">
+      <div className="max-w-4xl mx-auto space-y-12">
+        <div className="space-y-4">
+          <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
+            <Robot size={40} weight="bold" className="text-warning" />
             DEPLOY AUTONOMOUS SNIPER
           </h1>
-          <p className="text-muted-foreground">Configure automated trading parameters</p>
+          <p className="text-lg text-muted-foreground">Configure automated trading parameters</p>
         </div>
 
-        <div className="space-y-4">
-          <div className="space-y-1">
+        <div className="space-y-6">
+          <div className="space-y-2">
             <h2 className="text-sm font-bold text-muted-foreground tracking-wider">MARKET CONTEXT</h2>
           </div>
           <MarketRegimeLens {...marketRegimeProps} />
         </div>
 
         <WalletGate message="Connect your wallet to authenticate before deploying trading bots">
-          <Alert className="border-accent/50 bg-accent/10">
-            <Wallet size={20} className="text-accent" />
-            <AlertTitle className="text-accent">Wallet Authenticated</AlertTitle>
-            <AlertDescription>
+          <Alert className="border-accent/50 bg-accent/10 p-6">
+            <Wallet size={24} className="text-accent" />
+            <AlertTitle className="text-accent text-base mb-2">Wallet Authenticated</AlertTitle>
+            <AlertDescription className="text-sm">
               Authenticated as {wallet?.address.slice(0, 6)}...{wallet?.address.slice(-4)} · 
               Your wallet signature confirms your identity for secure trading operations.
             </AlertDescription>
           </Alert>
 
-          <Alert className="border-warning/50 bg-warning/10">
-            <Shield size={20} className="text-warning" />
-            <AlertTitle className="text-warning">Security Notice</AlertTitle>
-            <AlertDescription>
+          <Alert className="border-warning/50 bg-warning/10 p-6">
+            <Shield size={24} className="text-warning" />
+            <AlertTitle className="text-warning text-base mb-2">Security Notice</AlertTitle>
+            <AlertDescription className="text-sm">
               API keys are stored securely on the backend. Your credentials are never exposed to the client.
             </AlertDescription>
           </Alert>
 
           <Card className="bg-card/50 border-warning/30">
-            <CardHeader>
-              <CardTitle>Exchange Connection</CardTitle>
-              <CardDescription>Secure API authentication</CardDescription>
+            <CardHeader className="pb-6">
+              <CardTitle className="text-xl">Exchange Connection</CardTitle>
+              <CardDescription className="text-base mt-2">Secure API authentication</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="exchange">Exchange</Label>
+            <CardContent className="space-y-6">
+              <div className="space-y-3">
+                <Label htmlFor="exchange" className="text-base">Exchange</Label>
                 <Select
                   value={botConfig.exchange}
                   onValueChange={(value) =>
                     setBotConfig({ ...botConfig, exchange: value })
                   }
                 >
-                  <SelectTrigger id="exchange" className="bg-background">
+                  <SelectTrigger id="exchange" className="bg-background h-12">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -131,26 +131,26 @@ export function BotSetup() {
               {!isConnected ? (
                 <Button
                   onClick={() => setShowConnectModal(true)}
-                  className="w-full bg-warning hover:bg-warning/90 text-warning-foreground"
+                  className="w-full bg-warning hover:bg-warning/90 text-warning-foreground h-12"
                   size="lg"
                 >
-                  <Shield size={20} />
+                  <Shield size={22} />
                   CONNECT EXCHANGE
                 </Button>
               ) : (
-                <div className="flex items-center justify-between p-4 bg-success/10 border border-success/50 rounded">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between p-5 bg-success/10 border border-success/50 rounded-lg">
+                  <div className="flex items-center gap-4">
                     <div className="w-3 h-3 bg-success rounded-full scan-pulse" />
                     <div>
-                      <div className="font-bold text-success">CONNECTED</div>
-                      <div className="text-xs text-muted-foreground">{botConfig.exchange} · Secure Backend Storage</div>
+                      <div className="font-bold text-success text-base">CONNECTED</div>
+                      <div className="text-sm text-muted-foreground mt-1">{botConfig.exchange} · Secure Backend Storage</div>
                     </div>
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setIsConnected(false)}
-                    className="border-destructive text-destructive hover:bg-destructive/10"
+                    className="border-destructive text-destructive hover:bg-destructive/10 h-10"
                   >
                     DISCONNECT
                   </Button>
@@ -161,20 +161,20 @@ export function BotSetup() {
 
           {isConnected && (
             <Card className="bg-card/50 border-warning/30">
-              <CardHeader>
-                <CardTitle>Bot Configuration</CardTitle>
-                <CardDescription>Trading parameters and limits</CardDescription>
+              <CardHeader className="pb-6">
+                <CardTitle className="text-xl">Bot Configuration</CardTitle>
+                <CardDescription className="text-base mt-2">Trading parameters and limits</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="pair">Trading Pair</Label>
+              <CardContent className="space-y-8">
+                <div className="space-y-3">
+                  <Label htmlFor="pair" className="text-base">Trading Pair</Label>
                   <Select
                     value={botConfig.pair}
                     onValueChange={(value) =>
                       setBotConfig({ ...botConfig, pair: value })
                     }
                   >
-                    <SelectTrigger id="pair" className="bg-background">
+                    <SelectTrigger id="pair" className="bg-background h-12">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -186,11 +186,11 @@ export function BotSetup() {
                   </Select>
                 </div>
 
-                <div className="space-y-3">
-                  <Label>Trading Modes</Label>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between p-3 bg-background rounded border border-border">
-                      <Label htmlFor="swing" className="cursor-pointer">Swing Trading</Label>
+                <div className="space-y-4">
+                  <Label className="text-base">Trading Modes</Label>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-4 bg-background rounded-lg border border-border">
+                      <Label htmlFor="swing" className="cursor-pointer text-base">Swing Trading</Label>
                       <Switch
                         id="swing"
                         checked={botConfig.modes.swing}
@@ -202,8 +202,8 @@ export function BotSetup() {
                         }
                       />
                     </div>
-                    <div className="flex items-center justify-between p-3 bg-background rounded border border-border">
-                      <Label htmlFor="scalp" className="cursor-pointer">Scalp Trading</Label>
+                    <div className="flex items-center justify-between p-4 bg-background rounded-lg border border-border">
+                      <Label htmlFor="scalp" className="cursor-pointer text-base">Scalp Trading</Label>
                       <Switch
                         id="scalp"
                         checked={botConfig.modes.scalp}
@@ -218,7 +218,7 @@ export function BotSetup() {
                   </div>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <SniperModeSelector
                     selectedMode={botConfig.sniperMode}
                     onModeSelect={handleModeSelect}
@@ -227,8 +227,8 @@ export function BotSetup() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="max-trades">Max Trades Per Run</Label>
+                <div className="space-y-3">
+                  <Label htmlFor="max-trades" className="text-base">Max Trades Per Run</Label>
                   <Input
                     id="max-trades"
                     type="number"
@@ -241,12 +241,12 @@ export function BotSetup() {
                         maxTrades: parseInt(e.target.value) || 1,
                       })
                     }
-                    className="bg-background"
+                    className="bg-background h-12"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="duration">Mission Duration (Hours)</Label>
+                <div className="space-y-3">
+                  <Label htmlFor="duration" className="text-base">Mission Duration (Hours)</Label>
                   <Input
                     id="duration"
                     type="number"
@@ -259,7 +259,7 @@ export function BotSetup() {
                         duration: parseInt(e.target.value) || 1,
                       })
                     }
-                    className="bg-background"
+                    className="bg-background h-12"
                   />
                 </div>
               </CardContent>
@@ -270,10 +270,10 @@ export function BotSetup() {
             <Button
               onClick={handleDeployBot}
               disabled={!isValidConfig()}
-              className="w-full bg-warning hover:bg-warning/90 text-warning-foreground h-14 text-lg font-bold"
+              className="w-full bg-warning hover:bg-warning/90 text-warning-foreground h-16 text-lg font-bold mt-4"
               size="lg"
             >
-              <Lightning size={24} weight="bold" />
+              <Lightning size={28} weight="bold" />
               DEPLOY BOT
             </Button>
           )}

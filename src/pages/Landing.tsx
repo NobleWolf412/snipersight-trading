@@ -138,50 +138,50 @@ export function Landing() {
       <div className="absolute -top-24 -right-10 w-80 h-80 hud-glow-cyan rounded-full blur-[120px] opacity-40" aria-hidden />
       <div className="absolute -bottom-16 -left-24 w-[28rem] h-[28rem] hud-glow-green rounded-full blur-[140px] opacity-30" aria-hidden />
       <div className="absolute inset-0 pointer-events-none radial-radar" aria-hidden="true" />
-      <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-12 lg:py-16 space-y-10">
-        <div className="grid lg:grid-cols-[1.25fr_1fr] gap-10 items-center">
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.2em] text-accent">
+      <div className="relative max-w-6xl mx-auto px-6 md:px-8 py-16 lg:py-20 space-y-14">
+        <div className="grid lg:grid-cols-[1.25fr_1fr] gap-12 items-center">
+          <div className="space-y-8">
+            <div className="flex flex-wrap items-center gap-4 text-xs uppercase tracking-[0.2em] text-accent">
               <div className="w-2 h-2 bg-accent rounded-full scan-pulse" />
               <span>Systems Online</span>
-              <span className="px-3 py-1 rounded-full border border-accent/40 bg-accent/10 text-[11px]">Night Ops Ready</span>
-              <span className="px-3 py-1 rounded-full border border-success/40 bg-success/10 text-[11px] text-success">Low Latency Link</span>
+              <span className="px-4 py-1.5 rounded-full border border-accent/40 bg-accent/10 text-[11px]">Night Ops Ready</span>
+              <span className="px-4 py-1.5 rounded-full border border-success/40 bg-success/10 text-[11px] text-success">Low Latency Link</span>
             </div>
 
-            <div className="space-y-3">
-              <h1 className="text-4xl md:text-5xl font-bold text-foreground tracking-tight leading-tight">
+            <div className="space-y-4">
+              <h1 className="text-5xl md:text-6xl font-bold text-foreground tracking-tight leading-tight">
                 SniperSight Tactical Command
               </h1>
-              <p className="text-lg text-muted-foreground max-w-2xl">HUD-inspired command deck with breathable spacing for analysts and operators. Precision crypto reconnaissance with automated execution when targets confirm.</p>
+              <p className="text-xl text-muted-foreground max-w-2xl">HUD-inspired command deck with breathable spacing for analysts and operators. Precision crypto reconnaissance with automated execution when targets confirm.</p>
             </div>
 
-            <div className="grid sm:grid-cols-3 gap-3">
+            <div className="grid sm:grid-cols-3 gap-4">
               {readinessBadges.map(({ title, value, icon: Icon, colorClass, iconClass }) => (
                 <div
                   key={title}
-                  className={`flex items-center gap-3 rounded-lg border ${colorClass} p-3 backdrop-blur`}
+                  className={`flex items-center gap-4 rounded-lg border ${colorClass} p-4 backdrop-blur`}
                 >
-                  <div className={`w-9 h-9 rounded border flex items-center justify-center ${iconClass}`}>
-                    <Icon size={18} />
+                  <div className={`w-11 h-11 rounded border flex items-center justify-center ${iconClass}`}>
+                    <Icon size={20} />
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">{title}</p>
-                    <p className="text-sm font-semibold text-foreground">{value}</p>
+                    <p className="text-base font-semibold text-foreground">{value}</p>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-4">
               <Button
                 size="lg"
-                className="bg-accent hover:bg-accent/90 text-accent-foreground hud-glow"
+                className="bg-accent hover:bg-accent/90 text-accent-foreground hud-glow h-12 text-base"
                 onClick={() => navigate('/scan')}
               >Launch Scanner</Button>
               <Button
                 variant="outline"
                 size="lg"
-                className="border-border/70 bg-card/50 hover:border-accent/60 hover:text-foreground"
+                className="border-border/70 bg-card/50 hover:border-accent/60 hover:text-foreground h-12 text-base"
                 onClick={() => navigate('/bot')}
               >
                 Deploy Automation
@@ -189,39 +189,39 @@ export function Landing() {
             </div>
           </div>
 
-          <Card className="relative p-6 bg-card/60 border border-border/70 backdrop-blur-xl hud-glow-cyan">
-            <div className="absolute -top-8 -right-8 w-20 h-20 rounded-full bg-accent/10 border border-accent/40 flex items-center justify-center">
-              <Crosshair size={36} weight="bold" className="text-accent" />
+          <Card className="relative p-8 bg-card/60 border border-border/70 backdrop-blur-xl hud-glow-cyan">
+            <div className="absolute -top-10 -right-10 w-24 h-24 rounded-full bg-accent/10 border border-accent/40 flex items-center justify-center">
+              <Crosshair size={40} weight="bold" className="text-accent" />
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-[0.2em]">Mission Status</p>
-                  <p className="text-2xl font-semibold text-foreground">Active Recon</p>
+                  <p className="text-3xl font-semibold text-foreground">Active Recon</p>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-accent">
+                <div className="flex items-center gap-2.5 text-xs text-accent">
                   <div className="w-2 h-2 bg-accent rounded-full scan-pulse" />
                   <span>Live Feed</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 {missionStats.map(({ title, value, hint, border, accent }) => (
-                  <div key={title} className={`rounded-lg border ${border} bg-background/60 p-3`}>
+                  <div key={title} className={`rounded-lg border ${border} bg-background/60 p-4`}>
                     <p className="text-xs text-muted-foreground">{title}</p>
-                    <p className={`text-xl font-semibold ${accent}`}>{value}</p>
-                    <p className="text-[11px] text-muted-foreground">{hint}</p>
+                    <p className={`text-2xl font-semibold ${accent} mt-1`}>{value}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{hint}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="rounded-lg border border-border/60 bg-background/70 p-4 flex items-center justify-between">
+              <div className="rounded-lg border border-border/60 bg-background/70 p-5 flex items-center justify-between">
                 <div>
                   <p className="text-xs text-muted-foreground">Readiness</p>
-                  <p className="text-lg font-semibold text-foreground">SniperSight v1.0.0</p>
+                  <p className="text-xl font-semibold text-foreground mt-1">SniperSight v1.0.0</p>
                 </div>
-                <Button size="sm" className="bg-accent hover:bg-accent/90 text-accent-foreground" onClick={() => navigate('/market')}>
+                <Button size="sm" className="bg-accent hover:bg-accent/90 text-accent-foreground h-10" onClick={() => navigate('/market')}>
                   Market View
                 </Button>
               </div>
@@ -229,25 +229,25 @@ export function Landing() {
           </Card>
         </div>
 
-        <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-1">
+        <section className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-6">
+            <div className="space-y-2">
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">LIVE MARKET FEED</p>
-              <h2 className="text-xl font-semibold text-foreground">Persistent ticker stream · fully compatible with sessions</h2>
-              <p className="text-sm text-muted-foreground max-w-2xl">The scrolling tape remains online with dual-pass rendering for continuous motion. Session telemetry stays synced with your top-bar indicator so desktop and mobile operators keep consistent context.</p>
+              <h2 className="text-2xl font-semibold text-foreground">Persistent ticker stream · fully compatible with sessions</h2>
+              <p className="text-base text-muted-foreground max-w-2xl">The scrolling tape remains online with dual-pass rendering for continuous motion. Session telemetry stays synced with your top-bar indicator so desktop and mobile operators keep consistent context.</p>
             </div>
-            <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-card/60 px-3 py-2 backdrop-blur">
+            <div className="flex items-center gap-4 rounded-lg border border-border/60 bg-card/60 px-4 py-3 backdrop-blur">
               <SessionIndicator />
-              <div className="text-xs text-muted-foreground leading-tight">
+              <div className="text-sm text-muted-foreground leading-tight">
                 <div className="text-foreground font-semibold">Session link stable</div>
-                <div>Aligned with HUD status and notifications</div>
+                <div className="mt-0.5">Aligned with HUD status and notifications</div>
               </div>
             </div>
           </div>
           <LiveTicker className="rounded-xl border border-border/60" />
         </section>
 
-        <div className="grid lg:grid-cols-3 gap-4">
+        <div className="grid lg:grid-cols-3 gap-6">
           {primaryModules.map(
             ({
               title,
@@ -262,21 +262,21 @@ export function Landing() {
             }) => (
               <Card
                 key={title}
-                className={`p-5 bg-card/50 ${borderClass} transition-all cursor-pointer hud-glow group`}
+                className={`p-6 bg-card/50 ${borderClass} transition-all cursor-pointer hud-glow group`}
                 onClick={() => navigate(destination)}
               >
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-11 h-11 rounded-lg flex items-center justify-center border ${iconClass}`}>
-                      <Icon size={24} weight="bold" />
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center border ${iconClass}`}>
+                      <Icon size={26} weight="bold" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-bold text-foreground">{title}</h2>
-                      <p className="text-xs text-muted-foreground">{subtitle}</p>
+                      <h2 className="text-xl font-bold text-foreground">{title}</h2>
+                      <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
                     </div>
                   </div>
-                  <p className="text-sm text-foreground/80 leading-relaxed">{body}</p>
-                  <Button variant="outline" size="sm" className={buttonClass}>
+                  <p className="text-base text-foreground/80 leading-relaxed">{body}</p>
+                  <Button variant="outline" size="sm" className={`${buttonClass} h-10`}>
                     {buttonLabel}
                   </Button>
                 </div>

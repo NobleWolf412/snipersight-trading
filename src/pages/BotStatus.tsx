@@ -40,44 +40,44 @@ export function BotStatus() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="container mx-auto px-6 py-12">
+      <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-              <Robot size={32} weight="bold" className="text-warning" />
+          <div className="space-y-2">
+            <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
+              <Robot size={40} weight="bold" className="text-warning" />
               SNIPER IN THE FIELD
             </h1>
-            <p className="text-muted-foreground">Autonomous bot operational status</p>
+            <p className="text-lg text-muted-foreground">Autonomous bot operational status</p>
           </div>
           <Button
             onClick={handleAbortMission}
-            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground h-12"
             size="lg"
           >
-            <StopCircle size={20} weight="fill" />
+            <StopCircle size={22} weight="fill" />
             ABORT MISSION
           </Button>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-3 gap-6">
           <Card className="bg-card/50 border-accent/30">
-            <CardHeader>
+            <CardHeader className="pb-5">
               <CardTitle className="text-sm">MISSION STATUS</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <div className="w-3 h-3 bg-success rounded-full scan-pulse" />
                 <div>
-                  <div className="text-2xl font-bold text-success">ACTIVE</div>
-                  <div className="text-xs text-muted-foreground">Monitoring markets</div>
+                  <div className="text-3xl font-bold text-success">ACTIVE</div>
+                  <div className="text-sm text-muted-foreground mt-1">Monitoring markets</div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-card/50 border-accent/30">
-            <CardHeader>
+            <CardHeader className="pb-5">
               <CardTitle className="text-sm">ACTIVE TRADES</CardTitle>
             </CardHeader>
             <CardContent>

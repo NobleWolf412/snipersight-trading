@@ -97,38 +97,38 @@ export function ScannerSetup() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-            <Crosshair size={32} weight="bold" className="text-accent" />
+    <div className="container mx-auto px-6 py-12">
+      <div className="max-w-4xl mx-auto space-y-12">
+        <div className="space-y-4">
+          <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
+            <Crosshair size={40} weight="bold" className="text-accent" />
             ACQUIRE TARGETS
           </h1>
-          <p className="text-muted-foreground">Configure scanner parameters for market reconnaissance</p>
+          <p className="text-lg text-muted-foreground">Configure scanner parameters for market reconnaissance</p>
         </div>
 
-        <div className="space-y-4">
-          <div className="space-y-1">
+        <div className="space-y-6">
+          <div className="space-y-2">
             <h2 className="text-sm font-bold text-muted-foreground tracking-wider">MARKET CONTEXT</h2>
           </div>
           <MarketRegimeLens {...marketRegimeProps} />
         </div>
 
         <Card className="bg-card/50 border-accent/30">
-          <CardHeader>
-            <CardTitle>Scanner Configuration</CardTitle>
-            <CardDescription>Define search parameters and analysis scope</CardDescription>
+          <CardHeader className="pb-6">
+            <CardTitle className="text-xl">Scanner Configuration</CardTitle>
+            <CardDescription className="text-base mt-2">Define search parameters and analysis scope</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="exchange">Exchange</Label>
+          <CardContent className="space-y-8">
+            <div className="space-y-3">
+              <Label htmlFor="exchange" className="text-base">Exchange</Label>
               <Select
                 value={scanConfig.exchange}
                 onValueChange={(value) =>
                   setScanConfig({ ...scanConfig, exchange: value })
                 }
               >
-                <SelectTrigger id="exchange" className="bg-background">
+                <SelectTrigger id="exchange" className="bg-background h-12">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -141,8 +141,8 @@ export function ScannerSetup() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="top-pairs">Top Pairs by Volume</Label>
+            <div className="space-y-3">
+              <Label htmlFor="top-pairs" className="text-base">Top Pairs by Volume</Label>
               <Input
                 id="top-pairs"
                 type="number"
@@ -152,19 +152,19 @@ export function ScannerSetup() {
                 onChange={(e) =>
                   setScanConfig({ ...scanConfig, topPairs: parseInt(e.target.value) || 20 })
                 }
-                className="bg-background"
+                className="bg-background h-12"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="leverage">Leverage</Label>
+            <div className="space-y-3">
+              <Label htmlFor="leverage" className="text-base">Leverage</Label>
               <Select
                 value={(scanConfig.leverage ?? 1).toString()}
                 onValueChange={(value) =>
                   setScanConfig({ ...scanConfig, leverage: parseInt(value) })
                 }
               >
-                <SelectTrigger id="leverage" className="bg-background">
+                <SelectTrigger id="leverage" className="bg-background h-12">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -181,12 +181,12 @@ export function ScannerSetup() {
               </Select>
             </div>
 
-            <div className="space-y-3">
-              <Label>Asset Categories</Label>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between p-3 bg-background rounded border border-border">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="majors" className="cursor-pointer">Majors</Label>
+            <div className="space-y-4">
+              <Label className="text-base">Asset Categories</Label>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-4 bg-background rounded-lg border border-border">
+                  <div className="flex items-center gap-3">
+                    <Label htmlFor="majors" className="cursor-pointer text-base">Majors</Label>
                     <Badge variant="outline" className="text-xs">BTC, ETH, BNB</Badge>
                   </div>
                   <Switch
@@ -201,9 +201,9 @@ export function ScannerSetup() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between p-3 bg-background rounded border border-border">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="altcoins" className="cursor-pointer">Altcoins</Label>
+                <div className="flex items-center justify-between p-4 bg-background rounded-lg border border-border">
+                  <div className="flex items-center gap-3">
+                    <Label htmlFor="altcoins" className="cursor-pointer text-base">Altcoins</Label>
                     <Badge variant="outline" className="text-xs">SOL, MATIC, LINK</Badge>
                   </div>
                   <Switch
@@ -218,9 +218,9 @@ export function ScannerSetup() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between p-3 bg-background rounded border border-border">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="meme" className="cursor-pointer">Meme Mode</Label>
+                <div className="flex items-center justify-between p-4 bg-background rounded-lg border border-border">
+                  <div className="flex items-center gap-3">
+                    <Label htmlFor="meme" className="cursor-pointer text-base">Meme Mode</Label>
                     <Badge variant="outline" className="text-xs bg-warning/20 text-warning">VOLATILE</Badge>
                   </div>
                   <Switch
@@ -237,7 +237,7 @@ export function ScannerSetup() {
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               <SniperModeSelector
                 selectedMode={scanConfig.sniperMode}
                 onModeSelect={handleSniperModeSelect}
@@ -251,17 +251,17 @@ export function ScannerSetup() {
         <Button
           onClick={handleArmScanner}
           disabled={isScanning || scanConfig.timeframes.length === 0}
-          className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-14 text-lg font-bold disabled:opacity-50"
+          className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-16 text-lg font-bold disabled:opacity-50 mt-4"
           size="lg"
         >
           {isScanning ? (
             <>
-              <Lightning size={24} className="animate-pulse" />
+              <Lightning size={28} className="animate-pulse" />
               ACQUIRING TARGETS...
             </>
           ) : (
             <>
-              <Crosshair size={24} weight="bold" />
+              <Crosshair size={28} weight="bold" />
               ARM THE SCANNER
             </>
           )}

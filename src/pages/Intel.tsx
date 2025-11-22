@@ -4,57 +4,57 @@ import { ChartLine, TrendUp, TrendDown, Activity } from '@phosphor-icons/react';
 
 export function Intel() {
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-            <ChartLine size={32} weight="bold" className="text-accent" />
+    <div className="container mx-auto px-6 py-12">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div className="space-y-3">
+          <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
+            <ChartLine size={40} weight="bold" className="text-accent" />
             MARKET INTEL
           </h1>
-          <p className="text-muted-foreground">Real-time market insights and analysis</p>
+          <p className="text-lg text-muted-foreground">Real-time market insights and analysis</p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-3 gap-6">
           <Card className="bg-card/50 border-accent/30">
-            <CardHeader>
+            <CardHeader className="pb-5">
               <CardTitle className="text-sm">BTC TREND</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-3">
-                <TrendUp size={32} className="text-success" weight="bold" />
+              <div className="flex items-center gap-4">
+                <TrendUp size={36} className="text-success" weight="bold" />
                 <div>
-                  <div className="text-2xl font-bold text-success">BULLISH</div>
-                  <div className="text-xs text-muted-foreground">Higher timeframes aligned</div>
+                  <div className="text-3xl font-bold text-success">BULLISH</div>
+                  <div className="text-sm text-muted-foreground mt-1">Higher timeframes aligned</div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-card/50 border-accent/30">
-            <CardHeader>
+            <CardHeader className="pb-5">
               <CardTitle className="text-sm">MARKET VOLATILITY</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-3">
-                <Activity size={32} className="text-warning" weight="bold" />
+              <div className="flex items-center gap-4">
+                <Activity size={36} className="text-warning" weight="bold" />
                 <div>
-                  <div className="text-2xl font-bold text-warning">MODERATE</div>
-                  <div className="text-xs text-muted-foreground">Average daily range</div>
+                  <div className="text-3xl font-bold text-warning">MODERATE</div>
+                  <div className="text-sm text-muted-foreground mt-1">Average daily range</div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-card/50 border-accent/30">
-            <CardHeader>
+            <CardHeader className="pb-5">
               <CardTitle className="text-sm">ETH TREND</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-3">
-                <TrendDown size={32} className="text-destructive" weight="bold" />
+              <div className="flex items-center gap-4">
+                <TrendDown size={36} className="text-destructive" weight="bold" />
                 <div>
-                  <div className="text-2xl font-bold text-destructive">BEARISH</div>
-                  <div className="text-xs text-muted-foreground">Correction phase</div>
+                  <div className="text-3xl font-bold text-destructive">BEARISH</div>
+                  <div className="text-sm text-muted-foreground mt-1">Correction phase</div>
                 </div>
               </div>
             </CardContent>
@@ -62,14 +62,14 @@ export function Intel() {
         </div>
 
         <Card className="bg-card/50 border-accent/30">
-          <CardHeader>
-            <CardTitle>Market Heatmap</CardTitle>
+          <CardHeader className="pb-6">
+            <CardTitle className="text-xl">Market Heatmap</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="bg-muted/30 rounded-lg p-12 border border-border flex items-center justify-center min-h-[300px]">
-              <div className="text-center space-y-2">
-                <p className="text-muted-foreground">Market Heatmap Placeholder</p>
-                <p className="text-xs text-muted-foreground">
+            <div className="bg-muted/30 rounded-lg p-16 border border-border flex items-center justify-center min-h-[350px]">
+              <div className="text-center space-y-3">
+                <p className="text-lg text-muted-foreground">Market Heatmap Placeholder</p>
+                <p className="text-sm text-muted-foreground">
                   Integrate with market data provider for live visualization
                 </p>
               </div>
