@@ -3,7 +3,6 @@
 ## Critical integration issues
 
 1. **Frontend API base URL targets the wrong port.** The UI defaults to `http://localhost:3000`, but the FastAPI server in `backend/api_server.py` launches on port 8000. Without overriding `VITE_API_URL`, every telemetry request will fail to reach the backend. Align the frontend default with the backend port or expose the server on 3000 to avoid cross-service connection errors.
-2. **Telemetry filters pass raw strings where datetimes are expected.** The `/api/telemetry/events` endpoint forwards `start_time` and `end_time` query strings directly to the telemetry store, which calls `.isoformat()` on them. If a frontend filter is supplied, this raises an `AttributeError` and returns 500 instead of results. Parse the query params to `datetime` objects (or relax the store to accept strings) before calling `get_events`/`get_event_count`.
 
 ## Additional observations
 
