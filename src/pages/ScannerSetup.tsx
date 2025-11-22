@@ -19,15 +19,14 @@ import { SniperModeSelector } from '@/components/SniperModeSelector';
 import type { SniperMode } from '@/types/sniperMode';
 import { SNIPER_MODES } from '@/types/sniperMode';
 import { api } from '@/utils/api';
-import { toast } from 'sonner';
-import { useQuickNotifications } from '@/hooks/useNotifications';
+import { useToast } from '@/hooks/use-toast';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
   const { scanConfig, setScanConfig } = useScanner();
   const [, setScanResults] = useKV<ScanResult[]>('scan-results', []);
   const [isScanning, setIsScanning] = useState(false);
-  const { notifySignal, notifySystem } = useQuickNotifications();
+  const { toast } = useToast();
 
   const marketRegimeProps = useMockMarketRegime('scanner');
 
@@ -66,14 +65,6 @@ export function ScannerSetup() {
         toast('Using Mock Data', {
           description: 'Backend unavailable, displaying simulated results',
         });
-        
-        // Send system notification about fallback
-        notifySystem({
-          title: '⚠️ Backend Unavailable',
-          body: 'Using simulated data for demonstration',
-          priority: 'normal'
-        });
-        
         // Fallback to mock data
         const results = generateMockScanResults(8);
         setScanResults(results);
@@ -82,46 +73,21 @@ export function ScannerSetup() {
         const results = response.data.signals.map(convertSignalToScanResult);
         setScanResults(results);
         
-        toast('Targets Acquired', {
+        toast({
+          title: 'Targets Acquired',
           description: `${results.length} high-conviction setups identified`,
         });
-
-        // Send notifications for high-confidence signals
-        const highConfidenceSignals = results.filter(result => result.confidenceScore >= 80);
-        highConfidenceSignals.forEach(signal => {
-          notifySignal({
-            symbol: signal.pair,
-            direction: signal.trendBias,
-            confidence: signal.confidenceScore,
-            entry: signal.entryZone.high,
-            riskReward: signal.riskScore
-          });
-        });
-
-        if (highConfidenceSignals.length > 0) {
-          notifySystem({
-            title: '🎯 High-Confidence Signals Found',
-            body: `${highConfidenceSignals.length} premium setups identified`,
-            priority: 'high'
-          });
-        }
       }
 
       setIsScanning(false);
       navigate('/results');
     } catch (error) {
       console.error('Scanner error:', error);
-      toast.error('Scanner Error', {
+      toast({
+        title: 'Scanner Error',
         description: 'Failed to fetch signals, using mock data',
+        variant: 'destructive',
       });
-
-      // Send error notification
-      notifySystem({
-        title: '❌ Scanner Error',
-        body: 'Connection failed, using simulated results',
-        priority: 'normal'
-      });
-
       // Fallback to mock data
       const results = generateMockScanResults(8);
       setScanResults(results);
