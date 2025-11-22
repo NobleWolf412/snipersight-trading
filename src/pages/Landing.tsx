@@ -12,6 +12,7 @@ import {
   ChartLine,
 } from '@phosphor-icons/react';
 import { LiveTicker } from '@/components/LiveTicker';
+import { SessionIndicator } from '@/components/SessionIndicator/SessionIndicator';
 
 export function Landing() {
   const navigate = useNavigate();
@@ -145,7 +146,26 @@ export function Landing() {
           </Card>
         </div>
 
-        <LiveTicker />
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Live Market Feed</p>
+              <h2 className="text-xl font-semibold text-foreground">Persistent ticker stream · fully compatible with sessions</h2>
+              <p className="text-sm text-muted-foreground max-w-2xl">
+                The scrolling tape remains online with dual-pass rendering for continuous motion. Session telemetry stays synced
+                with your top-bar indicator so desktop and mobile operators keep consistent context.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-card/60 px-3 py-2 backdrop-blur">
+              <SessionIndicator />
+              <div className="text-xs text-muted-foreground leading-tight">
+                <div className="text-foreground font-semibold">Session link stable</div>
+                <div>Aligned with HUD status and notifications</div>
+              </div>
+            </div>
+          </div>
+          <LiveTicker className="rounded-xl border border-border/60" />
+        </section>
 
         <div className="grid lg:grid-cols-3 gap-4">
           <Card
