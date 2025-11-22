@@ -157,12 +157,15 @@ def _calculate_entry_zone(
     Near entry: Closer to current price, safer but lower R:R
     Far entry: Deeper into structure, riskier but better R:R
     """
+    logger.critical(f"_calculate_entry_zone CALLED: direction={direction}, current_price={current_price}, atr={atr}, num_obs={len(smc_snapshot.order_blocks)}, num_fvgs={len(smc_snapshot.fvgs)}")
+    
     # Find relevant order block or FVG
     if direction == "bullish":
         # Look for bullish OB or FVG below current price
         obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bullish" and ob.high < current_price]
         fvgs = [fvg for fvg in smc_snapshot.fvgs if fvg.direction == "bullish" and fvg.top < current_price]
         
+        logger.critical(f"Bullish entry zone: found {len(obs)} OBs and {len(fvgs)} FVGs below current price")
         if obs:
             # Use most recent/fresh OB
             best_ob = max(obs, key=lambda ob: ob.freshness_score)
