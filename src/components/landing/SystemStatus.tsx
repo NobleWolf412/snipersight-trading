@@ -15,7 +15,10 @@ export function SystemStatus({ data }: { data: SystemStatusData }) {
           <span className={statusColor}>Exchange: {data.exchangeStatus}</span>
         </div>
         <span className="text-muted-foreground">Latency: {data.latencyMs}ms</span>
-        <span className="text-muted-foreground">Active Targets: {data.activeTargets}</span>
+        <span className="text-muted-foreground flex items-center gap-2">
+          <span>Active Targets:</span>
+          <span className="font-semibold tabular-nums">{data.activeTargets}</span>
+        </span>
         <span className="text-muted-foreground">Rejected: {data.signalsRejected}</span>
       </div>
       <div className="text-muted-foreground font-medium">v{data.version}</div>
