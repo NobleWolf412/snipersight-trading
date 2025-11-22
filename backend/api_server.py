@@ -15,7 +15,7 @@ import logging
 from backend.risk.position_sizer import PositionSizer
 from backend.risk.risk_manager import RiskManager
 from backend.bot.executor.paper_executor import PaperExecutor, OrderType, OrderSide
-from backend.data.adapters.binance import BinanceAdapter
+from backend.data.adapters.phemex import PhemexAdapter
 from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import EventType
 from backend.engine.orchestrator import Orchestrator
@@ -42,9 +42,9 @@ app.add_middleware(
 # Pydantic models for API
 class Exchange(str, Enum):
     """Supported exchanges."""
+    PHEMEX = "phemex"
     BINANCE = "binance"
     BYBIT = "bybit"
-    PHEMEX = "phemex"
 
 
 class Timeframe(str, Enum):
@@ -121,7 +121,7 @@ active_bots: Dict[str, bool] = {}
 position_sizer = PositionSizer(account_balance=10000, max_risk_pct=2.0)
 risk_manager = RiskManager(account_balance=10000, max_open_positions=5)
 paper_executor = PaperExecutor(initial_balance=10000, fee_rate=0.001)
-binance_adapter = BinanceAdapter(testnet=False)
+exchange_adapter = PhemexAdapter(testnet=False)
 
 # Initialize orchestrator with default config
 default_config = ScanConfig(
@@ -132,7 +132,7 @@ default_config = ScanConfig(
 )
 orchestrator = Orchestrator(
     config=default_config,
-    exchange_adapter=binance_adapter,
+    exchange_adapter=exchange_adapter,
     risk_manager=risk_manager,
     position_sizer=position_sizer
 )
@@ -205,7 +205,7 @@ def _generate_demo_signals(symbols: List[str], min_score: float) -> List:
     Generate demo trading signals for UI testing when live data is unavailable.
     Used as fallback when exchange is geo-restricted or offline.
     """
-    from backend.shared.models.trade_plan import TradePlan, EntryZone, StopLoss, TakeProfit
+    from backend.shared.models.planner import TradePlan, EntryZone, StopLoss, TakeProfit
     
     demo_plans = []
     base_prices = {
@@ -279,7 +279,7 @@ async def get_signals(
         
         # Get top symbols by volume (with fallback for geo-restricted exchanges)
         try:
-            symbols = binance_adapter.get_top_symbols(n=min(limit * 2, 20), quote_currency='USDT')
+            symbols = exchange_adapter.get_top_symbols(n=min(limit * 2, 20), quote_currency='USDT')
         except Exception as exchange_error:
             logger.warning(f"Exchange unavailable (geo-restriction or network issue): {exchange_error}")
             symbols = []
@@ -291,11 +291,6 @@ async def get_signals(
         
         # Run orchestrator scan (this logs telemetry events automatically)
         trade_plans = orchestrator.scan(symbols[:limit])
-        
-        # If no signals generated (likely due to data unavailability), provide demo signals
-        if not trade_plans:
-            logger.warning("No signals from orchestrator - generating demo signals for UI testing")
-            trade_plans = _generate_demo_signals(symbols[:limit], min_score)
         
         # Convert TradePlan objects to API response format
         signals = []
@@ -309,20 +304,20 @@ async def get_signals(
                 "stop_loss": plan.stop_loss.level,
                 "targets": [
                     {"level": tp.level, "percentage": tp.percentage}
-                    for tp in plan.take_profits
+                    for tp in plan.targets
                 ],
-                "timeframe": plan.primary_timeframe or "1h",
+                "timeframe": "1h",  # Default timeframe
                 "current_price": plan.entry_zone.near_entry,  # Approximate
                 "analysis": {
-                    "order_blocks": len(plan.smc_context.get('order_blocks', [])) if plan.smc_context else 0,
-                    "fvgs": len(plan.smc_context.get('fvgs', [])) if plan.smc_context else 0,
-                    "structural_breaks": len(plan.smc_context.get('structural_breaks', [])) if plan.smc_context else 0,
-                    "liquidity_sweeps": len(plan.smc_context.get('liquidity_sweeps', [])) if plan.smc_context else 0,
+                    "order_blocks": plan.metadata.get('order_blocks', 0),
+                    "fvgs": plan.metadata.get('fvgs', 0),
+                    "structural_breaks": plan.metadata.get('structural_breaks', 0),
+                    "liquidity_sweeps": plan.metadata.get('liquidity_sweeps', 0),
                     "trend": plan.direction.lower(),
-                    "risk_reward": plan.risk_reward_ratio
+                    "risk_reward": plan.risk_reward
                 },
-                "rationale": plan.rationale or f"{plan.symbol} {plan.setup_type} setup with {plan.confidence_score:.1f}% confidence",
-                "setup_type": plan.setup_type or "smc_confluence"
+                "rationale": plan.rationale,
+                "setup_type": plan.setup_type
             }
             signals.append(signal)
         

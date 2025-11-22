@@ -214,6 +214,9 @@ class IngestionPipeline:
 
         # Sort by timestamp
         df = df.sort_values('timestamp').reset_index(drop=True)
+        
+        # Set timestamp as index for SMC detection functions
+        df = df.set_index('timestamp')
 
         # Final validation
         if len(df) == 0:
