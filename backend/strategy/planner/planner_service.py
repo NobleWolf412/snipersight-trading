@@ -159,8 +159,12 @@ def _calculate_entry_zone(
     """
     logger.critical(f"_calculate_entry_zone CALLED: direction={direction}, current_price={current_price}, atr={atr}, num_obs={len(smc_snapshot.order_blocks)}, num_fvgs={len(smc_snapshot.fvgs)}")
     
+    # Normalize direction to lowercase
+    direction_lower = direction.lower()
+    is_bullish = direction_lower in ["bullish", "long"]
+    
     # Find relevant order block or FVG
-    if direction == "bullish":
+    if is_bullish:
         # Look for bullish OB or FVG below current price
         obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bullish" and ob.high < current_price]
         fvgs = [fvg for fvg in smc_snapshot.fvgs if fvg.direction == "bullish" and fvg.top < current_price]
@@ -235,7 +239,10 @@ def _calculate_stop_loss(
     
     Never arbitrary - always beyond invalidation point.
     """
-    if direction == "bullish":
+    direction_lower = direction.lower()
+    is_bullish = direction_lower in ["bullish", "long"]
+    
+    if is_bullish:
         # Stop below the entry structure
         # Look for recent swing low or OB low
         potential_stops = []
@@ -329,7 +336,10 @@ def _calculate_targets(
     
     targets = []
     
-    if direction == "bullish":
+    direction_lower = direction.lower()
+    is_bullish = direction_lower in ["bullish", "long"]
+    
+    if is_bullish:
         # Target 1: Conservative (1.5R or nearest resistance)
         target1_rr = avg_entry + (risk_distance * 1.5)
         
