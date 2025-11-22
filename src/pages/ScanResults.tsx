@@ -51,7 +51,7 @@ export function ScanResults() {
           <TrendUp size={80} className="mx-auto text-muted-foreground" />
           <h2 className="text-3xl font-bold text-foreground">No Targets Acquired</h2>
           <p className="text-lg text-muted-foreground">Run a scan to identify trading opportunities</p>
-          <Button onClick={() => navigate('/scan')} className="bg-accent hover:bg-accent/90 text-accent-foreground h-12 text-base" size="lg">
+          <Button onClick={() => navigate('/scanner/setup')} className="bg-accent hover:bg-accent/90 text-accent-foreground h-12 text-base" size="lg">
             Arm Scanner
           </Button>
         </div>
@@ -67,7 +67,7 @@ export function ScanResults() {
           description={`${results.length} trading setup${results.length !== 1 ? 's' : ''} identified`}
           icon={<TrendUp size={40} weight="bold" className="text-accent" />}
           actions={
-            <Button onClick={() => navigate('/scan')} variant="outline" className="h-12" size="lg">
+            <Button onClick={() => navigate('/scanner/setup')} variant="outline" className="h-12" size="lg">
               New Scan
             </Button>
           }

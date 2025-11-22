@@ -35,7 +35,7 @@ export function BotStatus() {
   const handleAbortMission = () => {
     setIsActive(false);
     setTimeout(() => {
-      navigate('/bot');
+      navigate('/bot/setup');
     }, 1000);
   };
 
