@@ -117,16 +117,16 @@ export function Landing() {
 
             <SectionDivider />
 
-            <footer aria-label="System Status" id="status" className="pt-2">
+            <section aria-labelledby="status-heading" id="status" className="pt-2">
               <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
                 <div>
                   <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Status &amp; Safeguards</p>
-                  <h2 className="text-lg font-semibold text-foreground">Operational Readiness</h2>
+                  <h2 id="status-heading" className="text-lg font-semibold text-foreground">Operational Readiness</h2>
                   <p className="text-sm text-muted-foreground">Connection health, data streams, and risk interlocks before deploying automation.</p>
                 </div>
               </div>
               <SystemStatus data={system} />
-            </footer>
+            </section>
           </div>
         </div>
       </main>
