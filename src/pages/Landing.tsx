@@ -174,11 +174,6 @@ export function Landing() {
 
             <div className="flex flex-wrap gap-4">
               <Button
-                variant="outline"
-                size="lg"
-                className="border-border/70 bg-card/50 hover:border-accent/60 hover:text-foreground h-12 text-base font-semibold"
-                onClick={() => navigate('/bot')}
-              >Deploy Bot</Button>
             </div>
           </div>
 
