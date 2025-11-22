@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 
 interface PageLayoutProps {
   children: ReactNode;
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl' | '6xl' | '7xl';
+}
   className?: string;
 }
 
@@ -35,9 +35,9 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, icon, actions, className = '' }: PageHeaderProps) {
   return (
-    <div className={`space-y-3 ${className}`}>
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="space-y-3">
+          <h1 className="text-4xl font-bold te
+            {title}
+          {description && (
           <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
             {icon}
             {title}
@@ -78,7 +78,7 @@ export function PageSection({ children, title, description, className = '' }: Pa
           )}
         </div>
       )}
-      {children}
-    </section>
-  );
-}
+
+
+
+
