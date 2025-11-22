@@ -13,7 +13,7 @@ class ScanConfig:
     profile: str = "balanced"
     timeframes: Tuple[str, ...] = ('1W', '1D', '4H', '1H', '15m', '5m')
     min_confluence_score: float = 65.0
-    min_rr_ratio: float = 2.0
+    min_rr_ratio: float = 1.2  # Lowered for testing - allows more signals through
     btc_impulse_gate_enabled: bool = True
     max_symbols: int = 20
     max_risk_pct: float = 2.0

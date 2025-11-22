@@ -15,6 +15,7 @@ from typing import Optional, List
 from datetime import datetime
 import pandas as pd
 import numpy as np
+from loguru import logger
 
 from backend.shared.models.planner import TradePlan, EntryZone, StopLoss, Target
 from backend.shared.models.smc import SMCSnapshot, OrderBlock, FVG
@@ -165,8 +166,10 @@ def _calculate_entry_zone(
         if obs:
             # Use most recent/fresh OB
             best_ob = max(obs, key=lambda ob: ob.freshness_score)
-            near_entry = best_ob.high - (0.2 * atr)  # Just above OB high
-            far_entry = best_ob.low + (0.1 * atr)    # Deep into OB
+            logger.critical(f"ENTRY ZONE: Using bullish OB - high={best_ob.high}, low={best_ob.low}, ATR={atr}")
+            near_entry = best_ob.high - (0.1 * atr)  # Top of OB (aggressive entry)
+            far_entry = best_ob.low + (0.1 * atr)    # Bottom of OB (conservative, deeper)
+            logger.critical(f"ENTRY ZONE: Calculated near={near_entry}, far={far_entry}")
             rationale = f"Entry zone based on {best_ob.timeframe} bullish order block"
         
         elif fvgs:
@@ -174,14 +177,16 @@ def _calculate_entry_zone(
             best_fvg = min([fvg for fvg in fvgs if fvg.overlap_with_price < 0.5], 
                           key=lambda fvg: abs(fvg.top - current_price), 
                           default=fvgs[0])
-            near_entry = best_fvg.top - (0.1 * atr)
-            far_entry = best_fvg.bottom + (0.1 * atr)
+            near_entry = best_fvg.top - (0.1 * atr)      # Top of FVG (aggressive)
+            far_entry = best_fvg.bottom + (0.1 * atr)    # Bottom of FVG (conservative)
             rationale = f"Entry zone based on {best_fvg.timeframe} bullish FVG"
         
         else:
             # Fallback: use ATR-based zone below current price
+            logger.critical(f"ENTRY ZONE FALLBACK: current_price={current_price}, atr={atr}")
             near_entry = current_price - (0.5 * atr)
             far_entry = current_price - (1.5 * atr)
+            logger.critical(f"ENTRY ZONE FALLBACK: near={near_entry}, far={far_entry}")
             rationale = "Entry zone based on ATR pullback (no clear SMC structure)"
     
     else:  # bearish
@@ -191,8 +196,8 @@ def _calculate_entry_zone(
         
         if obs:
             best_ob = max(obs, key=lambda ob: ob.freshness_score)
-            near_entry = best_ob.low + (0.2 * atr)  # Just below OB low
-            far_entry = best_ob.high - (0.1 * atr)  # Deep into OB
+            near_entry = best_ob.low + (0.1 * atr)   # Bottom of OB (aggressive entry)
+            far_entry = best_ob.high - (0.1 * atr)   # Top of OB (conservative, deeper)
             rationale = f"Entry zone based on {best_ob.timeframe} bearish order block"
         
         elif fvgs:
@@ -232,25 +237,38 @@ def _calculate_stop_loss(
         # Look for recent swing low or OB low
         potential_stops = []
         
+        logger.debug(f"Calculating bullish stop: entry_zone.far_entry={entry_zone.far_entry}, entry_zone.near_entry={entry_zone.near_entry}")
+        
         # Check for OBs near entry
         for ob in smc_snapshot.order_blocks:
             if ob.direction == "bullish" and ob.low < entry_zone.far_entry:
                 potential_stops.append(ob.low)
+                logger.debug(f"Found bullish OB: low={ob.low}, high={ob.high}")
         
         # Check for FVGs
         for fvg in smc_snapshot.fvgs:
             if fvg.direction == "bullish" and fvg.bottom < entry_zone.far_entry:
                 potential_stops.append(fvg.bottom)
+                logger.debug(f"Found bullish FVG: bottom={fvg.bottom}, top={fvg.top}")
         
-        if potential_stops:
-            # Use closest structure below entry
-            stop_level = max([s for s in potential_stops if s < entry_zone.far_entry], default=entry_zone.far_entry - (2 * atr))
+        logger.debug(f"Potential stops before filtering: {potential_stops}")
+        
+        # Filter stops that are actually below entry
+        valid_stops = [s for s in potential_stops if s < entry_zone.far_entry]
+        
+        logger.debug(f"Valid stops after filtering: {valid_stops}")
+        
+        if valid_stops:
+            # Use closest structure below entry (highest of the valid stops)
+            stop_level = max(valid_stops)
             stop_level -= (0.3 * atr)  # Buffer beyond structure
             rationale = "Stop below entry structure invalidation point"
+            logger.debug(f"Using structure-based stop: {stop_level} (before buffer: {max(valid_stops)})")
         else:
             # Fallback: ATR-based stop
             stop_level = entry_zone.far_entry - (2.0 * atr)
             rationale = "Stop based on 2x ATR below entry (no clear structure)"
+            logger.debug(f"Using ATR-based stop: {stop_level}")
         
         distance_atr = (entry_zone.far_entry - stop_level) / atr
     
@@ -266,8 +284,12 @@ def _calculate_stop_loss(
             if fvg.direction == "bearish" and fvg.top > entry_zone.far_entry:
                 potential_stops.append(fvg.top)
         
-        if potential_stops:
-            stop_level = min([s for s in potential_stops if s > entry_zone.far_entry], default=entry_zone.far_entry + (2 * atr))
+        # Filter stops that are actually above entry
+        valid_stops = [s for s in potential_stops if s > entry_zone.far_entry]
+        
+        if valid_stops:
+            # Use closest structure above entry (lowest of the valid stops)
+            stop_level = min(valid_stops)
             stop_level += (0.3 * atr)  # Buffer beyond structure
             rationale = "Stop above entry structure invalidation point"
         else:
@@ -275,6 +297,9 @@ def _calculate_stop_loss(
             rationale = "Stop based on 2x ATR above entry (no clear structure)"
         
         distance_atr = (stop_level - entry_zone.far_entry) / atr
+    
+    # CRITICAL DEBUG
+    logger.critical(f"STOP CALC: direction={direction}, entry_near={entry_zone.near_entry}, entry_far={entry_zone.far_entry}, stop={stop_level}, atr={atr}")
     
     return StopLoss(
         level=stop_level,
@@ -323,7 +348,7 @@ def _calculate_targets(
         
         targets.append(Target(
             level=target1_level,
-            percentage=((target1_level - avg_entry) / avg_entry) * 100,
+            percentage=50.0,  # Close 50% of position at first target
             rationale=target1_rationale
         ))
         
@@ -331,7 +356,7 @@ def _calculate_targets(
         target2_level = avg_entry + (risk_distance * 2.5)
         targets.append(Target(
             level=target2_level,
-            percentage=((target2_level - avg_entry) / avg_entry) * 100,
+            percentage=30.0,  # Close 30% of position at second target
             rationale="2.5R target (moderate)"
         ))
         
@@ -339,7 +364,7 @@ def _calculate_targets(
         target3_level = avg_entry + (risk_distance * 4.0)
         targets.append(Target(
             level=target3_level,
-            percentage=((target3_level - avg_entry) / avg_entry) * 100,
+            percentage=20.0,  # Close final 20% at third target
             rationale="4R target (aggressive)"
         ))
     
@@ -365,7 +390,7 @@ def _calculate_targets(
         
         targets.append(Target(
             level=target1_level,
-            percentage=((avg_entry - target1_level) / avg_entry) * 100,
+            percentage=50.0,  # Close 50% of position at first target
             rationale=target1_rationale
         ))
         
@@ -373,7 +398,7 @@ def _calculate_targets(
         target2_level = avg_entry - (risk_distance * 2.5)
         targets.append(Target(
             level=target2_level,
-            percentage=((avg_entry - target2_level) / avg_entry) * 100,
+            percentage=30.0,  # Close 30% of position at second target
             rationale="2.5R target (moderate)"
         ))
         
@@ -381,7 +406,7 @@ def _calculate_targets(
         target3_level = avg_entry - (risk_distance * 4.0)
         targets.append(Target(
             level=target3_level,
-            percentage=((avg_entry - target3_level) / avg_entry) * 100,
+            percentage=20.0,  # Close final 20% at third target
             rationale="4R target (aggressive)"
         ))
     
