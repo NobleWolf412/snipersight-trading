@@ -200,6 +200,66 @@ async def stop_scanner(config_id: str):
     return {"status": "stopped", "config_id": config_id}
 
 
+def _generate_demo_signals(symbols: List[str], min_score: float) -> List:
+    """
+    Generate demo trading signals for UI testing when live data is unavailable.
+    Used as fallback when exchange is geo-restricted or offline.
+    """
+    from backend.shared.models.trade_plan import TradePlan, EntryZone, StopLoss, TakeProfit
+    
+    demo_plans = []
+    base_prices = {
+        'BTC/USDT': 43500.0,
+        'ETH/USDT': 2280.0,
+        'BNB/USDT': 315.0,
+        'SOL/USDT': 98.5,
+        'XRP/USDT': 0.62,
+        'ADA/USDT': 0.58,
+        'AVAX/USDT': 38.2,
+        'MATIC/USDT': 0.89,
+        'DOT/USDT': 7.45,
+        'LINK/USDT': 15.2,
+    }
+    
+    for i, symbol in enumerate(symbols[:5]):  # Generate 5 demo signals
+        base_price = base_prices.get(symbol, 100.0)
+        direction = "LONG" if i % 2 == 0 else "SHORT"
+        score = min_score + (i * 5) % 25  # Vary scores above min_score
+        
+        if direction == "LONG":
+            near_entry = base_price * 0.995
+            far_entry = base_price * 0.99
+            stop = base_price * 0.97
+            tp1 = base_price * 1.02
+            tp2 = base_price * 1.04
+        else:
+            near_entry = base_price * 1.005
+            far_entry = base_price * 1.01
+            stop = base_price * 1.03
+            tp1 = base_price * 0.98
+            tp2 = base_price * 0.96
+        
+        plan = TradePlan(
+            symbol=symbol,
+            direction=direction,
+            setup_type="demo_smc_confluence",
+            confidence_score=score,
+            entry_zone=EntryZone(near_entry=near_entry, far_entry=far_entry),
+            stop_loss=StopLoss(level=stop, rationale="Demo stop"),
+            take_profits=[
+                TakeProfit(level=tp1, percentage=50.0, rationale="Demo TP1"),
+                TakeProfit(level=tp2, percentage=50.0, rationale="Demo TP2")
+            ],
+            risk_reward_ratio=2.5,
+            primary_timeframe="4h",
+            rationale=f"DEMO: {symbol} shows potential {direction} setup with SMC confluence. Exchange data unavailable.",
+            smc_context={"demo": True, "order_blocks": 2, "fvgs": 1}
+        )
+        demo_plans.append(plan)
+    
+    return demo_plans
+
+
 @app.get("/api/scanner/signals")
 async def get_signals(
     limit: int = Query(default=10, ge=1, le=100),
@@ -210,20 +270,32 @@ async def get_signals(
     Get trading signals from scanner using full orchestrator pipeline.
     
     This endpoint runs the complete analysis pipeline with telemetry logging.
+    Falls back to demo signals when exchange is unavailable (geo-restriction).
     """
     try:
         # Update orchestrator config with request parameters
         orchestrator.config.min_confluence_score = min_score
         orchestrator.config.profile = sniper_mode.lower()
         
-        # Get top symbols by volume
-        symbols = binance_adapter.get_top_symbols(n=min(limit * 2, 20), quote_currency='USDT')
+        # Get top symbols by volume (with fallback for geo-restricted exchanges)
+        try:
+            symbols = binance_adapter.get_top_symbols(n=min(limit * 2, 20), quote_currency='USDT')
+        except Exception as exchange_error:
+            logger.warning(f"Exchange unavailable (geo-restriction or network issue): {exchange_error}")
+            symbols = []
+        
         if not symbols:
-            # Fallback to major pairs
-            symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT']
+            # Fallback to major pairs when exchange is unavailable
+            symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT', 
+                      'ADA/USDT', 'AVAX/USDT', 'MATIC/USDT', 'DOT/USDT', 'LINK/USDT']
         
         # Run orchestrator scan (this logs telemetry events automatically)
         trade_plans = orchestrator.scan(symbols[:limit])
+        
+        # If no signals generated (likely due to data unavailability), provide demo signals
+        if not trade_plans:
+            logger.warning("No signals from orchestrator - generating demo signals for UI testing")
+            trade_plans = _generate_demo_signals(symbols[:limit], min_score)
         
         # Convert TradePlan objects to API response format
         signals = []
