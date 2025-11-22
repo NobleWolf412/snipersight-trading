@@ -6,8 +6,8 @@ import { NotificationStatus } from '@/components/NotificationStatus';
 
 export function TopBar() {
   const navItems = [
-    { to: '/scan', label: 'Scanner' },
-    { to: '/bot', label: 'Bot' },
+    { to: '/scanner/setup', label: 'Scanner' },
+    { to: '/bot/setup', label: 'Bot' },
     { to: '/intel', label: 'Intel' },
     { to: '/market', label: 'Market' },
     { to: '/profiles', label: 'Profiles' }
