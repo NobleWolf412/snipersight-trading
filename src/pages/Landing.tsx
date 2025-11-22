@@ -230,18 +230,7 @@ export function Landing() {
         </div>
 
         <section className="space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-6">
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Live Market Feed</p>
-              <h2 className="text-2xl font-semibold text-foreground">Real-Time Price Updates</h2>
-            </div>
-            <div className="flex items-center gap-4 rounded-lg border border-border/60 bg-card/60 px-4 py-3 backdrop-blur">
-              <SessionIndicator />
-              <div className="text-sm text-muted-foreground leading-tight">
-                <div className="text-foreground font-semibold">Connected</div>
-              </div>
-            </div>
-          </div>
+
           <LiveTicker className="rounded-xl border border-border/60" />
         </section>
 
