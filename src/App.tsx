@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
 import { ScannerProvider } from '@/context/ScannerContext';
 import { WalletProvider } from '@/context/WalletContext';
@@ -15,28 +15,41 @@ import { TrainingGround } from '@/pages/TrainingGround';
 function App() {
   return (
     <BrowserRouter>
-      <WalletProvider>
-        <ScannerProvider>
-          <div className="min-h-screen bg-background text-foreground tactical-grid">
-            <TopBar />
-            <main>
-              <Routes>
-                <Route path="/" element={<Landing />} />
-                <Route path="/scanner/setup" element={<ScannerSetup />} />
-                <Route path="/scanner/results" element={<ScanResults />} />
-                <Route path="/bot/setup" element={<BotSetup />} />
-                <Route path="/bot/status" element={<BotStatus />} />
-                <Route path="/market" element={<MarketOverview />} />
-                <Route path="/intel" element={<Intel />} />
-                <Route path="/training" element={<TrainingGround />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </main>
-            <Toaster />
-          </div>
-        </ScannerProvider>
-      </WalletProvider>
+      <AppContent />
     </BrowserRouter>
+  );
+}
+
+function AppContent() {
+  const location = useLocation();
+  const showGlobalTopBar = location.pathname !== '/';
+
+  return (
+    <WalletProvider>
+      <ScannerProvider>
+        <div className="min-h-screen bg-background text-foreground tactical-grid">
+          {showGlobalTopBar && (
+            <header>
+              <TopBar />
+            </header>
+          )}
+          <main>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/scanner/setup" element={<ScannerSetup />} />
+              <Route path="/scanner/results" element={<ScanResults />} />
+              <Route path="/bot/setup" element={<BotSetup />} />
+              <Route path="/bot/status" element={<BotStatus />} />
+              <Route path="/market" element={<MarketOverview />} />
+              <Route path="/intel" element={<Intel />} />
+              <Route path="/training" element={<TrainingGround />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </main>
+          <Toaster />
+        </div>
+      </ScannerProvider>
+    </WalletProvider>
   );
 }
 
