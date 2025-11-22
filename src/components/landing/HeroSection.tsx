@@ -16,7 +16,7 @@ export function HeroSection() {
         </p>
       </div>
       <LiveTicker className="rounded-md border border-border/60" />
-      <div className="absolute -top-16 -right-12 w-32 h-32 rounded-full bg-accent/10 border border-accent/40 flex items-center justify-center pointer-events-none">
+      <div className="absolute -top-16 right-8 w-32 h-32 rounded-full bg-accent/10 border border-accent/40 flex items-center justify-center pointer-events-none">
         <Crosshair size={42} weight="bold" className="text-accent" />
       </div>
     </header>
