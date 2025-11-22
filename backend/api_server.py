@@ -18,6 +18,8 @@ from backend.bot.executor.paper_executor import PaperExecutor, OrderType, OrderS
 from backend.data.adapters.binance import BinanceAdapter
 from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import EventType
+from backend.engine.orchestrator import Orchestrator
+from backend.shared.config.defaults import ScanConfig
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +123,20 @@ risk_manager = RiskManager(account_balance=10000, max_open_positions=5)
 paper_executor = PaperExecutor(initial_balance=10000, fee_rate=0.001)
 binance_adapter = BinanceAdapter(testnet=False)
 
+# Initialize orchestrator with default config
+default_config = ScanConfig(
+    profile="balanced",
+    timeframes=["1h", "4h", "1d"],
+    min_confluence_score=70.0,
+    max_risk_pct=2.0
+)
+orchestrator = Orchestrator(
+    config=default_config,
+    exchange_adapter=binance_adapter,
+    risk_manager=risk_manager,
+    position_sizer=position_sizer
+)
+
 
 @app.get("/")
 async def root():
@@ -190,71 +206,51 @@ async def get_signals(
     min_score: float = Query(default=60, ge=0, le=100),
     sniper_mode: str = Query(default="PRECISION")
 ):
-    """Get trading signals from scanner."""
+    """
+    Get trading signals from scanner using full orchestrator pipeline.
+    
+    This endpoint runs the complete analysis pipeline with telemetry logging.
+    """
     try:
+        # Update orchestrator config with request parameters
+        orchestrator.config.min_confluence_score = min_score
+        orchestrator.config.profile = sniper_mode.lower()
+        
         # Get top symbols by volume
         symbols = binance_adapter.get_top_symbols(n=min(limit * 2, 20), quote_currency='USDT')
         if not symbols:
-            symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
+            # Fallback to major pairs
+            symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT']
         
+        # Run orchestrator scan (this logs telemetry events automatically)
+        trade_plans = orchestrator.scan(symbols[:limit])
+        
+        # Convert TradePlan objects to API response format
         signals = []
-        for symbol in symbols[:limit]:
-            try:
-                # Fetch real data using fetch_ticker
-                ticker = binance_adapter.fetch_ticker(symbol)
-                current_price = ticker['last']
-            except Exception as e:
-                logger.warning(f"Failed to fetch ticker for {symbol}: {e}")
-                # Skip if we can't get price
-                continue
-            
-            # Generate signal score (hash-based for consistency)
-            score = 75.0 + (hash(symbol) % 20)
-            
-            if score < min_score:
-                continue
-            
-            # Determine direction
-            direction = "LONG" if hash(symbol) % 2 == 0 else "SHORT"
-            
-            # Calculate entry zones and targets
-            if direction == "LONG":
-                entry_near = current_price * 0.99
-                entry_far = current_price * 0.98
-                stop_loss = current_price * 0.96
-                targets = [
-                    {"level": current_price * 1.02, "percentage": 50},
-                    {"level": current_price * 1.04, "percentage": 50}
-                ]
-            else:
-                entry_near = current_price * 1.01
-                entry_far = current_price * 1.02
-                stop_loss = current_price * 1.04
-                targets = [
-                    {"level": current_price * 0.98, "percentage": 50},
-                    {"level": current_price * 0.96, "percentage": 50}
-                ]
-            
+        for plan in trade_plans:
             signal = {
-                "symbol": symbol.replace('/', ''),  # Convert to BTCUSDT format
-                "direction": direction,
-                "score": score,
-                "entry_near": entry_near,
-                "entry_far": entry_far,
-                "stop_loss": stop_loss,
-                "targets": targets,
-                "timeframe": "1h",
-                "current_price": current_price,
+                "symbol": plan.symbol.replace('/', ''),  # Convert to BTCUSDT format
+                "direction": plan.direction,
+                "score": plan.confidence_score,
+                "entry_near": plan.entry_zone.near_entry,
+                "entry_far": plan.entry_zone.far_entry,
+                "stop_loss": plan.stop_loss.level,
+                "targets": [
+                    {"level": tp.level, "percentage": tp.percentage}
+                    for tp in plan.take_profits
+                ],
+                "timeframe": plan.primary_timeframe or "1h",
+                "current_price": plan.entry_zone.near_entry,  # Approximate
                 "analysis": {
-                    "order_blocks": 2,
-                    "fvgs": 1,
-                    "structural_breaks": 1,
-                    "liquidity_sweeps": 0,
-                    "trend": "bullish" if direction == "LONG" else "bearish",
-                    "risk_reward": 2.0
+                    "order_blocks": len(plan.smc_context.get('order_blocks', [])) if plan.smc_context else 0,
+                    "fvgs": len(plan.smc_context.get('fvgs', [])) if plan.smc_context else 0,
+                    "structural_breaks": len(plan.smc_context.get('structural_breaks', [])) if plan.smc_context else 0,
+                    "liquidity_sweeps": len(plan.smc_context.get('liquidity_sweeps', [])) if plan.smc_context else 0,
+                    "trend": plan.direction.lower(),
+                    "risk_reward": plan.risk_reward_ratio
                 },
-                "rationale": f"{symbol} shows SMC structure with {score:.0f}% confluence score. {direction} setup identified.",
-                "setup_type": "intraday"
+                "rationale": plan.rationale or f"{plan.symbol} {plan.setup_type} setup with {plan.confidence_score:.1f}% confidence",
+                "setup_type": plan.setup_type or "smc_confluence"
             }
             signals.append(signal)
         
@@ -265,8 +261,17 @@ async def get_signals(
             "mode": sniper_mode,
             "min_score": min_score
         }
+        
     except Exception as e:
         logger.error(f"Error generating signals: {e}")
+        # Log error to telemetry
+        from backend.bot.telemetry.events import create_error_event
+        telemetry = get_telemetry_logger()
+        telemetry.log_event(create_error_event(
+            error_message=str(e),
+            error_type=type(e).__name__,
+            run_id=None
+        ))
         raise HTTPException(status_code=500, detail=str(e))
 
 
