@@ -137,7 +137,7 @@ export function Landing() {
       <div className="absolute inset-0 tactical-grid opacity-30" aria-hidden />
       <div className="absolute -top-24 -right-10 w-80 h-80 hud-glow-cyan rounded-full blur-[120px] opacity-40" aria-hidden />
       <div className="absolute -bottom-16 -left-24 w-[28rem] h-[28rem] hud-glow-green rounded-full blur-[140px] opacity-30" aria-hidden />
-      <div className="absolute inset-0 pointer-events-none radial-radar" aria-hidden />
+      <div className="absolute inset-0 pointer-events-none radial-radar" aria-hidden="true" />
 
       <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-12 lg:py-16 space-y-10">
         <div className="grid lg:grid-cols-[1.25fr_1fr] gap-10 items-center">
