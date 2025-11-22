@@ -736,3 +736,36 @@ body {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* ========================================
+   HUD OVERLAY UTILITY CLASSES
+   ======================================== */
+
+.radial-radar {
+  background:
+    radial-gradient(circle at 20% 20%, oklch(0.72 0.15 195 / 0.12), transparent 30%),
+    radial-gradient(circle at 80% 30%, oklch(0.65 0.18 145 / 0.12), transparent 28%),
+    radial-gradient(circle at 50% 70%, oklch(0.72 0.15 195 / 0.12), transparent 35%);
+  mix-blend-mode: screen;
+  opacity: 0.75;
+}
+
+.radial-radar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, oklch(0.72 0.15 195 / 0.08) 0%, transparent 60%);
+  mask-image: radial-gradient(circle, black 40%, transparent 60%);
+  animation: radar-spin calc(18s / var(--tactical-speed)) linear infinite;
+  transform-origin: center;
+  pointer-events: none;
+}
+
+@keyframes radar-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
