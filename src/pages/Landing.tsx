@@ -234,7 +234,7 @@ export function Landing() {
             <div className="space-y-2">
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">LIVE MARKET FEED</p>
               <h2 className="text-2xl font-semibold text-foreground">Persistent ticker stream · fully compatible with sessions</h2>
-              <p className="text-base text-muted-foreground max-w-2xl">The scrolling tape remains online with dual-pass rendering for continuous motion. Session telemetry stays synced with your top-bar indicator so desktop and mobile operators keep consistent context.</p>
+              <p className="text-base text-muted-foreground max-w-2xl">The scrolling tape remains online with dual-pass rendering for continuous motion. Session telemetry stays syn</p>
             </div>
             <div className="flex items-center gap-4 rounded-lg border border-border/60 bg-card/60 px-4 py-3 backdrop-blur">
               <SessionIndicator />
