@@ -17,6 +17,121 @@ import { SessionIndicator } from '@/components/SessionIndicator/SessionIndicator
 export function Landing() {
   const navigate = useNavigate();
 
+  const readinessBadges = [
+    {
+      title: 'Mission Grade',
+      value: 'Institutional SMC',
+      icon: Shield,
+      colorClass: 'border-accent/40 bg-card/40',
+      iconClass: 'bg-accent/20 border-accent/50 text-accent',
+    },
+    {
+      title: 'Live Telemetry',
+      value: 'Streaming Signals',
+      icon: Activity,
+      colorClass: 'border-success/40 bg-card/40',
+      iconClass: 'bg-success/20 border-success/50 text-success',
+    },
+    {
+      title: 'Mobile Ready',
+      value: 'Adaptive Grid',
+      icon: ChartLine,
+      colorClass: 'border-warning/40 bg-card/40',
+      iconClass: 'bg-warning/20 border-warning/50 text-warning',
+    },
+  ];
+
+  const missionStats = [
+    {
+      title: 'Opportunities',
+      value: 'High Probability',
+      hint: 'SNR optimized',
+      border: 'border-accent/30',
+      accent: 'text-accent',
+    },
+    {
+      title: 'Execution',
+      value: 'Auto/Manual',
+      hint: 'Switchable control',
+      border: 'border-success/30',
+      accent: 'text-success',
+    },
+    {
+      title: 'Latency',
+      value: 'Sub-second',
+      hint: 'Web + mobile tuned',
+      border: 'border-warning/30',
+      accent: 'text-warning',
+    },
+    {
+      title: 'Comms',
+      value: 'Telegram',
+      hint: 'Actionable payloads',
+      border: 'border-border/50',
+      accent: 'text-foreground',
+    },
+  ];
+
+  const primaryModules = [
+    {
+      title: 'Recon Scanner',
+      subtitle: 'Manual sweep',
+      body:
+        'Multi-timeframe hunts with Smart Money Concepts overlays. Built for quick reads on desktops and compact insight on mobile.',
+      icon: MagnifyingGlass,
+      borderClass: 'border-accent/30 hover:border-accent/60',
+      iconClass: 'bg-accent/20 border-accent/50 text-accent',
+      buttonClass: 'border-accent/60 text-accent hover:bg-accent/10',
+      buttonLabel: 'Acquire targets',
+      destination: '/scan',
+    },
+    {
+      title: 'Autonomous Bot',
+      subtitle: 'Persistent watch',
+      body:
+        'Deploy sniper logic with risk rails and time windows. Notifications carry actionable payloads—no empty fields, no guesswork.',
+      icon: Robot,
+      borderClass: 'border-warning/30 hover:border-warning/60',
+      iconClass: 'bg-warning/20 border-warning/50 text-warning',
+      buttonClass: 'border-warning/60 text-warning hover:bg-warning/10',
+      buttonLabel: 'Deploy automation',
+      destination: '/bot',
+    },
+    {
+      title: 'Intel Desk',
+      subtitle: 'Signals & plans',
+      body:
+        'Curated targets, playbooks, and training briefs. Designed with breathing room so teams can parse data at a glance.',
+      icon: Target,
+      borderClass: 'border-success/30 hover:border-success/60',
+      iconClass: 'bg-success/20 border-success/50 text-success',
+      buttonClass: 'border-success/60 text-success hover:bg-success/10',
+      buttonLabel: 'Review intel',
+      destination: '/intel',
+    },
+  ];
+
+  const secondaryModules = [
+    {
+      title: 'Training Ground',
+      subtitle: 'Simulated drills',
+      icon: Target,
+      destination: '/training',
+    },
+    {
+      title: 'Sniper Profiles',
+      subtitle: 'Preset loadouts',
+      icon: ListBullets,
+      destination: '/profiles',
+    },
+    {
+      title: 'Market Overview',
+      subtitle: 'Situational awareness',
+      icon: Crosshair,
+      destination: '/market',
+    },
+  ];
+
   return (
     <div className="relative min-h-[calc(100vh-4rem)] overflow-hidden bg-gradient-to-b from-background via-background/90 to-background">
       <div className="absolute inset-0 tactical-grid opacity-30" aria-hidden />
@@ -45,33 +160,20 @@ export function Landing() {
             </div>
 
             <div className="grid sm:grid-cols-3 gap-3">
-              <div className="flex items-center gap-3 rounded-lg border border-accent/40 bg-card/40 p-3 backdrop-blur">
-                <div className="w-9 h-9 rounded bg-accent/20 border border-accent/50 flex items-center justify-center">
-                  <Shield size={18} className="text-accent" />
+              {readinessBadges.map(({ title, value, icon: Icon, colorClass, iconClass }) => (
+                <div
+                  key={title}
+                  className={`flex items-center gap-3 rounded-lg border ${colorClass} p-3 backdrop-blur`}
+                >
+                  <div className={`w-9 h-9 rounded border flex items-center justify-center ${iconClass}`}>
+                    <Icon size={18} />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">{title}</p>
+                    <p className="text-sm font-semibold text-foreground">{value}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Mission Grade</p>
-                  <p className="text-sm font-semibold text-foreground">Institutional SMC</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 rounded-lg border border-success/40 bg-card/40 p-3 backdrop-blur">
-                <div className="w-9 h-9 rounded bg-success/20 border border-success/50 flex items-center justify-center">
-                  <Activity size={18} className="text-success" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Live Telemetry</p>
-                  <p className="text-sm font-semibold text-foreground">Streaming Signals</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 rounded-lg border border-warning/40 bg-card/40 p-3 backdrop-blur">
-                <div className="w-9 h-9 rounded bg-warning/20 border border-warning/50 flex items-center justify-center">
-                  <ChartLine size={18} className="text-warning" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Mobile Ready</p>
-                  <p className="text-sm font-semibold text-foreground">Adaptive Grid</p>
-                </div>
-              </div>
+              ))}
             </div>
 
             <div className="flex flex-wrap gap-3">
@@ -111,26 +213,13 @@ export function Landing() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border border-accent/30 bg-background/60 p-3">
-                  <p className="text-xs text-muted-foreground">Opportunities</p>
-                  <p className="text-xl font-semibold text-accent">High Probability</p>
-                  <p className="text-[11px] text-muted-foreground">SNR optimized</p>
-                </div>
-                <div className="rounded-lg border border-success/30 bg-background/60 p-3">
-                  <p className="text-xs text-muted-foreground">Execution</p>
-                  <p className="text-xl font-semibold text-success">Auto/Manual</p>
-                  <p className="text-[11px] text-muted-foreground">Switchable control</p>
-                </div>
-                <div className="rounded-lg border border-warning/30 bg-background/60 p-3">
-                  <p className="text-xs text-muted-foreground">Latency</p>
-                  <p className="text-xl font-semibold text-warning">Sub-second</p>
-                  <p className="text-[11px] text-muted-foreground">Web + mobile tuned</p>
-                </div>
-                <div className="rounded-lg border border-border/50 bg-background/60 p-3">
-                  <p className="text-xs text-muted-foreground">Comms</p>
-                  <p className="text-xl font-semibold text-foreground">Telegram</p>
-                  <p className="text-[11px] text-muted-foreground">Actionable payloads</p>
-                </div>
+                {missionStats.map(({ title, value, hint, border, accent }) => (
+                  <div key={title} className={`rounded-lg border ${border} bg-background/60 p-3`}>
+                    <p className="text-xs text-muted-foreground">{title}</p>
+                    <p className={`text-xl font-semibold ${accent}`}>{value}</p>
+                    <p className="text-[11px] text-muted-foreground">{hint}</p>
+                  </div>
+                ))}
               </div>
 
               <div className="rounded-lg border border-border/60 bg-background/70 p-4 flex items-center justify-between">
@@ -168,123 +257,61 @@ export function Landing() {
         </section>
 
         <div className="grid lg:grid-cols-3 gap-4">
-          <Card
-            className="p-5 bg-card/50 border-accent/30 hover:border-accent/60 transition-all cursor-pointer hud-glow group"
-            onClick={() => navigate('/scan')}
-          >
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 bg-accent/20 rounded-lg flex items-center justify-center border border-accent/50">
-                  <MagnifyingGlass size={24} weight="bold" className="text-accent" />
+          {primaryModules.map(
+            ({
+              title,
+              subtitle,
+              body,
+              icon: Icon,
+              borderClass,
+              iconClass,
+              buttonClass,
+              buttonLabel,
+              destination,
+            }) => (
+              <Card
+                key={title}
+                className={`p-5 bg-card/50 ${borderClass} transition-all cursor-pointer hud-glow group`}
+                onClick={() => navigate(destination)}
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-11 h-11 rounded-lg flex items-center justify-center border ${iconClass}`}>
+                      <Icon size={24} weight="bold" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-foreground">{title}</h2>
+                      <p className="text-xs text-muted-foreground">{subtitle}</p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-foreground/80 leading-relaxed">{body}</p>
+                  <Button variant="outline" size="sm" className={buttonClass}>
+                    {buttonLabel}
+                  </Button>
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold text-foreground">Recon Scanner</h2>
-                  <p className="text-xs text-muted-foreground">Manual sweep</p>
-                </div>
-              </div>
-              <p className="text-sm text-foreground/80 leading-relaxed">
-                Multi-timeframe hunts with Smart Money Concepts overlays. Built for quick reads on desktops and compact insight on
-                mobile.
-              </p>
-              <Button variant="outline" size="sm" className="border-accent/60 text-accent hover:bg-accent/10">
-                Acquire targets
-              </Button>
-            </div>
-          </Card>
-
-          <Card
-            className="p-5 bg-card/50 border-warning/30 hover:border-warning/60 transition-all cursor-pointer group"
-            onClick={() => navigate('/bot')}
-          >
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 bg-warning/20 rounded-lg flex items-center justify-center border border-warning/50">
-                  <Robot size={24} weight="bold" className="text-warning" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-foreground">Autonomous Bot</h2>
-                  <p className="text-xs text-muted-foreground">Persistent watch</p>
-                </div>
-              </div>
-              <p className="text-sm text-foreground/80 leading-relaxed">
-                Deploy sniper logic with risk rails and time windows. Notifications carry actionable payloads—no empty fields, no
-                guesswork.
-              </p>
-              <Button variant="outline" size="sm" className="border-warning/60 text-warning hover:bg-warning/10">
-                Deploy automation
-              </Button>
-            </div>
-          </Card>
-
-          <Card
-            className="p-5 bg-card/50 border-success/30 hover:border-success/60 transition-all cursor-pointer group"
-            onClick={() => navigate('/intel')}
-          >
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 bg-success/20 rounded-lg flex items-center justify-center border border-success/50">
-                  <Target size={24} weight="bold" className="text-success" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-foreground">Intel Desk</h2>
-                  <p className="text-xs text-muted-foreground">Signals & plans</p>
-                </div>
-              </div>
-              <p className="text-sm text-foreground/80 leading-relaxed">
-                Curated targets, playbooks, and training briefs. Designed with breathing room so teams can parse data at a glance.
-              </p>
-              <Button variant="outline" size="sm" className="border-success/60 text-success hover:bg-success/10">
-                Review intel
-              </Button>
-            </div>
-          </Card>
+              </Card>
+            ),
+          )}
         </div>
 
         <div className="grid md:grid-cols-3 gap-4">
-          <Card
-            className="p-4 bg-card/40 border-border/60 hover:border-accent/40 transition-all cursor-pointer backdrop-blur"
-            onClick={() => navigate('/training')}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-muted/60 rounded-lg flex items-center justify-center border border-border/70">
-                <Target size={20} className="text-foreground" />
+          {secondaryModules.map(({ title, subtitle, icon: Icon, destination }) => (
+            <Card
+              key={title}
+              className="p-4 bg-card/40 border-border/60 hover:border-accent/40 transition-all cursor-pointer backdrop-blur"
+              onClick={() => navigate(destination)}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-muted/60 rounded-lg flex items-center justify-center border border-border/70">
+                  <Icon size={20} className="text-foreground" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-foreground">{title}</h3>
+                  <p className="text-xs text-muted-foreground">{subtitle}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-foreground">Training Ground</h3>
-                <p className="text-xs text-muted-foreground">Simulated drills</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card
-            className="p-4 bg-card/40 border-border/60 hover:border-accent/40 transition-all cursor-pointer backdrop-blur"
-            onClick={() => navigate('/profiles')}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-muted/60 rounded-lg flex items-center justify-center border border-border/70">
-                <ListBullets size={20} className="text-foreground" />
-              </div>
-              <div>
-                <h3 className="font-bold text-foreground">Sniper Profiles</h3>
-                <p className="text-xs text-muted-foreground">Preset loadouts</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card
-            className="p-4 bg-card/40 border-border/60 hover:border-accent/40 transition-all cursor-pointer backdrop-blur"
-            onClick={() => navigate('/market')}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-muted/60 rounded-lg flex items-center justify-center border border-border/70">
-                <Crosshair size={20} className="text-foreground" />
-              </div>
-              <div>
-                <h3 className="font-bold text-foreground">Market Overview</h3>
-                <p className="text-xs text-muted-foreground">Situational awareness</p>
-              </div>
-            </div>
-          </Card>
+            </Card>
+          ))}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-card/50 p-4 backdrop-blur">
