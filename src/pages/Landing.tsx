@@ -138,7 +138,6 @@ export function Landing() {
       <div className="absolute -top-24 -right-10 w-80 h-80 hud-glow-cyan rounded-full blur-[120px] opacity-40" aria-hidden />
       <div className="absolute -bottom-16 -left-24 w-[28rem] h-[28rem] hud-glow-green rounded-full blur-[140px] opacity-30" aria-hidden />
       <div className="absolute inset-0 pointer-events-none radial-radar" aria-hidden="true" />
-
       <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-12 lg:py-16 space-y-10">
         <div className="grid lg:grid-cols-[1.25fr_1fr] gap-10 items-center">
           <div className="space-y-6">
@@ -153,10 +152,7 @@ export function Landing() {
               <h1 className="text-4xl md:text-5xl font-bold text-foreground tracking-tight leading-tight">
                 SniperSight Tactical Command
               </h1>
-              <p className="text-lg text-muted-foreground max-w-2xl">
-                HUD-inspired command deck with breathable spacing for analysts and operators. Precision crypto reconnaissance with
-                automated execution when targets confirm.
-              </p>
+              <p className="text-lg text-muted-foreground max-w-2xl">HUD-inspired command deck with breathable spacing for analysts and operators. Precision crypto reconnaissance with automated execution when targets confirm.</p>
             </div>
 
             <div className="grid sm:grid-cols-3 gap-3">
@@ -181,9 +177,7 @@ export function Landing() {
                 size="lg"
                 className="bg-accent hover:bg-accent/90 text-accent-foreground hud-glow"
                 onClick={() => navigate('/scan')}
-              >
-                Launch Scanner
-              </Button>
+              >Launch Scanner</Button>
               <Button
                 variant="outline"
                 size="lg"
@@ -238,12 +232,9 @@ export function Landing() {
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="space-y-1">
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Live Market Feed</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">LIVE MARKET FEED</p>
               <h2 className="text-xl font-semibold text-foreground">Persistent ticker stream · fully compatible with sessions</h2>
-              <p className="text-sm text-muted-foreground max-w-2xl">
-                The scrolling tape remains online with dual-pass rendering for continuous motion. Session telemetry stays synced
-                with your top-bar indicator so desktop and mobile operators keep consistent context.
-              </p>
+              <p className="text-sm text-muted-foreground max-w-2xl">The scrolling tape remains online with dual-pass rendering for continuous motion. Session telemetry stays synced with your top-bar indicator so desktop and mobile operators keep consistent context.</p>
             </div>
             <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-card/60 px-3 py-2 backdrop-blur">
               <SessionIndicator />
