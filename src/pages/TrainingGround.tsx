@@ -5,7 +5,13 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Target, PlayCircle, BookOpen } from '@phosphor-icons/react';
 
-function generateMockScanResults(count: number) {
+interface MockScanResult {
+  pair: string;
+  trendBias: string;
+  classification: string;
+}
+
+function generateMockScanResults(count: number): MockScanResult[] {
   const pairs = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'AVAX/USD', 'MATIC/USD'];
   const trends = ['BULLISH', 'BEARISH', 'NEUTRAL'];
   const classifications = ['STRONG', 'MODERATE', 'WEAK'];
@@ -19,7 +25,7 @@ function generateMockScanResults(count: number) {
 
 export function TrainingGround() {
   const [isTraining, setIsTraining] = useState(false);
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<MockScanResult[]>([]);
 
   const handleStartTraining = () => {
     setIsTraining(true);
