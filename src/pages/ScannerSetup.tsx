@@ -20,6 +20,7 @@ import type { SniperMode } from '@/types/sniperMode';
 import { SNIPER_MODES } from '@/types/sniperMode';
 import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
+import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLayout';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
@@ -97,22 +98,17 @@ export function ScannerSetup() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-12">
+    <PageLayout maxWidth="lg">
       <div className="space-y-10">
-        <div className="space-y-3">
-          <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
-            <Crosshair size={40} weight="bold" className="text-accent" />
-            Acquire Targets
-          </h1>
-          <p className="text-base text-muted-foreground">Configure scanner parameters for market opportunities</p>
-        </div>
+        <PageHeader
+          title="Acquire Targets"
+          description="Configure scanner parameters for market opportunities"
+          icon={<Crosshair size={40} weight="bold" className="text-accent" />}
+        />
 
-        <div className="space-y-6">
-          <div className="space-y-2">
-            <h2 className="text-sm font-bold text-muted-foreground tracking-wider">MARKET CONTEXT</h2>
-          </div>
+        <PageSection title="MARKET CONTEXT">
           <MarketRegimeLens {...marketRegimeProps} />
-        </div>
+        </PageSection>
 
         <Card className="bg-card/50 border-accent/30">
           <CardHeader className="pb-6">
@@ -267,6 +263,6 @@ export function ScannerSetup() {
           )}
         </Button>
       </div>
-    </div>
+    </PageLayout>
   );
 }

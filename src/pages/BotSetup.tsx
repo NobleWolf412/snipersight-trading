@@ -17,6 +17,7 @@ import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
 import { SniperModeSelector } from '@/components/SniperModeSelector';
 import { SNIPER_MODES } from '@/types/sniperMode';
 import type { SniperMode } from '@/types/sniperMode';
+import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLayout';
 
 export function BotSetup() {
   const navigate = useNavigate();
@@ -66,22 +67,17 @@ export function BotSetup() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-12">
+    <PageLayout maxWidth="lg">
       <div className="space-y-10">
-        <div className="space-y-3">
-          <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
-            <Robot size={40} weight="bold" className="text-warning" />
-            Deploy Trading Bot
-          </h1>
-          <p className="text-base text-muted-foreground">Configure automated trading parameters and limits</p>
-        </div>
+        <PageHeader
+          title="Deploy Trading Bot"
+          description="Configure automated trading parameters and limits"
+          icon={<Robot size={40} weight="bold" className="text-warning" />}
+        />
 
-        <div className="space-y-6">
-          <div className="space-y-2">
-            <h2 className="text-sm font-bold text-muted-foreground tracking-wider">MARKET CONTEXT</h2>
-          </div>
+        <PageSection title="MARKET CONTEXT">
           <MarketRegimeLens {...marketRegimeProps} />
-        </div>
+        </PageSection>
 
         <WalletGate message="Connect your wallet to authenticate before deploying trading bots">
           <Alert className="border-accent/50 bg-accent/10 p-6">
@@ -314,6 +310,6 @@ export function BotSetup() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageLayout>
   );
 }
