@@ -1,10 +1,21 @@
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Target, PlayCircle, BookOpen } from '@phosphor-icons/react';
-import { useState } from 'react';
-import { generateMockScanResults } from '@/utils/mockData';
-import { Badge } from '@/components/ui/badge';
+
+function generateMockScanResults(count: number) {
+  const pairs = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'AVAX/USD', 'MATIC/USD'];
+  const trends = ['BULLISH', 'BEARISH', 'NEUTRAL'];
+  const classifications = ['STRONG', 'MODERATE', 'WEAK'];
+  
+  return Array.from({ length: count }, (_, i) => ({
+    pair: pairs[i % pairs.length],
+    trendBias: trends[Math.floor(Math.random() * trends.length)],
+    classification: classifications[Math.floor(Math.random() * classifications.length)],
+  }));
+}
 
 export function TrainingGround() {
   const [isTraining, setIsTraining] = useState(false);
@@ -90,9 +101,9 @@ export function TrainingGround() {
           </Card>
         )}
 
-        <Card className="bg-card/50 border-muted">
+        <Card className="bg-card/50 border-accent/30">
           <CardHeader className="pb-6">
-            <CardTitle>Training Resources</CardTitle>
+            <CardTitle>Learning Resources</CardTitle>
             <CardDescription>Essential concepts for successful trading</CardDescription>
           </CardHeader>
           <CardContent>
