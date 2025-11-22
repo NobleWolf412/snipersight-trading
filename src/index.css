@@ -8,6 +8,18 @@
 }
 
 :root {
+  /* ========================================
+     TACTICAL THEME INTENSITY CONTROLS
+     ======================================== */
+  --tactical-intensity: 1.0; /* 0.3 = subtle, 0.6 = medium, 1.0 = intense */
+  --tactical-speed: 1.0; /* Animation speed multiplier */
+  
+  /* Force dark color scheme for browser UI */
+  color-scheme: dark;
+  
+  /* ========================================
+     CORE DARK THEME COLORS
+     ======================================== */
   --background: oklch(0.25 0.01 260);
   --foreground: oklch(0.92 0.01 260);
 
@@ -39,6 +51,15 @@
   --radius: 0.5rem;
 
   --spacing: 0.20rem;
+  
+  /* ========================================
+     BACKWARD COMPATIBILITY ALIASES
+     ======================================== */
+  --color-bg: var(--background);
+  --color-bg-inset: oklch(0.20 0.01 260);
+  --color-bg-overlay: var(--card);
+  --color-fg: var(--foreground);
+  --color-fg-secondary: var(--muted-foreground);
 }
 
 @theme {
@@ -79,19 +100,108 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* ========================================
+   TACTICAL GRID EFFECTS
+   ======================================== */
+
+/* Multi-layer parallax grid with depth */
 .tactical-grid {
   background-image: 
-    linear-gradient(oklch(0.75 0.18 140 / 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(0.75 0.18 140 / 0.03) 1px, transparent 1px);
-  background-size: 20px 20px;
+    /* Layer 1: Fine detail grid */
+    linear-gradient(
+      oklch(0.75 0.18 140 / calc(0.02 * var(--tactical-intensity))) 1px, 
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg, 
+      oklch(0.75 0.18 140 / calc(0.02 * var(--tactical-intensity))) 1px, 
+      transparent 1px
+    ),
+    /* Layer 2: Medium grid */
+    linear-gradient(
+      oklch(0.72 0.15 195 / calc(0.015 * var(--tactical-intensity))) 1px, 
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg, 
+      oklch(0.72 0.15 195 / calc(0.015 * var(--tactical-intensity))) 1px, 
+      transparent 1px
+    ),
+    /* Layer 3: Coarse grid for depth */
+    linear-gradient(
+      oklch(0.65 0.18 145 / calc(0.01 * var(--tactical-intensity))) 2px, 
+      transparent 2px
+    ),
+    linear-gradient(
+      90deg, 
+      oklch(0.65 0.18 145 / calc(0.01 * var(--tactical-intensity))) 2px, 
+      transparent 2px
+    );
+  background-size: 
+    20px 20px,
+    20px 20px,
+    40px 40px,
+    40px 40px,
+    100px 100px,
+    100px 100px;
+  background-position:
+    0 0,
+    0 0,
+    5px 5px,
+    5px 5px,
+    10px 10px,
+    10px 10px;
 }
+
+/* ========================================
+   HUD GLOW EFFECTS (Multi-color variants)
+   ======================================== */
 
 .hud-glow {
-  box-shadow: 0 0 20px oklch(0.75 0.18 140 / 0.15);
+  box-shadow: 0 0 calc(20px * var(--tactical-intensity)) oklch(0.75 0.18 140 / calc(0.15 * var(--tactical-intensity)));
 }
 
-.scan-pulse {
-  animation: scan-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+.hud-glow-cyan {
+  box-shadow: 0 0 calc(20px * var(--tactical-intensity)) oklch(0.72 0.15 195 / calc(0.2 * var(--tactical-intensity)));
+}
+
+.hud-glow-green {
+  box-shadow: 0 0 calc(20px * var(--tactical-intensity)) oklch(0.65 0.18 145 / calc(0.2 * var(--tactical-intensity)));
+}
+
+.hud-glow-red {
+  box-shadow: 0 0 calc(20px * var(--tactical-intensity)) oklch(0.58 0.22 25 / calc(0.2 * var(--tactical-intensity)));
+}
+
+.hud-glow-amber {
+  box-shadow: 0 0 calc(20px * var(--tactical-intensity)) oklch(0.70 0.15 75 / calc(0.2 * var(--tactical-intensity)));
+}
+
+/* ========================================
+   SCAN PULSE ANIMATIONS (Multiple speeds)
+   ======================================== */
+
+@media (prefers-reduced-motion: no-preference) {
+  .scan-pulse {
+    animation: scan-pulse calc(2s / var(--tactical-speed)) cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .scan-pulse-fast {
+    animation: scan-pulse calc(1s / var(--tactical-speed)) cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .scan-pulse-slow {
+    animation: scan-pulse calc(4s / var(--tactical-speed)) cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+/* Static fallback for reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .scan-pulse,
+  .scan-pulse-fast,
+  .scan-pulse-slow {
+    opacity: 0.8;
+  }
 }
 
 @keyframes scan-pulse {
@@ -99,7 +209,513 @@ body {
     opacity: 1;
   }
   50% {
-    opacity: 0.5;
+    opacity: calc(0.5 * var(--tactical-intensity, 1));
+  }
+}
+
+/* ========================================
+   CRT SCAN LINES EFFECT
+   ======================================== */
+
+.scan-lines {
+  position: relative;
+}
+
+.scan-lines::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 50%,
+    oklch(0.75 0.18 140 / calc(0.02 * var(--tactical-intensity))) 50%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .scan-lines::before {
+    animation: scan-line-drift calc(8s / var(--tactical-speed)) linear infinite;
+  }
+}
+
+@keyframes scan-line-drift {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 0 4px;
+  }
+}
+
+/* ========================================
+   GLITCH / INTERFERENCE EFFECT
+   ======================================== */
+
+@media (prefers-reduced-motion: no-preference) {
+  .glitch-text {
+    animation: glitch calc(3s / var(--tactical-speed)) infinite;
+  }
+}
+
+@keyframes glitch {
+  0%, 90%, 100% { 
+    transform: translate(0); 
+    text-shadow: none;
+  }
+  92% { 
+    transform: translate(-2px, 1px); 
+    text-shadow: 2px 0 oklch(0.72 0.15 195), -2px 0 oklch(0.58 0.22 25);
+  }
+  94% { 
+    transform: translate(2px, -1px); 
+    text-shadow: -2px 0 oklch(0.65 0.18 145), 2px 0 oklch(0.70 0.15 75);
+  }
+  96% { 
+    transform: translate(-1px, 2px); 
+    text-shadow: 1px 0 oklch(0.72 0.15 195), -1px 0 oklch(0.58 0.22 25);
+  }
+}
+
+/* ========================================
+   TARGETING RETICLE
+   ======================================== */
+
+.target-reticle {
+  position: relative;
+}
+
+.target-reticle::before,
+.target-reticle::after {
+  content: '';
+  position: absolute;
+  border: 2px solid oklch(0.72 0.15 195 / calc(0.6 * var(--tactical-intensity)));
+  pointer-events: none;
+}
+
+.target-reticle::before {
+  inset: -12px;
+  border-radius: 50%;
+}
+
+.target-reticle::after {
+  inset: -8px;
+  border-radius: 50%;
+  border-style: dashed;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .target-reticle::before {
+    animation: reticle-pulse calc(2s / var(--tactical-speed)) ease-in-out infinite;
+  }
+  
+  .target-reticle::after {
+    animation: reticle-rotate calc(8s / var(--tactical-speed)) linear infinite;
+  }
+}
+
+@keyframes reticle-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: calc(0.6 * var(--tactical-intensity));
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: calc(0.3 * var(--tactical-intensity));
+  }
+}
+
+@keyframes reticle-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ========================================
+   RADAR SWEEP EFFECT
+   ======================================== */
+
+.radar-sweep {
+  position: relative;
+  overflow: hidden;
+}
+
+.radar-sweep::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    oklch(0.72 0.15 195 / calc(0.3 * var(--tactical-intensity))) 60deg,
+    transparent 120deg
+  );
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .radar-sweep::before {
+    animation: radar-spin calc(4s / var(--tactical-speed)) linear infinite;
+  }
+}
+
+@keyframes radar-spin {
+  to { 
+    transform: rotate(360deg); 
+  }
+}
+
+/* ========================================
+   HOLOGRAPHIC BORDER
+   ======================================== */
+
+.holo-border {
+  position: relative;
+  border: 1px solid transparent;
+  background: 
+    linear-gradient(var(--background), var(--background)) padding-box,
+    linear-gradient(
+      45deg,
+      oklch(0.72 0.15 195 / calc(0.8 * var(--tactical-intensity))),
+      oklch(0.65 0.18 145 / calc(0.8 * var(--tactical-intensity))),
+      oklch(0.72 0.15 195 / calc(0.8 * var(--tactical-intensity)))
+    ) border-box;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .holo-border {
+    animation: border-glow calc(3s / var(--tactical-speed)) ease-in-out infinite;
+  }
+}
+
+@keyframes border-glow {
+  0%, 100% {
+    filter: brightness(1) saturate(1);
+  }
+  50% {
+    filter: brightness(1.2) saturate(1.3);
+  }
+}
+
+/* ========================================
+   DATA STREAM EFFECT
+   ======================================== */
+
+.data-stream {
+  position: relative;
+  overflow: hidden;
+}
+
+.data-stream::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    oklch(0.72 0.15 195 / calc(0.1 * var(--tactical-intensity))) 0%,
+    transparent 50%,
+    oklch(0.65 0.18 145 / calc(0.1 * var(--tactical-intensity))) 100%
+  );
+  background-size: 100% 200%;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .data-stream::before {
+    animation: stream-flow calc(3s / var(--tactical-speed)) linear infinite;
+  }
+}
+
+@keyframes stream-flow {
+  0% { 
+    background-position: 0 0; 
+  }
+  100% { 
+    background-position: 0 100%; 
+  }
+}
+
+/* ========================================
+   TERMINAL CURSOR
+   ======================================== */
+
+.terminal-cursor::after {
+  content: '▮';
+  margin-left: 2px;
+  color: oklch(0.72 0.15 195 / calc(0.8 * var(--tactical-intensity)));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .terminal-cursor::after {
+    animation: cursor-blink calc(1s / var(--tactical-speed)) step-end infinite;
+  }
+}
+
+@keyframes cursor-blink {
+  50% { 
+    opacity: 0; 
+  }
+}
+
+/* ========================================
+   TACTICAL ALERT FLASH
+   ======================================== */
+
+@media (prefers-reduced-motion: no-preference) {
+  .alert-flash {
+    animation: alert-pulse calc(0.5s / var(--tactical-speed)) ease-in-out infinite alternate;
+  }
+}
+
+/* Static high-visibility state for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .alert-flash {
+    box-shadow: 0 0 15px oklch(0.58 0.22 25 / calc(0.8 * var(--tactical-intensity)));
+  }
+}
+
+@keyframes alert-pulse {
+  from { 
+    box-shadow: 0 0 5px oklch(0.58 0.22 25 / calc(0.5 * var(--tactical-intensity))); 
+  }
+  to { 
+    box-shadow: 0 0 20px oklch(0.58 0.22 25 / var(--tactical-intensity)); 
+  }
+}
+
+/* ========================================
+   POWER-UP / BOOT ANIMATION
+   ======================================== */
+
+@media (prefers-reduced-motion: no-preference) {
+  .power-up {
+    animation: power-glow calc(2s / var(--tactical-speed)) ease-out forwards;
+  }
+}
+
+@keyframes power-glow {
+  0% {
+    box-shadow: 0 0 0 0 oklch(0.72 0.15 195 / calc(0.8 * var(--tactical-intensity)));
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    box-shadow: 0 0 30px 10px oklch(0.72 0.15 195 / 0);
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ========================================
+   STATUS INDICATORS
+   ======================================== */
+
+.status-online,
+.status-warning,
+.status-error {
+  position: relative;
+  padding-left: 20px;
+}
+
+.status-online::before,
+.status-warning::before,
+.status-error::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-online::before {
+  background: oklch(0.65 0.18 145);
+  box-shadow: 0 0 10px oklch(0.65 0.18 145 / calc(0.8 * var(--tactical-intensity)));
+}
+
+.status-warning::before {
+  background: oklch(0.70 0.15 75);
+  box-shadow: 0 0 10px oklch(0.70 0.15 75 / calc(0.8 * var(--tactical-intensity)));
+}
+
+.status-error::before {
+  background: oklch(0.58 0.22 25);
+  box-shadow: 0 0 10px oklch(0.58 0.22 25 / calc(0.8 * var(--tactical-intensity)));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .status-online::before {
+    animation: status-pulse calc(2s / var(--tactical-speed)) ease-in-out infinite;
+  }
+  
+  .status-error::before {
+    animation: status-pulse calc(0.8s / var(--tactical-speed)) ease-in-out infinite;
+  }
+}
+
+@keyframes status-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translateY(-50%) scale(1.2);
+  }
+}
+
+/* ========================================
+   COMPOUND TACTICAL COMPONENT CLASSES
+   ======================================== */
+
+/* Command Panel - Main control surfaces */
+.command-panel {
+  background: var(--card);
+  border: 1px solid oklch(0.40 0.05 250 / calc(0.6 * var(--tactical-intensity)));
+  border-radius: var(--radius-lg);
+  box-shadow: 
+    0 0 calc(20px * var(--tactical-intensity)) oklch(0.72 0.15 195 / calc(0.1 * var(--tactical-intensity))),
+    inset 0 1px 0 oklch(0.92 0.01 260 / calc(0.05 * var(--tactical-intensity)));
+  position: relative;
+  overflow: hidden;
+}
+
+.command-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(
+      oklch(0.75 0.18 140 / calc(0.015 * var(--tactical-intensity))) 1px, 
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg, 
+      oklch(0.75 0.18 140 / calc(0.015 * var(--tactical-intensity))) 1px, 
+      transparent 1px
+    );
+  background-size: 20px 20px;
+  pointer-events: none;
+}
+
+/* Tactical Card - Highlighted info cards */
+.tactical-card {
+  background: linear-gradient(
+    135deg,
+    oklch(0.30 0.10 250) 0%,
+    oklch(0.28 0.08 250) 100%
+  );
+  border: 1px solid oklch(0.72 0.15 195 / calc(0.4 * var(--tactical-intensity)));
+  border-radius: var(--radius-md);
+  box-shadow: 
+    0 4px 6px oklch(0 0 0 / 0.1),
+    0 0 calc(15px * var(--tactical-intensity)) oklch(0.72 0.15 195 / calc(0.08 * var(--tactical-intensity)));
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tactical-card:hover {
+  border-color: oklch(0.72 0.15 195 / calc(0.6 * var(--tactical-intensity)));
+  box-shadow: 
+    0 8px 12px oklch(0 0 0 / 0.15),
+    0 0 calc(25px * var(--tactical-intensity)) oklch(0.72 0.15 195 / calc(0.15 * var(--tactical-intensity)));
+  transform: translateY(-2px);
+}
+
+/* Mission Brief - Critical info displays */
+.mission-brief {
+  background: oklch(0.28 0.08 250);
+  border-left: 3px solid oklch(0.72 0.15 195);
+  padding: 1rem;
+  position: relative;
+}
+
+.mission-brief::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(
+    180deg,
+    oklch(0.72 0.15 195) 0%,
+    oklch(0.65 0.18 145) 50%,
+    oklch(0.72 0.15 195) 100%
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mission-brief::before {
+    animation: border-pulse calc(3s / var(--tactical-speed)) ease-in-out infinite;
+  }
+}
+
+@keyframes border-pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Targeting System - Focus states */
+.targeting-system {
+  position: relative;
+  outline: 2px dashed oklch(0.72 0.15 195 / calc(0.4 * var(--tactical-intensity)));
+  outline-offset: 4px;
+  transition: all 0.3s ease;
+}
+
+.targeting-system:hover,
+.targeting-system:focus-within {
+  outline-color: oklch(0.72 0.15 195 / calc(0.8 * var(--tactical-intensity)));
+  outline-style: solid;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .targeting-system:hover::before,
+  .targeting-system:focus-within::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border: 2px solid oklch(0.72 0.15 195 / calc(0.3 * var(--tactical-intensity)));
+    border-radius: inherit;
+    animation: target-lock calc(1s / var(--tactical-speed)) ease-out;
+  }
+}
+
+@keyframes target-lock {
+  0% {
+    inset: 50%;
+    opacity: 0;
+  }
+  100% {
+    inset: -8px;
+    opacity: 1;
+  }
+}
+
+/* ========================================
+   SCROLL & TICKER ANIMATIONS
+   ======================================== */
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-scroll-left {
+    animation: scroll-left calc(20s / var(--tactical-speed)) linear infinite;
+    will-change: transform;
+  }
+
+  .animate-scroll-left:hover {
+    animation-play-state: paused;
   }
 }
 
@@ -110,15 +726,6 @@ body {
   100% {
     transform: translate3d(-50%, 0, 0);
   }
-}
-
-.animate-scroll-left {
-  animation: scroll-left 20s linear infinite;
-  will-change: transform;
-}
-
-.animate-scroll-left:hover {
-  animation-play-state: paused;
 }
 
 .scrollbar-hide {
