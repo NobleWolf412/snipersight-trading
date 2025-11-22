@@ -3,7 +3,7 @@ import { Crosshair } from '@phosphor-icons/react';
 
 export function HeroSection() {
   return (
-    <header className="space-y-8">
+    <header className="relative space-y-8">
       <div className="flex items-center gap-3 text-xs tracking-widest text-accent">
         <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
         <span>SYSTEM OPERATIONAL</span>
@@ -16,7 +16,7 @@ export function HeroSection() {
         </p>
       </div>
       <LiveTicker className="rounded-md border border-border/60" />
-      <div className="absolute -top-16 right-8 w-32 h-32 rounded-full bg-accent/10 border border-accent/40 flex items-center justify-center pointer-events-none">
+      <div className="absolute top-0 right-0 w-32 h-32 rounded-full bg-accent/10 border border-accent/40 flex items-center justify-center pointer-events-none opacity-30">
         <Crosshair size={42} weight="bold" className="text-accent" />
       </div>
     </header>
