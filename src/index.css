@@ -760,12 +760,3 @@ body {
   transform-origin: center;
   pointer-events: none;
 }
-
-@keyframes radar-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
