@@ -32,9 +32,9 @@ export function Landing() {
         >
           <div className="space-y-10">
             <div className="space-y-4">
-              <p id="hero-overview" className="text-sm uppercase tracking-[0.2em] text-muted-foreground">
+              <h2 id="hero-overview" className="text-sm uppercase tracking-[0.2em] text-muted-foreground">
                 Situational Overview
-              </p>
+              </h2>
               <HeroSection />
             </div>
             <div className="rounded-2xl border border-border/70 bg-card/40 p-6 shadow-inner">
