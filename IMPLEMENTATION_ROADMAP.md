@@ -289,11 +289,13 @@ if __name__ == "__main__":
 - [ ] Create confluence scoring engine
 - [ ] Build trade planner (entries, stops, targets)
 
-### ✅ Phase 4: Risk & Bot (Week 5)
+### 🚧 Phase 4: Risk & Bot (Week 5)
 - [ ] Implement position sizing
 - [ ] Build risk management rules
 - [ ] Create notification system (Telegram)
 - [ ] Add executor layer (paper/live modes)
+
+**Status:** See PHASE4_IMPLEMENTATION.md and PHASE4_STEP_BY_STEP.md for detailed guides
 
 ### ✅ Phase 5: Orchestration (Week 6)
 - [ ] Build pipeline controller
