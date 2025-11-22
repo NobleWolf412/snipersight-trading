@@ -174,11 +174,6 @@ export function Landing() {
 
             <div className="flex flex-wrap gap-4">
               <Button
-                size="lg"
-                className="bg-accent hover:bg-accent/90 text-accent-foreground hud-glow h-12 text-base font-semibold"
-                onClick={() => navigate('/scan')}
-              >Launch Scanner</Button>
-              <Button
                 variant="outline"
                 size="lg"
                 className="border-border/70 bg-card/50 hover:border-accent/60 hover:text-foreground h-12 text-base font-semibold"
