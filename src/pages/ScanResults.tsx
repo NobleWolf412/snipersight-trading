@@ -45,36 +45,34 @@ export function ScanResults() {
 
   if (results.length === 0) {
     return (
-      <div className="container mx-auto px-6 py-12">
-        <div className="max-w-6xl mx-auto space-y-8">
-          <div className="text-center space-y-6">
-            <TrendUp size={80} className="mx-auto text-muted-foreground" />
-            <h2 className="text-3xl font-bold text-foreground">NO TARGETS ACQUIRED</h2>
-            <p className="text-lg text-muted-foreground">Run a scan to identify trading opportunities</p>
-            <Button onClick={() => navigate('/scan')} className="bg-accent hover:bg-accent/90 text-accent-foreground h-14 text-base" size="lg">
-              ARM THE SCANNER
-            </Button>
-          </div>
+      <div className="max-w-6xl mx-auto px-6 py-12">
+        <div className="text-center space-y-6">
+          <TrendUp size={80} className="mx-auto text-muted-foreground" />
+          <h2 className="text-3xl font-bold text-foreground">No Targets Acquired</h2>
+          <p className="text-lg text-muted-foreground">Run a scan to identify trading opportunities</p>
+          <Button onClick={() => navigate('/scan')} className="bg-accent hover:bg-accent/90 text-accent-foreground h-12 text-base" size="lg">
+            Arm Scanner
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-6 py-12">
-      <div className="max-w-6xl mx-auto space-y-8">
-        <div className="flex items-center justify-between">
+    <div className="max-w-6xl mx-auto px-6 py-12">
+      <div className="space-y-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="space-y-2">
             <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
               <TrendUp size={40} weight="bold" className="text-accent" />
-              TARGETS LOCKED
+              Targets Locked
             </h1>
-            <p className="text-lg text-muted-foreground">
-              {results.length} high-conviction setup{results.length !== 1 ? 's' : ''} identified
+            <p className="text-base text-muted-foreground">
+              {results.length} trading setup{results.length !== 1 ? 's' : ''} identified
             </p>
           </div>
-          <Button onClick={() => navigate('/scan')} variant="outline" className="h-12" size="lg">
-            NEW SCAN
+          <Button onClick={() => navigate('/scan')} variant="outline" className="h-12 md:w-auto" size="lg">
+            New Scan
           </Button>
         </div>
 

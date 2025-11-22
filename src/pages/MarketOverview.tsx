@@ -14,14 +14,14 @@ const MAJOR_PAIRS = [
 
 export function MarketOverview() {
   return (
-    <div className="container mx-auto px-6 py-12">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="max-w-7xl mx-auto px-6 py-12">
+      <div className="space-y-8">
         <div className="space-y-3">
           <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
             <ChartLine size={40} weight="bold" className="text-accent" />
-            MARKET OVERVIEW
+            Market Overview
           </h1>
-          <p className="text-lg text-muted-foreground">Real-time price monitoring and market analysis</p>
+          <p className="text-base text-muted-foreground">Real-time price monitoring across major trading pairs</p>
         </div>
 
         <LiveTicker symbols={MAJOR_PAIRS} />

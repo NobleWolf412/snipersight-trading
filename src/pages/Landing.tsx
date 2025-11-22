@@ -74,59 +74,59 @@ export function Landing() {
 
   const primaryModules = [
     {
-      title: 'Recon Scanner',
-      subtitle: 'Manual sweep',
+      title: 'Market Scanner',
+      subtitle: 'Find opportunities',
       body:
-        'Multi-timeframe hunts with Smart Money Concepts overlays. Built for quick reads on desktops and compact insight on mobile.',
+        'Scan multiple timeframes with technical analysis. Identify high-probability trading setups with detailed analytics.',
       icon: MagnifyingGlass,
       borderClass: 'border-accent/30 hover:border-accent/60',
       iconClass: 'bg-accent/20 border-accent/50 text-accent',
       buttonClass: 'border-accent/60 text-accent hover:bg-accent/10',
-      buttonLabel: 'Acquire targets',
+      buttonLabel: 'Open Scanner',
       destination: '/scan',
     },
     {
-      title: 'Autonomous Bot',
-      subtitle: 'Persistent watch',
+      title: 'Trading Bot',
+      subtitle: 'Automate execution',
       body:
-        'Deploy sniper logic with risk rails and time windows. Notifications carry actionable payloads—no empty fields, no guesswork.',
+        'Deploy automated trading with configurable parameters and risk limits. Monitor trades in real-time with notifications.',
       icon: Robot,
       borderClass: 'border-warning/30 hover:border-warning/60',
       iconClass: 'bg-warning/20 border-warning/50 text-warning',
       buttonClass: 'border-warning/60 text-warning hover:bg-warning/10',
-      buttonLabel: 'Deploy automation',
+      buttonLabel: 'Setup Bot',
       destination: '/bot',
     },
     {
-      title: 'Intel Desk',
-      subtitle: 'Signals & plans',
+      title: 'Market Overview',
+      subtitle: 'Monitor prices',
       body:
-        'Curated targets, playbooks, and training briefs. Designed with breathing room so teams can parse data at a glance.',
+        'Real-time price feeds for major trading pairs. View market metrics and connection status at a glance.',
       icon: Target,
       borderClass: 'border-success/30 hover:border-success/60',
       iconClass: 'bg-success/20 border-success/50 text-success',
       buttonClass: 'border-success/60 text-success hover:bg-success/10',
-      buttonLabel: 'Review intel',
+      buttonLabel: 'View Prices',
       destination: '/intel',
     },
   ];
 
   const secondaryModules = [
     {
-      title: 'Training Ground',
-      subtitle: 'Simulated drills',
+      title: 'Market Training',
+      subtitle: 'Practice trading',
       icon: Target,
       destination: '/training',
     },
     {
-      title: 'Sniper Profiles',
-      subtitle: 'Preset loadouts',
+      title: 'Trading Profiles',
+      subtitle: 'Save configurations',
       icon: ListBullets,
       destination: '/profiles',
     },
     {
-      title: 'Market Overview',
-      subtitle: 'Situational awareness',
+      title: 'Price Charts',
+      subtitle: 'Technical analysis',
       icon: Crosshair,
       destination: '/market',
     },
@@ -138,7 +138,7 @@ export function Landing() {
       <div className="absolute -top-24 -right-10 w-80 h-80 hud-glow-cyan rounded-full blur-[120px] opacity-40" aria-hidden />
       <div className="absolute -bottom-16 -left-24 w-[28rem] h-[28rem] hud-glow-green rounded-full blur-[140px] opacity-30" aria-hidden />
       <div className="absolute inset-0 pointer-events-none radial-radar" aria-hidden="true" />
-      <div className="relative max-w-6xl mx-auto px-6 md:px-8 py-16 lg:py-20 space-y-14">
+      <div className="relative max-w-6xl mx-auto px-6 md:px-8 py-16 lg:py-20 space-y-12">
         <div className="grid lg:grid-cols-[1.25fr_1fr] gap-12 items-center">
           <div className="space-y-8">
             <div className="flex flex-wrap items-center gap-4 text-xs uppercase tracking-[0.2em] text-accent">
@@ -148,11 +148,11 @@ export function Landing() {
               <span className="px-4 py-1.5 rounded-full border border-success/40 bg-success/10 text-[11px] text-success">Low Latency Link</span>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
               <h1 className="text-5xl md:text-6xl font-bold text-foreground tracking-tight leading-tight">
-                SniperSight Tactical Command
+                SniperSight
               </h1>
-              <p className="text-xl text-muted-foreground max-w-2xl">HUD-inspired command deck with breathable spacing for analysts and operators. Precision crypto reconnaissance with automated execution when targets confirm.</p>
+              <p className="text-lg text-muted-foreground max-w-2xl leading-relaxed">Crypto trading intelligence with automated execution. Scan markets, identify opportunities, and execute trades with precision.</p>
             </div>
 
             <div className="grid sm:grid-cols-3 gap-4">
@@ -175,16 +175,16 @@ export function Landing() {
             <div className="flex flex-wrap gap-4">
               <Button
                 size="lg"
-                className="bg-accent hover:bg-accent/90 text-accent-foreground hud-glow h-12 text-base"
+                className="bg-accent hover:bg-accent/90 text-accent-foreground hud-glow h-12 text-base font-semibold"
                 onClick={() => navigate('/scan')}
               >Launch Scanner</Button>
               <Button
                 variant="outline"
                 size="lg"
-                className="border-border/70 bg-card/50 hover:border-accent/60 hover:text-foreground h-12 text-base"
+                className="border-border/70 bg-card/50 hover:border-accent/60 hover:text-foreground h-12 text-base font-semibold"
                 onClick={() => navigate('/bot')}
               >
-                Deploy Automation
+                Deploy Bot
               </Button>
             </div>
           </div>
@@ -232,15 +232,13 @@ export function Landing() {
         <section className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-6">
             <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">LIVE MARKET FEED</p>
-              <h2 className="text-2xl font-semibold text-foreground">Persistent ticker stream · fully compatible with sessions</h2>
-              <p className="text-base text-muted-foreground max-w-2xl">The scrolling tape remains online with dual-pass rendering for continuous motion. Session telemetry stays syn</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Live Market Feed</p>
+              <h2 className="text-2xl font-semibold text-foreground">Real-Time Price Updates</h2>
             </div>
             <div className="flex items-center gap-4 rounded-lg border border-border/60 bg-card/60 px-4 py-3 backdrop-blur">
               <SessionIndicator />
               <div className="text-sm text-muted-foreground leading-tight">
-                <div className="text-foreground font-semibold">Session link stable</div>
-                <div className="mt-0.5">Aligned with HUD status and notifications</div>
+                <div className="text-foreground font-semibold">Connected</div>
               </div>
             </div>
           </div>
@@ -308,10 +306,9 @@ export function Landing() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-card/50 p-4 backdrop-blur">
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <div className="w-2 h-2 bg-success rounded-full scan-pulse" />
-            <span>Telemetry</span>
-            <span className="text-foreground font-semibold">Telegram dispatch online</span>
+            <span className="text-foreground font-semibold">Telegram Notifications Active</span>
           </div>
-          <div className="text-xs text-muted-foreground">Version 1.0.0 · Optimized for desktop & mobile HUD</div>
+          <div className="text-xs text-muted-foreground">v1.0.0</div>
         </div>
       </div>
     </div>

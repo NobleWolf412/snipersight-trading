@@ -66,14 +66,14 @@ export function BotSetup() {
   };
 
   return (
-    <div className="container mx-auto px-6 py-12">
-      <div className="max-w-4xl mx-auto space-y-12">
-        <div className="space-y-4">
+    <div className="max-w-4xl mx-auto px-6 py-12">
+      <div className="space-y-10">
+        <div className="space-y-3">
           <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
             <Robot size={40} weight="bold" className="text-warning" />
-            DEPLOY AUTONOMOUS SNIPER
+            Deploy Trading Bot
           </h1>
-          <p className="text-lg text-muted-foreground">Configure automated trading parameters</p>
+          <p className="text-base text-muted-foreground">Configure automated trading parameters and limits</p>
         </div>
 
         <div className="space-y-6">
@@ -131,11 +131,11 @@ export function BotSetup() {
               {!isConnected ? (
                 <Button
                   onClick={() => setShowConnectModal(true)}
-                  className="w-full bg-warning hover:bg-warning/90 text-warning-foreground h-12"
+                  className="w-full bg-warning hover:bg-warning/90 text-warning-foreground h-12 text-base"
                   size="lg"
                 >
-                  <Shield size={22} />
-                  CONNECT EXCHANGE
+                  <Shield size={20} />
+                  Connect Exchange
                 </Button>
               ) : (
                 <div className="flex items-center justify-between p-5 bg-success/10 border border-success/50 rounded-lg">
@@ -270,11 +270,11 @@ export function BotSetup() {
             <Button
               onClick={handleDeployBot}
               disabled={!isValidConfig()}
-              className="w-full bg-warning hover:bg-warning/90 text-warning-foreground h-16 text-lg font-bold mt-4"
+              className="w-full bg-warning hover:bg-warning/90 text-warning-foreground h-12 text-base font-semibold mt-4"
               size="lg"
             >
-              <Lightning size={28} weight="bold" />
-              DEPLOY BOT
+              <Lightning size={20} weight="bold" />
+              Deploy Bot
             </Button>
           )}
         </WalletGate>

@@ -97,14 +97,14 @@ export function ScannerSetup() {
   };
 
   return (
-    <div className="container mx-auto px-6 py-12">
-      <div className="max-w-4xl mx-auto space-y-12">
-        <div className="space-y-4">
+    <div className="max-w-4xl mx-auto px-6 py-12">
+      <div className="space-y-10">
+        <div className="space-y-3">
           <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
             <Crosshair size={40} weight="bold" className="text-accent" />
-            ACQUIRE TARGETS
+            Acquire Targets
           </h1>
-          <p className="text-lg text-muted-foreground">Configure scanner parameters for market reconnaissance</p>
+          <p className="text-base text-muted-foreground">Configure scanner parameters for market opportunities</p>
         </div>
 
         <div className="space-y-6">
@@ -251,18 +251,18 @@ export function ScannerSetup() {
         <Button
           onClick={handleArmScanner}
           disabled={isScanning || scanConfig.timeframes.length === 0}
-          className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-16 text-lg font-bold disabled:opacity-50 mt-4"
+          className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-12 text-base font-semibold disabled:opacity-50 mt-4"
           size="lg"
         >
           {isScanning ? (
             <>
-              <Lightning size={28} className="animate-pulse" />
-              ACQUIRING TARGETS...
+              <Lightning size={20} className="animate-pulse" />
+              Scanning...
             </>
           ) : (
             <>
-              <Crosshair size={28} weight="bold" />
-              ARM THE SCANNER
+              <Crosshair size={20} weight="bold" />
+              Start Scan
             </>
           )}
         </Button>
