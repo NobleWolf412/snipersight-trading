@@ -16,6 +16,8 @@ from backend.risk.position_sizer import PositionSizer
 from backend.risk.risk_manager import RiskManager
 from backend.bot.executor.paper_executor import PaperExecutor, OrderType, OrderSide
 from backend.data.adapters.binance import BinanceAdapter
+from backend.bot.telemetry.logger import get_telemetry_logger
+from backend.bot.telemetry.events import EventType
 
 logger = logging.getLogger(__name__)
 
@@ -456,6 +458,182 @@ async def get_candles(
         "candles": [],
         "message": "Mock data - exchange integration pending"
     }
+
+
+# ============================================================================
+# Telemetry Endpoints
+# ============================================================================
+
+@app.get("/api/telemetry/recent")
+async def get_recent_telemetry(
+    limit: int = Query(default=100, ge=1, le=1000),
+    since_id: Optional[int] = Query(default=None)
+):
+    """
+    Get recent telemetry events for real-time updates.
+    
+    Args:
+        limit: Maximum events to return
+        since_id: Only return events with ID > this value (for polling)
+        
+    Returns:
+        List of event dictionaries with 'id' field
+    """
+    try:
+        telemetry = get_telemetry_logger()
+        events = telemetry.get_recent_with_id(limit=limit, since_id=since_id)
+        
+        return {
+            "events": events,
+            "count": len(events)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching recent telemetry: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/telemetry/events")
+async def get_telemetry_events(
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    event_type: Optional[str] = Query(default=None),
+    symbol: Optional[str] = Query(default=None),
+    run_id: Optional[str] = Query(default=None),
+    start_time: Optional[str] = Query(default=None),
+    end_time: Optional[str] = Query(default=None)
+):
+    """
+    Query telemetry events with filters.
+    
+    Args:
+        limit: Maximum events to return
+        offset: Pagination offset
+        event_type: Filter by event type (e.g., "scan_completed", "signal_generated")
+        symbol: Filter by symbol
+        run_id: Filter by scan run ID
+        start_time: Filter events after this time (ISO 8601)
+        end_time: Filter events before this time (ISO 8601)
+        
+    Returns:
+        Filtered list of events with pagination info
+    """
+    try:
+        telemetry = get_telemetry_logger()
+        
+        # Convert event_type string to enum if provided
+        event_type_enum = None
+        if event_type:
+            try:
+                event_type_enum = EventType(event_type)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid event_type: {event_type}")
+        
+        events = telemetry.get_events(
+            limit=limit,
+            offset=offset,
+            event_type=event_type_enum,
+            symbol=symbol,
+            run_id=run_id,
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        total_count = telemetry.get_event_count(
+            event_type=event_type_enum,
+            symbol=symbol,
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        return {
+            "events": events,
+            "pagination": {
+                "total": total_count,
+                "limit": limit,
+                "offset": offset,
+                "has_more": (offset + len(events)) < total_count
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error querying telemetry events: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/telemetry/analytics")
+async def get_telemetry_analytics(
+    start_time: Optional[str] = Query(default=None),
+    end_time: Optional[str] = Query(default=None)
+):
+    """
+    Get aggregated telemetry analytics/metrics.
+    
+    Args:
+        start_time: Calculate metrics from this time (ISO 8601)
+        end_time: Calculate metrics until this time (ISO 8601)
+        
+    Returns:
+        Analytics dashboard metrics
+    """
+    try:
+        telemetry = get_telemetry_logger()
+        
+        # Get counts for each event type
+        total_scans = telemetry.get_event_count(
+            event_type=EventType.SCAN_COMPLETED,
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        total_signals = telemetry.get_event_count(
+            event_type=EventType.SIGNAL_GENERATED,
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        total_rejected = telemetry.get_event_count(
+            event_type=EventType.SIGNAL_REJECTED,
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        total_errors = telemetry.get_event_count(
+            event_type=EventType.ERROR_OCCURRED,
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        # Get rejection breakdown
+        rejected_events = telemetry.get_events(
+            limit=1000,
+            event_type=EventType.SIGNAL_REJECTED,
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        rejection_reasons = {}
+        for event in rejected_events:
+            reason = event.get('data', {}).get('reason', 'Unknown')
+            rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
+        
+        return {
+            "metrics": {
+                "total_scans": total_scans,
+                "total_signals_generated": total_signals,
+                "total_signals_rejected": total_rejected,
+                "total_errors": total_errors,
+                "signal_success_rate": round((total_signals / max(total_signals + total_rejected, 1)) * 100, 2)
+            },
+            "rejection_breakdown": rejection_reasons,
+            "time_range": {
+                "start": start_time,
+                "end": end_time
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error calculating analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

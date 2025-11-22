@@ -17,6 +17,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Dict, Optional, Any
 import logging
+import time
 
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.models.data import MultiTimeframeData
@@ -26,6 +27,14 @@ from backend.shared.models.scoring import ConfluenceBreakdown
 from backend.shared.models.planner import TradePlan
 
 from backend.engine.context import SniperContext
+from backend.bot.telemetry.logger import get_telemetry_logger
+from backend.bot.telemetry.events import (
+    create_scan_started_event,
+    create_scan_completed_event,
+    create_signal_generated_event,
+    create_signal_rejected_event,
+    create_error_event
+)
 from backend.data.ingestion_pipeline import IngestionPipeline
 from backend.data.adapters.binance import BinanceAdapter
 from backend.indicators.momentum import compute_rsi, compute_stoch_rsi, compute_mfi
@@ -77,6 +86,9 @@ class Orchestrator:
         """
         self.config = config
         
+        # Initialize telemetry
+        self.telemetry = get_telemetry_logger()
+        
         # Initialize components
         self.exchange_adapter = exchange_adapter or BinanceAdapter(testnet=False)
         self.ingestion_pipeline = IngestionPipeline(self.exchange_adapter)
@@ -108,10 +120,19 @@ class Orchestrator:
         """
         run_id = str(uuid.uuid4())[:8]
         timestamp = datetime.now(timezone.utc)
+        start_time = time.time()
         
         logger.info(f"🎯 Starting scan {run_id} for {len(symbols)} symbols")
         
+        # Log scan started event
+        self.telemetry.log_event(create_scan_started_event(
+            run_id=run_id,
+            symbols=symbols,
+            profile=self.config.profile
+        ))
+        
         signals = []
+        rejected_count = 0
         
         for symbol in symbols:
             try:
@@ -120,11 +141,31 @@ class Orchestrator:
                     signals.append(signal)
                     logger.info(f"✅ {symbol}: Signal generated ({signal.confidence_score:.1f}%)")
                 else:
+                    rejected_count += 1
                     logger.debug(f"⚪ {symbol}: No qualifying setup")
                     
             except Exception as e:
+                rejected_count += 1
                 logger.error(f"❌ {symbol}: Pipeline error - {e}")
+                
+                # Log error event
+                self.telemetry.log_event(create_error_event(
+                    error_message=str(e),
+                    error_type=type(e).__name__,
+                    symbol=symbol,
+                    run_id=run_id
+                ))
                 continue
+        
+        # Log scan completed event
+        duration = time.time() - start_time
+        self.telemetry.log_event(create_scan_completed_event(
+            run_id=run_id,
+            symbols_scanned=len(symbols),
+            signals_generated=len(signals),
+            signals_rejected=rejected_count,
+            duration_seconds=duration
+        ))
         
         logger.info(f"🎯 Scan {run_id} complete: {len(signals)}/{len(symbols)} signals generated")
         return signals
@@ -177,6 +218,17 @@ class Orchestrator:
         # Check quality gate
         if context.confluence_breakdown.total_score < self.config.min_confluence_score:
             logger.debug(f"{symbol}: Below minimum confluence ({context.confluence_breakdown.total_score:.1f} < {self.config.min_confluence_score})")
+            
+            # Log rejection event
+            self.telemetry.log_event(create_signal_rejected_event(
+                run_id=run_id,
+                symbol=symbol,
+                reason="Below minimum confluence threshold",
+                gate_name="confluence_score",
+                score=context.confluence_breakdown.total_score,
+                threshold=self.config.min_confluence_score
+            ))
+            
             return None
         
         # Stage 6: Trade planning
@@ -188,7 +240,28 @@ class Orchestrator:
         logger.debug(f"{symbol}: Validating risk parameters")
         if not self._validate_risk(context.plan):
             logger.debug(f"{symbol}: Failed risk validation")
+            
+            # Log rejection event
+            self.telemetry.log_event(create_signal_rejected_event(
+                run_id=run_id,
+                symbol=symbol,
+                reason="Failed risk validation",
+                gate_name="risk_validation"
+            ))
+            
             return None
+        
+        # Log successful signal generation
+        if context.plan:
+            self.telemetry.log_event(create_signal_generated_event(
+                run_id=run_id,
+                symbol=symbol,
+                direction=context.plan.direction,
+                confidence_score=context.plan.confidence_score,
+                setup_type=context.plan.setup_type,
+                entry_price=context.plan.entry_zone.near_entry,
+                risk_reward_ratio=context.plan.risk_reward_ratio
+            ))
         
         return context.plan
     

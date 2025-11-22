@@ -2,55 +2,41 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { Robot, StopCircle, CheckCircle, Warning, Info } from '@phosphor-icons/react';
-import { generateMockBotActivity } from '@/utils/mockData';
+import { Robot, StopCircle, Target, CheckCircle, XCircle, TrendingUp } from '@phosphor-icons/react';
 import { useState, useEffect } from 'react';
-import type { BotActivity } from '@/utils/mockData';
 import { PriceDisplay } from '@/components/PriceDisplay';
 import { LiveTicker } from '@/components/LiveTicker';
+import { ActivityFeed } from '@/components/telemetry/ActivityFeed';
+import { telemetryService, type TelemetryAnalytics } from '@/services/telemetryService';
 
 export function BotStatus() {
   const navigate = useNavigate();
-  const [activities, setActivities] = useState<BotActivity[]>([]);
   const [isActive, setIsActive] = useState(true);
+  const [analytics, setAnalytics] = useState<TelemetryAnalytics | null>(null);
 
+  // Load analytics on mount
   useEffect(() => {
-    setActivities(generateMockBotActivity());
-
-    const interval = setInterval(() => {
-      if (isActive) {
-        const newActivity: BotActivity = {
-          id: `activity-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          action: [
-            'Monitoring price action',
-            'Confluence check passed',
-            'Entry zone proximity detected',
-            'Risk parameters validated',
-          ][Math.floor(Math.random() * 4)],
-          pair: ['BTC/USDT', 'ETH/USDT', 'SOL/USDT'][Math.floor(Math.random() * 3)],
-          status: ['success', 'info'][Math.floor(Math.random() * 2)] as BotActivity['status'],
-        };
-        setActivities((prev) => [newActivity, ...prev].slice(0, 20));
+    const loadAnalytics = async () => {
+      try {
+        const data = await telemetryService.getAnalytics();
+        setAnalytics(data);
+      } catch (error) {
+        console.error('Failed to load analytics:', error);
       }
-    }, 5000);
+    };
 
+    loadAnalytics();
+    
+    // Refresh analytics every 30 seconds
+    const interval = setInterval(loadAnalytics, 30000);
     return () => clearInterval(interval);
-  }, [isActive]);
+  }, []);
 
   const handleAbortMission = () => {
     setIsActive(false);
     setTimeout(() => {
       navigate('/bot');
     }, 1000);
-  };
-
-  const getStatusIcon = (status: BotActivity['status']) => {
-    if (status === 'success') return <CheckCircle size={16} weight="fill" className="text-success" />;
-    if (status === 'warning') return <Warning size={16} weight="fill" className="text-warning" />;
-    return <Info size={16} weight="fill" className="text-accent" />;
   };
 
   return (
@@ -113,91 +99,71 @@ export function BotStatus() {
 
         <LiveTicker symbols={['BTC/USDT', 'ETH/USDT', 'SOL/USDT']} />
 
-        <Card className="bg-card/50 border-accent/30">
-          <CardHeader>
-            <CardTitle>Current Targets</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="p-4 bg-background rounded border border-accent/50">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="space-y-1">
-                    <div className="font-bold">BTC/USDT</div>
-                    <PriceDisplay symbol="BTC/USDT" size="sm" />
-                  </div>
-                  <Badge className="bg-success/20 text-success border-success/50">MONITORING</Badge>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <div className="text-muted-foreground">Entry</div>
-                    <div className="font-mono">$42,150</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground">Stop</div>
-                    <div className="font-mono text-destructive">$41,200</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground">Target</div>
-                    <div className="font-mono text-success">$43,800</div>
-                  </div>
-                </div>
+        {/* Analytics Dashboard */}
+        <div className="grid md:grid-cols-4 gap-4">
+          <Card className="bg-card/50 border-accent/30">
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Target size={16} />
+                TOTAL SCANS
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-foreground">
+                {analytics?.metrics.total_scans || 0}
               </div>
+              <div className="text-xs text-muted-foreground">Completed</div>
+            </CardContent>
+          </Card>
 
-              <div className="p-4 bg-background rounded border border-accent/50">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="space-y-1">
-                    <div className="font-bold">ETH/USDT</div>
-                    <PriceDisplay symbol="ETH/USDT" size="sm" />
-                  </div>
-                  <Badge className="bg-warning/20 text-warning border-warning/50">ENTRY PENDING</Badge>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <div className="text-muted-foreground">Entry</div>
-                    <div className="font-mono">$2,245</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground">Stop</div>
-                    <div className="font-mono text-destructive">$2,190</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground">Target</div>
-                    <div className="font-mono text-success">$2,320</div>
-                  </div>
-                </div>
+          <Card className="bg-card/50 border-accent/30">
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <CheckCircle size={16} />
+                SIGNALS GENERATED
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-success">
+                {analytics?.metrics.total_signals_generated || 0}
               </div>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="text-xs text-muted-foreground">High conviction</div>
+            </CardContent>
+          </Card>
 
-        <Card className="bg-card/50 border-accent/30">
-          <CardHeader>
-            <CardTitle>Mission Feed</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[400px] pr-4">
-              <div className="space-y-2">
-                {activities.map((activity) => (
-                  <div key={activity.id}>
-                    <div className="flex items-start gap-3 p-3 bg-background rounded">
-                      <div className="mt-0.5">{getStatusIcon(activity.status)}</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-medium">{activity.action}</span>
-                          <Badge variant="outline" className="text-xs">{activity.pair}</Badge>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(activity.timestamp).toLocaleTimeString()}
-                        </div>
-                      </div>
-                    </div>
-                    <Separator className="my-2" />
-                  </div>
-                ))}
+          <Card className="bg-card/50 border-accent/30">
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <XCircle size={16} />
+                SIGNALS REJECTED
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-orange-400">
+                {analytics?.metrics.total_signals_rejected || 0}
               </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
+              <div className="text-xs text-muted-foreground">Failed gates</div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/50 border-accent/30">
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <TrendingUp size={16} />
+                SUCCESS RATE
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-accent">
+                {analytics?.metrics.signal_success_rate?.toFixed(1) || 0}%
+              </div>
+              <div className="text-xs text-muted-foreground">Signal quality</div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Real-time Activity Feed */}
+        <ActivityFeed limit={100} autoScroll={true} showFilters={true} pollInterval={3000} />
       </div>
     </div>
   );
