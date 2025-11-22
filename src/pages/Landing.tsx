@@ -183,9 +183,7 @@ export function Landing() {
                 size="lg"
                 className="border-border/70 bg-card/50 hover:border-accent/60 hover:text-foreground h-12 text-base font-semibold"
                 onClick={() => navigate('/bot')}
-              >
-                Deploy Bot
-              </Button>
+              >Deploy Bot</Button>
             </div>
           </div>
 
@@ -197,7 +195,7 @@ export function Landing() {
             <div className="space-y-8">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-[0.2em]">Mission Status</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-[0.2em]">MISSION STATUS</p>
                   <p className="text-3xl font-semibold text-foreground">Active Recon</p>
                 </div>
                 <div className="flex items-center gap-2.5 text-xs text-accent">
@@ -221,9 +219,7 @@ export function Landing() {
                   <p className="text-xs text-muted-foreground">Readiness</p>
                   <p className="text-xl font-semibold text-foreground mt-1">SniperSight v1.0.0</p>
                 </div>
-                <Button size="sm" className="bg-accent hover:bg-accent/90 text-accent-foreground h-10" onClick={() => navigate('/market')}>
-                  Market View
-                </Button>
+                <Button size="sm" className="bg-accent hover:bg-accent/90 text-accent-foreground h-10" onClick={() => navigate('/market')}>Market View</Button>
               </div>
             </div>
           </Card>
