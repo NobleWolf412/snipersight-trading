@@ -28,7 +28,6 @@ export function Landing() {
         <section
           className="relative max-w-7xl mx-auto px-6 lg:px-16 py-12 lg:py-20"
           aria-labelledby="hero-overview"
-          id="hero-overview"
         >
           <div className="space-y-10">
             <div className="space-y-4">
@@ -117,7 +116,7 @@ export function Landing() {
 
             <SectionDivider />
 
-            <footer aria-label="System Status" id="status" className="pt-2">
+            <section aria-label="System Status" id="status" className="pt-2">
               <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
                 <div>
                   <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Status &amp; Safeguards</p>
@@ -126,7 +125,7 @@ export function Landing() {
                 </div>
               </div>
               <SystemStatus data={system} />
-            </footer>
+            </section>
           </div>
         </div>
       </main>
