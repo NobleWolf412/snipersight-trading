@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Robot, StopCircle, Target, CheckCircle, XCircle, TrendingUp } from '@phosphor-icons/react';
+import { Robot, StopCircle, Target, CheckCircle, XCircle, TrendUp } from '@phosphor-icons/react';
 import { useState, useEffect } from 'react';
 import { PriceDisplay } from '@/components/PriceDisplay';
 import { LiveTicker } from '@/components/LiveTicker';
@@ -149,7 +149,7 @@ export function BotStatus() {
           <Card className="bg-card/50 border-accent/30">
             <CardHeader>
               <CardTitle className="text-sm flex items-center gap-2">
-                <TrendingUp size={16} />
+                <TrendUp size={16} />
                 SUCCESS RATE
               </CardTitle>
             </CardHeader>
