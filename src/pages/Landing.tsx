@@ -77,26 +77,7 @@ export function Landing() {
                   </Button>
                 </div>
               </div>
-              <div className="order-2 md:order-2 rounded-lg border border-border/60 bg-card/40 p-8 md:p-12">
-                <div className="space-y-4 text-sm text-muted-foreground">
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2 flex-shrink-0" />
-                    <p><span className="font-semibold text-foreground">Multi-Timeframe Analysis:</span> Simultaneous reconnaissance across H1, H4, and D1 charts to identify confluence zones where multiple timeframes align for high-conviction entries.</p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2 flex-shrink-0" />
-                    <p><span className="font-semibold text-foreground">Liquidity Validation:</span> Real-time volume analysis and order book depth checks to filter out illiquid traps and ensure clean execution potential on qualified targets.</p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2 flex-shrink-0" />
-                    <p><span className="font-semibold text-foreground">Pattern Recognition:</span> Automated detection of tactical setups including breakouts, support/resistance bounces, and momentum shifts with precision entry zones marked.</p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2 flex-shrink-0" />
-                    <p><span className="font-semibold text-foreground">Risk-Filtered Results:</span> Every scan result includes pre-calculated stop-loss levels, risk-reward ratios, and position sizing recommendations for disciplined deployment.</p>
-                  </div>
-                </div>
-              </div>
+
             </div>
           </div>
         </section>
