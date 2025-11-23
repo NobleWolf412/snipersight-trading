@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useScanner } from '@/context/ScannerContext';
-import type { ScanConfig } from '@/context/ScannerContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -107,6 +106,11 @@ export function ScannerSetup() {
           title="Acquire Targets"
           description="Configure scanner parameters for market opportunities"
           icon={<Crosshair size={40} weight="bold" className="text-accent" />}
+          actions={
+            <Button variant="outline" onClick={() => navigate('/scanner/status')} className="h-12">
+              View Status
+            </Button>
+          }
         />
 
         <PageSection title="MARKET CONTEXT">
@@ -267,3 +271,5 @@ export function ScannerSetup() {
     </PageLayout>
   );
 }
+
+export default ScannerSetup;
