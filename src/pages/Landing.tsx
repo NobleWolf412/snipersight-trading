@@ -56,21 +56,17 @@ export function Landing() {
         {/* Recon scanner section */}
         <section className="relative py-16 md:py-20 bg-card/20">
           <div className="max-w-6xl mx-auto px-6 md:px-8">
-            <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div className="max-w-3xl mx-auto text-center">
               <div className="space-y-6">
 
                 <p className="text-lg text-muted-foreground leading-relaxed">Deploy the multi-timeframe scanner to sweep for actionable targets, validate liquidity, and surface the highest-probability entries with tactical context baked in.</p>
-                <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                <div className="flex flex-col sm:flex-row gap-4 pt-4 justify-center">
                   <Button asChild size="lg" className="w-full sm:w-auto">
                     <Link to="/scanner/setup"></Link>
                   </Button>
                   <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
                     <Link to="/scanner/results"></Link>
                   </Button>
-                </div>
-              </div>
-              <div className="rounded-lg border border-border/60 bg-card/40 p-8 md:p-12">
-                <div className="space-y-4 text-sm text-muted-foreground">
                 </div>
               </div>
             </div>
