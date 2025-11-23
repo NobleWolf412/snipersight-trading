@@ -71,10 +71,6 @@ export function Landing() {
               </div>
               <div className="rounded-lg border border-border/60 bg-card/40 p-8 md:p-12">
                 <div className="space-y-4 text-sm text-muted-foreground">
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2" />
-                    <p>Liquidity and volume validation</p>
-                  </div>
                 </div>
               </div>
             </div>
