@@ -81,7 +81,7 @@ export function Landing() {
                 <div className="space-y-4 text-sm text-muted-foreground">
                   <div className="flex items-start gap-3">
                     <div className="w-1.5 h-1.5 rounded-full bg-warning mt-2" />
-                    <p>Automated position sizing and entry</p>
+                    <p></p>
                   </div>
                   <div className="flex items-start gap-3">
                     <div className="w-1.5 h-1.5 rounded-full bg-warning mt-2" />
