@@ -143,9 +143,7 @@ export function Landing() {
         <section className="relative py-16 md:py-20 bg-card/20">
           <div className="max-w-6xl mx-auto px-6 md:px-8 space-y-8">
             <div className="space-y-3">
-              <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-                Context Utilities
-              </p>
+              <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">CONTEXT UTILITIES</p>
               <h2 className="text-3xl md:text-4xl font-bold">
                 Intel & Market Context
               </h2>
