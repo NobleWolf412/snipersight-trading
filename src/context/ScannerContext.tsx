@@ -1,8 +1,7 @@
-import { createContext, useContext, ReactNode, useEffect, useState, useRef } from 'react';
+import { createContext, useContext, ReactNode, useEffect, useState } from 'react';
 import { useKV } from '@github/spark/hooks';
 import type { SniperMode } from '@/types/sniperMode';
 import type { ScannerMode } from '@/utils/api';
-import { api } from '@/utils/api';
 
 export interface ScanConfig {
   exchange: string;
@@ -75,6 +74,38 @@ const defaultBotConfig: BotConfig = {
   duration: 24,
 };
 
+// Static scanner modes - these are UI configurations only
+const SCANNER_MODES: ScannerMode[] = [
+  {
+    name: 'overwatch',
+    description: 'Long-term trend surveillance across 6 timeframes (1W to 5m). Best for patient, high-conviction setups.',
+    timeframes: ['1W', '1D', '4H', '1H', '15m', '5m'],
+    min_confluence_score: 75,
+    profile: 'conservative',
+  },
+  {
+    name: 'recon',
+    description: 'Balanced multi-timeframe analysis (5 TFs). Standard operating mode for most market conditions.',
+    timeframes: ['1D', '4H', '1H', '15m', '5m'],
+    min_confluence_score: 70,
+    profile: 'balanced',
+  },
+  {
+    name: 'strike',
+    description: 'Fast-action scanner focused on intraday timeframes (4 TFs). Ideal for active trading sessions.',
+    timeframes: ['4H', '1H', '15m', '5m'],
+    min_confluence_score: 65,
+    profile: 'aggressive',
+  },
+  {
+    name: 'surgical',
+    description: 'Precision-focused lower timeframe analysis (3 TFs). For experienced traders seeking exact entries.',
+    timeframes: ['1H', '15m', '5m'],
+    min_confluence_score: 60,
+    profile: 'aggressive',
+  },
+];
+
 const ScannerContext = createContext<ScannerContextType | undefined>(undefined);
 
 export function ScannerProvider({ children }: { children: ReactNode }) {
@@ -82,73 +113,25 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
   const [botConfig, setBotConfig] = useKV<BotConfig>('bot-config', defaultBotConfig);
   const [isScanning, setIsScanning] = useKV<boolean>('is-scanning', false);
   const [isBotActive, setIsBotActive] = useKV<boolean>('is-bot-active', false);
-  const [scannerModes, setScannerModes] = useState<ScannerMode[]>([]);
-  const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(null);
-  const inFlightRef = useRef<Promise<void> | null>(null);
+  
+  // Scanner modes are now static, no API fetch needed
+  const [scannerModes] = useState<ScannerMode[]>(SCANNER_MODES);
+  const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(() => {
+    // Initialize with the mode matching scanConfig, or default to 'recon'
+    const defaultMode = SCANNER_MODES.find(m => m.name === defaultScanConfig.sniperMode) || SCANNER_MODES[1];
+    return defaultMode;
+  });
 
   const refreshModes = async (): Promise<void> => {
-    if (inFlightRef.current) return inFlightRef.current;
-    inFlightRef.current = (async () => {
-      try {
-        const response = await api.getScannerModes();
-        if (response.data?.modes) {
-          setScannerModes(response.data.modes);
-          // Align selectedMode with existing scanConfig.sniperMode if present
-          if (!selectedMode) {
-            const match = response.data.modes.find(m => m.name === (scanConfig?.sniperMode || ''));
-            if (match) setSelectedMode(match);
-          }
-        } else if (response.error) {
-          console.error('[ScannerContext] Failed fetching scanner modes:', response.error);
-          // Fallback to mock modes when backend unavailable
-          const mockModes: ScannerMode[] = [
-            {
-              name: 'overwatch',
-              description: 'Long-term trend surveillance across 6 timeframes (1W to 5m). Best for patient, high-conviction setups.',
-              timeframes: ['1W', '1D', '4H', '1H', '15m', '5m'],
-              min_confluence_score: 75,
-              profile: 'conservative',
-            },
-            {
-              name: 'recon',
-              description: 'Balanced multi-timeframe analysis (5 TFs). Standard operating mode for most market conditions.',
-              timeframes: ['1D', '4H', '1H', '15m', '5m'],
-              min_confluence_score: 70,
-              profile: 'balanced',
-            },
-            {
-              name: 'strike',
-              description: 'Fast-action scanner focused on intraday timeframes (4 TFs). Ideal for active trading sessions.',
-              timeframes: ['4H', '1H', '15m', '5m'],
-              min_confluence_score: 65,
-              profile: 'aggressive',
-            },
-            {
-              name: 'surgical',
-              description: 'Precision-focused lower timeframe analysis (3 TFs). For experienced traders seeking exact entries.',
-              timeframes: ['1H', '15m', '5m'],
-              min_confluence_score: 60,
-              profile: 'aggressive',
-            },
-          ];
-          setScannerModes(mockModes);
-          // Set default mode if none selected
-          if (!selectedMode) {
-            const defaultMode = mockModes.find(m => m.name === 'recon') || mockModes[0];
-            setSelectedMode(defaultMode);
-          }
-        }
-      } finally {
-        inFlightRef.current = null;
-      }
-    })();
-    return inFlightRef.current;
+    // No-op - modes are static now, but keeping function for API compatibility
+    return Promise.resolve();
   };
 
-  // Initial fetch (guarded to avoid duplicate under StrictMode)
+  // Sync selectedMode with scanConfig.sniperMode on mount
   useEffect(() => {
-    if (scannerModes.length === 0) {
-      refreshModes();
+    if (scanConfig?.sniperMode && !selectedMode) {
+      const match = SCANNER_MODES.find(m => m.name === scanConfig.sniperMode);
+      if (match) setSelectedMode(match);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
