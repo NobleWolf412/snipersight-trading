@@ -1,134 +1,237 @@
 import { Link } from 'react-router-dom';
-import { HeroSection } from '@/components/landing/HeroSection';
-import { ModuleCard } from '@/components/landing/ModuleCard';
+import { LiveTicker } from '@/components/LiveTicker';
 import { MetricsGrid } from '@/components/landing/MetricsGrid';
 import { SystemStatus } from '@/components/landing/SystemStatus';
 import { modules } from '@/config/landingConfig';
 import { useTelemetry } from '@/hooks/useTelemetry';
-import { SectionDivider } from '@/components/layout/SectionDivider';
-import { SidebarNav } from '@/components/layout/SidebarNav';
 import { Button } from '@/components/ui/button';
 import { TopBar } from '@/components/TopBar/TopBar';
+import { Crosshair, MagnifyingGlass, Robot } from '@phosphor-icons/react';
 
 export function Landing() {
   const { metrics, system } = useTelemetry();
-  const scannerModule = modules.find(m => m.key === 'scanner');
-  const botModule = modules.find(m => m.key === 'bot');
   const contextModules = modules.filter(m => !['scanner', 'bot'].includes(m.key));
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-background via-background/95 to-background">
-      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      {/* Header with TopBar */}
+      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/95 backdrop-blur-sm">
         <TopBar />
       </header>
 
       <main>
-        <div className="absolute inset-0 tactical-grid opacity-25" aria-hidden />
+        {/* Tactical grid background */}
+        <div className="fixed inset-0 tactical-grid opacity-20 pointer-events-none" aria-hidden="true" />
 
-        <section
-          className="relative max-w-7xl mx-auto px-6 lg:px-16 py-12 lg:py-20"
-          aria-labelledby="hero-overview"
-          id="hero-overview"
-        >
-          <div className="space-y-10">
-            <div className="space-y-4">
-              <h2 id="hero-overview" className="text-sm uppercase tracking-[0.2em] text-muted-foreground">
-                Situational Overview
-              </h2>
-              <HeroSection />
-            </div>
-            <div className="rounded-2xl border border-border/70 bg-card/40 p-6 shadow-inner">
-              <h2 className="text-lg font-semibold text-foreground mb-3">Operational Telemetry</h2>
-              <p className="text-sm text-muted-foreground mb-6">
-                Live counters to confirm data uplinks, signal health, and exchange readiness before deploying any scans or automated plays.
-              </p>
-              <MetricsGrid metrics={metrics} />
+        {/* Hero section */}
+        <section className="relative py-16 md:py-24">
+          <div className="max-w-6xl mx-auto px-6 md:px-8">
+            <div className="relative space-y-8">
+              {/* Status indicator */}
+              <div className="flex items-center gap-3 text-xs tracking-widest text-accent">
+                <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
+                <span>SYSTEM OPERATIONAL</span>
+              </div>
+
+              {/* Hero title and subtitle */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <Crosshair size={64} weight="thin" className="text-accent opacity-40" />
+                  <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
+                    SniperSight
+                  </h1>
+                </div>
+                <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl leading-relaxed">
+                  Precision crypto market reconnaissance and disciplined execution.
+                  Identify high-quality targets, validate confluence, deploy with risk control.
+                </p>
+              </div>
+
+              {/* Primary CTAs */}
+              <div className="flex flex-wrap items-center gap-4 pt-4">
+                <Button asChild size="lg" className="text-base px-8 py-6">
+                  <Link to="/scanner/setup">
+                    <MagnifyingGlass size={20} className="mr-2" />
+                    Launch Scanner
+                  </Link>
+                </Button>
+                <Button asChild size="lg" variant="secondary" className="text-base px-8 py-6">
+                  <Link to="/bot/setup">
+                    <Robot size={20} className="mr-2" />
+                    Launch Bot
+                  </Link>
+                </Button>
+              </div>
             </div>
           </div>
         </section>
 
-        <SectionDivider />
+        {/* Market ticker strip */}
+        <section className="relative border-y border-border/40">
+          <LiveTicker />
+        </section>
 
-        <div className="relative max-w-7xl mx-auto px-6 lg:px-16 pb-12 xl:flex xl:items-start xl:gap-12">
-          <SidebarNav />
-          <div className="flex-1 space-y-16">
-            <section aria-labelledby="scanner-section" id="scanner" className="space-y-6">
-              <div className="flex flex-col gap-3">
-                <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Scanner</p>
-                <h2 id="scanner-section" className="text-2xl font-bold text-foreground">Recon Scanner</h2>
-                <p className="text-muted-foreground leading-relaxed">
+        {/* Operational telemetry section */}
+        <section className="relative py-16 md:py-20">
+          <div className="max-w-6xl mx-auto px-6 md:px-8 space-y-8">
+            <div className="space-y-3">
+              <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
+                Operational Telemetry
+              </p>
+              <h2 className="text-3xl md:text-4xl font-bold">
+                System Status
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-2xl">
+                Live counters to confirm data uplinks, signal health, and exchange readiness before deploying any scans or automated plays.
+              </p>
+            </div>
+            <MetricsGrid metrics={metrics} />
+          </div>
+        </section>
+
+        {/* Recon scanner section */}
+        <section className="relative py-16 md:py-20 bg-card/20">
+          <div className="max-w-6xl mx-auto px-6 md:px-8">
+            <div className="grid md:grid-cols-2 gap-12 items-center">
+              <div className="space-y-6">
+                <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-accent/40 bg-accent/5">
+                  <MagnifyingGlass size={20} weight="bold" className="text-accent" />
+                  <span className="text-sm font-medium text-accent">Scanner</span>
+                </div>
+                <h2 className="text-3xl md:text-4xl font-bold">
+                  Recon Scanner
+                </h2>
+                <p className="text-lg text-muted-foreground leading-relaxed">
                   Deploy the multi-timeframe scanner to sweep for actionable targets, validate liquidity, and surface the highest-probability entries with tactical context baked in.
                 </p>
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button asChild size="lg">
+                <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                  <Button asChild size="lg" className="w-full sm:w-auto">
                     <Link to="/scanner/setup">Configure Scanner</Link>
                   </Button>
-                  <Button asChild variant="ghost" size="lg">
-                    <Link to="/scanner/results">View Scan Results</Link>
+                  <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+                    <Link to="/scanner/results">View Results</Link>
                   </Button>
                 </div>
               </div>
-              {scannerModule && (
-                <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6 lg:gap-8">
-                  <ModuleCard key={scannerModule.key} module={scannerModule} />
+              <div className="rounded-lg border border-border/60 bg-card/40 p-8 md:p-12">
+                <div className="space-y-4 text-sm text-muted-foreground">
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2" />
+                    <p>Multi-timeframe confluence detection</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2" />
+                    <p>Liquidity and volume validation</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2" />
+                    <p>Risk-reward ratio filtering</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2" />
+                    <p>Market regime awareness</p>
+                  </div>
                 </div>
-              )}
-            </section>
+              </div>
+            </div>
+          </div>
+        </section>
 
-            <SectionDivider />
-
-            <section aria-labelledby="bot-section" id="bot" className="space-y-6">
-              <div className="flex flex-col gap-3">
-                <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Execution Bot</p>
-                <h2 id="bot-section" className="text-2xl font-bold text-foreground">SniperBot Automation</h2>
-                <p className="text-muted-foreground leading-relaxed">
+        {/* SniperBot automation section */}
+        <section className="relative py-16 md:py-20">
+          <div className="max-w-6xl mx-auto px-6 md:px-8">
+            <div className="grid md:grid-cols-2 gap-12 items-center">
+              <div className="order-2 md:order-1 rounded-lg border border-border/60 bg-card/40 p-8 md:p-12">
+                <div className="space-y-4 text-sm text-muted-foreground">
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-warning mt-2" />
+                    <p>Automated position sizing and entry</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-warning mt-2" />
+                    <p>Stop-loss and take-profit management</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-warning mt-2" />
+                    <p>Real-time trade telemetry</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-warning mt-2" />
+                    <p>Risk failsafes and circuit breakers</p>
+                  </div>
+                </div>
+              </div>
+              <div className="order-1 md:order-2 space-y-6">
+                <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-warning/40 bg-warning/5">
+                  <Robot size={20} weight="bold" className="text-warning" />
+                  <span className="text-sm font-medium text-warning">Execution Bot</span>
+                </div>
+                <h2 className="text-3xl md:text-4xl font-bold">
+                  SniperBot Automation
+                </h2>
+                <p className="text-lg text-muted-foreground leading-relaxed">
                   Hand off qualified plays to automated execution with position sizing, failsafes, and telemetry so every move is disciplined and repeatable.
                 </p>
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button asChild size="lg" variant="secondary">
-                    <Link to="/bot/setup">Deploy Bot Loadout</Link>
+                <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                  <Button asChild size="lg" variant="secondary" className="w-full sm:w-auto">
+                    <Link to="/bot/setup">Deploy Bot</Link>
                   </Button>
-                  <Button asChild variant="ghost" size="lg">
-                    <Link to="/bot/status">Monitor Live Bot</Link>
+                  <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+                    <Link to="/bot/status">Monitor Status</Link>
                   </Button>
                 </div>
               </div>
-              {botModule && (
-                <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6 lg:gap-8">
-                  <ModuleCard key={botModule.key} module={botModule} />
-                </div>
-              )}
-            </section>
-
-            <SectionDivider />
-
-            <section aria-labelledby="context-utilities" id="context-utilities" className="space-y-6">
-              <div className="flex flex-col gap-3">
-                <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Context Utilities</p>
-                <h2 id="context-utilities" className="text-2xl font-bold text-foreground">Intel & Market Context</h2>
-                <p className="text-muted-foreground leading-relaxed">
-                  Keep every decision anchored to live market intel, volatility regimes, and saved playbooks so the scanner and bot act within the right operating picture.
-                </p>
-              </div>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
-                {contextModules.map(m => <ModuleCard key={m.key} module={m} />)}
-              </div>
-            </section>
-
-            <SectionDivider />
-
-            <section aria-labelledby="status-heading" id="status" className="pt-2">
-              <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
-                <div>
-                  <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Status &amp; Safeguards</p>
-                  <h2 id="status-heading" className="text-lg font-semibold text-foreground">Operational Readiness</h2>
-                  <p className="text-sm text-muted-foreground">Connection health, data streams, and risk interlocks before deploying automation.</p>
-                </div>
-              </div>
-              <SystemStatus data={system} />
-            </section>
+            </div>
           </div>
-        </div>
+        </section>
+
+        {/* Intel & Market Context section */}
+        <section className="relative py-16 md:py-20 bg-card/20">
+          <div className="max-w-6xl mx-auto px-6 md:px-8 space-y-8">
+            <div className="space-y-3">
+              <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
+                Context Utilities
+              </p>
+              <h2 className="text-3xl md:text-4xl font-bold">
+                Intel & Market Context
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-2xl">
+                Keep every decision anchored to live market intel, volatility regimes, and saved playbooks so the scanner and bot act within the right operating picture.
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {contextModules.map((module) => {
+                const Icon = module.icon;
+                return (
+                  <Link
+                    key={module.key}
+                    to={module.destination}
+                    className="group rounded-lg border border-border/60 bg-card/40 p-6 hover:bg-card/60 hover:border-border transition-all"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 rounded-md flex items-center justify-center border border-border/60 bg-background/40 group-hover:scale-105 transition-transform">
+                        <Icon size={24} weight="bold" />
+                      </div>
+                      <div className="space-y-2 flex-1">
+                        <h3 className="text-lg font-semibold">{module.title}</h3>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          {module.description}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* Footer with system status */}
+        <footer className="relative py-12 border-t border-border/40">
+          <div className="max-w-6xl mx-auto px-6 md:px-8">
+            <SystemStatus data={system} />
+          </div>
+        </footer>
       </main>
     </div>
   );
