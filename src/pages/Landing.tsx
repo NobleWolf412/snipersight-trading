@@ -83,10 +83,7 @@ export function Landing() {
                     <div className="w-1.5 h-1.5 rounded-full bg-warning mt-2" />
                     <p></p>
                   </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-warning mt-2" />
-                    <p>Stop-loss and take-profit management</p>
-                  </div>
+
                   <div className="flex items-start gap-3">
                     <div className="w-1.5 h-1.5 rounded-full bg-warning mt-2" />
                     <p>Real-time trade telemetry</p>
