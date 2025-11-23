@@ -100,6 +100,43 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
           }
         } else if (response.error) {
           console.error('[ScannerContext] Failed fetching scanner modes:', response.error);
+          // Fallback to mock modes when backend unavailable
+          const mockModes: ScannerMode[] = [
+            {
+              name: 'overwatch',
+              description: 'Long-term trend surveillance across 6 timeframes (1W to 5m). Best for patient, high-conviction setups.',
+              timeframes: ['1W', '1D', '4H', '1H', '15m', '5m'],
+              min_confluence_score: 75,
+              profile: 'conservative',
+            },
+            {
+              name: 'recon',
+              description: 'Balanced multi-timeframe analysis (5 TFs). Standard operating mode for most market conditions.',
+              timeframes: ['1D', '4H', '1H', '15m', '5m'],
+              min_confluence_score: 70,
+              profile: 'balanced',
+            },
+            {
+              name: 'strike',
+              description: 'Fast-action scanner focused on intraday timeframes (4 TFs). Ideal for active trading sessions.',
+              timeframes: ['4H', '1H', '15m', '5m'],
+              min_confluence_score: 65,
+              profile: 'aggressive',
+            },
+            {
+              name: 'surgical',
+              description: 'Precision-focused lower timeframe analysis (3 TFs). For experienced traders seeking exact entries.',
+              timeframes: ['1H', '15m', '5m'],
+              min_confluence_score: 60,
+              profile: 'aggressive',
+            },
+          ];
+          setScannerModes(mockModes);
+          // Set default mode if none selected
+          if (!selectedMode) {
+            const defaultMode = mockModes.find(m => m.name === 'recon') || mockModes[0];
+            setSelectedMode(defaultMode);
+          }
         }
       } finally {
         inFlightRef.current = null;
