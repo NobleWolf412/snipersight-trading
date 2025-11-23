@@ -104,6 +104,8 @@ export interface OrderRequest {
 }
 
 class ApiClient {
+  public readonly baseURL = API_BASE;
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}

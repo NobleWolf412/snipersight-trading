@@ -42,12 +42,14 @@ export function ActivityFeed({
   // Initial load
   useEffect(() => {
     const loadInitialEvents = async () => {
+      console.log('[ActivityFeed] Loading initial events, limit:', limit);
       try {
         const response = await telemetryService.getRecentEvents(limit);
+        console.log('[ActivityFeed] Loaded events:', response.events.length);
         setEvents(response.events);
         setIsLoading(false);
       } catch (error) {
-        console.error('Failed to load initial events:', error);
+        console.error('[ActivityFeed] Failed to load initial events:', error);
         setIsLoading(false);
       }
     };
@@ -58,11 +60,16 @@ export function ActivityFeed({
   // Polling for new events
   useEffect(() => {
     if (isPaused) {
+      console.log('[ActivityFeed] Polling paused');
       telemetryService.stopPolling();
       return;
     }
 
+    console.log('[ActivityFeed] Starting polling, interval:', pollInterval);
     telemetryService.startPolling((newEvents) => {
+      if (newEvents.length > 0) {
+        console.log('[ActivityFeed] Received new events:', newEvents.length);
+      }
       setEvents((prev) => {
         // Merge new events, avoiding duplicates
         const existingIds = new Set(prev.map(e => e.id));

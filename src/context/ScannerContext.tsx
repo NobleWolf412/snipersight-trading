@@ -1,6 +1,8 @@
-import { createContext, useContext, ReactNode } from 'react';
+import { createContext, useContext, ReactNode, useEffect, useState, useRef } from 'react';
 import { useKV } from '@github/spark/hooks';
 import type { SniperMode } from '@/types/sniperMode';
+import type { ScannerMode } from '@/utils/api';
+import { api } from '@/utils/api';
 
 export interface ScanConfig {
   exchange: string;
@@ -39,6 +41,10 @@ interface ScannerContextType {
   setIsScanning: (scanning: boolean) => void;
   isBotActive: boolean;
   setIsBotActive: (active: boolean) => void;
+  scannerModes: ScannerMode[];
+  selectedMode: ScannerMode | null;
+  setSelectedMode: (mode: ScannerMode) => void;
+  refreshModes: () => Promise<void>;
 }
 
 const defaultScanConfig: ScanConfig = {
@@ -76,6 +82,39 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
   const [botConfig, setBotConfig] = useKV<BotConfig>('bot-config', defaultBotConfig);
   const [isScanning, setIsScanning] = useKV<boolean>('is-scanning', false);
   const [isBotActive, setIsBotActive] = useKV<boolean>('is-bot-active', false);
+  const [scannerModes, setScannerModes] = useState<ScannerMode[]>([]);
+  const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(null);
+  const inFlightRef = useRef<Promise<void> | null>(null);
+
+  const refreshModes = async (): Promise<void> => {
+    if (inFlightRef.current) return inFlightRef.current;
+    inFlightRef.current = (async () => {
+      try {
+        const response = await api.getScannerModes();
+        if (response.data?.modes) {
+          setScannerModes(response.data.modes);
+          // Align selectedMode with existing scanConfig.sniperMode if present
+          if (!selectedMode) {
+            const match = response.data.modes.find(m => m.name === (scanConfig?.sniperMode || ''));
+            if (match) setSelectedMode(match);
+          }
+        } else if (response.error) {
+          console.error('[ScannerContext] Failed fetching scanner modes:', response.error);
+        }
+      } finally {
+        inFlightRef.current = null;
+      }
+    })();
+    return inFlightRef.current;
+  };
+
+  // Initial fetch (guarded to avoid duplicate under StrictMode)
+  useEffect(() => {
+    if (scannerModes.length === 0) {
+      refreshModes();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <ScannerContext.Provider
@@ -88,6 +127,10 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
         setIsScanning,
         isBotActive: isBotActive || false,
         setIsBotActive,
+        scannerModes,
+        selectedMode,
+        setSelectedMode,
+        refreshModes,
       }}
     >
       {children}

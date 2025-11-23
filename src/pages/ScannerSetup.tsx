@@ -16,13 +16,13 @@ import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
 import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
 import { SniperModeSelector } from '@/components/SniperModeSelector';
 import { api } from '@/utils/api';
-import type { ScannerMode } from '@/utils/api';
+// selectedMode now sourced from ScannerContext
 import { useToast } from '@/hooks/use-toast';
 import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLayout';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
-  const { scanConfig, setScanConfig } = useScanner();
+  const { scanConfig, setScanConfig, selectedMode } = useScanner();
   const [, setScanResults] = useKV<ScanResult[]>('scan-results', []);
   const [, setScanMetadata] = useKV<any>('scan-metadata', null);
   const [isScanning, setIsScanning] = useState(false);
@@ -30,31 +30,26 @@ export function ScannerSetup() {
 
   const marketRegimeProps = useMockMarketRegime('scanner');
 
-  const [selectedModeData, setSelectedModeData] = useState<ScannerMode | null>(null);
-
-  const handleSniperModeSelect = (modeName: string, mode: ScannerMode) => {
-    setSelectedModeData(mode);
-    setScanConfig({
-      ...scanConfig,
-      sniperMode: modeName as any,
-      timeframes: mode.timeframes,
-    });
-  };
-
   const handleArmScanner = async () => {
+    console.log('[ScannerSetup] Starting scan...', {
+      mode: scanConfig.sniperMode,
+      topPairs: scanConfig.topPairs,
+      minScore: selectedMode?.min_confluence_score
+    });
     setIsScanning(true);
 
     try {
       // Call the real backend API with selected mode
       const response = await api.getSignals({
         limit: scanConfig.topPairs || 20,
-        min_score: selectedModeData?.min_confluence_score || 0,
+        min_score: selectedMode?.min_confluence_score || 0,
         sniper_mode: scanConfig.sniperMode,
       });
 
       if (response.error) {
-        console.error('API error, falling back to mock data:', response.error);
-        toast('Using Mock Data', {
+        console.error('[ScannerSetup] API error, falling back to mock data:', response.error);
+        toast({
+          title: 'Using Mock Data',
           description: 'Backend unavailable, displaying simulated results',
         });
         // Fallback to mock data
@@ -62,6 +57,13 @@ export function ScannerSetup() {
         setScanResults(results);
         setScanMetadata(null);
       } else if (response.data) {
+        console.log('[ScannerSetup] Received signals:', response.data.signals.length);
+        console.log('[ScannerSetup] Scan metadata:', {
+          mode: response.data.mode,
+          scanned: response.data.scanned,
+          total: response.data.total
+        });
+        
         // Convert backend signals to frontend ScanResult format
         const results = response.data.signals.map(convertSignalToScanResult);
         setScanResults(results);
@@ -76,6 +78,7 @@ export function ScannerSetup() {
           scanned: response.data.scanned,
         });
         
+        console.log('[ScannerSetup] Navigating to results with', results.length, 'setups');
         toast({
           title: 'Targets Acquired',
           description: `${results.length} high-conviction setups identified`,
@@ -241,10 +244,7 @@ export function ScannerSetup() {
             </div>
 
             <div className="space-y-4">
-              <SniperModeSelector
-                selectedMode={scanConfig.sniperMode}
-                onModeSelect={handleSniperModeSelect}
-              />
+              <SniperModeSelector />
             </div>
           </CardContent>
         </Card>

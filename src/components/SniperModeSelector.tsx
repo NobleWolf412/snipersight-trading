@@ -1,35 +1,13 @@
-import { useState, useEffect } from 'react';
+import { CircleNotch } from '@phosphor-icons/react';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { api } from '@/utils/api';
-import type { ScannerMode } from '@/utils/api';
-import { CircleNotch } from '@phosphor-icons/react';
+import { useScanner } from '@/context/ScannerContext';
 
-interface SniperModeSelectorProps {
-  selectedMode: string;
-  onModeSelect: (modeName: string, mode: ScannerMode) => void;
-}
+export function SniperModeSelector() {
+  const { scannerModes, selectedMode, setSelectedMode, scanConfig, setScanConfig } = useScanner();
 
-export function SniperModeSelector({
-  selectedMode,
-  onModeSelect,
-}: SniperModeSelectorProps) {
-  const [modes, setModes] = useState<ScannerMode[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchModes = async () => {
-      const response = await api.getScannerModes();
-      if (response.data) {
-        setModes(response.data.modes);
-      }
-      setLoading(false);
-    };
-    fetchModes();
-  }, []);
-
-  if (loading) {
+  if (scannerModes.length === 0) {
     return (
       <div className="flex items-center justify-center p-8">
         <CircleNotch size={32} className="animate-spin text-accent" />
@@ -41,8 +19,8 @@ export function SniperModeSelector({
     <div className="space-y-3">
       <Label className="text-base">Sniper Mode</Label>
       <div className="grid grid-cols-1 gap-3">
-        {modes.map((mode) => {
-          const isSelected = selectedMode === mode.name;
+        {scannerModes.map((mode) => {
+          const isSelected = selectedMode?.name === mode.name;
           const modeIcon = getModeIcon(mode.name);
 
           return (
@@ -53,7 +31,14 @@ export function SniperModeSelector({
                   ? 'bg-accent/10 border-accent shadow-md'
                   : 'bg-background hover:bg-muted/30 border-border'
               }`}
-              onClick={() => onModeSelect(mode.name, mode)}
+              onClick={() => {
+                setSelectedMode(mode);
+                setScanConfig({
+                  ...scanConfig,
+                  sniperMode: mode.name as any,
+                  timeframes: mode.timeframes,
+                });
+              }}
             >
               <div className="space-y-3">
                 <div className="flex items-start justify-between">
