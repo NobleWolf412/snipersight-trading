@@ -49,12 +49,6 @@ export function Landing() {
 
               {/* Primary CTAs */}
               <div className="flex flex-wrap items-center gap-4 pt-4">
-                <Button asChild size="lg" variant="secondary" className="text-base px-8 py-6">
-                  <Link to="/bot/setup">
-                    <Robot size={20} className="mr-2" />
-                    Launch Bot
-                  </Link>
-                </Button>
               </div>
             </div>
           </div>
