@@ -62,12 +62,8 @@ export function Landing() {
                   <MagnifyingGlass size={20} weight="bold" className="text-accent" />
                   <span className="text-sm font-medium text-accent">Reconnaissance Scanner</span>
                 </div>
-                <h2 className="text-3xl md:text-4xl font-bold">
-                  Tactical Market Scanner
-                </h2>
-                <p className="text-lg text-muted-foreground leading-relaxed">
-                  Deploy multi-timeframe reconnaissance to sweep for actionable targets, validate liquidity zones, and surface the highest-probability entries with tactical context baked in.
-                </p>
+                <h2 className="text-3xl md:text-4xl font-bold">Tactical Market Scanner</h2>
+                <p className="text-lg text-muted-foreground leading-relaxed">Deploy multi-timeframe reconnaissance to sweep for actionable targets, validate liquidity zones, and surface the highest-probability entries with tactical context baked in.</p>
                 <div className="flex flex-col sm:flex-row gap-4 pt-4">
                   <Button asChild size="lg" className="w-full sm:w-auto">
                     <Link to="/scanner/setup">Configure Scan</Link>
