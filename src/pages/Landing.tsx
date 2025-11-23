@@ -1,16 +1,11 @@
-import { Link } from 'react-router-dom';
 import { LiveTicker } from '@/components/LiveTicker';
-import { MetricsGrid } from '@/components/landing/MetricsGrid';
 import { SystemStatus } from '@/components/landing/SystemStatus';
-import { modules } from '@/config/landingConfig';
 import { useTelemetry } from '@/hooks/useTelemetry';
-import { Button } from '@/components/ui/button';
 import { TopBar } from '@/components/TopBar/TopBar';
-import { Crosshair, MagnifyingGlass, Robot } from '@phosphor-icons/react';
+import { Crosshair } from '@phosphor-icons/react';
 
 export function Landing() {
-  const { metrics, system } = useTelemetry();
-  const contextModules = modules.filter(m => !['scanner', 'bot'].includes(m.key));
+  const { system } = useTelemetry();
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
@@ -40,10 +35,6 @@ export function Landing() {
                 </div>
                 <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl leading-relaxed mx-auto">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
               </div>
-
-              {/* Primary CTAs */}
-              <div className="flex flex-wrap items-center gap-4 pt-4">
-              </div>
             </div>
           </div>
         </section>
@@ -53,97 +44,7 @@ export function Landing() {
           <LiveTicker />
         </section>
 
-        {/* Tactical Scanner section */}
-        <section className="relative py-16 md:py-20 bg-card/20">
-          <div className="max-w-6xl mx-auto px-6 md:px-8">
-            <div className="grid md:grid-cols-2 gap-12 items-center">
-              <div className="order-1 md:order-1 space-y-6">
-                <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-accent/40 bg-accent/5">
-                  <MagnifyingGlass size={20} weight="bold" className="text-accent" />
-                  <span className="text-sm font-medium text-accent">Reconnaissance Scanner</span>
-                </div>
-                <h2 className="text-3xl md:text-4xl font-bold">Tactical Market Scanner</h2>
-                <p className="text-lg text-muted-foreground leading-relaxed">Deploy multi-timeframe reconnaissance to sweep for actionable targets, validate liquidity zones, and surface the highest-probability entries with tactical context baked in.</p>
-                <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                  <Button asChild size="lg" className="w-full sm:w-auto">
-                    <Link to="/scanner/setup">Configure Scan</Link>
-                  </Button>
-                  <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
-                    <Link to="/scanner/results">View Targets</Link>
-                  </Button>
-                </div>
-              </div>
 
-            </div>
-          </div>
-        </section>
-
-        {/* SniperBot automation section */}
-        <section className="relative py-16 md:py-20">
-          <div className="max-w-6xl mx-auto px-6 md:px-8">
-            <div className="grid md:grid-cols-2 gap-12 items-center">
-              <div className="order-1 md:order-2 space-y-6">
-                <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-warning/40 bg-warning/5">
-                  <Robot size={20} weight="bold" className="text-warning" />
-                  <span className="text-sm font-medium text-warning">Execution Bot</span>
-                </div>
-                <h2 className="text-3xl md:text-4xl font-bold">
-                  SniperBot Automation
-                </h2>
-                <p className="text-lg text-muted-foreground leading-relaxed">
-                  Hand off qualified plays to automated execution with position sizing, failsafes, and telemetry so every move is disciplined and repeatable.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                  <Button asChild size="lg" variant="secondary" className="w-full sm:w-auto">
-                    <Link to="/bot/setup">Deploy Bot</Link>
-                  </Button>
-                  <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
-                    <Link to="/bot/status">Monitor Status</Link>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Intel & Market Context section */}
-        <section className="relative py-16 md:py-20 bg-card/20">
-          <div className="max-w-6xl mx-auto px-6 md:px-8 space-y-8">
-            <div className="space-y-3">
-              <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">CONTEXT UTILITIES</p>
-              <h2 className="text-3xl md:text-4xl font-bold">
-                Intel & Market Context
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl">
-                Keep every decision anchored to live market intel, volatility regimes, and saved playbooks so the scanner and bot act within the right operating picture.
-              </p>
-            </div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {contextModules.map((module) => {
-                const Icon = module.icon;
-                return (
-                  <Link
-                    key={module.key}
-                    to={module.destination}
-                    className="group rounded-lg border border-border/60 bg-card/40 p-6 hover:bg-card/60 hover:border-border transition-all"
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 rounded-md flex items-center justify-center border border-border/60 bg-background/40 group-hover:scale-105 transition-transform">
-                        <Icon size={24} weight="bold" />
-                      </div>
-                      <div className="space-y-2 flex-1">
-                        <h3 className="text-lg font-semibold">{module.title}</h3>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                          {module.description}
-                        </p>
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        </section>
 
         {/* Footer with system status */}
         <footer className="relative py-12 border-t border-border/40">
