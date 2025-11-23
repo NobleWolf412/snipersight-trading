@@ -67,7 +67,7 @@ export function Landing() {
                     <Link to="/scanner/setup"></Link>
                   </Button>
                   <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
-                    <Link to="/scanner/results">View Results</Link>
+                    <Link to="/scanner/results"></Link>
                   </Button>
                 </div>
               </div>
