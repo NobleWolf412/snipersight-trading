@@ -18,7 +18,6 @@ export function Landing() {
       <header className="sticky top-0 z-50 border-b border-border/60 bg-background/95 backdrop-blur-sm">
         <TopBar />
       </header>
-
       <main>
         {/* Tactical grid background */}
         <div className="fixed inset-0 tactical-grid opacity-20 pointer-events-none" aria-hidden="true" />
@@ -37,14 +36,9 @@ export function Landing() {
               <div className="space-y-6">
                 <div className="flex items-center gap-4">
                   <Crosshair size={64} weight="thin" className="text-accent opacity-40" />
-                  <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
-                    SniperSight
-                  </h1>
+                  <h1 className="text-5xl md:text-7xl font-bold tracking-tight">SniperSight</h1>
                 </div>
-                <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl leading-relaxed">
-                  Precision crypto market reconnaissance and disciplined execution.
-                  Identify high-quality targets, validate confluence, deploy with risk control.
-                </p>
+                <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl leading-relaxed">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
               </div>
 
               {/* Primary CTAs */}
@@ -63,15 +57,9 @@ export function Landing() {
         <section className="relative py-16 md:py-20">
           <div className="max-w-6xl mx-auto px-6 md:px-8 space-y-8">
             <div className="space-y-3">
-              <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-                Operational Telemetry
-              </p>
-              <h2 className="text-3xl md:text-4xl font-bold">
-                System Status
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl">
-                Live counters to confirm data uplinks, signal health, and exchange readiness before deploying any scans or automated plays.
-              </p>
+              <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">OPERATIONAL TELEMETRY</p>
+              <h2 className="text-3xl md:text-4xl font-bold">System Status</h2>
+              <p className="text-lg text-muted-foreground max-w-2xl">Live counters to confirm data uplinks, signal health, and exchange readiness before deploying any scans or automated plays.</p>
             </div>
             <MetricsGrid metrics={metrics} />
           </div>
