@@ -33,12 +33,12 @@ export function Landing() {
               </div>
 
               {/* Hero title and subtitle */}
-              <div className="space-y-6">
-                <div className="flex items-center gap-4">
+              <div className="space-y-6 text-center">
+                <div className="flex items-center justify-center gap-4">
                   <Crosshair size={64} weight="thin" className="text-accent opacity-40" />
                   <h1 className="text-5xl md:text-7xl font-bold tracking-tight">SniperSight</h1>
                 </div>
-                <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl leading-relaxed">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
+                <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl leading-relaxed mx-auto">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
               </div>
 
               {/* Primary CTAs */}
