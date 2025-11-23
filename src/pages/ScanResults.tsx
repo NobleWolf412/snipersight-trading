@@ -16,6 +16,7 @@ import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLay
 export function ScanResults() {
   const navigate = useNavigate();
   const [scanResults] = useKV<ScanResult[]>('scan-results', []);
+  const [scanMetadata] = useKV<any>('scan-metadata', null);
   const [selectedResult, setSelectedResult] = useState<ScanResult | null>(null);
   const [isChartModalOpen, setIsChartModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -76,6 +77,48 @@ export function ScanResults() {
         <PageSection>
           <LiveTicker symbols={results.slice(0, 6).map(r => r.pair)} />
         </PageSection>
+
+        {scanMetadata && (
+          <Card className="bg-accent/5 border-accent/30">
+            <CardHeader>
+              <CardTitle className="text-base">Scan Configuration</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                <div>
+                  <div className="text-muted-foreground mb-1">Mode</div>
+                  <Badge className="bg-accent text-accent-foreground uppercase font-mono">
+                    {scanMetadata.mode}
+                  </Badge>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">Timeframes</div>
+                  <div className="font-mono font-semibold">
+                    {scanMetadata.appliedTimeframes?.join(' · ')}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">Min Score</div>
+                  <div className="font-mono font-semibold text-accent">
+                    {scanMetadata.effectiveMinScore}%
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">Profile</div>
+                  <div className="font-mono font-semibold capitalize">
+                    {scanMetadata.profile?.replace(/_/g, ' ')}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">Scanned</div>
+                  <div className="font-mono font-semibold">
+                    {scanMetadata.scanned} symbols
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="bg-card/50 border-accent/30">
           <CardHeader>

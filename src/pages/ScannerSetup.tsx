@@ -16,9 +16,8 @@ import { generateMockScanResults, convertSignalToScanResult } from '@/utils/mock
 import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
 import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
 import { SniperModeSelector } from '@/components/SniperModeSelector';
-import type { SniperMode } from '@/types/sniperMode';
-import { SNIPER_MODES } from '@/types/sniperMode';
 import { api } from '@/utils/api';
+import type { ScannerMode } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
 import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLayout';
 
@@ -26,26 +25,20 @@ export function ScannerSetup() {
   const navigate = useNavigate();
   const { scanConfig, setScanConfig } = useScanner();
   const [, setScanResults] = useKV<ScanResult[]>('scan-results', []);
+  const [, setScanMetadata] = useKV<any>('scan-metadata', null);
   const [isScanning, setIsScanning] = useState(false);
   const { toast } = useToast();
 
   const marketRegimeProps = useMockMarketRegime('scanner');
 
-  const handleSniperModeSelect = (mode: SniperMode) => {
-    const modeConfig = SNIPER_MODES[mode];
-    const newTimeframes = mode === 'custom' ? (scanConfig.customTimeframes || []) : modeConfig.timeframes;
-    setScanConfig({
-      ...scanConfig,
-      sniperMode: mode,
-      timeframes: newTimeframes,
-    });
-  };
+  const [selectedModeData, setSelectedModeData] = useState<ScannerMode | null>(null);
 
-  const handleCustomTimeframesChange = (timeframes: string[]) => {
+  const handleSniperModeSelect = (modeName: string, mode: ScannerMode) => {
+    setSelectedModeData(mode);
     setScanConfig({
       ...scanConfig,
-      customTimeframes: timeframes,
-      timeframes: timeframes,
+      sniperMode: modeName as any,
+      timeframes: mode.timeframes,
     });
   };
 
@@ -53,12 +46,11 @@ export function ScannerSetup() {
     setIsScanning(true);
 
     try {
-      // Call the real backend API
-      const modeConfig = SNIPER_MODES[scanConfig.sniperMode];
+      // Call the real backend API with selected mode
       const response = await api.getSignals({
         limit: scanConfig.topPairs || 20,
-        min_score: modeConfig?.minConfluence || 60,
-        sniper_mode: scanConfig.sniperMode.toUpperCase(),
+        min_score: selectedModeData?.min_confluence_score || 0,
+        sniper_mode: scanConfig.sniperMode,
       });
 
       if (response.error) {
@@ -69,10 +61,21 @@ export function ScannerSetup() {
         // Fallback to mock data
         const results = generateMockScanResults(8);
         setScanResults(results);
+        setScanMetadata(null);
       } else if (response.data) {
         // Convert backend signals to frontend ScanResult format
         const results = response.data.signals.map(convertSignalToScanResult);
         setScanResults(results);
+        
+        // Store scan metadata for display
+        setScanMetadata({
+          mode: response.data.mode,
+          appliedTimeframes: response.data.applied_timeframes,
+          effectiveMinScore: response.data.effective_min_score,
+          baselineMinScore: response.data.baseline_min_score,
+          profile: response.data.profile,
+          scanned: response.data.scanned,
+        });
         
         toast({
           title: 'Targets Acquired',
@@ -237,8 +240,6 @@ export function ScannerSetup() {
               <SniperModeSelector
                 selectedMode={scanConfig.sniperMode}
                 onModeSelect={handleSniperModeSelect}
-                customTimeframes={scanConfig.customTimeframes || []}
-                onCustomTimeframesChange={handleCustomTimeframesChange}
               />
             </div>
           </CardContent>

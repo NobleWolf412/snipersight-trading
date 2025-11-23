@@ -22,7 +22,7 @@ export const modules: ModuleDef[] = [
     title: 'Recon Scanner',
     description: 'Sweep multi-timeframe price action for high-precision targets.',
     icon: MagnifyingGlass,
-    destination: '/scan',
+    destination: '/scanner/setup',
     tier: 'primary',
     accent: 'accent'
   },
@@ -31,7 +31,7 @@ export const modules: ModuleDef[] = [
     title: 'SniperBot',
     description: 'Automated execution with disciplined risk constraints.',
     icon: Robot,
-    destination: '/bot',
+    destination: '/bot/setup',
     tier: 'primary',
     accent: 'warning'
   },
