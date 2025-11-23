@@ -20,6 +20,7 @@ from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import EventType
 from backend.engine.orchestrator import Orchestrator
 from backend.shared.config.defaults import ScanConfig
+from backend.shared.config.scanner_modes import get_mode, list_modes
 
 logger = logging.getLogger(__name__)
 
@@ -260,43 +261,63 @@ def _generate_demo_signals(symbols: List[str], min_score: float) -> List:
     return demo_plans
 
 
+@app.get("/api/scanner/modes")
+async def get_scanner_modes():
+    """List available scanner modes and their characteristics."""
+    return {"modes": list_modes(), "total": len(list_modes())}
+
+
 @app.get("/api/scanner/signals")
 async def get_signals(
     limit: int = Query(default=10, ge=1, le=100),
-    min_score: float = Query(default=60, ge=0, le=100),
-    sniper_mode: str = Query(default="PRECISION")
+    min_score: float = Query(default=0, ge=0, le=100),  # 0 allows mode baseline logic
+    sniper_mode: str = Query(default="recon")
 ):
-    """
-    Get trading signals from scanner using full orchestrator pipeline.
-    
-    This endpoint runs the complete analysis pipeline with telemetry logging.
-    Falls back to demo signals when exchange is unavailable (geo-restriction).
+    """Generate trading signals applying selected sniper mode configuration.
+
+    Mode logic:
+    - Resolve mode (case-insensitive) via scanner_modes mapping.
+    - Apply its timeframes & baseline min_confluence_score.
+    - If caller supplies min_score > 0 it overrides upward; else baseline used.
+    - Profile updated to mode.profile for downstream heuristics.
+    Falls back to demo signals if exchange data unavailable.
     """
     try:
-        # Update orchestrator config with request parameters
-        orchestrator.config.min_confluence_score = min_score
-        orchestrator.config.profile = sniper_mode.lower()
-        
-        # Get top symbols by volume (with fallback for geo-restricted exchanges)
+        # Resolve requested mode (fallback handled by exception)
+        try:
+            mode = get_mode(sniper_mode)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        # Determine effective threshold
+        effective_min = max(min_score, mode.min_confluence_score) if min_score > 0 else mode.min_confluence_score
+
+        # Update orchestrator config in-place
+        orchestrator.config.timeframes = mode.timeframes
+        orchestrator.config.min_confluence_score = effective_min
+        orchestrator.config.profile = mode.profile
+
+        # Acquire symbols (fallback list on failure)
         try:
             symbols = exchange_adapter.get_top_symbols(n=min(limit * 2, 20), quote_currency='USDT')
         except Exception as exchange_error:
             logger.warning(f"Exchange unavailable (geo-restriction or network issue): {exchange_error}")
             symbols = []
-        
+
         if not symbols:
-            # Fallback to major pairs when exchange is unavailable
-            symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT', 
-                      'ADA/USDT', 'AVAX/USDT', 'MATIC/USDT', 'DOT/USDT', 'LINK/USDT']
-        
-        # Run orchestrator scan (this logs telemetry events automatically)
+            symbols = [
+                'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT',
+                'ADA/USDT', 'AVAX/USDT', 'MATIC/USDT', 'DOT/USDT', 'LINK/USDT'
+            ]
+
+        # Run scan pipeline
         trade_plans = orchestrator.scan(symbols[:limit])
-        
-        # Convert TradePlan objects to API response format
+
+        # Transform TradePlans for response
         signals = []
         for plan in trade_plans:
             signal = {
-                "symbol": plan.symbol.replace('/', ''),  # Convert to BTCUSDT format
+                "symbol": plan.symbol.replace('/', ''),
                 "direction": plan.direction,
                 "score": plan.confidence_score,
                 "entry_near": plan.entry_zone.near_entry,
@@ -306,8 +327,9 @@ async def get_signals(
                     {"level": tp.level, "percentage": tp.percentage}
                     for tp in plan.targets
                 ],
-                "timeframe": "1h",  # Default timeframe
-                "current_price": plan.entry_zone.near_entry,  # Approximate
+                # Provide highest frequency timeframe (last element) as representative
+                "primary_timeframe": mode.timeframes[-1] if mode.timeframes else "",
+                "current_price": plan.entry_zone.near_entry,
                 "analysis": {
                     "order_blocks": plan.metadata.get('order_blocks', 0),
                     "fvgs": plan.metadata.get('fvgs', 0),
@@ -320,18 +342,22 @@ async def get_signals(
                 "setup_type": plan.setup_type
             }
             signals.append(signal)
-        
+
         return {
             "signals": signals,
             "total": len(signals),
             "scanned": len(symbols),
-            "mode": sniper_mode,
-            "min_score": min_score
+            "mode": mode.name,
+            "applied_timeframes": mode.timeframes,
+            "effective_min_score": effective_min,
+            "baseline_min_score": mode.min_confluence_score,
+            "profile": mode.profile
         }
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating signals: {e}")
-        # Log error to telemetry
         from backend.bot.telemetry.events import create_error_event
         telemetry = get_telemetry_logger()
         telemetry.log_event(create_error_event(

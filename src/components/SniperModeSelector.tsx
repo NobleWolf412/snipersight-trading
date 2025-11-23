@@ -1,126 +1,120 @@
+import { useState, useEffect } from 'react';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { SNIPER_MODES } from '@/types/sniperMode';
-import type { SniperMode } from '@/types/sniperMode';
-import { X } from '@phosphor-icons/react';
+import { api } from '@/utils/api';
+import type { ScannerMode } from '@/utils/api';
+import { Loader } from '@phosphor-icons/react';
 
 interface SniperModeSelectorProps {
-  selectedMode: SniperMode;
-  onModeSelect: (mode: SniperMode) => void;
-  customTimeframes?: string[];
-  onCustomTimeframesChange?: (timeframes: string[]) => void;
+  selectedMode: string;
+  onModeSelect: (modeName: string, mode: ScannerMode) => void;
 }
-
-const AVAILABLE_TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d', '1w'];
 
 export function SniperModeSelector({
   selectedMode,
   onModeSelect,
-  customTimeframes = [],
-  onCustomTimeframesChange,
 }: SniperModeSelectorProps) {
-  const handleTimeframeToggle = (timeframe: string) => {
-    if (!onCustomTimeframesChange) return;
+  const [modes, setModes] = useState<ScannerMode[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    const newTimeframes = customTimeframes.includes(timeframe)
-      ? customTimeframes.filter((tf) => tf !== timeframe)
-      : [...customTimeframes, timeframe];
+  useEffect(() => {
+    const fetchModes = async () => {
+      const response = await api.getScannerModes();
+      if (response.data) {
+        setModes(response.data.modes);
+      }
+      setLoading(false);
+    };
+    fetchModes();
+  }, []);
 
-    onCustomTimeframesChange(newTimeframes);
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader size={32} className="animate-spin text-accent" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
-      <Label>Sniper Mode</Label>
-      <div className="grid grid-cols-1 gap-2">
-        {(Object.keys(SNIPER_MODES) as SniperMode[]).map((modeKey) => {
-          const mode = SNIPER_MODES[modeKey];
-          const isSelected = selectedMode === modeKey;
+      <Label className="text-base">Sniper Mode</Label>
+      <div className="grid grid-cols-1 gap-3">
+        {modes.map((mode) => {
+          const isSelected = selectedMode === mode.name;
+          const modeIcon = getModeIcon(mode.name);
 
           return (
             <Card
-              key={modeKey}
+              key={mode.name}
               className={`p-4 cursor-pointer transition-all ${
                 isSelected
-                  ? 'bg-warning/10 border-warning/50 shadow-md'
+                  ? 'bg-accent/10 border-accent shadow-md'
                   : 'bg-background hover:bg-muted/30 border-border'
               }`}
-              onClick={() => onModeSelect(modeKey)}
+              onClick={() => onModeSelect(mode.name, mode)}
             >
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1 flex-1">
-                    <div className="font-bold text-sm">{mode.name}</div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
+                    <div className="font-bold text-base flex items-center gap-2">
+                      <span className="text-xl">{modeIcon}</span>
+                      {mode.name.toUpperCase()}
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
                       {mode.description}
                     </p>
                   </div>
                   {isSelected && (
-                    <Badge className="bg-warning text-warning-foreground ml-2">
-                      ACTIVE
+                    <Badge className="bg-accent text-accent-foreground ml-2">
+                      ARMED
                     </Badge>
                   )}
                 </div>
 
-                {modeKey !== 'custom' && (
-                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50 text-xs">
-                    <div>
-                      <div className="text-muted-foreground">Timeframes</div>
-                      <div className="font-mono font-semibold">
-                        {mode.timeframes.join(', ')}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Min Confluence</div>
-                      <div className="font-mono font-semibold">{mode.minConfluence}%</div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Hold Period</div>
-                      <div className="font-mono font-semibold">{mode.holdingPeriod}</div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Risk/Reward</div>
-                      <div className="font-mono font-semibold">{mode.riskReward}:1</div>
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border/50 text-xs">
+                  <div>
+                    <div className="text-muted-foreground mb-1">Timeframes</div>
+                    <div className="font-mono font-semibold">
+                      {mode.timeframes.join(' · ')}
                     </div>
                   </div>
-                )}
+                  <div>
+                    <div className="text-muted-foreground mb-1">Min Confluence</div>
+                    <div className="font-mono font-semibold text-accent">
+                      {mode.min_confluence_score}%
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground mb-1">Profile</div>
+                    <div className="font-mono font-semibold capitalize">
+                      {mode.profile.replace(/_/g, ' ')}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground mb-1">Scope</div>
+                    <div className="font-mono font-semibold">
+                      {mode.timeframes.length} TF
+                    </div>
+                  </div>
+                </div>
               </div>
             </Card>
           );
         })}
       </div>
-
-      {selectedMode === 'custom' && (
-        <div className="space-y-3 p-4 bg-muted/20 rounded border border-border">
-          <Label className="text-xs">Select Custom Timeframes</Label>
-          <div className="flex flex-wrap gap-2">
-            {AVAILABLE_TIMEFRAMES.map((tf) => {
-              const isSelected = customTimeframes.includes(tf);
-              return (
-                <button
-                  key={tf}
-                  type="button"
-                  onClick={() => handleTimeframeToggle(tf)}
-                  className={`px-3 py-1.5 rounded font-mono text-sm font-semibold transition-all ${
-                    isSelected
-                      ? 'bg-warning text-warning-foreground'
-                      : 'bg-background border border-border hover:border-warning/50'
-                  }`}
-                >
-                  {isSelected && <X size={12} className="inline mr-1" weight="bold" />}
-                  {tf}
-                </button>
-              );
-            })}
-          </div>
-          {customTimeframes.length === 0 && (
-            <p className="text-xs text-muted-foreground italic">
-              Select at least one timeframe for custom mode
-            </p>
-          )}
-        </div>
-      )}
     </div>
   );
+}
+
+function getModeIcon(modeName: string): string {
+  const icons: Record<string, string> = {
+    overwatch: '🔭',
+    recon: '🎯',
+    strike: '⚡',
+    surgical: '🔬',
+    ghost: '👻',
+  };
+  return icons[modeName.toLowerCase()] || '🎯';
 }

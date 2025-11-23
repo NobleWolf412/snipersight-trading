@@ -36,9 +36,9 @@ function AppContent() {
           <main>
             <Routes>
               <Route path="/" element={<Landing />} />
-              <Route path="/scanner/setup" element={<ScannerSetup />} />
-              <Route path="/scanner/results" element={<ScanResults />} />
-              <Route path="/bot/setup" element={<BotSetup />} />
+              <Route path="/scan" element={<ScannerSetup />} />
+              <Route path="/results" element={<ScanResults />} />
+              <Route path="/bot" element={<BotSetup />} />
               <Route path="/bot/status" element={<BotStatus />} />
               <Route path="/market" element={<MarketOverview />} />
               <Route path="/intel" element={<Intel />} />

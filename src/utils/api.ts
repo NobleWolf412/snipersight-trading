@@ -20,6 +20,14 @@ export interface ScannerConfig {
   indicators: Record<string, boolean>;
 }
 
+export interface ScannerMode {
+  name: string;
+  description: string;
+  timeframes: string[];
+  min_confluence_score: number;
+  profile: string;
+}
+
 export interface Signal {
   symbol: string;
   direction: 'LONG' | 'SHORT';
@@ -28,7 +36,8 @@ export interface Signal {
   entry_far: number;
   stop_loss: number;
   targets: Array<{ level: number; percentage: number }>;
-  timeframe: string;
+  primary_timeframe?: string;
+  timeframe?: string;
   current_price?: number;
   analysis: {
     order_blocks?: number;
@@ -40,6 +49,17 @@ export interface Signal {
   };
   rationale: string;
   setup_type: string;
+}
+
+export interface SignalsResponse {
+  signals: Signal[];
+  total: number;
+  scanned: number;
+  mode: string;
+  applied_timeframes: string[];
+  effective_min_score: number;
+  baseline_min_score: number;
+  profile: string;
 }
 
 // Bot types
@@ -134,11 +154,15 @@ class ApiClient {
     return this.request(`/scanner/${configId}/stop`, { method: 'POST' });
   }
 
+  async getScannerModes() {
+    return this.request<{ modes: ScannerMode[]; total: number }>('/scanner/modes');
+  }
+
   async getSignals(params?: { limit?: number; min_score?: number; sniper_mode?: string }) {
     const query = new URLSearchParams(
       params as Record<string, string>
     ).toString();
-    return this.request<{ signals: Signal[]; total: number; scanned: number; mode?: string }>(
+    return this.request<SignalsResponse>(
       `/scanner/signals${query ? `?${query}` : ''}`
     );
   }
