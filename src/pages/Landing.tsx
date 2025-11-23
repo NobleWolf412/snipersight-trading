@@ -64,7 +64,7 @@ export function Landing() {
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 pt-4">
                   <Button asChild size="lg" className="w-full sm:w-auto">
-                    <Link to="/scanner/setup">Configure Scanner</Link>
+                    <Link to="/scanner/setup"></Link>
                   </Button>
                   <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
                     <Link to="/scanner/results">View Results</Link>
