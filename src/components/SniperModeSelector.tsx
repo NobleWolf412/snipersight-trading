@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { api } from '@/utils/api';
 import type { ScannerMode } from '@/utils/api';
-import { Loader } from '@phosphor-icons/react';
+import { CircleNotch } from '@phosphor-icons/react';
 
 interface SniperModeSelectorProps {
   selectedMode: string;
@@ -32,7 +32,7 @@ export function SniperModeSelector({
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <Loader size={32} className="animate-spin text-accent" />
+        <CircleNotch size={32} className="animate-spin text-accent" />
       </div>
     );
   }

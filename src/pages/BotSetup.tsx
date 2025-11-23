@@ -28,10 +28,10 @@ export function BotSetup() {
 
   const marketRegimeProps = useMockMarketRegime('bot');
 
-  const handleModeSelect = (mode: SniperMode) => {
+  const handleModeSelect = (modeName: string) => {
     setBotConfig({
       ...botConfig,
-      sniperMode: mode,
+      sniperMode: modeName as any,
     });
   };
 
@@ -218,8 +218,6 @@ export function BotSetup() {
                   <SniperModeSelector
                     selectedMode={botConfig.sniperMode}
                     onModeSelect={handleModeSelect}
-                    customTimeframes={botConfig.customTimeframes}
-                    onCustomTimeframesChange={handleCustomTimeframesChange}
                   />
                 </div>
 

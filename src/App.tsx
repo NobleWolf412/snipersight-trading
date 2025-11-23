@@ -36,13 +36,13 @@ function AppContent() {
           <main>
             <Routes>
               <Route path="/" element={<Landing />} />
-              <Route path="/scan" element={<ScannerSetup />} />
-              <Route path="/results" element={<ScanResults />} />
-              <Route path="/bot" element={<BotSetup />} />
+              <Route path="/scanner/setup" element={<ScannerSetup />} />
+              <Route path="/scanner/results" element={<ScanResults />} />
+              <Route path="/bot/setup" element={<BotSetup />} />
               <Route path="/bot/status" element={<BotStatus />} />
               <Route path="/market" element={<MarketOverview />} />
               <Route path="/intel" element={<Intel />} />
-              <Route path="/training" element={<TrainingGround />} />
+              <Route path="/profiles" element={<TrainingGround />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
