@@ -3,6 +3,7 @@ import { SystemStatus } from '@/components/landing/SystemStatus';
 import { useTelemetry } from '@/hooks/useTelemetry';
 import { TopBar } from '@/components/TopBar/TopBar';
 import { Crosshair } from '@phosphor-icons/react';
+import { Link } from 'react-router-dom';
 
 export function Landing() {
   const { system } = useTelemetry();
@@ -87,13 +88,13 @@ export function Landing() {
                     </div>
                   </div>
                   
-                  <a 
-                    href="/scanner/setup" 
+                  <Link
+                    to="/scanner/setup"
                     className="inline-flex items-center gap-2 px-6 py-3 bg-accent/10 hover:bg-accent/20 border border-accent/30 rounded-lg text-accent font-medium transition-all duration-200 group/btn"
                   >
                     Configure Scanner
                     <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
-                  </a>
+                  </Link>
                 </div>
               </div>
 
@@ -135,13 +136,13 @@ export function Landing() {
                     </div>
                   </div>
                   
-                  <a 
-                    href="/bot/setup" 
+                  <Link
+                    to="/bot/setup"
                     className="inline-flex items-center gap-2 px-6 py-3 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-primary font-medium transition-all duration-200 group/btn"
                   >
                     Configure Bot
                     <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
-                  </a>
+                  </Link>
                 </div>
               </div>
 
