@@ -75,11 +75,6 @@ export function Landing() {
                     <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2" />
                     <p>Liquidity and volume validation</p>
                   </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2" />
-                    <p>Risk-reward ratio filtering</p>
-                  </div>
-
                 </div>
               </div>
             </div>
