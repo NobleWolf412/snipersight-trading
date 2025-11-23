@@ -59,9 +59,7 @@ export function Landing() {
             <div className="grid md:grid-cols-2 gap-12 items-center">
               <div className="space-y-6">
 
-                <p className="text-lg text-muted-foreground leading-relaxed">
-                  Deploy the multi-timeframe scanner to sweep for actionable targets, validate liquidity, and surface the highest-probability entries with tactical context baked in.
-                </p>
+                <p className="text-lg text-muted-foreground leading-relaxed">Deploy the multi-timeframe scanner to sweep for actionable targets, validate liquidity, and surface the highest-probability entries with tactical context baked in.</p>
                 <div className="flex flex-col sm:flex-row gap-4 pt-4">
                   <Button asChild size="lg" className="w-full sm:w-auto">
                     <Link to="/scanner/setup"></Link>
@@ -81,10 +79,7 @@ export function Landing() {
                     <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2" />
                     <p>Risk-reward ratio filtering</p>
                   </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2" />
-                    <p>Market regime awareness</p>
-                  </div>
+
                 </div>
               </div>
             </div>
