@@ -64,7 +64,7 @@ export function SessionIndicator() {
       <div className="flex items-center gap-3">
         <Globe size={22} weight="bold" className="text-accent" />
       </div>
-      <div className="flex gap-5">
+      <div className="flex gap-6">
         {sessions.map((session) => {
           const isActive = currentSession === session;
           const activity = sessionActivity[session];

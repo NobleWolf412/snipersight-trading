@@ -44,7 +44,110 @@ export function Landing() {
           <LiveTicker />
         </section>
 
+        {/* Scanner & Bot Features */}
+        <section className="relative py-20 md:py-32">
+          <div className="max-w-6xl mx-auto px-6 md:px-8">
+            <div className="grid md:grid-cols-2 gap-12 md:gap-16">
+              
+              {/* Scanner Feature */}
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-br from-accent/10 to-transparent rounded-2xl blur-2xl group-hover:blur-3xl transition-all duration-500" />
+                <div className="relative p-8 md:p-10 border border-border/50 rounded-2xl bg-card/50 backdrop-blur-sm hover:border-accent/50 transition-all duration-300">
+                  <div className="flex items-start gap-4 mb-6">
+                    <div className="w-14 h-14 bg-accent/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Crosshair size={28} weight="bold" className="text-accent" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl md:text-3xl font-bold mb-2">Reconnaissance Scanner</h3>
+                      <p className="text-sm text-accent font-mono tracking-wider">MANUAL OPERATIONS</p>
+                    </div>
+                  </div>
+                  
+                  <p className="text-muted-foreground leading-relaxed mb-6">
+                    Multi-timeframe Smart Money Concept detection with institutional-grade confluence scoring. 
+                    Identify high-probability setups across order blocks, FVGs, liquidity sweeps, and structural breaks.
+                  </p>
+                  
+                  <div className="space-y-3 mb-8">
+                    <div className="flex items-start gap-3 text-sm">
+                      <div className="w-1.5 h-1.5 bg-accent rounded-full mt-2 flex-shrink-0" />
+                      <span className="text-muted-foreground">Smart Money pattern detection (OB, FVG, BOS, CHoCH)</span>
+                    </div>
+                    <div className="flex items-start gap-3 text-sm">
+                      <div className="w-1.5 h-1.5 bg-accent rounded-full mt-2 flex-shrink-0" />
+                      <span className="text-muted-foreground">Multi-factor confluence with HTF alignment</span>
+                    </div>
+                    <div className="flex items-start gap-3 text-sm">
+                      <div className="w-1.5 h-1.5 bg-accent rounded-full mt-2 flex-shrink-0" />
+                      <span className="text-muted-foreground">Complete trade plans with risk management</span>
+                    </div>
+                    <div className="flex items-start gap-3 text-sm">
+                      <div className="w-1.5 h-1.5 bg-accent rounded-full mt-2 flex-shrink-0" />
+                      <span className="text-muted-foreground">Interactive chart visualization with AI analysis</span>
+                    </div>
+                  </div>
+                  
+                  <a 
+                    href="/scanner/setup" 
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-accent/10 hover:bg-accent/20 border border-accent/30 rounded-lg text-accent font-medium transition-all duration-200 group/btn"
+                  >
+                    Configure Scanner
+                    <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
+                  </a>
+                </div>
+              </div>
 
+              {/* Bot Feature */}
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent rounded-2xl blur-2xl group-hover:blur-3xl transition-all duration-500" />
+                <div className="relative p-8 md:p-10 border border-border/50 rounded-2xl bg-card/50 backdrop-blur-sm hover:border-primary/50 transition-all duration-300">
+                  <div className="flex items-start gap-4 mb-6">
+                    <div className="w-14 h-14 bg-primary/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <div className="w-7 h-7 border-2 border-primary rounded" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl md:text-3xl font-bold mb-2">Autonomous Bot</h3>
+                      <p className="text-sm text-primary font-mono tracking-wider">AUTOMATED EXECUTION</p>
+                    </div>
+                  </div>
+                  
+                  <p className="text-muted-foreground leading-relaxed mb-6">
+                    Fully automated trading execution with multi-layered quality gates, risk controls, and real-time position management. 
+                    Deploy capital with institutional discipline and precision.
+                  </p>
+                  
+                  <div className="space-y-3 mb-8">
+                    <div className="flex items-start gap-3 text-sm">
+                      <div className="w-1.5 h-1.5 bg-primary rounded-full mt-2 flex-shrink-0" />
+                      <span className="text-muted-foreground">Autonomous setup detection & validation</span>
+                    </div>
+                    <div className="flex items-start gap-3 text-sm">
+                      <div className="w-1.5 h-1.5 bg-primary rounded-full mt-2 flex-shrink-0" />
+                      <span className="text-muted-foreground">Portfolio-level risk & correlation controls</span>
+                    </div>
+                    <div className="flex items-start gap-3 text-sm">
+                      <div className="w-1.5 h-1.5 bg-primary rounded-full mt-2 flex-shrink-0" />
+                      <span className="text-muted-foreground">Real-time SL/TP monitoring & trailing stops</span>
+                    </div>
+                    <div className="flex items-start gap-3 text-sm">
+                      <div className="w-1.5 h-1.5 bg-primary rounded-full mt-2 flex-shrink-0" />
+                      <span className="text-muted-foreground">Complete audit trail & telemetry logging</span>
+                    </div>
+                  </div>
+                  
+                  <a 
+                    href="/bot/setup" 
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-primary font-medium transition-all duration-200 group/btn"
+                  >
+                    Configure Bot
+                    <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
+                  </a>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </section>
 
         {/* Footer with system status */}
         <footer className="relative py-12 border-t border-border/40">
