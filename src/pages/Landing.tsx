@@ -105,10 +105,6 @@ export function Landing() {
         <section className="relative py-16 md:py-20">
           <div className="max-w-6xl mx-auto px-6 md:px-8">
             <div className="grid md:grid-cols-2 gap-12 items-center">
-              <div className="order-2 md:order-1 rounded-lg border border-border/60 bg-card/40 p-8 md:p-12">
-                <div className="space-y-4 text-sm text-muted-foreground">
-                </div>
-              </div>
               <div className="order-1 md:order-2 space-y-6">
                 <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-warning/40 bg-warning/5">
                   <Robot size={20} weight="bold" className="text-warning" />
