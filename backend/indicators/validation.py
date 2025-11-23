@@ -23,13 +23,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 try:
-    import talib
+    import talib  # type: ignore[import]
     TALIB_AVAILABLE = True
 except ImportError:
+    talib = None  # type: ignore[assignment]
     TALIB_AVAILABLE = False
     logger.warning("TA-Lib not available - validation and fallback disabled")
 
-from backend.indicators.momentum import compute_rsi, compute_stoch_rsi, compute_mfi
+from backend.indicators.momentum import compute_rsi, compute_mfi
 from backend.indicators.volatility import compute_atr, compute_bollinger_bands
 from backend.indicators.volume import compute_obv
 
@@ -50,7 +51,7 @@ def validate_rsi(df: pd.DataFrame, tolerance: float = 0.1) -> Dict:
     
     try:
         our_rsi = compute_rsi(df, period=14)
-        talib_rsi = pd.Series(talib.RSI(df['close'].values, timeperiod=14), index=df.index)
+        talib_rsi = pd.Series(talib.RSI(df['close'].values, timeperiod=14), index=df.index)  # type: ignore[union-attr]
         
         # Compare only valid (non-NaN) values
         valid_mask = ~(our_rsi.isna() | talib_rsi.isna())
@@ -78,7 +79,7 @@ def validate_rsi(df: pd.DataFrame, tolerance: float = 0.1) -> Dict:
             'samples': int(valid_mask.sum())
         }
         
-    except Exception as e:
+    except Exception as e:  # pyright: ignore - intentional broad catch for validation
         return {
             'indicator': 'RSI',
             'passed': False,
@@ -94,7 +95,7 @@ def validate_mfi(df: pd.DataFrame, tolerance: float = 0.1) -> Dict:
     try:
         our_mfi = compute_mfi(df, period=14)
         talib_mfi = pd.Series(
-            talib.MFI(df['high'].values, df['low'].values, df['close'].values, 
+            talib.MFI(df['high'].values, df['low'].values, df['close'].values,  # type: ignore[union-attr]
                      df['volume'].values, timeperiod=14),
             index=df.index
         )
@@ -131,7 +132,7 @@ def validate_atr(df: pd.DataFrame, tolerance_pct: float = 0.1) -> Dict:
     try:
         our_atr = compute_atr(df, period=14)
         talib_atr = pd.Series(
-            talib.ATR(df['high'].values, df['low'].values, df['close'].values, timeperiod=14),
+            talib.ATR(df['high'].values, df['low'].values, df['close'].values, timeperiod=14),  # type: ignore[union-attr]
             index=df.index
         )
         
@@ -166,7 +167,7 @@ def validate_bollinger_bands(df: pd.DataFrame, tolerance: float = 0.01) -> Dict:
     
     try:
         our_upper, our_mid, our_lower = compute_bollinger_bands(df, period=20, std_dev=2.0)
-        talib_upper, talib_mid, talib_lower = talib.BBANDS(
+        talib_upper, talib_mid, talib_lower = talib.BBANDS(  # type: ignore[union-attr]
             df['close'].values, timeperiod=20, nbdevup=2, nbdevdn=2, matype=0
         )
         
@@ -208,15 +209,15 @@ def validate_obv(df: pd.DataFrame, tolerance: float = 1.0) -> Dict:
     
     try:
         our_obv = compute_obv(df)
-        talib_obv = pd.Series(talib.OBV(df['close'].values, df['volume'].values), index=df.index)
+        talib_obv_result = pd.Series(talib.OBV(df['close'].values, df['volume'].values), index=df.index)  # type: ignore[union-attr]
         
-        valid_mask = ~(our_obv.isna() | talib_obv.isna())
+        valid_mask = ~(our_obv.isna() | talib_obv_result.isna())
         
         if valid_mask.sum() == 0:
             return {'indicator': 'OBV', 'passed': False, 'error': 'No valid values'}
         
         # OBV is cumulative, check percentage difference
-        pct_diff = np.abs((our_obv[valid_mask] - talib_obv[valid_mask]) / talib_obv[valid_mask]) * 100
+        pct_diff = np.abs((our_obv[valid_mask] - talib_obv_result[valid_mask]) / talib_obv_result[valid_mask]) * 100
         
         return {
             'indicator': 'OBV',
@@ -388,16 +389,16 @@ def compute_indicator_safe(
         
         return result
         
-    except Exception as e:
+    except Exception as e:  # pyright: ignore - intentional broad catch for fallback
         if use_fallback and TALIB_AVAILABLE:
-            logger.warning(f"Custom {indicator} failed: {e}. Using TA-Lib fallback")
+            logger.warning("Custom %s failed: %s. Using TA-Lib fallback", indicator, e)
             try:
                 return fallback_func(df, **kwargs)
             except Exception as fallback_error:
-                logger.error(f"TA-Lib fallback also failed: {fallback_error}")
+                logger.error("TA-Lib fallback also failed: %s", fallback_error)
                 raise
         else:
-            logger.error(f"{indicator} computation failed and fallback unavailable")
+            logger.error("%s computation failed and fallback unavailable", indicator)
             raise
 
 
@@ -422,13 +423,13 @@ def compute_bbands_safe(
         
         return result
         
-    except Exception as e:
+    except Exception as e:  # pyright: ignore - intentional broad catch for fallback
         if use_fallback and TALIB_AVAILABLE:
-            logger.warning(f"Custom Bollinger Bands failed: {e}. Using TA-Lib fallback")
+            logger.warning("Custom Bollinger Bands failed: %s. Using TA-Lib fallback", e)
             try:
                 return talib_bbands(df, period=period, std_dev=std_dev)
             except Exception as fallback_error:
-                logger.error(f"TA-Lib fallback also failed: {fallback_error}")
+                logger.error("TA-Lib fallback also failed: %s", fallback_error)
                 raise
         else:
             logger.error("Bollinger Bands computation failed and fallback unavailable")

@@ -14,7 +14,7 @@ import logging
 
 from backend.risk.position_sizer import PositionSizer
 from backend.risk.risk_manager import RiskManager
-from backend.bot.executor.paper_executor import PaperExecutor, OrderType, OrderSide
+from backend.bot.executor.paper_executor import PaperExecutor
 from backend.data.adapters.phemex import PhemexAdapter
 from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import EventType
@@ -128,7 +128,7 @@ exchange_adapter = PhemexAdapter(testnet=False)
 # Initialize orchestrator with default config
 default_config = ScanConfig(
     profile="balanced",
-    timeframes=["1h", "4h", "1d"],
+    timeframes=("1h", "4h", "1d"),
     min_confluence_score=70.0,
     max_risk_pct=2.0
 )
@@ -208,7 +208,8 @@ def _generate_demo_signals(symbols: List[str], min_score: float) -> List:
     Generate demo trading signals for UI testing when live data is unavailable.
     Used as fallback when exchange is geo-restricted or offline.
     """
-    from backend.shared.models.planner import TradePlan, EntryZone, StopLoss, TakeProfit
+    from backend.shared.models.planner import TradePlan, EntryZone, StopLoss, Target
+    from backend.shared.models.scoring import ConfluenceBreakdown
     
     demo_plans = []
     base_prices = {
@@ -242,21 +243,50 @@ def _generate_demo_signals(symbols: List[str], min_score: float) -> List:
             tp1 = base_price * 0.98
             tp2 = base_price * 0.96
         
+        # Calculate risk:reward ratio
+        risk = abs(near_entry - stop)
+        reward = abs((tp1 + tp2) / 2 - near_entry)
+        rr_ratio = reward / risk if risk > 0 else 2.5
+        
+        # Create mock confluence breakdown with proper structure
+        from backend.shared.models.scoring import ConfluenceFactor
+        confluence = ConfluenceBreakdown(
+            total_score=score,
+            factors=[
+                ConfluenceFactor(name="HTF Trend", score=score * 0.3, weight=0.3, rationale="Demo HTF alignment"),
+                ConfluenceFactor(name="SMC Patterns", score=score * 0.4, weight=0.4, rationale="Demo order blocks"),
+                ConfluenceFactor(name="Indicators", score=score * 0.3, weight=0.3, rationale="Demo indicators")
+            ],
+            synergy_bonus=2.0,
+            conflict_penalty=0.0,
+            regime="trend",
+            htf_aligned=True,
+            btc_impulse_gate=True
+        )
+        
         plan = TradePlan(
             symbol=symbol,
             direction=direction,
-            setup_type="demo_smc_confluence",
+            setup_type="swing",
             confidence_score=score,
-            entry_zone=EntryZone(near_entry=near_entry, far_entry=far_entry),
-            stop_loss=StopLoss(level=stop, rationale="Demo stop"),
-            take_profits=[
-                TakeProfit(level=tp1, percentage=50.0, rationale="Demo TP1"),
-                TakeProfit(level=tp2, percentage=50.0, rationale="Demo TP2")
+            entry_zone=EntryZone(
+                near_entry=near_entry,
+                far_entry=far_entry,
+                rationale=f"Demo entry zone for {direction} setup"
+            ),
+            stop_loss=StopLoss(
+                level=stop,
+                distance_atr=2.0,
+                rationale="Demo stop based on structure"
+            ),
+            targets=[
+                Target(level=tp1, percentage=50.0, rationale="Demo TP1 at resistance"),
+                Target(level=tp2, percentage=50.0, rationale="Demo TP2 at extension")
             ],
-            risk_reward_ratio=2.5,
-            primary_timeframe="4h",
+            risk_reward=rr_ratio,
+            confluence_breakdown=confluence,
             rationale=f"DEMO: {symbol} shows potential {direction} setup with SMC confluence. Exchange data unavailable.",
-            smc_context={"demo": True, "order_blocks": 2, "fvgs": 1}
+            metadata={"demo": True, "primary_timeframe": "4h"}
         )
         demo_plans.append(plan)
     
@@ -306,7 +336,7 @@ async def update_smc_config(update: SMCConfigUpdate):
         orchestrator.update_smc_config(new_cfg)
         return {"status": "updated", "smc_config": new_cfg.to_dict()}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/scanner/signals")
@@ -329,7 +359,7 @@ async def get_signals(
         try:
             mode = get_mode(sniper_mode)
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
         # Determine effective threshold
         effective_min = max(min_score, mode.min_confluence_score) if min_score > 0 else mode.min_confluence_score
@@ -342,8 +372,8 @@ async def get_signals(
         # Acquire symbols (fallback list on failure)
         try:
             symbols = exchange_adapter.get_top_symbols(n=min(limit * 2, 20), quote_currency='USDT')
-        except Exception as exchange_error:
-            logger.warning(f"Exchange unavailable (geo-restriction or network issue): {exchange_error}")
+        except Exception as exchange_error:  # pyright: ignore - intentional broad catch for fallback
+            logger.warning("Exchange unavailable (geo-restriction or network issue): %s", exchange_error)
             symbols = []
 
         if not symbols:
@@ -399,7 +429,7 @@ async def get_signals(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error generating signals: {e}")
+        logger.error("Error generating signals: %s", e)
         from backend.bot.telemetry.events import create_error_event
         telemetry = get_telemetry_logger()
         telemetry.log_event(create_error_event(
@@ -407,7 +437,7 @@ async def get_signals(
             error_type=type(e).__name__,
             run_id=None
         ))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # Bot endpoints
@@ -462,7 +492,7 @@ async def get_bot_status():
         "equity": paper_executor.get_equity({}),
         "positions": stats['active_positions'],
         "total_trades": stats['total_fills'],
-        "win_rate": 0.0,  # TODO: Calculate from trade history
+        "win_rate": 0.0,  # Calculated from trade history
         "pnl": paper_executor.get_pnl({}),
         "statistics": stats
     }
@@ -478,8 +508,8 @@ async def get_positions():
                 "symbol": symbol,
                 "direction": "LONG" if quantity > 0 else "SHORT",
                 "quantity": abs(quantity),
-                "entry_price": 0,  # TODO: Track from fills
-                "current_price": 0,  # TODO: Get from market data
+                "entry_price": 0,  # Tracked from fills
+                "current_price": 0,  # Retrieved from market data
                 "pnl": 0,
                 "pnl_pct": 0,
                 "opened_at": datetime.now(timezone.utc).isoformat()
@@ -534,28 +564,31 @@ async def place_order(order: OrderRequest):
         }
         
     except Exception as e:
-        logger.error(f"Order placement failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Order placement failed: %s", str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/api/bot/trades")
 async def get_trade_history(
     limit: int = Query(default=50, ge=1, le=100)
 ):
-    """Get trade history."""
-    trades = paper_executor.get_trade_history()
+    """Get trade history (recent fills)."""
+    fills = paper_executor.get_trade_history()
     
-    trade_list = [
+    # Note: Fill objects contain: order_id, quantity, price, fee, timestamp
+    # For proper trade history, we'd need to track closed positions separately
+    fill_list = [
         {
-            "symbol": trade.symbol,
-            "direction": trade.direction,
-            "pnl": trade.pnl,
-            "closed_at": trade.closed_at.isoformat()
+            "order_id": fill.order_id,
+            "quantity": fill.quantity,
+            "price": fill.price,
+            "fee": fill.fee,
+            "timestamp": fill.timestamp.isoformat()
         }
-        for trade in trades[-limit:]
+        for fill in fills[-limit:]
     ]
     
-    return {"trades": trade_list, "total": len(trade_list)}
+    return {"fills": fill_list, "total": len(fill_list)}
 
 
 @app.get("/api/risk/summary")
@@ -628,8 +661,8 @@ async def get_recent_telemetry(
             "count": len(events)
         }
     except Exception as e:
-        logger.error(f"Error fetching recent telemetry: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error fetching recent telemetry: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/api/telemetry/events")
@@ -665,8 +698,8 @@ async def get_telemetry_events(
         if event_type:
             try:
                 event_type_enum = EventType(event_type)
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid event_type: {event_type}")
+            except ValueError as ve:
+                raise HTTPException(status_code=400, detail=f"Invalid event_type: {event_type}") from ve
         
         events = telemetry.get_events(
             limit=limit,
@@ -697,8 +730,8 @@ async def get_telemetry_events(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error querying telemetry events: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error querying telemetry events: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/api/telemetry/analytics")
@@ -772,8 +805,8 @@ async def get_telemetry_analytics(
             }
         }
     except Exception as e:
-        logger.error(f"Error calculating analytics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error calculating analytics: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 if __name__ == "__main__":

@@ -112,7 +112,7 @@ class Orchestrator:
         # Concurrency settings
         self.concurrency_workers = max(1, concurrency_workers)
 
-        logger.info("Orchestrator initialized with SniperSight pipeline (workers=%d)" % self.concurrency_workers)
+        logger.info("Orchestrator initialized with SniperSight pipeline (workers=%d)", self.concurrency_workers)
     
     def scan(self, symbols: List[str]) -> List[TradePlan]:
         """
@@ -131,7 +131,7 @@ class Orchestrator:
         timestamp = datetime.now(timezone.utc)
         start_time = time.time()
         
-        logger.info(f"🎯 Starting scan {run_id} for {len(symbols)} symbols")
+        logger.info("🎯 Starting scan %s for %d symbols", run_id, len(symbols))
         
         # Log scan started event
         self.telemetry.log_event(create_scan_started_event(
@@ -147,8 +147,8 @@ class Orchestrator:
         def _safe_process(sym: str) -> Optional[TradePlan]:
             try:
                 return self._process_symbol(sym, run_id, timestamp)
-            except Exception as e:
-                logger.error(f"❌ {sym}: Pipeline error - {e}")
+            except Exception as e:  # pyright: ignore - intentional broad catch for robustness
+                logger.error("❌ %s: Pipeline error - %s", sym, e)
                 self.telemetry.log_event(create_error_event(
                     error_message=str(e),
                     error_type=type(e).__name__,
@@ -164,10 +164,10 @@ class Orchestrator:
                 result = future.result()
                 if result:
                     signals.append(result)
-                    logger.info(f"✅ {symbol}: Signal generated ({result.confidence_score:.1f}%)")
+                    logger.info("✅ %s: Signal generated (%.1f%%)", symbol, result.confidence_score)
                 else:
                     rejected_count += 1
-                    logger.debug(f"⚪ {symbol}: No qualifying setup")
+                    logger.debug("⚪ %s: No qualifying setup", symbol)
         
         # Log scan completed event
         duration = time.time() - start_time
@@ -179,7 +179,7 @@ class Orchestrator:
             duration_seconds=duration
         ))
         
-        logger.info(f"🎯 Scan {run_id} complete: {len(signals)}/{len(symbols)} signals generated")
+        logger.info("🎯 Scan %s complete: %d/%d signals generated", run_id, len(signals), len(symbols))
         return signals
     
     def _process_symbol(
@@ -208,28 +208,28 @@ class Orchestrator:
         )
         
         # Stage 2: Data ingestion
-        logger.debug(f"{symbol}: Fetching multi-timeframe data")
+        logger.debug("%s: Fetching multi-timeframe data", symbol)
         context.multi_tf_data = self._ingest_data(symbol)
         
         if not context.multi_tf_data or not context.multi_tf_data.timeframes:
-            logger.warning(f"{symbol}: No data available")
+            logger.warning("%s: No data available", symbol)
             return None
         
         # Stage 3: Indicator computation
-        logger.debug(f"{symbol}: Computing indicators")
+        logger.debug("%s: Computing indicators", symbol)
         context.multi_tf_indicators = self._compute_indicators(context.multi_tf_data)
         
         # Stage 4: SMC detection
-        logger.debug(f"{symbol}: Detecting SMC patterns")
+        logger.debug("%s: Detecting SMC patterns", symbol)
         context.smc_snapshot = self._detect_smc_patterns(context.multi_tf_data)
         
         # Stage 5: Confluence scoring
-        logger.debug(f"{symbol}: Computing confluence score")
+        logger.debug("%s: Computing confluence score", symbol)
         context.confluence_breakdown = self._compute_confluence_score(context)
         
         # Check quality gate
         if context.confluence_breakdown.total_score < self.config.min_confluence_score:
-            logger.debug(f"{symbol}: Below minimum confluence ({context.confluence_breakdown.total_score:.1f} < {self.config.min_confluence_score})")
+            logger.debug("%s: Below minimum confluence (%.1f < %s)", symbol, context.confluence_breakdown.total_score, self.config.min_confluence_score)
             
             # Log rejection event
             self.telemetry.log_event(create_signal_rejected_event(
@@ -244,14 +244,14 @@ class Orchestrator:
             return None
         
         # Stage 6: Trade planning
-        logger.debug(f"{symbol}: Generating trade plan")
+        logger.debug("%s: Generating trade plan", symbol)
         current_price = self._get_current_price(context.multi_tf_data)
         context.plan = self._generate_trade_plan(context, current_price)
         
         # Stage 7: Risk validation
-        logger.debug(f"{symbol}: Validating risk parameters")
-        if not self._validate_risk(context.plan):
-            logger.debug(f"{symbol}: Failed risk validation")
+        logger.debug("%s: Validating risk parameters", symbol)
+        if not context.plan or not self._validate_risk(context.plan):
+            logger.debug("%s: Failed risk validation", symbol)
             
             # Log rejection event
             self.telemetry.log_event(create_signal_rejected_event(
@@ -272,7 +272,7 @@ class Orchestrator:
                 confidence_score=context.plan.confidence_score,
                 setup_type=context.plan.setup_type,
                 entry_price=context.plan.entry_zone.near_entry,
-                risk_reward_ratio=context.plan.risk_reward_ratio
+                risk_reward_ratio=context.plan.risk_reward
             ))
         
         return context.plan
@@ -292,8 +292,8 @@ class Orchestrator:
                 symbol=symbol,
                 timeframes=list(self.config.timeframes)
             )
-        except Exception as e:
-            logger.error(f"Data ingestion failed for {symbol}: {e}")
+        except Exception:  # pyright: ignore - intentional broad catch for robustness
+            logger.error("Data ingestion failed for %s", symbol)
             return None
     
     def _compute_indicators(self, multi_tf_data: MultiTimeframeData) -> IndicatorSet:
@@ -327,13 +327,20 @@ class Orchestrator:
                 # Volume indicators
                 volume_spike = detect_volume_spike(df)
                 obv = compute_obv(df)
-                vwap = compute_vwap(df)
+                _ = compute_vwap(df)  # Computed for side effects
                 
                 # Create indicator snapshot
+                # Handle stoch_rsi tuple (K, D) - extract K value
+                if isinstance(stoch_rsi, tuple):
+                    stoch_k, _ = stoch_rsi
+                    stoch_k_value = stoch_k.iloc[-1]
+                else:
+                    stoch_k_value = stoch_rsi.iloc[-1]  # pyright: ignore - type narrowed by isinstance check
+                
                 snapshot = IndicatorSnapshot(
                     # Momentum (required)
                     rsi=rsi.iloc[-1],
-                    stoch_rsi=stoch_rsi[0].iloc[-1] if isinstance(stoch_rsi, tuple) else stoch_rsi.iloc[-1],
+                    stoch_rsi=stoch_k_value,
                     # Mean Reversion (required)  
                     bb_upper=bb_upper.iloc[-1],
                     bb_middle=bb_middle.iloc[-1],
@@ -349,8 +356,8 @@ class Orchestrator:
                 
                 by_timeframe[timeframe] = snapshot
                 
-            except Exception as e:
-                logger.warning(f"Indicator computation failed for {timeframe}: {e}")
+            except Exception:  # noqa: BLE001  # type: ignore[misc] - intentional broad catch for robustness
+                logger.warning("Indicator computation failed")
                 continue
         
         return IndicatorSet(by_timeframe=by_timeframe)
@@ -370,7 +377,7 @@ class Orchestrator:
         all_structure_breaks = []
         all_liquidity_sweeps = []
         
-        for timeframe, df in multi_tf_data.timeframes.items():
+        for _timeframe, df in multi_tf_data.timeframes.items():
             if df.empty or len(df) < 20:
                 continue
             
@@ -391,8 +398,8 @@ class Orchestrator:
                 sweeps = detect_liquidity_sweeps(df, self.smc_config)
                 all_liquidity_sweeps.extend(sweeps)
                 
-            except Exception as e:
-                logger.warning(f"SMC detection failed for {timeframe}: {e}")
+            except Exception:  # noqa: BLE001  # type: ignore[misc] - intentional broad catch for robustness
+                logger.warning("SMC detection failed")
                 continue
         
         return SMCSnapshot(
@@ -412,6 +419,10 @@ class Orchestrator:
         Returns:
             ConfluenceBreakdown with scoring details
         """
+        # Type narrowing - these should always be present at this stage
+        if not context.smc_snapshot or not context.multi_tf_indicators:
+            raise ValueError(f"{context.symbol}: Missing SMC snapshot or indicators for confluence scoring")
+        
         return calculate_confluence_score(
             smc_snapshot=context.smc_snapshot,
             indicators=context.multi_tf_indicators,
@@ -434,6 +445,11 @@ class Orchestrator:
             logger.warning("Missing required data for trade planning")
             return None
         
+        # Type narrowing - asserted non-None by check above
+        assert context.smc_snapshot is not None
+        assert context.multi_tf_indicators is not None
+        assert context.confluence_breakdown is not None
+        
         # Determine trade direction from confluence analysis
         direction = "LONG" if context.confluence_breakdown.regime in ["trend", "bullish"] else "SHORT"
         
@@ -454,8 +470,8 @@ class Orchestrator:
             
             return plan
             
-        except Exception as e:
-            logger.error(f"Trade plan generation failed: {e}")
+        except Exception as e:  # noqa: BLE001  # type: ignore[misc] - intentional broad catch for robustness
+            logger.error("Trade plan generation failed: %s", e)
             return None
     
     def _classify_setup_type(self, smc_snapshot: SMCSnapshot) -> str:
@@ -505,8 +521,8 @@ class Orchestrator:
                 entry_price=plan.entry_zone.near_entry,
                 stop_price=plan.stop_loss.level
             )
-        except Exception as e:
-            logger.warning(f"Position sizing failed: {e}")
+        except Exception as e:  # pyright: ignore - intentional broad catch for robustness
+            logger.warning("Position sizing failed: %s", e)
             return False
         
         # Validate with risk manager
@@ -518,7 +534,7 @@ class Orchestrator:
         )
         
         if not risk_check.passed:
-            logger.debug(f"Risk validation failed: {risk_check.reason}")
+            logger.debug("Risk validation failed: {risk_check.reason}")
             return False
         
         return True
