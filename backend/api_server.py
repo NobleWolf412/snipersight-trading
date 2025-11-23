@@ -19,6 +19,7 @@ from backend.data.adapters.phemex import PhemexAdapter
 from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import EventType
 from backend.engine.orchestrator import Orchestrator
+from backend.shared.config.smc_config import SMCConfig
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.scanner_modes import get_mode, list_modes
 
@@ -135,7 +136,8 @@ orchestrator = Orchestrator(
     config=default_config,
     exchange_adapter=exchange_adapter,
     risk_manager=risk_manager,
-    position_sizer=position_sizer
+    position_sizer=position_sizer,
+    concurrency_workers=4
 )
 
 
@@ -265,6 +267,46 @@ def _generate_demo_signals(symbols: List[str], min_score: float) -> List:
 async def get_scanner_modes():
     """List available scanner modes and their characteristics."""
     return {"modes": list_modes(), "total": len(list_modes())}
+
+
+class SMCConfigUpdate(BaseModel):
+    """Partial update model for SMCConfig values."""
+    min_wick_ratio: Optional[float] = None
+    min_displacement_atr: Optional[float] = None
+    ob_lookback_candles: Optional[int] = None
+    ob_volume_threshold: Optional[float] = None
+    ob_max_mitigation: Optional[float] = None
+    ob_min_freshness: Optional[float] = None
+    fvg_min_gap_atr: Optional[float] = None
+    fvg_max_overlap: Optional[float] = None
+    structure_swing_lookback: Optional[int] = None
+    structure_min_break_distance_atr: Optional[float] = None
+    sweep_swing_lookback: Optional[int] = None
+    sweep_max_sweep_candles: Optional[int] = None
+    sweep_min_reversal_atr: Optional[float] = None
+    sweep_require_volume_spike: Optional[bool] = None
+
+
+@app.get("/api/config/smc")
+async def get_smc_config():
+    """Get current Smart Money Concepts detector configuration."""
+    return {"smc_config": orchestrator.smc_config.to_dict()}
+
+
+@app.put("/api/config/smc")
+async def update_smc_config(update: SMCConfigUpdate):
+    """Update SMC detector configuration at runtime."""
+    current = orchestrator.smc_config.to_dict()
+    overrides = {k: v for k, v in update.dict().items() if v is not None}
+    if not overrides:
+        return {"status": "no_changes", "smc_config": current}
+    merged = {**current, **overrides}
+    try:
+        new_cfg = SMCConfig.from_dict(merged)
+        orchestrator.update_smc_config(new_cfg)
+        return {"status": "updated", "smc_config": new_cfg.to_dict()}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/api/scanner/signals")

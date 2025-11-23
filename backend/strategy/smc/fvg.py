@@ -15,9 +15,10 @@ import pandas as pd
 import numpy as np
 
 from backend.shared.models.smc import FVG
+from backend.shared.config.smc_config import SMCConfig
 
 
-def detect_fvgs(df: pd.DataFrame, config: dict = None) -> List[FVG]:
+def detect_fvgs(df: pd.DataFrame, config: SMCConfig | dict | None = None) -> List[FVG]:
     """
     Detect Fair Value Gaps in price data.
     
@@ -50,9 +51,18 @@ def detect_fvgs(df: pd.DataFrame, config: dict = None) -> List[FVG]:
     
     # Configuration
     if config is None:
-        config = {}
-    min_gap_atr = config.get('min_gap_atr', 0.3)
-    max_overlap = config.get('max_overlap', 0.1)
+        smc_cfg = SMCConfig.defaults()
+    elif isinstance(config, dict):
+        mapped = {}
+        if 'min_gap_atr' in config:
+            mapped['fvg_min_gap_atr'] = config['min_gap_atr']
+        if 'max_overlap' in config:
+            mapped['fvg_max_overlap'] = config['max_overlap']
+        smc_cfg = SMCConfig.from_dict(mapped)
+    else:
+        smc_cfg = config
+    min_gap_atr = smc_cfg.fvg_min_gap_atr
+    max_overlap = smc_cfg.fvg_max_overlap
     
     # Calculate ATR for gap size filtering
     from backend.indicators.volatility import compute_atr

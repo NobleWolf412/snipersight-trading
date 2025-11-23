@@ -14,6 +14,7 @@ Orchestrates the complete flow from symbols to actionable trading signals.
 """
 
 import uuid
+import concurrent.futures
 from datetime import datetime, timezone
 from typing import List, Dict, Optional, Any
 import logging
@@ -44,6 +45,7 @@ from backend.strategy.smc.order_blocks import detect_order_blocks
 from backend.strategy.smc.fvg import detect_fvgs
 from backend.strategy.smc.bos_choch import detect_structural_breaks
 from backend.strategy.smc.liquidity_sweeps import detect_liquidity_sweeps
+from backend.shared.config.smc_config import SMCConfig
 from backend.strategy.confluence.scorer import calculate_confluence_score
 from backend.strategy.planner.planner_service import generate_trade_plan
 from backend.risk.risk_manager import RiskManager
@@ -73,7 +75,8 @@ class Orchestrator:
         config: ScanConfig,
         exchange_adapter: Optional[BinanceAdapter] = None,
         risk_manager: Optional[RiskManager] = None,
-        position_sizer: Optional[PositionSizer] = None
+        position_sizer: Optional[PositionSizer] = None,
+        concurrency_workers: int = 4
     ):
         """
         Initialize orchestrator.
@@ -102,8 +105,14 @@ class Orchestrator:
             account_balance=10000,  # Default balance
             max_risk_pct=2.0
         )
+
+        # Smart Money Concepts configuration (extracted parameters)
+        self.smc_config = SMCConfig.defaults()
         
-        logger.info("Orchestrator initialized with SniperSight pipeline")
+        # Concurrency settings
+        self.concurrency_workers = max(1, concurrency_workers)
+
+        logger.info("Orchestrator initialized with SniperSight pipeline (workers=%d)" % self.concurrency_workers)
     
     def scan(self, symbols: List[str]) -> List[TradePlan]:
         """
@@ -134,28 +143,31 @@ class Orchestrator:
         signals = []
         rejected_count = 0
         
-        for symbol in symbols:
+        # Parallel per-symbol processing
+        def _safe_process(sym: str) -> Optional[TradePlan]:
             try:
-                signal = self._process_symbol(symbol, run_id, timestamp)
-                if signal:
-                    signals.append(signal)
-                    logger.info(f"✅ {symbol}: Signal generated ({signal.confidence_score:.1f}%)")
-                else:
-                    rejected_count += 1
-                    logger.debug(f"⚪ {symbol}: No qualifying setup")
-                    
+                return self._process_symbol(sym, run_id, timestamp)
             except Exception as e:
-                rejected_count += 1
-                logger.error(f"❌ {symbol}: Pipeline error - {e}")
-                
-                # Log error event
+                logger.error(f"❌ {sym}: Pipeline error - {e}")
                 self.telemetry.log_event(create_error_event(
                     error_message=str(e),
                     error_type=type(e).__name__,
-                    symbol=symbol,
+                    symbol=sym,
                     run_id=run_id
                 ))
-                continue
+                return None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.concurrency_workers) as executor:
+            future_map = {executor.submit(_safe_process, s): s for s in symbols}
+            for future in concurrent.futures.as_completed(future_map):
+                symbol = future_map[future]
+                result = future.result()
+                if result:
+                    signals.append(result)
+                    logger.info(f"✅ {symbol}: Signal generated ({result.confidence_score:.1f}%)")
+                else:
+                    rejected_count += 1
+                    logger.debug(f"⚪ {symbol}: No qualifying setup")
         
         # Log scan completed event
         duration = time.time() - start_time
@@ -364,19 +376,19 @@ class Orchestrator:
             
             try:
                 # Order blocks
-                obs = detect_order_blocks(df, {})
+                obs = detect_order_blocks(df, self.smc_config)
                 all_order_blocks.extend(obs)
                 
                 # Fair value gaps
-                fvgs = detect_fvgs(df, {})
+                fvgs = detect_fvgs(df, self.smc_config)
                 all_fvgs.extend(fvgs)
                 
                 # Structure breaks
-                breaks = detect_structural_breaks(df, {})
+                breaks = detect_structural_breaks(df, self.smc_config)
                 all_structure_breaks.extend(breaks)
                 
                 # Liquidity sweeps
-                sweeps = detect_liquidity_sweeps(df, {})
+                sweeps = detect_liquidity_sweeps(df, self.smc_config)
                 all_liquidity_sweeps.extend(sweeps)
                 
             except Exception as e:
@@ -539,6 +551,12 @@ class Orchestrator:
         """
         self.config = config
         logger.info("Configuration updated")
+
+    def update_smc_config(self, new_cfg: SMCConfig) -> None:
+        """Apply a new SMC configuration after validation."""
+        new_cfg.validate()
+        self.smc_config = new_cfg
+        logger.info("SMC configuration updated")
     
     def get_pipeline_status(self) -> Dict[str, Any]:
         """

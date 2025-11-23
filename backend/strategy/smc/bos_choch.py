@@ -14,11 +14,12 @@ import pandas as pd
 import numpy as np
 
 from backend.shared.models.smc import StructuralBreak
+from backend.shared.config.smc_config import SMCConfig
 
 
 def detect_structural_breaks(
     df: pd.DataFrame,
-    config: dict = None
+    config: SMCConfig | dict | None = None
 ) -> List[StructuralBreak]:
     """
     Detect Break of Structure (BOS) and Change of Character (CHoCH) patterns.
@@ -50,9 +51,18 @@ def detect_structural_breaks(
     
     # Configuration
     if config is None:
-        config = {}
-    swing_lookback = config.get('swing_lookback', 5)
-    min_break_distance_atr = config.get('min_break_distance_atr', 0.5)
+        smc_cfg = SMCConfig.defaults()
+    elif isinstance(config, dict):
+        mapped = {}
+        if 'swing_lookback' in config:
+            mapped['structure_swing_lookback'] = config['swing_lookback']
+        if 'min_break_distance_atr' in config:
+            mapped['structure_min_break_distance_atr'] = config['min_break_distance_atr']
+        smc_cfg = SMCConfig.from_dict(mapped)
+    else:
+        smc_cfg = config
+    swing_lookback = smc_cfg.structure_swing_lookback
+    min_break_distance_atr = smc_cfg.structure_min_break_distance_atr
     
     if len(df) < swing_lookback * 2 + 20:
         raise ValueError(f"DataFrame too short for structural break detection (need {swing_lookback * 2 + 20} rows, got {len(df)})")

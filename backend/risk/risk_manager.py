@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +186,9 @@ class RiskManager:
             'MAJORS': ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'],
             'ALTS': []  # Define alt correlation groups as needed
         }
+
+        # Lock for thread-safe position/trade mutations under concurrent scans
+        self._lock = threading.Lock()
     
     def validate_new_trade(
         self,
@@ -320,7 +324,8 @@ class RiskManager:
             unrealized_pnl=0.0
         )
         
-        self.positions[symbol] = position
+        with self._lock:
+            self.positions[symbol] = position
         logger.info(f"Position added: {symbol} {direction} {quantity} @ {entry_price}")
     
     def update_position(self, symbol: str, current_price: float) -> None:
@@ -337,14 +342,13 @@ class RiskManager:
         if symbol not in self.positions:
             raise KeyError(f"Position not found: {symbol}")
         
-        position = self.positions[symbol]
-        position.current_price = current_price
-        
-        # Calculate unrealized PnL
-        if position.direction == "LONG":
-            position.unrealized_pnl = (current_price - position.entry_price) * position.quantity
-        else:  # SHORT
-            position.unrealized_pnl = (position.entry_price - current_price) * position.quantity
+        with self._lock:
+            position = self.positions[symbol]
+            position.current_price = current_price
+            if position.direction == "LONG":
+                position.unrealized_pnl = (current_price - position.entry_price) * position.quantity
+            else:  # SHORT
+                position.unrealized_pnl = (position.entry_price - current_price) * position.quantity
     
     def close_position(self, symbol: str, exit_price: float) -> Trade:
         """
@@ -363,7 +367,8 @@ class RiskManager:
         if symbol not in self.positions:
             raise KeyError(f"Position not found: {symbol}")
         
-        position = self.positions[symbol]
+        with self._lock:
+            position = self.positions[symbol]
         
         # Calculate realized PnL
         if position.direction == "LONG":
@@ -379,13 +384,10 @@ class RiskManager:
             closed_at=datetime.now(timezone.utc)
         )
         
-        self.trade_history.append(trade)
-        
-        # Update account balance
-        self.account_balance += pnl
-        
-        # Remove position
-        del self.positions[symbol]
+        with self._lock:
+            self.trade_history.append(trade)
+            self.account_balance += pnl
+            del self.positions[symbol]
         
         logger.info(f"Position closed: {symbol} PnL: ${pnl:.2f}")
         

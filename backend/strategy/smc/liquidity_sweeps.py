@@ -15,11 +15,12 @@ import pandas as pd
 import numpy as np
 
 from backend.shared.models.smc import LiquiditySweep
+from backend.shared.config.smc_config import SMCConfig
 
 
 def detect_liquidity_sweeps(
     df: pd.DataFrame,
-    config: dict = None
+    config: SMCConfig | dict | None = None
 ) -> List[LiquiditySweep]:
     """
     Detect liquidity sweeps in price data.
@@ -54,11 +55,24 @@ def detect_liquidity_sweeps(
     
     # Configuration
     if config is None:
-        config = {}
-    swing_lookback = config.get('swing_lookback', 10)
-    max_sweep_candles = config.get('max_sweep_candles', 3)
-    min_reversal_atr = config.get('min_reversal_atr', 1.0)
-    require_volume_spike = config.get('require_volume_spike', False)
+        smc_cfg = SMCConfig.defaults()
+    elif isinstance(config, dict):
+        mapped = {}
+        if 'swing_lookback' in config:
+            mapped['sweep_swing_lookback'] = config['swing_lookback']
+        if 'max_sweep_candles' in config:
+            mapped['sweep_max_sweep_candles'] = config['max_sweep_candles']
+        if 'min_reversal_atr' in config:
+            mapped['sweep_min_reversal_atr'] = config['min_reversal_atr']
+        if 'require_volume_spike' in config:
+            mapped['sweep_require_volume_spike'] = config['require_volume_spike']
+        smc_cfg = SMCConfig.from_dict(mapped)
+    else:
+        smc_cfg = config
+    swing_lookback = smc_cfg.sweep_swing_lookback
+    max_sweep_candles = smc_cfg.sweep_max_sweep_candles
+    min_reversal_atr = smc_cfg.sweep_min_reversal_atr
+    require_volume_spike = smc_cfg.sweep_require_volume_spike
     
     if len(df) < swing_lookback * 2 + 20:
         raise ValueError(f"DataFrame too short for liquidity sweep detection (need {swing_lookback * 2 + 20} rows, got {len(df)})")

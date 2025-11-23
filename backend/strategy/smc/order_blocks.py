@@ -17,11 +17,12 @@ import pandas as pd
 import numpy as np
 
 from backend.shared.models.smc import OrderBlock
+from backend.shared.config.smc_config import SMCConfig
 
 
 def detect_order_blocks(
     df: pd.DataFrame,
-    config: dict
+    config: SMCConfig | dict | None = None
 ) -> List[OrderBlock]:
     """
     Detect order blocks in price data.
@@ -53,11 +54,32 @@ def detect_order_blocks(
     if not isinstance(df.index, pd.DatetimeIndex):
         raise ValueError("DataFrame must have DatetimeIndex")
     
-    # Configuration
-    min_wick_ratio = config.get('min_wick_ratio', 2.0)
-    min_displacement_atr = config.get('min_displacement_atr', 1.5)
-    lookback_candles = config.get('lookback_candles', 5)
-    volume_threshold = config.get('volume_threshold', 1.5)
+    # Normalize configuration to SMCConfig
+    if config is None:
+        smc_cfg = SMCConfig.defaults()
+    elif isinstance(config, dict):
+        # Map legacy keys to new dataclass fields
+        mapped = {}
+        if 'min_wick_ratio' in config:
+            mapped['min_wick_ratio'] = config['min_wick_ratio']
+        if 'min_displacement_atr' in config:
+            mapped['min_displacement_atr'] = config['min_displacement_atr']
+        if 'lookback_candles' in config:
+            mapped['ob_lookback_candles'] = config['lookback_candles']
+        if 'volume_threshold' in config:
+            mapped['ob_volume_threshold'] = config['volume_threshold']
+        if 'max_mitigation' in config:
+            mapped['ob_max_mitigation'] = config['max_mitigation']
+        if 'min_freshness' in config:
+            mapped['ob_min_freshness'] = config['min_freshness']
+        smc_cfg = SMCConfig.from_dict(mapped)
+    else:
+        smc_cfg = config  # already SMCConfig
+
+    min_wick_ratio = smc_cfg.min_wick_ratio
+    min_displacement_atr = smc_cfg.min_displacement_atr
+    lookback_candles = smc_cfg.ob_lookback_candles
+    volume_threshold = smc_cfg.ob_volume_threshold
     
     if len(df) < lookback_candles + 20:  # Need enough data for ATR calculation
         raise ValueError(f"DataFrame too short for order block detection (need {lookback_candles + 20} rows, got {len(df)})")
@@ -143,8 +165,8 @@ def detect_order_blocks(
         )
     
     # Filter out heavily mitigated or stale order blocks
-    max_mitigation = config.get('max_mitigation', 0.8)
-    min_freshness = config.get('min_freshness', 0.1)
+    max_mitigation = smc_cfg.ob_max_mitigation
+    min_freshness = smc_cfg.ob_min_freshness
     
     order_blocks = [
         ob for ob in order_blocks
