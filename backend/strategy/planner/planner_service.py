@@ -274,13 +274,11 @@ def _calculate_stop_loss(
             stop_level -= (0.3 * atr)  # Buffer beyond structure
             rationale = "Stop below entry structure invalidation point"
             logger.debug(f"Using structure-based stop: {stop_level} (before buffer: {max(valid_stops)})")
+            distance_atr = (entry_zone.far_entry - stop_level) / atr
         else:
-            # Fallback: ATR-based stop
-            stop_level = entry_zone.far_entry - (2.0 * atr)
-            rationale = "Stop based on 2x ATR below entry (no clear structure)"
-            logger.debug(f"Using ATR-based stop: {stop_level}")
-        
-        distance_atr = (entry_zone.far_entry - stop_level) / atr
+            # CRITICAL: Never use ATR-only stops - reject trade without structure
+            logger.warning(f"No structure-based stop found for bullish {direction} trade - rejecting")
+            raise ValueError("Cannot generate trade plan: no clear structure for stop loss placement")
     
     else:  # bearish
         # Stop above the entry structure
@@ -302,11 +300,11 @@ def _calculate_stop_loss(
             stop_level = min(valid_stops)
             stop_level += (0.3 * atr)  # Buffer beyond structure
             rationale = "Stop above entry structure invalidation point"
+            distance_atr = (stop_level - entry_zone.far_entry) / atr
         else:
-            stop_level = entry_zone.far_entry + (2.0 * atr)
-            rationale = "Stop based on 2x ATR above entry (no clear structure)"
-        
-        distance_atr = (stop_level - entry_zone.far_entry) / atr
+            # CRITICAL: Never use ATR-only stops - reject trade without structure
+            logger.warning(f"No structure-based stop found for bearish {direction} trade - rejecting")
+            raise ValueError("Cannot generate trade plan: no clear structure for stop loss placement")
     
     # CRITICAL DEBUG
     logger.critical(f"STOP CALC: direction={direction}, entry_near={entry_zone.near_entry}, entry_far={entry_zone.far_entry}, stop={stop_level}, atr={atr}")

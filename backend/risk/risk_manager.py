@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 import logging
 import threading
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +187,12 @@ class RiskManager:
             'MAJORS': ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'],
             'ALTS': []  # Define alt correlation groups as needed
         }
+        
+        # Dynamic correlation matrix (symbol -> symbol -> correlation coefficient)
+        # Updated via update_correlation_matrix() with actual price data
+        self.correlation_matrix: Dict[str, Dict[str, float]] = {}
+        self.correlation_threshold: float = 0.7  # Assets above this correlation treated as correlated
+        self.correlation_lookback_periods: int = 100  # Periods for correlation calculation
 
         # Lock for thread-safe position/trade mutations under concurrent scans
         self._lock = threading.Lock()
@@ -445,7 +452,12 @@ class RiskManager:
     
     def _get_correlated_exposure(self, symbol: str) -> float:
         """
-        Calculate exposure to correlated assets.
+        Calculate exposure to correlated assets using dynamic correlation matrix.
+        
+        Strategy:
+        1. Check correlation matrix for highly correlated pairs (> threshold)
+        2. Sum exposure across all correlated positions
+        3. Fallback to static groups if matrix not available
         
         Args:
             symbol: Trading pair to check
@@ -453,23 +465,196 @@ class RiskManager:
         Returns:
             Total correlated exposure
         """
-        # Find correlation group
-        correlated_symbols = set()
-        for group_symbols in self.correlation_groups.values():
-            if symbol in group_symbols:
-                correlated_symbols.update(group_symbols)
+        correlated_exposure = 0.0
         
-        # If no correlation group found, treat as isolated
-        if not correlated_symbols:
-            return self._get_asset_exposure(symbol)
+        # Use dynamic correlation matrix if available
+        if symbol in self.correlation_matrix:
+            for pos_symbol, position in self.positions.items():
+                # Check correlation coefficient
+                correlation = self.correlation_matrix.get(symbol, {}).get(pos_symbol, 0.0)
+                
+                # If highly correlated (above threshold), include in exposure
+                if abs(correlation) >= self.correlation_threshold:
+                    correlated_exposure += position.notional_value
+                    logger.debug(
+                        f"Correlated asset: {pos_symbol} with {symbol} "
+                        f"(correlation: {correlation:.2f}, exposure: ${position.notional_value:.2f})"
+                    )
+        else:
+            # Fallback to static correlation groups
+            correlated_symbols = set()
+            for group_symbols in self.correlation_groups.values():
+                if symbol in group_symbols:
+                    correlated_symbols.update(group_symbols)
+            
+            # If no correlation group found, treat as isolated
+            if not correlated_symbols:
+                return self._get_asset_exposure(symbol)
+            
+            # Sum exposure across correlated assets
+            for pos_symbol, position in self.positions.items():
+                if pos_symbol in correlated_symbols:
+                    correlated_exposure += position.notional_value
         
-        # Sum exposure across correlated assets
-        total_exposure = 0.0
-        for pos_symbol, position in self.positions.items():
-            if pos_symbol in correlated_symbols:
-                total_exposure += position.notional_value
+        return correlated_exposure
+    
+    def update_correlation_matrix(
+        self,
+        price_data: Dict[str, np.ndarray]
+    ) -> None:
+        """
+        Update correlation matrix from price data.
         
-        return total_exposure
+        Calculate Pearson correlation between all symbol pairs using returns.
+        This should be called periodically (e.g., hourly or daily) with fresh data.
+        
+        Args:
+            price_data: Dict mapping symbol -> array of closing prices
+                       Arrays should have same length (e.g., last 100 periods)
+        
+        Example:
+            price_data = {
+                'BTC/USDT': np.array([45000, 45100, 45200, ...]),
+                'ETH/USDT': np.array([3000, 3010, 3015, ...]),
+                'SOL/USDT': np.array([100, 101, 102, ...])
+            }
+            risk_mgr.update_correlation_matrix(price_data)
+        """
+        if not price_data:
+            logger.warning("Empty price data - correlation matrix not updated")
+            return
+        
+        symbols = list(price_data.keys())
+        
+        # Validate all arrays have same length
+        lengths = [len(prices) for prices in price_data.values()]
+        if len(set(lengths)) > 1:
+            logger.error(f"Inconsistent price data lengths: {dict(zip(symbols, lengths))}")
+            return
+        
+        # Calculate returns for each symbol
+        returns_data = {}
+        for symbol, prices in price_data.items():
+            if len(prices) < 2:
+                logger.warning(f"Insufficient price data for {symbol}: {len(prices)} periods")
+                continue
+            
+            # Calculate percentage returns
+            returns = np.diff(prices) / prices[:-1]
+            returns_data[symbol] = returns
+        
+        if not returns_data:
+            logger.warning("No valid returns data - correlation matrix not updated")
+            return
+        
+        # Build correlation matrix
+        new_matrix = {}
+        
+        for symbol1 in symbols:
+            if symbol1 not in returns_data:
+                continue
+            
+            new_matrix[symbol1] = {}
+            
+            for symbol2 in symbols:
+                if symbol2 not in returns_data:
+                    continue
+                
+                # Self-correlation is always 1.0
+                if symbol1 == symbol2:
+                    new_matrix[symbol1][symbol2] = 1.0
+                    continue
+                
+                # Calculate Pearson correlation
+                returns1 = returns_data[symbol1]
+                returns2 = returns_data[symbol2]
+                
+                # Ensure equal length (should be guaranteed by earlier check)
+                min_len = min(len(returns1), len(returns2))
+                returns1 = returns1[:min_len]
+                returns2 = returns2[:min_len]
+                
+                if min_len < 2:
+                    new_matrix[symbol1][symbol2] = 0.0
+                    continue
+                
+                # Calculate correlation coefficient
+                try:
+                    correlation = np.corrcoef(returns1, returns2)[0, 1]
+                    
+                    # Handle NaN (can occur with constant prices)
+                    if np.isnan(correlation):
+                        correlation = 0.0
+                    
+                    new_matrix[symbol1][symbol2] = float(correlation)
+                
+                except Exception as e:
+                    logger.error(f"Error calculating correlation {symbol1}-{symbol2}: {e}")
+                    new_matrix[symbol1][symbol2] = 0.0
+        
+        # Update correlation matrix atomically
+        with self._lock:
+            self.correlation_matrix = new_matrix
+        
+        # Log high correlations
+        for symbol1 in new_matrix:
+            for symbol2 in new_matrix[symbol1]:
+                if symbol1 < symbol2:  # Avoid duplicate pairs
+                    corr = new_matrix[symbol1][symbol2]
+                    if abs(corr) >= self.correlation_threshold:
+                        logger.info(
+                            f"High correlation detected: {symbol1} - {symbol2} = {corr:.2f}"
+                        )
+        
+        logger.info(
+            f"Correlation matrix updated: {len(new_matrix)} symbols, "
+            f"{sum(len(v) for v in new_matrix.values())} pairs"
+        )
+    
+    def get_correlation(self, symbol1: str, symbol2: str) -> Optional[float]:
+        """
+        Get correlation coefficient between two symbols.
+        
+        Args:
+            symbol1: First trading pair
+            symbol2: Second trading pair
+            
+        Returns:
+            Correlation coefficient (-1 to 1) or None if not available
+        """
+        return self.correlation_matrix.get(symbol1, {}).get(symbol2)
+    
+    def get_correlated_symbols(
+        self,
+        symbol: str,
+        min_correlation: Optional[float] = None
+    ) -> List[Tuple[str, float]]:
+        """
+        Get list of symbols correlated with given symbol.
+        
+        Args:
+            symbol: Trading pair to check
+            min_correlation: Minimum correlation threshold (defaults to self.correlation_threshold)
+            
+        Returns:
+            List of (symbol, correlation) tuples sorted by correlation strength
+        """
+        if min_correlation is None:
+            min_correlation = self.correlation_threshold
+        
+        if symbol not in self.correlation_matrix:
+            return []
+        
+        correlated = [
+            (other_symbol, corr)
+            for other_symbol, corr in self.correlation_matrix[symbol].items()
+            if other_symbol != symbol and abs(corr) >= min_correlation
+        ]
+        
+        # Sort by absolute correlation (strongest first)
+        correlated.sort(key=lambda x: abs(x[1]), reverse=True)
+        
+        return correlated
     
     def _get_period_loss(self, hours: int) -> float:
         """
@@ -499,6 +684,16 @@ class RiskManager:
         Returns:
             Dictionary with risk metrics
         """
+        # Calculate correlation exposure breakdown
+        correlation_exposure = {}
+        if self.correlation_matrix:
+            for symbol in self.positions:
+                corr_exp = self._get_correlated_exposure(symbol)
+                correlation_exposure[symbol] = {
+                    'exposure': corr_exp,
+                    'exposure_pct': (corr_exp / self.account_balance * 100) if self.account_balance > 0 else 0
+                }
+        
         return {
             'account_balance': self.account_balance,
             'equity': self.get_equity(),
@@ -510,5 +705,7 @@ class RiskManager:
             'exposure_pct': (self.get_total_exposure() / self.account_balance * 100) if self.account_balance > 0 else 0,
             'daily_loss': self._get_period_loss(24),
             'weekly_loss': self._get_period_loss(168),
-            'positions_by_direction': self.get_positions_by_direction()
+            'positions_by_direction': self.get_positions_by_direction(),
+            'correlation_matrix_loaded': len(self.correlation_matrix) > 0,
+            'correlation_exposure': correlation_exposure
         }
