@@ -4,6 +4,7 @@ import { ScannerSetup } from '@/pages/ScannerSetup';
 import { BotSetup } from '@/pages/BotSetup';
 import { ScannerStatus } from '@/pages/ScannerStatus';
 import { BotStatus } from '@/pages/BotStatus';
+import { ScanResults } from '@/pages/ScanResults';
 import { Routes, Route } from 'react-router-dom';
 
 function App() {
@@ -14,6 +15,8 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/scanner/setup" element={<ScannerSetup />} />
           <Route path="/scanner/status" element={<ScannerStatus />} />
+          <Route path="/scan" element={<ScannerSetup />} />
+          <Route path="/results" element={<ScanResults />} />
           <Route path="/bot/setup" element={<BotSetup />} />
           <Route path="/bot/status" element={<BotStatus />} />
         </Routes>

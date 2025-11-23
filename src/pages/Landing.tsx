@@ -88,13 +88,22 @@ export function Landing() {
                     </div>
                   </div>
                   
-                  <Link
-                    to="/scanner/setup"
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-accent/10 hover:bg-accent/20 border border-accent/30 rounded-lg text-accent font-medium transition-all duration-200 group/btn"
-                  >
-                    Configure Scanner
-                    <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
-                  </Link>
+                  <div className="flex gap-3 flex-wrap">
+                    <Link
+                      to="/scanner/setup"
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-accent/10 hover:bg-accent/20 border border-accent/30 rounded-lg text-accent font-medium transition-all duration-200 group/btn"
+                    >
+                      Configure Scanner
+                      <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
+                    </Link>
+                    <Link
+                      to="/scanner/status"
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-accent/5 hover:bg-accent/10 border border-accent/20 rounded-lg text-accent/80 font-medium transition-all duration-200 group/btn"
+                    >
+                      View Status
+                      <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
+                    </Link>
+                  </div>
                 </div>
               </div>
 
@@ -136,13 +145,22 @@ export function Landing() {
                     </div>
                   </div>
                   
-                  <Link
-                    to="/bot/setup"
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-primary font-medium transition-all duration-200 group/btn"
-                  >
-                    Configure Bot
-                    <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
-                  </Link>
+                  <div className="flex gap-3 flex-wrap">
+                    <Link
+                      to="/bot/setup"
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-primary font-medium transition-all duration-200 group/btn"
+                    >
+                      Configure Bot
+                      <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
+                    </Link>
+                    <Link
+                      to="/bot/status"
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-lg text-primary/80 font-medium transition-all duration-200 group/btn"
+                    >
+                      View Status
+                      <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
+                    </Link>
+                  </div>
                 </div>
               </div>
 

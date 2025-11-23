@@ -40,7 +40,10 @@ export function ScannerStatus() {
             </h1>
             <p className="text-lg text-muted-foreground">Reconnaissance scanner real-time status</p>
           </div>
-          <Button variant="outline" onClick={handleReconfigure} className="h-12">Configure</Button>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => navigate('/')} className="h-12">Home</Button>
+            <Button variant="outline" onClick={handleReconfigure} className="h-12">Configure</Button>
+          </div>
         </div>
 
         {/* Configuration Summary */}

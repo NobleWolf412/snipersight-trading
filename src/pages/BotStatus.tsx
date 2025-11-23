@@ -50,14 +50,24 @@ export function BotStatus() {
             </h1>
             <p className="text-lg text-muted-foreground">Autonomous bot operational status</p>
           </div>
-          <Button
-            onClick={handleAbortMission}
-            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground h-12"
-            size="lg"
-          >
-            <StopCircle size={22} weight="fill" />
-            ABORT MISSION
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              onClick={() => navigate('/')}
+              variant="outline"
+              className="h-12"
+              size="lg"
+            >
+              Home
+            </Button>
+            <Button
+              onClick={handleAbortMission}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground h-12"
+              size="lg"
+            >
+              <StopCircle size={22} weight="fill" />
+              ABORT MISSION
+            </Button>
+          </div>
         </div>
 
         <div className="grid md:grid-cols-3 gap-6">
