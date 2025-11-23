@@ -53,18 +53,6 @@ export function Landing() {
           <LiveTicker />
         </section>
 
-        {/* Operational telemetry section */}
-        <section className="relative py-16 md:py-20">
-          <div className="max-w-6xl mx-auto px-6 md:px-8 space-y-8">
-            <div className="space-y-3">
-              <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">OPERATIONAL TELEMETRY</p>
-              <h2 className="text-3xl md:text-4xl font-bold">System Status</h2>
-              <p className="text-lg text-muted-foreground max-w-2xl">Live counters to confirm data uplinks, signal health, and exchange readiness before deploying any scans or automated plays.</p>
-            </div>
-            <MetricsGrid metrics={metrics} />
-          </div>
-        </section>
-
         {/* Recon scanner section */}
         <section className="relative py-16 md:py-20 bg-card/20">
           <div className="max-w-6xl mx-auto px-6 md:px-8">
