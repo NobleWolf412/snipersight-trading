@@ -79,10 +79,6 @@ export function Landing() {
             <div className="grid md:grid-cols-2 gap-12 items-center">
               <div className="order-2 md:order-1 rounded-lg border border-border/60 bg-card/40 p-8 md:p-12">
                 <div className="space-y-4 text-sm text-muted-foreground">
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-warning mt-2" />
-                    <p>Risk failsafes and circuit breakers</p>
-                  </div>
                 </div>
               </div>
               <div className="order-1 md:order-2 space-y-6">
