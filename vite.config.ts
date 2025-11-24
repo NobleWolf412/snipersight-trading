@@ -15,7 +15,9 @@ const BACKEND_PORT = Number(process.env.BACKEND_PORT || 8000);
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    react(),
+    react({
+      include: '**/*.{jsx,tsx}',
+    }),
     tailwindcss(),
     // DO NOT REMOVE
     createIconImportProxy() as PluginOption,
@@ -36,5 +38,8 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react/jsx-runtime'],
   },
 });
