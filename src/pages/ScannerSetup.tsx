@@ -204,7 +204,7 @@ export function ScannerSetup() {
               <Label className="text-base">Asset Categories</Label>
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-4 bg-background rounded-lg border border-border">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-1">
                     <Label htmlFor="majors" className="cursor-pointer text-base">Majors</Label>
                     <Badge variant="outline" className="text-xs">BTC, ETH, BNB</Badge>
                   </div>
