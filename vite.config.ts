@@ -8,6 +8,10 @@ import { resolve } from 'path'
 
 const projectRoot = process.env.PROJECT_ROOT || import.meta.dirname
 
+// Port configuration for consistent frontend/backend setup
+const FRONTEND_PORT = Number(process.env.FRONTEND_PORT || 5000);
+const BACKEND_PORT = Number(process.env.BACKEND_PORT || 8000);
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -23,11 +27,12 @@ export default defineConfig({
     }
   },
   server: {
-    port: 5000,
+    host: '0.0.0.0',  // Bind to all interfaces for remote access (Codespaces/containers)
+    port: FRONTEND_PORT,
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: `http://localhost:${BACKEND_PORT}`,
         changeOrigin: true,
       }
     }
