@@ -178,3 +178,5 @@ export function BotStatus() {
     </div>
   );
 }
+
+export default BotStatus;

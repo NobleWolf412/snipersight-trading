@@ -237,3 +237,5 @@ export function ScanResults() {
     </PageLayout>
   );
 }
+
+export default ScanResults;
