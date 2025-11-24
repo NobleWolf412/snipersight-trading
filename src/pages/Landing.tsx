@@ -64,41 +64,16 @@ export function Landing() {
                     </div>
                   </div>
                   
-                  <p className="text-muted-foreground leading-relaxed mb-6">Multi-timeframe Smart Money Concept detection with institutional-grade confluence scoring. Identify high-probability setups across order blocks, FVGs, liquidity sweeps, and structural breaks.</p>
+                  <p className="text-muted-foreground leading-relaxed mb-10">Multi-timeframe Smart Money Concept detection with institutional-grade confluence scoring. Identify high-probability setups across order blocks, FVGs, liquidity sweeps, and structural breaks.</p>
                   
-                  <div className="space-y-3 mb-8">
-                    <div className="flex items-start gap-3 text-sm">
-                      <div className="w-1.5 h-1.5 bg-accent rounded-full mt-2 flex-shrink-0" />
-                      <span className="text-muted-foreground">Smart Money pattern detection (OB, FVG, BOS, CHoCH)</span>
-                    </div>
-                    <div className="flex items-start gap-3 text-sm">
-                      <div className="w-1.5 h-1.5 bg-accent rounded-full mt-2 flex-shrink-0" />
-                      <span className="text-muted-foreground">Multi-factor confluence with HTF alignment</span>
-                    </div>
-                    <div className="flex items-start gap-3 text-sm">
-                      <div className="w-1.5 h-1.5 bg-accent rounded-full mt-2 flex-shrink-0" />
-                      <span className="text-muted-foreground">Complete trade plans with risk management</span>
-                    </div>
-                    <div className="flex items-start gap-3 text-sm">
-                      <div className="w-1.5 h-1.5 bg-accent rounded-full mt-2 flex-shrink-0" />
-                      <span className="text-muted-foreground">Interactive chart visualization with AI analysis</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-3 flex-wrap">
+                  <div className="flex justify-center">
                     <Link
                       to="/scanner/setup"
-                      className="inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium btn-launch"
+                      className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-lg font-bold btn-tactical-scanner w-full md:w-auto text-base"
                     >
+                      <Crosshair size={20} weight="bold" />
                       Configure Scanner
-                      <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
-                    </Link>
-                    <Link
-                      to="/scanner/status"
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-accent/5 hover:bg-accent/10 border border-accent/20 rounded-lg text-accent/80 font-medium transition-all duration-200 group/btn"
-                    >
-                      View Status
-                      <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
+                      <span className="text-xl">→</span>
                     </Link>
                   </div>
                 </div>
@@ -118,44 +93,19 @@ export function Landing() {
                     </div>
                   </div>
                   
-                  <p className="text-muted-foreground leading-relaxed mb-6">
+                  <p className="text-muted-foreground leading-relaxed mb-10">
                     Fully automated trading execution with multi-layered quality gates, risk controls, and real-time position management. 
                     Deploy capital with institutional discipline and precision.
                   </p>
                   
-                  <div className="space-y-3 mb-8">
-                    <div className="flex items-start gap-3 text-sm">
-                      <div className="w-1.5 h-1.5 bg-primary rounded-full mt-2 flex-shrink-0" />
-                      <span className="text-muted-foreground">Autonomous setup detection & validation</span>
-                    </div>
-                    <div className="flex items-start gap-3 text-sm">
-                      <div className="w-1.5 h-1.5 bg-primary rounded-full mt-2 flex-shrink-0" />
-                      <span className="text-muted-foreground">Portfolio-level risk & correlation controls</span>
-                    </div>
-                    <div className="flex items-start gap-3 text-sm">
-                      <div className="w-1.5 h-1.5 bg-primary rounded-full mt-2 flex-shrink-0" />
-                      <span className="text-muted-foreground">Real-time SL/TP monitoring & trailing stops</span>
-                    </div>
-                    <div className="flex items-start gap-3 text-sm">
-                      <div className="w-1.5 h-1.5 bg-primary rounded-full mt-2 flex-shrink-0" />
-                      <span className="text-muted-foreground">Complete audit trail & telemetry logging</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-3 flex-wrap">
+                  <div className="flex justify-center">
                     <Link
                       to="/bot/setup"
-                      className="inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium btn-launch"
+                      className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-lg font-bold btn-tactical-bot w-full md:w-auto text-base"
                     >
+                      <div className="w-5 h-5 border-2 border-current rounded" />
                       Configure Bot
-                      <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
-                    </Link>
-                    <Link
-                      to="/bot/status"
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-lg text-primary/80 font-medium transition-all duration-200 group/btn"
-                    >
-                      View Status
-                      <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
+                      <span className="text-xl">→</span>
                     </Link>
                   </div>
                 </div>

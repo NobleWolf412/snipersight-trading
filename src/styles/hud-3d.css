@@ -57,30 +57,195 @@
     0 24px 56px rgba(0,0,0,0.25);
 }
 
-/* Launch/Primary CTA with subtle neon accent */
-.btn-launch {
+/* 3D Tactical Button - Scanner (Accent color) */
+.btn-tactical-scanner {
   position: relative;
-  border: 1px solid rgba(0, 173, 255, 0.35);
-  background: linear-gradient(180deg, rgba(0, 173, 255, 0.18), rgba(0, 173, 255, 0.12));
-  color: #bff1ff;
-  text-shadow: 0 0 8px rgba(0, 173, 255, 0.4);
-  box-shadow:
-    0 8px 20px rgba(0, 173, 255, 0.22),
-    inset 0 1px 0 rgba(255,255,255,0.08);
-  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
-}
-.btn-launch:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 12px 28px rgba(0, 173, 255, 0.28),
-    inset 0 1px 0 rgba(255,255,255,0.12);
-  filter: saturate(1.05);
-}
-.btn-launch:active {
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.65 0.10 180 / 0.6), 
+      oklch(0.65 0.10 180 / 0.3),
+      oklch(0.65 0.10 180 / 0.6)
+    ) border-box;
+  color: oklch(0.95 0.02 180);
+  text-shadow: 
+    0 0 10px oklch(0.65 0.10 180 / 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.8);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   transform: translateY(0);
   box-shadow:
-    0 6px 14px rgba(0, 173, 255, 0.22),
-    inset 0 1px 0 rgba(255,255,255,0.08);
+    0 0 20px oklch(0.65 0.10 180 / 0.3),
+    0 8px 16px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-tactical-scanner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, 
+    oklch(0.65 0.10 180 / 0.15) 0%, 
+    transparent 50%, 
+    oklch(0.65 0.10 180 / 0.15) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.btn-tactical-scanner:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 0 30px oklch(0.65 0.10 180 / 0.5),
+    0 12px 24px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.70 0.12 180 / 0.8), 
+      oklch(0.65 0.10 180 / 0.4),
+      oklch(0.70 0.12 180 / 0.8)
+    ) border-box;
+}
+
+.btn-tactical-scanner:hover::before {
+  opacity: 1;
+}
+
+.btn-tactical-scanner:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow:
+    0 0 15px oklch(0.65 0.10 180 / 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.8),
+    inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn-tactical-scanner::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      oklch(0.75 0.12 180 / 0.3) 50%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: scanner-sweep 3s ease-in-out infinite;
+  }
+}
+
+@keyframes scanner-sweep {
+  0%, 100% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+}
+
+/* 3D Tactical Button - Bot (Primary color) */
+.btn-tactical-bot {
+  position: relative;
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.60 0.18 145 / 0.6), 
+      oklch(0.60 0.18 145 / 0.3),
+      oklch(0.60 0.18 145 / 0.6)
+    ) border-box;
+  color: oklch(0.95 0.02 145);
+  text-shadow: 
+    0 0 10px oklch(0.60 0.18 145 / 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.8);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transform: translateY(0);
+  box-shadow:
+    0 0 20px oklch(0.60 0.18 145 / 0.3),
+    0 8px 16px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-tactical-bot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, 
+    oklch(0.60 0.18 145 / 0.15) 0%, 
+    transparent 50%, 
+    oklch(0.60 0.18 145 / 0.15) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.btn-tactical-bot:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 0 30px oklch(0.60 0.18 145 / 0.5),
+    0 12px 24px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.65 0.20 145 / 0.8), 
+      oklch(0.60 0.18 145 / 0.4),
+      oklch(0.65 0.20 145 / 0.8)
+    ) border-box;
+}
+
+.btn-tactical-bot:hover::before {
+  opacity: 1;
+}
+
+.btn-tactical-bot:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow:
+    0 0 15px oklch(0.60 0.18 145 / 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.8),
+    inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn-tactical-bot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      oklch(0.70 0.20 145 / 0.3) 50%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: bot-sweep 3s ease-in-out infinite;
+    animation-delay: 1.5s;
+  }
+}
+
+@keyframes bot-sweep {
+  0%, 100% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
 }
 
 /* Soft glow ring helper (apply to cards or panels) */
