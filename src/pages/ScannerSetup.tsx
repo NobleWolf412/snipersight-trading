@@ -220,7 +220,7 @@ export function ScannerSetup() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between p-4 bg-background rounded-lg border border-border">
+                <div className="flex items-center gap-3 flex-1">
                   <div className="flex items-center gap-3">
                     <Label htmlFor="altcoins" className="cursor-pointer text-base">Altcoins</Label>
                     <Badge variant="outline" className="text-xs">SOL, MATIC, LINK</Badge>
@@ -237,7 +237,7 @@ export function ScannerSetup() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between p-4 bg-background rounded-lg border border-border">
+                <div className="flex items-center gap-3 flex-1">
                   <div className="flex items-center gap-3">
                     <Label htmlFor="meme" className="cursor-pointer text-base">Meme Mode</Label>
                     <Badge variant="outline" className="text-xs bg-warning/20 text-warning">VOLATILE</Badge>
