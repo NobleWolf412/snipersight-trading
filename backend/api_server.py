@@ -346,7 +346,9 @@ async def get_signals(
     sniper_mode: str = Query(default="recon"),
     majors: bool = Query(default=True),
     altcoins: bool = Query(default=True),
-    meme_mode: bool = Query(default=False)
+    meme_mode: bool = Query(default=False),
+    exchange: str = Query(default="Phemex"),
+    leverage: int = Query(default=1, ge=1, le=125)
 ):
     """Generate trading signals applying selected sniper mode configuration.
 
@@ -360,6 +362,10 @@ async def get_signals(
     - majors: BTC, ETH, BNB
     - altcoins: SOL, XRP, ADA, AVAX, MATIC, DOT, LINK, etc.
     - meme_mode: DOGE, SHIB, PEPE, etc.
+    
+    Exchange & Leverage:
+    - exchange: Which exchange to use (currently only Phemex supported)
+    - leverage: Position leverage (1x-125x, affects position sizing)
     """
     try:
         # Resolve requested mode (fallback handled by exception)
@@ -370,6 +376,9 @@ async def get_signals(
 
         # Determine effective threshold
         effective_min = max(min_score, mode.min_confluence_score) if min_score > 0 else mode.min_confluence_score
+
+        logger.info("Scan request: mode=%s, exchange=%s, leverage=%dx, categories=(majors=%s, alts=%s, meme=%s)", 
+                   mode.name, exchange, leverage, majors, altcoins, meme_mode)
 
         # Update orchestrator config in-place
         orchestrator.config.timeframes = mode.timeframes
@@ -458,6 +467,13 @@ async def get_signals(
             "effective_min_score": effective_min,
             "baseline_min_score": mode.min_confluence_score,
             "profile": mode.profile,
+            "exchange": exchange,
+            "leverage": leverage,
+            "categories": {
+                "majors": majors,
+                "altcoins": altcoins,
+                "meme_mode": meme_mode
+            },
             "debug": {
                 "message": f"{len(trade_plans)} signals passed all quality gates, {rejected_count} rejected",
                 "rejection_reasons": "Check backend logs for detailed rejection reasons (confluence scores, risk validation, data availability)"

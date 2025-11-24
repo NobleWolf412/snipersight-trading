@@ -30,12 +30,15 @@ export function ScannerSetup() {
   const handleArmScanner = async () => {
     console.log('[ScannerSetup] Starting scan...', {
       mode: scanConfig.sniperMode,
+      exchange: scanConfig.exchange,
+      leverage: scanConfig.leverage,
       topPairs: scanConfig.topPairs,
-      minScore: selectedMode?.min_confluence_score
+      minScore: selectedMode?.min_confluence_score,
+      categories: scanConfig.categories
     });
     setIsScanning(true);
 
-    try {
+    try:
       // Add timeout to prevent indefinite waiting (2 minutes for heavy computation)
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Request timeout')), 120000)
@@ -48,6 +51,8 @@ export function ScannerSetup() {
         majors: scanConfig.categories.majors,
         altcoins: scanConfig.categories.altcoins,
         meme_mode: scanConfig.categories.memeMode,
+        exchange: scanConfig.exchange,
+        leverage: scanConfig.leverage || 1,
       });
 
       const response = await Promise.race([apiPromise, timeoutPromise]) as any;

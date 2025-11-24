@@ -167,6 +167,8 @@ class ApiClient {
     majors?: boolean;
     altcoins?: boolean;
     meme_mode?: boolean;
+    exchange?: string;
+    leverage?: number;
   }) {
     const queryParams: Record<string, string> = {};
     if (params) {
@@ -176,6 +178,8 @@ class ApiClient {
       if (params.majors !== undefined) queryParams.majors = params.majors.toString();
       if (params.altcoins !== undefined) queryParams.altcoins = params.altcoins.toString();
       if (params.meme_mode !== undefined) queryParams.meme_mode = params.meme_mode.toString();
+      if (params.exchange) queryParams.exchange = params.exchange;
+      if (params.leverage !== undefined) queryParams.leverage = params.leverage.toString();
     }
     const query = new URLSearchParams(queryParams).toString();
     return this.request<SignalsResponse>(
