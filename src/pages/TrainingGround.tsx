@@ -133,3 +133,5 @@ export function TrainingGround() {
     </div>
   );
 }
+
+export default TrainingGround;

@@ -113,3 +113,5 @@ export function Intel() {
     </div>
   );
 }
+
+export default Intel;
