@@ -59,15 +59,12 @@ export function Landing() {
                       <Crosshair size={28} weight="bold" className="text-accent" />
                     </div>
                     <div>
-                      <h3 className="text-2xl md:text-3xl font-bold mb-2 heading-hud">Reconnaissance Scanner</h3>
+                      <h3 className="text-2xl md:text-3xl font-bold mb-2 heading-hud">RECONNAISSANCE SCANNER</h3>
                       <p className="text-sm text-accent font-mono tracking-wider heading-hud">MANUAL OPERATIONS</p>
                     </div>
                   </div>
                   
-                  <p className="text-muted-foreground leading-relaxed mb-6">
-                    Multi-timeframe Smart Money Concept detection with institutional-grade confluence scoring. 
-                    Identify high-probability setups across order blocks, FVGs, liquidity sweeps, and structural breaks.
-                  </p>
+                  <p className="text-muted-foreground leading-relaxed mb-6">Multi-timeframe Smart Money Concept detection with institutional-grade confluence scoring. Identify high-probability setups across order blocks, FVGs, liquidity sweeps, and structural breaks.</p>
                   
                   <div className="space-y-3 mb-8">
                     <div className="flex items-start gap-3 text-sm">
@@ -116,7 +113,7 @@ export function Landing() {
                       <div className="w-7 h-7 border-2 border-primary rounded" />
                     </div>
                     <div>
-                      <h3 className="text-2xl md:text-3xl font-bold mb-2 heading-hud">Autonomous Bot</h3>
+                      <h3 className="text-2xl md:text-3xl font-bold mb-2 heading-hud">AUTONOMOUS BOT</h3>
                       <p className="text-sm text-primary font-mono tracking-wider heading-hud">AUTOMATED EXECUTION</p>
                     </div>
                   </div>
