@@ -9,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Crosshair, Lightning } from '@phosphor-icons/react';
-import { useKV } from '@github/spark/hooks';
 import type { ScanResult } from '@/utils/mockData';
 import { generateMockScanResults, convertSignalToScanResult } from '@/utils/mockData';
 import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
@@ -23,8 +22,6 @@ import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLay
 export function ScannerSetup() {
   const navigate = useNavigate();
   const { scanConfig, setScanConfig, selectedMode } = useScanner();
-  const [, setScanResults] = useKV<ScanResult[]>('scan-results', []);
-  const [, setScanMetadata] = useKV<any>('scan-metadata', null);
   const [isScanning, setIsScanning] = useState(false);
   const { toast } = useToast();
 
@@ -39,12 +36,21 @@ export function ScannerSetup() {
     setIsScanning(true);
 
     try {
-      // Call the real backend API with selected mode
-      const response = await api.getSignals({
+      // Add timeout to prevent indefinite waiting (2 minutes for heavy computation)
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 120000)
+      );
+      
+      const apiPromise = api.getSignals({
         limit: scanConfig.topPairs || 20,
         min_score: selectedMode?.min_confluence_score || 0,
         sniper_mode: scanConfig.sniperMode,
+        majors: scanConfig.categories.majors,
+        altcoins: scanConfig.categories.altcoins,
+        meme_mode: scanConfig.categories.memeMode,
       });
+
+      const response = await Promise.race([apiPromise, timeoutPromise]) as any;
 
       if (response.error) {
         console.error('[ScannerSetup] API error, falling back to mock data:', response.error);
@@ -54,8 +60,8 @@ export function ScannerSetup() {
         });
         // Fallback to mock data
         const results = generateMockScanResults(8);
-        setScanResults(results);
-        setScanMetadata(null);
+        localStorage.setItem('scan-results', JSON.stringify(results));
+        localStorage.removeItem('scan-metadata');
       } else if (response.data) {
         console.log('[ScannerSetup] Received signals:', response.data.signals.length);
         console.log('[ScannerSetup] Scan metadata:', {
@@ -66,17 +72,18 @@ export function ScannerSetup() {
         
         // Convert backend signals to frontend ScanResult format
         const results = response.data.signals.map(convertSignalToScanResult);
-        setScanResults(results);
+        localStorage.setItem('scan-results', JSON.stringify(results));
         
         // Store scan metadata for display
-        setScanMetadata({
+        const metadata = {
           mode: response.data.mode,
           appliedTimeframes: response.data.applied_timeframes,
           effectiveMinScore: response.data.effective_min_score,
           baselineMinScore: response.data.baseline_min_score,
           profile: response.data.profile,
           scanned: response.data.scanned,
-        });
+        };
+        localStorage.setItem('scan-metadata', JSON.stringify(metadata));
         
         console.log('[ScannerSetup] Navigating to results with', results.length, 'setups');
         toast({
@@ -96,7 +103,8 @@ export function ScannerSetup() {
       });
       // Fallback to mock data
       const results = generateMockScanResults(8);
-      setScanResults(results);
+      localStorage.setItem('scan-results', JSON.stringify(results));
+      localStorage.removeItem('scan-metadata');
       setIsScanning(false);
       navigate('/results');
     }

@@ -212,7 +212,7 @@ class Orchestrator:
         context.multi_tf_data = self._ingest_data(symbol)
         
         if not context.multi_tf_data or not context.multi_tf_data.timeframes:
-            logger.warning("%s: No data available", symbol)
+            logger.info("%s: REJECTED - No market data available (exchange may be restricted or offline)", symbol)
             return None
         
         # Stage 3: Indicator computation
@@ -229,7 +229,11 @@ class Orchestrator:
         
         # Check quality gate
         if context.confluence_breakdown.total_score < self.config.min_confluence_score:
-            logger.debug("%s: Below minimum confluence (%.1f < %s)", symbol, context.confluence_breakdown.total_score, self.config.min_confluence_score)
+            logger.info("%s: REJECTED - Confluence too low (%.1f < %.1f) | Factors: %s", 
+                       symbol, 
+                       context.confluence_breakdown.total_score, 
+                       self.config.min_confluence_score,
+                       ', '.join([f"{f.name}={f.score:.1f}" for f in context.confluence_breakdown.factors[:3]]))
             
             # Log rejection event
             self.telemetry.log_event(create_signal_rejected_event(
@@ -251,13 +255,21 @@ class Orchestrator:
         # Stage 7: Risk validation
         logger.debug("%s: Validating risk parameters", symbol)
         if not context.plan or not self._validate_risk(context.plan):
-            logger.debug("%s: Failed risk validation", symbol)
+            reason = "No trade plan generated" if not context.plan else "Failed risk validation"
+            if context.plan:
+                logger.info("%s: REJECTED - Risk validation failed | R:R=%.2f, Stop=%.2f, Entry=%.2f", 
+                           symbol, 
+                           context.plan.risk_reward if hasattr(context.plan, 'risk_reward') else 0,
+                           context.plan.stop_loss.level if context.plan.stop_loss else 0,
+                           context.plan.entry_zone.near_entry if context.plan.entry_zone else 0)
+            else:
+                logger.info("%s: REJECTED - No trade plan could be generated (insufficient SMC patterns)", symbol)
             
             # Log rejection event
             self.telemetry.log_event(create_signal_rejected_event(
                 run_id=run_id,
                 symbol=symbol,
-                reason="Failed risk validation",
+                reason=reason,
                 gate_name="risk_validation"
             ))
             

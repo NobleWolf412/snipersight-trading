@@ -1,12 +1,11 @@
 import { useNavigate } from 'react-router-dom';
-import { useKV } from '@github/spark/hooks';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ArrowUp, ArrowDown, Minus, TrendUp, Eye, FileText } from '@phosphor-icons/react';
 import type { ScanResult } from '@/utils/mockData';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChartModal } from '@/components/ChartModal/ChartModal';
 import { DetailsModal } from '@/components/DetailsModal/DetailsModal';
 import { LiveTicker } from '@/components/LiveTicker';
@@ -15,11 +14,31 @@ import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLay
 
 export function ScanResults() {
   const navigate = useNavigate();
-  const [scanResults] = useKV<ScanResult[]>('scan-results', []);
-  const [scanMetadata] = useKV<any>('scan-metadata', null);
+  const [scanResults, setScanResults] = useState<ScanResult[]>([]);
+  const [scanMetadata, setScanMetadata] = useState<any>(null);
   const [selectedResult, setSelectedResult] = useState<ScanResult | null>(null);
   const [isChartModalOpen, setIsChartModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    const resultsStr = localStorage.getItem('scan-results');
+    const metadataStr = localStorage.getItem('scan-metadata');
+    if (resultsStr) {
+      try {
+        setScanResults(JSON.parse(resultsStr));
+      } catch (e) {
+        console.error('Failed to parse scan results:', e);
+      }
+    }
+    if (metadataStr) {
+      try {
+        setScanMetadata(JSON.parse(metadataStr));
+      } catch (e) {
+        console.error('Failed to parse scan metadata:', e);
+      }
+    }
+  }, []);
 
   const results = scanResults || [];
 

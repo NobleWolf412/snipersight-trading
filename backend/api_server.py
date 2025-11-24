@@ -343,7 +343,10 @@ async def update_smc_config(update: SMCConfigUpdate):
 async def get_signals(
     limit: int = Query(default=10, ge=1, le=100),
     min_score: float = Query(default=0, ge=0, le=100),  # 0 allows mode baseline logic
-    sniper_mode: str = Query(default="recon")
+    sniper_mode: str = Query(default="recon"),
+    majors: bool = Query(default=True),
+    altcoins: bool = Query(default=True),
+    meme_mode: bool = Query(default=False)
 ):
     """Generate trading signals applying selected sniper mode configuration.
 
@@ -352,7 +355,11 @@ async def get_signals(
     - Apply its timeframes & baseline min_confluence_score.
     - If caller supplies min_score > 0 it overrides upward; else baseline used.
     - Profile updated to mode.profile for downstream heuristics.
-    Falls back to demo signals if exchange data unavailable.
+    
+    Category filtering:
+    - majors: BTC, ETH, BNB
+    - altcoins: SOL, XRP, ADA, AVAX, MATIC, DOT, LINK, etc.
+    - meme_mode: DOGE, SHIB, PEPE, etc.
     """
     try:
         # Resolve requested mode (fallback handled by exception)
@@ -371,20 +378,46 @@ async def get_signals(
 
         # Acquire symbols (fallback list on failure)
         try:
-            symbols = exchange_adapter.get_top_symbols(n=min(limit * 2, 20), quote_currency='USDT')
+            all_symbols = exchange_adapter.get_top_symbols(n=min(limit * 3, 50), quote_currency='USDT')
         except Exception as exchange_error:  # pyright: ignore - intentional broad catch for fallback
             logger.warning("Exchange unavailable (geo-restriction or network issue): %s", exchange_error)
-            symbols = []
+            all_symbols = []
 
-        if not symbols:
-            symbols = [
+        if not all_symbols:
+            all_symbols = [
                 'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT',
-                'ADA/USDT', 'AVAX/USDT', 'MATIC/USDT', 'DOT/USDT', 'LINK/USDT'
+                'ADA/USDT', 'AVAX/USDT', 'MATIC/USDT', 'DOT/USDT', 'LINK/USDT',
+                'DOGE/USDT', 'SHIB/USDT', 'PEPE/USDT'
             ]
+        
+        # Filter symbols by category
+        major_coins = {'BTC/USDT', 'ETH/USDT', 'BNB/USDT'}
+        meme_coins = {'DOGE/USDT', 'SHIB/USDT', 'PEPE/USDT', 'BONK/USDT', 'FLOKI/USDT', 'WIF/USDT'}
+        
+        symbols = []
+        for symbol in all_symbols:
+            if symbol in major_coins and majors:
+                symbols.append(symbol)
+            elif symbol in meme_coins and meme_mode:
+                symbols.append(symbol)
+            elif symbol not in major_coins and symbol not in meme_coins and altcoins:
+                symbols.append(symbol)
+        
+        # If no categories selected, use all
+        if not symbols:
+            symbols = all_symbols
+            
+        symbols = symbols[:limit]
+        logger.info("Filtering %d symbols by categories (majors=%s, altcoins=%s, meme=%s)", 
+                   len(symbols), majors, altcoins, meme_mode)
 
         # Run scan pipeline
-        trade_plans = orchestrator.scan(symbols[:limit])
+        trade_plans = orchestrator.scan(symbols)
 
+        rejected_count = len(symbols) - len(trade_plans)
+        logger.info("Scan completed: %d signals generated, %d rejected from %d symbols", 
+                   len(trade_plans), rejected_count, len(symbols))
+        
         # Transform TradePlans for response
         signals = []
         for plan in trade_plans:
@@ -419,11 +452,16 @@ async def get_signals(
             "signals": signals,
             "total": len(signals),
             "scanned": len(symbols),
+            "rejected": rejected_count,
             "mode": mode.name,
             "applied_timeframes": mode.timeframes,
             "effective_min_score": effective_min,
             "baseline_min_score": mode.min_confluence_score,
-            "profile": mode.profile
+            "profile": mode.profile,
+            "debug": {
+                "message": f"{len(trade_plans)} signals passed all quality gates, {rejected_count} rejected",
+                "rejection_reasons": "Check backend logs for detailed rejection reasons (confluence scores, risk validation, data availability)"
+            }
         }
 
     except HTTPException:

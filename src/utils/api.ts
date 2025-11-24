@@ -160,10 +160,24 @@ class ApiClient {
     return this.request<{ modes: ScannerMode[]; total: number }>('/scanner/modes');
   }
 
-  async getSignals(params?: { limit?: number; min_score?: number; sniper_mode?: string }) {
-    const query = new URLSearchParams(
-      params as Record<string, string>
-    ).toString();
+  async getSignals(params?: { 
+    limit?: number; 
+    min_score?: number; 
+    sniper_mode?: string;
+    majors?: boolean;
+    altcoins?: boolean;
+    meme_mode?: boolean;
+  }) {
+    const queryParams: Record<string, string> = {};
+    if (params) {
+      if (params.limit !== undefined) queryParams.limit = params.limit.toString();
+      if (params.min_score !== undefined) queryParams.min_score = params.min_score.toString();
+      if (params.sniper_mode) queryParams.sniper_mode = params.sniper_mode;
+      if (params.majors !== undefined) queryParams.majors = params.majors.toString();
+      if (params.altcoins !== undefined) queryParams.altcoins = params.altcoins.toString();
+      if (params.meme_mode !== undefined) queryParams.meme_mode = params.meme_mode.toString();
+    }
+    const query = new URLSearchParams(queryParams).toString();
     return this.request<SignalsResponse>(
       `/scanner/signals${query ? `?${query}` : ''}`
     );
