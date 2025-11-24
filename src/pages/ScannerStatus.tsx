@@ -104,5 +104,3 @@ function StatCard({ title, icon, value, subtitle, accent }: { title: string; ico
     </Card>
   );
 }
-
-export default ScannerStatus;

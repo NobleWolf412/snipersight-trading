@@ -34,5 +34,3 @@ export function BotSetup() {
     </div>
   );
 }
-
-export default BotSetup;

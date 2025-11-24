@@ -287,5 +287,3 @@ export function ScannerSetup() {
     </PageLayout>
   );
 }
-
-export default ScannerSetup;
