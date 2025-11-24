@@ -38,7 +38,7 @@ export function ScannerSetup() {
     });
     setIsScanning(true);
 
-    try:
+    try {
       // Add timeout to prevent indefinite waiting (2 minutes for heavy computation)
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Request timeout')), 120000)

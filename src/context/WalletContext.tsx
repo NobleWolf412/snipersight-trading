@@ -20,8 +20,8 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [wallet, setWallet] = useKV<WalletConnection | null>('wallet-connection', null);
-  const [isConnecting, setIsConnecting] = useKV<boolean>('wallet-connecting', false);
+  const [wallet, setWallet] = useLocalStorage<WalletConnection | null>('wallet-connection', null);
+  const [isConnecting, setIsConnecting] = useLocalStorage<boolean>('wallet-connecting', false);
 
   const isConnected = !!(wallet && wallet.address);
 

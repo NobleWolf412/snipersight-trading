@@ -1,4 +1,4 @@
-import { useKV } from '@github/spark/hooks'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -94,7 +94,7 @@ const initialPhases: Phase[] = [
 ]
 
 export function ProgressTrackerDetailed() {
-    const [phases, setPhases] = useKV<Phase[]>('snipersight-progress-detailed', initialPhases)
+    const [phases, setPhases] = useLocalStorage<Phase[]>('snipersight-progress-detailed', initialPhases)
 
     const toggleTask = (phaseId: string, taskId: string) => {
         setPhases((currentPhases) => {

@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { CheckCircle, Circle, Clock } from '@phosphor-icons/react'
-import { useKV } from '@github/spark/hooks'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
 
 export interface Phase {
   id: string
@@ -87,7 +87,7 @@ const defaultPhases: Phase[] = [
 ]
 
 export function ProgressTracker() {
-  const [phases, setPhases] = useKV<Phase[]>('snipersight-phases', defaultPhases)
+  const [phases, setPhases] = useLocalStorage<Phase[]>('snipersight-phases', defaultPhases)
 
   const phasesList = phases || defaultPhases
   const completedCount = phasesList.filter(p => p.status === 'completed').length

@@ -1,5 +1,5 @@
 import { createContext, useContext, ReactNode, useEffect, useState } from 'react';
-import { useKV } from '@github/spark/hooks';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import type { SniperMode } from '@/types/sniperMode';
 import type { ScannerMode } from '@/utils/api';
 
@@ -109,10 +109,10 @@ const SCANNER_MODES: ScannerMode[] = [
 const ScannerContext = createContext<ScannerContextType | undefined>(undefined);
 
 export function ScannerProvider({ children }: { children: ReactNode }) {
-  const [scanConfig, setScanConfig] = useKV<ScanConfig>('scan-config', defaultScanConfig);
-  const [botConfig, setBotConfig] = useKV<BotConfig>('bot-config', defaultBotConfig);
-  const [isScanning, setIsScanning] = useKV<boolean>('is-scanning', false);
-  const [isBotActive, setIsBotActive] = useKV<boolean>('is-bot-active', false);
+  const [scanConfig, setScanConfig] = useLocalStorage<ScanConfig>('scan-config', defaultScanConfig);
+  const [botConfig, setBotConfig] = useLocalStorage<BotConfig>('bot-config', defaultBotConfig);
+  const [isScanning, setIsScanning] = useLocalStorage<boolean>('is-scanning', false);
+  const [isBotActive, setIsBotActive] = useLocalStorage<boolean>('is-bot-active', false);
   
   // Scanner modes are now static, no API fetch needed
   const [scannerModes] = useState<ScannerMode[]>(SCANNER_MODES);
