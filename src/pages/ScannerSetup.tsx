@@ -203,15 +203,9 @@ export function ScannerSetup() {
             <div className="space-y-4">
               <Label className="text-base font-semibold">Asset Categories</Label>
               <div className="space-y-3">
-<<<<<<< HEAD
                 <div className="flex items-center justify-between p-4 bg-background rounded-lg border-2 border-border hover:border-accent/50 transition-colors">
                   <div className="flex items-center gap-3">
                     <Label htmlFor="majors" className="cursor-pointer text-base font-medium">Majors</Label>
-=======
-                <div className="flex items-center justify-between p-4 bg-background rounded-lg border border-border">
-                  <div className="flex items-center gap-3 flex-1">
-                    <Label htmlFor="majors" className="cursor-pointer text-base">Majors</Label>
->>>>>>> origin/main
                     <Badge variant="outline" className="text-xs">BTC, ETH, BNB</Badge>
                   </div>
                   <Switch
@@ -227,11 +221,7 @@ export function ScannerSetup() {
                   />
                 </div>
 
-<<<<<<< HEAD
                 <div className="flex items-center justify-between p-4 bg-background rounded-lg border-2 border-border hover:border-accent/50 transition-colors">
-=======
-                <div className="flex items-center gap-3 flex-1">
->>>>>>> origin/main
                   <div className="flex items-center gap-3">
                     <Label htmlFor="altcoins" className="cursor-pointer text-base font-medium">Altcoins</Label>
                     <Badge variant="outline" className="text-xs">SOL, MATIC, LINK</Badge>
@@ -249,11 +239,7 @@ export function ScannerSetup() {
                   />
                 </div>
 
-<<<<<<< HEAD
                 <div className="flex items-center justify-between p-4 bg-background rounded-lg border-2 border-border hover:border-warning/50 transition-colors">
-=======
-                <div className="flex items-center gap-3 flex-1">
->>>>>>> origin/main
                   <div className="flex items-center gap-3">
                     <Label htmlFor="meme" className="cursor-pointer text-base font-medium">Meme Mode</Label>
                     <Badge variant="outline" className="text-xs bg-warning/20 text-warning border-warning/40">VOLATILE</Badge>

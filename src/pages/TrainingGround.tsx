@@ -36,8 +36,8 @@ export function TrainingGround() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="max-w-4xl mx-auto space-y-10">
+    <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10 py-12">
+      <div className="space-y-10">
         <div className="space-y-3">
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
             <Target size={32} weight="bold" className="text-accent" />
