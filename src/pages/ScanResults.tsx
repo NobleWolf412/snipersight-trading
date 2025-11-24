@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowUp, ArrowDown, Minus, TrendUp, Eye, FileText } from '@phosphor-icons/react';
+import { ArrowUp, ArrowDown, Minus, TrendUp, Eye, FileText, CaretDown, CaretUp } from '@phosphor-icons/react';
 import type { ScanResult } from '@/utils/mockData';
 import { useState, useEffect } from 'react';
 import { ChartModal } from '@/components/ChartModal/ChartModal';
@@ -19,8 +19,9 @@ export function ScanResults() {
   const [selectedResult, setSelectedResult] = useState<ScanResult | null>(null);
   const [isChartModalOpen, setIsChartModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [showMetadata, setShowMetadata] = useState(true);
+  const [showResults, setShowResults] = useState(true);
 
-  // Load from localStorage on mount
   useEffect(() => {
     const resultsStr = localStorage.getItem('scan-results');
     const metadataStr = localStorage.getItem('scan-metadata');
@@ -68,11 +69,21 @@ export function ScanResults() {
     return (
       <PageLayout maxWidth="2xl">
         <div className="text-center space-y-6 py-12">
-          <TrendUp size={80} className="mx-auto text-muted-foreground" />
-          <h2 className="text-3xl font-bold text-foreground">No Targets Acquired</h2>
+          <div className="relative inline-block">
+            <TrendUp size={80} className="mx-auto text-muted-foreground" />
+            <div className="absolute inset-0 animate-ping">
+              <TrendUp size={80} className="mx-auto text-accent opacity-20" />
+            </div>
+          </div>
+          <h2 className="text-3xl font-bold text-foreground heading-hud">No Targets Acquired</h2>
           <p className="text-lg text-muted-foreground">Run a scan to identify trading opportunities</p>
-          <Button onClick={() => navigate('/scan')} className="bg-accent hover:bg-accent/90 text-accent-foreground h-12 text-base" size="lg">
-            Arm Scanner
+          <Button 
+            onClick={() => navigate('/scan')} 
+            className="bg-accent hover:bg-accent/90 text-accent-foreground h-14 text-lg px-8 btn-tactical-scanner" 
+            size="lg"
+          >
+            <TrendUp size={24} weight="bold" />
+            ARM SCANNER
           </Button>
         </div>
       </PageLayout>
@@ -84,139 +95,186 @@ export function ScanResults() {
       <div className="space-y-10">
         <PageHeader
           title="Targets Locked"
-          description={`${results.length} trading setup${results.length !== 1 ? 's' : ''} identified`}
+          description={`${results.length} high-probability setup${results.length !== 1 ? 's' : ''} identified`}
           icon={<TrendUp size={40} weight="bold" className="text-accent" />}
           actions={
-            <Button onClick={() => navigate('/scan')} variant="outline" className="h-12" size="lg">
+            <Button 
+              onClick={() => navigate('/scan')} 
+              variant="outline" 
+              className="h-12 hover:border-accent/50 transition-all" 
+              size="lg"
+            >
+              <TrendUp size={20} weight="bold" />
               New Scan
             </Button>
           }
         />
 
-        <PageSection>
+        <div className="card-3d rounded-xl overflow-hidden border border-accent/30">
           <LiveTicker symbols={results.slice(0, 6).map(r => r.pair)} />
-        </PageSection>
+        </div>
 
         {scanMetadata && (
-          <Card className="bg-accent/5 border-accent/30">
-            <CardHeader>
-              <CardTitle className="text-base">Scan Configuration</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+          <Card className="bg-accent/5 border-accent/30 card-3d overflow-hidden">
+            <CardHeader 
+              className="cursor-pointer select-none hover:bg-accent/10 transition-colors"
+              onClick={() => setShowMetadata(!showMetadata)}
+            >
+              <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-muted-foreground mb-1">Mode</div>
-                  <Badge className="bg-accent text-accent-foreground uppercase font-mono">
-                    {scanMetadata.mode}
-                  </Badge>
+                  <CardTitle className="text-base heading-hud flex items-center gap-3">
+                    <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
+                    SCAN CONFIGURATION
+                  </CardTitle>
                 </div>
-                <div>
-                  <div className="text-muted-foreground mb-1">Timeframes</div>
-                  <div className="font-mono font-semibold">
-                    {scanMetadata.appliedTimeframes?.join(' · ')}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground mb-1">Min Score</div>
-                  <div className="font-mono font-semibold text-accent">
-                    {scanMetadata.effectiveMinScore}%
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground mb-1">Profile</div>
-                  <div className="font-mono font-semibold capitalize">
-                    {scanMetadata.profile?.replace(/_/g, ' ')}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground mb-1">Scanned</div>
-                  <div className="font-mono font-semibold">
-                    {scanMetadata.scanned} symbols
-                  </div>
-                </div>
+                {showMetadata ? 
+                  <CaretUp size={20} weight="bold" className="text-accent" /> : 
+                  <CaretDown size={20} weight="bold" className="text-muted-foreground" />
+                }
               </div>
-            </CardContent>
+            </CardHeader>
+            {showMetadata && (
+              <CardContent className="animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                  <div className="p-4 bg-background/40 rounded-lg border border-accent/20">
+                    <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Mode</div>
+                    <Badge className="bg-accent text-accent-foreground uppercase font-mono font-bold">
+                      {scanMetadata.mode}
+                    </Badge>
+                  </div>
+                  <div className="p-4 bg-background/40 rounded-lg border border-primary/20">
+                    <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Timeframes</div>
+                    <div className="font-mono font-semibold text-primary">
+                      {scanMetadata.appliedTimeframes?.join(' · ')}
+                    </div>
+                  </div>
+                  <div className="p-4 bg-background/40 rounded-lg border border-success/20">
+                    <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Min Score</div>
+                    <div className="font-mono font-bold text-lg text-success">
+                      {scanMetadata.effectiveMinScore}%
+                    </div>
+                  </div>
+                  <div className="p-4 bg-background/40 rounded-lg border border-accent/20">
+                    <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Profile</div>
+                    <div className="font-mono font-semibold capitalize text-accent">
+                      {scanMetadata.profile?.replace(/_/g, ' ')}
+                    </div>
+                  </div>
+                  <div className="p-4 bg-background/40 rounded-lg border border-warning/20">
+                    <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Scanned</div>
+                    <div className="font-mono font-bold text-lg text-warning">
+                      {scanMetadata.scanned}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            )}
           </Card>
         )}
 
-        <Card className="bg-card/50 border-accent/30">
-          <CardHeader>
-            <CardTitle>Scan Results</CardTitle>
+        <Card className="bg-card/50 border-accent/30 card-3d overflow-hidden">
+          <CardHeader 
+            className="cursor-pointer select-none hover:bg-accent/5 transition-colors"
+            onClick={() => setShowResults(!showResults)}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="heading-hud flex items-center gap-3">
+                  <div className="w-2 h-2 bg-primary rounded-full scan-pulse-fast" />
+                  SCAN RESULTS
+                </CardTitle>
+              </div>
+              {showResults ? 
+                <CaretUp size={24} weight="bold" className="text-primary" /> : 
+                <CaretDown size={24} weight="bold" className="text-muted-foreground" />
+              }
+            </div>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>PAIR</TableHead>
-                  <TableHead>LIVE PRICE</TableHead>
-                  <TableHead>TREND</TableHead>
-                  <TableHead>CONFIDENCE</TableHead>
-                  <TableHead>RISK</TableHead>
-                  <TableHead>TYPE</TableHead>
-                  <TableHead>ACTIONS</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {results.map((result) => (
-                  <TableRow key={result.id}>
-                    <TableCell className="font-bold">{result.pair}</TableCell>
-                    <TableCell>
-                      <PriceDisplay symbol={result.pair} size="sm" />
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={getTrendColor(result.trendBias)}>
-                        <span className="flex items-center gap-1">
-                          {getTrendIcon(result.trendBias)}
-                          {result.trendBias}
-                        </span>
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 bg-muted rounded-full h-2">
-                          <div
-                            className="bg-accent h-2 rounded-full"
-                            style={{ width: `${result.confidenceScore}%` }}
-                          />
-                        </div>
-                        <span className="text-sm font-medium">{result.confidenceScore.toFixed(0)}%</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{result.riskScore.toFixed(1)}/10</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={result.classification === 'SWING' ? 'default' : 'secondary'}>
-                        {result.classification}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleViewChart(result)}
-                          className="hover:bg-accent/20 hover:border-accent"
-                        >
-                          <Eye size={16} />
-                          CHART
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleViewDetails(result)}
-                          className="hover:bg-accent/20 hover:border-accent"
-                        >
-                          <FileText size={16} />
-                          DETAILS
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
+          {showResults && (
+            <CardContent className="p-0 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-border/40 hover:bg-accent/5">
+                      <TableHead className="heading-hud text-xs">PAIR</TableHead>
+                      <TableHead className="heading-hud text-xs">LIVE PRICE</TableHead>
+                      <TableHead className="heading-hud text-xs">TREND</TableHead>
+                      <TableHead className="heading-hud text-xs">CONFIDENCE</TableHead>
+                      <TableHead className="heading-hud text-xs">RISK</TableHead>
+                      <TableHead className="heading-hud text-xs">TYPE</TableHead>
+                      <TableHead className="heading-hud text-xs">ACTIONS</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {results.map((result, index) => (
+                      <TableRow 
+                        key={result.id} 
+                        className="border-border/40 hover:bg-accent/5 transition-colors"
+                        style={{ animationDelay: `${index * 50}ms` }}
+                      >
+                        <TableCell className="font-bold text-accent">{result.pair}</TableCell>
+                        <TableCell>
+                          <PriceDisplay symbol={result.pair} size="sm" />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={getTrendColor(result.trendBias)}>
+                            <span className="flex items-center gap-1">
+                              {getTrendIcon(result.trendBias)}
+                              {result.trendBias}
+                            </span>
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="w-24 bg-muted rounded-full h-2.5">
+                              <div
+                                className="bg-accent h-2.5 rounded-full transition-all duration-500 hud-glow-cyan"
+                                style={{ width: `${result.confidenceScore}%` }}
+                              />
+                            </div>
+                            <span className="text-sm font-bold font-mono text-accent">{result.confidenceScore.toFixed(0)}%</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-mono font-bold">{result.riskScore.toFixed(1)}/10</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={result.classification === 'SWING' ? 'default' : 'secondary'}
+                            className="font-bold"
+                          >
+                            {result.classification}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewChart(result)}
+                              className="hover:bg-accent/20 hover:border-accent transition-all"
+                            >
+                              <Eye size={16} weight="bold" />
+                              CHART
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewDetails(result)}
+                              className="hover:bg-primary/20 hover:border-primary transition-all"
+                            >
+                              <FileText size={16} weight="bold" />
+                              DETAILS
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          )}
         </Card>
 
         {selectedResult && (
