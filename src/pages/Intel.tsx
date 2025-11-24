@@ -1,23 +1,24 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ChartLine, TrendUp, TrendDown, Activity } from '@phosphor-icons/react';
+import { PageShell } from '@/components/layout/PageShell';
 
 export function Intel() {
   return (
-    <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10 py-12">
-      <div className="space-y-8">
+    <PageShell>
+      <div className="space-y-10 md:space-y-12">
         <div className="space-y-3">
-          <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
+          <h1 className="text-4xl font-bold text-foreground flex items-center gap-4 heading-hud">
             <ChartLine size={40} weight="bold" className="text-accent" />
             MARKET INTEL
           </h1>
           <p className="text-lg text-muted-foreground">Real-time market insights and analysis</p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          <Card className="bg-card/50 border-accent/30">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="card-3d">
             <CardHeader className="pb-5">
-              <CardTitle className="text-sm">BTC TREND</CardTitle>
+              <CardTitle className="text-sm heading-hud">BTC TREND</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
@@ -30,9 +31,9 @@ export function Intel() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/50 border-accent/30">
+          <Card className="card-3d">
             <CardHeader className="pb-5">
-              <CardTitle className="text-sm">MARKET VOLATILITY</CardTitle>
+              <CardTitle className="text-sm heading-hud">MARKET VOLATILITY</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
@@ -45,9 +46,9 @@ export function Intel() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/50 border-accent/30">
+          <Card className="card-3d">
             <CardHeader className="pb-5">
-              <CardTitle className="text-sm">ETH TREND</CardTitle>
+              <CardTitle className="text-sm heading-hud">ETH TREND</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
@@ -61,9 +62,9 @@ export function Intel() {
           </Card>
         </div>
 
-        <Card className="bg-card/50 border-accent/30">
+        <Card className="command-panel">
           <CardHeader className="pb-6">
-            <CardTitle className="text-xl">Market Heatmap</CardTitle>
+            <CardTitle className="text-xl heading-hud">Market Heatmap</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="bg-muted/30 rounded-lg p-16 border border-border flex items-center justify-center min-h-[350px]">
@@ -77,12 +78,12 @@ export function Intel() {
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-accent/30">
+        <Card className="command-panel">
           <CardHeader>
-            <CardTitle>Active Alerts</CardTitle>
+            <CardTitle className="heading-hud">Active Alerts</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="p-4 bg-success/10 border border-success/50 rounded">
                 <div className="flex items-center justify-between mb-2">
                   <Badge className="bg-success/20 text-success border-success/50">OPPORTUNITY</Badge>
@@ -110,7 +111,7 @@ export function Intel() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageShell>
   );
 }
 

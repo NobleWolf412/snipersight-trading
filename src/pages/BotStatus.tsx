@@ -8,6 +8,7 @@ import { PriceDisplay } from '@/components/PriceDisplay';
 import { LiveTicker } from '@/components/LiveTicker';
 import { ActivityFeed } from '@/components/telemetry/ActivityFeed';
 import { telemetryService, type TelemetryAnalytics } from '@/services/telemetryService';
+import { PageShell } from '@/components/layout/PageShell';
 
 export function BotStatus() {
   const navigate = useNavigate();
@@ -40,28 +41,27 @@ export function BotStatus() {
   };
 
   return (
-    <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10 py-12">
-      <div className="space-y-8">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
+    <PageShell>
+      <div className="space-y-10 md:space-y-12">
+        <div className="flex items-center justify-between flex-wrap gap-6">
+          <div className="space-y-3">
+            <h1 className="text-4xl font-bold text-foreground flex items-center gap-4 heading-hud">
               <Robot size={40} weight="bold" className="text-warning" />
               SNIPER IN THE FIELD
             </h1>
             <p className="text-lg text-muted-foreground">Autonomous bot operational status</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-4">
             <Button
               onClick={() => navigate('/')}
               variant="outline"
-              className="h-12"
               size="lg"
             >
               Home
             </Button>
             <Button
               onClick={handleAbortMission}
-              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground h-12"
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
               size="lg"
             >
               <StopCircle size={22} weight="fill" />
@@ -70,10 +70,10 @@ export function BotStatus() {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          <Card className="bg-card/50 border-accent/30">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="card-3d">
             <CardHeader className="pb-5">
-              <CardTitle className="text-sm">MISSION STATUS</CardTitle>
+              <CardTitle className="text-sm heading-hud">MISSION STATUS</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
@@ -86,9 +86,9 @@ export function BotStatus() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/50 border-accent/30">
+          <Card className="card-3d">
             <CardHeader className="pb-5">
-              <CardTitle className="text-sm">ACTIVE TRADES</CardTitle>
+              <CardTitle className="text-sm heading-hud">ACTIVE TRADES</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">2/3</div>
@@ -96,9 +96,9 @@ export function BotStatus() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/50 border-accent/30">
+          <Card className="card-3d">
             <CardHeader>
-              <CardTitle className="text-sm">RUNTIME</CardTitle>
+              <CardTitle className="text-sm heading-hud">RUNTIME</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">04:23:15</div>
@@ -110,10 +110,10 @@ export function BotStatus() {
         <LiveTicker symbols={['BTC/USDT', 'ETH/USDT', 'SOL/USDT']} />
 
         {/* Analytics Dashboard */}
-        <div className="grid md:grid-cols-4 gap-4">
-          <Card className="bg-card/50 border-accent/30">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          <Card className="card-3d">
             <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
+              <CardTitle className="text-sm flex items-center gap-2 heading-hud">
                 <Target size={16} />
                 TOTAL SCANS
               </CardTitle>
@@ -126,9 +126,9 @@ export function BotStatus() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/50 border-accent/30">
+          <Card className="card-3d">
             <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
+              <CardTitle className="text-sm flex items-center gap-2 heading-hud">
                 <CheckCircle size={16} />
                 SIGNALS GENERATED
               </CardTitle>
@@ -141,9 +141,9 @@ export function BotStatus() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/50 border-accent/30">
+          <Card className="card-3d">
             <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
+              <CardTitle className="text-sm flex items-center gap-2 heading-hud">
                 <XCircle size={16} />
                 SIGNALS REJECTED
               </CardTitle>
@@ -156,9 +156,9 @@ export function BotStatus() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/50 border-accent/30">
+          <Card className="card-3d">
             <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
+              <CardTitle className="text-sm flex items-center gap-2 heading-hud">
                 <TrendUp size={16} />
                 SUCCESS RATE
               </CardTitle>
@@ -175,6 +175,6 @@ export function BotStatus() {
         {/* Real-time Activity Feed */}
         <ActivityFeed limit={100} autoScroll={true} showFilters={true} pollInterval={3000} />
       </div>
-    </div>
+    </PageShell>
   );
 }

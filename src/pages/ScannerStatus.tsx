@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { Crosshair, Target, TrendUp, XCircle, CheckCircle } from '@phosphor-icons/react';
 import { telemetryService, type TelemetryAnalytics } from '@/services/telemetryService';
 import { useNavigate } from 'react-router-dom';
+import { PageShell } from '@/components/layout/PageShell';
 
 export function ScannerStatus() {
   const { scanConfig } = useScanner();
@@ -30,21 +31,21 @@ export function ScannerStatus() {
   const handleReconfigure = () => navigate('/scanner/setup');
 
   return (
-    <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10 py-12">
-      <div className="space-y-10">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
+    <PageShell>
+      <div className="space-y-10 md:space-y-12">
+        <div className="flex items-center justify-between flex-wrap gap-6">
+          <div className="space-y-3">
             <h1 className="text-4xl font-bold flex items-center gap-4 heading-hud">
               <Crosshair size={44} weight="bold" className="text-accent" />
               SCANNER OPERATIONAL
             </h1>
             <p className="text-lg text-muted-foreground">Reconnaissance scanner real-time status</p>
           </div>
-          <Button variant="outline" onClick={handleReconfigure} className="h-12">Configure</Button>
+          <Button variant="outline" onClick={handleReconfigure} size="lg">Configure</Button>
         </div>
 
         {/* Configuration Summary */}
-        <Card className="bg-card/50 border-accent/30 hud-panel">
+        <Card className="command-panel">
           <CardHeader className="pb-4">
             <CardTitle className="text-sm tracking-wider heading-hud">CONFIGURATION SNAPSHOT</CardTitle>
           </CardHeader>
@@ -77,7 +78,7 @@ export function ScannerStatus() {
         </Card>
 
         {/* Analytics */}
-        <div className="grid md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           <StatCard title="TOTAL SCANS" icon={<Target size={16} />} value={analytics?.metrics.total_scans || 0} subtitle="Completed" />
           <StatCard title="SIGNALS GENERATED" icon={<CheckCircle size={16} />} value={analytics?.metrics.total_signals_generated || 0} subtitle="High conviction" accent="text-success" />
           <StatCard title="SIGNALS REJECTED" icon={<XCircle size={16} />} value={analytics?.metrics.total_signals_rejected || 0} subtitle="Failed gates" accent="text-orange-400" />
@@ -87,15 +88,15 @@ export function ScannerStatus() {
         {/* Activity Feed */}
         <ActivityFeed limit={75} showFilters pollInterval={4000} />
       </div>
-    </div>
+    </PageShell>
   );
 }
 
 function StatCard({ title, icon, value, subtitle, accent }: { title: string; icon: any; value: any; subtitle: string; accent?: string }) {
   return (
-    <Card className="bg-card/50 border-accent/30 card-3d">
+    <Card className="card-3d">
       <CardHeader>
-        <CardTitle className="text-sm flex items-center gap-2">{icon}{title}</CardTitle>
+        <CardTitle className="text-sm flex items-center gap-2 heading-hud">{icon}{title}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className={`text-2xl font-bold ${accent || 'text-foreground'}`}>{value}</div>
