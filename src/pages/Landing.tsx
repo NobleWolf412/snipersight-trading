@@ -20,7 +20,7 @@ export function Landing() {
 
         {/* Hero section */}
         <section className="relative py-16 md:py-24">
-          <div className="max-w-6xl mx-auto px-6 md:px-8">
+          <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10">
             <div className="relative space-y-8">
               {/* Status indicator */}
               <div className="flex items-center gap-3 text-xs tracking-widest text-accent">
@@ -47,7 +47,7 @@ export function Landing() {
 
         {/* Scanner & Bot Features */}
         <section className="relative py-20 md:py-32">
-          <div className="max-w-6xl mx-auto px-6 md:px-8">
+          <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10">
             <div className="grid md:grid-cols-2 gap-12 md:gap-16">
               
               {/* Scanner Feature */}
@@ -170,7 +170,7 @@ export function Landing() {
 
         {/* Footer with system status */}
         <footer className="relative py-12 border-t border-border/40">
-          <div className="max-w-6xl mx-auto px-6 md:px-8">
+          <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10">
             <SystemStatus data={system} />
           </div>
         </footer>

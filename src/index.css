@@ -100,6 +100,20 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Global layout support: full-screen and safe widths */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
 /* ========================================
    TACTICAL GRID EFFECTS
    ======================================== */

@@ -7,7 +7,7 @@ export function BotSetup() {
       <header className="sticky top-0 z-50 border-b border-border/60 bg-background/95 backdrop-blur-sm">
         <TopBar />
       </header>
-      <main className="max-w-5xl mx-auto px-6 py-12 space-y-10">
+      <main className="w-full px-4 sm:px-6 md:px-8 lg:px-10 py-12 space-y-10">
         <div className="space-y-3">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Autonomous Bot Configuration</h1>
           <p className="text-muted-foreground max-w-2xl">Control execution parameters, risk constraints, position management rules, and environment/credentials.</p>
