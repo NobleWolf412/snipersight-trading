@@ -133,9 +133,9 @@ export function ScannerSetup() {
           <MarketRegimeLens {...marketRegimeProps} />
         </PageSection>
 
-        <Card className="bg-card/50 border-accent/30">
+        <Card className="bg-card/50 border-accent/30 hud-panel">
           <CardHeader className="pb-6">
-            <CardTitle className="text-xl">Scanner Configuration</CardTitle>
+            <CardTitle className="text-xl heading-hud">Scanner Configuration</CardTitle>
             <CardDescription className="text-base mt-2">Define search parameters and analysis scope</CardDescription>
           </CardHeader>
           <CardContent className="space-y-8">
@@ -268,7 +268,7 @@ export function ScannerSetup() {
         <Button
           onClick={handleArmScanner}
           disabled={isScanning || scanConfig.timeframes.length === 0}
-          className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-12 text-base font-semibold disabled:opacity-50 mt-4"
+          className="w-full h-12 text-base font-semibold disabled:opacity-50 mt-4 btn-launch"
           size="lg"
         >
           {isScanning ? (

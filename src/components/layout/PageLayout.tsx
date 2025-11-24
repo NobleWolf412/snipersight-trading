@@ -37,7 +37,7 @@ export function PageHeader({ title, description, icon, actions, className = '' }
   return (
     <div className={`flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between ${className}`}>
       <div className="space-y-3">
-        <h1 className="text-4xl font-bold text-foreground flex items-center gap-4">
+        <h1 className="text-4xl font-bold text-foreground flex items-center gap-4 heading-hud">
           {icon}
           {title}
         </h1>
@@ -67,7 +67,7 @@ export function PageSection({ children, title, description, className = '' }: Pa
       {(title || description) && (
         <div className="space-y-2">
           {title && (
-            <h2 className="text-sm font-bold text-muted-foreground tracking-wider uppercase">
+            <h2 className="text-sm font-bold text-muted-foreground tracking-wider uppercase heading-hud">
               {title}
             </h2>
           )}

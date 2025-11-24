@@ -34,7 +34,7 @@ export function ScannerStatus() {
       <div className="space-y-10">
         <div className="flex items-center justify-between">
           <div className="space-y-2">
-            <h1 className="text-4xl font-bold flex items-center gap-4">
+            <h1 className="text-4xl font-bold flex items-center gap-4 heading-hud">
               <Crosshair size={44} weight="bold" className="text-accent" />
               SCANNER OPERATIONAL
             </h1>
@@ -44,9 +44,9 @@ export function ScannerStatus() {
         </div>
 
         {/* Configuration Summary */}
-        <Card className="bg-card/50 border-accent/30">
+        <Card className="bg-card/50 border-accent/30 hud-panel">
           <CardHeader className="pb-4">
-            <CardTitle className="text-sm tracking-wider">CONFIGURATION SNAPSHOT</CardTitle>
+            <CardTitle className="text-sm tracking-wider heading-hud">CONFIGURATION SNAPSHOT</CardTitle>
           </CardHeader>
           <CardContent className="grid md:grid-cols-4 gap-6 text-sm">
             <div>
@@ -93,7 +93,7 @@ export function ScannerStatus() {
 
 function StatCard({ title, icon, value, subtitle, accent }: { title: string; icon: any; value: any; subtitle: string; accent?: string }) {
   return (
-    <Card className="bg-card/50 border-accent/30">
+    <Card className="bg-card/50 border-accent/30 card-3d">
       <CardHeader>
         <CardTitle className="text-sm flex items-center gap-2">{icon}{title}</CardTitle>
       </CardHeader>

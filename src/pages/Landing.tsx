@@ -32,7 +32,7 @@ export function Landing() {
               <div className="space-y-6 text-center">
                 <div className="flex items-center justify-center gap-4">
                   <Crosshair size={64} weight="thin" className="text-accent opacity-40" />
-                  <h1 className="text-5xl md:text-7xl font-bold tracking-tight">SniperSight</h1>
+                  <h1 className="text-5xl md:text-7xl font-bold tracking-tight heading-hud">SniperSight</h1>
                 </div>
                 <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl leading-relaxed mx-auto">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
               </div>
@@ -53,14 +53,14 @@ export function Landing() {
               {/* Scanner Feature */}
               <div className="relative group">
                 <div className="absolute inset-0 bg-gradient-to-br from-accent/10 to-transparent rounded-2xl blur-2xl group-hover:blur-3xl transition-all duration-500" />
-                <div className="relative p-8 md:p-10 border border-border/50 rounded-2xl bg-card/50 backdrop-blur-sm hover:border-accent/50 transition-all duration-300">
+                <div className="relative p-8 md:p-10 rounded-2xl backdrop-blur-sm card-3d">
                   <div className="flex items-start gap-4 mb-6">
                     <div className="w-14 h-14 bg-accent/20 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Crosshair size={28} weight="bold" className="text-accent" />
                     </div>
                     <div>
-                      <h3 className="text-2xl md:text-3xl font-bold mb-2">Reconnaissance Scanner</h3>
-                      <p className="text-sm text-accent font-mono tracking-wider">MANUAL OPERATIONS</p>
+                      <h3 className="text-2xl md:text-3xl font-bold mb-2 heading-hud">Reconnaissance Scanner</h3>
+                      <p className="text-sm text-accent font-mono tracking-wider heading-hud">MANUAL OPERATIONS</p>
                     </div>
                   </div>
                   
@@ -91,7 +91,7 @@ export function Landing() {
                   <div className="flex gap-3 flex-wrap">
                     <Link
                       to="/scanner/setup"
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-accent/10 hover:bg-accent/20 border border-accent/30 rounded-lg text-accent font-medium transition-all duration-200 group/btn"
+                      className="inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium btn-launch"
                     >
                       Configure Scanner
                       <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
@@ -110,14 +110,14 @@ export function Landing() {
               {/* Bot Feature */}
               <div className="relative group">
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent rounded-2xl blur-2xl group-hover:blur-3xl transition-all duration-500" />
-                <div className="relative p-8 md:p-10 border border-border/50 rounded-2xl bg-card/50 backdrop-blur-sm hover:border-primary/50 transition-all duration-300">
+                <div className="relative p-8 md:p-10 rounded-2xl backdrop-blur-sm card-3d">
                   <div className="flex items-start gap-4 mb-6">
                     <div className="w-14 h-14 bg-primary/20 rounded-xl flex items-center justify-center flex-shrink-0">
                       <div className="w-7 h-7 border-2 border-primary rounded" />
                     </div>
                     <div>
-                      <h3 className="text-2xl md:text-3xl font-bold mb-2">Autonomous Bot</h3>
-                      <p className="text-sm text-primary font-mono tracking-wider">AUTOMATED EXECUTION</p>
+                      <h3 className="text-2xl md:text-3xl font-bold mb-2 heading-hud">Autonomous Bot</h3>
+                      <p className="text-sm text-primary font-mono tracking-wider heading-hud">AUTOMATED EXECUTION</p>
                     </div>
                   </div>
                   
@@ -148,7 +148,7 @@ export function Landing() {
                   <div className="flex gap-3 flex-wrap">
                     <Link
                       to="/bot/setup"
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-primary font-medium transition-all duration-200 group/btn"
+                      className="inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium btn-launch"
                     >
                       Configure Bot
                       <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
