@@ -9,8 +9,8 @@ import { Routes, Route } from 'react-router-dom';
 
 function App() {
   return (
-    <div className="min-h-screen bg-background text-foreground tactical-grid">
-      <main>
+    <div className="min-h-screen w-screen bg-background text-foreground">
+      <main className="w-full h-full tactical-grid">
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/scanner/setup" element={<ScannerSetup />} />
