@@ -15,7 +15,7 @@ import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
 import { SniperModeSelector } from '@/components/SniperModeSelector';
 import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
-import { MetalSection, MetalCard } from '@/components/MetalCard';
+import { MetalCard } from '@/components/MetalCard';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { scanHistoryService } from '@/services/scanHistoryService';
 
@@ -145,14 +145,14 @@ export function ScannerSetup() {
           </Button>
         </div>
 
-        <MetalSection title="MARKET CONTEXT" glowColor="accent" titleColor="text-accent">
+        <MetalCard title="MARKET CONTEXT" glowColor="cyan" titleColor="text-accent">
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground uppercase tracking-wide">Real-time regime analysis and conditions</p>
             <MarketRegimeLens {...marketRegimeProps} />
           </div>
-        </MetalSection>
+        </MetalCard>
 
-        <MetalSection title="BASIC CONFIGURATION" glowColor="primary" titleColor="text-primary">
+        <MetalCard title="BASIC CONFIGURATION" glowColor="emerald" titleColor="text-primary">
           <div className="space-y-6">
             <p className="text-sm text-muted-foreground uppercase tracking-wide">Exchange, pairs, and leverage settings</p>
             
@@ -227,9 +227,9 @@ export function ScannerSetup() {
               </Select>
             </div>
           </div>
-        </MetalSection>
+        </MetalCard>
 
-        <MetalSection title="ASSET CATEGORIES" glowColor="success" titleColor="text-success">
+        <MetalCard title="ASSET CATEGORIES" glowColor="emerald" titleColor="text-success">
           <div className="space-y-6">
             <p className="text-sm text-muted-foreground uppercase tracking-wide">Select market segments to scan</p>
             
@@ -324,14 +324,14 @@ export function ScannerSetup() {
               </div>
             </div>
           </div>
-        </MetalSection>
+        </MetalCard>
 
-        <MetalSection title="SNIPER MODE" glowColor="primary" titleColor="text-primary">
+        <MetalCard title="SNIPER MODE" glowColor="emerald" titleColor="text-primary">
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground uppercase tracking-wide">Select precision level and confidence thresholds</p>
             <SniperModeSelector />
           </div>
-        </MetalSection>
+        </MetalCard>
 
         <div className="relative group pt-4">
           <div className="absolute inset-0 bg-gradient-to-r from-accent/30 via-primary/30 to-accent/30 rounded-xl blur-xl group-hover:blur-2xl transition-all duration-300" />

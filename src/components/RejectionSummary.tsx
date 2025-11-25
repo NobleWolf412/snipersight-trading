@@ -1,4 +1,4 @@
-import { AlertTriangle, XCircle, TrendingDown, Database, Code } from '@phosphor-icons/react';
+import { Warning, XCircle, TrendDown, Database, Code } from '@phosphor-icons/react';
 import { Card } from '@/components/ui/card';
 import {
   Collapsible,
@@ -41,7 +41,7 @@ interface Props {
 
 const reasonConfig = {
   low_confluence: {
-    icon: TrendingDown,
+    icon: TrendDown,
     label: 'Low Confluence Score',
     color: 'text-yellow-400',
     description: 'Setup didn\'t meet minimum quality threshold',
@@ -53,7 +53,7 @@ const reasonConfig = {
     description: 'Unable to fetch price data from exchange',
   },
   risk_validation: {
-    icon: AlertTriangle,
+    icon: Warning,
     label: 'Risk Validation Failed',
     color: 'text-orange-400',
     description: 'Risk/reward ratio below minimum (1.5:1)',
@@ -85,7 +85,7 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
     <Card className="tactical-card p-6">
       <div className="flex items-start gap-4 mb-6">
         <div className="p-3 rounded-lg bg-yellow-500/10">
-          <AlertTriangle className="w-6 h-6 text-yellow-400" weight="duotone" />
+          <Warning className="w-6 h-6 text-yellow-400" weight="duotone" />
         </div>
         <div className="flex-1">
           <h3 className="heading-hud text-lg mb-1">Rejection Analysis</h3>
