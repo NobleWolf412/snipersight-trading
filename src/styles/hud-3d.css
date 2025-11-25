@@ -248,6 +248,102 @@
   }
 }
 
+/* 3D Tactical Button - Training (Warning color) */
+.btn-tactical-training {
+  position: relative;
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.70 0.16 75 / 0.6), 
+      oklch(0.70 0.16 75 / 0.3),
+      oklch(0.70 0.16 75 / 0.6)
+    ) border-box;
+  color: oklch(0.95 0.02 75);
+  text-shadow: 
+    0 0 10px oklch(0.70 0.16 75 / 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.8);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transform: translateY(0);
+  box-shadow:
+    0 0 20px oklch(0.70 0.16 75 / 0.3),
+    0 8px 16px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-tactical-training::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, 
+    oklch(0.70 0.16 75 / 0.15) 0%, 
+    transparent 50%, 
+    oklch(0.70 0.16 75 / 0.15) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.btn-tactical-training:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 0 30px oklch(0.70 0.16 75 / 0.5),
+    0 12px 24px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.75 0.18 75 / 0.8), 
+      oklch(0.70 0.16 75 / 0.4),
+      oklch(0.75 0.18 75 / 0.8)
+    ) border-box;
+}
+
+.btn-tactical-training:hover::before {
+  opacity: 1;
+}
+
+.btn-tactical-training:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow:
+    0 0 15px oklch(0.70 0.16 75 / 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.8),
+    inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn-tactical-training::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      oklch(0.80 0.18 75 / 0.3) 50%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: training-sweep 3s ease-in-out infinite;
+    animation-delay: 0.75s;
+  }
+}
+
+@keyframes training-sweep {
+  0%, 100% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+}
+
 /* Soft glow ring helper (apply to cards or panels) */
 .glow-soft {
   box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 0 30px rgba(0, 173, 255, 0.08);
