@@ -1,4 +1,4 @@
-import { CircleNotch } from '@phosphor-icons/react';
+import { CircleNotch, Crosshair, Eye, Lightning, Skull, Binoculars } from '@phosphor-icons/react';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -16,21 +16,16 @@ export function SniperModeSelector() {
   }
 
   return (
-    <div className="space-y-3">
-      <Label className="text-base">Sniper Mode</Label>
-      <div className="grid grid-cols-1 gap-3">
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4">
         {scannerModes.map((mode) => {
           const isSelected = selectedMode?.name === mode.name;
-          const modeIcon = getModeIcon(mode.name);
+          const { icon: ModeIcon, color, glowClass, borderClass, bgClass, textEffect } = getModeStyle(mode.name);
 
           return (
-            <Card
+            <div
               key={mode.name}
-              className={`p-4 cursor-pointer transition-all ${
-                isSelected
-                  ? 'bg-accent/10 border-accent shadow-md'
-                  : 'bg-background hover:bg-muted/30 border-border'
-              }`}
+              className="relative group"
               onClick={() => {
                 setSelectedMode(mode);
                 setScanConfig({
@@ -40,52 +35,76 @@ export function SniperModeSelector() {
                 });
               }}
             >
-              <div className="space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1 flex-1">
-                    <div className="font-bold text-base flex items-center gap-2">
-                      <span className="text-xl">{modeIcon}</span>
-                      {mode.name.toUpperCase()}
+              {isSelected && (
+                <div className={`absolute -inset-[2px] ${glowClass} rounded-xl blur-md transition-all duration-300`} />
+              )}
+              <Card
+                className={`relative cursor-pointer transition-all duration-300 overflow-hidden ${
+                  isSelected
+                    ? `${bgClass} ${borderClass} shadow-lg transform scale-[1.02]`
+                    : 'bg-background/40 hover:bg-background/60 border-border hover:border-border/80 hover:scale-[1.01]'
+                }`}
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-black/20 pointer-events-none" />
+                
+                <div className="relative p-5 space-y-4">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 rounded-lg ${bgClass} flex items-center justify-center flex-shrink-0 shadow-md ${isSelected ? 'scale-110' : 'group-hover:scale-105'} transition-transform`}>
+                          <ModeIcon size={24} weight="bold" className={color} />
+                        </div>
+                        <div>
+                          <div className={`font-bold text-lg tracking-wider ${textEffect} ${color}`}>
+                            {mode.name.toUpperCase()}
+                          </div>
+                          <p className="text-sm text-muted-foreground leading-relaxed mt-0.5">
+                            {mode.description}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {mode.description}
-                    </p>
+                    {isSelected && (
+                      <Badge className={`ml-2 ${bgClass} ${color} border-none shadow-md animate-in zoom-in duration-200`}>
+                        <Crosshair size={12} weight="bold" className="mr-1" />
+                        ARMED
+                      </Badge>
+                    )}
                   </div>
-                  {isSelected && (
-                    <Badge className="bg-accent text-accent-foreground ml-2">
-                      ARMED
-                    </Badge>
-                  )}
+
+                  <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/50">
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Timeframes</div>
+                      <div className="font-mono font-bold text-sm">
+                        {mode.timeframes.join(' · ')}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Min Confluence</div>
+                      <div className={`font-mono font-bold text-sm ${color}`}>
+                        {mode.min_confluence_score}%
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Profile</div>
+                      <div className="font-mono font-bold text-sm capitalize">
+                        {mode.profile.replace(/_/g, ' ')}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Scope</div>
+                      <div className="font-mono font-bold text-sm">
+                        {mode.timeframes.length} TF
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border/50 text-xs">
-                  <div>
-                    <div className="text-muted-foreground mb-1">Timeframes</div>
-                    <div className="font-mono font-semibold">
-                      {mode.timeframes.join(' · ')}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground mb-1">Min Confluence</div>
-                    <div className="font-mono font-semibold text-accent">
-                      {mode.min_confluence_score}%
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground mb-1">Profile</div>
-                    <div className="font-mono font-semibold capitalize">
-                      {mode.profile.replace(/_/g, ' ')}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground mb-1">Scope</div>
-                    <div className="font-mono font-semibold">
-                      {mode.timeframes.length} TF
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Card>
+                {isSelected && (
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-current to-transparent opacity-50 animate-pulse" style={{ color }} />
+                )}
+              </Card>
+            </div>
           );
         })}
       </div>
@@ -93,13 +112,56 @@ export function SniperModeSelector() {
   );
 }
 
-function getModeIcon(modeName: string): string {
-  const icons: Record<string, string> = {
-    overwatch: '🔭',
-    recon: '🎯',
-    strike: '⚡',
-    surgical: '🔬',
-    ghost: '👻',
+function getModeStyle(modeName: string) {
+  const styles: Record<string, {
+    icon: any;
+    color: string;
+    glowClass: string;
+    borderClass: string;
+    bgClass: string;
+    textEffect: string;
+  }> = {
+    overwatch: {
+      icon: Binoculars,
+      color: 'text-accent',
+      glowClass: 'bg-accent/30',
+      borderClass: 'border-accent/50',
+      bgClass: 'bg-accent/10',
+      textEffect: 'drop-shadow-[0_0_8px_rgba(101,186,195,0.5)]',
+    },
+    recon: {
+      icon: Eye,
+      color: 'text-primary',
+      glowClass: 'bg-primary/30',
+      borderClass: 'border-primary/50',
+      bgClass: 'bg-primary/10',
+      textEffect: 'drop-shadow-[0_0_8px_rgba(114,195,132,0.5)]',
+    },
+    strike: {
+      icon: Lightning,
+      color: 'text-warning',
+      glowClass: 'bg-warning/30',
+      borderClass: 'border-warning/50',
+      bgClass: 'bg-warning/10',
+      textEffect: 'drop-shadow-[0_0_10px_rgba(224,186,90,0.6)] animate-pulse',
+    },
+    surgical: {
+      icon: Crosshair,
+      color: 'text-success',
+      glowClass: 'bg-success/30',
+      borderClass: 'border-success/50',
+      bgClass: 'bg-success/10',
+      textEffect: 'drop-shadow-[0_0_8px_rgba(114,195,132,0.5)] tracking-widest',
+    },
+    ghost: {
+      icon: Skull,
+      color: 'text-muted-foreground',
+      glowClass: 'bg-muted/30',
+      borderClass: 'border-muted/50',
+      bgClass: 'bg-muted/10',
+      textEffect: 'drop-shadow-[0_0_6px_rgba(200,200,200,0.3)] opacity-80',
+    },
   };
-  return icons[modeName.toLowerCase()] || '🎯';
+  
+  return styles[modeName.toLowerCase()] || styles.recon;
 }

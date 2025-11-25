@@ -119,7 +119,7 @@ export function ScannerSetup() {
 
   return (
     <PageLayout maxWidth="lg">
-      <div className="space-y-10">
+      <div className="space-y-12">
         <PageHeader
           title="Acquire Targets"
           description="Configure scanner parameters for market opportunities"
@@ -275,13 +275,19 @@ export function ScannerSetup() {
           {showCategories && (
             <CardContent className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
               <div className="grid gap-4">
-                <div className="flex items-center justify-between p-5 bg-background/60 rounded-xl border-2 border-border/60 hover:border-accent/50 hover:bg-background/80 transition-all card-3d">
+                <div 
+                  className="flex items-center justify-between p-5 bg-background/60 rounded-xl border-2 border-border/60 hover:border-accent/50 hover:bg-background/80 transition-all card-3d cursor-pointer"
+                  onClick={() => setScanConfig({
+                    ...scanConfig,
+                    categories: { ...scanConfig.categories, majors: !scanConfig.categories.majors },
+                  })}
+                >
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
                       <div className="w-5 h-5 rounded border-2 border-accent" />
                     </div>
                     <div>
-                      <Label htmlFor="majors" className="cursor-pointer text-base font-semibold block mb-1">Majors</Label>
+                      <Label className="cursor-pointer text-base font-semibold block mb-1">Majors</Label>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-xs">BTC</Badge>
                         <Badge variant="outline" className="text-xs">ETH</Badge>
@@ -298,17 +304,24 @@ export function ScannerSetup() {
                         categories: { ...scanConfig.categories, majors: checked },
                       })
                     }
+                    onClick={(e) => e.stopPropagation()}
                     className="scale-125 data-[state=checked]:bg-accent"
                   />
                 </div>
 
-                <div className="flex items-center justify-between p-5 bg-background/60 rounded-xl border-2 border-border/60 hover:border-primary/50 hover:bg-background/80 transition-all card-3d">
+                <div 
+                  className="flex items-center justify-between p-5 bg-background/60 rounded-xl border-2 border-border/60 hover:border-primary/50 hover:bg-background/80 transition-all card-3d cursor-pointer"
+                  onClick={() => setScanConfig({
+                    ...scanConfig,
+                    categories: { ...scanConfig.categories, altcoins: !scanConfig.categories.altcoins },
+                  })}
+                >
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                       <div className="w-5 h-5 rounded border-2 border-primary" />
                     </div>
                     <div>
-                      <Label htmlFor="altcoins" className="cursor-pointer text-base font-semibold block mb-1">Altcoins</Label>
+                      <Label className="cursor-pointer text-base font-semibold block mb-1">Altcoins</Label>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-xs">SOL</Badge>
                         <Badge variant="outline" className="text-xs">MATIC</Badge>
@@ -325,17 +338,24 @@ export function ScannerSetup() {
                         categories: { ...scanConfig.categories, altcoins: checked },
                       })
                     }
+                    onClick={(e) => e.stopPropagation()}
                     className="scale-125 data-[state=checked]:bg-primary"
                   />
                 </div>
 
-                <div className="flex items-center justify-between p-5 bg-background/60 rounded-xl border-2 border-warning/30 hover:border-warning/60 hover:bg-background/80 transition-all card-3d alert-flash">
+                <div 
+                  className="flex items-center justify-between p-5 bg-background/60 rounded-xl border-2 border-warning/30 hover:border-warning/60 hover:bg-background/80 transition-all card-3d cursor-pointer"
+                  onClick={() => setScanConfig({
+                    ...scanConfig,
+                    categories: { ...scanConfig.categories, memeMode: !scanConfig.categories.memeMode },
+                  })}
+                >
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center flex-shrink-0">
                       <Lightning size={20} weight="bold" className="text-warning" />
                     </div>
                     <div>
-                      <Label htmlFor="meme" className="cursor-pointer text-base font-semibold block mb-1">Meme Mode</Label>
+                      <Label className="cursor-pointer text-base font-semibold block mb-1">Meme Mode</Label>
                       <Badge variant="outline" className="text-xs bg-warning/20 text-warning border-warning/50">HIGH VOLATILITY</Badge>
                     </div>
                   </div>
@@ -348,6 +368,7 @@ export function ScannerSetup() {
                         categories: { ...scanConfig.categories, memeMode: checked },
                       })
                     }
+                    onClick={(e) => e.stopPropagation()}
                     className="scale-125 data-[state=checked]:bg-warning"
                   />
                 </div>
