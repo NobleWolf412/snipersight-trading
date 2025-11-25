@@ -286,22 +286,22 @@ export function ScannerSetup() {
                 <CardContent className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="grid gap-6">
                     <div 
-                      className="flex items-center justify-between p-6 bg-background/60 rounded-xl border-2 border-border/60 hover:border-accent/50 hover:bg-background/80 transition-all card-3d cursor-pointer"
+                      className="flex items-center justify-between p-4 bg-background/60 rounded-xl border-2 border-border/60 hover:border-accent/50 hover:bg-background/80 transition-all card-3d cursor-pointer"
                       onClick={() => setScanConfig({
                         ...scanConfig,
                         categories: { ...scanConfig.categories, majors: !scanConfig.categories.majors },
                       })}
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
-                          <div className="w-5 h-5 rounded border-2 border-accent" />
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
+                          <div className="w-4 h-4 rounded border-2 border-accent" />
                         </div>
                         <div>
-                          <Label className="cursor-pointer text-base font-semibold block mb-1">Majors</Label>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">BTC</Badge>
-                            <Badge variant="outline" className="text-xs">ETH</Badge>
-                            <Badge variant="outline" className="text-xs">BNB</Badge>
+                          <Label className="cursor-pointer text-sm font-semibold block">Majors</Label>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <Badge variant="outline" className="text-xs px-1.5 py-0">BTC</Badge>
+                            <Badge variant="outline" className="text-xs px-1.5 py-0">ETH</Badge>
+                            <Badge variant="outline" className="text-xs px-1.5 py-0">BNB</Badge>
                           </div>
                         </div>
                       </div>
@@ -315,7 +315,7 @@ export function ScannerSetup() {
                           })
                         }
                         onClick={(e) => e.stopPropagation()}
-                        className="scale-125 data-[state=checked]:bg-accent"
+                        className="scale-110 data-[state=checked]:bg-accent"
                       />
                     </div>
 
