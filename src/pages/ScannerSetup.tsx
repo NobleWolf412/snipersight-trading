@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Crosshair, Lightning } from '@phosphor-icons/react';
+import { Crosshair, Lightning, Target, ChartBar, GearSix } from '@phosphor-icons/react';
 import type { ScanResult } from '@/utils/mockData';
 import { generateMockScanResults, convertSignalToScanResult } from '@/utils/mockData';
 import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
@@ -15,7 +15,7 @@ import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
 import { SniperModeSelector } from '@/components/SniperModeSelector';
 import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
-import { MetalCard } from '@/components/MetalCard';
+import { TacticalSection } from '@/components/layout/TacticalSection';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { scanHistoryService } from '@/services/scanHistoryService';
 
@@ -136,225 +136,240 @@ export function ScannerSetup() {
   };
 
   return (
-    <div className="min-h-screen w-full p-4 md:p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div className="flex items-center justify-between mb-8">
+    <div className="min-h-screen w-full p-3 md:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-between mb-6 md:mb-8">
           <HomeButton />
-          <Button variant="outline" onClick={() => navigate('/scanner/status')} className="hover:border-accent/50 transition-all">
+          <Button 
+            variant="outline" 
+            onClick={() => navigate('/scanner/status')} 
+            className="hover:border-accent/50 transition-all h-10 px-4"
+          >
+            <ChartBar size={18} className="mr-2" />
             View Status
           </Button>
         </div>
 
-        <MetalCard title="MARKET CONTEXT" glowColor="cyan" titleColor="text-accent">
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground uppercase tracking-wide">Real-time regime analysis and conditions</p>
-            <MarketRegimeLens {...marketRegimeProps} />
-          </div>
-        </MetalCard>
-
-        <MetalCard title="BASIC CONFIGURATION" glowColor="emerald" titleColor="text-primary">
-          <div className="space-y-6">
-            <p className="text-sm text-muted-foreground uppercase tracking-wide">Exchange, pairs, and leverage settings</p>
-            
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-3">
-                <Label htmlFor="exchange" className="text-sm font-semibold uppercase tracking-wide">
-                  Exchange
-                </Label>
-                <Select
-                  value={scanConfig.exchange}
-                  onValueChange={(value) =>
-                    setScanConfig({ ...scanConfig, exchange: value })
-                  }
-                >
-                  <SelectTrigger id="exchange" className="bg-background/60 h-12 border-border hover:border-primary/50 transition-colors">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Binance">Binance</SelectItem>
-                    <SelectItem value="Coinbase">Coinbase</SelectItem>
-                    <SelectItem value="Kraken">Kraken</SelectItem>
-                    <SelectItem value="Bybit">Bybit</SelectItem>
-                    <SelectItem value="Phemex">Phemex</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-3">
-                <Label htmlFor="top-pairs" className="text-sm font-semibold uppercase tracking-wide flex items-center gap-2">
-                  Top Pairs by Volume
-                  <Badge variant="outline" className="text-xs font-normal">10</Badge>
-                </Label>
-                <Input
-                  id="top-pairs"
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={scanConfig.topPairs ?? 20}
-                  onChange={(e) =>
-                    setScanConfig({ ...scanConfig, topPairs: parseInt(e.target.value) || 20 })
-                  }
-                  className="bg-background/60 h-12 border-border hover:border-primary/50 focus:border-primary transition-colors"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <Label htmlFor="leverage" className="text-sm font-semibold uppercase tracking-wide flex items-center gap-2">
-                Leverage
-                <Badge variant="outline" className="text-xs font-normal text-warning">Risk Multiple</Badge>
-              </Label>
-              <Select
-                value={(scanConfig.leverage ?? 1).toString()}
-                onValueChange={(value) =>
-                  setScanConfig({ ...scanConfig, leverage: parseInt(value) })
-                }
-              >
-                <SelectTrigger id="leverage" className="bg-background/60 h-12 border-border hover:border-primary/50 transition-colors">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">1x (No Leverage)</SelectItem>
-                  <SelectItem value="2">2x</SelectItem>
-                  <SelectItem value="3">3x</SelectItem>
-                  <SelectItem value="5">5x</SelectItem>
-                  <SelectItem value="10">10x</SelectItem>
-                  <SelectItem value="20">20x</SelectItem>
-                  <SelectItem value="50">50x</SelectItem>
-                  <SelectItem value="100">100x</SelectItem>
-                  <SelectItem value="125">125x</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </MetalCard>
-
-        <MetalCard title="ASSET CATEGORIES" glowColor="emerald" titleColor="text-success">
-          <div className="space-y-6">
-            <p className="text-sm text-muted-foreground uppercase tracking-wide">Select market segments to scan</p>
-            
-            <div className="space-y-4">
-              <div 
-                className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-border hover:border-accent/50 transition-all cursor-pointer"
-                onClick={() => setScanConfig({
-                  ...scanConfig,
-                  categories: { ...scanConfig.categories, majors: !scanConfig.categories.majors },
-                })}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-col">
-                    <Label className="cursor-pointer text-sm font-semibold uppercase tracking-wide">Majors</Label>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Badge variant="outline" className="text-xs px-1.5 py-0">ETH</Badge>
-                    </div>
-                  </div>
-                </div>
-                <Switch
-                  id="majors"
-                  checked={scanConfig.categories.majors}
-                  onCheckedChange={(checked) =>
-                    setScanConfig({
-                      ...scanConfig,
-                      categories: { ...scanConfig.categories, majors: checked },
-                    })
-                  }
-                  onClick={(e) => e.stopPropagation()}
-                  className="data-[state=checked]:bg-accent"
-                />
-              </div>
-
-              <div 
-                className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-border hover:border-primary/50 transition-all cursor-pointer"
-                onClick={() => setScanConfig({
-                  ...scanConfig,
-                  categories: { ...scanConfig.categories, altcoins: !scanConfig.categories.altcoins },
-                })}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-col">
-                    <Label className="cursor-pointer text-sm font-semibold uppercase tracking-wide">Altcoins</Label>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Badge variant="outline" className="text-xs px-1.5 py-0">SOL</Badge>
-                      <Badge variant="outline" className="text-xs px-1.5 py-0">MATIC</Badge>
-                      <Badge variant="outline" className="text-xs px-1.5 py-0">LINK</Badge>
-                    </div>
-                  </div>
-                </div>
-                <Switch
-                  id="altcoins"
-                  checked={scanConfig.categories.altcoins}
-                  onCheckedChange={(checked) =>
-                    setScanConfig({
-                      ...scanConfig,
-                      categories: { ...scanConfig.categories, altcoins: checked },
-                    })
-                  }
-                  onClick={(e) => e.stopPropagation()}
-                  className="data-[state=checked]:bg-primary"
-                />
-              </div>
-
-              <div 
-                className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-destructive/40 hover:border-destructive/70 transition-all cursor-pointer"
-                onClick={() => setScanConfig({
-                  ...scanConfig,
-                  categories: { ...scanConfig.categories, memeMode: !scanConfig.categories.memeMode },
-                })}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-col">
-                    <Label className="cursor-pointer text-sm font-semibold uppercase tracking-wide">Memes</Label>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Badge variant="outline" className="text-xs bg-destructive/20 text-destructive border-destructive/50">▼ HIGH VOLATILITY</Badge>
-                    </div>
-                  </div>
-                </div>
-                <Switch
-                  id="meme"
-                  checked={scanConfig.categories.memeMode}
-                  onCheckedChange={(checked) =>
-                    setScanConfig({
-                      ...scanConfig,
-                      categories: { ...scanConfig.categories, memeMode: checked },
-                    })
-                  }
-                  onClick={(e) => e.stopPropagation()}
-                  className="data-[state=checked]:bg-destructive"
-                />
-              </div>
-            </div>
-          </div>
-        </MetalCard>
-
-        <MetalCard title="SNIPER MODE" glowColor="emerald" titleColor="text-primary">
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground uppercase tracking-wide">Select precision level and confidence thresholds</p>
-            <SniperModeSelector />
-          </div>
-        </MetalCard>
-
-        <div className="relative group pt-4">
-          <div className="absolute inset-0 bg-gradient-to-r from-accent/30 via-primary/30 to-accent/30 rounded-xl blur-xl group-hover:blur-2xl transition-all duration-300" />
-          <Button
-            onClick={handleArmScanner}
-            disabled={isScanning || scanConfig.timeframes.length === 0}
-            className="relative w-full h-16 text-lg font-bold disabled:opacity-50 btn-tactical-scanner"
-            size="lg"
+        <div className="space-y-6">
+          <TacticalSection
+            title="MARKET CONTEXT"
+            subtitle="Real-time regime analysis and conditions"
+            variant="accent"
+            badge={<Badge variant="outline" className="bg-accent/10 text-accent border-accent/40 text-xs">LIVE</Badge>}
           >
-            {isScanning ? (
-              <>
-                <Lightning size={24} className="animate-pulse" />
-                <span className="mx-2">SCANNING MARKETS...</span>
-                <Lightning size={24} className="animate-pulse" />
-              </>
-            ) : (
-              <>
-                <Crosshair size={24} weight="bold" />
-                <span className="mx-3">ARM SCANNER</span>
-                <span className="text-2xl">→</span>
-              </>
-            )}
-          </Button>
+            <MarketRegimeLens {...marketRegimeProps} />
+          </TacticalSection>
+
+          <div className="grid lg:grid-cols-2 gap-6">
+            <TacticalSection
+              title="BASIC CONFIGURATION"
+              subtitle="Exchange, pairs, and leverage settings"
+              variant="default"
+              badge={<GearSix size={16} className="text-primary" />}
+            >
+              <div className="space-y-5">
+                <div className="space-y-2.5">
+                  <Label htmlFor="exchange" className="text-xs font-bold uppercase tracking-widest text-foreground/80 flex items-center gap-2">
+                    Exchange
+                  </Label>
+                  <Select
+                    value={scanConfig.exchange}
+                    onValueChange={(value) =>
+                      setScanConfig({ ...scanConfig, exchange: value })
+                    }
+                  >
+                    <SelectTrigger id="exchange" className="bg-background/60 h-11 border-border/60 hover:border-primary/50 transition-colors">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Binance">Binance</SelectItem>
+                      <SelectItem value="Coinbase">Coinbase</SelectItem>
+                      <SelectItem value="Kraken">Kraken</SelectItem>
+                      <SelectItem value="Bybit">Bybit</SelectItem>
+                      <SelectItem value="Phemex">Phemex</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2.5">
+                  <Label htmlFor="top-pairs" className="text-xs font-bold uppercase tracking-widest text-foreground/80 flex items-center gap-2">
+                    Top Pairs by Volume
+                    <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">10</Badge>
+                  </Label>
+                  <Input
+                    id="top-pairs"
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={scanConfig.topPairs ?? 20}
+                    onChange={(e) =>
+                      setScanConfig({ ...scanConfig, topPairs: parseInt(e.target.value) || 20 })
+                    }
+                    className="bg-background/60 h-11 border-border/60 hover:border-primary/50 focus:border-primary transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-2.5">
+                  <Label htmlFor="leverage" className="text-xs font-bold uppercase tracking-widest text-foreground/80 flex items-center gap-2">
+                    Leverage
+                    <Badge variant="outline" className="text-[10px] font-normal text-warning border-warning/40 px-1.5 py-0">Risk Multiple</Badge>
+                  </Label>
+                  <Select
+                    value={(scanConfig.leverage ?? 1).toString()}
+                    onValueChange={(value) =>
+                      setScanConfig({ ...scanConfig, leverage: parseInt(value) })
+                    }
+                  >
+                    <SelectTrigger id="leverage" className="bg-background/60 h-11 border-border/60 hover:border-primary/50 transition-colors">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1x (No Leverage)</SelectItem>
+                      <SelectItem value="2">2x</SelectItem>
+                      <SelectItem value="3">3x</SelectItem>
+                      <SelectItem value="5">5x</SelectItem>
+                      <SelectItem value="10">10x</SelectItem>
+                      <SelectItem value="20">20x</SelectItem>
+                      <SelectItem value="50">50x</SelectItem>
+                      <SelectItem value="100">100x</SelectItem>
+                      <SelectItem value="125">125x</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </TacticalSection>
+
+            <TacticalSection
+              title="ASSET CATEGORIES"
+              subtitle="Select market segments to scan"
+              variant="default"
+              badge={<Target size={16} className="text-success" />}
+            >
+              <div className="space-y-3">
+                <div 
+                  className="group relative flex items-center justify-between p-3.5 bg-background/40 rounded border border-border/60 hover:border-accent/50 hover:bg-background/60 transition-all cursor-pointer"
+                  onClick={() => setScanConfig({
+                    ...scanConfig,
+                    categories: { ...scanConfig.categories, majors: !scanConfig.categories.majors },
+                  })}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="cursor-pointer text-xs font-bold uppercase tracking-widest text-foreground/90">Majors</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-accent/10 text-accent border-accent/40">ETH</Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <Switch
+                    id="majors"
+                    checked={scanConfig.categories.majors}
+                    onCheckedChange={(checked) =>
+                      setScanConfig({
+                        ...scanConfig,
+                        categories: { ...scanConfig.categories, majors: checked },
+                      })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    className="data-[state=checked]:bg-accent"
+                  />
+                </div>
+
+                <div 
+                  className="group relative flex items-center justify-between p-3.5 bg-background/40 rounded border border-border/60 hover:border-primary/50 hover:bg-background/60 transition-all cursor-pointer"
+                  onClick={() => setScanConfig({
+                    ...scanConfig,
+                    categories: { ...scanConfig.categories, altcoins: !scanConfig.categories.altcoins },
+                  })}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="cursor-pointer text-xs font-bold uppercase tracking-widest text-foreground/90">Altcoins</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">SOL</Badge>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">MATIC</Badge>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">LINK</Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <Switch
+                    id="altcoins"
+                    checked={scanConfig.categories.altcoins}
+                    onCheckedChange={(checked) =>
+                      setScanConfig({
+                        ...scanConfig,
+                        categories: { ...scanConfig.categories, altcoins: checked },
+                      })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    className="data-[state=checked]:bg-primary"
+                  />
+                </div>
+
+                <div 
+                  className="group relative flex items-center justify-between p-3.5 bg-background/40 rounded border border-destructive/40 hover:border-destructive/70 hover:bg-background/60 transition-all cursor-pointer"
+                  onClick={() => setScanConfig({
+                    ...scanConfig,
+                    categories: { ...scanConfig.categories, memeMode: !scanConfig.categories.memeMode },
+                  })}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="cursor-pointer text-xs font-bold uppercase tracking-widest text-foreground/90">Memes</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px] bg-destructive/20 text-destructive border-destructive/50 px-1.5 py-0">▼ HIGH VOLATILITY</Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <Switch
+                    id="meme"
+                    checked={scanConfig.categories.memeMode}
+                    onCheckedChange={(checked) =>
+                      setScanConfig({
+                        ...scanConfig,
+                        categories: { ...scanConfig.categories, memeMode: checked },
+                      })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    className="data-[state=checked]:bg-destructive"
+                  />
+                </div>
+              </div>
+            </TacticalSection>
+          </div>
+
+          <TacticalSection
+            title="SNIPER MODE"
+            subtitle="Select precision level and confidence thresholds"
+            variant="default"
+            badge={<Crosshair size={16} className="text-primary" />}
+          >
+            <SniperModeSelector />
+          </TacticalSection>
+
+          <div className="relative group pt-2">
+            <div className="absolute inset-0 bg-gradient-to-r from-accent/20 via-primary/30 to-accent/20 rounded-xl blur-xl group-hover:blur-2xl transition-all duration-300 opacity-75" />
+            <Button
+              onClick={handleArmScanner}
+              disabled={isScanning || scanConfig.timeframes.length === 0}
+              className="relative w-full h-14 md:h-16 text-base md:text-lg font-bold disabled:opacity-50 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all"
+              size="lg"
+            >
+              {isScanning ? (
+                <>
+                  <Lightning size={24} className="animate-pulse" />
+                  <span className="mx-2">SCANNING MARKETS...</span>
+                  <Lightning size={24} className="animate-pulse" />
+                </>
+              ) : (
+                <>
+                  <Crosshair size={24} weight="bold" />
+                  <span className="mx-3">ARM SCANNER</span>
+                  <span className="text-2xl">→</span>
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
