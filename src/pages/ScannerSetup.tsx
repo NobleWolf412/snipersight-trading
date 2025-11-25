@@ -344,19 +344,20 @@ export function ScannerSetup() {
                 </div>
 
                 <div 
-                  className="flex items-center justify-between p-5 bg-background/60 rounded-xl border-2 border-warning/30 hover:border-warning/60 hover:bg-background/80 transition-all card-3d cursor-pointer"
+                  className="relative flex items-center justify-between p-5 bg-background/60 rounded-xl border-2 border-destructive/30 hover:border-destructive/60 hover:bg-background/80 transition-all card-3d cursor-pointer overflow-hidden"
                   onClick={() => setScanConfig({
                     ...scanConfig,
                     categories: { ...scanConfig.categories, memeMode: !scanConfig.categories.memeMode },
                   })}
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center flex-shrink-0">
-                      <Lightning size={20} weight="bold" className="text-warning" />
+                  <div className="absolute -inset-1 bg-destructive/20 rounded-xl blur-md animate-pulse" />
+                  <div className="flex items-center gap-4 relative z-10">
+                    <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center flex-shrink-0 shadow-lg shadow-destructive/20">
+                      <Lightning size={20} weight="bold" className="text-destructive animate-pulse" />
                     </div>
                     <div>
-                      <Label className="cursor-pointer text-base font-semibold block mb-1">Meme Mode</Label>
-                      <Badge variant="outline" className="text-xs bg-warning/20 text-warning border-warning/50">HIGH VOLATILITY</Badge>
+                      <Label className="cursor-pointer text-base font-semibold block mb-1 drop-shadow-[0_0_10px_rgba(207,102,121,0.6)]">Meme Mode</Label>
+                      <Badge variant="outline" className="text-xs bg-destructive/20 text-destructive border-destructive/50 shadow-sm">HIGH VOLATILITY</Badge>
                     </div>
                   </div>
                   <Switch
@@ -369,7 +370,7 @@ export function ScannerSetup() {
                       })
                     }
                     onClick={(e) => e.stopPropagation()}
-                    className="scale-125 data-[state=checked]:bg-warning"
+                    className="scale-125 data-[state=checked]:bg-destructive relative z-10"
                   />
                 </div>
               </div>
