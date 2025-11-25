@@ -5,6 +5,8 @@ import { BotSetup } from '@/pages/BotSetup';
 import { ScannerStatus } from '@/pages/ScannerStatus';
 import { BotStatus } from '@/pages/BotStatus';
 import { ScanResults } from '@/pages/ScanResults';
+import { TrainingGround } from '@/pages/TrainingGround';
+import { MarketOverview } from '@/pages/MarketOverview';
 import { Routes, Route } from 'react-router-dom';
 import { SniperReticle } from '@/components/SniperReticle';
 
@@ -21,6 +23,8 @@ function App() {
           <Route path="/results" element={<ScanResults />} />
           <Route path="/bot/setup" element={<BotSetup />} />
           <Route path="/bot/status" element={<BotStatus />} />
+          <Route path="/training" element={<TrainingGround />} />
+          <Route path="/market" element={<MarketOverview />} />
         </Routes>
       </main>
       <Toaster />
