@@ -31,7 +31,15 @@ export function Landing() {
               {/* Hero title and subtitle */}
               <div className="space-y-6 text-center">
                 <div className="flex items-center justify-center gap-4">
-                  <Crosshair size={64} weight="thin" className="text-accent opacity-40" />
+                  <div className="relative">
+                    <Crosshair size={64} weight="thin" className="text-destructive hud-glow-red scan-pulse animate-[spin_8s_linear_infinite]" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-16 h-16 border border-destructive/30 rounded-full animate-ping" />
+                    </div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-20 h-20 border-2 border-dashed border-destructive/20 rounded-full animate-[spin_4s_linear_infinite_reverse]" />
+                    </div>
+                  </div>
                   <h1 className="text-5xl md:text-7xl font-bold tracking-tight heading-hud hud-glow-green scan-pulse-slow glitch-text">SNIPERSIGHT</h1>
                 </div>
                 <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl leading-relaxed mx-auto">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
