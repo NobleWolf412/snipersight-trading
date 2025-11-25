@@ -286,7 +286,7 @@ export function ScannerSetup() {
                 <CardContent className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="grid gap-6">
                     <div 
-                      className="flex items-center justify-between p-4 bg-background/60 rounded-xl border-2 border-border/60 hover:border-accent/50 hover:bg-background/80 transition-all card-3d cursor-pointer"
+                      className="flex items-center justify-between p-4 bg-background/60 rounded-xl border-2 border-border/60 hover:border-accent/50 hover:bg-background/80 transition-all card-3d cursor-pointer text-base"
                       onClick={() => setScanConfig({
                         ...scanConfig,
                         categories: { ...scanConfig.categories, majors: !scanConfig.categories.majors },
