@@ -350,15 +350,18 @@ export function ScannerSetup() {
                     categories: { ...scanConfig.categories, memeMode: !scanConfig.categories.memeMode },
                   })}
                 >
-                  <div className="absolute -inset-1 bg-destructive/20 rounded-xl blur-md animate-pulse" />
+                  <div className="absolute -inset-1 bg-destructive/20 rounded-xl blur-md hud-glow-red" />
                   <div className="flex items-center gap-4 relative z-10">
                     <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center flex-shrink-0 shadow-lg shadow-destructive/20">
                       <Lightning size={20} weight="bold" className="text-destructive animate-pulse" />
                     </div>
                     <div>
-                      <Badge variant="outline" className="text-xs bg-destructive/20 text-destructive border-destructive/50 shadow-sm">HIGH VOLATILITY</Badge>
+                      <Label className="cursor-pointer text-base font-semibold block mb-1">Memes</Label>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs bg-destructive/20 text-destructive border-destructive/50">HIGH VOLATILITY</Badge>
+                      </div>
                     </div>
-                    </div>
+                  </div>
                   <Switch
                     id="meme"
                     checked={scanConfig.categories.memeMode}
