@@ -1,5 +1,5 @@
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react-swc";
+import react from "@vitejs/plugin-react";
 import { defineConfig, PluginOption } from "vite";
 
 import sparkPlugin from "@github/spark/spark-vite-plugin";
@@ -8,16 +8,10 @@ import { resolve } from 'path'
 
 const projectRoot = process.env.PROJECT_ROOT || import.meta.dirname
 
-// Port configuration for consistent frontend/backend setup
-const FRONTEND_PORT = Number(process.env.FRONTEND_PORT || 5000);
-const BACKEND_PORT = Number(process.env.BACKEND_PORT || 8000);
-
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    react({
-      jsxRuntime: 'automatic',
-    }),
+    react(),
     tailwindcss(),
     // DO NOT REMOVE
     createIconImportProxy() as PluginOption,
@@ -29,17 +23,13 @@ export default defineConfig({
     }
   },
   server: {
-    host: '0.0.0.0',  // Bind to all interfaces for remote access (Codespaces/containers)
-    port: FRONTEND_PORT,
+    port: 5000,
     strictPort: true,
     proxy: {
       '/api': {
-        target: `http://localhost:${BACKEND_PORT}`,
+        target: 'http://localhost:8000',
         changeOrigin: true,
       }
     }
-  },
-  optimizeDeps: {
-    include: ['react', 'react-dom', 'react/jsx-runtime'],
   },
 });
