@@ -221,7 +221,7 @@ export function ScannerSetup() {
                     onChange={(e) =>
                       setScanConfig({ ...scanConfig, topPairs: parseInt(e.target.value) || 20 })
                     }
-                    className="bg-background h-12 border-border/60 hover:border-accent/50 focus:border-accent transition-colors"
+                    className="bg-background h-12 border-border/60 hover:border-accent/50 focus:border-accent transition-colors w-24"
                   />
                 </div>
               </div>
