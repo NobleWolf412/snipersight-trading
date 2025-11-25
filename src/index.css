@@ -972,3 +972,61 @@ html, body {
 .scope-marker {
   animation: scope-focus calc(2s / var(--tactical-speed)) ease-in-out infinite;
 }
+
+/* ========================================
+   METAL FRAME EFFECTS
+   ======================================== */
+
+.metal-frame {
+  position: relative;
+}
+
+.metal-frame::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(
+    135deg,
+    oklch(0.40 0.04 150) 0%,
+    oklch(0.45 0.05 155) 25%,
+    oklch(0.35 0.03 145) 50%,
+    oklch(0.45 0.05 155) 75%,
+    oklch(0.40 0.04 150) 100%
+  );
+  border-radius: calc(var(--radius) * 1.5);
+  z-index: 0;
+  opacity: 0.8;
+}
+
+.metal-frame::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  background: linear-gradient(
+    -45deg,
+    transparent 0%,
+    oklch(0.50 0.08 150 / 0.3) 45%,
+    oklch(0.60 0.12 155 / 0.5) 50%,
+    oklch(0.50 0.08 150 / 0.3) 55%,
+    transparent 100%
+  );
+  background-size: 200% 200%;
+  border-radius: calc(var(--radius) * 1.5);
+  z-index: 1;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .metal-frame:hover::after {
+    animation: metal-shimmer calc(3s / var(--tactical-speed)) linear infinite;
+  }
+}
+
+@keyframes metal-shimmer {
+  0% {
+    background-position: 200% 200%;
+  }
+  100% {
+    background-position: -200% -200%;
+  }
+}
