@@ -274,9 +274,9 @@ export function ScannerSetup() {
           </CardHeader>
           {showCategories && (
             <CardContent className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-              <div className="grid gap-4">
+              <div className="grid gap-6">
                 <div 
-                  className="flex items-center justify-between p-5 bg-background/60 rounded-xl border-2 border-border/60 hover:border-accent/50 hover:bg-background/80 transition-all card-3d cursor-pointer"
+                  className="flex items-center justify-between p-6 bg-background/60 rounded-xl border-2 border-border/60 hover:border-accent/50 hover:bg-background/80 transition-all card-3d cursor-pointer"
                   onClick={() => setScanConfig({
                     ...scanConfig,
                     categories: { ...scanConfig.categories, majors: !scanConfig.categories.majors },
@@ -310,7 +310,7 @@ export function ScannerSetup() {
                 </div>
 
                 <div 
-                  className="flex items-center justify-between p-5 bg-background/60 rounded-xl border-2 border-border/60 hover:border-primary/50 hover:bg-background/80 transition-all card-3d cursor-pointer"
+                  className="flex items-center justify-between p-6 bg-background/60 rounded-xl border-2 border-border/60 hover:border-primary/50 hover:bg-background/80 transition-all card-3d cursor-pointer"
                   onClick={() => setScanConfig({
                     ...scanConfig,
                     categories: { ...scanConfig.categories, altcoins: !scanConfig.categories.altcoins },
@@ -344,7 +344,7 @@ export function ScannerSetup() {
                 </div>
 
                 <div 
-                  className="relative flex items-center justify-between p-5 bg-background/60 rounded-xl border-2 border-destructive/30 hover:border-destructive/60 hover:bg-background/80 transition-all card-3d cursor-pointer overflow-hidden"
+                  className="relative flex items-center justify-between p-6 bg-background/60 rounded-xl border-2 border-destructive/30 hover:border-destructive/60 hover:bg-background/80 transition-all card-3d cursor-pointer overflow-hidden"
                   onClick={() => setScanConfig({
                     ...scanConfig,
                     categories: { ...scanConfig.categories, memeMode: !scanConfig.categories.memeMode },
