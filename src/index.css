@@ -114,6 +114,11 @@
 body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   font-variant-numeric: tabular-nums;
+  cursor: none;
+}
+
+a, button, input, select, textarea, [role="button"] {
+  cursor: none !important;
 }
 
 /* Global layout support: full-screen and safe widths */
@@ -852,4 +857,34 @@ html, body {
   animation: radar-spin calc(18s / var(--tactical-speed)) linear infinite;
   transform-origin: center;
   pointer-events: none;
+}
+
+/* ========================================
+   SNIPER SCOPE RETICLE EFFECTS
+   ======================================== */
+
+@keyframes scope-breathe {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.02);
+  }
+}
+
+@keyframes scope-focus {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.scope-reticle {
+  animation: scope-breathe calc(4s / var(--tactical-speed)) ease-in-out infinite;
+}
+
+.scope-marker {
+  animation: scope-focus calc(2s / var(--tactical-speed)) ease-in-out infinite;
 }

@@ -6,10 +6,12 @@ import { ScannerStatus } from '@/pages/ScannerStatus';
 import { BotStatus } from '@/pages/BotStatus';
 import { ScanResults } from '@/pages/ScanResults';
 import { Routes, Route } from 'react-router-dom';
+import { SniperReticle } from '@/components/SniperReticle';
 
 function App() {
   return (
     <div className="min-h-screen w-screen bg-background text-foreground">
+      <SniperReticle />
       <main className="w-full h-full tactical-grid">
         <Routes>
           <Route path="/" element={<Landing />} />
