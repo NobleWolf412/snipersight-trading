@@ -11,6 +11,7 @@ import { DetailsModal } from '@/components/DetailsModal/DetailsModal';
 import { LiveTicker } from '@/components/LiveTicker';
 import { PriceDisplay } from '@/components/PriceDisplay';
 import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLayout';
+import { HomeButton } from '@/components/layout/HomeButton';
 
 export function ScanResults() {
   const navigate = useNavigate();
@@ -68,23 +69,28 @@ export function ScanResults() {
   if (results.length === 0) {
     return (
       <PageLayout maxWidth="2xl">
-        <div className="text-center space-y-6 py-12">
-          <div className="relative inline-block">
-            <TrendUp size={80} className="mx-auto text-muted-foreground" />
-            <div className="absolute inset-0 animate-ping">
-              <TrendUp size={80} className="mx-auto text-accent opacity-20" />
-            </div>
+        <div className="space-y-6">
+          <div className="flex justify-start">
+            <HomeButton />
           </div>
-          <h2 className="text-3xl font-bold text-foreground heading-hud">No Targets Acquired</h2>
-          <p className="text-lg text-muted-foreground">Run a scan to identify trading opportunities</p>
-          <Button 
-            onClick={() => navigate('/scan')} 
-            className="bg-accent hover:bg-accent/90 text-accent-foreground h-14 text-lg px-8 btn-tactical-scanner" 
-            size="lg"
-          >
-            <TrendUp size={24} weight="bold" />
-            ARM SCANNER
-          </Button>
+          <div className="text-center space-y-6 py-12">
+            <div className="relative inline-block">
+              <TrendUp size={80} className="mx-auto text-muted-foreground" />
+              <div className="absolute inset-0 animate-ping">
+                <TrendUp size={80} className="mx-auto text-accent opacity-20" />
+              </div>
+            </div>
+            <h2 className="text-3xl font-bold text-foreground heading-hud">No Targets Acquired</h2>
+            <p className="text-lg text-muted-foreground">Run a scan to identify trading opportunities</p>
+            <Button 
+              onClick={() => navigate('/scan')} 
+              className="bg-accent hover:bg-accent/90 text-accent-foreground h-14 text-lg px-8 btn-tactical-scanner" 
+              size="lg"
+            >
+              <TrendUp size={24} weight="bold" />
+              ARM SCANNER
+            </Button>
+          </div>
         </div>
       </PageLayout>
     );
@@ -93,6 +99,9 @@ export function ScanResults() {
   return (
     <PageLayout maxWidth="2xl">
       <div className="space-y-10">
+        <div className="flex justify-start">
+          <HomeButton />
+        </div>
         <PageHeader
           title="Targets Locked"
           description={`${results.length} high-probability setup${results.length !== 1 ? 's' : ''} identified`}

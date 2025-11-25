@@ -17,6 +17,7 @@ import { SniperModeSelector } from '@/components/SniperModeSelector';
 import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
 import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLayout';
+import { HomeButton } from '@/components/layout/HomeButton';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
@@ -120,6 +121,9 @@ export function ScannerSetup() {
   return (
     <PageLayout maxWidth="lg">
       <div className="space-y-12">
+        <div className="flex justify-start">
+          <HomeButton />
+        </div>
         <PageHeader
           title="Acquire Targets"
           description="Configure scanner parameters for market opportunities"

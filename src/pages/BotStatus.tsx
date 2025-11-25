@@ -9,6 +9,7 @@ import { LiveTicker } from '@/components/LiveTicker';
 import { ActivityFeed } from '@/components/telemetry/ActivityFeed';
 import { telemetryService, type TelemetryAnalytics } from '@/services/telemetryService';
 import { PageShell } from '@/components/layout/PageShell';
+import { HomeButton } from '@/components/layout/HomeButton';
 
 export function BotStatus() {
   const navigate = useNavigate();
@@ -43,6 +44,9 @@ export function BotStatus() {
   return (
     <PageShell>
       <div className="space-y-10 md:space-y-12">
+        <div className="flex justify-start">
+          <HomeButton />
+        </div>
         <div className="flex items-center justify-between flex-wrap gap-6">
           <div className="space-y-3">
             <div className="flex items-center gap-4">

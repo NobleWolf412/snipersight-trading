@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Robot, Key, Shield, Activity, Gear, TrendUp } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
+import { HomeButton } from '@/components/layout/HomeButton';
 
 export function BotSetup() {
   const configSections = [
@@ -78,6 +79,9 @@ export function BotSetup() {
       <main>
         <PageShell>
           <div className="space-y-10 md:space-y-12">
+            <div className="flex justify-start">
+              <HomeButton />
+            </div>
             <div className="space-y-4">
               <div className="flex items-center gap-4">
                 <div className="relative">

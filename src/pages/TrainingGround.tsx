@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Target, PlayCircle, BookOpen } from '@phosphor-icons/react';
 import { PageShell } from '@/components/layout/PageShell';
+import { HomeButton } from '@/components/layout/HomeButton';
 
 interface MockScanResult {
   pair: string;
@@ -39,6 +40,9 @@ export function TrainingGround() {
   return (
     <PageShell>
       <div className="space-y-10 md:space-y-12">
+        <div className="flex justify-start">
+          <HomeButton />
+        </div>
         <div className="space-y-3">
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-3 heading-hud">
             <Target size={32} weight="bold" className="text-accent" />

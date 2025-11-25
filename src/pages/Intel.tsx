@@ -2,11 +2,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ChartLine, TrendUp, TrendDown, Activity } from '@phosphor-icons/react';
 import { PageShell } from '@/components/layout/PageShell';
+import { HomeButton } from '@/components/layout/HomeButton';
 
 export function Intel() {
   return (
     <PageShell>
       <div className="space-y-10 md:space-y-12">
+        <div className="flex justify-start">
+          <HomeButton />
+        </div>
         <div className="space-y-3">
           <h1 className="text-4xl font-bold text-foreground flex items-center gap-4 heading-hud">
             <ChartLine size={40} weight="bold" className="text-accent" />

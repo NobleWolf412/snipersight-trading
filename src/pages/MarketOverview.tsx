@@ -3,6 +3,7 @@ import { TrendUp, ChartLine } from '@phosphor-icons/react';
 import { PriceCard } from '@/components/PriceCard';
 import { LiveTicker } from '@/components/LiveTicker';
 import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLayout';
+import { HomeButton } from '@/components/layout/HomeButton';
 
 const MAJOR_PAIRS = [
   'BTC/USDT',
@@ -17,6 +18,9 @@ export function MarketOverview() {
   return (
     <PageLayout maxWidth="7xl">
       <div className="space-y-10">
+        <div className="flex justify-start">
+          <HomeButton />
+        </div>
         <PageHeader
           title="Market Overview"
           description="Real-time price monitoring across major trading pairs"

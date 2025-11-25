@@ -8,6 +8,7 @@ import { Crosshair, Target, TrendUp, XCircle, CheckCircle, CaretDown, CaretUp } 
 import { telemetryService, type TelemetryAnalytics } from '@/services/telemetryService';
 import { useNavigate } from 'react-router-dom';
 import { PageShell } from '@/components/layout/PageShell';
+import { HomeButton } from '@/components/layout/HomeButton';
 
 export function ScannerStatus() {
   const { scanConfig } = useScanner();
@@ -35,6 +36,9 @@ export function ScannerStatus() {
   return (
     <PageShell>
       <div className="space-y-10 md:space-y-12">
+        <div className="flex justify-start">
+          <HomeButton />
+        </div>
         <div className="flex items-center justify-between flex-wrap gap-6">
           <div className="space-y-3">
             <div className="flex items-center gap-4">
