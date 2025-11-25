@@ -115,6 +115,52 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   font-variant-numeric: tabular-nums;
   cursor: none;
+  position: relative;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url('/src/assets/images/Metal_Texture_Wallpaper_On.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  opacity: 0.15;
+  z-index: -2;
+  pointer-events: none;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: 
+    radial-gradient(circle at 20% 30%, oklch(0.60 0.18 145 / 0.08), transparent 50%),
+    radial-gradient(circle at 80% 70%, oklch(0.65 0.10 180 / 0.06), transparent 50%),
+    radial-gradient(circle at 50% 50%, oklch(0.60 0.18 145 / 0.04), transparent 60%);
+  z-index: -1;
+  pointer-events: none;
+  animation: glow-pulse calc(8s / var(--tactical-speed, 1)) ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::after {
+    animation: none;
+    opacity: 0.8;
+  }
 }
 
 a, button, input, select, textarea, [role="button"] {
@@ -133,6 +179,7 @@ html, body {
   width: 100%;
   min-height: 100vh;
   overflow-x: hidden;
+  position: relative;
 }
 
 /* ========================================
@@ -141,6 +188,7 @@ html, body {
 
 /* Multi-layer parallax grid with depth */
 .tactical-grid {
+  position: relative;
   background-image: 
     /* Layer 1: Fine detail grid - bright green */
     linear-gradient(
@@ -186,6 +234,42 @@ html, body {
     5px 5px,
     10px 10px,
     10px 10px;
+}
+
+.tactical-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: 
+    radial-gradient(circle 400px at 15% 20%, oklch(0.60 0.18 145 / 0.12), transparent),
+    radial-gradient(circle 500px at 85% 80%, oklch(0.65 0.10 180 / 0.10), transparent),
+    radial-gradient(circle 350px at 60% 40%, oklch(0.60 0.18 145 / 0.08), transparent);
+  pointer-events: none;
+  z-index: 0;
+  animation: ambient-glow calc(12s / var(--tactical-speed, 1)) ease-in-out infinite;
+}
+
+@keyframes ambient-glow {
+  0%, 100% {
+    opacity: 0.5;
+    filter: blur(60px);
+  }
+  33% {
+    opacity: 0.8;
+    filter: blur(80px);
+  }
+  66% {
+    opacity: 0.6;
+    filter: blur(70px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tactical-grid::before {
+    animation: none;
+    opacity: 0.6;
+    filter: blur(70px);
+  }
 }
 
 /* ========================================
