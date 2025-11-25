@@ -48,3 +48,5 @@ export function MetalCard({
     </div>
   );
 }
+
+export const MetalSection = MetalCard;
