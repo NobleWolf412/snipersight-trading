@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ActivityFeed } from '@/components/telemetry/ActivityFeed';
+import { ScanHistory } from '@/components/ScanHistory';
 import { useScanner } from '@/context/ScannerContext';
 import { useEffect, useState } from 'react';
 import { Crosshair, Target, TrendUp, XCircle, CheckCircle, CaretDown, CaretUp } from '@phosphor-icons/react';
@@ -167,6 +168,8 @@ export function ScannerStatus() {
             </div>
           )}
         </div>
+
+        <ScanHistory maxEntries={10} />
 
         <div className="space-y-4">
           <h2 className="text-2xl font-bold heading-hud flex items-center gap-3">
