@@ -356,10 +356,9 @@ export function ScannerSetup() {
                       <Lightning size={20} weight="bold" className="text-destructive animate-pulse" />
                     </div>
                     <div>
-                      <Label className="cursor-pointer text-base font-semibold block mb-1 drop-shadow-[0_0_10px_rgba(207,102,121,0.6)]">Meme Mode</Label>
                       <Badge variant="outline" className="text-xs bg-destructive/20 text-destructive border-destructive/50 shadow-sm">HIGH VOLATILITY</Badge>
                     </div>
-                  </div>
+                    </div>
                   <Switch
                     id="meme"
                     checked={scanConfig.categories.memeMode}
@@ -371,9 +370,8 @@ export function ScannerSetup() {
                     }
                     onClick={(e) => e.stopPropagation()}
                     className="scale-125 data-[state=checked]:bg-destructive relative z-10"
-                  />
                 </div>
-              </div>
+                  />
             </CardContent>
           )}
         </Card>
