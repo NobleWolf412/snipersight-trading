@@ -1,51 +1,39 @@
 import { cn } from '@/lib/utils';
-
+import { ReactNode } from 'react';
 
 interface MetalCardProps {
   children: ReactNode;
   className?: string;
-export function MetalCard({ 
- 
-
-    primary: 'shadow-primary
-    success:
-    destruct
-
-    <div className={
-      'shadow-lg',
-      className
-      {children}
-  );
-
-  title?: string;
-  cl
-
-
-  title, 
-  className,
-  titleColor = 'te
-  const glowClasses = {
-    accent: 'hu
-    war
-  };
-  return (
-    
- 
-
-          {title}
-      )}
-        {children}
-    </div>
 }
 
+export function MetalCard({ 
+  children,
+  className
+}: MetalCardProps) {
+  return (
+    <div className={cn(
+      'relative bg-card border border-border rounded-xl p-6 backdrop-blur-sm shadow-lg',
+      className
+    )}>
+      {children}
+    </div>
+  );
+}
 
+interface MetalSectionProps {
+  children: ReactNode;
+  title?: string;
+  className?: string;
+  titleColor?: string;
+  glowColor?: 'primary' | 'accent' | 'success' | 'warning' | 'destructive';
+}
 
-
-
-
-
-
-
+export function MetalSection({
+  children,
+  title, 
+  className,
+  titleColor = 'text-primary',
+  glowColor = 'primary'
 }: MetalSectionProps) {
   const glowClasses = {
     primary: 'hud-glow-green',
