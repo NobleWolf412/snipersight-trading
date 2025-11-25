@@ -42,9 +42,9 @@ export function ScannerSetup() {
     setIsScanning(true);
 
     try {
-      // Add timeout to prevent indefinite waiting (2 minutes for heavy computation)
+      // Add timeout to prevent indefinite waiting (5 minutes for heavy computation with real exchange data)
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Request timeout')), 120000)
+        setTimeout(() => reject(new Error('Request timeout')), 300000)
       );
       
       const apiPromise = api.getSignals({
@@ -92,6 +92,13 @@ export function ScannerSetup() {
           scanned: response.data.scanned,
         };
         localStorage.setItem('scan-metadata', JSON.stringify(metadata));
+        
+        // Store rejection stats if available
+        if (response.data.rejections) {
+          localStorage.setItem('scan-rejections', JSON.stringify(response.data.rejections));
+        } else {
+          localStorage.removeItem('scan-rejections');
+        }
         
         console.log('[ScannerSetup] Navigating to results with', results.length, 'setups');
         toast({

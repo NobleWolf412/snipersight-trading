@@ -12,11 +12,13 @@ import { LiveTicker } from '@/components/LiveTicker';
 import { PriceDisplay } from '@/components/PriceDisplay';
 import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLayout';
 import { HomeButton } from '@/components/layout/HomeButton';
+import { RejectionSummary } from '@/components/RejectionSummary';
 
 export function ScanResults() {
   const navigate = useNavigate();
   const [scanResults, setScanResults] = useState<ScanResult[]>([]);
   const [scanMetadata, setScanMetadata] = useState<any>(null);
+  const [rejectionStats, setRejectionStats] = useState<any>(null);
   const [selectedResult, setSelectedResult] = useState<ScanResult | null>(null);
   const [isChartModalOpen, setIsChartModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -26,6 +28,7 @@ export function ScanResults() {
   useEffect(() => {
     const resultsStr = localStorage.getItem('scan-results');
     const metadataStr = localStorage.getItem('scan-metadata');
+    const rejectionsStr = localStorage.getItem('scan-rejections');
     if (resultsStr) {
       try {
         setScanResults(JSON.parse(resultsStr));
@@ -38,6 +41,13 @@ export function ScanResults() {
         setScanMetadata(JSON.parse(metadataStr));
       } catch (e) {
         console.error('Failed to parse scan metadata:', e);
+      }
+    }
+    if (rejectionsStr) {
+      try {
+        setRejectionStats(JSON.parse(rejectionsStr));
+      } catch (e) {
+        console.error('Failed to parse rejection stats:', e);
       }
     }
   }, []);
@@ -179,6 +189,13 @@ export function ScanResults() {
               </CardContent>
             )}
           </Card>
+        )}
+
+        {rejectionStats && rejectionStats.total_rejected > 0 && (
+          <RejectionSummary 
+            rejections={rejectionStats} 
+            totalScanned={scanMetadata?.scanned || rejectionStats.total_rejected} 
+          />
         )}
 
         <Card className="bg-card/50 border-accent/30 card-3d overflow-hidden">

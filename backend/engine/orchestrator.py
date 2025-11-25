@@ -114,7 +114,7 @@ class Orchestrator:
 
         logger.info("Orchestrator initialized with SniperSight pipeline (workers=%d)", self.concurrency_workers)
     
-    def scan(self, symbols: List[str]) -> List[TradePlan]:
+    def scan(self, symbols: List[str]) -> tuple[List[TradePlan], Dict[str, Any]]:
         """
         Execute complete scan pipeline for symbols.
         
@@ -122,7 +122,7 @@ class Orchestrator:
             symbols: List of trading pairs to scan
             
         Returns:
-            List of TradePlan objects for qualifying setups
+            Tuple of (TradePlans, rejection_stats dict)
             
         Raises:
             Exception: If critical pipeline stage fails
@@ -142,9 +142,16 @@ class Orchestrator:
         
         signals = []
         rejected_count = 0
+        rejection_stats: Dict[str, List[Dict[str, Any]]] = {
+            "low_confluence": [],
+            "no_data": [],
+            "risk_validation": [],
+            "no_trade_plan": [],
+            "errors": []
+        }
         
         # Parallel per-symbol processing
-        def _safe_process(sym: str) -> Optional[TradePlan]:
+        def _safe_process(sym: str) -> tuple[Optional[TradePlan], Optional[Dict[str, Any]]]:
             try:
                 return self._process_symbol(sym, run_id, timestamp)
             except Exception as e:  # pyright: ignore - intentional broad catch for robustness
@@ -155,18 +162,22 @@ class Orchestrator:
                     symbol=sym,
                     run_id=run_id
                 ))
-                return None
+                return None, {"symbol": sym, "error": str(e)}
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.concurrency_workers) as executor:
             future_map = {executor.submit(_safe_process, s): s for s in symbols}
             for future in concurrent.futures.as_completed(future_map):
                 symbol = future_map[future]
-                result = future.result()
+                result, rejection_info = future.result()
                 if result:
                     signals.append(result)
                     logger.info("✅ %s: Signal generated (%.1f%%)", symbol, result.confidence_score)
                 else:
                     rejected_count += 1
+                    # Categorize rejection
+                    if rejection_info:
+                        reason_type = rejection_info.get("reason_type", "errors")
+                        rejection_stats[reason_type].append(rejection_info)
                     logger.debug("⚪ %s: No qualifying setup", symbol)
         
         # Log scan completed event
@@ -180,14 +191,28 @@ class Orchestrator:
         ))
         
         logger.info("🎯 Scan %s complete: %d/%d signals generated", run_id, len(signals), len(symbols))
-        return signals
+        
+        # Build rejection summary
+        rejection_summary = {
+            "total_rejected": rejected_count,
+            "by_reason": {
+                "low_confluence": len(rejection_stats["low_confluence"]),
+                "no_data": len(rejection_stats["no_data"]),
+                "risk_validation": len(rejection_stats["risk_validation"]),
+                "no_trade_plan": len(rejection_stats["no_trade_plan"]),
+                "errors": len(rejection_stats["errors"])
+            },
+            "details": rejection_stats
+        }
+        
+        return signals, rejection_summary
     
     def _process_symbol(
         self, 
         symbol: str, 
         run_id: str, 
         timestamp: datetime
-    ) -> Optional[TradePlan]:
+    ) -> tuple[Optional[TradePlan], Optional[Dict[str, Any]]]:
         """
         Process single symbol through complete pipeline.
         
@@ -197,7 +222,7 @@ class Orchestrator:
             timestamp: Scan timestamp
             
         Returns:
-            TradePlan if qualifying setup found, None otherwise
+            Tuple of (TradePlan if qualifying, rejection_info dict if rejected)
         """
         # Stage 1: Initialize context
         context = SniperContext(
@@ -213,7 +238,11 @@ class Orchestrator:
         
         if not context.multi_tf_data or not context.multi_tf_data.timeframes:
             logger.info("%s: REJECTED - No market data available (exchange may be restricted or offline)", symbol)
-            return None
+            return None, {
+                "symbol": symbol,
+                "reason_type": "no_data",
+                "reason": "No market data available"
+            }
         
         # Stage 3: Indicator computation
         logger.debug("%s: Computing indicators", symbol)
@@ -245,7 +274,14 @@ class Orchestrator:
                 threshold=self.config.min_confluence_score
             ))
             
-            return None
+            return None, {
+                "symbol": symbol,
+                "reason_type": "low_confluence",
+                "reason": f"Confluence score too low ({context.confluence_breakdown.total_score:.1f} < {self.config.min_confluence_score:.1f})",
+                "score": context.confluence_breakdown.total_score,
+                "threshold": self.config.min_confluence_score,
+                "top_factors": [f"{f.name}: {f.score:.1f}" for f in context.confluence_breakdown.factors[:3]]
+            }
         
         # Stage 6: Trade planning
         logger.debug("%s: Generating trade plan", symbol)
@@ -256,14 +292,27 @@ class Orchestrator:
         logger.debug("%s: Validating risk parameters", symbol)
         if not context.plan or not self._validate_risk(context.plan):
             reason = "No trade plan generated" if not context.plan else "Failed risk validation"
+            reason_type = "no_trade_plan" if not context.plan else "risk_validation"
+            
             if context.plan:
                 logger.info("%s: REJECTED - Risk validation failed | R:R=%.2f, Stop=%.2f, Entry=%.2f", 
                            symbol, 
                            context.plan.risk_reward if hasattr(context.plan, 'risk_reward') else 0,
                            context.plan.stop_loss.level if context.plan.stop_loss else 0,
                            context.plan.entry_zone.near_entry if context.plan.entry_zone else 0)
+                rejection_info = {
+                    "symbol": symbol,
+                    "reason_type": reason_type,
+                    "reason": f"Risk/Reward ratio too low ({context.plan.risk_reward:.2f})",
+                    "risk_reward": context.plan.risk_reward
+                }
             else:
                 logger.info("%s: REJECTED - No trade plan could be generated (insufficient SMC patterns)", symbol)
+                rejection_info = {
+                    "symbol": symbol,
+                    "reason_type": reason_type,
+                    "reason": "Insufficient SMC patterns for entry/stop placement"
+                }
             
             # Log rejection event
             self.telemetry.log_event(create_signal_rejected_event(
@@ -273,7 +322,7 @@ class Orchestrator:
                 gate_name="risk_validation"
             ))
             
-            return None
+            return None, rejection_info
         
         # Log successful signal generation
         if context.plan:
@@ -287,7 +336,7 @@ class Orchestrator:
                 risk_reward_ratio=context.plan.risk_reward
             ))
         
-        return context.plan
+        return context.plan, None
     
     def _ingest_data(self, symbol: str) -> Optional[MultiTimeframeData]:
         """
