@@ -370,8 +370,9 @@ export function ScannerSetup() {
                     }
                     onClick={(e) => e.stopPropagation()}
                     className="scale-125 data-[state=checked]:bg-destructive relative z-10"
-                </div>
                   />
+                </div>
+              </div>
             </CardContent>
           )}
         </Card>
