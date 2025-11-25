@@ -51,7 +51,7 @@ MODES: Dict[str, ScannerMode] = {
         name="surgical",
         description="Tight precision setups only (higher quality threshold).",
         timeframes=("4h", "1h", "15m"),
-        min_confluence_score=80.0,
+        min_confluence_score=70.0,
         profile="precision",
     ),
     "ghost": ScannerMode(

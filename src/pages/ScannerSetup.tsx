@@ -17,6 +17,7 @@ import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
 import { MetalSection, MetalCard } from '@/components/MetalCard';
 import { HomeButton } from '@/components/layout/HomeButton';
+import { scanHistoryService } from '@/services/scanHistoryService';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
@@ -38,9 +39,9 @@ export function ScannerSetup() {
     setIsScanning(true);
 
     try {
-      // Add timeout to prevent indefinite waiting (2 minutes for heavy computation)
+      // Add timeout to prevent indefinite waiting (5 minutes for heavy computation with real exchange data)
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Request timeout')), 120000)
+        setTimeout(() => reject(new Error('Request timeout')), 300000)
       );
       
       const apiPromise = api.getSignals({
@@ -88,6 +89,26 @@ export function ScannerSetup() {
           scanned: response.data.scanned,
         };
         localStorage.setItem('scan-metadata', JSON.stringify(metadata));
+        
+        // Store rejection stats if available
+        if (response.data.rejections) {
+          localStorage.setItem('scan-rejections', JSON.stringify(response.data.rejections));
+        } else {
+          localStorage.removeItem('scan-rejections');
+        }
+        
+        // Save to scan history database
+        scanHistoryService.saveScan({
+          mode: response.data.mode,
+          profile: response.data.profile || 'default',
+          timeframes: response.data.applied_timeframes || [],
+          symbolsScanned: response.data.scanned || 0,
+          signalsGenerated: response.data.signals.length,
+          signalsRejected: response.data.rejections?.total_rejected || 0,
+          effectiveMinScore: response.data.effective_min_score || 0,
+          rejectionBreakdown: response.data.rejections?.by_reason,
+          results: results,
+        });
         
         console.log('[ScannerSetup] Navigating to results with', results.length, 'setups');
         toast({

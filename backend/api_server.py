@@ -421,7 +421,7 @@ async def get_signals(
                    len(symbols), majors, altcoins, meme_mode)
 
         # Run scan pipeline
-        trade_plans = orchestrator.scan(symbols)
+        trade_plans, rejection_summary = orchestrator.scan(symbols)
 
         rejected_count = len(symbols) - len(trade_plans)
         logger.info("Scan completed: %d signals generated, %d rejected from %d symbols", 
@@ -474,10 +474,7 @@ async def get_signals(
                 "altcoins": altcoins,
                 "meme_mode": meme_mode
             },
-            "debug": {
-                "message": f"{len(trade_plans)} signals passed all quality gates, {rejected_count} rejected",
-                "rejection_reasons": "Check backend logs for detailed rejection reasons (confluence scores, risk validation, data availability)"
-            }
+            "rejections": rejection_summary
         }
 
     except HTTPException:
