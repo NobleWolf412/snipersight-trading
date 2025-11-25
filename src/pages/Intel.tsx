@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { ChartLine, TrendUp, TrendDown, Activity } from '@phosphor-icons/react';
 import { PageShell } from '@/components/layout/PageShell';
 import { HomeButton } from '@/components/layout/HomeButton';
+import { TacticalPanel } from '@/components/TacticalPanel';
 
 export function Intel() {
   return (
@@ -20,11 +21,9 @@ export function Intel() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="card-3d">
-            <CardHeader className="pb-5">
-              <CardTitle className="text-sm heading-hud">BTC TREND</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <TacticalPanel>
+            <div className="p-4 md:p-6">
+              <div className="text-sm heading-hud mb-4 text-muted-foreground">BTC TREND</div>
               <div className="flex items-center gap-4">
                 <TrendUp size={36} className="text-success" weight="bold" />
                 <div>
@@ -32,14 +31,12 @@ export function Intel() {
                   <div className="text-sm text-muted-foreground mt-1">Higher timeframes aligned</div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </TacticalPanel>
 
-          <Card className="card-3d">
-            <CardHeader className="pb-5">
-              <CardTitle className="text-sm heading-hud">MARKET VOLATILITY</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <TacticalPanel>
+            <div className="p-4 md:p-6">
+              <div className="text-sm heading-hud mb-4 text-muted-foreground">MARKET VOLATILITY</div>
               <div className="flex items-center gap-4">
                 <Activity size={36} className="text-warning" weight="bold" />
                 <div>
@@ -47,14 +44,12 @@ export function Intel() {
                   <div className="text-sm text-muted-foreground mt-1">Average daily range</div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </TacticalPanel>
 
-          <Card className="card-3d">
-            <CardHeader className="pb-5">
-              <CardTitle className="text-sm heading-hud">ETH TREND</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <TacticalPanel>
+            <div className="p-4 md:p-6">
+              <div className="text-sm heading-hud mb-4 text-muted-foreground">ETH TREND</div>
               <div className="flex items-center gap-4">
                 <TrendDown size={36} className="text-destructive" weight="bold" />
                 <div>
@@ -62,15 +57,13 @@ export function Intel() {
                   <div className="text-sm text-muted-foreground mt-1">Correction phase</div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </TacticalPanel>
         </div>
 
-        <Card className="command-panel">
-          <CardHeader className="pb-6">
-            <CardTitle className="text-xl heading-hud">Market Heatmap</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <TacticalPanel>
+          <div className="p-4 md:p-6">
+            <h3 className="text-xl heading-hud text-foreground mb-6">Market Heatmap</h3>
             <div className="bg-muted/30 rounded-lg p-16 border border-border flex items-center justify-center min-h-[350px]">
               <div className="text-center space-y-3">
                 <p className="text-lg text-muted-foreground">Market Heatmap Placeholder</p>
@@ -79,14 +72,12 @@ export function Intel() {
                 </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </TacticalPanel>
 
-        <Card className="command-panel">
-          <CardHeader>
-            <CardTitle className="heading-hud">Active Alerts</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <TacticalPanel>
+          <div className="p-4 md:p-6">
+            <h3 className="heading-hud text-xl text-foreground mb-6">Active Alerts</h3>
             <div className="space-y-4">
               <div className="p-4 bg-success/10 border border-success/50 rounded">
                 <div className="flex items-center justify-between mb-2">
@@ -112,8 +103,8 @@ export function Intel() {
                 <div className="text-sm">London session opening - increased liquidity expected</div>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </TacticalPanel>
       </div>
     </PageShell>
   );

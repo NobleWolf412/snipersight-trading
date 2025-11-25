@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Target, PlayCircle, BookOpen } from '@phosphor-icons/react';
 import { PageShell } from '@/components/layout/PageShell';
 import { HomeButton } from '@/components/layout/HomeButton';
+import { TacticalPanel } from '@/components/TacticalPanel';
 
 interface MockScanResult {
   pair: string;
@@ -59,42 +60,44 @@ export function TrainingGround() {
           </AlertDescription>
         </Alert>
 
-        <Card className="command-panel">
-          <CardHeader className="pb-6">
-            <CardTitle className="heading-hud">Training Simulation</CardTitle>
-            <CardDescription>Run scanner with mock market data</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="p-5 bg-background rounded-lg border border-border">
-                <div className="text-sm text-muted-foreground mb-2">Mode</div>
-                <Badge variant="outline" className="bg-accent/20 text-accent">TRAINING</Badge>
-              </div>
-              <div className="p-5 bg-background rounded-lg border border-border">
-                <div className="text-sm text-muted-foreground mb-2">Data Source</div>
-                <Badge variant="outline">SIMULATED</Badge>
-              </div>
+        <TacticalPanel>
+          <div className="p-4 md:p-6">
+            <div className="mb-6">
+              <h3 className="heading-hud text-xl text-foreground mb-2">Training Simulation</h3>
+              <p className="text-sm text-muted-foreground">Run scanner with mock market data</p>
             </div>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="p-5 bg-background rounded-lg border border-border">
+                  <div className="text-sm text-muted-foreground mb-2">Mode</div>
+                  <Badge variant="outline" className="bg-accent/20 text-accent">TRAINING</Badge>
+                </div>
+                <div className="p-5 bg-background rounded-lg border border-border">
+                  <div className="text-sm text-muted-foreground mb-2">Data Source</div>
+                  <Badge variant="outline">SIMULATED</Badge>
+                </div>
+              </div>
 
-            <Button
-              onClick={handleStartTraining}
-              disabled={isTraining}
-              className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
-              size="lg"
-            >
-              <PlayCircle size={20} weight={isTraining ? 'fill' : 'regular'} />
-              {isTraining ? 'RUNNING SIMULATION...' : 'START TRAINING SCAN'}
-            </Button>
-          </CardContent>
-        </Card>
+              <Button
+                onClick={handleStartTraining}
+                disabled={isTraining}
+                className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
+                size="lg"
+              >
+                <PlayCircle size={20} weight={isTraining ? 'fill' : 'regular'} />
+                {isTraining ? 'RUNNING SIMULATION...' : 'START TRAINING SCAN'}
+              </Button>
+            </div>
+          </div>
+        </TacticalPanel>
 
         {results.length > 0 && (
-          <Card className="card-3d">
-            <CardHeader className="pb-6">
-              <CardTitle className="heading-hud">Training Results</CardTitle>
-              <CardDescription>{results.length} simulated targets identified</CardDescription>
-            </CardHeader>
-            <CardContent>
+          <TacticalPanel>
+            <div className="p-4 md:p-6">
+              <div className="mb-6">
+                <h3 className="heading-hud text-xl text-foreground mb-2">Training Results</h3>
+                <p className="text-sm text-muted-foreground">{results.length} simulated targets identified</p>
+              </div>
               <div className="space-y-4">
                 {results.map((result, i) => (
                   <div key={i} className="p-4 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors">
@@ -108,16 +111,16 @@ export function TrainingGround() {
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </TacticalPanel>
         )}
 
-        <Card className="command-panel">
-          <CardHeader className="pb-6">
-            <CardTitle className="heading-hud">Learning Resources</CardTitle>
-            <CardDescription>Essential concepts for successful trading</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <TacticalPanel>
+          <div className="p-4 md:p-6">
+            <div className="mb-6">
+              <h3 className="heading-hud text-xl text-foreground mb-2">Learning Resources</h3>
+              <p className="text-sm text-muted-foreground">Essential concepts for successful trading</p>
+            </div>
             <div className="space-y-4">
               <div className="p-5 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors">
                 <div className="font-bold mb-2 text-base heading-hud">Smart Money Concepts</div>
@@ -132,8 +135,8 @@ export function TrainingGround() {
                 <div className="text-muted-foreground">Position sizing, stop placement, and reward-to-risk ratios</div>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </TacticalPanel>
       </div>
     </PageShell>
   );

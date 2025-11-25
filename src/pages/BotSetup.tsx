@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Robot, Key, Shield, Activity, Gear, TrendUp } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { HomeButton } from '@/components/layout/HomeButton';
+import { TacticalPanel } from '@/components/TacticalPanel';
 
 export function BotSetup() {
   const configSections = [
@@ -105,23 +106,20 @@ export function BotSetup() {
 
             <div className="grid md:grid-cols-2 gap-6">
               {configSections.map((section, index) => (
-                <Card 
+                <TacticalPanel 
                   key={index}
-                  className="card-3d hover:scale-[1.02] transition-all duration-300 border-border/40 hover:border-accent/40"
-                  style={{ animationDelay: `${index * 75}ms` }}
+                  className="hover:scale-[1.02] transition-all duration-300"
                 >
-                  <CardHeader>
-                    <div className="flex items-start gap-4">
+                  <div className="p-4 md:p-6">
+                    <div className="flex items-start gap-4 mb-4">
                       <div className={`w-12 h-12 rounded-lg bg-${section.color}/10 flex items-center justify-center flex-shrink-0`}>
                         {section.icon}
                       </div>
                       <div className="flex-1">
-                        <CardTitle className="text-lg heading-hud mb-2">{section.title}</CardTitle>
+                        <h3 className="text-lg heading-hud mb-2 text-foreground">{section.title}</h3>
                         <Badge variant="outline" className="text-xs">COMING SOON</Badge>
                       </div>
                     </div>
-                  </CardHeader>
-                  <CardContent>
                     <ul className="space-y-2">
                       {section.items.map((item, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
@@ -130,67 +128,69 @@ export function BotSetup() {
                         </li>
                       ))}
                     </ul>
-                  </CardContent>
-                </Card>
+                  </div>
+                </TacticalPanel>
               ))}
             </div>
 
-            <Card className="command-panel border-primary/30">
-              <CardHeader>
-                <CardTitle className="heading-hud flex items-center gap-3">
-                  <div className="w-2 h-2 bg-primary rounded-full scan-pulse" />
-                  DEPLOYMENT STATUS
-                </CardTitle>
-                <CardDescription className="text-base mt-2">
-                  Bot deployment controls and activation settings
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="p-6 bg-background/40 rounded-xl border-2 border-warning/30">
-                  <div className="flex items-start gap-4">
-                    <Shield size={32} weight="bold" className="text-warning flex-shrink-0" />
-                    <div>
-                      <h3 className="text-lg font-bold text-warning mb-2">Configuration Required</h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Complete all configuration sections above before deploying the autonomous bot. 
-                        This ensures proper risk management and execution parameters are in place.
-                      </p>
-                      <div className="flex flex-wrap gap-3">
-                        <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/40">
-                          API Keys: Not Configured
-                        </Badge>
-                        <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/40">
-                          Risk Limits: Not Set
-                        </Badge>
-                        <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/40">
-                          Execution Rules: Missing
-                        </Badge>
+            <TacticalPanel className="border-primary/30">
+              <div className="p-4 md:p-6">
+                <div className="mb-6">
+                  <h3 className="heading-hud flex items-center gap-3 text-xl text-foreground mb-2">
+                    <div className="w-2 h-2 bg-primary rounded-full scan-pulse" />
+                    DEPLOYMENT STATUS
+                  </h3>
+                  <p className="text-base text-muted-foreground mt-2">
+                    Bot deployment controls and activation settings
+                  </p>
+                </div>
+                <div className="space-y-6">
+                  <div className="p-6 bg-background/40 rounded-xl border-2 border-warning/30">
+                    <div className="flex items-start gap-4">
+                      <Shield size={32} weight="bold" className="text-warning flex-shrink-0" />
+                      <div>
+                        <h3 className="text-lg font-bold text-warning mb-2">Configuration Required</h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Complete all configuration sections above before deploying the autonomous bot. 
+                          This ensures proper risk management and execution parameters are in place.
+                        </p>
+                        <div className="flex flex-wrap gap-3">
+                          <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/40">
+                            API Keys: Not Configured
+                          </Badge>
+                          <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/40">
+                            Risk Limits: Not Set
+                          </Badge>
+                          <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/40">
+                            Execution Rules: Missing
+                          </Badge>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-4 pt-4">
-                  <Link to="/" className="flex-1">
+                  <div className="flex items-center gap-4 pt-4">
+                    <Link to="/" className="flex-1">
+                      <Button 
+                        variant="outline" 
+                        size="lg" 
+                        className="w-full h-12 hover:border-accent/50 transition-all"
+                      >
+                        ← Back to Landing
+                      </Button>
+                    </Link>
                     <Button 
-                      variant="outline" 
-                      size="lg" 
-                      className="w-full h-12 hover:border-accent/50 transition-all"
+                      disabled 
+                      size="lg"
+                      className="flex-1 h-12 cursor-not-allowed opacity-50 bg-primary/20 text-primary border border-primary/30"
                     >
-                      ← Back to Landing
+                      <Robot size={20} weight="bold" />
+                      Deploy Bot (Inactive)
                     </Button>
-                  </Link>
-                  <Button 
-                    disabled 
-                    size="lg"
-                    className="flex-1 h-12 cursor-not-allowed opacity-50 bg-primary/20 text-primary border border-primary/30"
-                  >
-                    <Robot size={20} weight="bold" />
-                    Deploy Bot (Inactive)
-                  </Button>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </TacticalPanel>
           </div>
         </PageShell>
       </main>
