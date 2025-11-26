@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { TacticalPanel } from '@/components/TacticalPanel';
 import { PageShell } from '@/components/layout/PageShell';
 import { scanHistoryService } from '@/services/scanHistoryService';
+import { HudPanel, MissionBrief } from '@/components/hud';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
@@ -155,7 +156,7 @@ export function ScannerSetup() {
           </p>
         </div>
 
-        <TacticalPanel className="p-6 md:p-8">
+        <HudPanel title="Scanner Configuration" subtitle="Select your tactical profile and configure scan parameters">
           <div className="space-y-8">
             <div className="space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">MODE & EXCHANGE</h3>
@@ -353,7 +354,12 @@ export function ScannerSetup() {
               </div>
             </div>
           </div>
-        </TacticalPanel>
+        </HudPanel>
+
+        <MissionBrief title="Intel Brief" className="mb-4">
+          <p className="mb-2">Scanner will analyze top symbols across multiple timeframes using Smart Money Concepts detection.</p>
+          <p className="text-muted-foreground text-xs">Higher timeframes provide better confluence but require more data processing time.</p>
+        </MissionBrief>
 
         <div className="relative group pt-2">
           <div className="absolute inset-0 bg-gradient-to-r from-accent/20 via-primary/30 to-accent/20 rounded-xl blur-xl group-hover:blur-2xl transition-all duration-300 opacity-75" />
