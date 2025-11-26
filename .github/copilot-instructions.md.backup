@@ -6,7 +6,7 @@
 
 **Backend** (`/backend/`): Institutional-grade crypto scanner using Smart-Money Concepts (SMC). Core pipeline: data ingestion → indicators → SMC detection (order blocks, FVGs, BOS/CHoCH, liquidity sweeps) → confluence scoring → trade planning → risk validation → signal generation.
 
-**Frontend** (`/src/`): GitHub Spark-based UI with React 19, Tailwind v4, shadcn/ui components. Uses React Context (`ScannerContext`, `WalletContext`) + localStorage for state management via custom `useLocalStorage` hook. Spark provides LLM integration via `window.spark.llm()` for AI-powered chart analysis.
+**Frontend** (`/src/`): GitHub Spark-based UI with React 19, Tailwind v4, shadcn/ui components. Uses React Context (`ScannerContext`, `WalletContext`) + localStorage for state management, NOT `useKV` hooks. Spark provides LLM integration via `window.spark.llm()` for AI analysis features.
 
 ## Key Architectural Patterns
 
@@ -24,14 +24,13 @@ Never bypass quality gates—signals must pass all validation layers (data quali
 ### Frontend State Architecture
 - **Providers wrap app in order**: `BrowserRouter` → `WalletProvider` → `ScannerProvider` → `ErrorBoundary`
 - **Context hooks**: `useScanner()` for scan/bot config, `useWallet()` for Web3 auth
-- **State persistence**: `useLocalStorage<T>(key, default)` custom hook (in `src/hooks/useLocalStorage.ts`) backed by localStorage—survives page reloads
-- **Scan results flow**: `ScannerSetup` saves to localStorage → `ScanResults` reads on mount → uses local state (`useState`) for display
+- **State persistence**: `useLocalStorage` hook (custom) with localStorage backend—survives page reloads
 - **Routing convention**: Setup pages (`/scanner/setup`, `/bot/setup`) configure parameters; Status pages (`/scanner/status`, `/bot/status`) display real-time telemetry; Results page (`/results`) shows generated signals
-- **Spark Integration**: `@github/spark/spark` imported in `main.tsx` provides `window.spark.llm()` for LLM features (chart analysis, trade commentary generation)
+- **Spark Integration**: `@github/spark/spark` imported in `main.tsx` provides `window.spark.llm()` for LLM features (chart analysis, trade commentary)
 
 ### API Integration Layer
 `src/utils/api.ts` provides typed client wrapping backend endpoints:
-- Scanner: `getSignals()`, `getScannerModes()` (deprecated - modes now static in frontend), `startScanner()`, `stopScanner()`
+- Scanner: `getSignals()`, `getScannerModes()` (deprecated - now static), `startScanner()`, `stopScanner()`
 - Bot: `getBotStatus()`, `getPositions()`, `placeOrder()`
 - Risk: `getRiskSummary()`
 - Market: `getPrice()`, `getCandles()`, `getMarketRegime()`
@@ -71,11 +70,11 @@ pytest backend/tests/integration/ -v
 
 ### Backend Configuration System
 Configuration lives in `backend/shared/config/`:
-- **Scanner modes** (`scanner_modes.py`): predefined profiles (overwatch, recon, strike, surgical, ghost) with timeframes, min confluence, risk-reward targets
+- **Scanner modes** (`scanner_modes.py`): predefined profiles (overwatch, recon, strike, surgical) with timeframes, min confluence, risk-reward targets
 - **Defaults** (`defaults.py`): global thresholds (ATR multipliers, RSI levels, volume spike thresholds)
 - **SMC config** (`smc_config.py`): displacement requirements, freshness scoring, structural break detection params
 
-Always load mode via `get_mode('recon')` rather than hardcoding—modes are backend-driven. Frontend has STATIC mode definitions in `ScannerContext.tsx` (const `SCANNER_MODES`) for UI display only—these should mirror backend definitions but are not fetched from API.
+Always load mode via `get_mode('recon')` rather than hardcoding—modes are backend-driven. Frontend has STATIC mode definitions in `ScannerContext.tsx` for UI display only.
 
 ## Project-Specific Conventions
 
@@ -114,19 +113,6 @@ const { scanConfig, setScanConfig } = useScanner();
 setScanConfig({ ...scanConfig, leverage: 10 });
 ```
 
-**Scan results persistence** (manual localStorage operations in page components):
-```tsx
-// In ScannerSetup.tsx - after successful scan
-localStorage.setItem('scan-results', JSON.stringify(results));
-localStorage.setItem('scan-metadata', JSON.stringify(metadata));
-localStorage.setItem('scan-rejections', JSON.stringify(rejections));
-
-// In ScanResults.tsx - on mount
-const resultsStr = localStorage.getItem('scan-results');
-const results = resultsStr ? JSON.parse(resultsStr) : [];
-setScanResults(results); // Local state for display
-```
-
 **Telemetry integration**: `ActivityFeed` polls `telemetryService.getRecentEvents()` every 3-4s for real-time updates.
 
 ### Naming Conventions
@@ -141,8 +127,8 @@ setScanResults(results); // Local state for display
 1. Backend `Orchestrator.scan()` returns `List[TradePlan]`
 2. API endpoint `/scanner/signals` serializes to `SignalsResponse` with metadata
 3. Frontend `api.getSignals()` fetches, `convertSignalToScanResult()` transforms to `ScanResult[]`
-4. Store in localStorage: `localStorage.setItem('scan-results', JSON.stringify(results))`
-5. Navigate to `/results`, `ScanResults` page reads from localStorage via `useEffect` on mount
+4. Store in KV: `setScanResults(results)`, `setScanMetadata({ mode, timeframes, ... })`
+5. Navigate to `/results`, `ScanResults` page reads from KV
 
 ### Telemetry Event Pipeline
 Backend logs events via `get_telemetry_logger()`:
@@ -160,56 +146,33 @@ Frontend polls `/api/telemetry/recent` → `ActivityFeed` displays with icons/co
 - Dominance metrics (BTC.D, USDT.D, ALT.D) with trend arrows
 - Guidance lines (regime-specific trading advice)
 
-Backend endpoint `/api/market/regime` implemented—returns regime detection from BTC/USDT analysis.
+Currently uses mock hook `useMockMarketRegime('scanner')`—backend endpoint `/market/regime` pending.
 
 ## Critical Files Reference
 
 **Backend Core**:
-- `backend/engine/orchestrator.py`: Main pipeline coordinator with `apply_mode()` method for mode switching
+- `backend/engine/orchestrator.py`: Main pipeline coordinator
 - `backend/strategy/smc/`: SMC detection modules (order_blocks, fvg, bos_choch, liquidity_sweeps)
 - `backend/strategy/confluence/scorer.py`: Multi-factor confluence calculation
 - `backend/strategy/planner/planner_service.py`: Trade plan generation with structure-based stops
 - `backend/risk/risk_manager.py`: Exposure limits + correlation matrix
-- `backend/api_server.py`: FastAPI endpoints (defaults to Phemex adapter, configurable per-scan)
+- `backend/api_server.py`: FastAPI endpoints
 
 **Frontend Core**:
-- `src/App.tsx`: Route definitions (9 routes including Training Ground, Market Overview)
+- `src/App.tsx`: Route definitions
 - `src/main.tsx`: Provider hierarchy (Router → Wallet → Scanner → ErrorBoundary)
-- `src/context/ScannerContext.tsx`: Scan/bot config state management with STATIC mode definitions
-- `src/context/WalletContext.tsx`: Web3 wallet authentication (MetaMask, WalletConnect, Coinbase)
-- `src/hooks/useLocalStorage.ts`: Custom hook mimicking Spark's useKV API, backed by localStorage
-- `src/pages/ScannerSetup.tsx`: Configuration UI with leverage/mode selection, saves results to localStorage
-- `src/pages/ScanResults.tsx`: Signal display reading from localStorage, chart/details modals
-- `src/components/SniperModeSelector.tsx`: Dynamic mode selector displaying static frontend modes
-- `src/components/ChartModal/`: Interactive D3.js chart with AI analysis via `window.spark.llm()`
+- `src/context/ScannerContext.tsx`: Scan/bot config state management
+- `src/pages/ScannerSetup.tsx`: Configuration UI with leverage/mode selection
+- `src/pages/ScanResults.tsx`: Signal display with chart/details modals
+- `src/components/SniperModeSelector.tsx`: Dynamic mode selector (fetches from backend)
 - `src/utils/api.ts`: Typed API client
 
 **Config & Contracts**:
-- `backend/shared/config/scanner_modes.py`: Predefined trading profiles (5 modes: overwatch, recon, strike, surgical, ghost)
+- `backend/shared/config/scanner_modes.py`: Predefined trading profiles
 - `backend/shared/models/`: Dataclass definitions (data, indicators, smc, scoring, planner)
 - `backend/contracts/`: API boundary contracts (prevent signature drift)
 
 ## Advanced Features
-
-### Exchange Adapters (Tier 1 Only)
-`backend/data/adapters/` contains production-ready exchange integrations:
-- **PhemexAdapter** (default): No geo-blocking, fast, works with US IPs
-- **BybitAdapter**: Best overall but may be geo-blocked in some regions
-- **OKXAdapter**: Institutional-tier exchange
-- **BitgetAdapter**: Bot-friendly features
-- **BinanceAdapter**: Deprecated - geo-restricted in many regions
-
-All adapters implement retry logic, rate limiting, and CCXT integration. Orchestrator takes `exchange_adapter` parameter—API server provides factory in `EXCHANGE_ADAPTERS` dict.
-
-### Scanner Modes (Backend Truth)
-Backend `scanner_modes.py` defines 5 tactical modes with critical timeframe requirements:
-- **overwatch**: 6 TFs (1w→5m), 75% min score, macro surveillance
-- **recon**: 5 TFs (1d→5m), 65% min score, balanced multi-timeframe
-- **strike**: 4 TFs (4h→5m), 60% min score, intraday aggressive
-- **surgical**: 3 TFs (1h→5m), 70% min score, precision scalping
-- **ghost**: 5 TFs (1d→5m), 70% min score, stealth balanced
-
-Each mode specifies `critical_timeframes` tuple—symbols missing these are rejected with telemetry event.
 
 ### ML Integration (Future)
 `backend/ml/` directory reserved for machine learning enhancements:
@@ -231,15 +194,15 @@ Example: If BTC/USDT and ETH/USDT correlation = 0.85, opening both positions cou
 
 Check `_get_correlated_exposure()` for correlation-aware exposure calculations—falls back to static groups (BTC/ETH/BNB, SOL/AVAX/MATIC) when matrix unavailable.
 
-### Wallet Authentication (Web3)
-`WalletContext` (`src/context/WalletContext.tsx`) provides decentralized authentication:
-- **MetaMask**: Full integration with account/chain change listeners
-- **WalletConnect**: Coming soon (placeholder implemented)
-- **Coinbase Wallet**: Coming soon (placeholder implemented)
-- **Session persistence**: Stored in localStorage via `useLocalStorage` hook
-- **Network monitoring**: Automatically detects chain changes, account switches, disconnects
+### Missing Backend Implementations
+**Market Regime Endpoint**: Frontend `MarketRegimeLens` currently uses `useMockMarketRegime()` hook. Backend implementation pending:
+- Target endpoint: `GET /api/market/regime`
+- Required fields: `regime_label`, `visibility`, `btc_dominance`, `usdt_dominance`, `alt_dominance`, `guidance_lines`
+- Integration point: Add to `backend/api_server.py`, wire into confluence scorer as regime filter
 
-Used by `WalletConnect` component and `WalletGate` wrapper for protected features.
+**Risk Summary Endpoint**: `GET /api/risk/summary` defined in API client but not yet consumed in UI—ready for integration into Status pages.
+
+**Positions Panel**: `api.getPositions()` exists but no dedicated UI component yet—candidate for Bot Status page enhancement.
 
 ## Common Pitfalls
 
@@ -247,11 +210,9 @@ Used by `WalletConnect` component and `WalletGate` wrapper for protected feature
 2. **Backend signals must have complete rationale**—check `planner_service.py` generates full trade context
 3. **Don't bypass Orchestrator**—direct SMC detection skips quality gates and telemetry
 4. **Frontend imports from `@/`**—path alias configured in `tsconfig.json`, not relative imports
-5. **Scan results use direct localStorage operations** in page components, not context persistence
+5. **KV state is page-specific**—`scan-results` key shared across setup/status/results pages
 6. **Spark components require `@github/spark/spark` import in main.tsx**—already present, don't remove
 7. **Duplicate implementations**—always check existing files before creating new ones; prefer extending existing components over creating redundant variants
-8. **Static frontend modes**—`ScannerContext.tsx` defines SCANNER_MODES const for UI display; backend modes in `scanner_modes.py` are source of truth for pipeline behavior
-9. **Exchange adapter required**—Orchestrator constructor requires explicit adapter (Phemex, Bybit, OKX, or Bitget); no default fallback
 
 ## UI/UX Standards
 
@@ -261,28 +222,19 @@ Used by `WalletConnect` component and `WalletGate` wrapper for protected feature
 - Tailwind v4 with utility-first approach—no inline styles
 - Dark theme optimized with `bg-background`, `text-foreground`, tactical grid overlays
 - shadcn/ui components for consistency—never mix competing UI libraries
-- Phosphor Icons for all iconography (already imported, `@phosphor-icons/react`)
+- Phosphor Icons for all iconography (already imported)
 - Accent colors: `text-accent` (scanner), `text-primary` (bot), `text-warning` (alerts)
 - Animations: `scan-pulse` for live indicators, `transition-all duration-300` for hover states
 - Typography: Tabular nums for metrics (`font-mono`), tracking-wider for headers
 
-**Component Reuse**: Check `src/components/` before creating—existing:
-- **Layout**: `PageLayout`, `PageHeader`, `PageSection`, `HomeButton`, `TopBar`
-- **Data Display**: `LiveTicker`, `PriceDisplay`, `PriceCard`, `ConvictionBadge`, `RegimeIndicator`, `RejectionSummary`
-- **Interactive**: `SniperModeSelector`, `ChartModal`, `DetailsModal`, `WalletConnect`, `NotificationStatus`, `SessionIndicator`
-- **Telemetry**: `ActivityFeed`, `TelemetryAnalytics` (in telemetry/ subdirectory)
-- **Market**: `MarketRegimeLens`, `DominanceMetrics` (in market/ subdirectory)
+**Component Reuse**: Check `src/components/` before creating—existing: `MarketRegimeLens`, `ActivityFeed`, `SniperModeSelector`, `LiveTicker`, `PriceDisplay`, `SystemStatus`, `WalletConnect`, `SessionIndicator`, `NotificationStatus`.
 
 ## When Modifying
 
-**Adding new scanner mode**: Update `backend/shared/config/scanner_modes.py` `MODES` dict → backend restart → optionally update frontend `SCANNER_MODES` in `ScannerContext.tsx` for UI consistency.
+**Adding new scanner mode**: Update `backend/shared/config/scanner_modes.py` `SCANNER_MODES` dict → backend restart → frontend `SniperModeSelector` auto-fetches.
 
 **New backend endpoint**: Add route in `api_server.py` → update `src/utils/api.ts` client → call via `api.newMethod()` in components.
 
 **New SMC pattern**: Create detector in `backend/strategy/smc/` → wire into `Orchestrator._detect_smc()` → add to `SMCSnapshot` dataclass → update confluence scorer weights.
 
 **UI page addition**: Create in `src/pages/` → register route in `App.tsx` → add navigation links in relevant pages.
-
-**localStorage schema change**: Update both save (in `ScannerSetup.tsx`) and load (in `ScanResults.tsx`) logic—no automatic migration, users lose old data on schema mismatch.
-
-**Exchange adapter addition**: Create in `backend/data/adapters/` following CCXT pattern → add to `EXCHANGE_ADAPTERS` dict in `api_server.py` → expose in API query params.
