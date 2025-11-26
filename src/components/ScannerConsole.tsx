@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Terminal, Lightning } fr
-interface ScannerConsoleProps {
+import { Terminal, Lightning } from '@phosphor-icons/react';
+import { cn } from '@/lib/utils';
 
 interface ScannerConsoleProps {
   className?: string;
@@ -125,29 +125,29 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
       
       <div 
         ref={scrollRef}
+        className="flex-1 p-4 font-mono text-xs space-y-1 overflow-y-auto max-h-64 bg-card/50"
+      >
+        {logs.length > 0 ? (
+          logs.map((log, i) => (
+            <div key={i} className="flex gap-2">
+              <span className="text-muted-foreground shrink-0">[{log.timestamp}]</span>
+              <span className={cn(
+                "flex-1",
+                log.type === 'success' && "text-success",
+                log.type === 'warning' && "text-warning",
+                log.type === 'error' && "text-destructive",
+                log.type === 'info' && "text-foreground"
+              )}>
+                {log.message}
+              </span>
+            </div>
+          ))
         ) : (
-            <div 
-       
-                log.type === '
-                log.type === 'error' && "text-red-400",
-             
-              <span className="tex
-            </div
+          <div className="text-muted-foreground italic">
+            Awaiting scan initialization...
+          </div>
         )}
+      </div>
     </div>
+  );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
