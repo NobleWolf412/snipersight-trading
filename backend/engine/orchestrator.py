@@ -750,6 +750,30 @@ class Orchestrator:
         self.config = config
         logger.info("Configuration updated")
 
+    def apply_mode(self, mode) -> None:
+        """Apply a ScannerMode object to orchestrator config & internal state.
+
+        Ensures critical timeframe expectations, regime policy, and profile sync.
+
+        Args:
+            mode: ScannerMode instance (from get_mode())
+        """
+        try:
+            # Update configuration fields
+            self.config.profile = mode.profile
+            # Some configs may not store timeframes as tuple; ensure list assignment compatibility
+            self.config.timeframes = mode.timeframes
+            # Keep existing min_confluence_score if caller intentionally raised it; otherwise adopt baseline
+            if hasattr(self.config, 'min_confluence_score'):
+                self.config.min_confluence_score = max(self.config.min_confluence_score, mode.min_confluence_score)
+            # Refresh scanner_mode reference and regime policy
+            self.scanner_mode = mode
+            from backend.analysis.regime_policies import get_regime_policy
+            self.regime_policy = get_regime_policy(mode.profile)
+            logger.debug("Applied scanner mode: %s | timeframes=%s | critical=%s", mode.name, mode.timeframes, mode.critical_timeframes)
+        except Exception as e:
+            logger.warning("Failed to apply mode %s: %s", getattr(mode, 'name', 'unknown'), e)
+
     def _check_critical_timeframes(self, multi_tf_data: MultiTimeframeData) -> List[str]:
         """
         Check if critical timeframes are available in data.

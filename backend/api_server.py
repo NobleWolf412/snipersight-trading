@@ -179,6 +179,25 @@ async def health_check():
         }
     }
 
+@app.get("/api/scanner/mode_active")
+async def get_active_mode():
+    """Return current active scanner mode state with critical timeframe expectations."""
+    try:
+        mode = orchestrator.scanner_mode
+        return {
+            "active_mode": {
+                "name": mode.name,
+                "profile": mode.profile,
+                "timeframes": mode.timeframes,
+                "critical_timeframes": mode.critical_timeframes,
+                "baseline_min_confluence": mode.min_confluence_score,
+                "current_effective_min_confluence": getattr(orchestrator.config, 'min_confluence_score', mode.min_confluence_score)
+            }
+        }
+    except Exception as e:
+        logger.error("Failed to get active mode: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
 
 # Scanner endpoints
 @app.post("/api/scanner/config")
@@ -405,10 +424,10 @@ async def get_signals(
         logger.info("Scan request: mode=%s, exchange=%s, leverage=%dx, categories=(majors=%s, alts=%s, meme=%s)", 
                    mode.name, exchange, leverage, majors, altcoins, meme_mode)
 
-        # Update orchestrator config in-place
-        orchestrator.config.timeframes = mode.timeframes
+        # Apply mode safely (profile, timeframes, critical TFs, regime policy)
+        orchestrator.apply_mode(mode)
+        # If caller provided a higher override score, update after mode baseline applied
         orchestrator.config.min_confluence_score = effective_min
-        orchestrator.config.profile = mode.profile
         
         # Update orchestrator's exchange adapter
         orchestrator.exchange_adapter = current_adapter
@@ -493,6 +512,14 @@ async def get_signals(
             "rejected": rejected_count,
             "mode": mode.name,
             "applied_timeframes": mode.timeframes,
+            "critical_timeframes": mode.critical_timeframes,
+            "active_mode": {
+                "name": orchestrator.scanner_mode.name,
+                "profile": orchestrator.scanner_mode.profile,
+                "timeframes": orchestrator.scanner_mode.timeframes,
+                "critical_timeframes": orchestrator.scanner_mode.critical_timeframes,
+                "baseline_min_confluence": orchestrator.scanner_mode.min_confluence_score
+            },
             "effective_min_score": effective_min,
             "baseline_min_score": mode.min_confluence_score,
             "profile": mode.profile,

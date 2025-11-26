@@ -36,18 +36,22 @@ interface RejectionDetail {
 interface RejectionStats {
   total_rejected: number;
   by_reason: {
-    low_confluence: number;
-    no_data: number;
-    risk_validation: number;
-    no_trade_plan: number;
-    errors: number;
+    low_confluence?: number;
+    no_data?: number;
+    risk_validation?: number;
+    no_trade_plan?: number;
+    errors?: number;
+    missing_critical_tf?: number; // Added missing critical timeframe reason
+    [key: string]: number | undefined; // Future-proof
   };
   details: {
-    low_confluence: RejectionDetail[];
-    no_data: RejectionDetail[];
-    risk_validation: RejectionDetail[];
-    no_trade_plan: RejectionDetail[];
-    errors: RejectionDetail[];
+    low_confluence?: RejectionDetail[];
+    no_data?: RejectionDetail[];
+    risk_validation?: RejectionDetail[];
+    no_trade_plan?: RejectionDetail[];
+    errors?: RejectionDetail[];
+    missing_critical_tf?: RejectionDetail[]; // Add details list
+    [key: string]: RejectionDetail[] | undefined; // Future-proof
   };
 }
 
@@ -56,7 +60,12 @@ interface Props {
   totalScanned: number;
 }
 
-const reasonConfig = {
+const reasonConfig: Record<string, {
+  icon: any;
+  label: string;
+  color: string;
+  description: string;
+}> = {
   low_confluence: {
     icon: TrendDown,
     label: 'Low Confluence Score',
@@ -87,10 +96,18 @@ const reasonConfig = {
     color: 'text-red-500',
     description: 'Technical errors during analysis',
   },
+  missing_critical_tf: {
+    icon: Stack,
+    label: 'Missing Critical Timeframes',
+    color: 'text-purple-400',
+    description: 'Required higher timeframe data unavailable or incomplete',
+  },
 };
 
 export function RejectionSummary({ rejections, totalScanned }: Props) {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  // Dialog for category-level aggregated view
+  const [reasonDialog, setReasonDialog] = useState<string | null>(null);
 
   if (!rejections || !rejections.total_rejected || rejections.total_rejected === 0) {
     return null;
@@ -120,8 +137,12 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
         {Object.entries(byReason).map(([reason, count]) => {
           if (count === 0) return null;
 
-          const config = reasonConfig[reason as keyof typeof reasonConfig];
-          if (!config) return null;
+          const config = reasonConfig[reason] || {
+            icon: Info,
+            label: reason.replace(/_/g, ' '),
+            color: 'text-muted-foreground',
+            description: 'Additional rejection category',
+          };
           
           const Icon = config.icon;
           const reasonDetails = details[reason as keyof typeof details] || [];
@@ -143,6 +164,63 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">{config.description}</p>
                   </div>
+                  {Array.isArray(reasonDetails) && reasonDetails.length > 0 && (
+                    <Dialog open={reasonDialog === reason} onOpenChange={(open) => !open && setReasonDialog(null)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setReasonDialog(reason);
+                        }}
+                      >
+                        <Info className="w-3 h-3 mr-1" /> View All
+                      </Button>
+                      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2">
+                            <Icon className={`w-5 h-5 ${config.color}`} />
+                            {config.label} – {reasonDetails.length} Rejections
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          {reasonDetails.map((detail, idx) => (
+                            <Card key={idx} className="p-3 bg-background/40 border border-border/50">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="font-mono text-primary font-medium">{detail.symbol}</div>
+                                {detail.score !== undefined && detail.threshold !== undefined && (
+                                  <Badge variant="secondary" className="font-mono text-xs">
+                                    {detail.score.toFixed(1)} / {detail.threshold.toFixed(1)}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground mb-2">{detail.reason}</div>
+                              {detail.all_factors && detail.all_factors.length > 0 && (
+                                <div className="grid grid-cols-2 gap-2">
+                                  {detail.all_factors.slice(0, 4).map((f, fIdx) => (
+                                    <div key={fIdx} className="text-xxs p-2 rounded bg-card/30 border border-border/40">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className="text-[10px] font-medium truncate max-w-[70%]">{f.name}</span>
+                                        <span className="font-mono text-[10px] text-muted-foreground">{f.score.toFixed(0)}%</span>
+                                      </div>
+                                      <Progress value={f.score} className="h-1" />
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </Card>
+                          ))}
+                          {reasonDetails.length > 12 && (
+                            <div className="text-xs text-muted-foreground text-center">
+                              Showing {reasonDetails.length} rejections
+                            </div>
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  )}
                 </div>
               </CollapsibleTrigger>
 
