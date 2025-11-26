@@ -490,6 +490,53 @@
 @keyframes metal-shimmer { 0% { background-position: 200% 200%; } 100% { background-position: -200% -200%; } }
 
 /* ========================================
+   SCANNER CONSOLE SCREEN
+   ======================================== */
+
+.hud-console {
+  position: relative;
+  border-radius: 0.75rem;
+  background: radial-gradient(circle at top, #020617 0, #020617 40%, #000 100%);
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  box-shadow:
+    0 0 12px rgba(15, 255, 110, 0.22),
+    inset 0 0 18px rgba(15, 23, 42, 0.95);
+  padding: 0.75rem;
+  overflow: hidden;
+  font-family: "VT323", ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: #a5f3fc;
+}
+
+.hud-console::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.06) 0px,
+    rgba(255,255,255,0.06) 1px,
+    transparent 3px,
+    transparent 4px
+  );
+  opacity: 0.12;
+  mix-blend-mode: soft-light;
+}
+
+.hud-console::after {
+  content: "";
+  position: absolute;
+  inset: -10%;
+  background:
+    radial-gradient(circle at top center, rgba(34,197,94,0.22), transparent 55%),
+    radial-gradient(circle at bottom center, rgba(15,23,42,0.9), transparent 60%);
+  mix-blend-mode: screen;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* ========================================
    Opt-in utility: hide cursor
    ======================================== */
 

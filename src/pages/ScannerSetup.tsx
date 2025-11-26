@@ -148,10 +148,10 @@ export function ScannerSetup() {
     <PageShell>
       <div className="container mx-auto px-4 py-6 lg:py-8 space-y-6 lg:space-y-8">
         <div className="text-center space-y-2 mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-primary tracking-tight uppercase">
+          <h1 className="hud-headline hud-text-green text-xs md:text-sm tracking-[0.25em]">
             Scanner Command Center
           </h1>
-          <p className="text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
+          <p className="text-xs md:text-sm text-slate-400 max-w-xl mx-auto">
             Configure your sniper profile, exchange, and filters, then arm the scanner to search for high-confluence setups.
           </p>
         </div>
@@ -162,6 +162,7 @@ export function ScannerSetup() {
               title="Scan Mode & Profile" 
               subtitle="Select your tactical mode and operational parameters"
               className="tactical-grid holo-border"
+              titleClassName="hud-text-green"
             >
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -177,6 +178,7 @@ export function ScannerSetup() {
               title="Operational Parameters" 
               subtitle="Configure exchange, leverage, and scanning scope"
               className="tactical-grid holo-border"
+              titleClassName="hud-text-amber"
             >
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -257,6 +259,7 @@ export function ScannerSetup() {
               title="Filters & Asset Categories" 
               subtitle="Enable or disable asset classes for scanning"
               className="tactical-grid holo-border"
+              titleClassName="hud-text-amber"
             >
               <div className="space-y-3">
                 <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Category Filters</Label>
@@ -360,8 +363,11 @@ export function ScannerSetup() {
               title="Scanner Console" 
               subtitle="Real-time scan progress and system status"
               className="tactical-grid holo-border h-full"
+              titleClassName="hud-text-green"
             >
-              <ScannerConsole isScanning={isScanning} />
+              <div className="hud-console hud-terminal text-xs">
+                <ScannerConsole isScanning={isScanning} />
+              </div>
             </HudPanel>
           </div>
         </div>

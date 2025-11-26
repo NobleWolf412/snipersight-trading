@@ -114,35 +114,35 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
   }, [logs]);
 
   return (
-    <div className={cn("flex flex-col border border-border rounded-md bg-card overflow-hidden", className)}>
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
-        <Terminal size={18} className="text-primary" />
-        <span className="font-mono text-sm font-medium text-foreground">Scanner Console</span>
+    <div className={cn("flex flex-col overflow-hidden", className)}>
+      <div className="flex items-center gap-2 px-2 py-2 border-b border-cyan-500/30 bg-transparent">
+        <Terminal size={18} className="text-cyan-400" />
+        <span className="hud-terminal text-sm font-medium text-cyan-300">TERMINAL</span>
         {isScanning && (
-          <Lightning size={16} className="text-warning animate-pulse ml-auto" />
+          <Lightning size={16} className="text-amber-400 animate-pulse ml-auto" />
         )}
       </div>
       
       <div 
         ref={scrollRef}
-        className="flex-1 p-4 font-mono text-xs space-y-1 overflow-y-auto"
+        className="flex-1 p-3 hud-terminal text-xs space-y-1 overflow-y-auto"
         style={{ maxHeight: '300px' }}
       >
         {logs.length === 0 ? (
-          <div className="text-muted-foreground italic">Awaiting scan initialization...</div>
+          <div className="text-cyan-400/60 italic">Awaiting scan initialization...</div>
         ) : (
           logs.map((log, idx) => (
             <div 
               key={idx}
               className={cn(
                 "flex gap-2",
-                log.type === 'success' && "text-success",
-                log.type === 'warning' && "text-warning",
-                log.type === 'error' && "text-destructive",
-                log.type === 'info' && "text-foreground"
+                log.type === 'success' && "text-emerald-400",
+                log.type === 'warning' && "text-amber-400",
+                log.type === 'error' && "text-red-400",
+                log.type === 'info' && "text-cyan-300"
               )}
             >
-              <span className="text-muted-foreground">[{log.timestamp}]</span>
+              <span className="text-cyan-500/70">[{log.timestamp}]</span>
               <span>{log.message}</span>
             </div>
           ))

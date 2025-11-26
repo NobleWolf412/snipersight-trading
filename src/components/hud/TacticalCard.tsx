@@ -36,7 +36,7 @@ export function TacticalCard({
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <h3 className="font-bold text-lg text-foreground mb-1">
+          <h3 className="hud-headline text-[0.7rem] md:text-xs tracking-[0.18em] text-foreground mb-1">
             {title}
           </h3>
           {description && (

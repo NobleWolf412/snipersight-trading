@@ -69,25 +69,25 @@ export function SniperModeSelector() {
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/50">
                   <div className="space-y-1">
                     <div className="text-xs text-muted-foreground uppercase tracking-wide">Timeframes</div>
-                    <div className="font-mono font-bold text-sm">
+                    <div className="hud-terminal text-emerald-200 text-sm">
                       {mode.timeframes.join(' · ')}
                     </div>
                   </div>
                   <div className="space-y-1">
                     <div className="text-xs text-muted-foreground uppercase tracking-wide">Min Confluence</div>
-                    <div className={`font-mono font-bold text-sm ${color}`}>
+                    <div className={`hud-terminal text-sm ${color}`}>
                       {mode.min_confluence_score}%
                     </div>
                   </div>
                   <div className="space-y-1">
                     <div className="text-xs text-muted-foreground uppercase tracking-wide">Profile</div>
-                    <div className="font-mono font-bold text-sm capitalize">
+                    <div className="hud-terminal text-emerald-200 text-sm capitalize">
                       {mode.profile.replace(/_/g, ' ')}
                     </div>
                   </div>
                   <div className="space-y-1">
                     <div className="text-xs text-muted-foreground uppercase tracking-wide">Scope</div>
-                    <div className="font-mono font-bold text-sm">
+                    <div className="hud-terminal text-emerald-200 text-sm">
                       {mode.timeframes.length} TF
                     </div>
                   </div>
