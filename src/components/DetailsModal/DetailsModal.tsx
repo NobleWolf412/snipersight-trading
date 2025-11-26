@@ -5,7 +5,7 @@ import { Separator } from '@/components/ui/separator';
 import type { ScanResult } from '@/utils/mockData';
 import { RegimeIndicator } from '@/components/RegimeIndicator';
 import { ConvictionBadge } from '@/components/ConvictionBadge';
-import { TrendUp, TrendDown, Activity, Shield, AlertTriangle } from '@phosphor-icons/react';
+import { TrendUp, TrendDown, Activity, Shield, Warning } from '@phosphor-icons/react';
 
 interface DetailsModalProps {
   isOpen: boolean;
@@ -71,13 +71,13 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
                   <div>
                     <span className="text-muted-foreground">Global Regime:</span>{' '}
                     <Badge variant="outline" className="ml-2">
-                      {result.regime.global_regime.composite}
+                      {result.regime.global_regime?.composite || 'N/A'}
                     </Badge>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Symbol Regime:</span>{' '}
                     <Badge variant="outline" className="ml-2">
-                      {result.regime.symbol_regime.trend} / {result.regime.symbol_regime.volatility}
+                      {result.regime.symbol_regime?.trend || 'N/A'} / {result.regime.symbol_regime?.volatility || 'N/A'}
                     </Badge>
                   </div>
                 </div>
@@ -91,7 +91,7 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
               <>
                 <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-warning uppercase tracking-wider flex items-center gap-2">
-                    <AlertTriangle size={16} weight="fill" />
+                    <Warning size={16} weight="fill" />
                     Missing Critical Timeframes
                   </h3>
                   <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
@@ -116,20 +116,20 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Trade Setup</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="text-xs text-muted-foreground mb-1">Direction</div>
-                  <Badge variant="outline" className={result.direction === 'LONG' ? 'text-green-500' : 'text-red-500'}>
-                    {result.direction === 'LONG' ? <TrendUp size={14} className="mr-1" /> : <TrendDown size={14} className="mr-1" />}
-                    {result.direction}
+                  <div className="text-xs text-muted-foreground mb-1">Trend Bias</div>
+                  <Badge variant="outline" className={result.trendBias === 'BULLISH' ? 'text-green-500' : result.trendBias === 'BEARISH' ? 'text-red-500' : ''}>
+                    {result.trendBias === 'BULLISH' ? <TrendUp size={14} className="mr-1" /> : result.trendBias === 'BEARISH' ? <TrendDown size={14} className="mr-1" /> : <Activity size={14} className="mr-1" />}
+                    {result.trendBias}
                   </Badge>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground mb-1">Trend Bias</div>
-                  <Badge variant="outline">{result.trendBias}</Badge>
+                  <div className="text-xs text-muted-foreground mb-1">Classification</div>
+                  <Badge variant="outline">{result.classification}</Badge>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground mb-1">Entry Range</div>
                   <div className="font-mono text-sm">
-                    ${formatNum(result.entryMin, 2)} - ${formatNum(result.entryMax, 2)}
+                    ${formatNum(result.entryZone.low, 2)} - ${formatNum(result.entryZone.high, 2)}
                   </div>
                 </div>
                 <div>
@@ -145,35 +145,29 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Profit Targets</h3>
               <div className="space-y-2">
-                {(result.targets || []).map((target, idx) => (
-                  <div key={idx} className="flex items-center justify-between bg-muted/50 rounded-lg p-3">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="w-8 h-8 flex items-center justify-center">
-                        {idx + 1}
-                      </Badge>
-                      <div>
-                        <div className="font-mono text-sm font-semibold">${formatNum(target?.price, 2)}</div>
-                        <div className="text-xs text-muted-foreground">Target {idx + 1}</div>
+                {result.takeProfits.map((price, idx) => {
+                  const percentGain = ((price - result.entryZone.high) / result.entryZone.high) * 100;
+                  return (
+                    <div key={idx} className="flex items-center justify-between bg-muted/50 rounded-lg p-3">
+                      <div className="flex items-center gap-3">
+                        <Badge variant="outline" className="w-8 h-8 flex items-center justify-center">
+                          {idx + 1}
+                        </Badge>
+                        <div>
+                          <div className="font-mono text-sm font-semibold">${formatNum(price, 2)}</div>
+                          <div className="text-xs text-muted-foreground">Target {idx + 1}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-mono text-sm text-accent">{percentGain > 0 ? '+' : ''}{formatNum(percentGain, 1)}%</div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-mono text-sm text-accent">+{formatNum(target?.percentGain, 1)}%</div>
-                      <div className="text-xs text-muted-foreground">{formatNum(target?.allocation, 0)}% position</div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
             <Separator />
-
-            {/* Rationale Section */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Analysis Rationale</h3>
-              <div className="bg-card border border-border rounded-lg p-4">
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">{result.rationale}</p>
-              </div>
-            </div>
 
             <Separator />
 

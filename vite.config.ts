@@ -10,7 +10,9 @@ const projectRoot = process.env.PROJECT_ROOT || import.meta.dirname
 
 export default defineConfig({
   plugins: [
-    react(),
+    react({
+      jsxImportSource: 'react',
+    }),
     tailwindcss(),
     createIconImportProxy() as PluginOption,
     sparkPlugin() as PluginOption,
@@ -27,12 +29,16 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        timeout: 300000, // 5 minutes to match backend scan timeout
+        timeout: 300000,
         proxyTimeout: 300000,
       }
     }
   },
   optimizeDeps: {
     include: ['react', 'react-dom'],
+    exclude: ['@github/spark'],
+  },
+  esbuild: {
+    logOverride: { 'this-is-undefined-in-esm': 'silent' }
   },
 });
