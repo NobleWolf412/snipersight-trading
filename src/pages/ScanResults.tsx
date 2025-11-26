@@ -48,10 +48,6 @@ export function ScanResults() {
         // No results in localStorage - set empty array explicitly
         console.log('[ScanResults] No results in localStorage, setting empty array');
         setScanResults([]);
-      } else {
-        // No results in localStorage - set empty array explicitly
-        console.log('[ScanResults] No results in localStorage, setting empty array');
-        setScanResults([]);
       }
       
       if (metadataStr) {

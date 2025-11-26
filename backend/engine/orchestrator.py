@@ -41,7 +41,6 @@ from backend.bot.telemetry.events import (
     create_error_event
 )
 from backend.data.ingestion_pipeline import IngestionPipeline
-from backend.data.adapters.binance import BinanceAdapter
 from backend.indicators.momentum import compute_rsi, compute_stoch_rsi, compute_mfi
 from backend.indicators.volatility import compute_atr, compute_bollinger_bands
 from backend.indicators.volume import detect_volume_spike, compute_obv, compute_vwap
@@ -77,7 +76,7 @@ class Orchestrator:
     def __init__(
         self,
         config: ScanConfig,
-        exchange_adapter: Optional[BinanceAdapter] = None,
+        exchange_adapter: Optional[Any] = None,
         risk_manager: Optional[RiskManager] = None,
         position_sizer: Optional[PositionSizer] = None,
         concurrency_workers: int = 4
@@ -87,7 +86,7 @@ class Orchestrator:
         
         Args:
             config: Scan configuration
-            exchange_adapter: Exchange data adapter (creates default if None)
+            exchange_adapter: Exchange data adapter (required - pass Bybit, Phemex, OKX, or Bitget)
             risk_manager: Risk manager (creates default if None)
             position_sizer: Position sizer (creates default if None)
         """
@@ -97,7 +96,9 @@ class Orchestrator:
         self.telemetry = get_telemetry_logger()
         
         # Initialize components
-        self.exchange_adapter = exchange_adapter or BinanceAdapter(testnet=False)
+        if exchange_adapter is None:
+            raise ValueError("exchange_adapter is required - pass BybitAdapter, PhemexAdapter, OKXAdapter, or BitgetAdapter")
+        self.exchange_adapter = exchange_adapter
         self.ingestion_pipeline = IngestionPipeline(self.exchange_adapter)
         
         # Risk management components

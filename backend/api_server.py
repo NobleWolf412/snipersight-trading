@@ -16,6 +16,9 @@ from backend.risk.position_sizer import PositionSizer
 from backend.risk.risk_manager import RiskManager
 from backend.bot.executor.paper_executor import PaperExecutor
 from backend.data.adapters.phemex import PhemexAdapter
+from backend.data.adapters.bybit import BybitAdapter
+from backend.data.adapters.okx import OKXAdapter
+from backend.data.adapters.bitget import BitgetAdapter
 from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import EventType
 from backend.engine.orchestrator import Orchestrator
@@ -123,6 +126,16 @@ active_bots: Dict[str, bool] = {}
 position_sizer = PositionSizer(account_balance=10000, max_risk_pct=2.0)
 risk_manager = RiskManager(account_balance=10000, max_open_positions=5)
 paper_executor = PaperExecutor(initial_balance=10000, fee_rate=0.001)
+
+# Exchange adapters factory - Tier 1 exchanges only
+EXCHANGE_ADAPTERS = {
+    'bybit': lambda: BybitAdapter(testnet=False),      # #1 Best overall (may be geo-blocked)
+    'phemex': lambda: PhemexAdapter(testnet=False),     # No geo-blocking, fast
+    'okx': lambda: OKXAdapter(testnet=False),           # Institutional-tier
+    'bitget': lambda: BitgetAdapter(testnet=False),     # Bot-friendly
+}
+
+# Default to Phemex (no geo-blocking)
 exchange_adapter = PhemexAdapter(testnet=False)
 
 # Initialize orchestrator with default config
@@ -347,7 +360,7 @@ async def get_signals(
     majors: bool = Query(default=True),
     altcoins: bool = Query(default=True),
     meme_mode: bool = Query(default=False),
-    exchange: str = Query(default="Phemex"),
+    exchange: str = Query(default="phemex"),
     leverage: int = Query(default=1, ge=1, le=125)
 ):
     """Generate trading signals applying selected sniper mode configuration.
@@ -364,10 +377,21 @@ async def get_signals(
     - meme_mode: DOGE, SHIB, PEPE, etc.
     
     Exchange & Leverage:
-    - exchange: Which exchange to use (currently only Phemex supported)
+    - exchange: bybit (default), phemex, okx, bitget
     - leverage: Position leverage (1x-125x, affects position sizing)
     """
     try:
+        # Resolve requested exchange adapter
+        exchange_key = exchange.lower()
+        if exchange_key not in EXCHANGE_ADAPTERS:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unsupported exchange: {exchange}. Supported: {', '.join(EXCHANGE_ADAPTERS.keys())}"
+            )
+        
+        # Create fresh adapter instance for this scan
+        current_adapter = EXCHANGE_ADAPTERS[exchange_key]()
+        
         # Resolve requested mode (fallback handled by exception)
         try:
             mode = get_mode(sniper_mode)
@@ -384,10 +408,14 @@ async def get_signals(
         orchestrator.config.timeframes = mode.timeframes
         orchestrator.config.min_confluence_score = effective_min
         orchestrator.config.profile = mode.profile
+        
+        # Update orchestrator's exchange adapter
+        orchestrator.exchange_adapter = current_adapter
+        orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
 
         # Acquire symbols (fallback list on failure)
         try:
-            all_symbols = exchange_adapter.get_top_symbols(n=min(limit * 3, 50), quote_currency='USDT')
+            all_symbols = current_adapter.get_top_symbols(n=min(limit * 3, 50), quote_currency='USDT')
         except Exception as exchange_error:  # pyright: ignore - intentional broad catch for fallback
             logger.warning("Exchange unavailable (geo-restriction or network issue): %s", exchange_error)
             all_symbols = []

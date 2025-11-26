@@ -47,7 +47,7 @@ interface ScannerContextType {
 }
 
 const defaultScanConfig: ScanConfig = {
-  exchange: 'Binance',
+  exchange: 'phemex',
   topPairs: 20,
   customPairs: [],
   categories: {
@@ -62,7 +62,7 @@ const defaultScanConfig: ScanConfig = {
 };
 
 const defaultBotConfig: BotConfig = {
-  exchange: 'Binance',
+  exchange: 'phemex',
   pair: 'BTC/USDT',
   modes: {
     swing: true,

@@ -69,10 +69,15 @@ export function ScannerSetup() {
           description: 'Backend unavailable - check if API server is running',
           variant: 'destructive',
         });
-        // Set empty results and error state
+        // Preserve rejection summary if backend included one in partial payload
+        const maybeRejections = response.data?.rejections || {
+          total_rejected: 0,
+          by_reason: {},
+          details: {},
+        };
         localStorage.setItem('scan-results', JSON.stringify([]));
         localStorage.removeItem('scan-metadata');
-        localStorage.removeItem('scan-rejections');
+        localStorage.setItem('scan-rejections', JSON.stringify(maybeRejections));
       } else if (response.data) {
         console.log('[ScannerSetup] Received signals:', response.data.signals.length);
         console.log('[ScannerSetup] Scan metadata:', {
@@ -138,10 +143,16 @@ export function ScannerSetup() {
           : 'Failed to complete scan - check backend logs',
         variant: 'destructive',
       });
-      // Set empty results and error state (no mock data)
+      // Preserve any existing rejection stats if they were set before failure
+      if (!localStorage.getItem('scan-rejections')) {
+        localStorage.setItem('scan-rejections', JSON.stringify({
+          total_rejected: 0,
+          by_reason: {},
+          details: {},
+        }));
+      }
       localStorage.setItem('scan-results', JSON.stringify([]));
       localStorage.removeItem('scan-metadata');
-      localStorage.removeItem('scan-rejections');
       setIsScanning(false);
       navigate('/results');
     }
@@ -194,11 +205,10 @@ export function ScannerSetup() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Binance">Binance</SelectItem>
-                      <SelectItem value="Coinbase">Coinbase</SelectItem>
-                      <SelectItem value="Kraken">Kraken</SelectItem>
-                      <SelectItem value="Bybit">Bybit</SelectItem>
-                      <SelectItem value="Phemex">Phemex</SelectItem>
+                      <SelectItem value="phemex">⚡ Phemex (Fast, No Geo-Block)</SelectItem>
+                      <SelectItem value="bybit">🔥 Bybit (May Be Geo-Blocked)</SelectItem>
+                      <SelectItem value="okx">🏛️ OKX (May Be Geo-Blocked)</SelectItem>
+                      <SelectItem value="bitget">🤖 Bitget</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
