@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Terminal, Lightning } from '@phosphor-icons/react';
 
+interface ScannerConsoleProps {
   className?: string;
   isScanning: boolean;
-  className?: string;
 }
 
 export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
@@ -16,7 +16,7 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
       setLogs([{ 
         timestamp: new Date().toLocaleTimeString(), 
         message: '> Initializing scanner systems...', 
-          type: 'info
+        type: 'info'
       }]);
 
       const timeouts: NodeJS.Timeout[] = [];
@@ -24,78 +24,38 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
       timeouts.push(setTimeout(() => {
         setLogs(prev => [...prev, { 
           timestamp: new Date().toLocaleTimeString(), 
+          message: '> Loading market data feeds...', 
+          type: 'info' 
         }]);
+      }, 1500));
 
-        setL
-          messa
-
-
+      timeouts.push(setTimeout(() => {
         setLogs(prev => [...prev, { 
-          message: '> Processing technical indicators.
+          timestamp: new Date().toLocaleTimeString(), 
+          message: '> Processing technical indicators...', 
+          type: 'info' 
         }]);
+      }, 3200));
 
-        setL
-          messa
-
-
+      timeouts.push(setTimeout(() => {
         setLogs(prev => [...prev, { 
+          timestamp: new Date().toLocaleTimeString(), 
           message: '> Scanning for Order Blocks...', 
+          type: 'info' 
         }]);
+      }, 5100));
 
-        setL
-          messag
-
-
+      timeouts.push(setTimeout(() => {
         setLogs(prev => [...prev, { 
-          message: '> Validating Break of Structure pa
+          timestamp: new Date().toLocaleTimeString(), 
+          message: '> Analyzing Fair Value Gaps...', 
+          type: 'info' 
         }]);
+      }, 6800));
 
-        setL
-          messag
-
-
+      timeouts.push(setTimeout(() => {
         setLogs(prev => [...prev, { 
-          message: '> Computing confluence scores...',
-        }]);
-
-        setL
-          messag
-
-
-        setLogs(prev => [...prev, { 
-          message: '✓ Scan analysis complete', 
-        }]);
-
-        setL
-          messag
-
-
-        timeouts.forEach(clearTimeou
-    }
-
-    if (scrollRef.curre
-    }
-
-
-        <Terminal size={18} className=
-          Scanner Console
-        {isScanning && (
-        )}
-
-        ref=
-        style={{
-
-            Awaiting scan initializati
-        ) : (
-            <div 
-              className={cn(
-                log.typ
-            
-              )}
-
-            </div>
-        )}
-
+          timestamp: new Date().toLocaleTimeString(), 
           message: '> Validating Break of Structure patterns...', 
           type: 'info' 
         }]);
@@ -142,62 +102,52 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
       }, 14200));
 
       return () => {
+        timeouts.forEach(clearTimeout);
+      };
+    }
+  }, [isScanning]);
 
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [logs]);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  return (
+    <div className={cn("flex flex-col border border-border rounded-md bg-card overflow-hidden", className)}>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
+        <Terminal size={18} className="text-primary" />
+        <span className="font-mono text-sm font-medium text-foreground">Scanner Console</span>
+        {isScanning && (
+          <Lightning size={16} className="text-warning animate-pulse ml-auto" />
+        )}
+      </div>
+      
+      <div 
+        ref={scrollRef}
+        className="flex-1 p-4 font-mono text-xs space-y-1 overflow-y-auto"
+        style={{ maxHeight: '300px' }}
+      >
+        {logs.length === 0 ? (
+          <div className="text-muted-foreground italic">Awaiting scan initialization...</div>
+        ) : (
+          logs.map((log, idx) => (
+            <div 
+              key={idx}
+              className={cn(
+                "flex gap-2",
+                log.type === 'success' && "text-success",
+                log.type === 'warning' && "text-warning",
+                log.type === 'error' && "text-destructive",
+                log.type === 'info' && "text-foreground"
+              )}
+            >
+              <span className="text-muted-foreground">[{log.timestamp}]</span>
+              <span>{log.message}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
