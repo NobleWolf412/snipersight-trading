@@ -22,6 +22,7 @@ from backend.data.adapters.bitget import BitgetAdapter
 from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import EventType
 from backend.engine.orchestrator import Orchestrator
+from backend.data.ingestion_pipeline import IngestionPipeline
 from backend.shared.config.smc_config import SMCConfig
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.scanner_modes import get_mode, list_modes
@@ -948,4 +949,5 @@ async def get_telemetry_analytics(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    # Align runtime port with documented frontend expectation (5000)
+    uvicorn.run(app, host="0.0.0.0", port=5000, log_level="info")
