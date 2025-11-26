@@ -78,6 +78,22 @@ export function ScanResults() {
     setIsDetailsModalOpen(true);
   };
 
+  const handleLoadMockData = () => {
+    const { generateMockScanResults } = require('@/utils/mockData');
+    const mockResults = generateMockScanResults(8);
+    setScanResults(mockResults);
+    localStorage.setItem('scan-results', JSON.stringify(mockResults));
+    
+    const mockMetadata = {
+      mode: 'recon',
+      appliedTimeframes: ['1w', '1d', '4h', '1h', '15m', '5m'],
+      effectiveMinScore: 75.0,
+      scanned: 20,
+    };
+    setScanMetadata(mockMetadata);
+    localStorage.setItem('scan-metadata', JSON.stringify(mockMetadata));
+  };
+
   if (results.length === 0) {
     return (
       <PageLayout maxWidth="2xl">
@@ -85,24 +101,60 @@ export function ScanResults() {
           <div className="flex justify-start">
             <HomeButton />
           </div>
-          <div className="text-center space-y-6 py-12">
+          
+          {/* Header - always show */}
+          <div className="text-center space-y-4 py-8">
             <div className="relative inline-block">
               <TrendUp size={80} className="mx-auto text-muted-foreground" />
               <div className="absolute inset-0 animate-ping">
-                <TrendUp size={80} className="mx-auto text-accent opacity-20" />
+                <TrendUp size={80} className={rejectionStats ? "mx-auto text-warning opacity-20" : "mx-auto text-accent opacity-20"} />
               </div>
             </div>
             <h2 className="text-3xl font-bold text-foreground heading-hud">No Targets Acquired</h2>
-            <p className="text-lg text-muted-foreground">Run a scan to identify trading opportunities</p>
+            <p className="text-lg text-muted-foreground">
+              {rejectionStats && rejectionStats.total_rejected > 0 
+                ? `All ${rejectionStats.total_rejected} symbols filtered by quality gates`
+                : 'Run a scan to identify trading opportunities'
+              }
+            </p>
+          </div>
+
+          {/* Rejection breakdown - show if available */}
+          {rejectionStats && rejectionStats.total_rejected > 0 && (
+            <RejectionSummary 
+              rejections={rejectionStats} 
+              totalScanned={scanMetadata?.scanned || rejectionStats.total_rejected} 
+            />
+          )}
+
+          {/* Action buttons - always show */}
+          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center pt-4">
             <Button 
               onClick={() => navigate('/scan')} 
               className="bg-accent hover:bg-accent/90 text-accent-foreground h-14 text-lg px-8 btn-tactical-scanner" 
               size="lg"
             >
               <TrendUp size={24} weight="bold" />
-              ARM SCANNER
+              {rejectionStats ? 'ADJUST & RESCAN' : 'ARM SCANNER'}
+            </Button>
+            <Button 
+              onClick={handleLoadMockData}
+              variant="outline"
+              className="h-14 text-lg px-8 border-accent/50 hover:bg-accent/10" 
+              size="lg"
+            >
+              <Eye size={24} weight="bold" />
+              PREVIEW FEATURES
             </Button>
           </div>
+
+          {/* Helper text */}
+          <p className="text-xs text-muted-foreground text-center mt-4">
+            {rejectionStats 
+              ? 'Review rejection reasons above, then adjust scanner settings to capture more signals'
+              : 'Preview button shows Phase 6 enhancements: Conviction badges, Regime indicators, Enhanced details'
+            }
+          </p>
         </div>
       </PageLayout>
     );
