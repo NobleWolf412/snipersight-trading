@@ -151,9 +151,7 @@ export function ScannerSetup() {
           <h1 className="hud-headline hud-text-green text-xs md:text-sm tracking-[0.25em]">
             Scanner Command Center
           </h1>
-          <p className="text-xs md:text-sm text-slate-400 max-w-xl mx-auto">
-            Configure your sniper profile, exchange, and filters, then arm the scanner to search for high-confluence setups.
-          </p>
+          <p className="text-xs md:text-sm text-slate-400 max-w-xl mx-auto">Configure your sniper profile, exchange, and filters, then arm the scanner to search for high-confluence setups.</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
