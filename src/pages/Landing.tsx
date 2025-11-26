@@ -2,7 +2,7 @@ import { LiveTicker } from '@/components/LiveTicker';
 import { SystemStatus } from '@/components/landing/SystemStatus';
 import { useTelemetry } from '@/hooks/useTelemetry';
 import { TopBar } from '@/components/TopBar/TopBar';
-import { Crosshair, Target, ChartLine } from '@phosphor-icons/react';
+import { Crosshair, Target, ChartLine, Compass } from '@phosphor-icons/react';
 import { Link } from 'react-router-dom';
 
 export function Landing() {
@@ -112,27 +112,27 @@ export function Landing() {
 
               {/* Market Intel Feature */}
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent rounded-2xl blur-2xl group-hover:blur-3xl transition-all duration-500" />
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent rounded-2xl blur-2xl group-hover:blur-3xl transition-all duration-500" />
                 <div className="relative p-8 md:p-10 rounded-2xl backdrop-blur-sm card-3d">
                   <div className="flex items-start gap-4 mb-6">
-                    <div className="w-14 h-14 bg-primary/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <ChartLine size={28} weight="bold" className="text-primary" />
+                    <div className="w-14 h-14 bg-blue-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Compass size={28} weight="bold" className="text-blue-500" />
                     </div>
                     <div>
                       <h3 className="text-2xl md:text-3xl font-bold mb-2 heading-hud">MARKET INTEL</h3>
-                      <p className="text-sm text-primary font-mono tracking-wider heading-hud">LIVE MARKET DATA</p>
+                      <p className="text-sm text-blue-500 font-mono tracking-wider heading-hud">REGIME & AI ANALYSIS</p>
                     </div>
                   </div>
                   
-                  <p className="text-muted-foreground leading-relaxed mb-10">Real-time price monitoring and market intelligence across major trading pairs. Track institutional movements, volume trends, and market sentiment indicators.</p>
+                  <p className="text-muted-foreground leading-relaxed mb-10">Real-time market regime classification, dominance flows, and AI-powered symbol analysis. Understand market conditions and deploy the right sniper modes at the right time.</p>
                   
                   <div className="flex justify-center">
                     <Link
-                      to="/market"
-                      className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-lg font-bold btn-tactical-bot w-full md:w-auto text-base"
+                      to="/intel"
+                      className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-lg font-bold btn-tactical-intel w-full md:w-auto text-base"
                     >
-                      <ChartLine size={20} weight="bold" />
-                      View Market Overview
+                      <Compass size={20} weight="bold" />
+                      View Market Intel
                       <span className="text-xl">→</span>
                     </Link>
                   </div>
