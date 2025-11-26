@@ -54,9 +54,25 @@ export function ScanResults() {
         console.error('Failed to parse rejection stats:', e);
       }
     }
+    setIsLoading(false);
   }, []);
 
   const results = scanResults || [];
+
+  if (isLoading) {
+    return (
+      <PageLayout maxWidth="2xl">
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center space-y-4">
+            <div className="animate-pulse text-accent">
+              <TrendUp size={48} weight="bold" />
+            </div>
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
 
   const getTrendIcon = (bias: ScanResult['trendBias']) => {
     if (bias === 'BULLISH') return <ArrowUp size={16} weight="bold" className="text-success" />;
