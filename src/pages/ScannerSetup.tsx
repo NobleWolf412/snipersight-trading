@@ -202,9 +202,7 @@ export function ScannerSetup() {
           >
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="top-pairs" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                  Top Pairs to Scan
-                </Label>
+                <Label htmlFor="top-pairs" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">TOP PAIRS TO SCAN</Label>
                 <Input
                   id="top-pairs"
                   type="number"
