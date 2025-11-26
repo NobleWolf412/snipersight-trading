@@ -26,11 +26,11 @@ const defaultTheme = {
     },
   },
   extend: {
-    screens: {
-      coarse: { raw: "(pointer: coarse)" },
-      fine: { raw: "(pointer: fine)" },
-      pwa: { raw: "(display-mode: standalone)" },
-    },
+    // Removed custom raw screens (pointer/display-mode) to avoid
+    // Tailwind v4 container optimization warnings generating invalid
+    // width-based media queries in production build. These variants
+    // were not used in the codebase.
+    screens: {},
     colors: {
       neutral: {
         1: "var(--color-neutral-1)",

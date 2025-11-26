@@ -10,9 +10,7 @@ const projectRoot = process.env.PROJECT_ROOT || import.meta.dirname
 
 export default defineConfig({
   plugins: [
-    react({
-      jsxImportSource: 'react',
-    }),
+    react(),
     tailwindcss(),
     createIconImportProxy() as PluginOption,
     sparkPlugin() as PluginOption,

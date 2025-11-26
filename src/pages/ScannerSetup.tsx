@@ -146,7 +146,7 @@ export function ScannerSetup() {
 
   return (
     <PageShell>
-      <div className="container mx-auto px-4 py-6 lg:py-8 space-y-6 lg:space-y-8">
+      <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 lg:py-8 space-y-6 lg:space-y-8">
         <div className="text-center space-y-2 mb-8">
           <h1 className="hud-headline hud-text-green text-xs md:text-sm tracking-[0.25em]">
             Scanner Command Center
