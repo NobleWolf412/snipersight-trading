@@ -27,6 +27,7 @@ export function ScanResults() {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [showMetadata, setShowMetadata] = useState(true);
   const [showResults, setShowResults] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const resultsStr = localStorage.getItem('scan-results');

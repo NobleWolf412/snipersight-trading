@@ -40,7 +40,7 @@ export function PageHeader({ title, description, icon, actions, className = '' }
     <div className={`flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between ${className}`}>
       <div className="space-y-3">
         <h1 className="text-4xl font-bold text-foreground flex items-center gap-4 heading-hud">
-          {icon}
+          {icon && icon}
           {title}
         </h1>
         {description && (
