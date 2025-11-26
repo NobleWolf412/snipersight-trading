@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ArrowUp, ArrowDown, Minus, TrendUp, Eye, FileText, CaretDown, CaretUp } from '@phosphor-icons/react';
 import type { ScanResult } from '@/utils/mockData';
+import { generateMockScanResults } from '@/utils/mockData';
 import { useState, useEffect } from 'react';
 import { ChartModal } from '@/components/ChartModal/ChartModal';
 import { DetailsModal } from '@/components/DetailsModal/DetailsModal';
@@ -79,7 +80,6 @@ export function ScanResults() {
   };
 
   const handleLoadMockData = () => {
-    const { generateMockScanResults } = require('@/utils/mockData');
     const mockResults = generateMockScanResults(8);
     setScanResults(mockResults);
     localStorage.setItem('scan-results', JSON.stringify(mockResults));
