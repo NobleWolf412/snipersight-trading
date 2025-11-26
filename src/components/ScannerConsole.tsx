@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Terminal, Lightning } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 
 interface ScannerConsoleProps {
@@ -135,7 +134,7 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
                 "flex-1",
                 log.type === 'success' && "text-success",
                 log.type === 'warning' && "text-warning",
-                log.type === 'error' && "text-destructive",
+}               log.type === 'error' && "text-destructive",
                 log.type === 'info' && "text-foreground"
               )}>
                 {log.message}
