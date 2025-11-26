@@ -7,16 +7,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Crosshair, Lightning, Target, ChartBar, GearSix } from '@phosphor-icons/react';
-import type { ScanResult } from '@/utils/mockData';
-import { generateMockScanResults, convertSignalToScanResult } from '@/utils/mockData';
-import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
-import { useMarketRegime } from '@/hooks/use-market-regime';
+import { Crosshair, Lightning, Target } from '@phosphor-icons/react';
+import { convertSignalToScanResult } from '@/utils/mockData';
 import { SniperModeSelector } from '@/components/SniperModeSelector';
 import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
-import { TacticalSection } from '@/components/layout/TacticalSection';
-import { HomeButton } from '@/components/layout/HomeButton';
+import { TacticalPanel } from '@/components/TacticalPanel';
+import { PageShell } from '@/components/layout/PageShell';
 import { scanHistoryService } from '@/services/scanHistoryService';
 
 export function ScannerSetup() {
@@ -24,8 +21,6 @@ export function ScannerSetup() {
   const { scanConfig, setScanConfig, selectedMode } = useScanner();
   const [isScanning, setIsScanning] = useState(false);
   const { toast } = useToast();
-
-  const marketRegimeProps = useMarketRegime('scanner');
 
   const handleArmScanner = async () => {
     console.log('[ScannerSetup] Starting scan...', {
@@ -38,13 +33,11 @@ export function ScannerSetup() {
     });
     setIsScanning(true);
     
-    // Clear any stale results immediately to prevent showing old mock data
     localStorage.removeItem('scan-results');
     localStorage.removeItem('scan-metadata');
     localStorage.removeItem('scan-rejections');
 
     try {
-      // Add timeout to prevent indefinite waiting (5 minutes for heavy computation with real exchange data)
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Request timeout')), 300000)
       );
@@ -69,7 +62,6 @@ export function ScannerSetup() {
           description: 'Backend unavailable - check if API server is running',
           variant: 'destructive',
         });
-        // Preserve rejection summary if backend included one in partial payload
         const maybeRejections = response.data?.rejections || {
           total_rejected: 0,
           by_reason: {},
@@ -86,14 +78,10 @@ export function ScannerSetup() {
           total: response.data.total
         });
         
-        // Convert backend signals to frontend ScanResult format
         const results = response.data.signals.map(convertSignalToScanResult);
         
-        // CRITICAL: Always clear old results, even if new results are empty
-        // This prevents showing stale mock data from previous sessions
         localStorage.setItem('scan-results', JSON.stringify(results));
         
-        // Store scan metadata for display
         const metadata = {
           mode: response.data.mode,
           appliedTimeframes: response.data.applied_timeframes,
@@ -104,14 +92,12 @@ export function ScannerSetup() {
         };
         localStorage.setItem('scan-metadata', JSON.stringify(metadata));
         
-        // Store rejection stats if available
         if (response.data.rejections) {
           localStorage.setItem('scan-rejections', JSON.stringify(response.data.rejections));
         } else {
           localStorage.removeItem('scan-rejections');
         }
         
-        // Save to scan history database
         scanHistoryService.saveScan({
           mode: response.data.mode,
           profile: response.data.profile || 'default',
@@ -143,7 +129,6 @@ export function ScannerSetup() {
           : 'Failed to complete scan - check backend logs',
         variant: 'destructive',
       });
-      // Preserve any existing rejection stats if they were set before failure
       if (!localStorage.getItem('scan-rejections')) {
         localStorage.setItem('scan-rejections', JSON.stringify({
           total_rejected: 0,
@@ -159,40 +144,34 @@ export function ScannerSetup() {
   };
 
   return (
-    <div className="min-h-screen w-full p-3 md:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-6 md:mb-8">
-          <HomeButton />
-          <Button 
-            variant="outline" 
-            onClick={() => navigate('/scanner/status')} 
-            className="hover:border-accent/50 transition-all h-10 px-4"
-          >
-            <ChartBar size={18} className="mr-2" />
-            View Status
-          </Button>
+    <PageShell>
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div className="text-center space-y-2 mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
+            Scanner Setup
+          </h1>
+          <p className="text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
+            Configure your sniper profile, exchange, and filters, then arm the scanner to search for high-confluence setups.
+          </p>
         </div>
 
-        <div className="space-y-6">
-          <TacticalSection
-            title="MARKET CONTEXT"
-            subtitle="Real-time regime analysis and conditions"
-            variant="accent"
-            badge={<Badge variant="outline" className="bg-accent/10 text-accent border-accent/40 text-xs">LIVE</Badge>}
-          >
-            <MarketRegimeLens {...marketRegimeProps} />
-          </TacticalSection>
+        <TacticalPanel className="p-6 md:p-8">
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                Mode & Exchange
+              </h3>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-foreground">
+                    Sniper Mode
+                  </Label>
+                  <SniperModeSelector />
+                </div>
 
-          <div className="grid lg:grid-cols-2 gap-6">
-            <TacticalSection
-              title="BASIC CONFIGURATION"
-              subtitle="Exchange, pairs, and leverage settings"
-              variant="default"
-              badge={<GearSix size={16} className="text-primary" />}
-            >
-              <div className="space-y-5">
-                <div className="space-y-2.5">
-                  <Label htmlFor="exchange" className="text-xs font-bold uppercase tracking-widest text-foreground/80 flex items-center gap-2">
+                <div className="space-y-2">
+                  <Label htmlFor="exchange" className="text-sm font-medium text-foreground">
                     Exchange
                   </Label>
                   <Select
@@ -201,7 +180,7 @@ export function ScannerSetup() {
                       setScanConfig({ ...scanConfig, exchange: value })
                     }
                   >
-                    <SelectTrigger id="exchange" className="bg-background/60 h-11 border-border/60 hover:border-primary/50 transition-colors">
+                    <SelectTrigger id="exchange" className="bg-background/60 border-border/60 hover:border-primary/50 transition-colors">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -212,11 +191,20 @@ export function ScannerSetup() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            </div>
 
-                <div className="space-y-2.5">
-                  <Label htmlFor="top-pairs" className="text-xs font-bold uppercase tracking-widest text-foreground/80 flex items-center gap-2">
-                    Top Pairs by Volume
-                    <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">10</Badge>
+            <div className="h-px bg-border/50" />
+
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                Universe & Filters
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="top-pairs" className="text-sm font-medium text-foreground">
+                    Top Pairs to Scan
                   </Label>
                   <Input
                     id="top-pairs"
@@ -227,57 +215,27 @@ export function ScannerSetup() {
                     onChange={(e) =>
                       setScanConfig({ ...scanConfig, topPairs: parseInt(e.target.value) || 20 })
                     }
-                    className="bg-background/60 h-11 border-border/60 hover:border-primary/50 focus:border-primary transition-colors"
+                    className="bg-background/60 border-border/60 hover:border-primary/50 focus:border-primary transition-colors"
                   />
-                </div>
-
-                <div className="space-y-2.5">
-                  <Label htmlFor="leverage" className="text-xs font-bold uppercase tracking-widest text-foreground/80 flex items-center gap-2">
-                    Leverage
-                    <Badge variant="outline" className="text-[10px] font-normal text-warning border-warning/40 px-1.5 py-0">Risk Multiple</Badge>
-                  </Label>
-                  <Select
-                    value={(scanConfig.leverage ?? 1).toString()}
-                    onValueChange={(value) =>
-                      setScanConfig({ ...scanConfig, leverage: parseInt(value) })
-                    }
-                  >
-                    <SelectTrigger id="leverage" className="bg-background/60 h-11 border-border/60 hover:border-primary/50 transition-colors">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">1x (No Leverage)</SelectItem>
-                      <SelectItem value="2">2x</SelectItem>
-                      <SelectItem value="3">3x</SelectItem>
-                      <SelectItem value="5">5x</SelectItem>
-                      <SelectItem value="10">10x</SelectItem>
-                      <SelectItem value="20">20x</SelectItem>
-                      <SelectItem value="50">50x</SelectItem>
-                      <SelectItem value="100">100x</SelectItem>
-                      <SelectItem value="125">125x</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Higher values scan more symbols but take longer
+                  </p>
                 </div>
               </div>
-            </TacticalSection>
 
-            <TacticalSection
-              title="ASSET CATEGORIES"
-              subtitle="Select market segments to scan"
-              variant="default"
-              badge={<Target size={16} className="text-success" />}
-            >
-              <div className="space-y-3">
+              <div className="space-y-3 pt-2">
+                <Label className="text-sm font-medium text-foreground">Category Filters</Label>
+                
                 <div 
-                  className="group relative flex items-center justify-between p-3.5 bg-background/40 rounded border border-border/60 hover:border-accent/50 hover:bg-background/60 transition-all cursor-pointer"
+                  className="flex items-center justify-between p-3 bg-background/40 rounded-lg border border-border/60 hover:border-accent/50 hover:bg-background/60 transition-all cursor-pointer"
                   onClick={() => setScanConfig({
                     ...scanConfig,
                     categories: { ...scanConfig.categories, majors: !scanConfig.categories.majors },
                   })}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="cursor-pointer text-xs font-bold uppercase tracking-widest text-foreground/90">Majors</Label>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-medium text-foreground">Majors</span>
                       <div className="flex items-center gap-1.5">
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-accent/10 text-accent border-accent/40">ETH</Badge>
                       </div>
@@ -298,15 +256,15 @@ export function ScannerSetup() {
                 </div>
 
                 <div 
-                  className="group relative flex items-center justify-between p-3.5 bg-background/40 rounded border border-border/60 hover:border-primary/50 hover:bg-background/60 transition-all cursor-pointer"
+                  className="flex items-center justify-between p-3 bg-background/40 rounded-lg border border-border/60 hover:border-primary/50 hover:bg-background/60 transition-all cursor-pointer"
                   onClick={() => setScanConfig({
                     ...scanConfig,
                     categories: { ...scanConfig.categories, altcoins: !scanConfig.categories.altcoins },
                   })}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="cursor-pointer text-xs font-bold uppercase tracking-widest text-foreground/90">Altcoins</Label>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-medium text-foreground">Altcoins</span>
                       <div className="flex items-center gap-1.5">
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">SOL</Badge>
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">MATIC</Badge>
@@ -329,15 +287,15 @@ export function ScannerSetup() {
                 </div>
 
                 <div 
-                  className="group relative flex items-center justify-between p-3.5 bg-background/40 rounded border border-destructive/40 hover:border-destructive/70 hover:bg-background/60 transition-all cursor-pointer"
+                  className="flex items-center justify-between p-3 bg-background/40 rounded-lg border border-destructive/40 hover:border-destructive/70 hover:bg-background/60 transition-all cursor-pointer"
                   onClick={() => setScanConfig({
                     ...scanConfig,
                     categories: { ...scanConfig.categories, memeMode: !scanConfig.categories.memeMode },
                   })}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="cursor-pointer text-xs font-bold uppercase tracking-widest text-foreground/90">Memes</Label>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-medium text-foreground">Meme Mode</span>
                       <div className="flex items-center gap-1.5">
                         <Badge variant="outline" className="text-[10px] bg-destructive/20 text-destructive border-destructive/50 px-1.5 py-0">▼ HIGH VOLATILITY</Badge>
                       </div>
@@ -357,43 +315,72 @@ export function ScannerSetup() {
                   />
                 </div>
               </div>
-            </TacticalSection>
-          </div>
+            </div>
 
-          <TacticalSection
-            title="SNIPER MODE"
-            subtitle="Select precision level and confidence thresholds"
-            variant="default"
-            badge={<Crosshair size={16} className="text-primary" />}
+            <div className="h-px bg-border/50" />
+
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                Risk Profile
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="leverage" className="text-sm font-medium text-foreground flex items-center gap-2">
+                    Leverage
+                    <Badge variant="outline" className="text-[10px] font-normal text-warning border-warning/40 px-1.5 py-0">Risk Multiple</Badge>
+                  </Label>
+                  <Select
+                    value={(scanConfig.leverage ?? 1).toString()}
+                    onValueChange={(value) =>
+                      setScanConfig({ ...scanConfig, leverage: parseInt(value) })
+                    }
+                  >
+                    <SelectTrigger id="leverage" className="bg-background/60 border-border/60 hover:border-primary/50 transition-colors">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1x (No Leverage)</SelectItem>
+                      <SelectItem value="2">2x</SelectItem>
+                      <SelectItem value="3">3x</SelectItem>
+                      <SelectItem value="5">5x</SelectItem>
+                      <SelectItem value="10">10x</SelectItem>
+                      <SelectItem value="20">20x</SelectItem>
+                      <SelectItem value="50">50x</SelectItem>
+                      <SelectItem value="100">100x</SelectItem>
+                      <SelectItem value="125">125x</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </TacticalPanel>
+
+        <div className="relative group pt-2">
+          <div className="absolute inset-0 bg-gradient-to-r from-accent/20 via-primary/30 to-accent/20 rounded-xl blur-xl group-hover:blur-2xl transition-all duration-300 opacity-75" />
+          <Button
+            onClick={handleArmScanner}
+            disabled={isScanning || scanConfig.timeframes.length === 0}
+            className="relative w-full h-14 md:h-16 text-base md:text-lg font-bold disabled:opacity-50 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all"
+            size="lg"
           >
-            <SniperModeSelector />
-          </TacticalSection>
-
-          <div className="relative group pt-2">
-            <div className="absolute inset-0 bg-gradient-to-r from-accent/20 via-primary/30 to-accent/20 rounded-xl blur-xl group-hover:blur-2xl transition-all duration-300 opacity-75" />
-            <Button
-              onClick={handleArmScanner}
-              disabled={isScanning || scanConfig.timeframes.length === 0}
-              className="relative w-full h-14 md:h-16 text-base md:text-lg font-bold disabled:opacity-50 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all"
-              size="lg"
-            >
-              {isScanning ? (
-                <>
-                  <Lightning size={24} className="animate-pulse" />
-                  <span className="mx-2">SCANNING MARKETS...</span>
-                  <Lightning size={24} className="animate-pulse" />
-                </>
-              ) : (
-                <>
-                  <Crosshair size={24} weight="bold" />
-                  <span className="mx-3">ARM SCANNER</span>
-                  <span className="text-2xl">→</span>
-                </>
-              )}
-            </Button>
-          </div>
+            {isScanning ? (
+              <>
+                <Lightning size={24} className="animate-pulse" />
+                <span className="mx-2">SCANNING MARKETS...</span>
+                <Lightning size={24} className="animate-pulse" />
+              </>
+            ) : (
+              <>
+                <Crosshair size={24} weight="bold" />
+                <span className="mx-3">ARM SCANNER</span>
+                <span className="text-2xl">→</span>
+              </>
+            )}
+          </Button>
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
