@@ -158,9 +158,7 @@ export function ScannerSetup() {
         <TacticalPanel className="p-6 md:p-8">
           <div className="space-y-8">
             <div className="space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                Mode & Exchange
-              </h3>
+              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">MODE & EXCHANGE</h3>
               
               <div className="space-y-4">
                 <div className="space-y-2">

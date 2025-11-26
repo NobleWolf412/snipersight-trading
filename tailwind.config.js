@@ -1,4 +1,5 @@
 import fs from "fs";
+import animate from "tailwindcss-animate";
 
 /** @type {import('tailwindcss').Config} */
 
@@ -98,6 +99,10 @@ const defaultTheme = {
         overlay: "var(--color-bg-overlay)",
       },
       "focus-ring": "var(--color-focus-ring)",
+      // Neon accents for HUD effects
+      neonRed: "#ff2d2d",
+      neonGreen: "#00ff9d",
+      neonOrange: "#ff9900",
     },
     borderRadius: {
       sm: "var(--radius-sm)",
@@ -106,6 +111,10 @@ const defaultTheme = {
       xl: "var(--radius-xl)",
       "2xl": "var(--radius-2xl)",
       full: "var(--radius-full)",
+    },
+    boxShadow: {
+      neon: "0 0 15px rgba(255, 153, 0, 0.8)",
+      neonGreen: "0 0 15px rgba(0, 255, 157, 0.7)",
     },
   },
   spacing: {
@@ -156,4 +165,5 @@ export default {
   corePlugins: {
     container: false,
   },
+  plugins: [animate],
 };
