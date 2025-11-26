@@ -14,6 +14,15 @@ interface DetailsModalProps {
 }
 
 export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
+  const formatNum = (value: number | undefined | null, digits = 2) => {
+    if (value === undefined || value === null || Number.isNaN(value as number)) return '-';
+    try {
+      return (value as number).toFixed(digits);
+    } catch {
+      return '-';
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh]">
@@ -42,10 +51,10 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
                     <div className="w-32 bg-muted rounded-full h-3">
                       <div
                         className="bg-accent h-3 rounded-full transition-all duration-500"
-                        style={{ width: `${result.confidenceScore}%` }}
+                        style={{ width: `${typeof result.confidenceScore === 'number' ? result.confidenceScore : 0}%` }}
                       />
                     </div>
-                    <span className="text-lg font-bold font-mono text-accent">{result.confidenceScore.toFixed(0)}%</span>
+                    <span className="text-lg font-bold font-mono text-accent">{formatNum(result.confidenceScore, 0)}%</span>
                   </div>
                 </div>
               </div>
@@ -120,12 +129,12 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
                 <div>
                   <div className="text-xs text-muted-foreground mb-1">Entry Range</div>
                   <div className="font-mono text-sm">
-                    ${result.entryMin.toFixed(2)} - ${result.entryMax.toFixed(2)}
+                    ${formatNum(result.entryMin, 2)} - ${formatNum(result.entryMax, 2)}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground mb-1">Stop Loss</div>
-                  <div className="font-mono text-sm text-red-500">${result.stopLoss.toFixed(2)}</div>
+                  <div className="font-mono text-sm text-red-500">${formatNum(result.stopLoss, 2)}</div>
                 </div>
               </div>
             </div>
@@ -136,20 +145,20 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Profit Targets</h3>
               <div className="space-y-2">
-                {result.targets.map((target, idx) => (
+                {(result.targets || []).map((target, idx) => (
                   <div key={idx} className="flex items-center justify-between bg-muted/50 rounded-lg p-3">
                     <div className="flex items-center gap-3">
                       <Badge variant="outline" className="w-8 h-8 flex items-center justify-center">
                         {idx + 1}
                       </Badge>
                       <div>
-                        <div className="font-mono text-sm font-semibold">${target.price.toFixed(2)}</div>
+                        <div className="font-mono text-sm font-semibold">${formatNum(target?.price, 2)}</div>
                         <div className="text-xs text-muted-foreground">Target {idx + 1}</div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-mono text-sm text-accent">+{target.percentGain.toFixed(1)}%</div>
-                      <div className="text-xs text-muted-foreground">{target.allocation}% position</div>
+                      <div className="font-mono text-sm text-accent">+{formatNum(target?.percentGain, 1)}%</div>
+                      <div className="text-xs text-muted-foreground">{formatNum(target?.allocation, 0)}% position</div>
                     </div>
                   </div>
                 ))}

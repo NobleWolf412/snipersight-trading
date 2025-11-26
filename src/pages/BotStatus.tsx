@@ -10,6 +10,7 @@ import { ActivityFeed } from '@/components/telemetry/ActivityFeed';
 import { telemetryService, type TelemetryAnalytics } from '@/services/telemetryService';
 import { PageShell } from '@/components/layout/PageShell';
 import { HomeButton } from '@/components/layout/HomeButton';
+import { PositionsPanel } from '@/components/bot/PositionsPanel';
 
 export function BotStatus() {
   const navigate = useNavigate();
@@ -143,6 +144,8 @@ export function BotStatus() {
             <LiveTicker symbols={['BTC/USDT', 'ETH/USDT', 'SOL/USDT']} />
           </div>
         </div>
+
+        <PositionsPanel />
 
         <div className="space-y-4">
           <div 

@@ -59,7 +59,7 @@ class TelemetryService {
       params.append('since_id', sinceId.toString());
     }
 
-    const response = await fetch(`${api.baseURL}/api/telemetry/recent?${params}`);
+    const response = await fetch(`${api.baseURL}/telemetry/recent?${params}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch recent events: ${response.statusText}`);
     }
@@ -88,7 +88,7 @@ class TelemetryService {
     if (filters.start_time) params.append('start_time', filters.start_time);
     if (filters.end_time) params.append('end_time', filters.end_time);
 
-    const response = await fetch(`${api.baseURL}/api/telemetry/events?${params}`);
+    const response = await fetch(`${api.baseURL}/telemetry/events?${params}`);
     if (!response.ok) {
       throw new Error(`Failed to query events: ${response.statusText}`);
     }
@@ -103,7 +103,7 @@ class TelemetryService {
     if (startTime) params.append('start_time', startTime);
     if (endTime) params.append('end_time', endTime);
 
-    const response = await fetch(`${api.baseURL}/api/telemetry/analytics?${params}`);
+    const response = await fetch(`${api.baseURL}/telemetry/analytics?${params}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch analytics: ${response.statusText}`);
     }

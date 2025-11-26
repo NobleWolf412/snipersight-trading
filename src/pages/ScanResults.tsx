@@ -30,31 +30,54 @@ export function ScanResults() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const resultsStr = localStorage.getItem('scan-results');
-    const metadataStr = localStorage.getItem('scan-metadata');
-    const rejectionsStr = localStorage.getItem('scan-rejections');
-    if (resultsStr) {
-      try {
-        setScanResults(JSON.parse(resultsStr));
-      } catch (e) {
-        console.error('Failed to parse scan results:', e);
+    try {
+      const resultsStr = localStorage.getItem('scan-results');
+      const metadataStr = localStorage.getItem('scan-metadata');
+      const rejectionsStr = localStorage.getItem('scan-rejections');
+      
+      if (resultsStr) {
+        try {
+          const parsed = JSON.parse(resultsStr);
+          console.log('[ScanResults] Parsed results:', Array.isArray(parsed) ? `${parsed.length} items` : 'not an array');
+          setScanResults(Array.isArray(parsed) ? parsed : []);
+        } catch (e) {
+          console.error('Failed to parse scan results:', e);
+          setScanResults([]);
+        }
+      } else {
+        // No results in localStorage - set empty array explicitly
+        console.log('[ScanResults] No results in localStorage, setting empty array');
+        setScanResults([]);
+      } else {
+        // No results in localStorage - set empty array explicitly
+        console.log('[ScanResults] No results in localStorage, setting empty array');
+        setScanResults([]);
       }
-    }
-    if (metadataStr) {
-      try {
-        setScanMetadata(JSON.parse(metadataStr));
-      } catch (e) {
-        console.error('Failed to parse scan metadata:', e);
+      
+      if (metadataStr) {
+        try {
+          setScanMetadata(JSON.parse(metadataStr));
+        } catch (e) {
+          console.error('Failed to parse scan metadata:', e);
+          setScanMetadata(null);
+        }
       }
-    }
-    if (rejectionsStr) {
-      try {
-        setRejectionStats(JSON.parse(rejectionsStr));
-      } catch (e) {
-        console.error('Failed to parse rejection stats:', e);
+      
+      if (rejectionsStr) {
+        try {
+          const parsed = JSON.parse(rejectionsStr);
+          console.log('[ScanResults] Rejection stats loaded:', parsed);
+          setRejectionStats(parsed);
+        } catch (e) {
+          console.error('Failed to parse rejection stats:', e);
+          setRejectionStats(null);
+        }
       }
+    } catch (error) {
+      console.error('[ScanResults] Error loading data from localStorage:', error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
   const results = scanResults || [];

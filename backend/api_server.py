@@ -684,6 +684,64 @@ async def get_candles(
     }
 
 
+@app.get("/api/market/regime")
+async def get_market_regime():
+    """
+    Get current global market regime.
+    
+    Analyzes BTC/USDT market data to determine regime state across
+    trend, volatility, liquidity, risk appetite, and derivatives dimensions.
+    
+    Returns:
+        MarketRegime with composite label, score, and dimension breakdown
+    """
+    try:
+        # Detect global regime via orchestrator
+        regime = orchestrator._detect_global_regime()
+        
+        if not regime:
+            # Return neutral regime if detection fails
+            return {
+                "composite": "neutral",
+                "score": 50.0,
+                "dimensions": {
+                    "trend": "sideways",
+                    "volatility": "normal",
+                    "liquidity": "normal",
+                    "risk_appetite": "neutral",
+                    "derivatives": "balanced"
+                },
+                "trend_score": 50.0,
+                "volatility_score": 50.0,
+                "liquidity_score": 50.0,
+                "risk_score": 50.0,
+                "derivatives_score": 50.0,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        
+        return {
+            "composite": regime.composite,
+            "score": regime.score,
+            "dimensions": {
+                "trend": regime.dimensions.trend,
+                "volatility": regime.dimensions.volatility,
+                "liquidity": regime.dimensions.liquidity,
+                "risk_appetite": regime.dimensions.risk_appetite,
+                "derivatives": regime.dimensions.derivatives
+            },
+            "trend_score": regime.trend_score,
+            "volatility_score": regime.volatility_score,
+            "liquidity_score": regime.liquidity_score,
+            "risk_score": regime.risk_score,
+            "derivatives_score": regime.derivatives_score,
+            "timestamp": regime.timestamp.isoformat()
+        }
+        
+    except Exception as e:
+        logger.error("Market regime detection failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Regime detection error: {str(e)}") from e
+
+
 # ============================================================================
 # Telemetry Endpoints
 # ============================================================================

@@ -10,12 +10,15 @@ import { telemetryService, type TelemetryAnalytics } from '@/services/telemetryS
 import { useNavigate } from 'react-router-dom';
 import { PageShell } from '@/components/layout/PageShell';
 import { HomeButton } from '@/components/layout/HomeButton';
+import { scanHistoryService } from '@/services/scanHistoryService';
+import { RiskSummary } from '@/components/risk/RiskSummary';
 
 export function ScannerStatus() {
   const { scanConfig } = useScanner();
   const [analytics, setAnalytics] = useState<TelemetryAnalytics | null>(null);
   const [showConfig, setShowConfig] = useState(true);
   const [showAnalytics, setShowAnalytics] = useState(true);
+  const [analyticsTf, setAnalyticsTf] = useState<'1h' | '24h' | '7d' | 'all'>('24h');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -132,44 +135,28 @@ export function ScannerStatus() {
           </div>
           
           {showAnalytics && (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
-              <StatCard 
-                title="TOTAL SCANS" 
-                icon={<Target size={20} weight="bold" />} 
-                value={analytics?.metrics.total_scans || 0} 
-                subtitle="Completed" 
-                accent="text-foreground" 
-                glowColor="primary"
-              />
-              <StatCard 
-                title="SIGNALS GENERATED" 
-                icon={<CheckCircle size={20} weight="bold" />} 
-                value={analytics?.metrics.total_signals_generated || 0} 
-                subtitle="High conviction" 
-                accent="text-success" 
-                glowColor="success"
-              />
-              <StatCard 
-                title="SIGNALS REJECTED" 
-                icon={<XCircle size={20} weight="bold" />} 
-                value={analytics?.metrics.total_signals_rejected || 0} 
-                subtitle="Failed gates" 
-                accent="text-warning" 
-                glowColor="warning"
-              />
-              <StatCard 
-                title="SUCCESS RATE" 
-                icon={<TrendUp size={20} weight="bold" />} 
-                value={((analytics?.metrics.signal_success_rate || 0).toFixed(1) + '%')} 
-                subtitle="Quality metric" 
-                accent="text-accent" 
-                glowColor="accent"
-              />
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                {(['1h','24h','7d','all'] as const).map(tf => (
+                  <Button
+                    key={tf}
+                    variant={analyticsTf === tf ? 'default' : 'outline'}
+                    size="sm"
+                    className={analyticsTf === tf ? 'bg-accent text-foreground' : ''}
+                    onClick={() => setAnalyticsTf(tf)}
+                  >
+                    {tf.toUpperCase()}
+                  </Button>
+                ))}
+              </div>
+              <AnalyticsTiles analytics={analytics} timeframe={analyticsTf} />
             </div>
           )}
         </div>
 
         <ScanHistory maxEntries={10} />
+
+        <RiskSummary />
 
         <div className="space-y-4">
           <h2 className="text-2xl font-bold heading-hud flex items-center gap-3">
@@ -180,6 +167,62 @@ export function ScannerStatus() {
         </div>
       </div>
     </PageShell>
+  );
+}
+
+function AnalyticsTiles({ analytics, timeframe }: { analytics: TelemetryAnalytics | null; timeframe: '1h' | '24h' | '7d' | 'all' }) {
+  // Compute local stats fallback from scan history
+  const hours = timeframe === '1h' ? 1 : timeframe === '24h' ? 24 : timeframe === '7d' ? 168 : undefined;
+  const localStats = scanHistoryService.getStatistics(hours);
+
+  const metrics = analytics?.metrics;
+  const useLocal = !metrics || (
+    (metrics.total_scans === 0 && metrics.total_signals_generated === 0 && metrics.total_signals_rejected === 0)
+  );
+
+  const totalScans = useLocal ? localStats.totalScans : (metrics?.total_scans || 0);
+  const totalSignals = useLocal ? localStats.totalSignals : (metrics?.total_signals_generated || 0);
+  const totalRejected = useLocal ? localStats.totalRejections : (metrics?.total_signals_rejected || 0);
+  const successRate = useLocal ? localStats.avgSuccessRate : Number((metrics?.signal_success_rate || 0).toFixed(1));
+
+  return (
+    <div className="space-y-2">
+      <div className="text-xs text-muted-foreground font-mono">Source: {useLocal ? 'Local History' : 'Backend Telemetry'}</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
+        <StatCard 
+        title="TOTAL SCANS" 
+        icon={<Target size={20} weight="bold" />} 
+        value={totalScans} 
+        subtitle="Completed" 
+        accent="text-foreground" 
+        glowColor="primary"
+        />
+        <StatCard 
+        title="SIGNALS GENERATED" 
+        icon={<CheckCircle size={20} weight="bold" />} 
+        value={totalSignals} 
+        subtitle="High conviction" 
+        accent="text-success" 
+        glowColor="success"
+        />
+        <StatCard 
+        title="SIGNALS REJECTED" 
+        icon={<XCircle size={20} weight="bold" />} 
+        value={totalRejected} 
+        subtitle="Failed gates" 
+        accent="text-warning" 
+        glowColor="warning"
+        />
+        <StatCard 
+        title="SUCCESS RATE" 
+        icon={<TrendUp size={20} weight="bold" />} 
+        value={`${successRate.toFixed ? successRate.toFixed(1) : Number(successRate).toFixed(1)}%`} 
+        subtitle="Quality metric" 
+        accent="text-accent" 
+        glowColor="accent"
+        />
+      </div>
+    </div>
   );
 }
 

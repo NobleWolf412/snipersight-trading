@@ -354,7 +354,21 @@ class Orchestrator:
                 "reason": f"Confluence score too low ({context.confluence_breakdown.total_score:.1f} < {self.config.min_confluence_score:.1f})",
                 "score": context.confluence_breakdown.total_score,
                 "threshold": self.config.min_confluence_score,
-                "top_factors": [f"{f.name}: {f.score:.1f}" for f in context.confluence_breakdown.factors[:3]]
+                "top_factors": [f"{f.name}: {f.score:.1f}" for f in context.confluence_breakdown.factors[:3]],
+                "all_factors": [
+                    {
+                        "name": f.name,
+                        "score": f.score,
+                        "weight": f.weight,
+                        "weighted_contribution": f.score * f.weight,
+                        "rationale": f.rationale
+                    }
+                    for f in context.confluence_breakdown.factors
+                ],
+                "synergy_bonus": context.confluence_breakdown.synergy_bonus,
+                "conflict_penalty": context.confluence_breakdown.conflict_penalty,
+                "htf_aligned": context.confluence_breakdown.htf_aligned,
+                "btc_impulse_gate": context.confluence_breakdown.btc_impulse_gate
             }
         
         # Stage 6: Trade planning

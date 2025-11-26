@@ -243,6 +243,27 @@ class ApiClient {
       `/market/candles/${symbol}?timeframe=${timeframe}&limit=${limit}`
     );
   }
+
+  // Regime data
+  async getMarketRegime() {
+    return this.request<{
+      composite: string;
+      score: number;
+      dimensions: {
+        trend: string;
+        volatility: string;
+        liquidity: string;
+        risk_appetite: string;
+        derivatives: string;
+      };
+      trend_score: number;
+      volatility_score: number;
+      liquidity_score: number;
+      risk_score: number;
+      derivatives_score: number;
+      timestamp: string;
+    }>('/market/regime');
+  }
 }
 
 export const api = new ApiClient();

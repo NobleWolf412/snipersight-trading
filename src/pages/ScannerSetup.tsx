@@ -11,7 +11,7 @@ import { Crosshair, Lightning, Target, ChartBar, GearSix } from '@phosphor-icons
 import type { ScanResult } from '@/utils/mockData';
 import { generateMockScanResults, convertSignalToScanResult } from '@/utils/mockData';
 import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
-import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
+import { useMarketRegime } from '@/hooks/use-market-regime';
 import { SniperModeSelector } from '@/components/SniperModeSelector';
 import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
@@ -25,7 +25,7 @@ export function ScannerSetup() {
   const [isScanning, setIsScanning] = useState(false);
   const { toast } = useToast();
 
-  const marketRegimeProps = useMockMarketRegime('scanner');
+  const marketRegimeProps = useMarketRegime('scanner');
 
   const handleArmScanner = async () => {
     console.log('[ScannerSetup] Starting scan...', {
@@ -37,6 +37,11 @@ export function ScannerSetup() {
       categories: scanConfig.categories
     });
     setIsScanning(true);
+    
+    // Clear any stale results immediately to prevent showing old mock data
+    localStorage.removeItem('scan-results');
+    localStorage.removeItem('scan-metadata');
+    localStorage.removeItem('scan-rejections');
 
     try {
       // Add timeout to prevent indefinite waiting (5 minutes for heavy computation with real exchange data)
@@ -58,15 +63,16 @@ export function ScannerSetup() {
       const response = await Promise.race([apiPromise, timeoutPromise]) as any;
 
       if (response.error) {
-        console.error('[ScannerSetup] API error, falling back to mock data:', response.error);
+        console.error('[ScannerSetup] API error:', response.error);
         toast({
-          title: 'Using Mock Data',
-          description: 'Backend unavailable, displaying simulated results',
+          title: 'Scanner Failed',
+          description: 'Backend unavailable - check if API server is running',
+          variant: 'destructive',
         });
-        // Fallback to mock data
-        const results = generateMockScanResults(8);
-        localStorage.setItem('scan-results', JSON.stringify(results));
+        // Set empty results and error state
+        localStorage.setItem('scan-results', JSON.stringify([]));
         localStorage.removeItem('scan-metadata');
+        localStorage.removeItem('scan-rejections');
       } else if (response.data) {
         console.log('[ScannerSetup] Received signals:', response.data.signals.length);
         console.log('[ScannerSetup] Scan metadata:', {
@@ -77,6 +83,9 @@ export function ScannerSetup() {
         
         // Convert backend signals to frontend ScanResult format
         const results = response.data.signals.map(convertSignalToScanResult);
+        
+        // CRITICAL: Always clear old results, even if new results are empty
+        // This prevents showing stale mock data from previous sessions
         localStorage.setItem('scan-results', JSON.stringify(results));
         
         // Store scan metadata for display
@@ -121,15 +130,18 @@ export function ScannerSetup() {
       navigate('/results');
     } catch (error) {
       console.error('Scanner error:', error);
+      const isTimeout = error instanceof Error && error.message === 'Request timeout';
       toast({
-        title: 'Scanner Error',
-        description: 'Failed to fetch signals, using mock data',
+        title: isTimeout ? 'Scan Timeout' : 'Scanner Error',
+        description: isTimeout 
+          ? 'Scan exceeded 5 minutes - try reducing symbols or timeframes'
+          : 'Failed to complete scan - check backend logs',
         variant: 'destructive',
       });
-      // Fallback to mock data
-      const results = generateMockScanResults(8);
-      localStorage.setItem('scan-results', JSON.stringify(results));
+      // Set empty results and error state (no mock data)
+      localStorage.setItem('scan-results', JSON.stringify([]));
       localStorage.removeItem('scan-metadata');
+      localStorage.removeItem('scan-rejections');
       setIsScanning(false);
       navigate('/results');
     }
