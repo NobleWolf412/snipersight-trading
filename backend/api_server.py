@@ -127,7 +127,7 @@ exchange_adapter = PhemexAdapter(testnet=False)
 
 # Initialize orchestrator with default config
 default_config = ScanConfig(
-    profile="balanced",
+    profile="recon",  # Valid mode from scanner_modes.py
     timeframes=("1h", "4h", "1d"),
     min_confluence_score=70.0,
     max_risk_pct=2.0

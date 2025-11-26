@@ -21,11 +21,15 @@ import logging
 import time
 
 from backend.shared.config.defaults import ScanConfig
+from backend.shared.config.scanner_modes import get_mode
 from backend.shared.models.data import MultiTimeframeData
 from backend.shared.models.indicators import IndicatorSet
 from backend.shared.models.smc import SMCSnapshot
 from backend.shared.models.scoring import ConfluenceBreakdown
 from backend.shared.models.planner import TradePlan
+from backend.shared.models.regime import MarketRegime, SymbolRegime
+from backend.analysis.regime_detector import get_regime_detector
+from backend.analysis.regime_policies import get_regime_policy
 
 from backend.engine.context import SniperContext
 from backend.bot.telemetry.logger import get_telemetry_logger
@@ -109,10 +113,19 @@ class Orchestrator:
         # Smart Money Concepts configuration (extracted parameters)
         self.smc_config = SMCConfig.defaults()
         
+        # Load scanner mode for critical timeframe tracking
+        self.scanner_mode = get_mode(self.config.profile)
+        
+        # Regime detection
+        self.regime_detector = get_regime_detector()
+        self.regime_policy = get_regime_policy(self.config.profile)
+        self.current_regime: Optional[MarketRegime] = None
+        
         # Concurrency settings
         self.concurrency_workers = max(1, concurrency_workers)
 
-        logger.info("Orchestrator initialized with SniperSight pipeline (workers=%d)", self.concurrency_workers)
+        logger.info("Orchestrator initialized with SniperSight pipeline (mode=%s, workers=%d)", 
+                   self.config.profile, self.concurrency_workers)
     
     def scan(self, symbols: List[str]) -> tuple[List[TradePlan], Dict[str, Any]]:
         """
@@ -140,11 +153,29 @@ class Orchestrator:
             profile=self.config.profile
         ))
         
+        # Detect global market regime from BTC
+        try:
+            self.current_regime = self._detect_global_regime()
+            if self.current_regime:
+                logger.info("🌍 Global regime: %s (score=%.1f)", 
+                           self.current_regime.composite, 
+                           self.current_regime.score)
+                
+                # Check regime gate for mode
+                if self.current_regime.score < self.regime_policy.min_regime_score:
+                    logger.warning("⚠️ Regime score %.1f below mode minimum %.1f - signals may be limited",
+                                 self.current_regime.score,
+                                 self.regime_policy.min_regime_score)
+        except Exception as e:
+            logger.warning("Regime detection failed: %s - continuing without regime context", e)
+            self.current_regime = None
+        
         signals = []
         rejected_count = 0
         rejection_stats: Dict[str, List[Dict[str, Any]]] = {
             "low_confluence": [],
             "no_data": [],
+            "missing_critical_tf": [],
             "risk_validation": [],
             "no_trade_plan": [],
             "errors": []
@@ -198,11 +229,17 @@ class Orchestrator:
             "by_reason": {
                 "low_confluence": len(rejection_stats["low_confluence"]),
                 "no_data": len(rejection_stats["no_data"]),
+                "missing_critical_tf": len(rejection_stats["missing_critical_tf"]),
                 "risk_validation": len(rejection_stats["risk_validation"]),
                 "no_trade_plan": len(rejection_stats["no_trade_plan"]),
                 "errors": len(rejection_stats["errors"])
             },
-            "details": rejection_stats
+            "details": rejection_stats,
+            "regime": {
+                "composite": self.current_regime.composite if self.current_regime else "unknown",
+                "score": self.current_regime.score if self.current_regime else 0,
+                "policy_min_score": self.regime_policy.min_regime_score
+            } if self.current_regime else None
         }
         
         return signals, rejection_summary
@@ -244,9 +281,46 @@ class Orchestrator:
                 "reason": "No market data available"
             }
         
+        # Stage 2.5: Check critical timeframe availability
+        missing_critical_tfs = self._check_critical_timeframes(context.multi_tf_data)
+        if missing_critical_tfs:
+            logger.info("%s: REJECTED - Missing critical timeframes: %s", symbol, ', '.join(missing_critical_tfs))
+            
+            # Log telemetry event
+            self.telemetry.log_event(create_signal_rejected_event(
+                run_id=run_id,
+                symbol=symbol,
+                reason=f"Missing critical timeframes: {', '.join(missing_critical_tfs)}",
+                gate_name="critical_timeframes"
+            ))
+            
+            return None, {
+                "symbol": symbol,
+                "reason_type": "missing_critical_tf",
+                "reason": f"Missing critical timeframes: {', '.join(missing_critical_tfs)}",
+                "missing_timeframes": missing_critical_tfs,
+                "required_timeframes": list(self.scanner_mode.critical_timeframes)
+            }
+        
+        # Store missing TFs for plan metadata (even if empty)
+        context.metadata['missing_critical_timeframes'] = missing_critical_tfs
+        
         # Stage 3: Indicator computation
         logger.debug("%s: Computing indicators", symbol)
         context.multi_tf_indicators = self._compute_indicators(context.multi_tf_data)
+        
+        # Stage 3.5: Detect symbol-specific regime (after indicators computed)
+        if context.multi_tf_data and context.multi_tf_indicators and self.regime_detector:
+            try:
+                symbol_regime = self.regime_detector.detect_symbol_regime(
+                    symbol=symbol,
+                    data=context.multi_tf_data,
+                    indicators=context.multi_tf_indicators
+                )
+                context.metadata['symbol_regime'] = symbol_regime
+                logger.debug("%s: Symbol regime: %s (score=%.1f)", symbol, symbol_regime.trend, symbol_regime.score)
+            except Exception as e:
+                logger.debug("%s: Symbol regime detection skipped: %s", symbol, e)
         
         # Stage 4: SMC detection
         logger.debug("%s: Detecting SMC patterns", symbol)
@@ -484,12 +558,25 @@ class Orchestrator:
         if not context.smc_snapshot or not context.multi_tf_indicators:
             raise ValueError(f"{context.symbol}: Missing SMC snapshot or indicators for confluence scoring")
         
-        return calculate_confluence_score(
+        base_breakdown = calculate_confluence_score(
             smc_snapshot=context.smc_snapshot,
             indicators=context.multi_tf_indicators,
             config=self.config,
             direction="LONG"  # We'll determine this properly later
         )
+        
+        # Apply regime adjustments if regime is available
+        if self.current_regime:
+            symbol_regime = context.metadata.get('symbol_regime')
+            adjusted_score = self._apply_regime_adjustments(
+                base_score=base_breakdown.total_score,
+                symbol_regime=symbol_regime
+            )
+            
+            # Update breakdown with adjusted score
+            base_breakdown.total_score = adjusted_score
+        
+        return base_breakdown
     
     def _generate_trade_plan(self, context: SniperContext, current_price: float) -> Optional[TradePlan]:
         """
@@ -526,8 +613,27 @@ class Orchestrator:
                 indicators=context.multi_tf_indicators,
                 confluence_breakdown=context.confluence_breakdown,
                 config=self.config,
-                current_price=current_price
+                current_price=current_price,
+                missing_critical_timeframes=context.metadata.get('missing_critical_timeframes', [])
             )
+            
+            # Enrich plan with regime context
+            if plan and self.current_regime:
+                plan.metadata['global_regime'] = {
+                    'composite': self.current_regime.composite,
+                    'score': self.current_regime.score,
+                    'trend': self.current_regime.dimensions.trend,
+                    'volatility': self.current_regime.dimensions.volatility,
+                    'liquidity': self.current_regime.dimensions.liquidity
+                }
+                
+                symbol_regime = context.metadata.get('symbol_regime')
+                if symbol_regime:
+                    plan.metadata['symbol_regime'] = {
+                        'trend': symbol_regime.trend,
+                        'volatility': symbol_regime.volatility,
+                        'score': symbol_regime.score
+                    }
             
             return plan
             
@@ -629,6 +735,86 @@ class Orchestrator:
         self.config = config
         logger.info("Configuration updated")
 
+    def _check_critical_timeframes(self, multi_tf_data: MultiTimeframeData) -> List[str]:
+        """
+        Check if critical timeframes are available in data.
+        
+        Args:
+            multi_tf_data: Fetched multi-timeframe data
+            
+        Returns:
+            List of missing critical timeframes (empty if all present)
+        """
+        available_tfs = set(multi_tf_data.timeframes.keys())
+        critical_tfs = set(self.scanner_mode.critical_timeframes)
+        missing = critical_tfs - available_tfs
+        return sorted(missing)
+    
+    def _detect_global_regime(self) -> Optional[MarketRegime]:
+        """
+        Detect global market regime from BTC/USDT.
+        
+        Returns:
+            MarketRegime or None if detection fails
+        """
+        try:
+            # Fetch BTC data
+            btc_data = self._ingest_data('BTC/USDT')
+            if not btc_data or not btc_data.timeframes:
+                logger.warning("Unable to fetch BTC data for regime detection")
+                return None
+            
+            # Compute BTC indicators
+            btc_indicators = self._compute_indicators(btc_data)
+            if not btc_indicators.by_timeframe:
+                logger.warning("Unable to compute BTC indicators for regime detection")
+                return None
+            
+            # Detect regime
+            regime = self.regime_detector.detect_global_regime(
+                btc_data=btc_data,
+                btc_indicators=btc_indicators
+            )
+            
+            return regime
+            
+        except Exception as e:
+            logger.error("Global regime detection failed: %s", e)
+            return None
+    
+    def _apply_regime_adjustments(self, base_score: float, symbol_regime: Optional[SymbolRegime]) -> float:
+        """
+        Apply regime-based adjustments to confluence score.
+        
+        Args:
+            base_score: Base confluence score before regime adjustments
+            symbol_regime: Symbol-specific regime (if detected)
+            
+        Returns:
+            Adjusted confluence score
+        """
+        if not self.current_regime:
+            return base_score
+        
+        adjusted_score = base_score
+        
+        # Get regime-specific adjustment from policy
+        composite = self.current_regime.composite
+        if composite in self.regime_policy.confluence_adjustment:
+            adjustment = self.regime_policy.confluence_adjustment[composite]
+            adjusted_score += adjustment
+            logger.debug("Regime adjustment for %s: %.1f → %.1f (adjustment: %+.1f)",
+                        composite, base_score, adjusted_score, adjustment)
+        
+        # Apply symbol regime bonus if available
+        if symbol_regime and symbol_regime.score >= 70:
+            bonus = 2.0  # Bonus for strong local regime
+            adjusted_score += bonus
+            logger.debug("Symbol regime bonus: +%.1f (symbol score=%.1f)", bonus, symbol_regime.score)
+        
+        # Clamp to 0-100 range
+        return max(0.0, min(100.0, adjusted_score))
+    
     def update_smc_config(self, new_cfg: SMCConfig) -> None:
         """Apply a new SMC configuration after validation."""
         new_cfg.validate()

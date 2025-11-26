@@ -22,6 +22,7 @@ from backend.shared.models.smc import SMCSnapshot, OrderBlock, FVG
 from backend.shared.models.indicators import IndicatorSet
 from backend.shared.models.scoring import ConfluenceBreakdown
 from backend.shared.config.defaults import ScanConfig
+from backend.shared.config.rr_matrix import validate_rr, classify_conviction
 
 
 def generate_trade_plan(
@@ -32,7 +33,8 @@ def generate_trade_plan(
     indicators: IndicatorSet,
     confluence_breakdown: ConfluenceBreakdown,
     config: ScanConfig,
-    current_price: float
+    current_price: float,
+    missing_critical_timeframes: List[str] = None
 ) -> TradePlan:
     """
     Generate a complete, actionable trade plan.
@@ -46,6 +48,7 @@ def generate_trade_plan(
         confluence_breakdown: Confluence score breakdown
         config: Scan configuration
         current_price: Current market price
+        missing_critical_timeframes: List of critical TFs that failed to load
         
     Returns:
         TradePlan: Complete trade plan with entries, stops, targets
@@ -53,6 +56,9 @@ def generate_trade_plan(
     Raises:
         ValueError: If unable to generate valid plan (insufficient structure)
     """
+    if missing_critical_timeframes is None:
+        missing_critical_timeframes = []
+    
     # Get primary timeframe indicators
     if not indicators.by_timeframe:
         raise ValueError("No indicators available for trade planning")
@@ -65,23 +71,32 @@ def generate_trade_plan(
     
     atr = primary_indicators.atr
     
+    # Track plan composition for type classification
+    plan_composition = {
+        'entry_from_structure': False,
+        'stop_from_structure': False,
+        'targets_from_structure': False
+    }
+    
     # --- Determine Entry Zone ---
     
-    entry_zone = _calculate_entry_zone(
+    entry_zone, entry_used_structure = _calculate_entry_zone(
         direction=direction,
         smc_snapshot=smc_snapshot,
         current_price=current_price,
         atr=atr
     )
+    plan_composition['entry_from_structure'] = entry_used_structure
     
     # --- Calculate Stop Loss ---
     
-    stop_loss = _calculate_stop_loss(
+    stop_loss, stop_used_structure = _calculate_stop_loss(
         direction=direction,
         entry_zone=entry_zone,
         smc_snapshot=smc_snapshot,
         atr=atr
     )
+    plan_composition['stop_from_structure'] = stop_used_structure
     
     # --- Calculate Targets ---
     
@@ -106,9 +121,32 @@ def generate_trade_plan(
     reward = abs(targets[0].level - avg_entry)
     risk_reward = reward / risk
     
-    # Enforce minimum R:R
-    if risk_reward < config.min_rr_ratio:
-        raise ValueError(f"Risk:Reward {risk_reward:.2f} below minimum {config.min_rr_ratio}")
+    # --- Classify Plan Type ---
+    
+    # Determine plan type based on structure usage
+    if plan_composition['entry_from_structure'] and plan_composition['stop_from_structure']:
+        plan_type = "SMC"
+    elif not plan_composition['entry_from_structure'] and not plan_composition['stop_from_structure']:
+        plan_type = "ATR_FALLBACK"
+    else:
+        plan_type = "HYBRID"
+    
+    # --- Tiered R:R Validation ---
+    
+    # Apply R:R threshold appropriate for plan type
+    is_valid_rr, rr_reason = validate_rr(plan_type, risk_reward)
+    if not is_valid_rr:
+        raise ValueError(rr_reason)
+    
+    # --- Classify Conviction ---
+    
+    has_all_critical_tfs = len(missing_critical_timeframes) == 0
+    conviction_class = classify_conviction(
+        plan_type=plan_type,
+        risk_reward=risk_reward,
+        confluence_score=confluence_breakdown.total_score,
+        has_all_critical_tfs=has_all_critical_tfs
+    )
     
     # --- Generate Rationale ---
     
@@ -135,10 +173,14 @@ def generate_trade_plan(
         confidence_score=confluence_breakdown.total_score,
         confluence_breakdown=confluence_breakdown,
         rationale=rationale,
+        plan_type=plan_type,
+        conviction_class=conviction_class,
+        missing_critical_timeframes=missing_critical_timeframes,
         metadata={
             "atr": atr,
             "current_price": current_price,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
+            "plan_composition": plan_composition
         }
     )
     
@@ -150,12 +192,15 @@ def _calculate_entry_zone(
     smc_snapshot: SMCSnapshot,
     current_price: float,
     atr: float
-) -> EntryZone:
+) -> tuple[EntryZone, bool]:
     """
     Calculate dual entry zone based on SMC structure.
     
     Near entry: Closer to current price, safer but lower R:R
     Far entry: Deeper into structure, riskier but better R:R
+    
+    Returns:
+        Tuple of (EntryZone, used_structure_flag)
     """
     logger.critical(f"_calculate_entry_zone CALLED: direction={direction}, current_price={current_price}, atr={atr}, num_obs={len(smc_snapshot.order_blocks)}, num_fvgs={len(smc_snapshot.fvgs)}")
     
@@ -178,6 +223,7 @@ def _calculate_entry_zone(
             far_entry = best_ob.low + (0.1 * atr)    # Bottom of OB (conservative, deeper)
             logger.critical(f"ENTRY ZONE: Calculated near={near_entry}, far={far_entry}")
             rationale = f"Entry zone based on {best_ob.timeframe} bullish order block"
+            used_structure = True
         
         elif fvgs:
             # Use nearest unfilled FVG
@@ -187,6 +233,7 @@ def _calculate_entry_zone(
             near_entry = best_fvg.top - (0.1 * atr)      # Top of FVG (aggressive)
             far_entry = best_fvg.bottom + (0.1 * atr)    # Bottom of FVG (conservative)
             rationale = f"Entry zone based on {best_fvg.timeframe} bullish FVG"
+            used_structure = True
         
         else:
             # Fallback: use ATR-based zone below current price
@@ -195,6 +242,7 @@ def _calculate_entry_zone(
             far_entry = current_price - (1.5 * atr)
             logger.critical(f"ENTRY ZONE FALLBACK: near={near_entry}, far={far_entry}")
             rationale = "Entry zone based on ATR pullback (no clear SMC structure)"
+            used_structure = False
     
     else:  # bearish
         # Look for bearish OB or FVG above current price
@@ -206,6 +254,7 @@ def _calculate_entry_zone(
             near_entry = best_ob.low + (0.1 * atr)   # Bottom of OB (aggressive entry)
             far_entry = best_ob.high - (0.1 * atr)   # Top of OB (conservative, deeper)
             rationale = f"Entry zone based on {best_ob.timeframe} bearish order block"
+            used_structure = True
         
         elif fvgs:
             best_fvg = min([fvg for fvg in fvgs if fvg.overlap_with_price < 0.5],
@@ -214,18 +263,20 @@ def _calculate_entry_zone(
             near_entry = best_fvg.bottom + (0.1 * atr)
             far_entry = best_fvg.top - (0.1 * atr)
             rationale = f"Entry zone based on {best_fvg.timeframe} bearish FVG"
+            used_structure = True
         
         else:
             # Fallback: use ATR-based zone above current price
             near_entry = current_price + (0.5 * atr)
             far_entry = current_price + (1.5 * atr)
             rationale = "Entry zone based on ATR retracement (no clear SMC structure)"
+            used_structure = False
     
     return EntryZone(
         near_entry=near_entry,
         far_entry=far_entry,
         rationale=rationale
-    )
+    ), used_structure
 
 
 def _calculate_stop_loss(
@@ -233,11 +284,14 @@ def _calculate_stop_loss(
     entry_zone: EntryZone,
     smc_snapshot: SMCSnapshot,
     atr: float
-) -> StopLoss:
+) -> tuple[StopLoss, bool]:
     """
     Calculate structure-based stop loss.
     
     Never arbitrary - always beyond invalidation point.
+    
+    Returns:
+        Tuple of (StopLoss, used_structure_flag)
     """
     direction_lower = direction.lower()
     is_bullish = direction_lower in ["bullish", "long"]
@@ -275,6 +329,7 @@ def _calculate_stop_loss(
             rationale = "Stop below entry structure invalidation point"
             logger.debug(f"Using structure-based stop: {stop_level} (before buffer: {max(valid_stops)})")
             distance_atr = (entry_zone.far_entry - stop_level) / atr
+            used_structure = True
         else:
             # CRITICAL: Never use ATR-only stops - reject trade without structure
             logger.warning(f"No structure-based stop found for bullish {direction} trade - rejecting")
@@ -301,6 +356,7 @@ def _calculate_stop_loss(
             stop_level += (0.3 * atr)  # Buffer beyond structure
             rationale = "Stop above entry structure invalidation point"
             distance_atr = (stop_level - entry_zone.far_entry) / atr
+            used_structure = True
         else:
             # CRITICAL: Never use ATR-only stops - reject trade without structure
             logger.warning(f"No structure-based stop found for bearish {direction} trade - rejecting")
@@ -313,7 +369,7 @@ def _calculate_stop_loss(
         level=stop_level,
         distance_atr=distance_atr,
         rationale=rationale
-    )
+    ), used_structure
 
 
 def _calculate_targets(

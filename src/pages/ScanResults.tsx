@@ -13,6 +13,8 @@ import { PriceDisplay } from '@/components/PriceDisplay';
 import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLayout';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { RejectionSummary } from '@/components/RejectionSummary';
+import { RegimeIndicator } from '@/components/RegimeIndicator';
+import { ConvictionBadge } from '@/components/ConvictionBadge';
 
 export function ScanResults() {
   const navigate = useNavigate();
@@ -225,6 +227,8 @@ export function ScanResults() {
                       <TableHead className="heading-hud text-xs">PAIR</TableHead>
                       <TableHead className="heading-hud text-xs">LIVE PRICE</TableHead>
                       <TableHead className="heading-hud text-xs">TREND</TableHead>
+                      <TableHead className="heading-hud text-xs">CONVICTION</TableHead>
+                      <TableHead className="heading-hud text-xs">REGIME</TableHead>
                       <TableHead className="heading-hud text-xs">CONFIDENCE</TableHead>
                       <TableHead className="heading-hud text-xs">RISK</TableHead>
                       <TableHead className="heading-hud text-xs">TYPE</TableHead>
@@ -249,6 +253,20 @@ export function ScanResults() {
                               {result.trendBias}
                             </span>
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {result.conviction_class && result.plan_type ? (
+                            <ConvictionBadge 
+                              conviction={result.conviction_class} 
+                              planType={result.plan_type}
+                              size="sm"
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <RegimeIndicator regime={result.regime} size="sm" />
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">

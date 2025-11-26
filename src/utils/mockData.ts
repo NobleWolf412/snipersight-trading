@@ -1,3 +1,5 @@
+import type { PlanType, ConvictionClass, RegimeMetadata } from '@/types/regime';
+
 export interface ScanResult {
   id: string;
   pair: string;
@@ -11,6 +13,12 @@ export interface ScanResult {
   orderBlocks: Array<{ type: 'bullish' | 'bearish'; price: number; timeframe: string }>;
   fairValueGaps: Array<{ low: number; high: number; type: 'bullish' | 'bearish' }>;
   timestamp: string;
+  
+  // Phase 1-5 enhancements
+  plan_type?: PlanType;
+  conviction_class?: ConvictionClass;
+  missing_critical_timeframes?: string[];
+  regime?: RegimeMetadata;
 }
 
 export interface BotActivity {
@@ -24,11 +32,18 @@ export interface BotActivity {
 export function generateMockScanResults(count: number = 5): ScanResult[] {
   const pairs = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'MATIC/USDT', 'AVAX/USDT', 'LINK/USDT', 'DOT/USDT', 'ADA/USDT'];
   const results: ScanResult[] = [];
+  
+  const planTypes: PlanType[] = ['SMC', 'ATR_FALLBACK', 'HYBRID'];
+  const convictions: ConvictionClass[] = ['A', 'B', 'C'];
+  const trends = ['strong_up', 'up', 'sideways', 'down', 'strong_down'] as const;
+  const volatilities = ['compressed', 'normal', 'elevated', 'chaotic'] as const;
 
   for (let i = 0; i < count; i++) {
     const pair = pairs[i % pairs.length];
     const basePrice = Math.random() * 50000 + 1000;
     const trendBias = ['BULLISH', 'BEARISH', 'NEUTRAL'][Math.floor(Math.random() * 3)] as ScanResult['trendBias'];
+    const planType = planTypes[Math.floor(Math.random() * planTypes.length)];
+    const conviction = convictions[Math.floor(Math.random() * convictions.length)];
     
     results.push({
       id: `scan-${Date.now()}-${i}`,
@@ -52,6 +67,25 @@ export function generateMockScanResults(count: number = 5): ScanResult[] {
         { low: basePrice * 0.96, high: basePrice * 0.98, type: 'bullish' },
       ],
       timestamp: new Date().toISOString(),
+      
+      // Phase 1-5 enhancements
+      plan_type: planType,
+      conviction_class: conviction,
+      missing_critical_timeframes: Math.random() > 0.7 ? ['1w'] : [],
+      regime: {
+        global_regime: {
+          composite: 'bullish_risk_on',
+          score: 65 + Math.random() * 30,
+          trend: trends[Math.floor(Math.random() * trends.length)],
+          volatility: volatilities[Math.floor(Math.random() * volatilities.length)],
+          liquidity: 'healthy' as const
+        },
+        symbol_regime: {
+          trend: trends[Math.floor(Math.random() * trends.length)],
+          volatility: volatilities[Math.floor(Math.random() * volatilities.length)],
+          score: 50 + Math.random() * 50
+        }
+      }
     });
   }
 

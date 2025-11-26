@@ -123,6 +123,8 @@ class TradePlan:
         confidence_score: Confluence score (0-100)
         confluence_breakdown: Detailed scoring breakdown
         rationale: Multi-paragraph human-readable explanation
+        plan_type: How plan was generated (SMC vs ATR fallback vs hybrid)
+        conviction_class: Signal quality tier (A=best, B=good, C=acceptable)
         metadata: Optional additional data
         timestamp: When plan was generated
     """
@@ -136,6 +138,9 @@ class TradePlan:
     confidence_score: float
     confluence_breakdown: ConfluenceBreakdown
     rationale: str
+    plan_type: Literal["SMC", "ATR_FALLBACK", "HYBRID"] = "SMC"  # Default to SMC
+    conviction_class: Literal["A", "B", "C"] = "B"  # Default to B
+    missing_critical_timeframes: List[str] = field(default_factory=list)  # Track critical TFs that failed to load
     metadata: Dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.utcnow)
     
