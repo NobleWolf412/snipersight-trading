@@ -168,9 +168,15 @@ export function ScannerSetup() {
                 </Label>
                 <SniperModeSelector />
               </div>
+            </div>
+          </HudPanel>
 
-              <div className="h-px bg-border/50" />
-
+          <HudPanel 
+            title="Operational Parameters" 
+            subtitle="Configure exchange, leverage, and scanning scope"
+            className="tactical-grid holo-border"
+          >
+            <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="exchange" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                   Exchange
@@ -192,140 +198,9 @@ export function ScannerSetup() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-          </HudPanel>
 
-          <HudPanel 
-            title="Core Scan Settings" 
-            subtitle="Define your scanning universe and parameters"
-            className="tactical-grid holo-border"
-          >
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="top-pairs" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">TOP PAIRS TO SCAN</Label>
-                <Input
-                  id="top-pairs"
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={scanConfig.topPairs ?? 20}
-                  onChange={(e) =>
-                    setScanConfig({ ...scanConfig, topPairs: parseInt(e.target.value) || 20 })
-                  }
-                  className="bg-background/60 border-border/60 hover:border-primary/50 focus:border-primary transition-colors h-12 font-mono text-lg"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Higher values scan more symbols but take longer
-                </p>
-              </div>
-            </div>
-          </HudPanel>
+              <div className="h-px bg-border/50" />
 
-          <HudPanel 
-            title="Filters & Asset Categories" 
-            subtitle="Enable or disable asset classes for scanning"
-            className="tactical-grid holo-border"
-          >
-            <div className="space-y-3">
-              <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Category Filters</Label>
-              
-              <div 
-                className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-border/60 hover:border-accent/50 hover:bg-background/60 transition-all cursor-pointer"
-                onClick={() => setScanConfig({
-                  ...scanConfig,
-                  categories: { ...scanConfig.categories, majors: !scanConfig.categories.majors },
-                })}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-sm font-bold text-foreground uppercase tracking-wide">Majors</span>
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-accent/10 text-accent border-accent/40">ETH</Badge>
-                    </div>
-                  </div>
-                </div>
-                <Switch
-                  id="majors"
-                  checked={scanConfig.categories.majors}
-                  onCheckedChange={(checked) =>
-                    setScanConfig({
-                      ...scanConfig,
-                      categories: { ...scanConfig.categories, majors: checked },
-                    })
-                  }
-                  onClick={(e) => e.stopPropagation()}
-                  className="data-[state=checked]:bg-accent"
-                />
-              </div>
-
-              <div 
-                className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-border/60 hover:border-primary/50 hover:bg-background/60 transition-all cursor-pointer"
-                onClick={() => setScanConfig({
-                  ...scanConfig,
-                  categories: { ...scanConfig.categories, altcoins: !scanConfig.categories.altcoins },
-                })}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-sm font-bold text-foreground uppercase tracking-wide">Altcoins</span>
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">SOL</Badge>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">MATIC</Badge>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">LINK</Badge>
-                    </div>
-                  </div>
-                </div>
-                <Switch
-                  id="altcoins"
-                  checked={scanConfig.categories.altcoins}
-                  onCheckedChange={(checked) =>
-                    setScanConfig({
-                      ...scanConfig,
-                      categories: { ...scanConfig.categories, altcoins: checked },
-                    })
-                  }
-                  onClick={(e) => e.stopPropagation()}
-                  className="data-[state=checked]:bg-primary"
-                />
-              </div>
-
-              <div 
-                className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-destructive/40 hover:border-destructive/70 hover:bg-background/60 transition-all cursor-pointer"
-                onClick={() => setScanConfig({
-                  ...scanConfig,
-                  categories: { ...scanConfig.categories, memeMode: !scanConfig.categories.memeMode },
-                })}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-sm font-bold text-foreground uppercase tracking-wide">Meme Mode</span>
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className="text-[10px] bg-destructive/20 text-destructive border-destructive/50 px-1.5 py-0">▼ HIGH VOLATILITY</Badge>
-                    </div>
-                  </div>
-                </div>
-                <Switch
-                  id="meme"
-                  checked={scanConfig.categories.memeMode}
-                  onCheckedChange={(checked) =>
-                    setScanConfig({
-                      ...scanConfig,
-                      categories: { ...scanConfig.categories, memeMode: checked },
-                    })
-                  }
-                  onClick={(e) => e.stopPropagation()}
-                  className="data-[state=checked]:bg-destructive"
-                />
-              </div>
-            </div>
-          </HudPanel>
-
-          <HudPanel 
-            title="Risk Profile" 
-            subtitle="Configure leverage and risk parameters"
-            className="tactical-grid holo-border"
-          >
-            <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="leverage" className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                   Leverage
@@ -352,6 +227,127 @@ export function ScannerSetup() {
                     <SelectItem value="125">125x</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="h-px bg-border/50" />
+
+              <div className="space-y-2">
+                <Label htmlFor="top-pairs" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Top Pairs to Scan</Label>
+                <Input
+                  id="top-pairs"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={scanConfig.topPairs ?? 20}
+                  onChange={(e) =>
+                    setScanConfig({ ...scanConfig, topPairs: parseInt(e.target.value) || 20 })
+                  }
+                  className="bg-background/60 border-border/60 hover:border-primary/50 focus:border-primary transition-colors h-12 font-mono text-lg"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Higher values scan more symbols but take longer
+                </p>
+              </div>
+            </div>
+          </HudPanel>
+
+          <HudPanel 
+            title="Filters & Asset Categories" 
+            subtitle="Enable or disable asset classes for scanning"
+            className="tactical-grid holo-border lg:col-span-2"
+          >
+            <div className="space-y-3">
+              <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Category Filters</Label>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div 
+                  className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-border/60 hover:border-accent/50 hover:bg-background/60 transition-all cursor-pointer"
+                  onClick={() => setScanConfig({
+                    ...scanConfig,
+                    categories: { ...scanConfig.categories, majors: !scanConfig.categories.majors },
+                  })}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-sm font-bold text-foreground uppercase tracking-wide">Majors</span>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-accent/10 text-accent border-accent/40">ETH</Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <Switch
+                    id="majors"
+                    checked={scanConfig.categories.majors}
+                    onCheckedChange={(checked) =>
+                      setScanConfig({
+                        ...scanConfig,
+                        categories: { ...scanConfig.categories, majors: checked },
+                      })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    className="data-[state=checked]:bg-accent"
+                  />
+                </div>
+
+                <div 
+                  className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-border/60 hover:border-primary/50 hover:bg-background/60 transition-all cursor-pointer"
+                  onClick={() => setScanConfig({
+                    ...scanConfig,
+                    categories: { ...scanConfig.categories, altcoins: !scanConfig.categories.altcoins },
+                  })}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-sm font-bold text-foreground uppercase tracking-wide">Altcoins</span>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">SOL</Badge>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">MATIC</Badge>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">LINK</Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <Switch
+                    id="altcoins"
+                    checked={scanConfig.categories.altcoins}
+                    onCheckedChange={(checked) =>
+                      setScanConfig({
+                        ...scanConfig,
+                        categories: { ...scanConfig.categories, altcoins: checked },
+                      })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    className="data-[state=checked]:bg-primary"
+                  />
+                </div>
+
+                <div 
+                  className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-destructive/40 hover:border-destructive/70 hover:bg-background/60 transition-all cursor-pointer"
+                  onClick={() => setScanConfig({
+                    ...scanConfig,
+                    categories: { ...scanConfig.categories, memeMode: !scanConfig.categories.memeMode },
+                  })}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-sm font-bold text-foreground uppercase tracking-wide">Meme Mode</span>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px] bg-destructive/20 text-destructive border-destructive/50 px-1.5 py-0">▼ HIGH VOLATILITY</Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <Switch
+                    id="meme"
+                    checked={scanConfig.categories.memeMode}
+                    onCheckedChange={(checked) =>
+                      setScanConfig({
+                        ...scanConfig,
+                        categories: { ...scanConfig.categories, memeMode: checked },
+                      })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    className="data-[state=checked]:bg-destructive"
+                  />
+                </div>
               </div>
             </div>
           </HudPanel>
