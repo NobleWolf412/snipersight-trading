@@ -172,11 +172,11 @@ export function ScannerSetup() {
   return (
     <PageShell>
       <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 lg:py-8 space-y-6 lg:space-y-8">
-        <div className="text-center space-y-2 mb-8">
-          <h1 className="hud-headline hud-text-green text-xs md:text-sm tracking-[0.25em]">
+        <div className="text-center space-y-3 mb-8">
+          <h1 className="hud-headline hud-text-green text-sm md:text-base lg:text-lg tracking-[0.2em] px-4">
             Scanner Command Center
           </h1>
-          <p className="text-xs md:text-sm text-slate-400 max-w-xl mx-auto">Configure your sniper profile, exchange, and filters, then arm the scanner to search for high-confluence setups.</p>
+          <p className="text-sm md:text-base text-slate-400 max-w-2xl mx-auto px-4">Configure your sniper profile, exchange, and filters, then arm the scanner to search for high-confluence setups.</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
@@ -189,7 +189,7 @@ export function ScannerSetup() {
             >
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
                     Sniper Mode
                   </Label>
                   <SniperModeSelector />
@@ -205,7 +205,7 @@ export function ScannerSetup() {
             >
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="exchange" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                  <Label htmlFor="exchange" className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
                     Exchange
                   </Label>
                   <Select
@@ -214,14 +214,14 @@ export function ScannerSetup() {
                       setScanConfig({ ...scanConfig, exchange: value })
                     }
                   >
-                    <SelectTrigger id="exchange" className="bg-background/60 border-border/60 hover:border-primary/50 transition-colors h-12">
+                    <SelectTrigger id="exchange" className="bg-background/60 border-border/60 hover:border-primary/50 transition-colors h-12 text-base">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="phemex">⚡ Phemex (Fast, No Geo-Block)</SelectItem>
-                      <SelectItem value="bybit">🔥 Bybit (May Be Geo-Blocked)</SelectItem>
-                      <SelectItem value="okx">🏛️ OKX (May Be Geo-Blocked)</SelectItem>
-                      <SelectItem value="bitget">🤖 Bitget</SelectItem>
+                    <SelectContent className="font-sans">
+                      <SelectItem value="phemex" className="text-base">⚡ Phemex (Fast, No Geo-Block)</SelectItem>
+                      <SelectItem value="bybit" className="text-base">🔥 Bybit (May Be Geo-Blocked)</SelectItem>
+                      <SelectItem value="okx" className="text-base">🏛️ OKX (May Be Geo-Blocked)</SelectItem>
+                      <SelectItem value="bitget" className="text-base">🤖 Bitget</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -229,9 +229,9 @@ export function ScannerSetup() {
                 <div className="h-px bg-border/50" />
 
                 <div className="space-y-2">
-                  <Label htmlFor="leverage" className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                  <Label htmlFor="leverage" className="text-sm font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                     Leverage
-                    <Badge variant="outline" className="text-[10px] font-normal text-warning border-warning/40 px-1.5 py-0">Risk Multiple</Badge>
+                    <Badge variant="outline" className="text-xs font-normal text-warning border-warning/40 px-2 py-0.5">Risk Multiple</Badge>
                   </Label>
                   <Select
                     value={(scanConfig.leverage ?? 1).toString()}
@@ -239,19 +239,19 @@ export function ScannerSetup() {
                       setScanConfig({ ...scanConfig, leverage: parseInt(value) })
                     }
                   >
-                    <SelectTrigger id="leverage" className="bg-background/60 border-border/60 hover:border-primary/50 transition-colors h-12">
+                    <SelectTrigger id="leverage" className="bg-background/60 border-border/60 hover:border-primary/50 transition-colors h-12 text-base">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">1x (No Leverage)</SelectItem>
-                      <SelectItem value="2">2x</SelectItem>
-                      <SelectItem value="3">3x</SelectItem>
-                      <SelectItem value="5">5x</SelectItem>
-                      <SelectItem value="10">10x</SelectItem>
-                      <SelectItem value="20">20x</SelectItem>
-                      <SelectItem value="50">50x</SelectItem>
-                      <SelectItem value="100">100x</SelectItem>
-                      <SelectItem value="125">125x</SelectItem>
+                    <SelectContent className="font-sans">
+                      <SelectItem value="1" className="text-base">1x (No Leverage)</SelectItem>
+                      <SelectItem value="2" className="text-base">2x</SelectItem>
+                      <SelectItem value="3" className="text-base">3x</SelectItem>
+                      <SelectItem value="5" className="text-base">5x</SelectItem>
+                      <SelectItem value="10" className="text-base">10x</SelectItem>
+                      <SelectItem value="20" className="text-base">20x</SelectItem>
+                      <SelectItem value="50" className="text-base">50x</SelectItem>
+                      <SelectItem value="100" className="text-base">100x</SelectItem>
+                      <SelectItem value="125" className="text-base">125x</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -259,7 +259,7 @@ export function ScannerSetup() {
                 <div className="h-px bg-border/50" />
 
                 <div className="space-y-2">
-                  <Label htmlFor="top-pairs" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Top Pairs to Scan</Label>
+                  <Label htmlFor="top-pairs" className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Top Pairs to Scan</Label>
                   <Input
                     id="top-pairs"
                     type="number"
@@ -271,7 +271,7 @@ export function ScannerSetup() {
                     }
                     className="bg-background/60 border-border/60 hover:border-primary/50 focus:border-primary transition-colors h-12 font-mono text-lg"
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     Higher values scan more symbols but take longer
                   </p>
                 </div>
@@ -285,7 +285,7 @@ export function ScannerSetup() {
               titleClassName="hud-text-amber"
             >
               <div className="space-y-3">
-                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Category Filters</Label>
+                <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Category Filters</Label>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div 
@@ -297,9 +297,9 @@ export function ScannerSetup() {
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex flex-col gap-1.5">
-                        <span className="text-sm font-bold text-foreground uppercase tracking-wide">Majors</span>
+                        <span className="text-base font-bold text-foreground uppercase tracking-wide font-sans">Majors</span>
                         <div className="flex items-center gap-1.5">
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-accent/10 text-accent border-accent/40">ETH</Badge>
+                          <Badge variant="outline" className="text-xs px-2 py-0.5 bg-accent/10 text-accent border-accent/40 font-sans">ETH</Badge>
                         </div>
                       </div>
                     </div>
@@ -326,11 +326,11 @@ export function ScannerSetup() {
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex flex-col gap-1.5">
-                        <span className="text-sm font-bold text-foreground uppercase tracking-wide">Altcoins</span>
+                        <span className="text-base font-bold text-foreground uppercase tracking-wide font-sans">Altcoins</span>
                         <div className="flex items-center gap-1.5">
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">SOL</Badge>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">MATIC</Badge>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/40">LINK</Badge>
+                          <Badge variant="outline" className="text-xs px-2 py-0.5 bg-primary/10 text-primary border-primary/40 font-sans">SOL</Badge>
+                          <Badge variant="outline" className="text-xs px-2 py-0.5 bg-primary/10 text-primary border-primary/40 font-sans">MATIC</Badge>
+                          <Badge variant="outline" className="text-xs px-2 py-0.5 bg-primary/10 text-primary border-primary/40 font-sans">LINK</Badge>
                         </div>
                       </div>
                     </div>
@@ -357,9 +357,9 @@ export function ScannerSetup() {
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex flex-col gap-1.5">
-                        <span className="text-sm font-bold text-foreground uppercase tracking-wide">Meme Mode</span>
+                        <span className="text-base font-bold text-foreground uppercase tracking-wide font-sans">Meme Mode</span>
                         <div className="flex items-center gap-1.5">
-                          <Badge variant="outline" className="text-[10px] bg-destructive/20 text-destructive border-destructive/50 px-1.5 py-0">▼ HIGH VOLATILITY</Badge>
+                          <Badge variant="outline" className="text-xs bg-destructive/20 text-destructive border-destructive/50 px-2 py-0.5 font-sans">▼ HIGH VOLATILITY</Badge>
                         </div>
                       </div>
                     </div>
