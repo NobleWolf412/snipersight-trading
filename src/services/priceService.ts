@@ -184,21 +184,23 @@ class PriceService {
       return cached;
     }
 
-    const { data, error } = await api.getPrice(symbol, this.exchange);
-    if (error || !data) {
+    // Use bulk endpoint with single symbol
+    const { data, error } = await api.getPrices([symbol], this.exchange);
+    if (error || !data || data.prices.length === 0) {
       throw new Error(error || `Failed to fetch price for ${symbol}`);
     }
 
+    const item = data.prices[0];
     const priceData: PriceData = {
-      symbol,
-      price: Number(data.price) || 0,
+      symbol: item.symbol,
+      price: Number(item.price) || 0,
       change24h: 0,
       changePercent24h: 0,
       high24h: 0,
       low24h: 0,
       volume24h: 0,
-      timestamp: new Date(data.timestamp).getTime() || Date.now(),
-      exchange: 'Backend',
+      timestamp: new Date(item.timestamp).getTime() || Date.now(),
+      exchange: data.exchange,
     };
 
     this.priceCache.set(symbol, priceData);
