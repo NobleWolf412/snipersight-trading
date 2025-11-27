@@ -261,6 +261,20 @@ class ApiClient {
     );
   }
 
+  async getPrices(symbols: string[], exchange?: string) {
+    const symbolsParam = symbols.join(',');
+    const qp = new URLSearchParams();
+    qp.set('symbols', symbolsParam);
+    if (exchange) qp.set('exchange', exchange);
+    
+    return this.request<{
+      prices: Array<{ symbol: string; price: number; timestamp: string }>;
+      total: number;
+      errors?: Array<{ symbol: string; error: string }>;
+      exchange: string;
+    }>(`/market/prices?${qp.toString()}`);
+  }
+
   async getCandles(symbol: string, timeframe = '1h', limit = 100) {
     return this.request(
       `/market/candles/${symbol}?timeframe=${timeframe}&limit=${limit}`
@@ -286,6 +300,56 @@ class ApiClient {
       derivatives_score: number;
       timestamp: string;
     }>('/market/regime');
+  }
+
+  // Background scan jobs
+  async createScanRun(params: {
+    limit?: number;
+    min_score?: number;
+    sniper_mode?: string;
+    majors?: boolean;
+    altcoins?: boolean;
+    meme_mode?: boolean;
+    exchange?: string;
+    leverage?: number;
+  }) {
+    const queryParams: Record<string, string> = {};
+    if (params.limit !== undefined) queryParams.limit = params.limit.toString();
+    if (params.min_score !== undefined) queryParams.min_score = params.min_score.toString();
+    if (params.sniper_mode) queryParams.sniper_mode = params.sniper_mode;
+    if (params.majors !== undefined) queryParams.majors = params.majors.toString();
+    if (params.altcoins !== undefined) queryParams.altcoins = params.altcoins.toString();
+    if (params.meme_mode !== undefined) queryParams.meme_mode = params.meme_mode.toString();
+    if (params.exchange) queryParams.exchange = params.exchange;
+    if (params.leverage !== undefined) queryParams.leverage = params.leverage.toString();
+
+    const query = new URLSearchParams(queryParams).toString();
+    return this.request<{
+      run_id: string;
+      status: string;
+      created_at: string;
+    }>(`/scanner/runs${query ? `?${query}` : ''}`, { method: 'POST' });
+  }
+
+  async getScanRun(runId: string) {
+    return this.request<{
+      run_id: string;
+      status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+      progress: number;
+      total: number;
+      current_symbol?: string;
+      created_at: string;
+      started_at?: string;
+      completed_at?: string;
+      signals?: Signal[];
+      metadata?: Record<string, any>;
+      rejections?: Record<string, any>;
+      error?: string;
+    }>(`/scanner/runs/${runId}`);
+  }
+
+  async cancelScanRun(runId: string) {
+    return this.request(`/scanner/runs/${runId}`, { method: 'DELETE' });
   }
 }
 

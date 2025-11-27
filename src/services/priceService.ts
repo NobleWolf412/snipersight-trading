@@ -208,6 +208,46 @@ class PriceService {
   async fetchMultiplePrices(symbols: string[]): Promise<Map<string, PriceData>> {
     const results = new Map<string, PriceData>();
     
+    // Use bulk endpoint if more than 3 symbols
+    if (symbols.length > 3) {
+      try {
+        const { data, error } = await api.getPrices(symbols, this.exchange);
+        if (error || !data) {
+          throw new Error(error || 'Failed to fetch bulk prices');
+        }
+
+        // Process successful prices
+        for (const item of data.prices) {
+          const priceData: PriceData = {
+            symbol: item.symbol,
+            price: Number(item.price) || 0,
+            change24h: 0,
+            changePercent24h: 0,
+            high24h: 0,
+            low24h: 0,
+            volume24h: 0,
+            timestamp: new Date(item.timestamp).getTime() || Date.now(),
+            exchange: data.exchange,
+          };
+          results.set(item.symbol, priceData);
+          this.priceCache.set(item.symbol, priceData);
+        }
+
+        // Log errors if any
+        if (data.errors && data.errors.length > 0) {
+          data.errors.forEach(err => {
+            console.warn(`Failed to fetch ${err.symbol}: ${err.error}`);
+          });
+        }
+
+        return results;
+      } catch (error) {
+        console.error('Bulk price fetch failed, falling back to individual requests:', error);
+        // Fall through to individual fetches
+      }
+    }
+
+    // Fallback: individual requests (or for small lists)
     await Promise.all(
       symbols.map(async (symbol) => {
         try {

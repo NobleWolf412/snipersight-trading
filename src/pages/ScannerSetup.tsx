@@ -21,10 +21,11 @@ export function ScannerSetup() {
   const navigate = useNavigate();
   const { scanConfig, setScanConfig, selectedMode } = useScanner();
   const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState<{ current: number; total: number; symbol?: string } | null>(null);
   const { toast } = useToast();
 
   const handleArmScanner = async () => {
-    console.log('[ScannerSetup] Starting scan...', {
+    console.log('[ScannerSetup] Starting background scan job...', {
       mode: scanConfig.sniperMode,
       exchange: scanConfig.exchange,
       leverage: scanConfig.leverage,
@@ -33,17 +34,15 @@ export function ScannerSetup() {
       categories: scanConfig.categories
     });
     setIsScanning(true);
+    setScanProgress({ current: 0, total: 0 });
     
     localStorage.removeItem('scan-results');
     localStorage.removeItem('scan-metadata');
     localStorage.removeItem('scan-rejections');
 
     try {
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Request timeout')), 300000)
-      );
-      
-      const apiPromise = api.getSignals({
+      // Start background scan job
+      const createResponse = await api.createScanRun({
         limit: scanConfig.topPairs || 20,
         min_score: selectedMode?.min_confluence_score || 0,
         sniper_mode: scanConfig.sniperMode,
@@ -54,92 +53,108 @@ export function ScannerSetup() {
         leverage: scanConfig.leverage || 1,
       });
 
-      const response = await Promise.race([apiPromise, timeoutPromise]) as any;
-
-      if (response.error) {
-        console.error('[ScannerSetup] API error:', response.error);
-        toast({
-          title: 'Scanner Failed',
-          description: 'Backend unavailable - check if API server is running',
-          variant: 'destructive',
-        });
-        const maybeRejections = response.data?.rejections || {
-          total_rejected: 0,
-          by_reason: {},
-          details: {},
-        };
-        localStorage.setItem('scan-results', JSON.stringify([]));
-        localStorage.removeItem('scan-metadata');
-        localStorage.setItem('scan-rejections', JSON.stringify(maybeRejections));
-      } else if (response.data) {
-        console.log('[ScannerSetup] Received signals:', response.data.signals.length);
-        console.log('[ScannerSetup] Scan metadata:', {
-          mode: response.data.mode,
-          scanned: response.data.scanned,
-          total: response.data.total
-        });
-        
-        const results = response.data.signals.map(convertSignalToScanResult);
-        
-        localStorage.setItem('scan-results', JSON.stringify(results));
-        
-        const metadata = {
-          mode: response.data.mode,
-          appliedTimeframes: response.data.applied_timeframes,
-          effectiveMinScore: response.data.effective_min_score,
-          baselineMinScore: response.data.baseline_min_score,
-          profile: response.data.profile,
-          scanned: response.data.scanned,
-        };
-        localStorage.setItem('scan-metadata', JSON.stringify(metadata));
-        
-        if (response.data.rejections) {
-          localStorage.setItem('scan-rejections', JSON.stringify(response.data.rejections));
-        } else {
-          localStorage.removeItem('scan-rejections');
-        }
-        
-        scanHistoryService.saveScan({
-          mode: response.data.mode,
-          profile: response.data.profile || 'default',
-          timeframes: response.data.applied_timeframes || [],
-          symbolsScanned: response.data.scanned || 0,
-          signalsGenerated: response.data.signals.length,
-          signalsRejected: response.data.rejections?.total_rejected || 0,
-          effectiveMinScore: response.data.effective_min_score || 0,
-          rejectionBreakdown: response.data.rejections?.by_reason,
-          results: results,
-        });
-        
-        console.log('[ScannerSetup] Navigating to results with', results.length, 'setups');
-        toast({
-          title: 'Targets Acquired',
-          description: `${results.length} high-conviction setups identified`,
-        });
+      if (createResponse.error || !createResponse.data) {
+        throw new Error(createResponse.error || 'Failed to start scan');
       }
 
-      setIsScanning(false);
-      navigate('/results');
+      const runId = createResponse.data.run_id;
+      console.log('[ScannerSetup] Scan job started:', runId);
+
+      // Poll for progress
+      const pollInterval = setInterval(async () => {
+        const statusResponse = await api.getScanRun(runId);
+        
+        if (statusResponse.error || !statusResponse.data) {
+          clearInterval(pollInterval);
+          throw new Error(statusResponse.error || 'Failed to get scan status');
+        }
+
+        const job = statusResponse.data;
+        console.log('[ScannerSetup] Job status:', job.status, `${job.progress}/${job.total}`);
+        
+        setScanProgress({
+          current: job.progress,
+          total: job.total,
+          symbol: job.current_symbol
+        });
+
+        if (job.status === 'completed') {
+          clearInterval(pollInterval);
+          
+          const results = (job.signals || []).map(convertSignalToScanResult);
+          
+          localStorage.setItem('scan-results', JSON.stringify(results));
+          
+          const metadata = {
+            mode: job.metadata?.mode || scanConfig.sniperMode,
+            appliedTimeframes: job.metadata?.applied_timeframes || [],
+            effectiveMinScore: job.metadata?.effective_min_score || 0,
+            baselineMinScore: selectedMode?.min_confluence_score || 0,
+            profile: job.metadata?.profile || 'default',
+            scanned: job.metadata?.scanned || 0,
+          };
+          localStorage.setItem('scan-metadata', JSON.stringify(metadata));
+          
+          if (job.rejections) {
+            localStorage.setItem('scan-rejections', JSON.stringify(job.rejections));
+          }
+          
+          scanHistoryService.saveScan({
+            mode: metadata.mode,
+            profile: metadata.profile,
+            timeframes: metadata.appliedTimeframes,
+            symbolsScanned: metadata.scanned,
+            signalsGenerated: results.length,
+            signalsRejected: job.metadata?.rejected || 0,
+            effectiveMinScore: metadata.effectiveMinScore,
+            rejectionBreakdown: job.rejections?.by_reason,
+            results: results,
+          });
+          
+          console.log('[ScannerSetup] Scan completed:', results.length, 'signals');
+          toast({
+            title: 'Targets Acquired',
+            description: `${results.length} high-conviction setups identified`,
+          });
+          
+          setIsScanning(false);
+          setScanProgress(null);
+          navigate('/results');
+        } else if (job.status === 'failed') {
+          clearInterval(pollInterval);
+          throw new Error(job.error || 'Scan failed');
+        } else if (job.status === 'cancelled') {
+          clearInterval(pollInterval);
+          throw new Error('Scan cancelled');
+        }
+      }, 2000); // Poll every 2 seconds
+
+      // Timeout after 10 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        if (isScanning) {
+          throw new Error('Scan timeout - job exceeded 10 minutes');
+        }
+      }, 600000);
+
     } catch (error) {
       console.error('Scanner error:', error);
-      const isTimeout = error instanceof Error && error.message === 'Request timeout';
       toast({
-        title: isTimeout ? 'Scan Timeout' : 'Scanner Error',
-        description: isTimeout 
-          ? 'Scan exceeded 5 minutes - try reducing symbols or timeframes'
-          : 'Failed to complete scan - check backend logs',
+        title: 'Scanner Error',
+        description: error instanceof Error ? error.message : 'Failed to complete scan',
         variant: 'destructive',
       });
-      if (!localStorage.getItem('scan-rejections')) {
-        localStorage.setItem('scan-rejections', JSON.stringify({
-          total_rejected: 0,
-          by_reason: {},
-          details: {},
-        }));
-      }
+      
+      localStorage.setItem('scan-rejections', JSON.stringify({
+        total_rejected: 0,
+        by_reason: {},
+        details: {},
+      }));
       localStorage.setItem('scan-results', JSON.stringify([]));
       localStorage.removeItem('scan-metadata');
+      
       setIsScanning(false);
+      setScanProgress(null);
       navigate('/results');
     }
   };
@@ -386,7 +401,12 @@ export function ScannerSetup() {
             {isScanning ? (
               <>
                 <Lightning size={24} className="animate-pulse" />
-                <span className="mx-2">Scanning Markets...</span>
+                <span className="mx-2">
+                  {scanProgress && scanProgress.total > 0 
+                    ? `Scanning ${scanProgress.current}/${scanProgress.total}${scanProgress.symbol ? ` • ${scanProgress.symbol}` : ''}`
+                    : 'Initializing Scan...'
+                  }
+                </span>
                 <Lightning size={24} className="animate-pulse" />
               </>
             ) : (
@@ -397,6 +417,14 @@ export function ScannerSetup() {
               </>
             )}
           </Button>
+          {scanProgress && scanProgress.total > 0 && (
+            <div className="relative mt-3 h-2 bg-background/60 rounded-full overflow-hidden border border-primary/30">
+              <div 
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary to-accent transition-all duration-500 rounded-full"
+                style={{ width: `${(scanProgress.current / scanProgress.total) * 100}%` }}
+              />
+            </div>
+          )}
         </TargetReticleOverlay>
       </div>
     </PageShell>
