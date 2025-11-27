@@ -1,3 +1,4 @@
+/* @refresh skip */
 import { createContext, useContext, ReactNode, useEffect, useState } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import type { SniperMode } from '@/types/sniperMode';
