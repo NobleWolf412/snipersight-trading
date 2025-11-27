@@ -40,7 +40,7 @@ export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegi
     // Map composite label to UI label/color heuristically
     const labelMap: Record<string, { label: string; color: MarketRegimeLensProps['color'] }> = {
       ALTSEASON: { label: 'ALTSEASON', color: 'green' },
-      BTC_DRIVE: { label: 'BTC_DRIVE', color: 'cyan' },
+      BTC_DRIVE: { label: 'BTC_DRIVE', color: 'blue' },
       DEFENSIVE: { label: 'DEFENSIVE', color: 'orange' },
       PANIC: { label: 'PANIC', color: 'red' },
       CHOPPY: { label: 'CHOPPY', color: 'yellow' },

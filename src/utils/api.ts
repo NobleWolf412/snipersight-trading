@@ -134,10 +134,8 @@ class ApiClient {
         }
       }
 
-      // Handle empty bodies gracefully
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
-        // @ts-expect-error - allow T to be unknown when no JSON
         return { data: undefined };
       }
 
@@ -145,7 +143,6 @@ class ApiClient {
         const data = await response.json();
         return { data };
       } catch {
-        // @ts-expect-error - allow T to be unknown when JSON parsing fails
         return { data: undefined };
       }
     } catch (error) {

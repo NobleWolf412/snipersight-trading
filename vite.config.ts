@@ -1,5 +1,5 @@
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
+import react from "@vitejs/plugin-react-swc";
 import { defineConfig, PluginOption } from "vite";
 
 import sparkPlugin from "@github/spark/spark-vite-plugin";
@@ -12,7 +12,9 @@ const frontendPort = process.env.FRONTEND_PORT ? Number(process.env.FRONTEND_POR
 
 export default defineConfig({
   plugins: [
-    react(),
+    react({
+      plugins: [],
+    }),
     tailwindcss(),
     createIconImportProxy() as PluginOption,
     sparkPlugin() as PluginOption,
