@@ -2,6 +2,7 @@ export type SniperMode =
   | 'overwatch'
   | 'recon'
   | 'strike'
+  | 'surgical'
   | 'rapid-fire'
   | 'custom';
 
@@ -46,6 +47,16 @@ export const SNIPER_MODES: Record<SniperMode, SniperModeConfig> = {
     holdingPeriod: 'Minutes to hours',
     riskReward: 2.5,
     icon: '⚡'
+  },
+  'surgical': {
+    mode: 'surgical',
+    name: '🎯 Surgical',
+    description: 'Precision-focused lower timeframe analysis. For experienced traders seeking exact entries.',
+    timeframes: ['1h', '15m', '5m'],
+    minConfluence: 60,
+    holdingPeriod: 'Minutes to hours',
+    riskReward: 2.2,
+    icon: '🎯'
   },
   'rapid-fire': {
     mode: 'rapid-fire',
