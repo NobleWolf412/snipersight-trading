@@ -1,5 +1,5 @@
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react-swc";
+import react from "@vitejs/plugin-react";
 import { defineConfig, PluginOption } from "vite";
 
 import sparkPlugin from "@github/spark/spark-vite-plugin";
@@ -12,9 +12,7 @@ const frontendPort = process.env.FRONTEND_PORT ? Number(process.env.FRONTEND_POR
 
 export default defineConfig({
   plugins: [
-    react({
-      plugins: [],
-    }),
+    react(),
     tailwindcss(),
     createIconImportProxy() as PluginOption,
     sparkPlugin() as PluginOption,
@@ -27,6 +25,9 @@ export default defineConfig({
   server: {
     port: frontendPort,
     strictPort: true,
+    hmr: {
+      overlay: true,
+    },
     proxy: {
       '/api': {
         target: process.env.BACKEND_URL || 'http://localhost:8000',
@@ -43,4 +44,13 @@ export default defineConfig({
   esbuild: {
     logOverride: { 'this-is-undefined-in-esm': 'silent' }
   },
+  build: {
+    sourcemap: true,
+    rollupOptions: {
+      onwarn(warning, warn) {
+        if (warning.code === 'MODULE_LEVEL_DIRECTIVE') return;
+        warn(warning);
+      }
+    }
+  }
 });
