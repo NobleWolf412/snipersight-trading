@@ -13,18 +13,31 @@ import { ScannerProvider } from '@/context/ScannerContext';
 
 import "./main.css";
 
-createRoot(document.getElementById('root')!).render(
+const rootElement = document.getElementById('root');
+
+if (!rootElement) {
+  throw new Error('Root element not found');
+}
+
+console.log('[SniperSight] Initializing application...');
+
+createRoot(rootElement).render(
   <StrictMode>
-    <BrowserRouter>
-      <QueryClientProvider client={queryClient}>
-        <WalletProvider>
-          <ScannerProvider>
-            <ErrorBoundary FallbackComponent={ErrorFallback}>
+    <ErrorBoundary
+      FallbackComponent={ErrorFallback}
+      onError={(error, info) => {
+        console.error('[SniperSight] Application error:', error, info);
+      }}
+    >
+      <BrowserRouter>
+        <QueryClientProvider client={queryClient}>
+          <WalletProvider>
+            <ScannerProvider>
               <App />
-            </ErrorBoundary>
-          </ScannerProvider>
-        </WalletProvider>
-      </QueryClientProvider>
-    </BrowserRouter>
+            </ScannerProvider>
+          </WalletProvider>
+        </QueryClientProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   </StrictMode>
-)
+);

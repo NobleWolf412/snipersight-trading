@@ -110,6 +110,8 @@ const SCANNER_MODES: ScannerMode[] = [
 const ScannerContext = createContext<ScannerContextType | undefined>(undefined);
 
 export function ScannerProvider({ children }: { children: ReactNode }) {
+  console.log('[ScannerContext] Initializing ScannerProvider...');
+  
   const [scanConfig, setScanConfig] = useLocalStorage<ScanConfig>('scan-config', defaultScanConfig);
   const [botConfig, setBotConfig] = useLocalStorage<BotConfig>('bot-config', defaultBotConfig);
   const [isScanning, setIsScanning] = useLocalStorage<boolean>('is-scanning', false);
@@ -120,6 +122,7 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
   const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(() => {
     // Initialize with the mode matching scanConfig, or default to 'recon'
     const defaultMode = SCANNER_MODES.find(m => m.name === defaultScanConfig.sniperMode) || SCANNER_MODES[1];
+    console.log('[ScannerContext] Initial mode:', defaultMode.name);
     return defaultMode;
   });
 
@@ -136,6 +139,8 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  console.log('[ScannerContext] Provider ready');
 
   return (
     <ScannerContext.Provider

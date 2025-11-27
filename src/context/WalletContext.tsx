@@ -21,10 +21,14 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
+  console.log('[WalletContext] Initializing WalletProvider...');
+  
   const [wallet, setWallet] = useLocalStorage<WalletConnection | null>('wallet-connection', null);
   const [isConnecting, setIsConnecting] = useLocalStorage<boolean>('wallet-connecting', false);
 
   const isConnected = !!(wallet && wallet.address);
+
+  console.log('[WalletContext] Provider ready, isConnected:', isConnected);
 
   useEffect(() => {
     if (wallet && wallet.address && window.ethereum) {
