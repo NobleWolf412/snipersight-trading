@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "dev:frontend": "vite",
+        "dev:frontend": "vite --host 0.0.0.0 --port ${FRONTEND_PORT:-5000}",
         "backend": "./.venv/bin/python -m uvicorn backend.api_server:app --host 0.0.0.0 --port ${BACKEND_PORT:-8000} --reload",
         "dev:all": "concurrently \"npm run backend\" \"npm run dev:frontend\"",
         "sync": "bash scripts/auto_sync.sh",

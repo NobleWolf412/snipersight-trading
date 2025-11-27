@@ -9,7 +9,7 @@ nohup ./.venv/bin/python -m uvicorn backend.api_server:app --host 0.0.0.0 --port
 BACK_PID=$!
 
 echo "Starting frontend on :$FRONTEND_PORT"
-nohup npm run dev:frontend > logs/frontend.log 2>&1 &
+nohup vite --host 0.0.0.0 --port $FRONTEND_PORT > logs/frontend.log 2>&1 &
 FRONT_PID=$!
 
 echo "Backend PID: $BACK_PID"
