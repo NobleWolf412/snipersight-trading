@@ -1,0 +1,17 @@
+# Frontend Dockerfile
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm install --omit=dev || npm install
+COPY tsconfig.json vite.config.ts ./
+COPY src ./src
+COPY public ./public
+RUN npm run build
+
+# Production server (nginx) stage
+FROM nginx:1.27-alpine AS prod
+WORKDIR /usr/share/nginx/html
+COPY --from=build /app/dist ./
+# Basic nginx config could be added for SPA routing
+EXPOSE 5000
+CMD ["nginx", "-g", "daemon off;"]

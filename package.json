@@ -5,16 +5,20 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "dev:frontend": "vite --port 5000",
-        "backend": "python -m uvicorn backend.api_server:app --host 0.0.0.0 --port 8000 --reload",
+        "dev:frontend": "vite",
+        "backend": "python -m uvicorn backend.api_server:app --host 0.0.0.0 --port ${BACKEND_PORT:-8000} --reload",
         "dev:all": "concurrently \"npm run backend\" \"npm run dev:frontend\"",
         "sync": "bash scripts/auto_sync.sh",
-        "kill": "fuser -k 5000/tcp || true && fuser -k 8000/tcp || true",
+        "sync:safe": "bash scripts/safe_sync.sh",
+        "kill": "fuser -k ${FRONTEND_PORT:-5000}/tcp || true && fuser -k ${BACKEND_PORT:-8000}/tcp || true",
+        "build:frontend": "vite build",
+        "build:backend": "echo 'Backend build step placeholder'",
         "build": "tsc -b --noCheck && vite build",
         "lint": "eslint .",
         "optimize": "vite optimize",
         "preview": "vite preview",
-        "test": "vitest run"
+        "test": "vitest run",
+        "test:smoke": "pytest -k smoke -q"
     },
     "dependencies": {
         "@github/spark": "^0.39.0",
