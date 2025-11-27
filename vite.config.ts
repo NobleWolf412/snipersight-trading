@@ -8,6 +8,8 @@ import { resolve } from 'path'
 
 const projectRoot = process.env.PROJECT_ROOT || import.meta.dirname
 
+const frontendPort = process.env.FRONTEND_PORT ? Number(process.env.FRONTEND_PORT) : 5000;
+
 export default defineConfig({
   plugins: [
     react(),
@@ -21,11 +23,11 @@ export default defineConfig({
     }
   },
   server: {
-    port: 5000,
+    port: frontendPort,
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: process.env.BACKEND_URL || 'http://localhost:8000',
         changeOrigin: true,
         timeout: 300000,
         proxyTimeout: 300000,
