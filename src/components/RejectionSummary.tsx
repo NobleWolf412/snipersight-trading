@@ -224,8 +224,7 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                       </DialogContent>
                     </Dialog>
                   )}
-                </div>
-              </CollapsibleTrigger>
+              </div>
 
               <CollapsibleContent>
                 <div className="mt-2 ml-8 space-y-2">
