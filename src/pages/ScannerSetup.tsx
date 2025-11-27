@@ -112,10 +112,20 @@ export function ScannerSetup() {
           });
           
           console.log('[ScannerSetup] Scan completed:', results.length, 'signals');
-          toast({
-            title: 'Targets Acquired',
-            description: `${results.length} high-conviction setups identified`,
-          });
+          
+          // Show appropriate message based on results
+          if (results.length === 0) {
+            toast({
+              title: 'No Setups Found',
+              description: `Scanned ${job.metadata?.scanned || 0} symbols - all rejected. Try adjusting mode or threshold.`,
+              variant: 'destructive',
+            });
+          } else {
+            toast({
+              title: 'Targets Acquired',
+              description: `${results.length} high-conviction setups identified`,
+            });
+          }
           
           setIsScanning(false);
           setScanProgress(null);
