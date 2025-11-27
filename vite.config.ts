@@ -38,7 +38,7 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react/jsx-runtime'],
+    include: ['react', 'react-dom', 'react/jsx-runtime', 'react-router-dom'],
     exclude: ['@github/spark'],
   },
   esbuild: {
