@@ -1336,5 +1336,5 @@ async def get_telemetry_analytics(
 
 if __name__ == "__main__":
     import uvicorn
-    # Align runtime port with documented frontend expectation (5000)
-    uvicorn.run(app, host="0.0.0.0", port=5000, log_level="info")
+    # Backend runs on port 8000, frontend (Vite) on port 5000
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
