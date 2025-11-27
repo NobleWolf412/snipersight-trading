@@ -707,21 +707,48 @@ async def get_risk_summary():
 
 # Market data endpoints (mock for now)
 @app.get("/api/market/price/{symbol}")
-async def get_price(symbol: str):
-    """Get current price for symbol."""
-    # Mock data - will be replaced with exchange integration
-    mock_prices = {
-        "BTC/USDT": 50000,
-        "ETH/USDT": 3000,
-        "SOL/USDT": 100
-    }
-    
-    price = mock_prices.get(symbol, 0)
-    return {
-        "symbol": symbol,
-        "price": price,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
+async def get_price(symbol: str, exchange: str | None = Query(default=None)):
+    """Get current price for symbol via selected exchange adapter.
+
+    Falls back to Phemex if no exchange provided. Uses ccxt under the hood.
+    """
+    try:
+        exchange_key = (exchange or 'phemex').lower()
+        if exchange_key not in EXCHANGE_ADAPTERS:
+            raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange_key}")
+
+        adapter = EXCHANGE_ADAPTERS[exchange_key]()
+
+        request_symbol = symbol
+        fetch_symbol = symbol
+        # OKX uses suffix ":USDT" for swap markets in ccxt
+        if exchange_key == 'okx' and '/USDT' in symbol and ':USDT' not in symbol:
+            fetch_symbol = symbol.replace('/USDT', '/USDT:USDT')
+
+        # Use ccxt to fetch ticker
+        ticker = adapter.exchange.fetch_ticker(fetch_symbol)
+        last_price = ticker.get('last') or ticker.get('close') or 0.0
+        ts_ms = ticker.get('timestamp')
+        if ts_ms is None:
+            # Some exchanges include 'datetime' or none; fallback to now
+            dt_iso = datetime.now(timezone.utc).isoformat()
+        else:
+            try:
+                dt_iso = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).isoformat()
+            except Exception:
+                dt_iso = datetime.now(timezone.utc).isoformat()
+
+        return {
+            "symbol": request_symbol,
+            "price": float(last_price) if last_price is not None else 0.0,
+            "timestamp": dt_iso,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:  # Exchange could be geo-blocked or network error
+        logger.error("Failed to fetch price for %s on %s: %s", symbol, exchange or 'phemex', e)
+        raise HTTPException(status_code=502, detail="Failed to fetch price from exchange") from e
 
 
 @app.get("/api/market/candles/{symbol}")

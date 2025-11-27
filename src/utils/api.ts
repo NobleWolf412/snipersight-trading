@@ -120,12 +120,34 @@ class ApiClient {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        return { error: error.detail || 'Request failed' };
+        // Try JSON error first; fall back to text or generic message.
+        try {
+          const errJson = await response.json();
+          return { error: (errJson && (errJson.detail || errJson.error)) || `${response.status} ${response.statusText}` };
+        } catch {
+          try {
+            const errText = await response.text();
+            return { error: errText || `${response.status} ${response.statusText}` };
+          } catch {
+            return { error: `${response.status} ${response.statusText}` };
+          }
+        }
       }
 
-      const data = await response.json();
-      return { data };
+      // Handle empty bodies gracefully
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        // @ts-expect-error - allow T to be unknown when no JSON
+        return { data: undefined };
+      }
+
+      try {
+        const data = await response.json();
+        return { data };
+      } catch {
+        // @ts-expect-error - allow T to be unknown when JSON parsing fails
+        return { data: undefined };
+      }
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Unknown error' };
     }
@@ -232,9 +254,10 @@ class ApiClient {
   }
 
   // Market data
-  async getPrice(symbol: string) {
+  async getPrice(symbol: string, exchange?: string) {
+    const qp = exchange ? `?exchange=${encodeURIComponent(exchange)}` : '';
     return this.request<{ symbol: string; price: number; timestamp: string }>(
-      `/market/price/${symbol}`
+      `/market/price/${encodeURIComponent(symbol)}${qp}`
     );
   }
 

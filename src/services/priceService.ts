@@ -19,6 +19,8 @@ export interface PriceTick {
 type PriceUpdateCallback = (data: PriceData) => void;
 type TickUpdateCallback = (tick: PriceTick) => void;
 
+import { api } from '@/utils/api';
+
 class PriceService {
   private ws: WebSocket | null = null;
   private reconnectTimer: number | null = null;
@@ -30,55 +32,17 @@ class PriceService {
   private reconnectDelay = 1000;
   private subscribedSymbols: Set<string> = new Set();
   private isConnecting = false;
+  private pollers: Map<string, number> = new Map();
+  private exchange: string = 'phemex';
 
   constructor() {
-    this.connect();
+    // Disable direct Binance WebSocket in browser to avoid CORS/network blocks.
+    // We will poll backend prices instead.
   }
 
+  // Kept for potential future backend WS support; currently unused.
   private connect() {
-    if (this.isConnecting || this.ws?.readyState === WebSocket.OPEN) {
-      return;
-    }
-
-    this.isConnecting = true;
-
-    try {
-      this.ws = new WebSocket('wss://stream.binance.com:9443/ws/!ticker@arr');
-
-      this.ws.onopen = () => {
-        console.log('✅ Price service connected');
-        this.reconnectAttempts = 0;
-        this.isConnecting = false;
-      };
-
-      this.ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (Array.isArray(data)) {
-            data.forEach((ticker) => this.processTicker(ticker));
-          } else {
-            this.processTicker(data);
-          }
-        } catch (error) {
-          console.error('Error parsing price data:', error);
-        }
-      };
-
-      this.ws.onerror = (error) => {
-        console.error('Price service error:', error);
-      };
-
-      this.ws.onclose = () => {
-        console.log('Price service disconnected');
-        this.isConnecting = false;
-        this.ws = null;
-        this.scheduleReconnect();
-      };
-    } catch (error) {
-      console.error('Failed to create WebSocket:', error);
-      this.isConnecting = false;
-      this.scheduleReconnect();
-    }
+    return;
   }
 
   private processTicker(ticker: any) {
@@ -161,6 +125,8 @@ class PriceService {
       callback(cached);
     }
 
+    this.ensurePolling(normalizedSymbol);
+
     return () => {
       const subscribers = this.subscribers.get(normalizedSymbol);
       if (subscribers) {
@@ -168,6 +134,7 @@ class PriceService {
         if (subscribers.size === 0) {
           this.subscribers.delete(normalizedSymbol);
           this.subscribedSymbols.delete(normalizedSymbol);
+          this.maybeStopPolling(normalizedSymbol);
         }
       }
     };
@@ -192,6 +159,8 @@ class PriceService {
       });
     }
 
+    this.ensurePolling(normalizedSymbol);
+
     return () => {
       const subscribers = this.tickSubscribers.get(normalizedSymbol);
       if (subscribers) {
@@ -199,6 +168,7 @@ class PriceService {
         if (subscribers.size === 0) {
           this.tickSubscribers.delete(normalizedSymbol);
           this.subscribedSymbols.delete(normalizedSymbol);
+          this.maybeStopPolling(normalizedSymbol);
         }
       }
     };
@@ -214,25 +184,21 @@ class PriceService {
       return cached;
     }
 
-    const binanceSymbol = symbol.replace('/', '');
-    const response = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch price for ${symbol}`);
+    const { data, error } = await api.getPrice(symbol, this.exchange);
+    if (error || !data) {
+      throw new Error(error || `Failed to fetch price for ${symbol}`);
     }
 
-    const data = await response.json();
-    
     const priceData: PriceData = {
       symbol,
-      price: parseFloat(data.lastPrice),
-      change24h: parseFloat(data.priceChange),
-      changePercent24h: parseFloat(data.priceChangePercent),
-      high24h: parseFloat(data.highPrice),
-      low24h: parseFloat(data.lowPrice),
-      volume24h: parseFloat(data.volume),
-      timestamp: data.closeTime || Date.now(),
-      exchange: 'Binance',
+      price: Number(data.price) || 0,
+      change24h: 0,
+      changePercent24h: 0,
+      high24h: 0,
+      low24h: 0,
+      volume24h: 0,
+      timestamp: new Date(data.timestamp).getTime() || Date.now(),
+      exchange: 'Backend',
     };
 
     this.priceCache.set(symbol, priceData);
@@ -270,6 +236,49 @@ class PriceService {
     this.subscribers.clear();
     this.tickSubscribers.clear();
     this.subscribedSymbols.clear();
+
+    // Stop all pollers
+    this.pollers.forEach((id) => clearInterval(id));
+    this.pollers.clear();
+  }
+
+  setExchange(exchange: string) {
+    this.exchange = exchange || 'phemex';
+  }
+
+  private ensurePolling(symbol: string) {
+    if (this.pollers.has(symbol)) return;
+
+    // Poll backend every 3 seconds
+    const id = window.setInterval(async () => {
+      try {
+        const data = await this.fetchPrice(symbol);
+        const subs = this.subscribers.get(symbol);
+        if (subs && subs.size > 0) subs.forEach((cb) => cb(data));
+
+        const tickSubs = this.tickSubscribers.get(symbol);
+        if (tickSubs && tickSubs.size > 0) {
+          const tick: PriceTick = { symbol, price: data.price, timestamp: data.timestamp };
+          tickSubs.forEach((cb) => cb(tick));
+        }
+      } catch (e) {
+        // Already logged in fetchPrice via api client handling
+      }
+    }, 3000);
+
+    this.pollers.set(symbol, id);
+  }
+
+  private maybeStopPolling(symbol: string) {
+    const hasPriceSubs = this.subscribers.has(symbol) && (this.subscribers.get(symbol)?.size || 0) > 0;
+    const hasTickSubs = this.tickSubscribers.has(symbol) && (this.tickSubscribers.get(symbol)?.size || 0) > 0;
+    if (!hasPriceSubs && !hasTickSubs) {
+      const id = this.pollers.get(symbol);
+      if (id) {
+        clearInterval(id);
+        this.pollers.delete(symbol);
+      }
+    }
   }
 }
 
