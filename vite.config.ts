@@ -1,5 +1,5 @@
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react-swc";
+import react from "@vitejs/plugin-react";
 import { defineConfig, PluginOption } from "vite";
 
 import sparkPlugin from "@github/spark/spark-vite-plugin";
@@ -33,7 +33,7 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    include: ['react', 'react-dom'],
+    include: ['react', 'react-dom', 'react/jsx-runtime'],
     exclude: ['@github/spark'],
   },
   esbuild: {
