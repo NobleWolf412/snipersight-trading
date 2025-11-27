@@ -154,31 +154,34 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
               open={isExpanded}
               onOpenChange={() => setExpandedSection(isExpanded ? null : reason)}
             >
-              <CollapsibleTrigger className="w-full">
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-card/50 hover:bg-card/70 transition-colors cursor-pointer">
-                  <Icon className={`w-5 h-5 ${config.color}`} weight="duotone" />
-                  <div className="flex-1 text-left">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">{config.label}</span>
-                      <span className="text-xs font-mono text-muted-foreground">{count}</span>
+              <div className="flex items-center gap-2">
+                <CollapsibleTrigger className="flex-1">
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-card/50 hover:bg-card/70 transition-colors cursor-pointer">
+                    <Icon className={`w-5 h-5 ${config.color}`} weight="duotone" />
+                    <div className="flex-1 text-left">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">{config.label}</span>
+                        <span className="text-xs font-mono text-muted-foreground">{count}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{config.description}</p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{config.description}</p>
                   </div>
-                  {Array.isArray(reasonDetails) && reasonDetails.length > 0 && (
-                    <Dialog open={reasonDialog === reason} onOpenChange={(open) => !open && setReasonDialog(null)}>
+                </CollapsibleTrigger>
+                {Array.isArray(reasonDetails) && reasonDetails.length > 0 && (
+                  <Dialog open={reasonDialog === reason} onOpenChange={(open) => !open && setReasonDialog(null)}>
+                    <DialogTrigger asChild>
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-6 text-xs"
+                        className="h-8 text-xs mr-2"
                         onClick={(e) => {
-                          e.preventDefault();
                           e.stopPropagation();
-                          setReasonDialog(reason);
                         }}
                       >
                         <Info className="w-3 h-3 mr-1" /> View All
                       </Button>
-                      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                    </DialogTrigger>
+                    <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                         <DialogHeader>
                           <DialogTitle className="flex items-center gap-2">
                             <Icon className={`w-5 h-5 ${config.color}`} />
@@ -221,21 +224,24 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                       </DialogContent>
                     </Dialog>
                   )}
-                </div>
-              </CollapsibleTrigger>
+              </div>
 
               <CollapsibleContent>
                 <div className="mt-2 ml-8 space-y-2">
                   {Array.isArray(reasonDetails) && reasonDetails.slice(0, 10).map((detail, idx) => (
                     <Dialog key={idx}>
                       <DialogTrigger asChild>
-                        <div className="p-3 rounded bg-background/50 border border-border/50 hover:border-primary/50 cursor-pointer transition-colors">
+                        <div 
+                          className="p-3 rounded bg-background/50 border border-border/50 hover:border-primary/50 cursor-pointer transition-colors"
+                          role="button"
+                          tabIndex={0}
+                        >
                           <div className="flex items-center justify-between mb-2">
                             <div className="font-mono text-primary font-medium">{detail.symbol}</div>
-                            <Button variant="ghost" size="sm" className="h-6 text-xs">
-                              <Info className="w-3 h-3 mr-1" />
+                            <div className="text-xs text-primary flex items-center gap-1">
+                              <Info className="w-3 h-3" />
                               Details
-                            </Button>
+                            </div>
                           </div>
                           <div className="text-xs text-muted-foreground">{detail.reason}</div>
                           {detail.score !== undefined && detail.threshold !== undefined && (

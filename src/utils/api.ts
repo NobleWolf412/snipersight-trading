@@ -120,12 +120,34 @@ class ApiClient {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        return { error: error.detail || 'Request failed' };
+        // Try JSON error first; fall back to text or generic message.
+        try {
+          const errJson = await response.json();
+          return { error: (errJson && (errJson.detail || errJson.error)) || `${response.status} ${response.statusText}` };
+        } catch {
+          try {
+            const errText = await response.text();
+            return { error: errText || `${response.status} ${response.statusText}` };
+          } catch {
+            return { error: `${response.status} ${response.statusText}` };
+          }
+        }
       }
 
-      const data = await response.json();
-      return { data };
+      // Handle empty bodies gracefully
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        // @ts-expect-error - allow T to be unknown when no JSON
+        return { data: undefined };
+      }
+
+      try {
+        const data = await response.json();
+        return { data };
+      } catch {
+        // @ts-expect-error - allow T to be unknown when JSON parsing fails
+        return { data: undefined };
+      }
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Unknown error' };
     }
@@ -232,10 +254,25 @@ class ApiClient {
   }
 
   // Market data
-  async getPrice(symbol: string) {
+  async getPrice(symbol: string, exchange?: string) {
+    const qp = exchange ? `?exchange=${encodeURIComponent(exchange)}` : '';
     return this.request<{ symbol: string; price: number; timestamp: string }>(
-      `/market/price/${symbol}`
+      `/market/price/${encodeURIComponent(symbol)}${qp}`
     );
+  }
+
+  async getPrices(symbols: string[], exchange?: string) {
+    const symbolsParam = symbols.join(',');
+    const qp = new URLSearchParams();
+    qp.set('symbols', symbolsParam);
+    if (exchange) qp.set('exchange', exchange);
+    
+    return this.request<{
+      prices: Array<{ symbol: string; price: number; timestamp: string }>;
+      total: number;
+      errors?: Array<{ symbol: string; error: string }>;
+      exchange: string;
+    }>(`/market/prices?${qp.toString()}`);
   }
 
   async getCandles(symbol: string, timeframe = '1h', limit = 100) {
@@ -263,6 +300,56 @@ class ApiClient {
       derivatives_score: number;
       timestamp: string;
     }>('/market/regime');
+  }
+
+  // Background scan jobs
+  async createScanRun(params: {
+    limit?: number;
+    min_score?: number;
+    sniper_mode?: string;
+    majors?: boolean;
+    altcoins?: boolean;
+    meme_mode?: boolean;
+    exchange?: string;
+    leverage?: number;
+  }) {
+    const queryParams: Record<string, string> = {};
+    if (params.limit !== undefined) queryParams.limit = params.limit.toString();
+    if (params.min_score !== undefined) queryParams.min_score = params.min_score.toString();
+    if (params.sniper_mode) queryParams.sniper_mode = params.sniper_mode;
+    if (params.majors !== undefined) queryParams.majors = params.majors.toString();
+    if (params.altcoins !== undefined) queryParams.altcoins = params.altcoins.toString();
+    if (params.meme_mode !== undefined) queryParams.meme_mode = params.meme_mode.toString();
+    if (params.exchange) queryParams.exchange = params.exchange;
+    if (params.leverage !== undefined) queryParams.leverage = params.leverage.toString();
+
+    const query = new URLSearchParams(queryParams).toString();
+    return this.request<{
+      run_id: string;
+      status: string;
+      created_at: string;
+    }>(`/scanner/runs${query ? `?${query}` : ''}`, { method: 'POST' });
+  }
+
+  async getScanRun(runId: string) {
+    return this.request<{
+      run_id: string;
+      status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+      progress: number;
+      total: number;
+      current_symbol?: string;
+      created_at: string;
+      started_at?: string;
+      completed_at?: string;
+      signals?: Signal[];
+      metadata?: Record<string, any>;
+      rejections?: Record<string, any>;
+      error?: string;
+    }>(`/scanner/runs/${runId}`);
+  }
+
+  async cancelScanRun(runId: string) {
+    return this.request(`/scanner/runs/${runId}`, { method: 'DELETE' });
   }
 }
 

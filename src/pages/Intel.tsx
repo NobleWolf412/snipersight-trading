@@ -19,7 +19,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { TacticalPanel } from '@/components/TacticalPanel';
 import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
-import { useMockMarketRegime } from '@/hooks/use-mock-market-regime';
+import { useMarketRegime } from '@/hooks/useMarketRegime';
 import { cn } from '@/lib/utils';
 
 interface SymbolIntel {
@@ -108,7 +108,7 @@ function ModeChip({ mode, status, icon: Icon }: ModeReadiness) {
 }
 
 export function Intel() {
-  const regimeProps = useMockMarketRegime('scanner');
+  const regimeProps = useMarketRegime('scanner');
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

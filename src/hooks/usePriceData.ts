@@ -1,10 +1,19 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { priceService, type PriceData, type PriceTick } from '@/services/priceService';
+import { useScanner } from '@/context/ScannerContext';
 
 export function usePrice(symbol: string | null) {
+  const { scanConfig } = useScanner();
   const [priceData, setPriceData] = useState<PriceData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Keep price service aligned with selected exchange
+    if (scanConfig?.exchange) {
+      priceService.setExchange(scanConfig.exchange);
+    }
+  }, [scanConfig?.exchange]);
 
   useEffect(() => {
     if (!symbol) {
@@ -34,13 +43,20 @@ export function usePrice(symbol: string | null) {
     return () => {
       unsubscribe();
     };
-  }, [symbol]);
+  }, [symbol, scanConfig?.exchange]);
 
   return { priceData, isLoading, error };
 }
 
 export function usePriceTick(symbol: string | null) {
+  const { scanConfig } = useScanner();
   const [tick, setTick] = useState<PriceTick | null>(null);
+
+  useEffect(() => {
+    if (scanConfig?.exchange) {
+      priceService.setExchange(scanConfig.exchange);
+    }
+  }, [scanConfig?.exchange]);
 
   useEffect(() => {
     if (!symbol) {
@@ -55,12 +71,13 @@ export function usePriceTick(symbol: string | null) {
     return () => {
       unsubscribe();
     };
-  }, [symbol]);
+  }, [symbol, scanConfig?.exchange]);
 
   return tick;
 }
 
 export function useMultiplePrices(symbols: string[]) {
+  const { scanConfig } = useScanner();
   const [prices, setPrices] = useState<Map<string, PriceData>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +96,12 @@ export function useMultiplePrices(symbols: string[]) {
       pendingUpdatesRef.current.clear();
     }
   }, []);
+
+  useEffect(() => {
+    if (scanConfig?.exchange) {
+      priceService.setExchange(scanConfig.exchange);
+    }
+  }, [scanConfig?.exchange]);
 
   useEffect(() => {
     if (symbols.length === 0) {
@@ -124,7 +147,7 @@ export function useMultiplePrices(symbols: string[]) {
       unsubscribers.forEach((unsub) => unsub());
       pendingUpdatesRef.current.clear();
     };
-  }, [symbols.join(','), flushUpdates]);
+  }, [symbols.join(','), flushUpdates, scanConfig?.exchange]);
 
   return { prices, isLoading, error };
 }

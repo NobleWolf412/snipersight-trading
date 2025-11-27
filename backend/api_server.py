@@ -123,6 +123,32 @@ bot_configs: Dict[str, BotConfig] = {}
 active_scanners: Dict[str, bool] = {}
 active_bots: Dict[str, bool] = {}
 
+# Background scan job tracking
+import asyncio
+import uuid
+from typing import Literal
+
+ScanJobStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
+
+class ScanJob:
+    def __init__(self, run_id: str, params: dict):
+        self.run_id = run_id
+        self.status: ScanJobStatus = "queued"
+        self.progress = 0
+        self.total = 0
+        self.current_symbol: Optional[str] = None
+        self.signals: List[dict] = []
+        self.rejections: dict = {}
+        self.metadata: dict = {}
+        self.error: Optional[str] = None
+        self.params = params
+        self.created_at = datetime.now(timezone.utc)
+        self.started_at: Optional[datetime] = None
+        self.completed_at: Optional[datetime] = None
+        self.task: Optional[asyncio.Task] = None
+
+scan_jobs: Dict[str, ScanJob] = {}
+
 # Initialize trading components
 position_sizer = PositionSizer(account_balance=10000, max_risk_pct=2.0)
 risk_manager = RiskManager(account_balance=10000, max_open_positions=5)
@@ -705,39 +731,373 @@ async def get_risk_summary():
     return summary
 
 
-# Market data endpoints (mock for now)
-@app.get("/api/market/price/{symbol}")
-async def get_price(symbol: str):
-    """Get current price for symbol."""
-    # Mock data - will be replaced with exchange integration
-    mock_prices = {
-        "BTC/USDT": 50000,
-        "ETH/USDT": 3000,
-        "SOL/USDT": 100
+# Background scan endpoints
+@app.post("/api/scanner/runs")
+async def create_scan_run(
+    limit: int = Query(default=10, ge=1, le=100),
+    min_score: float = Query(default=0, ge=0, le=100),
+    sniper_mode: str = Query(default="recon"),
+    majors: bool = Query(default=True),
+    altcoins: bool = Query(default=True),
+    meme_mode: bool = Query(default=False),
+    exchange: str = Query(default="phemex"),
+    leverage: int = Query(default=1, ge=1, le=125)
+):
+    """Start a background scan job and return immediately with run_id."""
+    run_id = str(uuid.uuid4())
+    params = {
+        "limit": limit,
+        "min_score": min_score,
+        "sniper_mode": sniper_mode,
+        "majors": majors,
+        "altcoins": altcoins,
+        "meme_mode": meme_mode,
+        "exchange": exchange,
+        "leverage": leverage
     }
     
-    price = mock_prices.get(symbol, 0)
+    job = ScanJob(run_id, params)
+    scan_jobs[run_id] = job
+    
+    # Start background task
+    job.task = asyncio.create_task(_execute_scan_job(job))
+    
     return {
-        "symbol": symbol,
-        "price": price,
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "run_id": run_id,
+        "status": job.status,
+        "created_at": job.created_at.isoformat()
     }
+
+
+@app.get("/api/scanner/runs/{run_id}")
+async def get_scan_run(run_id: str):
+    """Get status and results of a scan job."""
+    if run_id not in scan_jobs:
+        raise HTTPException(status_code=404, detail="Scan job not found")
+    
+    job = scan_jobs[run_id]
+    
+    response = {
+        "run_id": job.run_id,
+        "status": job.status,
+        "progress": job.progress,
+        "total": job.total,
+        "current_symbol": job.current_symbol,
+        "created_at": job.created_at.isoformat(),
+        "started_at": job.started_at.isoformat() if job.started_at else None,
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+    }
+    
+    if job.status == "completed":
+        response["signals"] = job.signals
+        response["metadata"] = job.metadata
+        response["rejections"] = job.rejections
+    elif job.status == "failed":
+        response["error"] = job.error
+    
+    return response
+
+
+@app.delete("/api/scanner/runs/{run_id}")
+async def cancel_scan_run(run_id: str):
+    """Cancel a running scan job."""
+    if run_id not in scan_jobs:
+        raise HTTPException(status_code=404, detail="Scan job not found")
+    
+    job = scan_jobs[run_id]
+    
+    if job.status in ["completed", "failed", "cancelled"]:
+        return {"message": f"Job already {job.status}"}
+    
+    if job.task and not job.task.done():
+        job.task.cancel()
+    
+    job.status = "cancelled"
+    job.completed_at = datetime.now(timezone.utc)
+    
+    return {"message": "Job cancelled", "run_id": run_id}
+
+
+async def _execute_scan_job(job: ScanJob):
+    """Execute scan in background, updating job status as it progresses."""
+    try:
+        job.status = "running"
+        job.started_at = datetime.now(timezone.utc)
+        
+        params = job.params
+        
+        # Resolve exchange adapter
+        exchange_key = params["exchange"].lower()
+        if exchange_key not in EXCHANGE_ADAPTERS:
+            raise ValueError(f"Unsupported exchange: {exchange_key}")
+        
+        current_adapter = EXCHANGE_ADAPTERS[exchange_key]()
+        
+        # Resolve mode
+        try:
+            mode = get_mode(params["sniper_mode"])
+        except ValueError as e:
+            raise ValueError(f"Invalid mode: {e}") from e
+        
+        effective_min = max(params["min_score"], mode.min_confluence_score) if params["min_score"] > 0 else mode.min_confluence_score
+        
+        # Apply mode to orchestrator
+        orchestrator.apply_mode(mode)
+        orchestrator.config.min_confluence_score = effective_min
+        orchestrator.exchange_adapter = current_adapter
+        orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
+        
+        # Get symbols
+        try:
+            all_symbols = current_adapter.get_top_symbols(n=min(params["limit"] * 3, 50), quote_currency='USDT')
+        except Exception:
+            all_symbols = []
+        
+        if not all_symbols:
+            all_symbols = [
+                'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT',
+                'ADA/USDT', 'AVAX/USDT', 'MATIC/USDT', 'DOT/USDT', 'LINK/USDT',
+                'DOGE/USDT', 'SHIB/USDT', 'PEPE/USDT'
+            ]
+        
+        # Filter by categories
+        major_coins = {'BTC/USDT', 'ETH/USDT', 'BNB/USDT'}
+        meme_coins = {'DOGE/USDT', 'SHIB/USDT', 'PEPE/USDT', 'BONK/USDT', 'FLOKI/USDT', 'WIF/USDT'}
+        
+        symbols = []
+        for symbol in all_symbols:
+            if symbol in major_coins and params["majors"]:
+                symbols.append(symbol)
+            elif symbol in meme_coins and params["meme_mode"]:
+                symbols.append(symbol)
+            elif symbol not in major_coins and symbol not in meme_coins and params["altcoins"]:
+                symbols.append(symbol)
+        
+        if not symbols:
+            symbols = all_symbols
+        
+        symbols = symbols[:params["limit"]]
+        job.total = len(symbols)
+        
+        # Run scan
+        trade_plans, rejection_summary = orchestrator.scan(symbols)
+        
+        # Transform results
+        signals = []
+        for plan in trade_plans:
+            signal = {
+                "symbol": plan.symbol.replace('/', ''),
+                "direction": plan.direction,
+                "score": plan.confidence_score,
+                "entry_near": plan.entry_zone.near_entry,
+                "entry_far": plan.entry_zone.far_entry,
+                "stop_loss": plan.stop_loss.level,
+                "targets": [
+                    {"level": tp.level, "percentage": tp.percentage}
+                    for tp in plan.targets
+                ],
+                "primary_timeframe": mode.timeframes[-1] if mode.timeframes else "",
+                "current_price": plan.entry_zone.near_entry,
+                "analysis": {
+                    "order_blocks": plan.metadata.get('order_blocks', 0),
+                    "fvgs": plan.metadata.get('fvgs', 0),
+                    "structural_breaks": plan.metadata.get('structural_breaks', 0),
+                    "liquidity_sweeps": plan.metadata.get('liquidity_sweeps', 0),
+                    "trend": plan.direction.lower(),
+                    "risk_reward": plan.risk_reward
+                },
+                "rationale": plan.rationale,
+                "setup_type": plan.setup_type
+            }
+            signals.append(signal)
+        
+        job.signals = signals
+        job.rejections = rejection_summary
+        job.metadata = {
+            "total": len(signals),
+            "scanned": len(symbols),
+            "rejected": len(symbols) - len(signals),
+            "mode": mode.name,
+            "applied_timeframes": mode.timeframes,
+            "effective_min_score": effective_min,
+            "exchange": exchange_key,
+            "leverage": params["leverage"]
+        }
+        job.status = "completed"
+        job.completed_at = datetime.now(timezone.utc)
+        job.progress = job.total
+        
+    except asyncio.CancelledError:
+        job.status = "cancelled"
+        job.completed_at = datetime.now(timezone.utc)
+        raise
+    except Exception as e:
+        logger.error("Scan job %s failed: %s", job.run_id, e)
+        job.status = "failed"
+        job.error = str(e)
+        job.completed_at = datetime.now(timezone.utc)
+
+
+# Market data endpoints (mock for now)
+@app.get("/api/market/price/{symbol}")
+async def get_price(symbol: str, exchange: str | None = Query(default=None)):
+    """Get current price for symbol via selected exchange adapter.
+
+    Falls back to Phemex if no exchange provided. Uses ccxt under the hood.
+    """
+    try:
+        exchange_key = (exchange or 'phemex').lower()
+        if exchange_key not in EXCHANGE_ADAPTERS:
+            raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange_key}")
+
+        adapter = EXCHANGE_ADAPTERS[exchange_key]()
+
+        request_symbol = symbol
+        fetch_symbol = symbol
+        # OKX uses suffix ":USDT" for swap markets in ccxt
+        if exchange_key == 'okx' and '/USDT' in symbol and ':USDT' not in symbol:
+            fetch_symbol = symbol.replace('/USDT', '/USDT:USDT')
+
+        # Use ccxt to fetch ticker
+        ticker = adapter.exchange.fetch_ticker(fetch_symbol)
+        last_price = ticker.get('last') or ticker.get('close') or 0.0
+        ts_ms = ticker.get('timestamp')
+        if ts_ms is None:
+            # Some exchanges include 'datetime' or none; fallback to now
+            dt_iso = datetime.now(timezone.utc).isoformat()
+        else:
+            try:
+                dt_iso = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).isoformat()
+            except Exception:
+                dt_iso = datetime.now(timezone.utc).isoformat()
+
+        return {
+            "symbol": request_symbol,
+            "price": float(last_price) if last_price is not None else 0.0,
+            "timestamp": dt_iso,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:  # Exchange could be geo-blocked or network error
+        logger.error("Failed to fetch price for %s on %s: %s", symbol, exchange or 'phemex', e)
+        raise HTTPException(status_code=502, detail="Failed to fetch price from exchange") from e
+
+
+@app.get("/api/market/prices")
+async def get_prices(
+    symbols: str = Query(..., description="Comma-separated list of symbols (e.g., BTC/USDT,ETH/USDT)"),
+    exchange: str | None = Query(default=None)
+):
+    """Get current prices for multiple symbols in one request.
+    
+    Reduces N requests to 1 for watchlists. Returns partial results if some symbols fail.
+    """
+    try:
+        exchange_key = (exchange or 'phemex').lower()
+        if exchange_key not in EXCHANGE_ADAPTERS:
+            raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange_key}")
+
+        adapter = EXCHANGE_ADAPTERS[exchange_key]()
+        symbol_list = [s.strip() for s in symbols.split(',') if s.strip()]
+        
+        if not symbol_list:
+            raise HTTPException(status_code=400, detail="No symbols provided")
+        
+        if len(symbol_list) > 50:
+            raise HTTPException(status_code=400, detail="Maximum 50 symbols per request")
+
+        results = []
+        errors = []
+        
+        for symbol in symbol_list:
+            try:
+                fetch_symbol = symbol
+                # OKX uses suffix ":USDT" for swap markets
+                if exchange_key == 'okx' and '/USDT' in symbol and ':USDT' not in symbol:
+                    fetch_symbol = symbol.replace('/USDT', '/USDT:USDT')
+                
+                ticker = adapter.exchange.fetch_ticker(fetch_symbol)
+                last_price = ticker.get('last') or ticker.get('close') or 0.0
+                ts_ms = ticker.get('timestamp')
+                
+                if ts_ms is None:
+                    dt_iso = datetime.now(timezone.utc).isoformat()
+                else:
+                    try:
+                        dt_iso = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).isoformat()
+                    except Exception:
+                        dt_iso = datetime.now(timezone.utc).isoformat()
+                
+                results.append({
+                    "symbol": symbol,
+                    "price": float(last_price) if last_price is not None else 0.0,
+                    "timestamp": dt_iso,
+                })
+            except Exception as e:
+                logger.warning("Failed to fetch price for %s: %s", symbol, e)
+                errors.append({
+                    "symbol": symbol,
+                    "error": str(e)
+                })
+        
+        return {
+            "prices": results,
+            "total": len(results),
+            "errors": errors if errors else None,
+            "exchange": exchange_key
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Bulk price fetch failed: %s", e)
+        raise HTTPException(status_code=502, detail="Failed to fetch prices from exchange") from e
 
 
 @app.get("/api/market/candles/{symbol}")
 async def get_candles(
     symbol: str,
     timeframe: Timeframe = Query(default=Timeframe.H1),
-    limit: int = Query(default=100, ge=1, le=1000)
+    limit: int = Query(default=100, ge=1, le=1000),
+    exchange: str | None = Query(default=None)
 ):
-    """Get candlestick data."""
-    # Mock data - will be replaced with exchange integration
-    return {
-        "symbol": symbol,
-        "timeframe": timeframe.value,
-        "candles": [],
-        "message": "Mock data - exchange integration pending"
-    }
+    """Get candlestick data via selected exchange adapter."""
+    try:
+        exchange_key = (exchange or 'phemex').lower()
+        if exchange_key not in EXCHANGE_ADAPTERS:
+            raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange_key}")
+
+        adapter = EXCHANGE_ADAPTERS[exchange_key]()
+
+        fetch_symbol = symbol
+        if exchange_key == 'okx' and '/USDT' in symbol and ':USDT' not in symbol:
+            fetch_symbol = symbol.replace('/USDT', '/USDT:USDT')
+
+        df = adapter.fetch_ohlcv(fetch_symbol, timeframe.value, limit=limit)
+        candles = []
+        if not df.empty:
+            for _, row in df.iterrows():
+                candles.append({
+                    'timestamp': row['timestamp'].to_pydatetime().isoformat(),
+                    'open': float(row['open']),
+                    'high': float(row['high']),
+                    'low': float(row['low']),
+                    'close': float(row['close']),
+                    'volume': float(row['volume']),
+                })
+
+        return {
+            "symbol": symbol,
+            "timeframe": timeframe.value,
+            "candles": candles,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to fetch candles for %s on %s: %s", symbol, exchange or 'phemex', e)
+        raise HTTPException(status_code=502, detail="Failed to fetch candles from exchange") from e
 
 
 @app.get("/api/market/regime")
@@ -976,5 +1336,5 @@ async def get_telemetry_analytics(
 
 if __name__ == "__main__":
     import uvicorn
-    # Align runtime port with documented frontend expectation (5000)
-    uvicorn.run(app, host="0.0.0.0", port=5000, log_level="info")
+    # Backend runs on port 8000, frontend (Vite) on port 5000
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
