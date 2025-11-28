@@ -24,8 +24,8 @@ export function SidebarNav() {
               const Icon = item.icon;
               return (
                 <li key={item.href}>
-                  <a href={item.href} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent/10 transition-colors">
-                    <Icon size={16} weight="bold" className="text-accent" />
+                  <a href={item.href} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent/10 transition-colors" aria-label={`Jump to ${item.label} section`}>
+                    <Icon size={16} weight="bold" className="text-accent" aria-hidden="true" />
                     <span>{item.label}</span>
                   </a>
                 </li>

@@ -14,7 +14,7 @@ export function HudPanel({ title, subtitle, className, titleClassName, children 
       {(title || subtitle) && (
         <div className="relative z-10 px-6 py-5 border-b border-border/50 flex-shrink-0">
           {title && (
-            <h2 className={cn("hud-headline text-xl md:text-2xl lg:text-3xl tracking-[0.18em] text-slate-200 leading-relaxed", titleClassName)}>
+            <h2 className={cn("hud-headline text-xl md:text-2xl lg:text-3xl tracking-[0.18em] text-slate-800 dark:text-slate-100 leading-relaxed", titleClassName)}>
               {title}
             </h2>
           )}

@@ -29,68 +29,6 @@ export interface BotActivity {
   status: 'success' | 'warning' | 'info';
 }
 
-export function generateMockScanResults(count: number = 5): ScanResult[] {
-  const pairs = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'MATIC/USDT', 'AVAX/USDT', 'LINK/USDT', 'DOT/USDT', 'ADA/USDT'];
-  const results: ScanResult[] = [];
-  
-  const planTypes: PlanType[] = ['SMC', 'ATR_FALLBACK', 'HYBRID'];
-  const convictions: ConvictionClass[] = ['A', 'B', 'C'];
-  const trends = ['strong_up', 'up', 'sideways', 'down', 'strong_down'] as const;
-  const volatilities = ['compressed', 'normal', 'elevated', 'chaotic'] as const;
-
-  for (let i = 0; i < count; i++) {
-    const pair = pairs[i % pairs.length];
-    const basePrice = Math.random() * 50000 + 1000;
-    const trendBias = ['BULLISH', 'BEARISH', 'NEUTRAL'][Math.floor(Math.random() * 3)] as ScanResult['trendBias'];
-    const planType = planTypes[Math.floor(Math.random() * planTypes.length)];
-    const conviction = convictions[Math.floor(Math.random() * convictions.length)];
-    
-    results.push({
-      id: `scan-${Date.now()}-${i}`,
-      pair,
-      trendBias,
-      confidenceScore: Math.random() * 40 + 60,
-      riskScore: Math.random() * 5 + 1,
-      classification: Math.random() > 0.5 ? 'SWING' : 'SCALP',
-      entryZone: { low: basePrice * 0.98, high: basePrice * 1.02 },
-      stopLoss: basePrice * (trendBias === 'BULLISH' ? 0.95 : 1.05),
-      takeProfits: [
-        basePrice * (trendBias === 'BULLISH' ? 1.03 : 0.97),
-        basePrice * (trendBias === 'BULLISH' ? 1.06 : 0.94),
-        basePrice * (trendBias === 'BULLISH' ? 1.09 : 0.91),
-      ],
-      orderBlocks: [
-        { type: trendBias === 'BULLISH' ? 'bullish' : 'bearish', price: basePrice * 0.99, timeframe: '4H' },
-        { type: trendBias === 'BULLISH' ? 'bullish' : 'bearish', price: basePrice * 0.97, timeframe: '1D' },
-      ],
-      fairValueGaps: [
-        { low: basePrice * 0.96, high: basePrice * 0.98, type: 'bullish' },
-      ],
-      timestamp: new Date().toISOString(),
-      
-      // Phase 1-5 enhancements
-      plan_type: planType,
-      conviction_class: conviction,
-      missing_critical_timeframes: Math.random() > 0.7 ? ['1w'] : [],
-      regime: {
-        global_regime: {
-          composite: 'bullish_risk_on',
-          score: 65 + Math.random() * 30,
-          trend: trends[Math.floor(Math.random() * trends.length)],
-          volatility: volatilities[Math.floor(Math.random() * volatilities.length)],
-          liquidity: 'healthy' as const
-        },
-        symbol_regime: {
-          trend: trends[Math.floor(Math.random() * trends.length)],
-          volatility: volatilities[Math.floor(Math.random() * volatilities.length)],
-          score: 50 + Math.random() * 50
-        }
-      }
-    });
-  }
-
-  return results;
-}
 
 export function generateMockBotActivity(): BotActivity[] {
   const activities = [

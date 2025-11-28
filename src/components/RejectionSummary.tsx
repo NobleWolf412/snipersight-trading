@@ -235,6 +235,7 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                           className="p-3 rounded bg-background/50 border border-border/50 hover:border-primary/50 cursor-pointer transition-colors"
                           role="button"
                           tabIndex={0}
+                          aria-label={`View details for ${detail.symbol}`}
                         >
                           <div className="flex items-center justify-between mb-2">
                             <div className="font-mono text-primary font-medium">{detail.symbol}</div>

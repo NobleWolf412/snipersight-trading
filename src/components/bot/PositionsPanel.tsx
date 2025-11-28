@@ -158,19 +158,19 @@ export function PositionsPanel() {
                 {/* Position Details */}
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
-                    <div className="text-xs text-slate-400 mb-1">Entry</div>
+                    <div className="text-xs text-slate-300 mb-1">Entry</div>
                     <div className="text-sm font-mono text-slate-200">
                       ${position.entry_price.toLocaleString()}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-slate-400 mb-1">Current</div>
+                    <div className="text-xs text-slate-300 mb-1">Current</div>
                     <div className="text-sm font-mono text-accent">
                       ${position.current_price.toLocaleString()}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-slate-400 mb-1">Quantity</div>
+                    <div className="text-xs text-slate-300 mb-1">Quantity</div>
                     <div className="text-sm font-mono text-slate-200">
                       {position.quantity.toFixed(4)}
                     </div>
@@ -179,7 +179,7 @@ export function PositionsPanel() {
 
                 {/* Time Open */}
                 <div className="mt-3 pt-3 border-t border-slate-700/30">
-                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
                     <Clock size={12} weight="bold" />
                     Opened {formatDistanceToNow(new Date(position.opened_at), { addSuffix: true })}
                   </div>
@@ -193,11 +193,11 @@ export function PositionsPanel() {
         <div className="mt-4 pt-4 border-t border-slate-700/30">
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="text-center">
-              <div className="text-xs text-slate-400 mb-1">Total Positions</div>
+              <div className="text-xs text-slate-300 mb-1">Total Positions</div>
               <div className="font-bold text-lg text-accent">{positions.length}</div>
             </div>
             <div className="text-center">
-              <div className="text-xs text-slate-400 mb-1">Combined P&L</div>
+              <div className="text-xs text-slate-300 mb-1">Combined P&L</div>
               <div className={`font-bold text-lg ${
                 positions.reduce((sum, p) => sum + p.pnl, 0) >= 0 ? 'text-success' : 'text-destructive'
               }`}>

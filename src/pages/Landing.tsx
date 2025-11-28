@@ -33,7 +33,7 @@ export function Landing() {
                 <div className="flex items-center justify-center gap-4">
                   <h1 className="hud-headline hud-text-green text-5xl md:text-7xl font-bold tracking-[0.16em] scan-pulse-slow glitch-text">SNIPERSIGHT</h1>
                 </div>
-                <p className="text-base md:text-lg text-slate-400 max-w-3xl leading-relaxed mx-auto px-4">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
+                <p className="text-base md:text-lg text-slate-300 max-w-3xl leading-relaxed mx-auto px-4">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
               </div>
             </div>
           </div>
@@ -63,7 +63,7 @@ export function Landing() {
                     </div>
                   </div>
                   
-                  <p className="text-base md:text-lg text-slate-400 leading-relaxed mb-10">Multi-timeframe Smart Money Concept detection with institutional-grade confluence scoring. Identify high-probability setups across order blocks, FVGs, liquidity sweeps, and structural breaks.</p>
+                  <p className="text-base md:text-lg text-slate-300 leading-relaxed mb-10">Multi-timeframe Smart Money Concept detection with institutional-grade confluence scoring. Identify high-probability setups across order blocks, FVGs, liquidity sweeps, and structural breaks.</p>
                   
                   <div className="flex justify-center">
                     <Link
@@ -92,7 +92,7 @@ export function Landing() {
                     </div>
                   </div>
                   
-                  <p className="text-base md:text-lg text-slate-400 leading-relaxed mb-10">
+                  <p className="text-base md:text-lg text-slate-300 leading-relaxed mb-10">
                     Fully automated trading execution with multi-layered quality gates, risk controls, and real-time position management. 
                     Deploy capital with institutional discipline and precision.
                   </p>
@@ -124,7 +124,7 @@ export function Landing() {
                     </div>
                   </div>
                   
-                  <p className="text-base md:text-lg text-slate-400 leading-relaxed mb-10">Real-time market regime classification, dominance flows, and AI-powered symbol analysis. Understand market conditions and deploy the right sniper modes at the right time.</p>
+                  <p className="text-base md:text-lg text-slate-300 leading-relaxed mb-10">Real-time market regime classification, dominance flows, and AI-powered symbol analysis. Understand market conditions and deploy the right sniper modes at the right time.</p>
                   
                   <div className="flex justify-center">
                     <Link
@@ -153,7 +153,7 @@ export function Landing() {
                     </div>
                   </div>
                   
-                  <p className="text-base md:text-lg text-slate-400 leading-relaxed mb-10">Practice with simulated market data in a risk-free environment. Master the system's features, test strategies, and build confidence before deploying real capital.</p>
+                  <p className="text-base md:text-lg text-slate-300 leading-relaxed mb-10">Practice with simulated market data in a risk-free environment. Master the system's features, test strategies, and build confidence before deploying real capital.</p>
                   
                   <div className="flex justify-center">
                     <Link

@@ -23,6 +23,15 @@ const preview: Preview = {
         },
       ],
     },
+    a11y: {
+      config: {
+        rules: [
+          { id: 'color-contrast', enabled: true },
+          { id: 'button-name', enabled: true },
+          { id: 'aria-allowed-attr', enabled: true },
+        ],
+      },
+    },
   },
 };
 

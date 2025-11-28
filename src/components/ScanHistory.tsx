@@ -86,7 +86,7 @@ export function ScanHistory({ maxEntries = 10 }: ScanHistoryProps) {
       recon: 'bg-green-500/20 text-green-400 border-green-500/30',
       strike: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
       surgical: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-      ghost: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+      ghost: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
     };
     return colors[mode.toLowerCase()] || 'bg-accent/20 text-accent border-accent/30';
   };
@@ -101,7 +101,7 @@ export function ScanHistory({ maxEntries = 10 }: ScanHistoryProps) {
           </CardTitle>
           <CardDescription>No scans recorded yet</CardDescription>
         </CardHeader>
-        <CardContent className="text-center py-8 text-slate-400">
+        <CardContent className="text-center py-8 text-slate-300">
           <Target size={48} weight="thin" className="mx-auto mb-3 opacity-30" />
           <p>Run a scan to begin tracking history</p>
         </CardContent>
@@ -151,9 +151,9 @@ export function ScanHistory({ maxEntries = 10 }: ScanHistoryProps) {
                     }}
                     className="h-auto py-3 flex-col gap-1 hover:border-accent/50"
                   >
-                    <span className="font-semibold">Last Hour</span>
-                    <span className="text-xs text-slate-400">
-                      {scanHistoryService.getRecentScans(1).length} scans
+                    <span className="font-semibold">All Time</span>
+                    <span className="text-xs text-slate-300">
+                      {scanHistoryService.getScans().length} total
                     </span>
                   </Button>
                   <Button
@@ -165,7 +165,7 @@ export function ScanHistory({ maxEntries = 10 }: ScanHistoryProps) {
                     className="h-auto py-3 flex-col gap-1 hover:border-accent/50"
                   >
                     <span className="font-semibold">Last 24 Hours</span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-300">
                       {scanHistoryService.getRecentScans(24).length} scans
                     </span>
                   </Button>
@@ -178,7 +178,7 @@ export function ScanHistory({ maxEntries = 10 }: ScanHistoryProps) {
                     className="h-auto py-3 flex-col gap-1 hover:border-accent/50"
                   >
                     <span className="font-semibold">Last 7 Days</span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-300">
                       {scanHistoryService.getRecentScans(168).length} scans
                     </span>
                   </Button>
@@ -200,9 +200,9 @@ export function ScanHistory({ maxEntries = 10 }: ScanHistoryProps) {
               </AlertDialogContent>
             </AlertDialog>
             {expanded ? (
-              <CaretUp size={20} weight="bold" className="text-slate-400" />
+              <CaretUp size={20} weight="bold" className="text-slate-300" />
             ) : (
-              <CaretDown size={20} weight="bold" className="text-slate-400" />
+              <CaretDown size={20} weight="bold" className="text-slate-300" />
             )}
           </div>
         </div>
@@ -242,7 +242,7 @@ export function ScanHistory({ maxEntries = 10 }: ScanHistoryProps) {
                     <Badge className={getModeColor(scan.mode)}>
                       {scan.mode.toUpperCase()}
                     </Badge>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-300">
                       <Clock size={12} weight="bold" className="inline mr-1" />
                       {formatTimestamp(scan.timestamp)}
                     </span>
@@ -261,21 +261,21 @@ export function ScanHistory({ maxEntries = 10 }: ScanHistoryProps) {
 
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
-                    <div className="text-xs text-slate-400 mb-1">Scanned</div>
+                    <div className="text-xs text-slate-300 mb-1">Scanned</div>
                     <div className="text-lg font-mono text-slate-200">
                       <Crosshair size={14} weight="bold" className="inline mr-1 text-accent" />
                       {scan.symbolsScanned}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-slate-400 mb-1">Signals</div>
+                    <div className="text-xs text-slate-300 mb-1">Signals</div>
                     <div className="text-lg font-mono text-green-400">
                       <Target size={14} weight="bold" className="inline mr-1" />
                       {scan.signalsGenerated}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-slate-400 mb-1">Rejected</div>
+                    <div className="text-xs text-slate-300 mb-1">Rejected</div>
                     <div className="text-lg font-mono text-orange-400">
                       <XCircle size={14} weight="bold" className="inline mr-1" />
                       {scan.signalsRejected}
@@ -286,7 +286,7 @@ export function ScanHistory({ maxEntries = 10 }: ScanHistoryProps) {
                 {scan.timeframes && scan.timeframes.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-slate-700/30">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-slate-400">Timeframes:</span>
+                      <span className="text-xs text-slate-300">Timeframes:</span>
                       {scan.timeframes.map((tf) => (
                         <Badge
                           key={tf}

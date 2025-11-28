@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ArrowUp, ArrowDown, Minus, TrendUp, Eye, FileText, CaretDown, CaretUp } from '@phosphor-icons/react';
 import type { ScanResult } from '@/utils/mockData';
-import { generateMockScanResults } from '@/utils/mockData';
+
 import { useState, useEffect } from 'react';
 import { ChartModal } from '@/components/ChartModal/ChartModal';
 import { DetailsModal } from '@/components/DetailsModal/DetailsModal';
@@ -115,20 +115,7 @@ export function ScanResults() {
     setIsDetailsModalOpen(true);
   };
 
-  const handleLoadMockData = () => {
-    const mockResults = generateMockScanResults(8);
-    setScanResults(mockResults);
-    localStorage.setItem('scan-results', JSON.stringify(mockResults));
-    
-    const mockMetadata = {
-      mode: 'recon',
-      appliedTimeframes: ['1w', '1d', '4h', '1h', '15m', '5m'],
-      effectiveMinScore: 75.0,
-      scanned: 20,
-    };
-    setScanMetadata(mockMetadata);
-    localStorage.setItem('scan-metadata', JSON.stringify(mockMetadata));
-  };
+
 
   if (results.length === 0) {
     return (
@@ -172,15 +159,6 @@ export function ScanResults() {
             >
               <TrendUp size={24} weight="bold" />
               {rejectionStats ? 'ADJUST & RESCAN' : 'ARM SCANNER'}
-            </Button>
-            <Button 
-              onClick={handleLoadMockData}
-              variant="outline"
-              className="h-14 text-lg px-8 border-accent/50 hover:bg-accent/10" 
-              size="lg"
-            >
-              <Eye size={24} weight="bold" />
-              PREVIEW FEATURES
             </Button>
           </div>
 

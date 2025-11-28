@@ -105,9 +105,29 @@ export const WithResults: Story = {};
 export const NoResults: Story = {
   decorators: [
     (Story) => {
-      // Clear localStorage for this story
-      localStorage.removeItem('scan-results');
-      localStorage.removeItem('scan-metadata');
+      // Set up empty results and mock rejectionStats for this story
+      localStorage.setItem('scan-results', JSON.stringify([]));
+      localStorage.setItem('scan-metadata', JSON.stringify({
+        timestamp: new Date().toISOString(),
+        mode: 'recon',
+        scanned: 10,
+        total: 0,
+      }));
+      localStorage.setItem('scan-rejections', JSON.stringify({
+        total_rejected: 10,
+        by_reason: {
+          'Missing critical timeframe': 4,
+          'Low confluence score': 3,
+          'No valid trade plan': 2,
+          'Risk validation failed': 1,
+        },
+        details: {
+          'BTC/USDT': ['Missing critical timeframe'],
+          'ETH/USDT': ['Low confluence score'],
+          'SOL/USDT': ['No valid trade plan'],
+          'MATIC/USDT': ['Risk validation failed'],
+        },
+      }));
       return <Story />;
     },
   ],
