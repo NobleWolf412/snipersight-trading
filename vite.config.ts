@@ -1,5 +1,5 @@
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
+import react from "@vitejs/plugin-react-swc";
 import { defineConfig, PluginOption } from "vite";
 
 import sparkPlugin from "@github/spark/spark-vite-plugin";
@@ -28,12 +28,7 @@ const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
 
 export default defineConfig({
   plugins: [
-    react({
-      fastRefresh: true,
-      babel: {
-        plugins: []
-      }
-    }),
+    react(),
     tailwindcss(),
     createIconImportProxy() as PluginOption,
     sparkPlugin() as PluginOption,
