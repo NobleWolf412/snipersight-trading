@@ -178,7 +178,7 @@ export function ScannerSetup() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-          <div className="lg:col-span-2 space-y-6 lg:space-y-8 bg-red-600">
+          <div className="lg:col-span-2 space-y-6 lg:space-y-8 bg-slate-50">
             <HudPanel 
               title="Scan Mode & Profile" 
               subtitle="Select your tactical mode and operational parameters"
@@ -201,9 +201,7 @@ export function ScannerSetup() {
             >
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="exchange" className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground">
-                    Exchange
-                  </Label>
+                  <Label htmlFor="exchange" className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground bg-slate-900">EXCHANGE</Label>
                   <Select
                     value={scanConfig.exchange}
                     onValueChange={(value) =>
