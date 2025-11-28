@@ -186,8 +186,8 @@ export function ScannerSetup() {
               titleClassName="hud-text-green"
             >
               <div className="space-y-4">
-                <div className="space-y-2 border-red-600 bg-slate-900">
-                  <Label className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground">SNIPER MODE</Label>
+                <div className="space-y-2">
+                  <Label className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground bg-slate-900">SNIPER MODE</Label>
                   <SniperModeSelector />
                 </div>
               </div>
@@ -223,7 +223,7 @@ export function ScannerSetup() {
                 <div className="h-px bg-border/50" />
 
                 <div className="space-y-2">
-                  <Label htmlFor="leverage" className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                  <Label htmlFor="leverage" className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground bg-slate-900 flex items-center gap-2">
                     Leverage
                     <Badge variant="outline" className="text-xs font-normal text-warning border-warning/40 px-2 py-0.5 font-sans">Risk Multiple</Badge>
                   </Label>
@@ -253,7 +253,7 @@ export function ScannerSetup() {
                 <div className="h-px bg-border/50" />
 
                 <div className="space-y-2">
-                  <Label htmlFor="top-pairs" className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground">Top Pairs to Scan</Label>
+                  <Label htmlFor="top-pairs" className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground bg-slate-900">Top Pairs to Scan</Label>
                   <Input
                     id="top-pairs"
                     type="number"
@@ -279,7 +279,7 @@ export function ScannerSetup() {
               titleClassName="hud-text-amber"
             >
               <div className="space-y-3">
-                <Label className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground">Category Filters</Label>
+                <Label className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground bg-slate-900">Category Filters</Label>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div 
