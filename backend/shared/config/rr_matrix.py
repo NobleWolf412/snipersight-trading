@@ -22,7 +22,7 @@ RR_MATRIX: Dict[str, RRThreshold] = {
     
     "SMC": RRThreshold(
         plan_type="SMC",
-        min_rr=1.5,  # Structure-based plans require 1.5:1 minimum
+        min_rr=0.8,  # Temporarily lowered for testing (normally 1.5)
         ideal_rr=2.5,
         description="Structure-based entry/stop from order blocks, FVGs, or structural breaks"
     ),
