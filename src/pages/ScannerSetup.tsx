@@ -198,7 +198,7 @@ export function ScannerSetup() {
             <HudPanel 
               title="Operational Parameters" 
               subtitle="Configure exchange, leverage, scanning scope, and asset classes"
-              className="holo-border relative"
+              className="relative bg-card"
               titleClassName="hud-text-amber"
             >
               <div className="space-y-4">
