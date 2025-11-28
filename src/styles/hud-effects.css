@@ -202,15 +202,14 @@
    ======================================== */
 
 .target-reticle { position: relative; }
-.target-reticle::before,
-.target-reticle::after {
+.target-reticle::before {
   content: '';
   position: absolute;
   border: 2px solid oklch(0.72 0.15 195 / calc(0.6 * var(--tactical-intensity)));
   pointer-events: none;
+  inset: -12px;
+  border-radius: 50%;
 }
-.target-reticle::before { inset: -12px; border-radius: 50%; }
-.target-reticle::after { inset: -8px; border-radius: 50%; border-style: dashed; }
 
 @media (prefers-reduced-motion: no-preference) {
   .target-reticle::before { animation: reticle-pulse calc(2s / var(--tactical-speed)) ease-in-out infinite; }
