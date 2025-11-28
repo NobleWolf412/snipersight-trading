@@ -51,7 +51,7 @@ export function SniperModeSelector() {
                 className={`cursor-pointer ${
                   isSelected
                     ? `${bgClass} ${borderClass} shadow-xl transform scale-[1.02] border-2`
-                    : `bg-card/40 hover:${bgClass} hover:border-border hover:scale-[1.01] border backdrop-blur-sm`
+                    : `bg-card/40 hover:border-border hover:scale-[1.01] border backdrop-blur-sm`
                 } ${textEffect}`}
               >
                 <div className={`absolute inset-0 bg-gradient-to-br ${isSelected ? `from-${color.replace('text-', '')}/5 via-transparent` : 'from-transparent via-transparent'} to-black/30 pointer-events-none rounded-xl`} />
