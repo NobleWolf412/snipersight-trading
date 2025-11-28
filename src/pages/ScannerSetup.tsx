@@ -197,7 +197,7 @@ export function ScannerSetup() {
 
             <HudPanel 
               title="Operational Parameters" 
-              subtitle="Configure exchange, leverage, and scanning scope"
+              subtitle="Configure exchange, leverage, scanning scope, and asset classes"
               className="tactical-grid holo-border"
               titleClassName="hud-text-amber"
             >
@@ -284,22 +284,12 @@ export function ScannerSetup() {
                     </div>
                   </div>
                 </div>
-              </div>
-            </HudPanel>
 
-            <HudPanel 
-              title="Filters & Asset Categories" 
-              subtitle="Enable or disable asset classes for scanning"
-              className="tactical-grid holo-border"
-              titleClassName="hud-text-amber"
-            >
-              <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div
-                      className="relative z-10 flex items-center justify-between p-4 bg-card rounded-lg border border-border hover:border-accent/50 hover:bg-card/80 transition-all"
-                  >
-                    <div className="flex items-center gap-3 max-w-[70%]">
-                        <span id="majors-label" className="text-base md:text-lg font-bold text-foreground uppercase tracking-wide font-sans">Majors</span>
-                    </div>
+                <div className="h-px bg-border/50" />
+
+                <div className="flex items-center gap-4">
+                  <span id="majors-label" className="w-32 text-right text-base font-mono text-muted-foreground">Majors</span>
+                  <div className="flex-1 flex justify-end">
                     <Switch
                       id="majors"
                       aria-labelledby="majors-label"
@@ -311,16 +301,14 @@ export function ScannerSetup() {
                           categories: { ...scanConfig.categories, majors: checked },
                         })
                       }
-                        className="z-20 shrink-0"
+                      className="shrink-0"
                     />
                   </div>
+                </div>
 
-                  <div
-                      className="relative z-10 flex items-center justify-between p-4 bg-card rounded-lg border border-border hover:border-primary/50 hover:bg-card/80 transition-all"
-                  >
-                    <div className="flex items-center gap-3 max-w-[70%]">
-                        <span id="altcoins-label" className="text-base md:text-lg font-bold text-foreground uppercase tracking-wide font-sans">Altcoins</span>
-                    </div>
+                <div className="flex items-center gap-4">
+                  <span id="altcoins-label" className="w-32 text-right text-base font-mono text-muted-foreground">Altcoins</span>
+                  <div className="flex-1 flex justify-end">
                     <Switch
                       id="altcoins"
                       aria-labelledby="altcoins-label"
@@ -332,21 +320,16 @@ export function ScannerSetup() {
                           categories: { ...scanConfig.categories, altcoins: checked },
                         })
                       }
-                        className="z-20 shrink-0"
+                      className="shrink-0"
                     />
                   </div>
+                </div>
 
-                  <div
-                      className="relative z-10 flex items-center justify-between p-4 bg-card rounded-lg border border-destructive/40 hover:border-destructive/70 hover:bg-card/80 transition-all"
-                  >
-                    <div className="flex items-center gap-3 max-w-[70%]">
-                      <div className="flex flex-col gap-1.5">
-                          <span id="meme-label" className="text-base md:text-lg font-bold text-foreground uppercase tracking-wide font-sans">Meme Mode</span>
-                        <div className="flex items-center gap-1.5">
-                          <Badge variant="outline" className="text-xs bg-red-100 dark:bg-destructive/20 text-red-800 dark:text-destructive border-red-300 dark:border-destructive/50 px-2 py-0.5 font-sans shadow-[0_0_8px_rgba(239,68,68,0.5)] animate-pulse">▼ HIGH VOLATILITY</Badge>
-                        </div>
-                      </div>
-                    </div>
+                <div className="flex items-center gap-4">
+                  <div className="w-32 text-right">
+                    <span id="meme-label" className="text-base font-mono text-muted-foreground">Meme Mode</span>
+                  </div>
+                  <div className="flex-1 flex items-center justify-end gap-3">
                     <Switch
                       id="meme"
                       aria-labelledby="meme-label"
@@ -358,11 +341,17 @@ export function ScannerSetup() {
                           categories: { ...scanConfig.categories, memeMode: checked },
                         })
                       }
-                        className="z-20 shrink-0"
+                      className="shrink-0"
                     />
+                    {scanConfig.categories.memeMode && (
+                      <Badge variant="outline" className="text-xs bg-red-100 dark:bg-destructive/20 text-red-800 dark:text-destructive border-red-300 dark:border-destructive/50 px-2 py-0.5 font-sans">HIGH VOLATILITY</Badge>
+                    )}
                   </div>
+                </div>
               </div>
             </HudPanel>
+
+            {/* Filters & Asset Categories panel removed; toggles moved above */}
           </div>
 
           <div className="lg:col-span-1 flex flex-col px-6">
