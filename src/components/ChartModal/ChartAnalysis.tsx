@@ -19,6 +19,9 @@ export function ChartAnalysis({ result }: ChartAnalysisProps) {
     setIsAnalyzing(true);
     
     try {
+      if (!(window as any).spark || typeof (window as any).spark.llm !== 'function') {
+        throw new Error('Spark is not available in this environment.');
+      }
       const promptText = `You are a professional crypto trader analyzing a ${result.pair} trading setup.
 
 **Market Data:**
@@ -51,11 +54,38 @@ Identify possible obstacles or scenarios that could invalidate the setup.
 
 Be professional, concise, and actionable. Use bullet points where appropriate.`;
 
-      const prompt = window.spark.llmPrompt([promptText], promptText);
-      const response = await window.spark.llm(prompt, 'gpt-4o-mini');
+      const prompt = (window as any).spark.llmPrompt([promptText], promptText);
+      // Try model, and provide a graceful fallback if the selected model is unavailable
+      let response: string | undefined;
+      const models = ['gpt-4o-mini'];
+      let lastError: any = null;
+      for (const model of models) {
+        try {
+          response = await (window as any).spark.llm(prompt, model);
+          break;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+      if (!response) {
+        throw lastError || new Error('Spark LLM call failed');
+      }
       setAnalysis(response);
     } catch (error) {
-      setAnalysis('Failed to generate analysis. Please try again.');
+      console.error('[ChartAnalysis] Spark LLM error:', error);
+      const host = window.location.host;
+      const tips = [
+        'Make sure you are logged into GitHub in this browser.',
+        'If using Codespaces, ensure the frontend port is Public in the Ports tab.',
+        'On mobile browsers, allow cookies/site data for app.github.dev and github.com.',
+      ];
+      setAnalysis(
+        `Failed to generate analysis via Spark.
+        
+Environment: ${host}
+Tips:
+- ${tips.join('\n- ')}`
+      );
     } finally {
       setIsAnalyzing(false);
     }
