@@ -310,7 +310,7 @@ export function ScannerSetup() {
                           categories: { ...scanConfig.categories, majors: checked },
                         })
                       }
-                      className="shrink-0"
+                      className="shrink-0 z-20"
                     />
                   </div>
                 </div>
@@ -328,7 +328,7 @@ export function ScannerSetup() {
                           categories: { ...scanConfig.categories, altcoins: checked },
                         })
                       }
-                      className="shrink-0"
+                      className="shrink-0 z-20"
                     />
                   </div>
                 </div>
@@ -348,7 +348,7 @@ export function ScannerSetup() {
                           categories: { ...scanConfig.categories, memeMode: checked },
                         })
                       }
-                      className="shrink-0"
+                      className="shrink-0 z-20"
                     />
                     {scanConfig.categories.memeMode && (
                       <Badge variant="outline" className="text-xs bg-red-100 dark:bg-destructive/20 text-red-800 dark:text-destructive border-red-300 dark:border-destructive/50 px-2 py-0.5 font-sans">HIGH VOLATILITY</Badge>
