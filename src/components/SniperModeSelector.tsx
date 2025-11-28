@@ -48,13 +48,15 @@ export function SniperModeSelector() {
                     <ModeIcon size={24} weight="bold" className={color} />
                   </div>
                 }
-                className={`cursor-pointer ${
-                  isSelected
-                    ? `${bgClass} ${borderClass} shadow-xl transform scale-[1.02] border-2`
-                    : `bg-card/40 hover:border-border hover:scale-[1.01] border backdrop-blur-sm`
-                } ${textEffect}`}
+                className={[
+                  'relative overflow-hidden rounded-xl transition-transform duration-200 cursor-pointer',
+                  isSelected ? 'scale-[1.02] ring-2 ring-white/20 shadow-2xl' : 'ring-1 ring-white/10 hover:scale-[1.01] shadow-lg',
+                  bgClass,
+                  borderClass,
+                  textEffect,
+                ].join(' ')}
               >
-                <div className={`absolute inset-0 bg-gradient-to-br ${isSelected ? `from-${color.replace('text-', '')}/5 via-transparent` : 'from-transparent via-transparent'} to-black/30 pointer-events-none rounded-xl`} />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-transparent via-black/0 to-black/10 rounded-xl" />
                 
                 <div className="flex items-end justify-between">
                   <div className="flex-1" />
@@ -118,40 +120,40 @@ function getModeStyle(modeName: string) {
       icon: Binoculars,
       color: 'text-accent',
       glowClass: 'bg-accent/30',
-      borderClass: 'border-accent/60',
-      bgClass: 'bg-accent/20',
+      borderClass: 'ring-cyan-300/60',
+      bgClass: 'bg-cyan-600/45',
       textEffect: 'drop-shadow-[0_0_8px_rgba(101,186,195,0.5)]',
     },
     recon: {
       icon: Eye,
       color: 'text-primary',
       glowClass: 'bg-primary/30',
-      borderClass: 'border-primary/60',
-      bgClass: 'bg-primary/20',
+      borderClass: 'ring-emerald-300/60',
+      bgClass: 'bg-emerald-600/45',
       textEffect: 'drop-shadow-[0_0_8px_rgba(114,195,132,0.5)]',
     },
     strike: {
       icon: Lightning,
       color: 'text-warning',
       glowClass: 'bg-warning/30',
-      borderClass: 'border-warning/60',
-      bgClass: 'bg-warning/25',
-      textEffect: 'drop-shadow-[0_0_10px_rgba(224,186,90,0.6)]',
+      borderClass: 'ring-amber-300/60',
+      bgClass: 'bg-amber-600/50',
+      textEffect: 'drop-shadow-[0_0_10px_rgba(224,186,90,0.6)] animate-pulse',
     },
     surgical: {
       icon: Crosshair,
       color: 'text-success',
       glowClass: 'bg-success/30',
-      borderClass: 'border-success/60',
-      bgClass: 'bg-success/20',
+      borderClass: 'ring-green-300/60',
+      bgClass: 'bg-green-600/45',
       textEffect: 'drop-shadow-[0_0_8px_rgba(114,195,132,0.5)] tracking-widest',
     },
     ghost: {
       icon: Skull,
       color: 'text-muted-foreground',
       glowClass: 'bg-muted/30',
-      borderClass: 'border-muted/60',
-      bgClass: 'bg-slate-700/30',
+      borderClass: 'ring-cyan-400/60',
+      bgClass: 'bg-cyan-700/35',
       textEffect: 'drop-shadow-[0_0_6px_rgba(200,200,200,0.3)] opacity-80',
     },
   };
