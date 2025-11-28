@@ -197,7 +197,7 @@ export function ScannerSetup() {
 
             <HudPanel 
               title="Operational Parameters" 
-              subtitle="Configure exchange, leverage, scanning scope, and asset classes"
+              subtitle="Configure exchange, leverage, and scanning scope"
               className="relative bg-card"
               unstyled
               titleClassName="hud-text-amber"
@@ -286,8 +286,16 @@ export function ScannerSetup() {
                   </div>
                 </div>
 
-                <div className="h-px bg-border/50" />
+              </div>
+            </HudPanel>
 
+            {/* Asset toggles in a plain section to avoid any overlays */}
+            <div className="relative rounded-lg border border-border bg-card p-6">
+              <div className="mb-3">
+                <h3 className="hud-headline text-lg tracking-[0.14em] text-foreground">Asset Categories</h3>
+                <p className="text-muted-foreground">Enable or disable asset classes for scanning</p>
+              </div>
+              <div className="space-y-4">
                 <div className="flex items-center gap-4">
                   <span id="majors-label" className="w-32 text-right text-base font-mono text-muted-foreground">Majors</span>
                   <div className="flex-1 flex justify-end">
@@ -306,7 +314,6 @@ export function ScannerSetup() {
                     />
                   </div>
                 </div>
-
                 <div className="flex items-center gap-4">
                   <span id="altcoins-label" className="w-32 text-right text-base font-mono text-muted-foreground">Altcoins</span>
                   <div className="flex-1 flex justify-end">
@@ -325,7 +332,6 @@ export function ScannerSetup() {
                     />
                   </div>
                 </div>
-
                 <div className="flex items-center gap-4">
                   <div className="w-32 text-right">
                     <span id="meme-label" className="text-base font-mono text-muted-foreground">Meme Mode</span>
@@ -350,7 +356,7 @@ export function ScannerSetup() {
                   </div>
                 </div>
               </div>
-            </HudPanel>
+            </div>
 
             {/* Filters & Asset Categories panel removed; toggles moved above */}
           </div>
