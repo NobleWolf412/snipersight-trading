@@ -5,6 +5,7 @@ Provides REST API endpoints for the frontend UI.
 """
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -181,14 +182,8 @@ orchestrator = Orchestrator(
 )
 
 
-@app.get("/")
-async def root():
-    """Health check endpoint."""
-    return {
-        "status": "online",
-        "version": "1.0.0",
-        "message": "SniperSight API is running"
-    }
+# Serve built frontend at root. Ensure `npm run build` created `dist/`.
+app.mount("/", StaticFiles(directory="dist", html=True), name="frontend")
 
 
 @app.get("/api/health")
@@ -1341,5 +1336,5 @@ async def get_telemetry_analytics(
 
 if __name__ == "__main__":
     import uvicorn
-    # Backend runs on port 8000, frontend (Vite) on port 5000
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    # Serve API + frontend on port 5000
+    uvicorn.run(app, host="0.0.0.0", port=5000, log_level="info")

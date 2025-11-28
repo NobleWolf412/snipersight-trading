@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { TopBar } from '@/components/TopBar/TopBar';
 import { useNavigate } from 'react-router-dom';
 import { useScanner } from '@/context/ScannerContext';
 import { Button } from '@/components/ui/button';
@@ -174,8 +175,13 @@ export function ScannerSetup() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/95 backdrop-blur-sm">
+        <TopBar />
+      </header>
+      <main className="p-8">
+        <div className="fixed inset-0 tactical-grid opacity-20 pointer-events-none" aria-hidden="true" />
+        <div className="max-w-6xl mx-auto space-y-8">
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold hud-headline hud-text-green">SCANNER SETUP</h1>
           <p className="hud-terminal text-primary/80">Configure your scanner parameters</p>
@@ -184,13 +190,13 @@ export function ScannerSetup() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             {/* Scan Mode */}
-            <div className="border border-border rounded-lg p-6 bg-card">
+            <div className="rounded-2xl p-6 md:p-8 backdrop-blur-sm card-3d">
               <h2 className="text-xl font-semibold mb-4 hud-headline hud-text-green">SCAN MODE & PROFILE</h2>
               <SniperModeSelector />
             </div>
 
             {/* Operational Parameters */}
-            <div className="border border-border rounded-lg p-6 bg-card">
+            <div className="rounded-2xl p-6 md:p-8 backdrop-blur-sm card-3d">
               <h2 className="text-xl font-semibold mb-4 hud-headline hud-text-green">OPERATIONAL PARAMETERS</h2>
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
@@ -278,7 +284,7 @@ export function ScannerSetup() {
             </div>
 
             {/* Asset Categories */}
-            <div className="border border-border rounded-lg p-6 bg-card">
+            <div className="rounded-2xl p-6 md:p-8 backdrop-blur-sm card-3d">
               <h2 className="text-xl font-semibold mb-2 hud-headline hud-text-green">ASSET CATEGORIES</h2>
               <p className="hud-terminal text-primary/80 mb-4">Enable or disable asset classes for scanning</p>
               <div className="space-y-3">
@@ -331,7 +337,7 @@ export function ScannerSetup() {
           </div>
 
           {/* Console */}
-          <div className="border border-border rounded-lg p-6 bg-card mb-6 relative z-0">
+          <div className="rounded-2xl p-6 md:p-8 backdrop-blur-sm card-3d mb-6 relative z-0">
             <h2 className="text-xl font-semibold mb-4 hud-headline hud-text-green">SCANNER CONSOLE</h2>
             <ScannerConsole
               isScanning={isScanning}
@@ -344,7 +350,7 @@ export function ScannerSetup() {
         <Button
           onClick={handleArmScanner}
           disabled={isScanning || scanConfig.timeframes.length === 0}
-          className="w-full h-14 text-lg relative z-10"
+          className="w-full h-14 text-lg relative z-10 btn-tactical-scanner"
           size="lg"
         >
           {isScanning ? (
@@ -371,7 +377,8 @@ export function ScannerSetup() {
             />
           </div>
         )}
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

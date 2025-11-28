@@ -4,6 +4,8 @@ import { useTelemetry } from '@/hooks/useTelemetry';
 import { TopBar } from '@/components/TopBar/TopBar';
 import { Crosshair, Target, ChartLine, Compass } from '@phosphor-icons/react';
 import { Link } from 'react-router-dom';
+// Default logo path; update if your file name differs
+import sniperLogo from '@/assets/images/SniperLogo.png';
 
 export function Landing() {
   const { system } = useTelemetry();
@@ -30,10 +32,14 @@ export function Landing() {
 
               {/* Hero title and subtitle */}
               <div className="space-y-6 text-center">
-                <div className="flex items-center justify-center gap-4">
-                  <h1 className="hud-headline hud-text-green text-5xl md:text-7xl font-bold tracking-[0.16em] scan-pulse-slow glitch-text">SNIPERSIGHT</h1>
+                <div className="flex items-center justify-center">
+                  <img
+                    src={sniperLogo}
+                    alt="SniperSight Logo"
+                    className="h-14 md:h-20 w-auto drop-shadow-[0_0_14px_rgba(0,255,170,0.45)]"
+                  />
                 </div>
-                <p className="text-base md:text-lg text-slate-300 max-w-3xl leading-relaxed mx-auto px-4">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
+                <p className="hud-terminal text-primary/80 text-base md:text-lg max-w-3xl leading-relaxed mx-auto px-4">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
               </div>
             </div>
           </div>
