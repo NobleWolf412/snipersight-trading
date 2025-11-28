@@ -116,10 +116,10 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
   return (
     <div className={cn("flex flex-col h-full border border-border rounded-md bg-card overflow-hidden", className)}>
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
-        <Terminal size={18} className="text-primary" />
+        <Terminal size={18} className="text-primary" aria-hidden="true" focusable="false" />
         <span className="font-mono text-sm font-medium text-foreground">Scanner Console</span>
         {isScanning && (
-          <Lightning size={16} className="text-warning animate-pulse ml-auto" />
+          <Lightning size={16} className="text-warning animate-pulse ml-auto" aria-hidden="true" focusable="false" />
         )}
       </div>
       
@@ -143,7 +143,7 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
             </div>
           ))
         ) : (
-          <div className="text-muted-foreground italic">
+          <div className="text-slate-600 dark:text-muted-foreground italic">
             Awaiting scan initialization...
           </div>
         )}

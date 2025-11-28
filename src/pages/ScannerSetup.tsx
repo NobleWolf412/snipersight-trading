@@ -180,8 +180,8 @@ export function ScannerSetup() {
     <PageShell>
       <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 lg:py-8 space-y-6 lg:space-y-8">
         <div className="text-center space-y-3 mb-8">
-          <h1 className="hud-headline hud-text-green text-2xl md:text-4xl lg:text-5xl tracking-[0.2em] px-4 leading-relaxed py-2">SCANNER COMMAND CENTER</h1>
-          <p className="text-lg md:text-xl lg:text-2xl text-slate-400 max-w-2xl mx-auto px-4">Configure your sniper profile, exchange, and filters, then arm the scanner to search for high-confluence setups.</p>
+          <h1 className="hud-headline text-emerald-700 dark:text-emerald-300 text-2xl md:text-4xl lg:text-5xl tracking-[0.2em] px-4 leading-relaxed py-2 drop-shadow-sm">SCANNER COMMAND CENTER</h1>
+          <p className="text-lg md:text-xl lg:text-2xl text-slate-600 dark:text-slate-300 max-w-2xl mx-auto px-4">Configure your sniper profile, exchange, and filters, then arm the scanner to search for high-confluence setups.</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
@@ -203,7 +203,7 @@ export function ScannerSetup() {
             >
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
-                  <span className="w-32 text-right text-base font-mono text-muted-foreground">Exchange</span>
+                  <span id="exchange-label" className="w-32 text-right text-base font-mono text-muted-foreground">Exchange</span>
                   <div className="flex-1 flex justify-end">
                     <Select
                       value={scanConfig.exchange}
@@ -211,8 +211,8 @@ export function ScannerSetup() {
                         setScanConfig({ ...scanConfig, exchange: value })
                       }
                     >
-                      <SelectTrigger id="exchange" className="bg-background/60 border-border/60 hover:border-primary/50 transition-colors h-12 text-base font-mono">
-                        <SelectValue />
+                      <SelectTrigger id="exchange" aria-label="Select Exchange" aria-labelledby="exchange-label" className="bg-background border-border hover:border-primary/50 transition-colors h-12 text-base font-mono">
+                        <SelectValue placeholder="Exchange" />
                       </SelectTrigger>
                       <SelectContent className="font-mono">
                         <SelectItem value="phemex" className="text-base font-mono">⚡ Phemex (Fast, No Geo-Block)</SelectItem>
@@ -227,7 +227,7 @@ export function ScannerSetup() {
                 <div className="h-px bg-border/50" />
 
                 <div className="flex items-center gap-4">
-                  <span className="w-32 text-right text-base font-mono text-muted-foreground">Leverage</span>
+                  <span id="leverage-label" className="w-32 text-right text-base font-mono text-muted-foreground">Leverage</span>
                   <div className="flex-1 flex justify-end">
                     <Select
                       value={(scanConfig.leverage ?? 1).toString()}
@@ -235,8 +235,8 @@ export function ScannerSetup() {
                         setScanConfig({ ...scanConfig, leverage: parseInt(value) })
                       }
                     >
-                      <SelectTrigger id="leverage" className="bg-background/60 border-border/60 hover:border-primary/50 transition-colors h-12 text-base font-mono">
-                        <SelectValue />
+                      <SelectTrigger id="leverage" aria-label="Select Leverage" aria-labelledby="leverage-label" className="bg-background border-border hover:border-primary/50 transition-colors h-12 text-base font-mono">
+                        <SelectValue placeholder="Leverage" />
                       </SelectTrigger>
                       <SelectContent className="font-mono">
                         <SelectItem value="1" className="text-base font-mono">1x (No Leverage)</SelectItem>
@@ -256,11 +256,12 @@ export function ScannerSetup() {
                 <div className="h-px bg-border/50" />
 
                 <div className="flex items-center gap-4">
-                  <span className="w-32 text-right text-base font-mono text-muted-foreground">Pairs to Scan</span>
+                  <label htmlFor="top-pairs" id="top-pairs-label" className="w-32 text-right text-base font-mono text-muted-foreground">Pairs to Scan</label>
                   <div className="flex-1 flex justify-end">
                     <div>
                       <Input
                         id="top-pairs"
+                        aria-labelledby="top-pairs-label"
                         type="number"
                         min="1"
                         max="100"
@@ -275,7 +276,7 @@ export function ScannerSetup() {
                             setScanConfig({ ...scanConfig, topPairs: num });
                           }
                         }}
-                        className="bg-background/60 border-border/60 hover:border-primary/50 focus:border-primary transition-colors h-12 font-mono text-lg w-[4ch] max-w-[4ch]"
+                        className="bg-background border-border hover:border-primary/50 focus:border-primary transition-colors h-12 font-mono text-lg w-20 max-w-24"
                       />
                       <p className="text-sm text-muted-foreground mt-2">
                         Higher values scan more symbols but take longer
@@ -294,14 +295,15 @@ export function ScannerSetup() {
             >
               <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div
-                    className="relative z-10 flex items-center justify-between p-4 bg-background/40 rounded-lg border border-border/60 hover:border-accent/50 hover:bg-background/60 transition-all"
+                      className="relative z-10 flex items-center justify-between p-4 bg-card rounded-lg border border-border hover:border-accent/50 hover:bg-card/80 transition-all"
                   >
-                    <div className="flex items-center gap-3">
-                      <span id="majors-label" className="text-base md:text-lg font-bold text-foreground uppercase tracking-wide font-sans">Majors</span>
+                    <div className="flex items-center gap-3 max-w-[70%]">
+                        <span id="majors-label" className="text-base md:text-lg font-bold text-foreground uppercase tracking-wide font-sans">Majors</span>
                     </div>
                     <Switch
                       id="majors"
                       aria-labelledby="majors-label"
+                      aria-label="Toggle Majors"
                       checked={scanConfig.categories.majors}
                       onCheckedChange={(checked) =>
                         setScanConfig({
@@ -309,19 +311,20 @@ export function ScannerSetup() {
                           categories: { ...scanConfig.categories, majors: checked },
                         })
                       }
-                      className="data-[state=checked]:bg-accent"
+                        className="z-20 shrink-0"
                     />
                   </div>
 
                   <div
-                    className="relative z-10 flex items-center justify-between p-4 bg-background/40 rounded-lg border border-border/60 hover:border-primary/50 hover:bg-background/60 transition-all"
+                      className="relative z-10 flex items-center justify-between p-4 bg-card rounded-lg border border-border hover:border-primary/50 hover:bg-card/80 transition-all"
                   >
-                    <div className="flex items-center gap-3">
-                      <span id="altcoins-label" className="text-base md:text-lg font-bold text-foreground uppercase tracking-wide font-sans">Altcoins</span>
+                    <div className="flex items-center gap-3 max-w-[70%]">
+                        <span id="altcoins-label" className="text-base md:text-lg font-bold text-foreground uppercase tracking-wide font-sans">Altcoins</span>
                     </div>
                     <Switch
                       id="altcoins"
                       aria-labelledby="altcoins-label"
+                      aria-label="Toggle Altcoins"
                       checked={scanConfig.categories.altcoins}
                       onCheckedChange={(checked) =>
                         setScanConfig({
@@ -329,24 +332,25 @@ export function ScannerSetup() {
                           categories: { ...scanConfig.categories, altcoins: checked },
                         })
                       }
-                      className="data-[state=checked]:bg-primary"
+                        className="z-20 shrink-0"
                     />
                   </div>
 
                   <div
-                    className="relative z-10 flex items-center justify-between p-4 bg-background/40 rounded-lg border border-destructive/40 hover:border-destructive/70 hover:bg-background/60 transition-all"
+                      className="relative z-10 flex items-center justify-between p-4 bg-card rounded-lg border border-destructive/40 hover:border-destructive/70 hover:bg-card/80 transition-all"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 max-w-[70%]">
                       <div className="flex flex-col gap-1.5">
-                        <span id="meme-label" className="text-base md:text-lg font-bold text-foreground uppercase tracking-wide font-sans">Meme Mode</span>
+                          <span id="meme-label" className="text-base md:text-lg font-bold text-foreground uppercase tracking-wide font-sans">Meme Mode</span>
                         <div className="flex items-center gap-1.5">
-                          <Badge variant="outline" className="text-xs bg-destructive/20 text-destructive border-destructive/50 px-2 py-0.5 font-sans shadow-[0_0_8px_rgba(239,68,68,0.5)] animate-pulse">▼ HIGH VOLATILITY</Badge>
+                          <Badge variant="outline" className="text-xs bg-red-100 dark:bg-destructive/20 text-red-800 dark:text-destructive border-red-300 dark:border-destructive/50 px-2 py-0.5 font-sans shadow-[0_0_8px_rgba(239,68,68,0.5)] animate-pulse">▼ HIGH VOLATILITY</Badge>
                         </div>
                       </div>
                     </div>
                     <Switch
                       id="meme"
                       aria-labelledby="meme-label"
+                      aria-label="Toggle Meme Mode"
                       checked={scanConfig.categories.memeMode}
                       onCheckedChange={(checked) =>
                         setScanConfig({
@@ -354,7 +358,7 @@ export function ScannerSetup() {
                           categories: { ...scanConfig.categories, memeMode: checked },
                         })
                       }
-                      className="data-[state=checked]:bg-destructive"
+                        className="z-20 shrink-0"
                     />
                   </div>
               </div>
