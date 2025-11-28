@@ -214,14 +214,12 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .target-reticle::before { animation: reticle-pulse calc(2s / var(--tactical-speed)) ease-in-out infinite; }
-  .target-reticle::after { animation: reticle-rotate calc(8s / var(--tactical-speed)) linear infinite; }
 }
 
 @keyframes reticle-pulse {
   0%, 100% { transform: scale(1); opacity: calc(0.6 * var(--tactical-intensity)); }
   50% { transform: scale(1.1); opacity: calc(0.3 * var(--tactical-intensity)); }
 }
-@keyframes reticle-rotate { to { transform: rotate(360deg); } }
 
 /* ========================================
    RADAR SWEEP EFFECT
@@ -241,8 +239,7 @@
   border-radius: 50%;
   pointer-events: none;
 }
-@media (prefers-reduced-motion: no-preference) { .radar-sweep::before { animation: radar-spin calc(4s / var(--tactical-speed)) linear infinite; } }
-@keyframes radar-spin { to { transform: rotate(360deg); } }
+
 
 /* ========================================
    HOLOGRAPHIC BORDER
@@ -448,7 +445,6 @@
   inset: 0;
   background: radial-gradient(circle, oklch(0.72 0.15 195 / 0.08) 0%, transparent 60%);
   mask-image: radial-gradient(circle, black 40%, transparent 60%);
-  animation: radar-spin calc(18s / var(--tactical-speed)) linear infinite;
   transform-origin: center;
   pointer-events: none;
 }
