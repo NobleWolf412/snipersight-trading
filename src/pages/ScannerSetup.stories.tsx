@@ -26,7 +26,17 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const Default: Story = {
+  play: async () => {
+    // Log all interactions to browser console
+    window.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('button') || target.closest('[role="button"]')) {
+        console.log('[Storybook Action] clicked:', target.textContent?.trim() || target.getAttribute('aria-label') || 'unknown element');
+      }
+    });
+  },
+};
 
 export const WithWalletConnected: Story = {
   play: async () => {

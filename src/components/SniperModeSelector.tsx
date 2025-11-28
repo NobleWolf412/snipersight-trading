@@ -17,15 +17,18 @@ export function SniperModeSelector() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4">
-        {scannerModes.map((mode) => {
+    <div className="flex flex-col gap-5 w-full">
+      {scannerModes.map((mode) => {
           const isSelected = selectedMode?.name === mode.name;
           const { icon: ModeIcon, color, glowClass, borderClass, bgClass, textEffect } = getModeStyle(mode.name);
 
           return (
             <div
               key={mode.name}
+              role="button"
+              tabIndex={0}
+              aria-label={`Select ${mode.name} sniper mode`}
+              aria-pressed={isSelected}
               className="relative group"
               onClick={() => {
                 setSelectedMode(mode);
@@ -35,22 +38,33 @@ export function SniperModeSelector() {
                   timeframes: mode.timeframes,
                 });
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setSelectedMode(mode);
+                  setScanConfig({
+                    ...scanConfig,
+                    sniperMode: mode.name as any,
+                    timeframes: mode.timeframes,
+                  });
+                }
+              }}
             >
               {isSelected && (
-                <div className={`absolute -inset-[2px] ${glowClass} rounded-xl blur-md transition-all duration-300`} />
+                <div className={`absolute -inset-[1px] ${glowClass} rounded-xl blur-sm transition-all duration-300`} />
               )}
               <TacticalCard
                 title={mode.name.toUpperCase()}
                 description={mode.description}
                 selected={isSelected}
                 icon={
-                  <div className={`w-12 h-12 rounded-lg ${bgClass} flex items-center justify-center shadow-lg ${isSelected ? 'scale-110 shadow-xl' : 'group-hover:scale-105'} transition-all`}>
-                    <ModeIcon size={24} weight="bold" className={color} />
+                  <div className={`w-12 h-12 rounded-lg ${bgClass} flex items-center justify-center shadow-lg ${isSelected ? 'scale-110 shadow-xl' : 'group-hover:scale-105'} transition-all duration-300`}>
+                    <ModeIcon size={isSelected ? 26 : 24} weight="bold" className={color} />
                   </div>
                 }
                 className={[
-                  'relative overflow-hidden rounded-xl transition-transform duration-200 cursor-pointer',
-                  isSelected ? 'scale-[1.02] ring-2 ring-white/20 shadow-2xl' : 'ring-1 ring-white/10 hover:scale-[1.01] shadow-lg',
+                  'relative overflow-visible rounded-xl transition-all duration-300 cursor-pointer',
+                  isSelected ? 'ring-2 ring-white/20 shadow-2xl' : 'ring-1 ring-white/10 hover:ring-white/15 shadow-lg',
                   bgClass,
                   borderClass,
                   textEffect,
@@ -58,7 +72,7 @@ export function SniperModeSelector() {
               >
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-transparent via-black/0 to-black/10 rounded-xl" />
                 
-                <div className="flex items-end justify-between">
+                <div className="flex items-end justify-between mb-3">
                   <div className="flex-1" />
                   {isSelected && (
                     <Badge className={`${bgClass} ${color} border-none shadow-md animate-in zoom-in duration-200`}>
@@ -70,26 +84,26 @@ export function SniperModeSelector() {
 
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/50">
                   <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground uppercase tracking-wide">Timeframes</div>
-                    <div className="hud-terminal text-emerald-200 text-sm">
+                    <div className={`text-xs md:text-sm text-muted-foreground uppercase tracking-wide ${isSelected ? 'font-bold' : ''}`}>Timeframes</div>
+                    <div className={`hud-terminal text-emerald-200 ${isSelected ? 'text-base md:text-lg font-bold' : 'text-sm md:text-base'} transition-all duration-300`}>
                       {mode.timeframes.join(' · ')}
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground uppercase tracking-wide">Min Confluence</div>
-                    <div className={`hud-terminal text-sm ${color}`}>
+                    <div className={`text-xs md:text-sm text-muted-foreground uppercase tracking-wide ${isSelected ? 'font-bold' : ''}`}>Min Confluence</div>
+                    <div className={`hud-terminal ${isSelected ? 'text-base md:text-lg font-bold' : 'text-sm md:text-base'} ${color} transition-all duration-300`}>
                       {mode.min_confluence_score}%
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground uppercase tracking-wide">Profile</div>
-                    <div className="hud-terminal text-emerald-200 text-sm capitalize">
+                    <div className={`text-xs md:text-sm text-muted-foreground uppercase tracking-wide ${isSelected ? 'font-bold' : ''}`}>Profile</div>
+                    <div className={`hud-terminal text-emerald-200 ${isSelected ? 'text-base md:text-lg font-bold' : 'text-sm md:text-base'} capitalize transition-all duration-300`}>
                       {mode.profile.replace(/_/g, ' ')}
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground uppercase tracking-wide">Scope</div>
-                    <div className="hud-terminal text-emerald-200 text-sm">
+                    <div className={`text-xs md:text-sm text-muted-foreground uppercase tracking-wide ${isSelected ? 'font-bold' : ''}`}>Scope</div>
+                    <div className={`hud-terminal text-emerald-200 ${isSelected ? 'text-base md:text-lg font-bold' : 'text-sm md:text-base'} transition-all duration-300`}>
                       {mode.timeframes.length} TF
                     </div>
                   </div>
@@ -102,7 +116,6 @@ export function SniperModeSelector() {
             </div>
           );
         })}
-      </div>
     </div>
   );
 }
@@ -138,7 +151,7 @@ function getModeStyle(modeName: string) {
       glowClass: 'bg-warning/30',
       borderClass: 'ring-amber-300/60',
       bgClass: 'bg-amber-600/50',
-      textEffect: 'drop-shadow-[0_0_10px_rgba(224,186,90,0.6)] animate-pulse',
+      textEffect: 'drop-shadow-[0_0_10px_rgba(224,186,90,0.6)]',
     },
     surgical: {
       icon: Crosshair,

@@ -114,7 +114,7 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
   }, [logs]);
 
   return (
-    <div className={cn("flex flex-col border border-border rounded-md bg-card overflow-hidden", className)}>
+    <div className={cn("flex flex-col h-full border border-border rounded-md bg-card overflow-hidden", className)}>
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
         <Terminal size={18} className="text-primary" />
         <span className="font-mono text-sm font-medium text-foreground">Scanner Console</span>
@@ -125,7 +125,7 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
       
       <div 
         ref={scrollRef}
-        className="flex-1 p-4 font-mono text-xs space-y-1 overflow-y-auto max-h-64 bg-card/50"
+        className="flex-1 p-4 font-mono text-xs space-y-1 overflow-y-auto bg-card/50"
       >
         {logs.length > 0 ? (
           logs.map((log, i) => (

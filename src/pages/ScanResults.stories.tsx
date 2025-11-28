@@ -11,15 +11,33 @@ const meta = {
     layout: 'fullscreen',
   },
   decorators: [
-    (Story) => (
-      <BrowserRouter>
-        <WalletProvider>
-          <ScannerProvider>
-            <Story />
-          </ScannerProvider>
-        </WalletProvider>
-      </BrowserRouter>
-    ),
+    (Story) => {
+      // Inject mock data into localStorage before rendering
+      localStorage.setItem('scan-results', JSON.stringify(mockScanResults));
+      localStorage.setItem('scan-metadata', JSON.stringify({
+        timestamp: new Date().toISOString(),
+        mode: 'recon',
+        scanned: 10,
+        total: 2,
+      }));
+      
+      // Mock ticker data for LiveTicker component
+      localStorage.setItem('ticker-prices', JSON.stringify({
+        'BTC/USDT': { price: 86750, change24h: 2.5 },
+        'ETH/USDT': { price: 2875, change24h: 1.8 },
+        'SOL/USDT': { price: 145, change24h: -0.5 },
+      }));
+      
+      return (
+        <BrowserRouter>
+          <WalletProvider>
+            <ScannerProvider>
+              <Story />
+            </ScannerProvider>
+          </WalletProvider>
+        </BrowserRouter>
+      );
+    },
   ],
 } satisfies Meta<typeof ScanResults>;
 
@@ -32,6 +50,8 @@ const mockScanResults = [
     symbol: 'BTC/USDT',
     direction: 'LONG',
     score: 87.5,
+    confidenceScore: 87.5,
+    riskScore: 7.8,
     entry_near: 86500,
     entry_far: 87000,
     stop_loss: 85200,
@@ -56,6 +76,8 @@ const mockScanResults = [
     symbol: 'ETH/USDT',
     direction: 'LONG',
     score: 72.3,
+    confidenceScore: 72.3,
+    riskScore: 6.2,
     entry_near: 2850,
     entry_far: 2900,
     stop_loss: 2780,
@@ -78,23 +100,15 @@ const mockScanResults = [
   },
 ];
 
-export const WithResults: Story = {
-  play: async () => {
-    // Inject mock data into localStorage
-    localStorage.setItem('scan-results', JSON.stringify(mockScanResults));
-    localStorage.setItem('scan-metadata', JSON.stringify({
-      timestamp: new Date().toISOString(),
-      mode: 'recon',
-      scanned: 10,
-      total: 2,
-    }));
-  },
-};
+export const WithResults: Story = {};
 
 export const NoResults: Story = {
-  play: async () => {
-    // Clear localStorage
-    localStorage.removeItem('scan-results');
-    localStorage.removeItem('scan-metadata');
-  },
+  decorators: [
+    (Story) => {
+      // Clear localStorage for this story
+      localStorage.removeItem('scan-results');
+      localStorage.removeItem('scan-metadata');
+      return <Story />;
+    },
+  ],
 };

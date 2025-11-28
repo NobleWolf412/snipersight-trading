@@ -51,10 +51,10 @@ const TickerItem = memo(({ symbol, price, changePercent24h }: { symbol: string; 
     prevPriceRef.current = price;
   }, [price]);
 
-  if (!price) {
+  if (!price || !symbol) {
     return (
       <div className="flex items-center gap-3 px-6 min-w-[220px]">
-        <div className="text-sm font-bold text-muted-foreground">{symbol.split('/')[0]}</div>
+        <div className="text-sm font-bold text-muted-foreground">{symbol?.split('/')[0] || 'Loading...'}</div>
         <div className="h-4 w-20 bg-muted/30 animate-pulse rounded" />
       </div>
     );

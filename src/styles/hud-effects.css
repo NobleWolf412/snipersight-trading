@@ -345,7 +345,6 @@
   backdrop-filter: blur(8px);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  overflow: hidden;
 }
 .command-panel:hover {
   border-color: oklch(0.60 0.18 145 / 0.5);
@@ -358,6 +357,7 @@
   background-image: linear-gradient(oklch(0.60 0.18 145 / calc(0.015 * var(--tactical-intensity))) 1px, transparent 1px), linear-gradient(90deg, oklch(0.60 0.18 145 / calc(0.015 * var(--tactical-intensity))) 1px, transparent 1px);
   background-size: 20px 20px;
   pointer-events: none;
+  z-index: -1;
 }
 
 .tactical-card {
