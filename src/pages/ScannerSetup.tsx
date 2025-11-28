@@ -311,7 +311,7 @@ export function ScannerSetup() {
                           categories: { ...scanConfig.categories, majors: checked },
                         })
                       }
-                      className="shrink-0 z-20"
+                       className="shrink-0 z-20 h-7 w-12"
                       />
                     </div>
                   </div>
@@ -331,7 +331,7 @@ export function ScannerSetup() {
                           categories: { ...scanConfig.categories, altcoins: checked },
                         })
                       }
-                      className="shrink-0 z-20"
+                       className="shrink-0 z-20 h-7 w-12"
                       />
                     </div>
                   </div>
@@ -353,7 +353,7 @@ export function ScannerSetup() {
                           categories: { ...scanConfig.categories, memeMode: checked },
                         })
                       }
-                      className="shrink-0 z-20"
+                       className="shrink-0 z-20 h-7 w-12"
                       />
                     </div>
                     {scanConfig.categories.memeMode && (
