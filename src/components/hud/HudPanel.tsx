@@ -6,11 +6,12 @@ interface HudPanelProps {
   className?: string;
   titleClassName?: string;
   children: React.ReactNode;
+  unstyled?: boolean;
 }
 
-export function HudPanel({ title, subtitle, className, titleClassName, children }: HudPanelProps) {
+export function HudPanel({ title, subtitle, className, titleClassName, children, unstyled = false }: HudPanelProps) {
   return (
-    <div className={cn("command-panel relative z-[1] flex flex-col", className)}>
+    <div className={cn(unstyled ? "relative z-[1] flex flex-col" : "command-panel relative z-[1] flex flex-col", className)}>
       {(title || subtitle) && (
         <div className="relative z-10 px-6 py-5 border-b border-border/50 flex-shrink-0">
           {title && (

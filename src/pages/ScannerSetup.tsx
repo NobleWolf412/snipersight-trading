@@ -199,6 +199,7 @@ export function ScannerSetup() {
               title="Operational Parameters" 
               subtitle="Configure exchange, leverage, scanning scope, and asset classes"
               className="relative bg-card"
+              unstyled
               titleClassName="hud-text-amber"
             >
               <div className="space-y-4">
