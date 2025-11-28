@@ -879,8 +879,13 @@ async def _execute_scan_job(job: ScanJob):
         symbols = symbols[:params["limit"]]
         job.total = len(symbols)
         
-        # Run scan
-        trade_plans, rejection_summary = orchestrator.scan(symbols)
+        # Run scan in thread pool to avoid blocking event loop
+        loop = asyncio.get_event_loop()
+        trade_plans, rejection_summary = await loop.run_in_executor(
+            None,  # Uses default ThreadPoolExecutor
+            orchestrator.scan,
+            symbols
+        )
         
         # Transform results
         signals = []

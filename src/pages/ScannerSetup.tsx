@@ -400,24 +400,23 @@ export function ScannerSetup() {
           <p className="text-muted-foreground text-xs">Higher timeframes provide better confluence but require more data processing time.</p>
         </MissionBrief>
 
-        <TargetReticleOverlay className="relative group pt-2">
-          <div className="absolute inset-0 bg-gradient-to-r from-accent/20 via-primary/30 to-accent/20 rounded-xl blur-xl group-hover:blur-2xl transition-all duration-300 opacity-75" />
+        <TargetReticleOverlay className="relative pt-2">
           <Button
             onClick={handleArmScanner}
             disabled={isScanning || scanConfig.timeframes.length === 0}
-            className="relative w-full h-14 md:h-16 text-base md:text-lg font-bold disabled:opacity-50 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all uppercase tracking-widest"
+            className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-lg font-bold btn-tactical-scanner w-full text-base md:text-lg disabled:opacity-50"
             size="lg"
           >
             {isScanning ? (
               <>
-                <Lightning size={24} className="animate-pulse" />
+                <Lightning size={24} />
                 <span className="mx-2">
                   {scanProgress && scanProgress.total > 0 
                     ? `Scanning ${scanProgress.current}/${scanProgress.total}${scanProgress.symbol ? ` • ${scanProgress.symbol}` : ''}`
                     : 'Initializing Scan...'
                   }
                 </span>
-                <Lightning size={24} className="animate-pulse" />
+                <Lightning size={24} />
               </>
             ) : (
               <>
