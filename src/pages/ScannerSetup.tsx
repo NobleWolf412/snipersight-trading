@@ -290,7 +290,7 @@ export function ScannerSetup() {
             </HudPanel>
 
             {/* Asset toggles in a plain section to avoid any overlays */}
-            <div className="relative rounded-lg border border-border bg-card p-6">
+            <div className="relative rounded-lg border border-border bg-card p-6 isolation isolate">
               <div className="mb-3">
                 <h3 className="hud-headline text-lg tracking-[0.14em] text-foreground">Asset Categories</h3>
                 <p className="text-muted-foreground">Enable or disable asset classes for scanning</p>
