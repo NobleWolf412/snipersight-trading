@@ -173,14 +173,12 @@ export function ScannerSetup() {
     <PageShell>
       <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 lg:py-8 space-y-6 lg:space-y-8">
         <div className="text-center space-y-3 mb-8">
-          <h1 className="hud-headline hud-text-green text-base md:text-xl lg:text-2xl tracking-[0.2em] px-4 leading-relaxed py-2">
-            Scanner Command Center
-          </h1>
+          <h1 className="hud-headline hud-text-green text-base md:text-xl lg:text-2xl tracking-[0.2em] px-4 leading-relaxed py-2">SCANNER COMMAND CENTER</h1>
           <p className="text-base md:text-lg text-slate-400 max-w-2xl mx-auto px-4">Configure your sniper profile, exchange, and filters, then arm the scanner to search for high-confluence setups.</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-          <div className="lg:col-span-2 space-y-6 lg:space-y-8">
+          <div className="lg:col-span-2 space-y-6 lg:space-y-8 bg-red-600">
             <HudPanel 
               title="Scan Mode & Profile" 
               subtitle="Select your tactical mode and operational parameters"
@@ -188,10 +186,8 @@ export function ScannerSetup() {
               titleClassName="hud-text-green"
             >
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground">
-                    Sniper Mode
-                  </Label>
+                <div className="space-y-2 border-red-600 bg-slate-50">
+                  <Label className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground">SNIPER MODE</Label>
                   <SniperModeSelector />
                 </div>
               </div>

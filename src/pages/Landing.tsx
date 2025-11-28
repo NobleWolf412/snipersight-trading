@@ -59,7 +59,7 @@ export function Landing() {
                     </div>
                     <div>
                       <h3 className="hud-headline text-xl md:text-2xl lg:text-3xl font-bold mb-2 tracking-[0.16em]">RECONNAISSANCE SCANNER</h3>
-                      <p className="hud-headline text-xs md:text-sm text-accent tracking-[0.16em]">Manual Operations</p>
+                      <p className="hud-headline text-xs md:text-sm text-accent tracking-[0.16em]">MANUAL OPERATIONS</p>
                     </div>
                   </div>
                   
