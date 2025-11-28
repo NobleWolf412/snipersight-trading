@@ -1,15 +1,5 @@
 /* HUD + 3D utility classes (opt-in) */
 
-/* Tactical grid background (alias used in Landing) */
-.tactical-grid,
-.grid-tactical {
-  background-image:
-    linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
-  background-size: 24px 24px, 24px 24px;
-  background-position: -1px -1px, -1px -1px;
-}
-
 /* HUD headings */
 .heading-hud {
   letter-spacing: 0.08em;
