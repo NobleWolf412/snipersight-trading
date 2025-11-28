@@ -73,3 +73,6 @@ backend/cache/
 backend/data/cache/
 *.pkl
 *.pickle
+
+*storybook.log
+storybook-static
