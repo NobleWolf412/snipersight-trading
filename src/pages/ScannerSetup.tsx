@@ -3,18 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { useScanner } from '@/context/ScannerContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Crosshair, Lightning, Target } from '@phosphor-icons/react';
+import { Crosshair, Lightning } from '@phosphor-icons/react';
 import { convertSignalToScanResult } from '@/utils/mockData';
 import { SniperModeSelector } from '@/components/SniperModeSelector';
 import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
-import { PageShell } from '@/components/layout/PageShell';
 import { scanHistoryService } from '@/services/scanHistoryService';
-import { HudPanel, MissionBrief, TargetReticleOverlay } from '@/components/hud';
 import { ScannerConsole } from '@/components/ScannerConsole';
 
 export function ScannerSetup() {
@@ -177,31 +174,24 @@ export function ScannerSetup() {
   };
 
   return (
-    <PageShell>
-      <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 lg:py-8 space-y-6 lg:space-y-8">
-        <div className="text-center space-y-3 mb-8">
-          <h1 className="hud-headline text-emerald-700 dark:text-emerald-300 text-2xl md:text-4xl lg:text-5xl tracking-[0.2em] px-4 leading-relaxed py-2 drop-shadow-sm">SCANNER COMMAND CENTER</h1>
-          <p className="text-lg md:text-xl lg:text-2xl text-slate-600 dark:text-slate-300 max-w-2xl mx-auto px-4">Configure your sniper profile, exchange, and filters, then arm the scanner to search for high-confluence setups.</p>
+    <div className="min-h-screen bg-background p-8">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div className="text-center space-y-2">
+          <h1 className="text-3xl font-bold text-foreground">Scanner Setup</h1>
+          <p className="text-muted-foreground">Configure your scanner parameters</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-          <div className="lg:col-span-2 space-y-6 lg:space-y-8 px-6 overflow-visible">
-            <HudPanel 
-              title="Scan Mode & Profile" 
-              subtitle="Select your tactical mode and operational parameters"
-              className="tactical-grid holo-border overflow-visible"
-              titleClassName="hud-text-green"
-            >
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            {/* Scan Mode */}
+            <div className="border border-border rounded-lg p-6 bg-card">
+              <h2 className="text-xl font-semibold mb-4">Scan Mode & Profile</h2>
               <SniperModeSelector />
-            </HudPanel>
+            </div>
 
-            <HudPanel 
-              title="Operational Parameters" 
-              subtitle="Configure exchange, leverage, and scanning scope"
-              className="relative bg-card"
-              unstyled
-              titleClassName="hud-text-amber"
-            >
+            {/* Operational Parameters */}
+            <div className="border border-border rounded-lg p-6 bg-card">
+              <h2 className="text-xl font-semibold mb-4">Operational Parameters</h2>
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
                   <span id="exchange-label" className="w-32 text-right text-base font-mono text-muted-foreground">Exchange</span>
@@ -287,65 +277,44 @@ export function ScannerSetup() {
                 </div>
 
               </div>
-            </HudPanel>
+            </div>
 
-            {/* Asset toggles in a plain section to avoid any overlays */}
-            <div className="relative z-10 rounded-lg border border-border bg-card p-6 isolation isolate">
-              <div className="mb-3">
-                <h3 className="hud-headline text-lg tracking-[0.14em] text-foreground">Asset Categories</h3>
-                <p className="text-muted-foreground">Enable or disable asset classes for scanning</p>
-              </div>
+            {/* Asset Categories */}
+            <div className="border border-border rounded-lg p-6 bg-card">
+              <h2 className="text-xl font-semibold mb-2">Asset Categories</h2>
+              <p className="text-muted-foreground mb-4">Enable or disable asset classes for scanning</p>
               <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <span id="majors-label" className="w-32 text-right text-base font-mono text-muted-foreground">Majors</span>
-                  <div className="flex-1 flex justify-end">
-                    <div className="bg-background rounded-md px-2 py-1 shadow-sm">
-                      <Switch
-                      id="majors"
-                      aria-labelledby="majors-label"
-                      aria-label="Toggle Majors"
-                      checked={scanConfig.categories.majors}
-                      onCheckedChange={(checked) =>
-                        setScanConfig({
-                          ...scanConfig,
-                          categories: { ...scanConfig.categories, majors: checked },
-                        })
-                      }
-                       className="shrink-0 z-20 h-7 w-12"
-                      />
-                    </div>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-foreground">Majors</span>
+                  <Switch
+                    id="majors"
+                    checked={scanConfig.categories.majors}
+                    onCheckedChange={(checked) =>
+                      setScanConfig({
+                        ...scanConfig,
+                        categories: { ...scanConfig.categories, majors: checked },
+                      })
+                    }
+                  />
                 </div>
-                <div className="flex items-center gap-4">
-                  <span id="altcoins-label" className="w-32 text-right text-base font-mono text-muted-foreground">Altcoins</span>
-                  <div className="flex-1 flex justify-end">
-                    <div className="bg-background rounded-md px-2 py-1 shadow-sm">
-                      <Switch
-                      id="altcoins"
-                      aria-labelledby="altcoins-label"
-                      aria-label="Toggle Altcoins"
-                      checked={scanConfig.categories.altcoins}
-                      onCheckedChange={(checked) =>
-                        setScanConfig({
-                          ...scanConfig,
-                          categories: { ...scanConfig.categories, altcoins: checked },
-                        })
-                      }
-                       className="shrink-0 z-20 h-7 w-12"
-                      />
-                    </div>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-foreground">Altcoins</span>
+                  <Switch
+                    id="altcoins"
+                    checked={scanConfig.categories.altcoins}
+                    onCheckedChange={(checked) =>
+                      setScanConfig({
+                        ...scanConfig,
+                        categories: { ...scanConfig.categories, altcoins: checked },
+                      })
+                    }
+                  />
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="w-32 text-right">
-                    <span id="meme-label" className="text-base font-mono text-muted-foreground">Meme Mode</span>
-                  </div>
-                  <div className="flex-1 flex items-center justify-end gap-3">
-                    <div className="bg-background rounded-md px-2 py-1 shadow-sm">
-                      <Switch
+                <div className="flex items-center justify-between">
+                  <span className="text-foreground">Meme Mode</span>
+                  <div className="flex items-center gap-3">
+                    <Switch
                       id="meme"
-                      aria-labelledby="meme-label"
-                      aria-label="Toggle Meme Mode"
                       checked={scanConfig.categories.memeMode}
                       onCheckedChange={(checked) =>
                         setScanConfig({
@@ -353,76 +322,65 @@ export function ScannerSetup() {
                           categories: { ...scanConfig.categories, memeMode: checked },
                         })
                       }
-                       className="shrink-0 z-20 h-7 w-12"
-                      />
-                    </div>
+                    />
                     {scanConfig.categories.memeMode && (
-                      <Badge variant="outline" className="text-xs bg-red-100 dark:bg-destructive/20 text-red-800 dark:text-destructive border-red-300 dark:border-destructive/50 px-2 py-0.5 font-sans">HIGH VOLATILITY</Badge>
+                      <Badge variant="outline" className="text-xs">HIGH VOLATILITY</Badge>
                     )}
                   </div>
                 </div>
               </div>
             </div>
-
-            {/* Filters & Asset Categories panel removed; toggles moved above */}
           </div>
 
-          <div className="lg:col-span-1 flex flex-col px-6">
-            <HudPanel 
-              title="Scanner Console" 
-              subtitle="Real-time scan progress and system status"
-              className="tactical-grid holo-border flex-1 flex flex-col"
-              titleClassName="hud-text-green"
-            >
-              <ScannerConsole
-                isScanning={isScanning}
-                className="hud-console hud-terminal text-xs flex-1 min-h-[300px]"
-              />
-            </HudPanel>
+          {/* Console */}
+          <div className="border border-border rounded-lg p-6 bg-card">
+            <h2 className="text-xl font-semibold mb-4">Scanner Console</h2>
+            <ScannerConsole
+              isScanning={isScanning}
+              className="min-h-[300px]"
+            />
           </div>
         </div>
 
-        <MissionBrief title="Intel Brief" className="hud-glow-cyan">
-          <p className="mb-2">Scanner will analyze top symbols across multiple timeframes using Smart Money Concepts detection.</p>
-          <p className="text-muted-foreground text-xs">Higher timeframes provide better confluence but require more data processing time.</p>
-        </MissionBrief>
+        {/* Info */}
+        <div className="border border-border rounded-lg p-6 bg-card">
+          <h3 className="font-semibold mb-2">Intel Brief</h3>
+          <p className="text-sm text-muted-foreground mb-2">Scanner will analyze top symbols across multiple timeframes using Smart Money Concepts detection.</p>
+          <p className="text-xs text-muted-foreground">Higher timeframes provide better confluence but require more data processing time.</p>
+        </div>
 
-        <TargetReticleOverlay className="relative pt-2">
-          <Button
-            onClick={handleArmScanner}
-            disabled={isScanning || scanConfig.timeframes.length === 0}
-            className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-lg font-bold btn-tactical-scanner w-full text-base md:text-lg disabled:opacity-50"
-            size="lg"
-          >
-            {isScanning ? (
-              <>
-                <Lightning size={24} />
-                <span className="mx-2">
-                  {scanProgress && scanProgress.total > 0 
-                    ? `Scanning ${scanProgress.current}/${scanProgress.total}${scanProgress.symbol ? ` • ${scanProgress.symbol}` : ''}`
-                    : 'Initializing Scan...'
-                  }
-                </span>
-                <Lightning size={24} />
-              </>
-            ) : (
-              <>
-                <Crosshair size={24} weight="bold" />
-                <span className="mx-3">Arm Scanner</span>
-                <Target size={24} weight="bold" />
-              </>
-            )}
-          </Button>
-          {scanProgress && scanProgress.total > 0 && (
-            <div className="relative mt-3 h-2 bg-background/60 rounded-full overflow-hidden border border-primary/30">
-              <div 
-                className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary to-accent transition-all duration-500 rounded-full"
-                style={{ width: `${(scanProgress.current / scanProgress.total) * 100}%` }}
-              />
-            </div>
+        {/* Arm Button */}
+        <Button
+          onClick={handleArmScanner}
+          disabled={isScanning || scanConfig.timeframes.length === 0}
+          className="w-full h-14 text-lg"
+          size="lg"
+        >
+          {isScanning ? (
+            <>
+              <Lightning size={24} className="mr-2" />
+              {scanProgress && scanProgress.total > 0 
+                ? `Scanning ${scanProgress.current}/${scanProgress.total}${scanProgress.symbol ? ` • ${scanProgress.symbol}` : ''}`
+                : 'Initializing Scan...'
+              }
+            </>
+          ) : (
+            <>
+              <Crosshair size={24} className="mr-2" />
+              Arm Scanner
+            </>
           )}
-        </TargetReticleOverlay>
+        </Button>
+        
+        {scanProgress && scanProgress.total > 0 && (
+          <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-primary transition-all duration-500"
+              style={{ width: `${(scanProgress.current / scanProgress.total) * 100}%` }}
+            />
+          </div>
+        )}
       </div>
-    </PageShell>
+    </div>
   );
 }
