@@ -186,7 +186,7 @@ export function ScannerSetup() {
               titleClassName="hud-text-green"
             >
               <div className="space-y-4">
-                <div className="space-y-2 border-red-600 bg-slate-50">
+                <div className="space-y-2 border-red-600 bg-slate-900">
                   <Label className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground">SNIPER MODE</Label>
                   <SniperModeSelector />
                 </div>
