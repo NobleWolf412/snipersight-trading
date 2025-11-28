@@ -136,7 +136,7 @@ function getModeStyle(modeName: string) {
       glowClass: 'bg-warning/30',
       borderClass: 'border-warning/60',
       bgClass: 'bg-warning/25',
-      textEffect: 'drop-shadow-[0_0_10px_rgba(224,186,90,0.6)] animate-pulse',
+      textEffect: 'drop-shadow-[0_0_10px_rgba(224,186,90,0.6)]',
     },
     surgical: {
       icon: Crosshair,
