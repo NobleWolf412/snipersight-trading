@@ -114,18 +114,18 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
   }, [logs]);
 
   return (
-    <div className={cn("flex flex-col h-full border border-border rounded-md bg-card overflow-hidden", className)}>
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
-        <Terminal size={18} className="text-primary" aria-hidden="true" focusable="false" />
-        <span className="font-mono text-sm font-medium text-foreground">Scanner Console</span>
+    <div className={cn("flex flex-col h-full hud-console overflow-hidden rounded-lg relative z-0", className)}>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-600 bg-slate-900/80">
+        <Terminal size={18} className="text-primary hud-text-green" aria-hidden="true" focusable="false" />
+        <span className="font-mono text-sm font-medium hud-terminal text-primary">SCANNER CONSOLE</span>
         {isScanning && (
-          <Lightning size={16} className="text-warning animate-pulse ml-auto" aria-hidden="true" focusable="false" />
+          <Lightning size={16} className="text-warning animate-pulse ml-auto scan-pulse" aria-hidden="true" focusable="false" />
         )}
       </div>
       
       <div 
         ref={scrollRef}
-        className="flex-1 p-4 font-mono text-xs space-y-1 overflow-y-auto bg-card/50"
+        className="flex-1 p-4 font-mono text-xs space-y-1 overflow-y-auto"
       >
         {logs.length > 0 ? (
           logs.map((log, i) => (

@@ -177,24 +177,24 @@ export function ScannerSetup() {
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold text-foreground">Scanner Setup</h1>
-          <p className="text-muted-foreground">Configure your scanner parameters</p>
+          <h1 className="text-3xl font-bold hud-headline hud-text-green">SCANNER SETUP</h1>
+          <p className="hud-terminal text-primary/80">Configure your scanner parameters</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             {/* Scan Mode */}
             <div className="border border-border rounded-lg p-6 bg-card">
-              <h2 className="text-xl font-semibold mb-4">Scan Mode & Profile</h2>
+              <h2 className="text-xl font-semibold mb-4 hud-headline hud-text-green">SCAN MODE & PROFILE</h2>
               <SniperModeSelector />
             </div>
 
             {/* Operational Parameters */}
             <div className="border border-border rounded-lg p-6 bg-card">
-              <h2 className="text-xl font-semibold mb-4">Operational Parameters</h2>
+              <h2 className="text-xl font-semibold mb-4 hud-headline hud-text-green">OPERATIONAL PARAMETERS</h2>
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
-                  <span id="exchange-label" className="w-32 text-right text-base font-mono text-muted-foreground">Exchange</span>
+                  <span id="exchange-label" className="w-32 text-right text-base hud-terminal text-primary/90 tracking-wide">EXCHANGE</span>
                   <div className="flex-1 flex justify-end">
                     <Select
                       value={scanConfig.exchange}
@@ -218,7 +218,7 @@ export function ScannerSetup() {
                 <div className="h-px bg-border/50" />
 
                 <div className="flex items-center gap-4">
-                  <span id="leverage-label" className="w-32 text-right text-base font-mono text-muted-foreground">Leverage</span>
+                  <span id="leverage-label" className="w-32 text-right text-base hud-terminal text-primary/90 tracking-wide">LEVERAGE</span>
                   <div className="flex-1 flex justify-end">
                     <Select
                       value={(scanConfig.leverage ?? 1).toString()}
@@ -247,32 +247,30 @@ export function ScannerSetup() {
                 <div className="h-px bg-border/50" />
 
                 <div className="flex items-center gap-4">
-                  <label htmlFor="top-pairs" id="top-pairs-label" className="w-32 text-right text-base font-mono text-muted-foreground">Pairs to Scan</label>
-                  <div className="flex-1 flex justify-end">
-                    <div>
-                      <Input
-                        id="top-pairs"
-                        aria-labelledby="top-pairs-label"
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={topPairsInput}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          // Allow empty string for deletion
-                          setTopPairsInput(val);
-                          if (val === '') return;
-                          const num = Number(val);
-                          if (!isNaN(num) && num >= 1 && num <= 100) {
-                            setScanConfig({ ...scanConfig, topPairs: num });
-                          }
-                        }}
-                        className="bg-background border-border hover:border-primary/50 focus:border-primary transition-colors h-12 font-mono text-lg w-20 max-w-24"
-                      />
-                      <p className="text-sm text-muted-foreground mt-2">
-                        Higher values scan more symbols but take longer
-                      </p>
-                    </div>
+                  <label htmlFor="top-pairs" id="top-pairs-label" className="w-32 text-right text-base hud-terminal text-primary/90 tracking-wide">PAIRS TO SCAN</label>
+                  <div className="flex-1 flex flex-col items-end">
+                    <Input
+                      id="top-pairs"
+                      aria-labelledby="top-pairs-label"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={topPairsInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        // Allow empty string for deletion
+                        setTopPairsInput(val);
+                        if (val === '') return;
+                        const num = Number(val);
+                        if (!isNaN(num) && num >= 1 && num <= 100) {
+                          setScanConfig({ ...scanConfig, topPairs: num });
+                        }
+                      }}
+                      className="h-12 text-lg w-20 max-w-24"
+                    />
+                    <p className="text-sm hud-terminal text-primary/60 mt-2 text-right">
+                      Higher values scan more symbols but take longer
+                    </p>
                   </div>
                 </div>
 
@@ -281,11 +279,11 @@ export function ScannerSetup() {
 
             {/* Asset Categories */}
             <div className="border border-border rounded-lg p-6 bg-card">
-              <h2 className="text-xl font-semibold mb-2">Asset Categories</h2>
-              <p className="text-muted-foreground mb-4">Enable or disable asset classes for scanning</p>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-foreground">Majors</span>
+              <h2 className="text-xl font-semibold mb-2 hud-headline hud-text-green">ASSET CATEGORIES</h2>
+              <p className="hud-terminal text-primary/80 mb-4">Enable or disable asset classes for scanning</p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded border border-border/40 bg-background/40 hover:border-primary/30 transition-colors">
+                  <span className="hud-terminal text-primary/90 tracking-wide">MAJORS</span>
                   <Switch
                     id="majors"
                     checked={scanConfig.categories.majors}
@@ -297,8 +295,8 @@ export function ScannerSetup() {
                     }
                   />
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-foreground">Altcoins</span>
+                <div className="flex items-center justify-between p-3 rounded border border-border/40 bg-background/40 hover:border-primary/30 transition-colors">
+                  <span className="hud-terminal text-primary/90 tracking-wide">ALTCOINS</span>
                   <Switch
                     id="altcoins"
                     checked={scanConfig.categories.altcoins}
@@ -310,31 +308,31 @@ export function ScannerSetup() {
                     }
                   />
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-foreground">Meme Mode</span>
+                <div className="flex items-center justify-between p-3 rounded border border-border/40 bg-background/40 hover:border-primary/30 transition-colors">
                   <div className="flex items-center gap-3">
-                    <Switch
-                      id="meme"
-                      checked={scanConfig.categories.memeMode}
-                      onCheckedChange={(checked) =>
-                        setScanConfig({
-                          ...scanConfig,
-                          categories: { ...scanConfig.categories, memeMode: checked },
-                        })
-                      }
-                    />
+                    <span className="hud-terminal text-primary/90 tracking-wide">MEME MODE</span>
                     {scanConfig.categories.memeMode && (
-                      <Badge variant="outline" className="text-xs">HIGH VOLATILITY</Badge>
+                      <Badge variant="outline" className="text-xs hud-text-amber border-warning/50">HIGH VOLATILITY</Badge>
                     )}
                   </div>
+                  <Switch
+                    id="meme"
+                    checked={scanConfig.categories.memeMode}
+                    onCheckedChange={(checked) =>
+                      setScanConfig({
+                        ...scanConfig,
+                        categories: { ...scanConfig.categories, memeMode: checked },
+                      })
+                    }
+                  />
                 </div>
               </div>
             </div>
           </div>
 
           {/* Console */}
-          <div className="border border-border rounded-lg p-6 bg-card">
-            <h2 className="text-xl font-semibold mb-4">Scanner Console</h2>
+          <div className="border border-border rounded-lg p-6 bg-card mb-6 relative z-0">
+            <h2 className="text-xl font-semibold mb-4 hud-headline hud-text-green">SCANNER CONSOLE</h2>
             <ScannerConsole
               isScanning={isScanning}
               className="min-h-[300px]"
@@ -342,18 +340,11 @@ export function ScannerSetup() {
           </div>
         </div>
 
-        {/* Info */}
-        <div className="border border-border rounded-lg p-6 bg-card">
-          <h3 className="font-semibold mb-2">Intel Brief</h3>
-          <p className="text-sm text-muted-foreground mb-2">Scanner will analyze top symbols across multiple timeframes using Smart Money Concepts detection.</p>
-          <p className="text-xs text-muted-foreground">Higher timeframes provide better confluence but require more data processing time.</p>
-        </div>
-
         {/* Arm Button */}
         <Button
           onClick={handleArmScanner}
           disabled={isScanning || scanConfig.timeframes.length === 0}
-          className="w-full h-14 text-lg"
+          className="w-full h-14 text-lg relative z-10"
           size="lg"
         >
           {isScanning ? (
