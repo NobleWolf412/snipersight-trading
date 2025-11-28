@@ -31,9 +31,9 @@ export function Landing() {
               {/* Hero title and subtitle */}
               <div className="space-y-6 text-center">
                 <div className="flex items-center justify-center gap-4">
-                  <h1 className="text-5xl md:text-7xl font-bold tracking-tight heading-hud hud-glow-green scan-pulse-slow glitch-text">SNIPERSIGHT</h1>
+                  <h1 className="hud-headline hud-text-green text-5xl md:text-7xl font-bold tracking-[0.16em] scan-pulse-slow glitch-text">SNIPERSIGHT</h1>
                 </div>
-                <p className="text-base md:text-lg text-muted-foreground max-w-3xl leading-relaxed mx-auto px-4 font-sans">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
+                <p className="text-base md:text-lg text-slate-400 max-w-3xl leading-relaxed mx-auto px-4">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
               </div>
             </div>
           </div>
@@ -58,12 +58,12 @@ export function Landing() {
                       <Crosshair size={28} weight="bold" className="text-accent" />
                     </div>
                     <div>
-                      <h3 className="text-xl md:text-2xl lg:text-3xl font-bold mb-2 heading-hud">RECONNAISSANCE SCANNER</h3>
-                      <p className="text-xs md:text-sm text-accent font-mono tracking-wider heading-hud uppercase">Manual Operations</p>
+                      <h3 className="hud-headline text-xl md:text-2xl lg:text-3xl font-bold mb-2 tracking-[0.16em]">RECONNAISSANCE SCANNER</h3>
+                      <p className="hud-headline text-xs md:text-sm text-accent tracking-[0.16em]">Manual Operations</p>
                     </div>
                   </div>
                   
-                  <p className="text-base md:text-lg text-muted-foreground leading-relaxed mb-10 font-sans">Multi-timeframe Smart Money Concept detection with institutional-grade confluence scoring. Identify high-probability setups across order blocks, FVGs, liquidity sweeps, and structural breaks.</p>
+                  <p className="text-base md:text-lg text-slate-400 leading-relaxed mb-10">Multi-timeframe Smart Money Concept detection with institutional-grade confluence scoring. Identify high-probability setups across order blocks, FVGs, liquidity sweeps, and structural breaks.</p>
                   
                   <div className="flex justify-center">
                     <Link
@@ -87,12 +87,12 @@ export function Landing() {
                       <div className="w-7 h-7 border-2 border-primary rounded" />
                     </div>
                     <div>
-                      <h3 className="text-xl md:text-2xl lg:text-3xl font-bold mb-2 heading-hud">AUTONOMOUS BOT</h3>
-                      <p className="text-xs md:text-sm text-primary font-mono tracking-wider heading-hud uppercase">Automated Execution</p>
+                      <h3 className="hud-headline text-xl md:text-2xl lg:text-3xl font-bold mb-2 tracking-[0.16em]">AUTONOMOUS BOT</h3>
+                      <p className="hud-headline text-xs md:text-sm text-primary tracking-[0.16em]">Automated Execution</p>
                     </div>
                   </div>
                   
-                  <p className="text-base md:text-lg text-muted-foreground leading-relaxed mb-10 font-sans">
+                  <p className="text-base md:text-lg text-slate-400 leading-relaxed mb-10">
                     Fully automated trading execution with multi-layered quality gates, risk controls, and real-time position management. 
                     Deploy capital with institutional discipline and precision.
                   </p>
@@ -119,12 +119,12 @@ export function Landing() {
                       <Compass size={28} weight="bold" className="text-blue-500" />
                     </div>
                     <div>
-                      <h3 className="text-xl md:text-2xl lg:text-3xl font-bold mb-2 heading-hud">MARKET INTEL</h3>
-                      <p className="text-xs md:text-sm text-blue-500 font-mono tracking-wider heading-hud uppercase">Regime & AI Analysis</p>
+                      <h3 className="hud-headline text-xl md:text-2xl lg:text-3xl font-bold mb-2 tracking-[0.16em]">MARKET INTEL</h3>
+                      <p className="hud-headline text-xs md:text-sm text-blue-500 tracking-[0.16em]">Regime & AI Analysis</p>
                     </div>
                   </div>
                   
-                  <p className="text-base md:text-lg text-muted-foreground leading-relaxed mb-10 font-sans">Real-time market regime classification, dominance flows, and AI-powered symbol analysis. Understand market conditions and deploy the right sniper modes at the right time.</p>
+                  <p className="text-base md:text-lg text-slate-400 leading-relaxed mb-10">Real-time market regime classification, dominance flows, and AI-powered symbol analysis. Understand market conditions and deploy the right sniper modes at the right time.</p>
                   
                   <div className="flex justify-center">
                     <Link
@@ -148,12 +148,12 @@ export function Landing() {
                       <Target size={28} weight="bold" className="text-warning" />
                     </div>
                     <div>
-                      <h3 className="text-xl md:text-2xl lg:text-3xl font-bold mb-2 heading-hud">TRAINING GROUND</h3>
-                      <p className="text-xs md:text-sm text-warning font-mono tracking-wider heading-hud uppercase">Simulation Mode</p>
+                      <h3 className="hud-headline text-xl md:text-2xl lg:text-3xl font-bold mb-2 tracking-[0.16em]">TRAINING GROUND</h3>
+                      <p className="hud-headline text-xs md:text-sm text-warning tracking-[0.16em]">Simulation Mode</p>
                     </div>
                   </div>
                   
-                  <p className="text-base md:text-lg text-muted-foreground leading-relaxed mb-10 font-sans">Practice with simulated market data in a risk-free environment. Master the system's features, test strategies, and build confidence before deploying real capital.</p>
+                  <p className="text-base md:text-lg text-slate-400 leading-relaxed mb-10">Practice with simulated market data in a risk-free environment. Master the system's features, test strategies, and build confidence before deploying real capital.</p>
                   
                   <div className="flex justify-center">
                     <Link
