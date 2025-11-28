@@ -29,5 +29,3 @@ export function HudPanel({ title, subtitle, className, titleClassName, children 
     </div>
   );
 }
-
-export default HudPanel;

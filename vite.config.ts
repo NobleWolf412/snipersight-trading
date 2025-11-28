@@ -28,7 +28,12 @@ const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
 
 export default defineConfig({
   plugins: [
-    react(),
+    react({
+      fastRefresh: true,
+      babel: {
+        plugins: []
+      }
+    }),
     tailwindcss(),
     createIconImportProxy() as PluginOption,
     sparkPlugin() as PluginOption,
@@ -44,6 +49,7 @@ export default defineConfig({
     strictPort,
     hmr: {
       overlay: true,
+      clientPort: frontendPort,
     },
     proxy: {
       '/api': {

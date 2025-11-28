@@ -20,5 +20,3 @@ export function MissionBrief({ title, className, children }: MissionBriefProps) 
     </div>
   );
 }
-
-export default MissionBrief;

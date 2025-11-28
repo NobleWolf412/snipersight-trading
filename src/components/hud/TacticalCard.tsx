@@ -56,5 +56,3 @@ export function TacticalCard({
     </div>
   );
 }
-
-export default TacticalCard;

@@ -12,5 +12,3 @@ export function TargetReticleOverlay({ className, children }: TargetReticleOverl
     </div>
   );
 }
-
-export default TargetReticleOverlay;
