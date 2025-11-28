@@ -290,7 +290,7 @@ export function ScannerSetup() {
             </HudPanel>
 
             {/* Asset toggles in a plain section to avoid any overlays */}
-            <div className="relative rounded-lg border border-border bg-card p-6 isolation isolate">
+            <div className="relative z-10 rounded-lg border border-border bg-card p-6 isolation isolate">
               <div className="mb-3">
                 <h3 className="hud-headline text-lg tracking-[0.14em] text-foreground">Asset Categories</h3>
                 <p className="text-muted-foreground">Enable or disable asset classes for scanning</p>
@@ -299,7 +299,8 @@ export function ScannerSetup() {
                 <div className="flex items-center gap-4">
                   <span id="majors-label" className="w-32 text-right text-base font-mono text-muted-foreground">Majors</span>
                   <div className="flex-1 flex justify-end">
-                    <Switch
+                    <div className="bg-background rounded-md px-2 py-1 shadow-sm">
+                      <Switch
                       id="majors"
                       aria-labelledby="majors-label"
                       aria-label="Toggle Majors"
@@ -311,13 +312,15 @@ export function ScannerSetup() {
                         })
                       }
                       className="shrink-0 z-20"
-                    />
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <span id="altcoins-label" className="w-32 text-right text-base font-mono text-muted-foreground">Altcoins</span>
                   <div className="flex-1 flex justify-end">
-                    <Switch
+                    <div className="bg-background rounded-md px-2 py-1 shadow-sm">
+                      <Switch
                       id="altcoins"
                       aria-labelledby="altcoins-label"
                       aria-label="Toggle Altcoins"
@@ -329,7 +332,8 @@ export function ScannerSetup() {
                         })
                       }
                       className="shrink-0 z-20"
-                    />
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
@@ -337,7 +341,8 @@ export function ScannerSetup() {
                     <span id="meme-label" className="text-base font-mono text-muted-foreground">Meme Mode</span>
                   </div>
                   <div className="flex-1 flex items-center justify-end gap-3">
-                    <Switch
+                    <div className="bg-background rounded-md px-2 py-1 shadow-sm">
+                      <Switch
                       id="meme"
                       aria-labelledby="meme-label"
                       aria-label="Toggle Meme Mode"
@@ -349,7 +354,8 @@ export function ScannerSetup() {
                         })
                       }
                       className="shrink-0 z-20"
-                    />
+                      />
+                    </div>
                     {scanConfig.categories.memeMode && (
                       <Badge variant="outline" className="text-xs bg-red-100 dark:bg-destructive/20 text-red-800 dark:text-destructive border-red-300 dark:border-destructive/50 px-2 py-0.5 font-sans">HIGH VOLATILITY</Badge>
                     )}
