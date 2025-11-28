@@ -1,5 +1,5 @@
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react-swc";
+import reactSwc from "@vitejs/plugin-react-swc";
 import { defineConfig, PluginOption } from "vite";
 
 import sparkPlugin from "@github/spark/spark-vite-plugin";
@@ -28,7 +28,7 @@ const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
 
 export default defineConfig({
   plugins: [
-    react(),
+    reactSwc(),
     tailwindcss(),
     createIconImportProxy() as PluginOption,
     sparkPlugin() as PluginOption,
@@ -58,6 +58,7 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react', 'react-dom', 'react/jsx-runtime', 'react-router-dom'],
     exclude: ['@github/spark'],
+    force: true,
   },
   esbuild: {
     logOverride: { 'this-is-undefined-in-esm': 'silent' }
