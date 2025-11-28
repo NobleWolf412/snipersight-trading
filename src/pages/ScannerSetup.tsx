@@ -282,8 +282,10 @@ export function ScannerSetup() {
                 <Label className="text-base md:text-lg font-bold uppercase tracking-widest text-muted-foreground bg-slate-900">Category Filters</Label>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div 
-                    className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-border/60 hover:border-accent/50 hover:bg-background/60 transition-all cursor-pointer"
+                  <button
+                    type="button"
+                    aria-label="Toggle majors filter"
+                    className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-border/60 hover:border-accent/50 hover:bg-background/60 transition-all cursor-pointer text-left w-full"
                     onClick={() => setScanConfig({
                       ...scanConfig,
                       categories: { ...scanConfig.categories, majors: !scanConfig.categories.majors },
@@ -309,10 +311,12 @@ export function ScannerSetup() {
                       onClick={(e) => e.stopPropagation()}
                       className="data-[state=checked]:bg-accent"
                     />
-                  </div>
+                  </button>
 
-                  <div 
-                    className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-border/60 hover:border-primary/50 hover:bg-background/60 transition-all cursor-pointer"
+                  <button
+                    type="button"
+                    aria-label="Toggle altcoins filter"
+                    className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-border/60 hover:border-primary/50 hover:bg-background/60 transition-all cursor-pointer text-left w-full"
                     onClick={() => setScanConfig({
                       ...scanConfig,
                       categories: { ...scanConfig.categories, altcoins: !scanConfig.categories.altcoins },
@@ -340,10 +344,12 @@ export function ScannerSetup() {
                       onClick={(e) => e.stopPropagation()}
                       className="data-[state=checked]:bg-primary"
                     />
-                  </div>
+                  </button>
 
-                  <div 
-                    className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-destructive/40 hover:border-destructive/70 hover:bg-background/60 transition-all cursor-pointer"
+                  <button
+                    type="button"
+                    aria-label="Toggle meme mode filter"
+                    className="flex items-center justify-between p-4 bg-background/40 rounded-lg border border-destructive/40 hover:border-destructive/70 hover:bg-background/60 transition-all cursor-pointer text-left w-full"
                     onClick={() => setScanConfig({
                       ...scanConfig,
                       categories: { ...scanConfig.categories, memeMode: !scanConfig.categories.memeMode },
@@ -369,7 +375,7 @@ export function ScannerSetup() {
                       onClick={(e) => e.stopPropagation()}
                       className="data-[state=checked]:bg-destructive"
                     />
-                  </div>
+                  </button>
                 </div>
               </div>
             </HudPanel>
