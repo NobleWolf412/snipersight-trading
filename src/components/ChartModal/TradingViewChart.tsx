@@ -27,6 +27,7 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
     bosChoch: true,
     sweeps: true,
   });
+  const [density, setDensity] = useState<'low' | 'medium' | 'high'>('medium');
 
   // Convert pair format (e.g., "BTC/USDT" -> "BTCUSDT")
   const symbol = result.pair.replace('/', '');
@@ -163,6 +164,17 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
           >
             Sweeps
           </Button>
+          {/* Density selector */}
+          <div className="flex items-center gap-1 ml-2">
+            <span className="text-xs text-muted-foreground">Density</span>
+            <Tabs value={density} onValueChange={(v) => setDensity(v as any)}>
+              <TabsList className="bg-muted/50">
+                <TabsTrigger value="low">Low</TabsTrigger>
+                <TabsTrigger value="medium">Med</TabsTrigger>
+                <TabsTrigger value="high">High</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         </div>
       </div>
 
@@ -185,7 +197,7 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
             allow="clipboard-write"
           />
           {/* SVG overlay on top of iframe */}
-          <SMCOverlay result={result} show={showSMC} />
+          <SMCOverlay result={result} show={showSMC} timeframe={timeframe} density={density} />
         </div>
       </div>
 

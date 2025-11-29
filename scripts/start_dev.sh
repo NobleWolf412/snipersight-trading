@@ -4,6 +4,14 @@ mkdir -p logs
 FRONTEND_PORT=${FRONTEND_PORT:-5000}
 BACKEND_PORT=${BACKEND_PORT:-8000}
 
+# Load local environment overrides if present (auto-export)
+if [[ -f .env.local ]]; then
+	echo "Loading .env.local"
+	set -a
+	source .env.local
+	set +a
+fi
+
 echo "Starting backend on :$BACKEND_PORT"
 nohup ./.venv/bin/python -m uvicorn backend.api_server:app --host 0.0.0.0 --port $BACKEND_PORT --reload > logs/backend.log 2>&1 &
 BACK_PID=$!
