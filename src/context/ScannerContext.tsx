@@ -79,40 +79,40 @@ const defaultBotConfig: BotConfig = {
 // Static scanner modes (fallback if backend unavailable)
 // Should mirror backend/shared/config/scanner_modes.py MODES dict
 const fallbackModes: ScannerMode[] = [
-  { 
-    name: 'overwatch', 
-    description: 'High-altitude regime & trend surveillance (macro + swing alignment)', 
-    timeframes: ['1W','1D','4H','1H','15m','5m'], 
-    min_confluence_score: 75, 
-    profile: 'macro_surveillance' 
+  {
+    name: 'overwatch',
+    description: 'High-altitude overwatch: macro recon and regime alignment; fewer shots, higher conviction.',
+    timeframes: ['1W','1D','4H','1H','15m','5m'],
+    min_confluence_score: 75,
+    profile: 'macro_surveillance'
   },
-  { 
-    name: 'recon', 
-    description: 'Broad multi-timeframe scouting for emerging momentum pivots', 
-    timeframes: ['1D','4H','1H','15m','5m'], 
-    min_confluence_score: 65, 
-    profile: 'balanced' 
+  {
+    name: 'recon',
+    description: 'Balanced recon: multi-timeframe scouting for momentum pivots; adaptable and mission-ready.',
+    timeframes: ['1D','4H','1H','15m','5m'],
+    min_confluence_score: 65,
+    profile: 'balanced'
   },
-  { 
-    name: 'strike', 
-    description: 'Intraday execution focus (momentum + local liquidity)', 
-    timeframes: ['4H','1H','15m','5m'], 
-    min_confluence_score: 60, 
-    profile: 'intraday_aggressive' 
+  {
+    name: 'strike',
+    description: 'Strike ops: intraday assault on momentum with local liquidity reads; fast entry, fast exfil.',
+    timeframes: ['4H','1H','15m','5m'],
+    min_confluence_score: 60,
+    profile: 'intraday_aggressive'
   },
-  { 
-    name: 'surgical', 
-    description: 'Tight precision setups only (higher quality threshold)', 
-    timeframes: ['1H','15m','5m'], 
-    min_confluence_score: 70, 
-    profile: 'precision' 
+  {
+    name: 'surgical',
+    description: 'Surgical precision: tight, high-quality entries only; minimal exposure, maximum control.',
+    timeframes: ['1H','15m','5m'],
+    min_confluence_score: 70,
+    profile: 'precision'
   },
-  { 
-    name: 'ghost', 
-    description: 'Stealth monitoring across mixed horizons (reduced surface area)', 
-    timeframes: ['1D','4H','1H','15m','5m'], 
-    min_confluence_score: 70, 
-    profile: 'stealth_balanced' 
+  {
+    name: 'ghost',
+    description: 'Ghost mode: stealth surveillance across mixed horizons; nimble, low profile, reduced macro drag.',
+    timeframes: ['1D','4H','1H','15m','5m'],
+    min_confluence_score: 70,
+    profile: 'stealth_balanced'
   },
 ];
 

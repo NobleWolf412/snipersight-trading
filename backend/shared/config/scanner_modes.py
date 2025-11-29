@@ -35,7 +35,7 @@ class ScannerMode:
 MODES: Dict[str, ScannerMode] = {
     "overwatch": ScannerMode(
         name="overwatch",
-        description="High-altitude regime & trend surveillance (macro + swing alignment).",
+        description="High-altitude overwatch: macro recon and regime alignment; fewer shots, higher conviction.",
         timeframes=("1w", "1d", "4h", "1h", "15m", "5m"),  # Extended to match UI
         min_confluence_score=75.0,
         profile="macro_surveillance",
@@ -47,7 +47,7 @@ MODES: Dict[str, ScannerMode] = {
     ),
     "recon": ScannerMode(
         name="recon",
-        description="Broad multi-timeframe scouting for emerging momentum pivots.",
+        description="Balanced recon: multi-timeframe scouting for momentum pivots; adaptable and mission-ready.",
         timeframes=("1d", "4h", "1h", "15m", "5m"),  # Added 1D to match UI
         min_confluence_score=65.0,
         profile="balanced",
@@ -59,7 +59,7 @@ MODES: Dict[str, ScannerMode] = {
     ),
     "strike": ScannerMode(
         name="strike",
-        description="Intraday execution focus (momentum + local liquidity).",
+        description="Strike ops: intraday assault on momentum with local liquidity reads; fast entry, fast exfil.",
         timeframes=("4h", "1h", "15m", "5m"),  # Changed from 1m to 4h start
         min_confluence_score=60.0,
         profile="intraday_aggressive",
@@ -71,7 +71,7 @@ MODES: Dict[str, ScannerMode] = {
     ),
     "surgical": ScannerMode(
         name="surgical",
-        description="Tight precision setups only (higher quality threshold).",
+        description="Surgical precision: tight, high-quality entries only; minimal exposure, maximum control.",
         timeframes=("1h", "15m", "5m"),  # Simplified for precision
         min_confluence_score=70.0,
         profile="precision",
@@ -83,7 +83,7 @@ MODES: Dict[str, ScannerMode] = {
     ),
     "ghost": ScannerMode(
         name="ghost",
-        description="Stealth monitoring across mixed horizons (reduced surface area).",
+        description="Ghost mode: stealth surveillance across mixed horizons; nimble, low profile, reduced macro drag.",
         timeframes=("1d", "4h", "1h", "15m", "5m"),
         min_confluence_score=70.0,
         profile="stealth_balanced",

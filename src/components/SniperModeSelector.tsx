@@ -84,6 +84,9 @@ export function SniperModeSelector() {
                   )}
                 </div>
 
+                {/* Mode Brief: show only when selected */}
+                {/* Mode Brief removed as redundant */}
+
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/50">
                   <div className="space-y-1">
                     <div className={`text-xs md:text-sm text-muted-foreground uppercase tracking-wide ${isSelected ? 'font-bold' : ''}`}>Timeframes</div>
