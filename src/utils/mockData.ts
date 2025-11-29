@@ -68,11 +68,18 @@ export function convertSignalToScanResult(signal: any): ScanResult {
     ? Math.max(1, Math.min(10, 10 / signal.analysis.risk_reward))
     : 5;
 
+  // Derive conviction class A/B/C from confidence score if not provided
+  const confidence: number = typeof signal.score === 'number' ? signal.score : 0;
+  const derivedConviction: ConvictionClass = confidence >= 80 ? 'A' : confidence >= 60 ? 'B' : 'C';
+
+  // Prefer backend-provided regime metadata when available
+  const regime: RegimeMetadata | undefined = signal.regime || signal.analysis?.regime || undefined;
+
   return {
     id: `signal-${signal.symbol}-${Date.now()}`,
     pair: signal.symbol.replace('USDT', '/USDT'),
     trendBias,
-    confidenceScore: signal.score,
+    confidenceScore: confidence,
     riskScore,
     classification,
     entryZone: { low: signal.entry_far, high: signal.entry_near },
@@ -93,5 +100,11 @@ export function convertSignalToScanResult(signal: any): ScanResult {
         }))
       : [],
     timestamp: new Date().toISOString(),
+
+    // Phase enhancements
+    plan_type: (signal.plan_type as PlanType) || 'SMC',
+    conviction_class: (signal.conviction_class as ConvictionClass) || derivedConviction,
+    missing_critical_timeframes: signal.missing_critical_timeframes || signal.analysis?.missing_critical_timeframes || [],
+    regime,
   };
 }
