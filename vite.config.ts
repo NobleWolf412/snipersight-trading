@@ -58,7 +58,10 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react', 'react-dom', 'react/jsx-runtime', 'react-router-dom'],
     exclude: ['@github/spark'],
-    force: true,
+    force: false,
+    esbuildOptions: {
+      target: 'esnext'
+    }
   },
   esbuild: {
     logOverride: { 'this-is-undefined-in-esm': 'silent' }
