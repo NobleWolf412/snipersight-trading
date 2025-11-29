@@ -2,6 +2,7 @@
 import { createContext, useContext, ReactNode, useEffect, useState } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import type { SniperMode } from '@/types/sniperMode';
+import { api } from '@/utils/api';
 import type { ScannerMode } from '@/utils/api';
 
 export interface ScanConfig {
@@ -75,36 +76,9 @@ const defaultBotConfig: BotConfig = {
   duration: 24,
 };
 
-// Static scanner modes - these are UI configurations only
-const SCANNER_MODES: ScannerMode[] = [
-  {
-    name: 'overwatch',
-    description: 'Long-term trend surveillance across 6 timeframes (1W to 5m). Best for patient, high-conviction setups.',
-    timeframes: ['1W', '1D', '4H', '1H', '15m', '5m'],
-    min_confluence_score: 75,
-    profile: 'conservative',
-  },
-  {
-    name: 'recon',
-    description: 'Balanced multi-timeframe analysis (5 TFs). Standard operating mode for most market conditions.',
-    timeframes: ['1D', '4H', '1H', '15m', '5m'],
-    min_confluence_score: 70,
-    profile: 'balanced',
-  },
-  {
-    name: 'strike',
-    description: 'Fast-action scanner focused on intraday timeframes (4 TFs). Ideal for active trading sessions.',
-    timeframes: ['4H', '1H', '15m', '5m'],
-    min_confluence_score: 65,
-    profile: 'aggressive',
-  },
-  {
-    name: 'surgical',
-    description: 'Precision-focused lower timeframe analysis (3 TFs). For experienced traders seeking exact entries.',
-    timeframes: ['1H', '15m', '5m'],
-    min_confluence_score: 60,
-    profile: 'aggressive',
-  },
+// Dynamic scanner modes fetched from backend (source of truth)
+const fallbackModes: ScannerMode[] = [
+  { name: 'recon', description: 'Balanced multi-timeframe', timeframes: ['1D','4H','1H','15m','5m'], min_confluence_score: 65, profile: 'balanced' },
 ];
 
 const ScannerContext = createContext<ScannerContextType | undefined>(undefined);
@@ -117,26 +91,34 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
   const [isScanning, setIsScanning] = useLocalStorage<boolean>('is-scanning', false);
   const [isBotActive, setIsBotActive] = useLocalStorage<boolean>('is-bot-active', false);
   
-  // Scanner modes are now static, no API fetch needed
-  const [scannerModes] = useState<ScannerMode[]>(SCANNER_MODES);
-  const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(() => {
-    // Initialize with the mode matching scanConfig, or default to 'recon'
-    const defaultMode = SCANNER_MODES.find(m => m.name === defaultScanConfig.sniperMode) || SCANNER_MODES[1];
-    console.log('[ScannerContext] Initial mode:', defaultMode.name);
-    return defaultMode;
-  });
+  const [scannerModes, setScannerModes] = useState<ScannerMode[]>(fallbackModes);
+  const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(null);
 
   const refreshModes = async (): Promise<void> => {
-    // No-op - modes are static now, but keeping function for API compatibility
-    return Promise.resolve();
+    const { data, error } = await api.getScannerModes();
+    if (error) {
+      console.warn('[ScannerContext] Failed to fetch modes, using fallback:', error);
+      setScannerModes(fallbackModes);
+      return;
+    }
+    const modes = (data?.modes || []).map(m => ({
+      name: m.name,
+      description: m.description,
+      timeframes: m.timeframes,
+      min_confluence_score: m.min_confluence_score,
+      profile: m.profile,
+    }));
+    setScannerModes(modes.length ? modes : fallbackModes);
+    // Ensure selectedMode aligned with scanConfig
+    const desired = (scanConfig?.sniperMode as string) || 'recon';
+    const match = modes.find(m => m.name === desired) || modes.find(m => m.name === 'recon') || modes[0] || fallbackModes[0];
+    setSelectedMode(match);
+    console.log('[ScannerContext] Modes loaded. Active:', match?.name);
   };
 
-  // Sync selectedMode with scanConfig.sniperMode on mount
+  // On mount, fetch modes and set selectedMode from backend truth
   useEffect(() => {
-    if (scanConfig?.sniperMode && !selectedMode) {
-      const match = SCANNER_MODES.find(m => m.name === scanConfig.sniperMode);
-      if (match) setSelectedMode(match);
-    }
+    refreshModes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

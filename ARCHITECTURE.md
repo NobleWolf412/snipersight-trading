@@ -334,6 +334,20 @@ See `docs/exchange_profiles.md` and `docs/security.md` for comprehensive specifi
 
 ---
 
+## Recent Alignments (Contracts & Mode Sync)
+
+To prevent drift between backend and frontend, the following changes are now in place:
+
+- Frontend scanner modes are fetched dynamically from backend via `/api/scanner/modes` at app initialization. Static UI lists have been removed to ensure timeframes, profiles, and baseline confluence thresholds match backend definitions.
+- Signal responses from `/api/scanner/signals` and background scan jobs now include enriched fields used by the UI:
+  - Top-level: `plan_type`, `conviction_class`, `missing_critical_timeframes`, `regime`
+  - Analysis: `risk_reward`, `confluence_score`, `expected_value` (when available)
+- The Details view consumes provided `conviction_class` and `regime` directly and displays EV/R:R using provided fields when present, falling back to safe local calculations if absent.
+
+These alignments reduce mapping complexity and ensure future enhancements do not conflict with the established structure.
+
+---
+
 ## Scanner Flow (Recon Mode) - Full Backend + UI
 
 ### Backend: Scanner API

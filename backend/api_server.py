@@ -586,10 +586,24 @@ async def get_signals(
                     "structural_breaks": plan.metadata.get('structural_breaks', 0),
                     "liquidity_sweeps": plan.metadata.get('liquidity_sweeps', 0),
                     "trend": plan.direction.lower(),
-                    "risk_reward": plan.risk_reward
+                    "risk_reward": plan.risk_reward,
+                    "confluence_score": plan.confluence_breakdown.total_score if hasattr(plan, 'confluence_breakdown') else plan.confidence_score,
+                    "expected_value": plan.metadata.get('expected_value')
+                },
+                # Optional SMC geometry for chart overlays (if provided by pipeline)
+                "smc_geometry": {
+                    "order_blocks": plan.metadata.get('order_blocks_list'),
+                    "fvgs": plan.metadata.get('fvgs_list'),
+                    "bos_choch": plan.metadata.get('structural_breaks_list'),
+                    "liquidity_sweeps": plan.metadata.get('liquidity_sweeps_list')
                 },
                 "rationale": plan.rationale,
-                "setup_type": plan.setup_type
+                "setup_type": plan.setup_type,
+                # Enrichment for frontend contract alignment
+                "plan_type": getattr(plan, 'plan_type', 'SMC'),
+                "conviction_class": getattr(plan, 'conviction_class', None),
+                "missing_critical_timeframes": plan.metadata.get('missing_critical_timeframes', []),
+                "regime": plan.metadata.get('regime')
             }
             signals.append(signal)
 
@@ -1044,10 +1058,16 @@ async def _execute_scan_job(job: ScanJob):
                     "structural_breaks": plan.metadata.get('structural_breaks', 0),
                     "liquidity_sweeps": plan.metadata.get('liquidity_sweeps', 0),
                     "trend": plan.direction.lower(),
-                    "risk_reward": plan.risk_reward
+                    "risk_reward": plan.risk_reward,
+                    "confluence_score": plan.confluence_breakdown.total_score if hasattr(plan, 'confluence_breakdown') else plan.confidence_score,
+                    "expected_value": plan.metadata.get('expected_value')
                 },
                 "rationale": plan.rationale,
-                "setup_type": plan.setup_type
+                "setup_type": plan.setup_type,
+                "plan_type": getattr(plan, 'plan_type', 'SMC'),
+                "conviction_class": getattr(plan, 'conviction_class', None),
+                "missing_critical_timeframes": plan.metadata.get('missing_critical_timeframes', []),
+                "regime": plan.metadata.get('regime')
             }
             signals.append(signal)
         
@@ -1221,7 +1241,11 @@ async def get_candles(
                 candles.append({
                     'timestamp': row['timestamp'].to_pydatetime().isoformat(),
                     'open': float(row['open']),
-                    'high': float(row['high']),
+                "setup_type": plan.setup_type,
+                "plan_type": getattr(plan, 'plan_type', 'SMC'),
+                "conviction_class": getattr(plan, 'conviction_class', None),
+                "missing_critical_timeframes": plan.metadata.get('missing_critical_timeframes', []),
+                "regime": plan.metadata.get('regime')
                     'low': float(row['low']),
                     'close': float(row['close']),
                     'volume': float(row['volume']),

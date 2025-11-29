@@ -46,6 +46,14 @@ export interface Signal {
     liquidity_sweeps?: number;
     trend?: string;
     risk_reward?: number;
+    confluence_score?: number;
+    expected_value?: number;
+  };
+  smc_geometry?: {
+    order_blocks?: any[];
+    fvgs?: any[];
+    bos_choch?: any[];
+    liquidity_sweeps?: any[];
   };
   rationale: string;
   setup_type: string;

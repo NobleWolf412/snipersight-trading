@@ -19,6 +19,13 @@ export interface ScanResult {
   conviction_class?: ConvictionClass;
   missing_critical_timeframes?: string[];
   regime?: RegimeMetadata;
+  // Optional SMC geometry from backend for accurate overlays
+  smc_geometry?: {
+    order_blocks?: any[];
+    fvgs?: any[];
+    bos_choch?: any[];
+    liquidity_sweeps?: any[];
+  };
 }
 
 export interface BotActivity {
@@ -106,5 +113,7 @@ export function convertSignalToScanResult(signal: any): ScanResult {
     conviction_class: (signal.conviction_class as ConvictionClass) || derivedConviction,
     missing_critical_timeframes: signal.missing_critical_timeframes || signal.analysis?.missing_critical_timeframes || [],
     regime,
+    // Pass through raw geometry if provided for future chart overlays
+    smc_geometry: signal.smc_geometry,
   };
 }
