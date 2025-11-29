@@ -16,7 +16,6 @@ const DEFAULT_SYMBOLS = [
   'XRP/USDT',
   'ADA/USDT',
   'DOGE/USDT',
-  'MATIC/USDT',
   'DOT/USDT',
   'AVAX/USDT',
   'LINK/USDT',
