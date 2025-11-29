@@ -182,8 +182,10 @@ orchestrator = Orchestrator(
 )
 
 
-# Serve built frontend at root. Ensure `npm run build` created `dist/`.
-app.mount("/", StaticFiles(directory="dist", html=True), name="frontend")
+# Serve built frontend at root (only if dist exists - for production)
+import os
+if os.path.exists("dist"):
+    app.mount("/", StaticFiles(directory="dist", html=True), name="frontend")
 
 
 @app.get("/api/health")
