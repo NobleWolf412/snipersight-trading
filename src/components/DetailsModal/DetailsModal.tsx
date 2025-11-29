@@ -27,7 +27,35 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">Signal Details: {result.pair}</DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-xl font-bold">Signal Details: {result.pair}</DialogTitle>
+            {(() => {
+              const metaEV = (result as any)?.metadata?.ev?.expected_value as number | undefined;
+              let ev: number | undefined = undefined;
+              if (typeof metaEV === 'number') {
+                ev = metaEV;
+              } else {
+                try {
+                  const score = typeof result.confidenceScore === 'number' ? result.confidenceScore : 0;
+                  const pWin = Math.max(0.2, Math.min(0.85, score / 100.0));
+                  const avgEntry = (result.entryZone.high + result.entryZone.low) / 2;
+                  const risk = Math.abs(avgEntry - result.stopLoss);
+                  const firstTarget = result.takeProfits && result.takeProfits.length > 0 ? result.takeProfits[0] : undefined;
+                  if (firstTarget && risk > 0) {
+                    const reward = Math.abs(firstTarget - avgEntry);
+                    const R = reward / risk;
+                    ev = pWin * R - (1 - pWin) * 1.0;
+                  }
+                } catch {}
+              }
+              if (ev === undefined) return null;
+              const positive = ev >= 0;
+              const cls = positive ? 'bg-success/20 text-success border-success/50' : 'bg-destructive/20 text-destructive border-destructive/50';
+              return (
+                <Badge variant="outline" className={`font-mono font-bold ${cls}`}>EV {ev.toFixed(2)}</Badge>
+              );
+            })()}
+          </div>
           <DialogDescription>Complete Smart Money Concepts analysis</DialogDescription>
         </DialogHeader>
 
@@ -147,6 +175,27 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
                       const reward = Math.abs(firstTarget - avgEntry);
                       const rr = reward / risk;
                       return `${formatNum(rr, 2)}:1`;
+                    })()}
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <div className="text-xs text-muted-foreground mb-1">Expected Value (approx)</div>
+                  <div className="font-mono text-sm">
+                    {(() => {
+                      try {
+                        const score = typeof result.confidenceScore === 'number' ? result.confidenceScore : 0;
+                        const pWin = Math.max(0.35, Math.min(0.70, 0.35 + (score / 100.0) * (0.70 - 0.35)));
+                        const avgEntry = (result.entryZone.high + result.entryZone.low) / 2;
+                        const risk = Math.abs(avgEntry - result.stopLoss);
+                        const firstTarget = result.takeProfits && result.takeProfits.length > 0 ? result.takeProfits[0] : undefined;
+                        if (!firstTarget || risk <= 0) return '-';
+                        const reward = Math.abs(firstTarget - avgEntry);
+                        const R = reward / risk;
+                        const ev = pWin * R - (1 - pWin) * 1.0;
+                        return `${ev.toFixed(2)}`;
+                      } catch {
+                        return '-';
+                      }
                     })()}
                   </div>
                 </div>

@@ -11,13 +11,30 @@ Following the "No-Null, Actionable Outputs" principle:
 - Complete rationale for every decision
 """
 
-from typing import Optional, List
+from typing import Optional, List, Literal, cast
 from datetime import datetime
 import pandas as pd
 import numpy as np
 from loguru import logger
 
 from backend.shared.models.planner import TradePlan, EntryZone, StopLoss, Target
+
+SetupArchetype = Literal[
+    "TREND_OB_PULLBACK",
+    "RANGE_REVERSION",
+    "SWEEP_REVERSAL",
+    "BREAKOUT_RETEST",
+]
+
+def _map_setup_to_archetype(setup_type: str) -> SetupArchetype:
+    s = (setup_type or "").upper().replace(" ", "_")
+    if "SWEEP" in s:
+        return cast(SetupArchetype, "SWEEP_REVERSAL")
+    if "BREAKOUT" in s or "RETEST" in s:
+        return cast(SetupArchetype, "BREAKOUT_RETEST")
+    if "RANGE" in s or "MEAN" in s:
+        return cast(SetupArchetype, "RANGE_REVERSION")
+    return cast(SetupArchetype, "TREND_OB_PULLBACK")
 from backend.shared.models.smc import SMCSnapshot, OrderBlock, FVG
 from backend.shared.models.indicators import IndicatorSet
 from backend.shared.models.scoring import ConfluenceBreakdown
@@ -34,7 +51,7 @@ def generate_trade_plan(
     confluence_breakdown: ConfluenceBreakdown,
     config: ScanConfig,
     current_price: float,
-    missing_critical_timeframes: List[str] = None
+    missing_critical_timeframes: Optional[List[str]] = None
 ) -> TradePlan:
     """
     Generate a complete, actionable trade plan.
@@ -63,7 +80,7 @@ def generate_trade_plan(
     if not indicators.by_timeframe:
         raise ValueError("No indicators available for trade planning")
     
-    primary_tf = list(indicators.by_timeframe.keys())[0]
+    primary_tf = getattr(config, "primary_planning_timeframe", None) or list(indicators.by_timeframe.keys())[-1]
     primary_indicators = indicators.by_timeframe[primary_tf]
     
     if primary_indicators.atr is None:
@@ -78,35 +95,50 @@ def generate_trade_plan(
         'targets_from_structure': False
     }
     
+    # Normalize direction and setup semantics
+    direction_norm = direction.upper()
+    if direction_norm not in ("LONG", "SHORT"):
+        raise ValueError(f"Unsupported direction: {direction_norm}")
+    is_bullish = direction_norm == "LONG"
+    setup_archetype = _map_setup_to_archetype(setup_type)
+
     # --- Determine Entry Zone ---
     
     entry_zone, entry_used_structure = _calculate_entry_zone(
-        direction=direction,
+        is_bullish=is_bullish,
         smc_snapshot=smc_snapshot,
         current_price=current_price,
-        atr=atr
+        atr=atr,
+        primary_tf=primary_tf,
+        setup_archetype=setup_archetype,
+        config=config
     )
     plan_composition['entry_from_structure'] = entry_used_structure
     
     # --- Calculate Stop Loss ---
     
     stop_loss, stop_used_structure = _calculate_stop_loss(
-        direction=direction,
+        is_bullish=is_bullish,
         entry_zone=entry_zone,
         smc_snapshot=smc_snapshot,
-        atr=atr
+        atr=atr,
+        primary_tf=primary_tf,
+        setup_archetype=setup_archetype,
+        config=config
     )
     plan_composition['stop_from_structure'] = stop_used_structure
     
     # --- Calculate Targets ---
     
     targets = _calculate_targets(
-        direction=direction,
+        is_bullish=is_bullish,
         entry_zone=entry_zone,
         stop_loss=stop_loss,
         smc_snapshot=smc_snapshot,
         atr=atr,
-        config=config
+        config=config,
+        setup_archetype=setup_archetype,
+        regime_label=confluence_breakdown.regime
     )
     
     # --- Calculate Risk:Reward ---
@@ -120,6 +152,13 @@ def generate_trade_plan(
     # Use first target for R:R calculation
     reward = abs(targets[0].level - avg_entry)
     risk_reward = reward / risk
+
+    # --- Approximate Expected Value (EV) ---
+    # Derive a coarse win probability from confluence (bounded for sanity)
+    p_win_raw = confluence_breakdown.total_score / 100.0
+    p_win = max(0.2, min(0.85, p_win_raw))
+    # EV with first target R:R: EV = p*R - (1-p)*1
+    expected_value = (p_win * risk_reward) - ((1.0 - p_win) * 1.0)
     
     # --- Classify Plan Type ---
     
@@ -131,8 +170,15 @@ def generate_trade_plan(
     else:
         plan_type = "HYBRID"
     
-    # --- Tiered R:R Validation ---
-    
+    # --- Sanity gates and Tiered R:R Validation ---
+    # Stop distance sanity using config bounds if present
+    max_stop_atr = getattr(config, "max_stop_atr", 6.0)
+    min_stop_atr = getattr(config, "min_stop_atr", 0.3)
+    if stop_loss.distance_atr > max_stop_atr:
+        raise ValueError("Stop too wide relative to ATR")
+    if stop_loss.distance_atr < min_stop_atr:
+        raise ValueError("Stop too tight relative to ATR")
+
     # Apply R:R threshold appropriate for plan type
     is_valid_rr, rr_reason = validate_rr(plan_type, risk_reward)
     if not is_valid_rr:
@@ -157,15 +203,21 @@ def generate_trade_plan(
         entry_zone=entry_zone,
         stop_loss=stop_loss,
         targets=targets,
-        risk_reward=risk_reward
+        risk_reward=risk_reward,
+        primary_tf=primary_tf
     )
     
     # --- Build Trade Plan ---
     
+    # Normalize to expected TradePlan literal types
+    _dir_lower = direction.lower()
+    trade_direction = "LONG" if is_bullish else "SHORT"
+    trade_setup = setup_type if setup_type in ["scalp", "swing", "intraday"] else "intraday"
+
     trade_plan = TradePlan(
         symbol=symbol,
-        direction=direction,
-        setup_type=setup_type,
+        direction=trade_direction,
+        setup_type=cast(Literal['scalp', 'swing', 'intraday'], trade_setup),
         entry_zone=entry_zone,
         stop_loss=stop_loss,
         targets=targets,
@@ -180,7 +232,19 @@ def generate_trade_plan(
             "atr": atr,
             "current_price": current_price,
             "timestamp": datetime.utcnow().isoformat(),
-            "plan_composition": plan_composition
+            "plan_composition": plan_composition,
+            "rr_components": {
+                "avg_entry": avg_entry,
+                "stop": stop_loss.level,
+                "first_target": targets[0].level,
+                "risk_distance": risk,
+                "reward_distance": reward
+            },
+            "ev": {
+                "p_win": p_win,
+                "risk_reward": risk_reward,
+                "expected_value": expected_value
+            }
         }
     )
     
@@ -188,10 +252,13 @@ def generate_trade_plan(
 
 
 def _calculate_entry_zone(
-    direction: str,
+    is_bullish: bool,
     smc_snapshot: SMCSnapshot,
     current_price: float,
-    atr: float
+    atr: float,
+    primary_tf: str,
+    setup_archetype: SetupArchetype,
+    config: ScanConfig
 ) -> tuple[EntryZone, bool]:
     """
     Calculate dual entry zone based on SMC structure.
@@ -202,22 +269,25 @@ def _calculate_entry_zone(
     Returns:
         Tuple of (EntryZone, used_structure_flag)
     """
-    logger.critical(f"_calculate_entry_zone CALLED: direction={direction}, current_price={current_price}, atr={atr}, num_obs={len(smc_snapshot.order_blocks)}, num_fvgs={len(smc_snapshot.fvgs)}")
-    
-    # Normalize direction to lowercase
-    direction_lower = direction.lower()
-    is_bullish = direction_lower in ["bullish", "long"]
+    logger.critical(f"_calculate_entry_zone CALLED: is_bullish={is_bullish}, current_price={current_price}, atr={atr}, num_obs={len(smc_snapshot.order_blocks)}, num_fvgs={len(smc_snapshot.fvgs)}")
     
     # Find relevant order block or FVG
     if is_bullish:
         # Look for bullish OB or FVG below current price
         obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bullish" and ob.high < current_price]
+        # Filter out OBs too far (distance constraint)
+        max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
+        obs = [ob for ob in obs if (current_price - ob.high) / atr <= max_pullback_atr]
+        # Prefer higher timeframe / freshness
+        tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
+        def _ob_score(ob: OrderBlock) -> float:
+            return ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
         fvgs = [fvg for fvg in smc_snapshot.fvgs if fvg.direction == "bullish" and fvg.top < current_price]
         
         logger.critical(f"Bullish entry zone: found {len(obs)} OBs and {len(fvgs)} FVGs below current price")
         if obs:
             # Use most recent/fresh OB
-            best_ob = max(obs, key=lambda ob: ob.freshness_score)
+            best_ob = max(obs, key=_ob_score)
             logger.critical(f"ENTRY ZONE: Using bullish OB - high={best_ob.high}, low={best_ob.low}, ATR={atr}")
             near_entry = best_ob.high - (0.1 * atr)  # Top of OB (aggressive entry)
             far_entry = best_ob.low + (0.1 * atr)    # Bottom of OB (conservative, deeper)
@@ -247,10 +317,15 @@ def _calculate_entry_zone(
     else:  # bearish
         # Look for bearish OB or FVG above current price
         obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bearish" and ob.low > current_price]
+        max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
+        obs = [ob for ob in obs if (ob.low - current_price) / atr <= max_pullback_atr]
+        tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
+        def _ob_score_b(ob: OrderBlock) -> float:
+            return ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
         fvgs = [fvg for fvg in smc_snapshot.fvgs if fvg.direction == "bearish" and fvg.bottom > current_price]
         
         if obs:
-            best_ob = max(obs, key=lambda ob: ob.freshness_score)
+            best_ob = max(obs, key=_ob_score_b)
             near_entry = best_ob.low + (0.1 * atr)   # Bottom of OB (aggressive entry)
             far_entry = best_ob.high - (0.1 * atr)   # Top of OB (conservative, deeper)
             rationale = f"Entry zone based on {best_ob.timeframe} bearish order block"
@@ -280,10 +355,13 @@ def _calculate_entry_zone(
 
 
 def _calculate_stop_loss(
-    direction: str,
+    is_bullish: bool,
     entry_zone: EntryZone,
     smc_snapshot: SMCSnapshot,
-    atr: float
+    atr: float,
+    primary_tf: str,
+    setup_archetype: SetupArchetype,
+    config: ScanConfig
 ) -> tuple[StopLoss, bool]:
     """
     Calculate structure-based stop loss.
@@ -293,8 +371,7 @@ def _calculate_stop_loss(
     Returns:
         Tuple of (StopLoss, used_structure_flag)
     """
-    direction_lower = direction.lower()
-    is_bullish = direction_lower in ["bullish", "long"]
+    # Direction provided via is_bullish
     
     if is_bullish:
         # Stop below the entry structure
@@ -332,7 +409,7 @@ def _calculate_stop_loss(
             used_structure = True
         else:
             # CRITICAL: Never use ATR-only stops - reject trade without structure
-            logger.warning(f"No structure-based stop found for bullish {direction} trade - rejecting")
+            logger.warning(f"No structure-based stop found for bullish trade - rejecting")
             raise ValueError("Cannot generate trade plan: no clear structure for stop loss placement")
     
     else:  # bearish
@@ -359,11 +436,11 @@ def _calculate_stop_loss(
             used_structure = True
         else:
             # CRITICAL: Never use ATR-only stops - reject trade without structure
-            logger.warning(f"No structure-based stop found for bearish {direction} trade - rejecting")
+            logger.warning(f"No structure-based stop found for bearish trade - rejecting")
             raise ValueError("Cannot generate trade plan: no clear structure for stop loss placement")
     
     # CRITICAL DEBUG
-    logger.critical(f"STOP CALC: direction={direction}, entry_near={entry_zone.near_entry}, entry_far={entry_zone.far_entry}, stop={stop_level}, atr={atr}")
+    logger.critical(f"STOP CALC: is_bullish={is_bullish}, entry_near={entry_zone.near_entry}, entry_far={entry_zone.far_entry}, stop={stop_level}, atr={atr}")
     
     return StopLoss(
         level=stop_level,
@@ -373,12 +450,14 @@ def _calculate_stop_loss(
 
 
 def _calculate_targets(
-    direction: str,
+    is_bullish: bool,
     entry_zone: EntryZone,
     stop_loss: StopLoss,
     smc_snapshot: SMCSnapshot,
     atr: float,
-    config: ScanConfig
+    config: ScanConfig,
+    setup_archetype: SetupArchetype,
+    regime_label: str
 ) -> List[Target]:
     """
     Calculate tiered targets based on structure and R:R multiples.
@@ -390,12 +469,21 @@ def _calculate_targets(
     
     targets = []
     
-    direction_lower = direction.lower()
-    is_bullish = direction_lower in ["bullish", "long"]
+    # Determine RR ladder based on archetype and regime
+    regime_lower = (regime_label or "").lower()
+    trending = any(k in regime_lower for k in ["trend", "drive"]) or 'aligned' in regime_lower
+    if setup_archetype == "SWEEP_REVERSAL":
+        rr_levels = [1.2, 2.0, 3.0]
+    elif setup_archetype == "RANGE_REVERSION":
+        rr_levels = [1.2, 2.0, 3.0]
+    elif setup_archetype == "BREAKOUT_RETEST":
+        rr_levels = [1.5, 2.5, 4.0] if not trending else [2.0, 3.0, 5.0]
+    else:  # TREND_OB_PULLBACK
+        rr_levels = [1.5, 2.5, 4.0] if not trending else [2.0, 3.0, 5.0]
     
     if is_bullish:
         # Target 1: Conservative (1.5R or nearest resistance)
-        target1_rr = avg_entry + (risk_distance * 1.5)
+        target1_rr = avg_entry + (risk_distance * rr_levels[0])
         
         # Look for FVG or OB resistance
         resistances = []
@@ -419,16 +507,16 @@ def _calculate_targets(
             rationale=target1_rationale
         ))
         
-        # Target 2: Moderate (2.5R or mid-structure)
-        target2_level = avg_entry + (risk_distance * 2.5)
+        # Target 2: Moderate
+        target2_level = avg_entry + (risk_distance * rr_levels[1])
         targets.append(Target(
             level=target2_level,
             percentage=30.0,  # Close 30% of position at second target
             rationale="2.5R target (moderate)"
         ))
         
-        # Target 3: Aggressive (4R or major structure)
-        target3_level = avg_entry + (risk_distance * 4.0)
+        # Target 3: Aggressive
+        target3_level = avg_entry + (risk_distance * rr_levels[2])
         targets.append(Target(
             level=target3_level,
             percentage=20.0,  # Close final 20% at third target
@@ -437,7 +525,7 @@ def _calculate_targets(
     
     else:  # bearish
         # Target 1: Conservative
-        target1_rr = avg_entry - (risk_distance * 1.5)
+        target1_rr = avg_entry - (risk_distance * rr_levels[0])
         
         # Look for support
         supports = []
@@ -462,7 +550,7 @@ def _calculate_targets(
         ))
         
         # Target 2: Moderate
-        target2_level = avg_entry - (risk_distance * 2.5)
+        target2_level = avg_entry - (risk_distance * rr_levels[1])
         targets.append(Target(
             level=target2_level,
             percentage=30.0,  # Close 30% of position at second target
@@ -470,7 +558,7 @@ def _calculate_targets(
         ))
         
         # Target 3: Aggressive
-        target3_level = avg_entry - (risk_distance * 4.0)
+        target3_level = avg_entry - (risk_distance * rr_levels[2])
         targets.append(Target(
             level=target3_level,
             percentage=20.0,  # Close final 20% at third target
@@ -487,7 +575,8 @@ def _generate_rationale(
     entry_zone: EntryZone,
     stop_loss: StopLoss,
     targets: List[Target],
-    risk_reward: float
+    risk_reward: float,
+    primary_tf: str
 ) -> str:
     """
     Generate comprehensive human-readable rationale for the trade plan.
@@ -520,6 +609,11 @@ def _generate_rationale(
     lines.append(f"• Stop: {stop_loss.rationale} ({stop_loss.distance_atr:.1f}x ATR)")
     lines.append(f"• Targets: {len(targets)} tiered levels")
     lines.append(f"• Risk:Reward: {risk_reward:.2f}:1")
+    lines.append("")
+
+    # Explicit invalidation guidance
+    lines.append("**Invalidation:**")
+    lines.append(f"Trade idea invalid if price closes beyond {stop_loss.level:.4f} on the {primary_tf} timeframe.")
     lines.append("")
     
     # Synergies and warnings

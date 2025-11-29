@@ -591,25 +591,55 @@ class Orchestrator:
         if not context.smc_snapshot or not context.multi_tf_indicators:
             raise ValueError(f"{context.symbol}: Missing SMC snapshot or indicators for confluence scoring")
         
-        base_breakdown = calculate_confluence_score(
+        # Evaluate both directions and choose the stronger confluence
+        long_breakdown = calculate_confluence_score(
             smc_snapshot=context.smc_snapshot,
             indicators=context.multi_tf_indicators,
             config=self.config,
-            direction="LONG"  # We'll determine this properly later
+            direction="LONG"
         )
+        short_breakdown = calculate_confluence_score(
+            smc_snapshot=context.smc_snapshot,
+            indicators=context.multi_tf_indicators,
+            config=self.config,
+            direction="SHORT"
+        )
+
+        # Regime-aware adjustment: optionally penalize contrarian setups
+        def regime_adjust(score: float, direction: str) -> float:
+            try:
+                symbol_regime = context.metadata.get('symbol_regime')
+                trend = (symbol_regime.trend if symbol_regime else None) or 'neutral'
+                if trend == 'bullish' and direction == 'SHORT':
+                    return score - 2.0
+                if trend == 'bearish' and direction == 'LONG':
+                    return score - 2.0
+            except Exception:
+                pass
+            return score
+
+        long_breakdown.total_score = regime_adjust(long_breakdown.total_score, 'LONG')
+        short_breakdown.total_score = regime_adjust(short_breakdown.total_score, 'SHORT')
+
+        chosen = long_breakdown if long_breakdown.total_score >= short_breakdown.total_score else short_breakdown
+        # Persist alt scores for analytics/debugging
+        context.metadata['alt_confluence'] = {
+            'long': long_breakdown.total_score,
+            'short': short_breakdown.total_score
+        }
+        # Store chosen direction for downstream planning
+        context.metadata['chosen_direction'] = 'LONG' if chosen is long_breakdown else 'SHORT'
         
         # Apply regime adjustments if regime is available
         if self.current_regime:
             symbol_regime = context.metadata.get('symbol_regime')
             adjusted_score = self._apply_regime_adjustments(
-                base_score=base_breakdown.total_score,
+                base_score=chosen.total_score,
                 symbol_regime=symbol_regime
             )
-            
-            # Update breakdown with adjusted score
-            base_breakdown.total_score = adjusted_score
-        
-        return base_breakdown
+            chosen.total_score = adjusted_score
+
+        return chosen
     
     def _generate_trade_plan(self, context: SniperContext, current_price: float) -> Optional[TradePlan]:
         """
@@ -631,8 +661,8 @@ class Orchestrator:
         assert context.multi_tf_indicators is not None
         assert context.confluence_breakdown is not None
         
-        # Determine trade direction from confluence analysis
-        direction = "LONG" if context.confluence_breakdown.regime in ["trend", "bullish"] else "SHORT"
+        # Determine trade direction from chosen confluence evaluation
+        direction = context.metadata.get('chosen_direction', "LONG")
         
         # Determine setup type based on SMC patterns
         setup_type = self._classify_setup_type(context.smc_snapshot)
@@ -668,6 +698,18 @@ class Orchestrator:
                         'score': symbol_regime.score
                     }
             
+            # Compute simple EV estimate for ranking/prioritization
+            try:
+                # Map confluence score (0-100) to win prob (0.35-0.70)
+                score = float(context.confluence_breakdown.total_score)
+                p_win = max(0.35, min(0.70, 0.35 + (score / 100.0) * (0.70 - 0.35)))
+                R = float(plan.risk_reward)
+                ev = p_win * R - (1 - p_win) * 1.0
+                plan.metadata['ev'] = round(ev, 3)
+                plan.metadata['p_win'] = round(p_win, 3)
+            except Exception:
+                plan.metadata['ev'] = None
+
             return plan
             
         except Exception as e:  # noqa: BLE001  # type: ignore[misc] - intentional broad catch for robustness
@@ -784,11 +826,19 @@ class Orchestrator:
             # Keep existing min_confluence_score if caller intentionally raised it; otherwise adopt baseline
             if hasattr(self.config, 'min_confluence_score'):
                 self.config.min_confluence_score = max(self.config.min_confluence_score, mode.min_confluence_score)
+            
+            # Wire planner-specific knobs from mode into config
+            self.config.primary_planning_timeframe = mode.primary_planning_timeframe
+            self.config.max_pullback_atr = mode.max_pullback_atr
+            self.config.min_stop_atr = mode.min_stop_atr
+            self.config.max_stop_atr = mode.max_stop_atr
+            
             # Refresh scanner_mode reference and regime policy
             self.scanner_mode = mode
             from backend.analysis.regime_policies import get_regime_policy
             self.regime_policy = get_regime_policy(mode.profile)
-            logger.debug("Applied scanner mode: %s | timeframes=%s | critical=%s", mode.name, mode.timeframes, mode.critical_timeframes)
+            logger.debug("Applied scanner mode: %s | timeframes=%s | critical=%s | planning_tf=%s", 
+                        mode.name, mode.timeframes, mode.critical_timeframes, mode.primary_planning_timeframe)
         except Exception as e:
             logger.warning("Failed to apply mode %s: %s", getattr(mode, 'name', 'unknown'), e)
 

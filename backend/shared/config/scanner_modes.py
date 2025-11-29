@@ -22,6 +22,11 @@ class ScannerMode:
     min_confluence_score: float
     profile: str
     critical_timeframes: Tuple[str, ...] = ()  # Must be present or symbol rejected
+    # Planner-related knobs
+    primary_planning_timeframe: str = "1h"
+    max_pullback_atr: float = 3.0
+    min_stop_atr: float = 0.3
+    max_stop_atr: float = 6.0
 
 
 # Mode definitions (ordered roughly by strategic altitude)
@@ -35,6 +40,10 @@ MODES: Dict[str, ScannerMode] = {
         min_confluence_score=75.0,
         profile="macro_surveillance",
         critical_timeframes=("1w", "1d"),  # Weekly and daily are essential for macro view
+        primary_planning_timeframe="4h",
+        max_pullback_atr=4.0,
+        min_stop_atr=0.4,
+        max_stop_atr=8.0,
     ),
     "recon": ScannerMode(
         name="recon",
@@ -43,6 +52,10 @@ MODES: Dict[str, ScannerMode] = {
         min_confluence_score=65.0,
         profile="balanced",
         critical_timeframes=("4h", "1h"),  # 4H and 1H essential for swing context
+        primary_planning_timeframe="1h",
+        max_pullback_atr=3.0,
+        min_stop_atr=0.3,
+        max_stop_atr=6.0,
     ),
     "strike": ScannerMode(
         name="strike",
@@ -51,6 +64,10 @@ MODES: Dict[str, ScannerMode] = {
         min_confluence_score=60.0,
         profile="intraday_aggressive",
         critical_timeframes=("15m",),  # 15m is essential for intraday entries
+        primary_planning_timeframe="15m",
+        max_pullback_atr=2.5,
+        min_stop_atr=0.25,
+        max_stop_atr=5.0,
     ),
     "surgical": ScannerMode(
         name="surgical",
@@ -59,6 +76,10 @@ MODES: Dict[str, ScannerMode] = {
         min_confluence_score=70.0,
         profile="precision",
         critical_timeframes=("15m",),  # 15m essential for precision scalping
+        primary_planning_timeframe="15m",
+        max_pullback_atr=2.0,
+        min_stop_atr=0.25,
+        max_stop_atr=4.0,
     ),
     "ghost": ScannerMode(
         name="ghost",
@@ -67,6 +88,10 @@ MODES: Dict[str, ScannerMode] = {
         min_confluence_score=70.0,
         profile="stealth_balanced",
         critical_timeframes=("1h",),  # 1H essential for multi-horizon context
+        primary_planning_timeframe="1h",
+        max_pullback_atr=3.0,
+        min_stop_atr=0.3,
+        max_stop_atr=6.0,
     ),
 }
 
@@ -80,6 +105,10 @@ def list_modes() -> List[Dict[str, object]]:
             "timeframes": m.timeframes,
             "min_confluence_score": m.min_confluence_score,
             "profile": m.profile,
+            "primary_planning_timeframe": m.primary_planning_timeframe,
+            "max_pullback_atr": m.max_pullback_atr,
+            "min_stop_atr": m.min_stop_atr,
+            "max_stop_atr": m.max_stop_atr,
         }
         for m in MODES.values()
     ]

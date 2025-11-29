@@ -77,6 +77,18 @@ export function ScanResults() {
   }, []);
 
   const results = scanResults || [];
+  
+  // Compute EV from metadata if available, else approximate from confidence and a nominal R:R
+  const getEV = (r: ScanResult) => {
+    const metaEV = (r as any)?.metadata?.ev?.expected_value;
+    if (typeof metaEV === 'number') return metaEV;
+    const rr = (r as any)?.riskReward ?? 1.5;
+    const pRaw = (r.confidenceScore ?? 50) / 100;
+    const p = Math.max(0.2, Math.min(0.85, pRaw));
+    return p * rr - (1 - p) * 1.0;
+  };
+  
+  const sortedResults = [...results].sort((a, b) => getEV(b) - getEV(a));
 
   if (isLoading) {
     return (
@@ -198,7 +210,7 @@ export function ScanResults() {
         />
 
         <div className="card-3d rounded-xl overflow-hidden border border-accent/30">
-          <LiveTicker symbols={results.slice(0, 6).map(r => r.pair)} />
+          <LiveTicker symbols={sortedResults.slice(0, 6).map(r => r.pair)} />
         </div>
 
         {scanMetadata && (
@@ -302,7 +314,8 @@ export function ScanResults() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {results.map((result, index) => (
+                    {sortedResults.map((result, index) => (
+                                            <TableHead className="heading-hud text-xs">EV</TableHead>
                       <TableRow 
                         key={result.id} 
                         className="border-border/40 hover:bg-accent/5 transition-colors"
@@ -312,6 +325,18 @@ export function ScanResults() {
                         <TableCell>
                           <PriceDisplay symbol={result.pair} size="sm" />
                         </TableCell>
+                                                <TableCell>
+                                                  {(() => {
+                                                    const ev = getEV(result);
+                                                    const positive = ev >= 0;
+                                                    const cls = positive ? 'bg-success/20 text-success border-success/50' : 'bg-destructive/20 text-destructive border-destructive/50';
+                                                    return (
+                                                      <Badge variant="outline" className={`font-mono font-bold ${cls}`}>
+                                                        {ev.toFixed(2)}
+                                                      </Badge>
+                                                    );
+                                                  })()}
+                                                </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={getTrendColor(result.trendBias)}>
                             <span className="flex items-center gap-1">
@@ -386,6 +411,13 @@ export function ScanResults() {
             </CardContent>
           )}
         </Card>
+
+        {/* EV Legend */}
+        <div className="text-xs text-muted-foreground text-center">
+          <p>
+            EV ≈ p(win) × R − (1 − p(win)) × 1. p(win) bounded 0.20–0.85 from confidence; R uses first target vs stop.
+          </p>
+        </div>
 
         {selectedResult && (
           <>

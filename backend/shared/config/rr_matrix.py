@@ -1,10 +1,11 @@
 """
 Risk:Reward Validation Matrix
 
-Defines tiered R:R thresholds based on plan type and conviction class.
+Defines tiered R:R thresholds based on plan type, mode profile, and conviction class.
 Allows different quality standards for SMC-based plans vs ATR fallback plans.
+Also supports mode-aware thresholds (scalp vs swing horizons).
 """
-from typing import Dict, Literal
+from typing import Dict, Literal, Optional
 from dataclasses import dataclass
 
 
@@ -17,29 +18,38 @@ class RRThreshold:
     description: str
 
 
-# Tiered R:R validation matrix
+# Base R:R validation matrix (production-ready values)
 RR_MATRIX: Dict[str, RRThreshold] = {
     
     "SMC": RRThreshold(
         plan_type="SMC",
-        min_rr=0.8,  # Temporarily lowered for testing (normally 1.5)
+        min_rr=1.5,
         ideal_rr=2.5,
         description="Structure-based entry/stop from order blocks, FVGs, or structural breaks"
     ),
     
     "ATR_FALLBACK": RRThreshold(
         plan_type="ATR_FALLBACK",
-        min_rr=0.8,  # Lower threshold for ATR-based plans (allow scalps)
-        ideal_rr=1.5,
+        min_rr=1.0,
+        ideal_rr=1.8,
         description="ATR-based entry/stop when clear SMC structure unavailable"
     ),
     
     "HYBRID": RRThreshold(
         plan_type="HYBRID",
-        min_rr=1.2,  # Middle ground - some structure, some ATR
+        min_rr=1.2,
         ideal_rr=2.0,
         description="Mixed SMC structure + ATR-based components"
     ),
+}
+
+# Mode-specific R:R adjustments (profile-aware)
+MODE_RR_MULTIPLIERS: Dict[str, tuple[float, float]] = {
+    "precision": (1.0, 1.0),           # surgical: default strict
+    "intraday_aggressive": (0.85, 0.9),  # strike: slightly looser for scalps
+    "balanced": (1.0, 1.0),            # recon: default
+    "macro_surveillance": (1.1, 1.15),  # overwatch: tighter for swings
+    "stealth_balanced": (1.0, 1.0),    # ghost: default
 }
 
 
