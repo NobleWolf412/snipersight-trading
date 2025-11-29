@@ -168,7 +168,7 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                   </div>
                 </CollapsibleTrigger>
                 {Array.isArray(reasonDetails) && reasonDetails.length > 0 && (
-                  <Dialog open={reasonDialog === reason} onOpenChange={(open) => !open && setReasonDialog(null)}>
+                    <Dialog open={reasonDialog === reason} onOpenChange={(open) => !open && setReasonDialog(null)}>
                     <DialogTrigger asChild>
                       <Button
                         variant="ghost"
@@ -176,6 +176,7 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                         className="h-8 text-xs mr-2"
                         onClick={(e) => {
                           e.stopPropagation();
+                            setReasonDialog(reason);
                         }}
                       >
                         <Info className="w-3 h-3 mr-1" /> View All
@@ -183,10 +184,20 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                     </DialogTrigger>
                     <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                         <DialogHeader>
-                          <DialogTitle className="flex items-center gap-2">
+                          <div className="flex items-center justify-between">
+                            <DialogTitle className="flex items-center gap-2">
                             <Icon className={`w-5 h-5 ${config.color}`} />
                             {config.label} – {reasonDetails.length} Rejections
                           </DialogTitle>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setReasonDialog(null)}
+                              className="text-xs"
+                            >
+                              Close
+                            </Button>
+                          </div>
                         </DialogHeader>
                         <div className="space-y-4">
                           {reasonDetails.map((detail, idx) => (

@@ -403,12 +403,30 @@ class Orchestrator:
                     "reason": "Insufficient SMC patterns for entry/stop placement"
                 }
             
-            # Log rejection event
+            # Log rejection event with diagnostics for UI visibility
+            diagnostics = {}
+            if context.plan:
+                try:
+                    avg_entry = (context.plan.entry_zone.near_entry + context.plan.entry_zone.far_entry) / 2
+                    diagnostics = {
+                        "risk_reward": round(context.plan.risk_reward, 2),
+                        "entry_near": round(context.plan.entry_zone.near_entry, 6),
+                        "entry_far": round(context.plan.entry_zone.far_entry, 6),
+                        "avg_entry": round(avg_entry, 6),
+                        "stop_level": round(context.plan.stop_loss.level, 6),
+                        "stop_distance_atr": round(context.plan.stop_loss.distance_atr, 2),
+                        "stop_rationale": context.plan.stop_loss.rationale,
+                        "first_target": round(context.plan.targets[0].level, 6) if context.plan.targets else None,
+                    }
+                except Exception:
+                    diagnostics = {"risk_reward": getattr(context.plan, 'risk_reward', None)}
+
             self.telemetry.log_event(create_signal_rejected_event(
                 run_id=run_id,
                 symbol=symbol,
                 reason=reason,
-                gate_name="risk_validation"
+                gate_name="risk_validation",
+                diagnostics=diagnostics
             ))
             
             return None, rejection_info

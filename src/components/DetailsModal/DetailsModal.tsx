@@ -136,6 +136,20 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
                   <div className="text-xs text-muted-foreground mb-1">Stop Loss</div>
                   <div className="font-mono text-sm text-red-500">${formatNum(result.stopLoss, 2)}</div>
                 </div>
+                <div className="col-span-2">
+                  <div className="text-xs text-muted-foreground mb-1">Risk/Reward (computed)</div>
+                  <div className="font-mono text-sm">
+                    {(() => {
+                      const avgEntry = (result.entryZone.high + result.entryZone.low) / 2;
+                      const risk = Math.abs(avgEntry - result.stopLoss);
+                      const firstTarget = result.takeProfits && result.takeProfits.length > 0 ? result.takeProfits[0] : undefined;
+                      if (!firstTarget || risk <= 0) return '-';
+                      const reward = Math.abs(firstTarget - avgEntry);
+                      const rr = reward / risk;
+                      return `${formatNum(rr, 2)}:1`;
+                    })()}
+                  </div>
+                </div>
               </div>
             </div>
 

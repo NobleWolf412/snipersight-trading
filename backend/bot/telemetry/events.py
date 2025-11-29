@@ -153,7 +153,8 @@ def create_signal_rejected_event(
     reason: str,
     gate_name: Optional[str] = None,
     score: Optional[float] = None,
-    threshold: Optional[float] = None
+    threshold: Optional[float] = None,
+    diagnostics: Optional[Dict[str, Any]] = None
 ) -> TelemetryEvent:
     """Create signal rejected event."""
     data = {
@@ -165,6 +166,9 @@ def create_signal_rejected_event(
         data['score'] = round(score, 2)
     if threshold is not None:
         data['threshold'] = round(threshold, 2)
+    if diagnostics:
+        # Attach structured diagnostics for UI/console visibility
+        data['diagnostics'] = diagnostics
     
     return TelemetryEvent(
         event_type=EventType.SIGNAL_REJECTED,
