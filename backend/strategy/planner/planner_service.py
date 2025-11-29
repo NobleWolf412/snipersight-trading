@@ -41,6 +41,8 @@ from backend.shared.models.indicators import IndicatorSet
 from backend.shared.models.scoring import ConfluenceBreakdown
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.rr_matrix import validate_rr, classify_conviction
+from backend.bot.telemetry.logger import get_telemetry_logger
+from backend.bot.telemetry.events import create_signal_rejected_event
 
 
 def generate_trade_plan(
@@ -86,9 +88,17 @@ def generate_trade_plan(
     primary_tf = getattr(config, "primary_planning_timeframe", None) or list(indicators.by_timeframe.keys())[-1]
     primary_indicators = indicators.by_timeframe[primary_tf]
     
-    if primary_indicators.atr is None:
-        raise ValueError("ATR required for trade planning")
-    
+    telemetry = get_telemetry_logger()
+    run_id = datetime.utcnow().strftime("run-%Y%m%d")  # coarse run grouping
+
+    if primary_indicators.atr is None or primary_indicators.atr <= 0:
+        telemetry.log_event(create_signal_rejected_event(
+            run_id=run_id,
+            symbol=symbol,
+            reason="atr_invalid",
+            diagnostics={"atr": primary_indicators.atr}
+        ))
+        raise ValueError("ATR required for trade planning and must be positive")
     atr = primary_indicators.atr
     
     # Track plan composition for type classification
@@ -132,8 +142,31 @@ def generate_trade_plan(
     )
     plan_composition['stop_from_structure'] = stop_used_structure
     
+    # --- Structural collapse guards before targets (prevent .15 DOGE case) ---
+    avg_entry_pre = (entry_zone.near_entry + entry_zone.far_entry) / 2.0
+    spread = abs(entry_zone.near_entry - entry_zone.far_entry)
+    risk_distance_pre = abs(avg_entry_pre - stop_loss.level)
+    price_eps = max(1e-6, current_price * 0.0001)  # Dynamic epsilon (~0.01%)
+    if spread <= price_eps:
+        logger.warning(f"Rejecting plan: entry zone collapsed (near={entry_zone.near_entry}, far={entry_zone.far_entry}, eps={price_eps})")
+        telemetry.log_event(create_signal_rejected_event(
+            run_id=run_id,
+            symbol=symbol,
+            reason="entry_zone_collapsed",
+            diagnostics={"near_entry": entry_zone.near_entry, "far_entry": entry_zone.far_entry, "eps": price_eps}
+        ))
+        raise ValueError("Entry zone collapsed: insufficient spread")
+    if risk_distance_pre <= price_eps:
+        logger.warning(f"Rejecting plan: risk distance collapsed (avg_entry={avg_entry_pre}, stop={stop_loss.level}, eps={price_eps})")
+        telemetry.log_event(create_signal_rejected_event(
+            run_id=run_id,
+            symbol=symbol,
+            reason="risk_distance_collapsed",
+            diagnostics={"avg_entry": avg_entry_pre, "stop": stop_loss.level, "eps": price_eps}
+        ))
+        raise ValueError("Risk distance collapsed: stop too close to entry")
+
     # --- Calculate Targets ---
-    
     targets = _calculate_targets(
         is_bullish=is_bullish,
         entry_zone=entry_zone,
@@ -148,6 +181,17 @@ def generate_trade_plan(
     # --- Calculate Risk:Reward ---
     
     avg_entry = (entry_zone.near_entry + entry_zone.far_entry) / 2
+    # Targets collapse guard: ensure at least one target offers meaningful reward distance
+    target_dists = [abs(t.level - avg_entry) for t in targets]
+    if all(d <= price_eps for d in target_dists):
+        logger.warning(f"Rejecting plan: targets collapsed near entry (targets={[t.level for t in targets]}, avg_entry={avg_entry}, eps={price_eps})")
+        telemetry.log_event(create_signal_rejected_event(
+            run_id=run_id,
+            symbol=symbol,
+            reason="targets_collapsed",
+            diagnostics={"targets": [t.level for t in targets], "avg_entry": avg_entry, "eps": price_eps}
+        ))
+        raise ValueError("Targets collapsed: no meaningful reward distance")
     risk = abs(avg_entry - stop_loss.level)
     
     if risk == 0:

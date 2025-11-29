@@ -17,7 +17,7 @@ import { ScannerConsole } from '@/components/ScannerConsole';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
-  const { scanConfig, setScanConfig, selectedMode } = useScanner();
+  const { scanConfig, setScanConfig, selectedMode, addConsoleLog } = useScanner();
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<{ current: number; total: number; symbol?: string } | null>(null);
   const { toast } = useToast();
@@ -204,9 +204,11 @@ export function ScannerSetup() {
                   <div className="flex-1 flex justify-end">
                     <Select
                       value={(scanConfig.leverage ?? 1).toString()}
-                      onValueChange={(value) =>
-                        setScanConfig({ ...scanConfig, leverage: parseInt(value) })
-                      }
+                      onValueChange={(value) => {
+                        const lev = parseInt(value);
+                        setScanConfig({ ...scanConfig, leverage: lev });
+                        addConsoleLog(`CONFIG: Leverage set to ${lev}x`, 'config');
+                      }}
                     >
                       <SelectTrigger id="leverage" aria-label="Select Leverage" aria-labelledby="leverage-label" className="bg-background border-border hover:border-primary/50 transition-colors h-12 text-base font-mono">
                         <SelectValue placeholder="Leverage" />

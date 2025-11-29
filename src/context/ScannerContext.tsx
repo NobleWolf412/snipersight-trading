@@ -46,6 +46,15 @@ interface ScannerContextType {
   selectedMode: ScannerMode | null;
   setSelectedMode: (mode: ScannerMode) => void;
   refreshModes: () => Promise<void>;
+  consoleLogs: ConsoleLog[];
+  addConsoleLog: (message: string, type?: ConsoleLog['type']) => void;
+  clearConsoleLogs: () => void;
+}
+
+export interface ConsoleLog {
+  timestamp: number; // epoch ms for precise ordering
+  message: string;
+  type?: 'info' | 'success' | 'warning' | 'error' | 'config';
 }
 
 const defaultScanConfig: ScanConfig = {
@@ -128,6 +137,15 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
   
   const [scannerModes, setScannerModes] = useState<ScannerMode[]>(fallbackModes);
   const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(null);
+  const [consoleLogs, setConsoleLogs] = useLocalStorage<ConsoleLog[]>('scanner-console-logs', []);
+
+  const addConsoleLog = (message: string, type: ConsoleLog['type'] = 'info') => {
+    setConsoleLogs([...consoleLogs, { timestamp: Date.now(), message, type }]);
+  };
+
+  const clearConsoleLogs = () => {
+    setConsoleLogs([]);
+  };
 
   const refreshModes = async (): Promise<void> => {
     console.log('[ScannerContext] Fetching modes from backend...');
@@ -178,6 +196,9 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
         selectedMode,
         setSelectedMode,
         refreshModes,
+        consoleLogs,
+        addConsoleLog,
+        clearConsoleLogs,
       }}
     >
       {children}

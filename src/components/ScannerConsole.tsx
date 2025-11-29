@@ -1,19 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Terminal, Lightning } from '@phosphor-icons/react';
+import { useScanner } from '@/context/ScannerContext';
 
-interface ScannerConsoleProps {
-  className?: string;
-  isScanning: boolean;
-}
+interface ScannerConsoleProps { className?: string; isScanning: boolean; }
 
 export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
-  const [logs, setLogs] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'warning' | 'error' }>>([]);
+  const { consoleLogs, addConsoleLog, scanConfig } = useScanner();
   const scrollRef = useRef<HTMLDivElement>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [scanPhaseLogs, setScanPhaseLogs] = useState<{ timestamp: number; message: string; type?: string }[]>([]);
 
   useEffect(() => {
     // Clear existing timers
@@ -26,6 +25,8 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
     setElapsedMs(0);
 
     if (isScanning) {
+      // Reset ephemeral scan phase logs but preserve prior config logs
+      setScanPhaseLogs([]);
       startTimeRef.current = Date.now();
       // Subtle elapsed timer tick every 1s
       intervalRef.current = setInterval(() => {
@@ -40,15 +41,16 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
         const totalSeconds = Math.floor(ms / 1000);
         const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
         const s = (totalSeconds % 60).toString().padStart(2, '0');
-        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: `… working (elapsed ${m}:${s})`, type: 'info' }]);
+        setScanPhaseLogs(prev => [...prev, { timestamp: Date.now(), message: `… working (elapsed ${m}:${s})`, type: 'info' }]);
       };
       timers.current.push(setInterval(heartbeat, 5000) as unknown as ReturnType<typeof setTimeout>);
-
-      setLogs([{ timestamp: new Date().toLocaleTimeString(), message: '> Initializing scanner systems...', type: 'info' }]);
+      // Snapshot current config (persistent)
+      addConsoleLog(`CONFIG SNAPSHOT: mode=${scanConfig.sniperMode} leverage=${scanConfig.leverage}x exchange=${scanConfig.exchange} topPairs=${scanConfig.topPairs}`, 'config');
+      setScanPhaseLogs(prev => [...prev, { timestamp: Date.now(), message: '> Initializing scanner systems...', type: 'info' }]);
 
       const push = (ms: number, msg: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
         timers.current.push(setTimeout(() => {
-          setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: msg, type }]);
+          setScanPhaseLogs(prev => [...prev, { timestamp: Date.now(), message: msg, type }]);
         }, ms));
       };
 
@@ -83,8 +85,6 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
         }
         startTimeRef.current = null;
       };
-    } else {
-      setLogs([]);
     }
   }, [isScanning]);
 
@@ -106,11 +106,13 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
   // Insert near header or keep unobtrusive as fixed overlay
   // Consumers can reposition if needed
 
+  const mergedLogs = [...consoleLogs, ...scanPhaseLogs];
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [logs]);
+  }, [mergedLogs.length]);
 
   return (
     <div className={cn("flex flex-col h-full hud-console overflow-hidden rounded-lg relative z-0", className)}>
@@ -131,16 +133,17 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
         ref={scrollRef}
         className="flex-1 p-4 font-mono text-xs space-y-1 overflow-y-auto"
       >
-        {logs.length > 0 ? (
-          logs.map((log, i) => (
+        {mergedLogs.length > 0 ? (
+          mergedLogs.map((log, i) => (
             <div key={i} className="flex gap-2">
-              <span className="text-muted-foreground shrink-0">[{log.timestamp}]</span>
+              <span className="text-muted-foreground shrink-0">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
               <span className={cn(
                 "flex-1",
                 log.type === 'success' && "text-success",
                 log.type === 'warning' && "text-warning",
                 log.type === 'error' && "text-destructive",
-                log.type === 'info' && "text-foreground"
+                (log.type === 'info' || !log.type) && "text-foreground",
+                log.type === 'config' && "text-muted-foreground"
               )}>
                 {log.message}
               </span>
