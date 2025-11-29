@@ -17,6 +17,12 @@ class ScanConfig:
     btc_impulse_gate_enabled: bool = True
     max_symbols: int = 20
     max_risk_pct: float = 2.0
+    
+    # Planner-specific knobs (wired from scanner mode)
+    primary_planning_timeframe: str = "4H"
+    max_pullback_atr: float = 3.0
+    min_stop_atr: float = 1.0
+    max_stop_atr: float = 6.0
 
 
 @dataclass

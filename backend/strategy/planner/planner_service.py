@@ -18,6 +18,7 @@ import numpy as np
 from loguru import logger
 
 from backend.shared.models.planner import TradePlan, EntryZone, StopLoss, Target
+from backend.shared.models.data import MultiTimeframeData
 
 SetupArchetype = Literal[
     "TREND_OB_PULLBACK",
@@ -51,7 +52,8 @@ def generate_trade_plan(
     confluence_breakdown: ConfluenceBreakdown,
     config: ScanConfig,
     current_price: float,
-    missing_critical_timeframes: Optional[List[str]] = None
+    missing_critical_timeframes: Optional[List[str]] = None,
+    multi_tf_data: Optional['MultiTimeframeData'] = None
 ) -> TradePlan:
     """
     Generate a complete, actionable trade plan.
@@ -66,6 +68,7 @@ def generate_trade_plan(
         config: Scan configuration
         current_price: Current market price
         missing_critical_timeframes: List of critical TFs that failed to load
+        multi_tf_data: Optional multi-timeframe candle data for swing-based stops
         
     Returns:
         TradePlan: Complete trade plan with entries, stops, targets
@@ -124,7 +127,8 @@ def generate_trade_plan(
         atr=atr,
         primary_tf=primary_tf,
         setup_archetype=setup_archetype,
-        config=config
+        config=config,
+        multi_tf_data=multi_tf_data
     )
     plan_composition['stop_from_structure'] = stop_used_structure
     
@@ -179,8 +183,8 @@ def generate_trade_plan(
     if stop_loss.distance_atr < min_stop_atr:
         raise ValueError("Stop too tight relative to ATR")
 
-    # Apply R:R threshold appropriate for plan type
-    is_valid_rr, rr_reason = validate_rr(plan_type, risk_reward)
+    # Apply R:R threshold appropriate for plan type (mode-aware)
+    is_valid_rr, rr_reason = validate_rr(plan_type, risk_reward, mode_profile=config.profile)
     if not is_valid_rr:
         raise ValueError(rr_reason)
     
@@ -191,7 +195,8 @@ def generate_trade_plan(
         plan_type=plan_type,
         risk_reward=risk_reward,
         confluence_score=confluence_breakdown.total_score,
-        has_all_critical_tfs=has_all_critical_tfs
+        has_all_critical_tfs=has_all_critical_tfs,
+        mode_profile=config.profile
     )
     
     # --- Generate Rationale ---
@@ -354,6 +359,65 @@ def _calculate_entry_zone(
     ), used_structure
 
 
+def _find_swing_level(
+    is_bullish: bool,
+    reference_price: float,
+    candles_df: pd.DataFrame,
+    lookback: int = 20
+) -> Optional[float]:
+    """
+    Find swing high or swing low from price action.
+    
+    A swing low is a bar where the low is lower than N bars before and after.
+    A swing high is a bar where the high is higher than N bars before and after.
+    
+    Args:
+        is_bullish: If True, find swing low (for stop). If False, find swing high.
+        reference_price: Entry price to anchor search from
+        candles_df: OHLCV dataframe for the timeframe
+        lookback: Number of bars to search back
+        
+    Returns:
+        Swing level price or None if no clear swing found
+    """
+    if candles_df is None or len(candles_df) < 5:
+        return None
+    
+    # Use last N candles
+    recent = candles_df.tail(lookback)
+    
+    if is_bullish:
+        # Find swing lows below reference price
+        swing_lows = []
+        for i in range(2, len(recent) - 2):
+            low = recent.iloc[i]['low']
+            # Check if local minimum (lower than 2 bars before and after)
+            if (low < recent.iloc[i-1]['low'] and 
+                low < recent.iloc[i-2]['low'] and
+                low < recent.iloc[i+1]['low'] and 
+                low < recent.iloc[i+2]['low'] and
+                low < reference_price):
+                swing_lows.append(low)
+        
+        # Return the highest swing low (closest to entry)
+        return max(swing_lows) if swing_lows else None
+    else:
+        # Find swing highs above reference price
+        swing_highs = []
+        for i in range(2, len(recent) - 2):
+            high = recent.iloc[i]['high']
+            # Check if local maximum (higher than 2 bars before and after)
+            if (high > recent.iloc[i-1]['high'] and 
+                high > recent.iloc[i-2]['high'] and
+                high > recent.iloc[i+1]['high'] and 
+                high > recent.iloc[i+2]['high'] and
+                high > reference_price):
+                swing_highs.append(high)
+        
+        # Return the lowest swing high (closest to entry)
+        return min(swing_highs) if swing_highs else None
+
+
 def _calculate_stop_loss(
     is_bullish: bool,
     entry_zone: EntryZone,
@@ -361,7 +425,8 @@ def _calculate_stop_loss(
     atr: float,
     primary_tf: str,
     setup_archetype: SetupArchetype,
-    config: ScanConfig
+    config: ScanConfig,
+    multi_tf_data: Optional[MultiTimeframeData] = None
 ) -> tuple[StopLoss, bool]:
     """
     Calculate structure-based stop loss.
@@ -408,9 +473,28 @@ def _calculate_stop_loss(
             distance_atr = (entry_zone.far_entry - stop_level) / atr
             used_structure = True
         else:
-            # CRITICAL: Never use ATR-only stops - reject trade without structure
-            logger.warning(f"No structure-based stop found for bullish trade - rejecting")
-            raise ValueError("Cannot generate trade plan: no clear structure for stop loss placement")
+            # Fallback: swing-based stop from primary timeframe
+            logger.info(f"No SMC structure for stop - attempting swing-based fallback on {primary_tf}")
+            swing_level = None
+            if multi_tf_data and primary_tf in multi_tf_data.timeframes:
+                candles_df = multi_tf_data.timeframes[primary_tf]
+                swing_level = _find_swing_level(
+                    is_bullish=True,
+                    reference_price=entry_zone.far_entry,
+                    candles_df=candles_df,
+                    lookback=20
+                )
+            
+            if swing_level:
+                stop_level = swing_level - (0.3 * atr)  # Buffer below swing
+                rationale = f"Stop below swing low on {primary_tf} (no SMC structure)"
+                distance_atr = (entry_zone.far_entry - stop_level) / atr
+                used_structure = False  # Swing level, not SMC structure
+                logger.info(f"Using swing-based stop: {stop_level}")
+            else:
+                # Last resort: check HTF for structure
+                logger.warning(f"No swing level found - rejecting trade")
+                raise ValueError("Cannot generate trade plan: no clear structure or swing level for stop loss placement")
     
     else:  # bearish
         # Stop above the entry structure
@@ -435,9 +519,28 @@ def _calculate_stop_loss(
             distance_atr = (stop_level - entry_zone.far_entry) / atr
             used_structure = True
         else:
-            # CRITICAL: Never use ATR-only stops - reject trade without structure
-            logger.warning(f"No structure-based stop found for bearish trade - rejecting")
-            raise ValueError("Cannot generate trade plan: no clear structure for stop loss placement")
+            # Fallback: swing-based stop from primary timeframe
+            logger.info(f"No SMC structure for stop - attempting swing-based fallback on {primary_tf}")
+            swing_level = None
+            if multi_tf_data and primary_tf in multi_tf_data.timeframes:
+                candles_df = multi_tf_data.timeframes[primary_tf]
+                swing_level = _find_swing_level(
+                    is_bullish=False,
+                    reference_price=entry_zone.far_entry,
+                    candles_df=candles_df,
+                    lookback=20
+                )
+            
+            if swing_level:
+                stop_level = swing_level + (0.3 * atr)  # Buffer above swing
+                rationale = f"Stop above swing high on {primary_tf} (no SMC structure)"
+                distance_atr = (stop_level - entry_zone.far_entry) / atr
+                used_structure = False  # Swing level, not SMC structure
+                logger.info(f"Using swing-based stop: {stop_level}")
+            else:
+                # Last resort: reject if no swing level
+                logger.warning(f"No swing level found - rejecting trade")
+                raise ValueError("Cannot generate trade plan: no clear structure or swing level for stop loss placement")
     
     # CRITICAL DEBUG
     logger.critical(f"STOP CALC: is_bullish={is_bullish}, entry_near={entry_zone.near_entry}, entry_far={entry_zone.far_entry}, stop={stop_level}, atr={atr}")

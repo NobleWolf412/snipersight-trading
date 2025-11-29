@@ -677,7 +677,8 @@ class Orchestrator:
                 confluence_breakdown=context.confluence_breakdown,
                 config=self.config,
                 current_price=current_price,
-                missing_critical_timeframes=context.metadata.get('missing_critical_timeframes', [])
+                missing_critical_timeframes=context.metadata.get('missing_critical_timeframes', []),
+                multi_tf_data=context.multi_tf_data
             )
             
             # Enrich plan with regime context

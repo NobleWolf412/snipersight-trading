@@ -53,32 +53,70 @@ MODE_RR_MULTIPLIERS: Dict[str, tuple[float, float]] = {
 }
 
 
-def get_rr_threshold(plan_type: Literal["SMC", "ATR_FALLBACK", "HYBRID"]) -> RRThreshold:
-    """Get R:R threshold configuration for plan type."""
-    return RR_MATRIX.get(plan_type, RR_MATRIX["SMC"])  # Default to strictest
+def get_rr_threshold(
+    plan_type: Literal["SMC", "ATR_FALLBACK", "HYBRID"],
+    mode_profile: Optional[str] = None
+) -> RRThreshold:
+    """
+    Get the mode-aware R:R validation threshold for a plan type.
+    
+    Args:
+        plan_type: Type of trade plan (SMC, ATR_FALLBACK, HYBRID)
+        mode_profile: Scanner mode profile for threshold adjustments
+            - precision (surgical): strictest thresholds
+            - intraday_aggressive (strike): looser for scalps (0.85x min, 0.9x ideal)
+            - macro_surveillance (overwatch): tighter for swings (1.1x min, 1.15x ideal)
+            - balanced/stealth_balanced: default thresholds
+        
+    Returns:
+        RRThreshold configuration with mode-adjusted values
+    """
+    base_threshold = RR_MATRIX.get(plan_type, RR_MATRIX["SMC"])
+    
+    # Apply mode multipliers if profile provided
+    if mode_profile and mode_profile in MODE_RR_MULTIPLIERS:
+        min_mult, ideal_mult = MODE_RR_MULTIPLIERS[mode_profile]
+        return RRThreshold(
+            plan_type=base_threshold.plan_type,
+            min_rr=base_threshold.min_rr * min_mult,
+            ideal_rr=base_threshold.ideal_rr * ideal_mult,
+            description=base_threshold.description
+        )
+    
+    return base_threshold
 
 
 def classify_conviction(
     plan_type: Literal["SMC", "ATR_FALLBACK", "HYBRID"],
     risk_reward: float,
     confluence_score: float,
-    has_all_critical_tfs: bool
+    has_all_critical_tfs: bool,
+    mode_profile: Optional[str] = None
 ) -> Literal["A", "B", "C"]:
     """
-    Classify conviction class based on plan quality.
+    Classify conviction class based on plan quality using band-based logic.
+    
+    Conviction Classes (Quality Bands):
+    - A: Best of best - SMC structure + ideal R:R + high confluence + complete data
+    - B: Close to ideal OR decent confluence - allows good ATR_FALLBACK plans
+    - C: Barely acceptable - meets minimum thresholds but nothing special
+    
+    ATR_FALLBACK plans are capped at B (can be good, but never A-tier without structure).
     
     Args:
-        plan_type: How plan was generated
+        plan_type: How plan was generated (SMC/HYBRID/ATR_FALLBACK)
         risk_reward: R:R ratio
-        confluence_score: Total confluence score
+        confluence_score: Total confluence score (0-100)
         has_all_critical_tfs: Whether all critical timeframes loaded
+        mode_profile: Scanner mode profile for threshold adjustments
         
     Returns:
         Conviction class: A (best), B (good), C (acceptable)
     """
-    threshold = get_rr_threshold(plan_type)
+    threshold = get_rr_threshold(plan_type, mode_profile)
     
-    # Class A: Ideal conditions
+    # Class A: Best of best (requires SMC structure)
+    # - Perfect plan type + ideal R:R + high confluence + complete data
     if (
         plan_type == "SMC" and
         risk_reward >= threshold.ideal_rr and
@@ -87,34 +125,47 @@ def classify_conviction(
     ):
         return "A"
     
-    # Class C: Barely acceptable
-    if (
-        plan_type == "ATR_FALLBACK" or
-        risk_reward < threshold.ideal_rr or
-        confluence_score < 65.0 or
-        not has_all_critical_tfs
-    ):
-        return "C"
+    # Class B: Close to ideal (allows good ATR_FALLBACK)
+    # - R:R near ideal (≥80% of ideal) + decent confluence (≥65)
+    # - OR strong structure (SMC/HYBRID) with decent R:R
+    rr_near_ideal = risk_reward >= (threshold.ideal_rr * 0.8)
+    decent_confluence = confluence_score >= 65.0
     
-    # Class B: Everything else (good but not ideal)
-    return "B"
+    if rr_near_ideal and decent_confluence:
+        return "B"
+    
+    if plan_type in ("SMC", "HYBRID") and risk_reward >= threshold.min_rr and decent_confluence:
+        return "B"
+    
+    # ATR_FALLBACK cap: can be B if decent, but never A
+    if plan_type == "ATR_FALLBACK" and risk_reward >= threshold.min_rr and confluence_score >= 60.0:
+        return "B"
+    
+    # Class C: Barely acceptable
+    # - Meets minimum thresholds but nothing special
+    return "C"
 
 
 def validate_rr(
     plan_type: Literal["SMC", "ATR_FALLBACK", "HYBRID"],
-    risk_reward: float
+    risk_reward: float,
+    mode_profile: Optional[str] = None
 ) -> tuple[bool, str]:
     """
     Validate R:R ratio against plan type threshold.
     
+    Single source of truth for R:R validation - all other components should
+    delegate to this function rather than implementing their own thresholds.
+    
     Args:
-        plan_type: Plan classification
+        plan_type: Plan classification (SMC/HYBRID/ATR_FALLBACK)
         risk_reward: Calculated R:R ratio
+        mode_profile: Scanner mode profile for threshold adjustments
         
     Returns:
         Tuple of (is_valid, reason_if_invalid)
     """
-    threshold = get_rr_threshold(plan_type)
+    threshold = get_rr_threshold(plan_type, mode_profile)
     
     if risk_reward >= threshold.min_rr:
         return True, ""
@@ -124,3 +175,62 @@ def validate_rr(
         f"{threshold.description}."
     )
     return False, reason
+
+
+def calculate_implied_pwin(risk_reward: float, target_ev: float = 0.0) -> float:
+    """
+    Calculate implied win probability needed for target EV given R:R.
+    
+    EV formula: EV = p_win * R - (1 - p_win) * 1
+    Solving for p_win: p_win = (EV + 1) / (R + 1)
+    
+    Args:
+        risk_reward: R:R ratio
+        target_ev: Target expected value (default 0 for breakeven)
+        
+    Returns:
+        Implied win probability (0.0 to 1.0)
+    """
+    if risk_reward <= 0:
+        return 1.0  # Need 100% win rate for zero/negative R:R
+    
+    p_win = (target_ev + 1.0) / (risk_reward + 1.0)
+    return max(0.0, min(1.0, p_win))  # Clamp to valid probability range
+
+
+def get_conviction_behavior_guide() -> Dict[str, Dict[str, str]]:
+    """
+    Guide for how conviction class should influence behavior across the system.
+    
+    Conviction should modulate:
+    - Target spacing (A: aggressive ladders, C: conservative single targets)
+    - Position sizing (A: full allocation, C: reduced size)
+    - Entry patience (A: wait for perfect entry, C: accept wider zones)
+    - Gate strictness (A: pass all gates, C: borderline may slip through)
+    
+    Returns:
+        Nested dict mapping conviction class to behavior dimensions
+    """
+    return {
+        "A": {
+            "target_spacing": "Aggressive ladder - 3+ targets with tight spacing",
+            "position_sizing": "Full mode allocation (up to max account %)",
+            "entry_patience": "Wait for premium entry within tight zone",
+            "gate_strictness": "Must pass all quality gates with margin",
+            "hold_behavior": "Hold through noise, conviction-driven exits only",
+        },
+        "B": {
+            "target_spacing": "Balanced ladder - 2-3 targets, moderate spacing",
+            "position_sizing": "75% of mode allocation",
+            "entry_patience": "Accept mid-zone entries, don't chase extremes",
+            "gate_strictness": "Pass standard gates, minor violations acceptable",
+            "hold_behavior": "Manage actively, respect technical exits",
+        },
+        "C": {
+            "target_spacing": "Conservative - single target or minimal ladder",
+            "position_sizing": "50% of mode allocation (test position)",
+            "entry_patience": "Accept wider entry zones, don't force precision",
+            "gate_strictness": "Borderline passes allowed if other factors strong",
+            "hold_behavior": "Exit quickly on adverse signals, tight leash",
+        },
+    }
