@@ -173,6 +173,8 @@ class RiskManager:
         self.max_weekly_loss_pct = max_weekly_loss_pct
         self.max_position_concentration_pct = max_position_concentration_pct
         
+        logger.info(f"RiskManager initialized: max_asset_exposure_pct={max_asset_exposure_pct}%")
+        
         # Active positions
         self.positions: Dict[str, Position] = {}
         

@@ -304,6 +304,7 @@ export function ScanResults() {
                     <TableRow className="border-border/40 hover:bg-accent/5">
                       <TableHead className="heading-hud text-xs">PAIR</TableHead>
                       <TableHead className="heading-hud text-xs">LIVE PRICE</TableHead>
+                      <TableHead className="heading-hud text-xs">EV</TableHead>
                       <TableHead className="heading-hud text-xs">TREND</TableHead>
                       <TableHead className="heading-hud text-xs">CONVICTION</TableHead>
                       <TableHead className="heading-hud text-xs">REGIME</TableHead>
@@ -330,7 +331,11 @@ export function ScanResults() {
                                                     const positive = ev >= 0;
                                                     const cls = positive ? 'bg-success/20 text-success border-success/50' : 'bg-destructive/20 text-destructive border-destructive/50';
                                                     return (
-                                                      <Badge variant="outline" className={`font-mono font-bold ${cls}`}>
+                                                      <Badge
+                                                        variant="outline"
+                                                        className={`font-mono font-bold ${cls}`}
+                                                        title={`EV = ${ev.toFixed(2)} (p*R - (1-p)*1); p≈clamped confidence, R=first target/stop`}
+                                                      >
                                                         {ev.toFixed(2)}
                                                       </Badge>
                                                     );

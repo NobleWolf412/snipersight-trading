@@ -65,13 +65,27 @@ export function ScannerSetup() {
       const runId = createResponse.data.run_id;
       console.log('[ScannerSetup] Scan job started:', runId);
 
-      // Poll for progress
+      // Poll for progress with transient failure tolerance
+      const MAX_POLL_FAILURES = 5;
+      let consecutiveFailures = 0;
       const pollInterval = setInterval(async () => {
-        const statusResponse = await api.getScanRun(runId);
-        
+        let statusResponse;
+        try {
+          statusResponse = await api.getScanRun(runId);
+        } catch (e) {
+          statusResponse = { error: (e instanceof Error ? e.message : 'network_error') } as any;
+        }
         if (statusResponse.error || !statusResponse.data) {
-          clearInterval(pollInterval);
-          throw new Error(statusResponse.error || 'Failed to get scan status');
+          consecutiveFailures += 1;
+          console.warn('[ScannerSetup] Poll failure', consecutiveFailures, statusResponse.error);
+          // Allow transient 404 / network jitter until threshold
+          if (consecutiveFailures >= MAX_POLL_FAILURES) {
+            clearInterval(pollInterval);
+            throw new Error(statusResponse.error || 'Failed to get scan status after retries');
+          }
+          return; // Skip remainder this cycle
+        } else if (consecutiveFailures > 0) {
+          consecutiveFailures = 0; // Reset after success
         }
 
         const job = statusResponse.data;
@@ -144,11 +158,18 @@ export function ScannerSetup() {
         }
       }, 2000); // Poll every 2 seconds
 
-      // Timeout after 10 minutes
+      // Timeout after 10 minutes (graceful abort)
       setTimeout(() => {
-        clearInterval(pollInterval);
         if (isScanning) {
-          throw new Error('Scan timeout - job exceeded 10 minutes');
+          console.warn('[ScannerSetup] Scan timeout exceeded');
+          clearInterval(pollInterval);
+          toast({
+            title: 'Scan Timeout',
+            description: 'Job exceeded 10 minute limit',
+            variant: 'destructive'
+          });
+          setIsScanning(false);
+          setScanProgress(null);
         }
       }, 600000);
 

@@ -12,13 +12,15 @@ try:
     print("✓ ScanConfig imported")
     
     from backend.engine.orchestrator import Orchestrator
+    from backend.data.adapters.phemex import PhemexAdapter
     print("✓ Orchestrator imported")
     
-    config = ScanConfig(profile="balanced")
+    config = ScanConfig(profile="recon")
     print(f"✓ Config created: {config}")
-    
-    orchestrator = Orchestrator(config)
-    print("✓ Orchestrator initialized")
+
+    adapter = PhemexAdapter()
+    orchestrator = Orchestrator(config, exchange_adapter=adapter)
+    print("✓ Orchestrator initialized with PhemexAdapter")
     
     print("🎉 All imports successful!")
     

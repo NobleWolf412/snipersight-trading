@@ -42,9 +42,14 @@ export default defineConfig({
     port: frontendPort,
     host: hostBind,
     strictPort,
+    // Enhanced HMR for dev tunnels / remote environments.
+    // Allows override via env vars:
+    // HMR_HOST, HMR_PROTOCOL (ws/wss), HMR_CLIENT_PORT
     hmr: {
       overlay: true,
-      clientPort: frontendPort,
+      protocol: (process.env.HMR_PROTOCOL) || (hostBind === 'localhost' ? 'ws' : 'wss'),
+      host: process.env.HMR_HOST || hostBind,
+      clientPort: process.env.HMR_CLIENT_PORT ? Number(process.env.HMR_CLIENT_PORT) : (hostBind === 'localhost' ? frontendPort : 443),
     },
     proxy: {
       '/api': {

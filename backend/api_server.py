@@ -28,6 +28,12 @@ from backend.analysis.pair_selection import select_symbols
 from backend.shared.config.smc_config import SMCConfig
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.scanner_modes import get_mode, list_modes
+from backend.bot.notifications.notification_manager import (
+    notification_manager,
+    NotificationPriority,
+    NotificationType,
+    NotificationEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +125,35 @@ class OrderRequest(BaseModel):
     leverage: Optional[int] = 1
 
 
+class NotificationPayload(BaseModel):
+    """Inbound notification payload for generic event creation."""
+    type: str
+    priority: str = "normal"
+    title: str
+    message: str
+    data: Optional[Dict[str, Any]] = None
+
+    def to_event(self) -> NotificationEvent:
+        # Map enums safely; fallback to SYSTEM/NORMAL
+        try:
+            n_type = NotificationType(self.type.lower())
+        except Exception:
+            n_type = NotificationType.SYSTEM
+        try:
+            n_priority = NotificationPriority(self.priority.lower())
+        except Exception:
+            n_priority = NotificationPriority.NORMAL
+        return NotificationEvent(
+            id=f"custom-{int(datetime.now(timezone.utc).timestamp())}-{n_type.value}",
+            type=n_type,
+            priority=n_priority,
+            timestamp=datetime.now(timezone.utc),
+            title=self.title,
+            body=self.message,
+            data=self.data,
+        )
+
+
 # Global state (in production, use proper state management/database)
 scanner_configs: Dict[str, ScannerConfig] = {}
 bot_configs: Dict[str, BotConfig] = {}
@@ -153,7 +188,11 @@ scan_jobs: Dict[str, ScanJob] = {}
 
 # Initialize trading components
 position_sizer = PositionSizer(account_balance=10000, max_risk_pct=2.0)
-risk_manager = RiskManager(account_balance=10000, max_open_positions=5)
+risk_manager = RiskManager(
+    account_balance=10000,
+    max_open_positions=5,
+    max_asset_exposure_pct=50.0  # Increased for intraday tight-stop strategies
+)
 paper_executor = PaperExecutor(initial_balance=10000, fee_rate=0.001)
 
 # Exchange adapters factory - Tier 1 exchanges only
@@ -596,6 +635,58 @@ async def get_signals(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@app.get("/api/scanner/diagnostics")
+async def get_scanner_diagnostics():
+    """
+    Get detailed diagnostics and rejection breakdowns from orchestrator.
+    
+    Useful for debugging zero-signal scans and understanding quality gate failures.
+    Returns per-stage rejection counts and sample failures for deep analysis.
+    """
+    try:
+        # Get orchestrator pipeline status including diagnostics
+        status = orchestrator.get_pipeline_status()
+        
+        # Build breakdown summary
+        diagnostics_data = status.get('diagnostics', {})
+        
+        return {
+            "debug_mode": status.get('debug_mode', False),
+            "config": status.get('config', {}),
+            "rejection_breakdown": {
+                "data_failures": {
+                    "count": len(diagnostics_data.get('data_failures', [])),
+                    "samples": diagnostics_data.get('data_failures', [])[:5]
+                },
+                "indicator_failures": {
+                    "count": len(diagnostics_data.get('indicator_failures', [])),
+                    "samples": diagnostics_data.get('indicator_failures', [])[:5]
+                },
+                "smc_rejections": {
+                    "count": len(diagnostics_data.get('smc_rejections', [])),
+                    "samples": diagnostics_data.get('smc_rejections', [])[:5]
+                },
+                "confluence_rejections": {
+                    "count": len(diagnostics_data.get('confluence_rejections', [])),
+                    "samples": diagnostics_data.get('confluence_rejections', [])[:5]
+                },
+                "planner_rejections": {
+                    "count": len(diagnostics_data.get('planner_rejections', [])),
+                    "samples": diagnostics_data.get('planner_rejections', [])[:5]
+                },
+                "risk_rejections": {
+                    "count": len(diagnostics_data.get('risk_rejections', [])),
+                    "samples": diagnostics_data.get('risk_rejections', [])[:5]
+                }
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "help": "Enable SS_DEBUG=1 environment variable for debug bundle export"
+        }
+    except Exception as e:
+        logger.error("Error retrieving diagnostics: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 # Bot endpoints
 @app.post("/api/bot/config")
 async def create_bot_config(config: BotConfig):
@@ -752,6 +843,48 @@ async def get_risk_summary():
     """Get risk management summary."""
     summary = risk_manager.get_risk_summary()
     return summary
+
+
+# ---------------------------------------------------------------------------
+# Notification Endpoints
+# ---------------------------------------------------------------------------
+@app.get("/api/notifications")
+async def list_notifications(limit: int = Query(default=50, ge=1, le=200)):
+    """Return recent notification events (newest first)."""
+    events = notification_manager.get_recent_events(limit=limit)
+    return {"notifications": events, "total": len(events)}
+
+
+@app.post("/api/notifications/send")
+async def send_notification(payload: NotificationPayload):
+    """Create and store a notification event.
+
+    For type 'signal' attempts to use signal notification formatting when possible.
+    Returns the created notification event.
+    """
+    try:
+        if payload.type.lower() == "signal" and payload.data and "symbol" in payload.data:
+            # Adapt incoming data to signal_data expected fields.
+            confidence_field = payload.data.get("confidence")
+            if isinstance(confidence_field, float) and confidence_field <= 1.0:
+                confidence = int(confidence_field * 100)
+            else:
+                confidence = int(confidence_field or 50)
+            signal_data = {
+                "symbol": payload.data.get("symbol"),
+                "direction": payload.data.get("direction", "LONG"),
+                "confidence": confidence,
+                "risk_reward": payload.data.get("risk_reward") or payload.data.get("rr", 0),
+            }
+            event_id = notification_manager.send_signal_notification(signal_data)
+            event = notification_manager.get_event_by_id(event_id)
+            return {"event_id": event_id, "notification": event}
+        # Generic path
+        event = payload.to_event()
+        notification_manager._add_event(event)  # internal add to preserve data
+        return {"event_id": event.id, "notification": event.to_dict()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to send notification: {e}") from e
 
 
 # Background scan endpoints

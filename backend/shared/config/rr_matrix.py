@@ -37,7 +37,7 @@ RR_MATRIX: Dict[str, RRThreshold] = {
     
     "HYBRID": RRThreshold(
         plan_type="HYBRID",
-        min_rr=1.2,
+        min_rr=0.9,
         ideal_rr=2.0,
         description="Mixed SMC structure + ATR-based components"
     ),
@@ -149,26 +149,46 @@ def classify_conviction(
 def validate_rr(
     plan_type: Literal["SMC", "ATR_FALLBACK", "HYBRID"],
     risk_reward: float,
-    mode_profile: Optional[str] = None
+    mode_profile: Optional[str] = None,
+    expected_value: Optional[float] = None,
+    confluence_score: Optional[float] = None
 ) -> tuple[bool, str]:
     """
-    Validate R:R ratio against plan type threshold.
+    Validate R:R ratio against plan type threshold with EV-based override.
     
     Single source of truth for R:R validation - all other components should
     delegate to this function rather than implementing their own thresholds.
+    
+    EV Override Logic:
+    - If expected_value provided and > 0.02 (positive expected value)
+    - AND confluence_score >= 70 (strong confluence)
+    - Allow R:R down to 0.75 (25% below standard minimum)
     
     Args:
         plan_type: Plan classification (SMC/HYBRID/ATR_FALLBACK)
         risk_reward: Calculated R:R ratio
         mode_profile: Scanner mode profile for threshold adjustments
+        expected_value: Optional computed EV for override consideration
+        confluence_score: Optional confluence score for override gating
         
     Returns:
         Tuple of (is_valid, reason_if_invalid)
     """
     threshold = get_rr_threshold(plan_type, mode_profile)
     
+    # Standard validation
     if risk_reward >= threshold.min_rr:
         return True, ""
+    
+    # EV-based override for borderline cases
+    if (
+        expected_value is not None and
+        confluence_score is not None and
+        expected_value > 0.02 and
+        confluence_score >= 70.0 and
+        risk_reward >= 0.75  # Hard floor (75% of typical minimum)
+    ):
+        return True, f"EV override: R:R {risk_reward:.2f} < {threshold.min_rr:.2f} but EV={expected_value:.3f} with {confluence_score:.1f}% confluence"
     
     reason = (
         f"R:R {risk_reward:.2f} below {plan_type} minimum {threshold.min_rr:.2f}. "

@@ -11,7 +11,9 @@ async def test_signals():
     """Test the signals endpoint directly"""
     try:
         print("Testing signals endpoint...")
-        result = await get_signals(limit=3, min_score=70, sniper_mode="PRECISION")
+        # Pass raw primitives for parameters that have FastAPI Query defaults
+        # Use a valid sniper_mode defined in scanner_modes (e.g., 'recon')
+        result = await get_signals(limit=3, min_score=70, sniper_mode="recon", exchange="phemex", majors=True, altcoins=True, meme_mode=False, leverage=1)
         print(f"✓ Signals endpoint working: {result['total']} signals generated")
         print(f"  Data source: {result.get('data_source', 'unknown')}")
         

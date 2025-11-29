@@ -184,7 +184,14 @@ def generate_trade_plan(
         raise ValueError("Stop too tight relative to ATR")
 
     # Apply R:R threshold appropriate for plan type (mode-aware)
-    is_valid_rr, rr_reason = validate_rr(plan_type, risk_reward, mode_profile=config.profile)
+    # Pass EV and confluence to enable intelligent override for borderline R:R
+    is_valid_rr, rr_reason = validate_rr(
+        plan_type, 
+        risk_reward, 
+        mode_profile=config.profile,
+        expected_value=expected_value,
+        confluence_score=confluence_breakdown.total_score
+    )
     if not is_valid_rr:
         raise ValueError(rr_reason)
     

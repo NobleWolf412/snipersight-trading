@@ -15,6 +15,9 @@ Orchestrates the complete flow from symbols to actionable trading signals.
 
 import uuid
 import concurrent.futures
+import json
+import os
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import List, Dict, Optional, Any
 import logging
@@ -79,6 +82,7 @@ class Orchestrator:
         exchange_adapter: Optional[Any] = None,
         risk_manager: Optional[RiskManager] = None,
         position_sizer: Optional[PositionSizer] = None,
+        debug_mode: bool = False,
         concurrency_workers: int = 4
     ):
         """
@@ -92,6 +96,17 @@ class Orchestrator:
         """
         self.config = config
         
+        # Debug mode and diagnostics tracking
+        self.debug_mode = debug_mode or os.getenv('SS_DEBUG', '0') == '1'
+        self.diagnostics: Dict[str, Any] = {
+            'data_failures': [],
+            'indicator_failures': [],
+            'smc_rejections': [],
+            'confluence_rejections': [],
+            'planner_rejections': [],
+            'risk_rejections': []
+        }
+        
         # Initialize telemetry
         self.telemetry = get_telemetry_logger()
         
@@ -104,7 +119,8 @@ class Orchestrator:
         # Risk management components
         self.risk_manager = risk_manager or RiskManager(
             account_balance=10000,  # Default balance
-            max_open_positions=5
+            max_open_positions=5,
+            max_asset_exposure_pct=50.0  # Increased for intraday tight-stop strategies
         )
         self.position_sizer = position_sizer or PositionSizer(
             account_balance=10000,  # Default balance
@@ -262,6 +278,9 @@ class Orchestrator:
         Returns:
             Tuple of (TradePlan if qualifying, rejection_info dict if rejected)
         """
+        # Generate trace_id for correlation
+        trace_id = f"{run_id}_{symbol.replace('/', '_')}_{int(timestamp.timestamp())}"
+        
         # Stage 1: Initialize context
         context = SniperContext(
             symbol=symbol,
@@ -271,15 +290,17 @@ class Orchestrator:
         )
         
         # Stage 2: Data ingestion
-        logger.debug("%s: Fetching multi-timeframe data", symbol)
+        logger.debug("%s [%s]: Fetching multi-timeframe data", symbol, trace_id)
         context.multi_tf_data = self._ingest_data(symbol)
         
         if not context.multi_tf_data or not context.multi_tf_data.timeframes:
-            logger.info("%s: REJECTED - No market data available (exchange may be restricted or offline)", symbol)
+            logger.info("%s [%s]: REJECTED - No market data available", symbol, trace_id)
+            self.diagnostics['data_failures'].append({'symbol': symbol, 'trace_id': trace_id})
             return None, {
                 "symbol": symbol,
                 "reason_type": "no_data",
-                "reason": "No market data available"
+                "reason": "No market data available",
+                "trace_id": trace_id
             }
         
         # Stage 2.5: Check critical timeframe availability
@@ -328,16 +349,22 @@ class Orchestrator:
         context.smc_snapshot = self._detect_smc_patterns(context.multi_tf_data)
         
         # Stage 5: Confluence scoring
-        logger.debug("%s: Computing confluence score", symbol)
+        logger.debug("%s [%s]: Computing confluence score", symbol, trace_id)
         context.confluence_breakdown = self._compute_confluence_score(context)
         
         # Check quality gate
         if context.confluence_breakdown.total_score < self.config.min_confluence_score:
-            logger.info("%s: REJECTED - Confluence too low (%.1f < %.1f) | Factors: %s", 
-                       symbol, 
+            logger.info("%s [%s]: REJECTED - Confluence too low (%.1f < %.1f)", 
+                       symbol, trace_id,
                        context.confluence_breakdown.total_score, 
-                       self.config.min_confluence_score,
-                       ', '.join([f"{f.name}={f.score:.1f}" for f in context.confluence_breakdown.factors[:3]]))
+                       self.config.min_confluence_score)
+            
+            self.diagnostics['confluence_rejections'].append({
+                'symbol': symbol,
+                'trace_id': trace_id,
+                'score': context.confluence_breakdown.total_score,
+                'threshold': self.config.min_confluence_score
+            })
             
             # Log rejection event
             self.telemetry.log_event(create_signal_rejected_event(
@@ -373,34 +400,53 @@ class Orchestrator:
             }
         
         # Stage 6: Trade planning
-        logger.debug("%s: Generating trade plan", symbol)
+        logger.debug("%s [%s]: Generating trade plan", symbol, trace_id)
         current_price = self._get_current_price(context.multi_tf_data)
         context.plan = self._generate_trade_plan(context, current_price)
         
         # Stage 7: Risk validation
-        logger.debug("%s: Validating risk parameters", symbol)
-        if not context.plan or not self._validate_risk(context.plan):
-            reason = "No trade plan generated" if not context.plan else "Failed risk validation"
+        logger.debug("%s [%s]: Validating risk parameters", symbol, trace_id)
+        risk_failure_reason = None
+        if context.plan:
+            # Store the actual risk validation failure reason
+            if not self._validate_risk(context.plan):
+                # Extract actual reason from last risk_manager call (stored in instance variable)
+                risk_failure_reason = getattr(self, '_last_risk_failure', 'Failed risk validation')
+        
+        if not context.plan or risk_failure_reason:
+            reason = "No trade plan generated" if not context.plan else risk_failure_reason
             reason_type = "no_trade_plan" if not context.plan else "risk_validation"
             
             if context.plan:
-                logger.info("%s: REJECTED - Risk validation failed | R:R=%.2f, Stop=%.2f, Entry=%.2f", 
-                           symbol, 
+                logger.info("%s [%s]: REJECTED - Risk validation failed | R:R=%.2f | Reason: %s", 
+                           symbol, trace_id,
                            context.plan.risk_reward if hasattr(context.plan, 'risk_reward') else 0,
-                           context.plan.stop_loss.level if context.plan.stop_loss else 0,
-                           context.plan.entry_zone.near_entry if context.plan.entry_zone else 0)
+                           risk_failure_reason)
+                self.diagnostics['risk_rejections'].append({
+                    'symbol': symbol,
+                    'trace_id': trace_id,
+                    'rr': context.plan.risk_reward,
+                    'reason': risk_failure_reason
+                })
                 rejection_info = {
                     "symbol": symbol,
                     "reason_type": reason_type,
-                    "reason": f"Risk/Reward ratio too low ({context.plan.risk_reward:.2f})",
-                    "risk_reward": context.plan.risk_reward
+                    "reason": risk_failure_reason or "Failed risk validation",
+                    "risk_reward": context.plan.risk_reward,
+                    "trace_id": trace_id
                 }
             else:
-                logger.info("%s: REJECTED - No trade plan could be generated (insufficient SMC patterns)", symbol)
+                logger.info("%s [%s]: REJECTED - No trade plan generated", symbol, trace_id)
+                self.diagnostics['planner_rejections'].append({
+                    'symbol': symbol,
+                    'trace_id': trace_id,
+                    'reason': 'no_plan'
+                })
                 rejection_info = {
                     "symbol": symbol,
                     "reason_type": reason_type,
-                    "reason": "Insufficient SMC patterns for entry/stop placement"
+                    "reason": "Insufficient SMC patterns for entry/stop placement",
+                    "trace_id": trace_id
                 }
             
             # Log rejection event with diagnostics for UI visibility
@@ -777,7 +823,10 @@ class Orchestrator:
         )
         
         if not risk_check.passed:
-            logger.debug("Risk validation failed: {risk_check.reason}")
+            logger.warning("Risk validation failed for %s: %s | Limits: %s", 
+                         plan.symbol, risk_check.reason, risk_check.limits_hit)
+            # Store the actual failure reason for better rejection messages
+            self._last_risk_failure = risk_check.reason
             return False
         
         return True
@@ -932,6 +981,76 @@ class Orchestrator:
     def get_pipeline_status(self) -> Dict[str, Any]:
         """
         Get status of all pipeline components.
+        
+        Returns:
+            Dictionary with component statuses and diagnostics
+        """
+        return {
+            'config': {
+                'profile': self.config.profile,
+                'timeframes': self.config.timeframes,
+                'mode': self.scanner_mode.name if self.scanner_mode else None
+            },
+            'diagnostics': self.diagnostics,
+            'debug_mode': self.debug_mode
+        }
+    
+    def export_debug_bundle(self, symbol: str, trace_id: str, **data) -> Optional[str]:
+        """
+        Export debug bundle to disk for replay and analysis.
+        
+        Args:
+            symbol: Trading symbol
+            trace_id: Unique trace identifier
+            **data: Analysis snapshot (multi_tf_data, indicators, smc, plan, etc.)
+            
+        Returns:
+            Path to saved bundle or None if disabled
+        """
+        if not self.debug_mode:
+            return None
+        
+        try:
+            cache_dir = Path('backend/cache/debug') / symbol.replace('/', '_')
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            
+            timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+            bundle_path = cache_dir / f"{trace_id}_{timestamp}.json"
+            
+            # Serialize dataclass objects to dict
+            serialized = {
+                'trace_id': trace_id,
+                'symbol': symbol,
+                'timestamp': timestamp,
+                'metadata': {
+                    k: self._serialize_obj(v) for k, v in data.items()
+                }
+            }
+            
+            with open(bundle_path, 'w') as f:
+                json.dump(serialized, f, indent=2, default=str)
+            
+            logger.debug("Debug bundle exported: %s", bundle_path)
+            return str(bundle_path)
+            
+        except Exception as e:
+            logger.warning("Failed to export debug bundle for %s: %s", symbol, e)
+            return None
+    
+    def _serialize_obj(self, obj):
+        """Convert dataclass/object to serializable dict."""
+        if hasattr(obj, '__dict__'):
+            return {k: self._serialize_obj(v) for k, v in obj.__dict__.items()}
+        elif isinstance(obj, dict):
+            return {k: self._serialize_obj(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [self._serialize_obj(x) for x in obj]
+        else:
+            return obj
+    
+    def get_system_status(self) -> Dict[str, Any]:
+        """
+        Get detailed system status.
         
         Returns:
             Status dictionary
