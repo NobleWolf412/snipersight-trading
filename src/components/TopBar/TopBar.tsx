@@ -16,14 +16,13 @@ export function TopBar() {
             <span className="text-lg font-bold text-foreground tracking-tight hidden sm:inline">SNIPERSIGHT</span>
           </Link>
 
-          <div className="flex items-center gap-4 sm:gap-6 ml-auto">
-            <div className="hidden md:block">
-              <SessionIndicator />
-            </div>
-            <div className="flex items-center gap-3 sm:gap-4">
-              <NotificationStatus />
-              <WalletConnect />
-            </div>
+          <div className="hidden lg:flex flex-1 justify-center max-w-3xl mx-auto">
+            <SessionIndicator />
+          </div>
+
+          <div className="flex items-center gap-3 sm:gap-4">
+            <NotificationStatus />
+            <WalletConnect />
           </div>
         </div>
       </div>

@@ -19,7 +19,7 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
         type: 'info'
       }]);
 
-      const timeouts: NodeJS.Timeout[] = [];
+      const timeouts: ReturnType<typeof setTimeout>[] = [];
 
       timeouts.push(setTimeout(() => {
         setLogs(prev => [...prev, { 

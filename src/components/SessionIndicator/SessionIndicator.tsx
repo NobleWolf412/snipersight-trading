@@ -60,28 +60,28 @@ export function SessionIndicator() {
   };
 
   return (
-    <div className="flex items-center gap-6 bg-card/50 border border-border px-7 py-3.5 rounded-lg hud-glow-cyan">
-      <div className="flex items-center gap-3">
-        <Globe size={22} weight="bold" className="text-accent" />
+    <div className="flex items-center gap-4 bg-background/60 border border-primary/30 px-5 py-2.5 rounded-sm backdrop-blur-sm shadow-[0_0_12px_rgba(0,255,170,0.15)]">
+      <div className="flex items-center gap-2">
+        <Globe size={20} weight="bold" className="text-primary" />
       </div>
-      <div className="flex gap-6">
+      <div className="flex gap-4">
         {sessions.map((session) => {
           const isActive = currentSession === session;
           const activity = sessionActivity[session];
           return (
             <div
               key={session}
-              className={`relative px-5 py-2.5 rounded-md text-xs font-bold tracking-wide transition-all ${
+              className={`relative px-4 py-2 rounded-sm text-xs font-bold tracking-[0.12em] uppercase transition-all ${
                 isActive
-                  ? `${getSessionColor(session)} bg-accent/30 border border-accent hud-glow-cyan shadow-lg scale-105`
-                  : 'text-muted-foreground bg-background/50 border border-border/30'
+                  ? 'text-primary bg-primary/20 border border-primary/60 shadow-[0_0_8px_rgba(0,255,170,0.3)]'
+                  : 'text-muted-foreground/60 bg-background/30 border border-border/20'
               }`}
             >
               {isActive && (
-                <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-2 h-2 bg-accent rounded-full scan-pulse-fast shadow-[0_0_8px_currentColor]" />
+                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-primary rounded-full scan-pulse shadow-[0_0_6px_currentColor]" />
               )}
-              <div className="flex items-center gap-2.5">
-                <span className="relative z-10">{sessionLabels[session]}</span>
+              <div className="flex items-center gap-2">
+                <span className="relative z-10 hud-terminal">{sessionLabels[session]}</span>
                 <div className="relative z-10" title={`${activity.charAt(0).toUpperCase() + activity.slice(1)} volume`}>
                   {getActivityIndicator(activity)}
                 </div>

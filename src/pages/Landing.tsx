@@ -1,7 +1,6 @@
 import { LiveTicker } from '@/components/LiveTicker';
 import { SystemStatus } from '@/components/landing/SystemStatus';
 import { useTelemetry } from '@/hooks/useTelemetry';
-import { TopBar } from '@/components/TopBar/TopBar';
 import { Crosshair, Target, ChartLine, Compass } from '@phosphor-icons/react';
 import { Link } from 'react-router-dom';
 // Default logo path; update if your file name differs
@@ -12,18 +11,14 @@ export function Landing() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
-      {/* Header with TopBar */}
-      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/95 backdrop-blur-sm">
-        <TopBar />
-      </header>
       <main>
         {/* Tactical grid background */}
-        <div className="fixed inset-0 tactical-grid opacity-20 pointer-events-none" aria-hidden="true" />
+        <div className="fixed inset-0 tactical-grid opacity-10 pointer-events-none" aria-hidden="true" />
 
         {/* Hero section */}
-        <section className="relative py-16 md:py-24">
+        <section className="relative py-8 md:py-12">
           <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10">
-            <div className="relative space-y-8">
+            <div className="relative space-y-4">
               {/* Status indicator */}
               <div className="flex items-center gap-3 text-xs tracking-widest text-accent">
                 <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
@@ -31,12 +26,12 @@ export function Landing() {
               </div>
 
               {/* Hero title and subtitle */}
-              <div className="space-y-6 text-center">
+              <div className="space-y-3 text-center">
                 <div className="flex items-center justify-center">
                   <img
                     src={sniperLogo}
                     alt="SniperSight Logo"
-                    className="h-14 md:h-20 w-auto drop-shadow-[0_0_14px_rgba(0,255,170,0.45)]"
+                    className="h-10 md:h-14 w-auto drop-shadow-[0_0_14px_rgba(0,255,170,0.45)]"
                   />
                 </div>
                 <p className="hud-terminal text-primary/80 text-base md:text-lg max-w-3xl leading-relaxed mx-auto px-4">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
