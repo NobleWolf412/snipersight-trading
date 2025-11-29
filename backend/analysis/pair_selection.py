@@ -1,10 +1,13 @@
 """Centralized pair selection and category filtering.
 
-Uses existing exchange adapters' `get_top_symbols` to fetch USDT perp symbols,
-then applies category toggles (majors, altcoins, meme_mode). Falls back to a
-default list when adapter returns no data or filtering yields nothing.
+- Uses adapters' `get_top_symbols` for ranked candidates
+- Robust stablecoin-base exclusion
+- Leverage-aware perp detection (adapter-first, heuristic fallback)
+- Majors, memes, alts bucket selection with curated majors semantics
+- Safe fallback behavior when adapter data is unavailable
 """
-from typing import List, Protocol
+from typing import List, Protocol, Optional
+from loguru import logger
 
 
 class SupportsTopSymbols(Protocol):
@@ -32,15 +35,17 @@ DEFAULT_FALLBACK = [
     "PEPE/USDT",
 ]
 
-
-def _unique_preserve_order(items: List[str]) -> List[str]:
-    seen = set()
-    out: List[str] = []
-    for s in items:
-        if s not in seen:
-            seen.add(s)
-            out.append(s)
-    return out
+# Curated crypto majors used when present in adapter list; preserves list ranking
+HARDCODED_MAJORS = {
+    "BTC/USDT",
+    "ETH/USDT",
+    "BNB/USDT",
+    "SOL/USDT",
+    "XRP/USDT",
+    "ADA/USDT",
+    "AVAX/USDT",
+    "MATIC/USDT",
+}
 
 
 def _is_meme_symbol(symbol: str) -> bool:
@@ -63,18 +68,77 @@ def _is_meme_symbol(symbol: str) -> bool:
     return any(hint in name for hint in MEME_HINTS)
 
 
+def _normalize_token(token: str) -> str:
+    """Normalize token by stripping separators ("-", ":", "_") and uppercasing."""
+    return token.replace("-", "").replace(":", "").replace("_", "").upper()
+
+
+def _is_stable_base(symbol: str) -> bool:
+    """Detect if the BASE of a symbol is a stablecoin.
+
+    Handles formats like:
+    - BASE/USDT
+    - FDUSD:USDT
+    - USDCUSDT
+    - USDT-USD
+    - USTC/USDT
+
+    Strategy: normalize BASE (strip separators, uppercase) and check equality or
+    startswith against known crypto stable prefixes.
+    """
+    parts = symbol.split("/")
+    base_raw = parts[0] if parts else symbol
+    base_norm = _normalize_token(base_raw)
+
+    STABLE_PREFIXES = {
+        "USDT",
+        "USDC",
+        "BUSD",
+        "USD",
+        "DAI",
+        "TUSD",
+        "FDUSD",
+        "UST",
+        "USTC",
+    }
+
+    return any(base_norm == s or base_norm.startswith(s) for s in STABLE_PREFIXES)
+
+
+def _is_perp_with_fallback(adapter: SupportsTopSymbols, symbol: str) -> bool:
+    """Prefer adapter.is_perp; otherwise apply conservative heuristics.
+
+    Heuristics:
+    - Prefer ":USDT" swap notation (OKX style) over "/USDT" which is often spot
+    - Accept markers "-SWAP" or "PERP" (case-insensitive)
+    Emits a debug log when heuristic fallback is used.
+    """
+    try:
+        if hasattr(adapter, "is_perp") and adapter.is_perp(symbol):  # type: ignore[attr-defined]
+            return True
+    except Exception:
+        # Continue to heuristic on adapter failures
+        pass
+
+    sym_u = symbol.upper()
+    heuristic = (":USDT" in sym_u) or ("-SWAP" in sym_u) or ("PERP" in sym_u)
+    if heuristic:
+        logger.debug(f"perp heuristic matched for symbol={symbol} (adapter lacks/failed is_perp)")
+    return heuristic
+
+
 def select_symbols(
     adapter: SupportsTopSymbols,
     limit: int,
     majors: bool,
     altcoins: bool,
     meme_mode: bool,
-    leverage: int | None = None,
+    leverage: Optional[int] = None,
 ) -> List[str]:
     """Resolve final symbol list based on adapter data and category toggles.
 
     - Oversamples via adapter (3x limit capped at 50)
-    - Applies category filters
+    - Excludes stablecoin bases
     - Falls back to all symbols or default list when needed
     - Truncates to `limit`
     """
@@ -87,37 +151,29 @@ def select_symbols(
     if not all_symbols:
         all_symbols = DEFAULT_FALLBACK.copy()
 
-    # Exclude stablecoin bases from consideration
-    STABLES = {"USDT", "USDC", "BUSD", "USD", "DAI", "TUSD", "FDUSD", "UST"}
-    def _is_stable(symbol: str) -> bool:
-        base = symbol.split("/")[0].upper()
-        return base in STABLES
-
-    all_symbols = [s for s in all_symbols if not _is_stable(s)]
+    # Exclude stablecoin bases from consideration (crypto-focused)
+    all_symbols = [s for s in all_symbols if not _is_stable_base(s)]
 
     # If leverage is requested (>1), prefer/require perp/marginable symbols
-    def _is_perp(symbol: str) -> bool:
-        try:
-            # Adapters that implement is_perp
-            return bool(getattr(adapter, "is_perp")(symbol))  # type: ignore[attr-defined]
-        except Exception:
-            # Heuristics: OKX uses ":USDT" suffix for swaps; most adapters list perps in top symbols
-            return ":USDT" in symbol or symbol.endswith("/USDT")
-
     if (leverage or 1) > 1:
-        perp_symbols = [s for s in all_symbols if _is_perp(s)]
+        perp_symbols = [s for s in all_symbols if _is_perp_with_fallback(adapter, s)]
         # Require perp when leverage > 1; if empty, try fallback perp-filter
         if perp_symbols:
             all_symbols = perp_symbols
         else:
-            fallback_perps = [s for s in DEFAULT_FALLBACK if _is_perp(s)]
+            fallback_perps = [s for s in DEFAULT_FALLBACK if _is_perp_with_fallback(adapter, s)]
             all_symbols = fallback_perps if fallback_perps else DEFAULT_FALLBACK.copy()
+            logger.debug("leverage > 1 but adapter/perp heuristics returned empty; using fallback set")
 
-    # Determine majors dynamically by top-by-volume slice (rank order retained)
-    # Size majors slice proportionally (≈20% of list), bounded [3..10]
+    # Curated majors when present; preserves ranking order. Fallback to dynamic slice when none found.
     proportional = max(1, int(len(all_symbols) * 0.2))
     top_k = max(3, min(10, proportional))
-    majors_list = [s for s in all_symbols[:top_k]]
+    # Use curated majors but only within the dynamic top slice window to preserve UX and leave room for alts
+    majors_present = [s for s in all_symbols[:top_k] if s in HARDCODED_MAJORS]
+    if majors_present:
+        majors_list = majors_present
+    else:
+        majors_list = [s for s in all_symbols[:top_k]]
 
     # Meme and alt derivations
     memes_list = [s for s in all_symbols if _is_meme_symbol(s)]

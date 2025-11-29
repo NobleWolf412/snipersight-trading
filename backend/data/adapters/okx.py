@@ -175,6 +175,24 @@ class OKXAdapter:
             logger.error(f"Error fetching top symbols from OKX: {e}")
             raise
 
+    def is_perp(self, symbol: str) -> bool:
+        """Detect if a symbol is a USDT perpetual swap on OKX.
+
+        OKX swaps typically use the ':USDT' notation in CCXT markets.
+        """
+        try:
+            if not getattr(self.exchange, 'markets', None):
+                self.exchange.load_markets()
+            # OKX uses ':USDT' for swap markets; convert symbol to market key
+            market_key = symbol if ':USDT' in symbol else symbol.replace('/USDT', '/USDT:USDT')
+            info = self.exchange.markets.get(market_key)
+            if info and info.get('type') == 'swap':
+                return True
+        except Exception:
+            pass
+        su = symbol.upper()
+        return (":USDT" in su) or ("-SWAP" in su) or ("PERP" in su)
+
     def get_exchange_name(self) -> str:
         """Return the exchange name."""
         return "OKX"

@@ -169,6 +169,22 @@ class BybitAdapter:
             logger.error(f"Error fetching top symbols from Bybit: {e}")
             raise
 
+    def is_perp(self, symbol: str) -> bool:
+        """Detect if a symbol is a USDT perpetual swap on Bybit.
+
+        Uses CCXT market metadata when available; falls back to conservative heuristics.
+        """
+        try:
+            if not getattr(self.exchange, 'markets', None):
+                self.exchange.load_markets()
+            info = self.exchange.markets.get(symbol)
+            if info and info.get('type') == 'swap':
+                return True
+        except Exception:
+            pass
+        su = symbol.upper()
+        return (":USDT" in su) or ("-SWAP" in su) or ("PERP" in su)
+
     def get_exchange_name(self) -> str:
         """Return the exchange name."""
         return "Bybit"

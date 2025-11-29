@@ -224,3 +224,22 @@ class BinanceAdapter:
         except ccxt.ExchangeError as e:
             logger.error(f"Exchange error fetching top symbols: {e}")
             raise
+
+    def is_perp(self, symbol: str) -> bool:
+        """Detect if a symbol is a perpetual/derivatives market (public data only).
+
+        Prefers exchange market metadata; falls back to conservative heuristics.
+        """
+        try:
+            # Ensure markets are loaded
+            if not getattr(self.exchange, 'markets', None):
+                self.exchange.load_markets()
+            info = self.exchange.markets.get(symbol)
+            if info:
+                # Binance futures: contract=True and spot=False or type=='future'
+                if info.get('type') == 'future' or (info.get('contract') and not info.get('spot')):
+                    return True
+        except Exception:
+            pass
+        su = symbol.upper()
+        return (":USDT" in su) or ("-SWAP" in su) or ("PERP" in su)

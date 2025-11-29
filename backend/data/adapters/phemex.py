@@ -5,7 +5,7 @@ Works with US IPs - no geo-blocking for public endpoints.
 """
 
 import time
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, cast
 from functools import wraps
 import pandas as pd
 import ccxt
@@ -157,7 +157,7 @@ class PhemexAdapter:
         try:
             ticker = self.exchange.fetch_ticker(symbol)
             logger.debug(f"Fetched ticker for {symbol}: {ticker.get('last', 'N/A')}")
-            return ticker
+            return cast(Dict[str, Any], ticker)
 
         except ccxt.ExchangeError as e:
             logger.error(f"Exchange error fetching ticker for {symbol}: {e}")
@@ -223,6 +223,23 @@ class PhemexAdapter:
                 'ADA/USDT', 'MATIC/USDT', 'DOT/USDT', 'LINK/USDT', 'AVAX/USDT'
             ]
             return default_pairs[:n]
+
+    def is_perp(self, symbol: str) -> bool:
+        """Detect if a symbol is a USDT perpetual swap on Phemex.
+
+        Uses CCXT market metadata when available; falls back to conservative heuristics.
+        """
+        try:
+            if not getattr(self.exchange, 'markets', None):
+                self.exchange.load_markets()
+            markets_obj = getattr(self.exchange, 'markets', {})
+            info = markets_obj.get(symbol) if isinstance(markets_obj, dict) else None
+            if info and (info.get('type') == 'swap' or (info.get('contract') and not info.get('spot'))):
+                return True
+        except Exception:
+            pass
+        su = symbol.upper()
+        return (":USDT" in su) or ("-SWAP" in su) or ("PERP" in su)
 
     def supports_trading(self) -> bool:
         """
