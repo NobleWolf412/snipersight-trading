@@ -315,7 +315,6 @@ export function ScanResults() {
                   </TableHeader>
                   <TableBody>
                     {sortedResults.map((result, index) => (
-                                            <TableHead className="heading-hud text-xs">EV</TableHead>
                       <TableRow 
                         key={result.id} 
                         className="border-border/40 hover:bg-accent/5 transition-colors"
