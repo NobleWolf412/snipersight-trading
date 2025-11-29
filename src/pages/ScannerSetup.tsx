@@ -30,12 +30,14 @@ export function ScannerSetup() {
   }, [scanConfig.topPairs]);
 
   const handleArmScanner = async () => {
-    console.log('[ScannerSetup] Starting background scan job...', {
+    console.log(`[ScannerSetup] 🎯 ARMING SCANNER with mode: ${scanConfig.sniperMode.toUpperCase()}`);
+    console.log('[ScannerSetup] Scan configuration:', {
       mode: scanConfig.sniperMode,
       exchange: scanConfig.exchange,
       leverage: scanConfig.leverage,
       topPairs: scanConfig.topPairs,
       minScore: selectedMode?.min_confluence_score,
+      timeframes: scanConfig.timeframes,
       categories: scanConfig.categories
     });
     setIsScanning(true);

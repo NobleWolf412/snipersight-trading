@@ -31,6 +31,7 @@ export function SniperModeSelector() {
               aria-pressed={isSelected}
               className="relative group"
               onClick={() => {
+                console.log(`[SniperModeSelector] Mode selected: ${mode.name}`);
                 setSelectedMode(mode);
                 setScanConfig({
                   ...scanConfig,
@@ -41,6 +42,7 @@ export function SniperModeSelector() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
+                  console.log(`[SniperModeSelector] Mode selected (keyboard): ${mode.name}`);
                   setSelectedMode(mode);
                   setScanConfig({
                     ...scanConfig,
