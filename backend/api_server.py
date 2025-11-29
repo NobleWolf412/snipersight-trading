@@ -24,6 +24,7 @@ from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import EventType
 from backend.engine.orchestrator import Orchestrator
 from backend.data.ingestion_pipeline import IngestionPipeline
+from backend.analysis.pair_selection import select_symbols
 from backend.shared.config.smc_config import SMCConfig
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.scanner_modes import get_mode, list_modes
@@ -355,6 +356,54 @@ async def get_scanner_modes():
     return {"modes": list_modes(), "total": len(list_modes())}
 
 
+@app.get("/api/scanner/pairs")
+async def get_scanner_pairs(
+    limit: int = Query(default=10, ge=1, le=100),
+    majors: bool = Query(default=True),
+    altcoins: bool = Query(default=True),
+    meme_mode: bool = Query(default=False),
+    exchange: str = Query(default="phemex"),
+    leverage: int = Query(default=1, ge=1, le=125),
+):
+    """Preview pairs the scanner would use without running a scan.
+
+    Reuses adapter + centralized selection logic, returns symbols and filter context.
+    """
+    try:
+        exchange_key = exchange.lower()
+        if exchange_key not in EXCHANGE_ADAPTERS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported exchange: {exchange}. Supported: {', '.join(EXCHANGE_ADAPTERS.keys())}",
+            )
+
+        adapter = EXCHANGE_ADAPTERS[exchange_key]()
+        symbols = select_symbols(
+            adapter=adapter,
+            limit=limit,
+            majors=majors,
+            altcoins=altcoins,
+            meme_mode=meme_mode,
+            leverage=leverage,
+        )
+
+        return {
+            "exchange": exchange_key,
+            "limit": limit,
+            "filters": {
+                "majors": majors,
+                "altcoins": altcoins,
+                "meme_mode": meme_mode,
+            },
+            "symbols": symbols,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error resolving scanner pairs: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 class SMCConfigUpdate(BaseModel):
     """Partial update model for SMCConfig values."""
     min_wick_ratio: Optional[float] = None
@@ -456,38 +505,15 @@ async def get_signals(
         orchestrator.exchange_adapter = current_adapter
         orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
 
-        # Acquire symbols (fallback list on failure)
-        try:
-            all_symbols = current_adapter.get_top_symbols(n=min(limit * 3, 50), quote_currency='USDT')
-        except Exception as exchange_error:  # pyright: ignore - intentional broad catch for fallback
-            logger.warning("Exchange unavailable (geo-restriction or network issue): %s", exchange_error)
-            all_symbols = []
-
-        if not all_symbols:
-            all_symbols = [
-                'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT',
-                'ADA/USDT', 'AVAX/USDT', 'MATIC/USDT', 'DOT/USDT', 'LINK/USDT',
-                'DOGE/USDT', 'SHIB/USDT', 'PEPE/USDT'
-            ]
-        
-        # Filter symbols by category
-        major_coins = {'BTC/USDT', 'ETH/USDT', 'BNB/USDT'}
-        meme_coins = {'DOGE/USDT', 'SHIB/USDT', 'PEPE/USDT', 'BONK/USDT', 'FLOKI/USDT', 'WIF/USDT'}
-        
-        symbols = []
-        for symbol in all_symbols:
-            if symbol in major_coins and majors:
-                symbols.append(symbol)
-            elif symbol in meme_coins and meme_mode:
-                symbols.append(symbol)
-            elif symbol not in major_coins and symbol not in meme_coins and altcoins:
-                symbols.append(symbol)
-        
-        # If no categories selected, use all
-        if not symbols:
-            symbols = all_symbols
-            
-        symbols = symbols[:limit]
+        # Resolve symbols via centralized selector
+        symbols = select_symbols(
+            adapter=current_adapter,
+            limit=limit,
+            majors=majors,
+            altcoins=altcoins,
+            meme_mode=meme_mode,
+            leverage=leverage,
+        )
         logger.info("Filtering %d symbols by categories (majors=%s, altcoins=%s, meme=%s)", 
                    len(symbols), majors, altcoins, meme_mode)
 
@@ -844,36 +870,15 @@ async def _execute_scan_job(job: ScanJob):
         orchestrator.exchange_adapter = current_adapter
         orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
         
-        # Get symbols
-        try:
-            all_symbols = current_adapter.get_top_symbols(n=min(params["limit"] * 3, 50), quote_currency='USDT')
-        except Exception:
-            all_symbols = []
-        
-        if not all_symbols:
-            all_symbols = [
-                'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT',
-                'ADA/USDT', 'AVAX/USDT', 'MATIC/USDT', 'DOT/USDT', 'LINK/USDT',
-                'DOGE/USDT', 'SHIB/USDT', 'PEPE/USDT'
-            ]
-        
-        # Filter by categories
-        major_coins = {'BTC/USDT', 'ETH/USDT', 'BNB/USDT'}
-        meme_coins = {'DOGE/USDT', 'SHIB/USDT', 'PEPE/USDT', 'BONK/USDT', 'FLOKI/USDT', 'WIF/USDT'}
-        
-        symbols = []
-        for symbol in all_symbols:
-            if symbol in major_coins and params["majors"]:
-                symbols.append(symbol)
-            elif symbol in meme_coins and params["meme_mode"]:
-                symbols.append(symbol)
-            elif symbol not in major_coins and symbol not in meme_coins and params["altcoins"]:
-                symbols.append(symbol)
-        
-        if not symbols:
-            symbols = all_symbols
-        
-        symbols = symbols[:params["limit"]]
+        # Resolve symbols via centralized selector
+        symbols = select_symbols(
+            adapter=current_adapter,
+            limit=params["limit"],
+            majors=params["majors"],
+            altcoins=params["altcoins"],
+            meme_mode=params["meme_mode"],
+            leverage=params["leverage"],
+        )
         job.total = len(symbols)
         
         # Run scan in thread pool to avoid blocking event loop
