@@ -1241,11 +1241,6 @@ async def get_candles(
                 candles.append({
                     'timestamp': row['timestamp'].to_pydatetime().isoformat(),
                     'open': float(row['open']),
-                "setup_type": plan.setup_type,
-                "plan_type": getattr(plan, 'plan_type', 'SMC'),
-                "conviction_class": getattr(plan, 'conviction_class', None),
-                "missing_critical_timeframes": plan.metadata.get('missing_critical_timeframes', []),
-                "regime": plan.metadata.get('regime')
                     'low': float(row['low']),
                     'close': float(row['close']),
                     'volume': float(row['volume']),
