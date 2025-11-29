@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import { usePrice } from '@/hooks/usePriceData';
+import { priceService } from '@/services/priceService';
 import { ArrowUp, ArrowDown } from '@phosphor-icons/react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -19,6 +21,11 @@ export function PriceDisplay({
   size = 'md'
 }: PriceDisplayProps) {
   const { priceData, isLoading } = usePrice(symbol);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const sizeClasses = {
     sm: 'text-sm',
@@ -83,6 +90,28 @@ export function PriceDisplay({
           Vol: {formatVolume(priceData.volume24h)}
         </div>
       )}
+      {/* Stale/backoff badges */}
+      {(() => {
+        const backoff = priceService.getBackoff(symbol);
+        const ageMs = now - priceData.timestamp;
+        const stale = ageMs > 10000; // >10s old
+        if (backoff) {
+          const eta = Math.max(0, Math.ceil((backoff.next - now) / 1000));
+          return (
+            <span className="text-[10px] px-2 py-1 rounded bg-warning/20 border border-warning/40 text-warning font-mono">
+              RETRY {eta}s
+            </span>
+          );
+        }
+        if (stale) {
+          return (
+            <span className="text-[10px] px-2 py-1 rounded bg-destructive/15 border border-destructive/40 text-destructive font-mono">
+              STALE {Math.floor(ageMs/1000)}s
+            </span>
+          );
+        }
+        return null;
+      })()}
     </div>
   );
 }

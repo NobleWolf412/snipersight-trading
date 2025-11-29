@@ -3,6 +3,7 @@ import type { PlanType, ConvictionClass, RegimeMetadata } from '@/types/regime';
 export interface ScanResult {
   id: string;
   pair: string;
+  sniper_mode?: string; // added for mode-aware overlays
   trendBias: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
   confidenceScore: number;
   riskScore: number;
@@ -85,6 +86,7 @@ export function convertSignalToScanResult(signal: any): ScanResult {
   return {
     id: `signal-${signal.symbol}-${Date.now()}`,
     pair: signal.symbol.replace('USDT', '/USDT'),
+    sniper_mode: signal.sniper_mode || signal.mode || undefined,
     trendBias,
     confidenceScore: confidence,
     riskScore,
@@ -116,4 +118,67 @@ export function convertSignalToScanResult(signal: any): ScanResult {
     // Pass through raw geometry if provided for future chart overlays
     smc_geometry: signal.smc_geometry,
   };
+}
+
+/**
+ * Generate demo ScanResults for offline/dev fallback
+ */
+export function generateDemoScanResults(count = 5, mode: string = 'recon'): ScanResult[] {
+  const symbols = [
+    'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'DOT/USDT', 'LINK/USDT',
+    'XRP/USDT', 'ADA/USDT', 'AVAX/USDT', 'MATIC/USDT', 'BNB/USDT',
+  ];
+  const basePrices: Record<string, number> = {
+    'BTC/USDT': 43500,
+    'ETH/USDT': 2280,
+    'SOL/USDT': 98.5,
+    'DOT/USDT': 7.45,
+    'LINK/USDT': 15.2,
+    'XRP/USDT': 0.62,
+    'ADA/USDT': 0.58,
+    'AVAX/USDT': 38.2,
+    'MATIC/USDT': 0.89,
+    'BNB/USDT': 315,
+  };
+  const now = Date.now();
+  const out: ScanResult[] = [];
+  for (let i = 0; i < Math.min(count, symbols.length); i++) {
+    const pair = symbols[i];
+    const base = basePrices[pair] ?? 100;
+    const long = i % 2 === 0;
+    const confidence = 60 + (i * 6) % 35; // 60..95
+    const entryNear = long ? base * 0.995 : base * 1.005;
+    const entryFar = long ? base * 0.99 : base * 1.01;
+    const stop = long ? base * 0.97 : base * 1.03;
+    const tp1 = long ? base * 1.02 : base * 0.98;
+    const tp2 = long ? base * 1.04 : base * 0.96;
+    const rr = Math.max(1.5, (Math.abs(((tp1 + tp2) / 2) - entryNear) / Math.abs(entryNear - stop)));
+
+    out.push({
+      id: `demo-${pair}-${now}-${i}`,
+      pair,
+      sniper_mode: mode,
+      trendBias: long ? 'BULLISH' : 'BEARISH',
+      confidenceScore: confidence,
+      riskScore: Math.max(1, Math.min(10, 10 / rr)),
+      classification: mode === 'surgical' || mode === 'strike' ? 'SCALP' : 'SWING',
+      entryZone: { low: entryFar, high: entryNear },
+      stopLoss: stop,
+      takeProfits: [tp1, tp2],
+      orderBlocks: [],
+      fairValueGaps: [],
+      timestamp: new Date(now - i * 60000).toISOString(),
+      plan_type: 'SMC',
+      conviction_class: confidence >= 80 ? 'A' : confidence >= 60 ? 'B' : 'C',
+      missing_critical_timeframes: [],
+      regime: undefined,
+      smc_geometry: {
+        order_blocks: [],
+        fvgs: [],
+        bos_choch: [],
+        liquidity_sweeps: [],
+      },
+    });
+  }
+  return out;
 }

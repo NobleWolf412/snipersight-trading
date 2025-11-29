@@ -1,77 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ScanResult } from '@/utils/mockData';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { 
   TrendUp, 
   TrendDown, 
   Target,
 } from '@phosphor-icons/react';
-import { SMCOverlay } from './SMCOverlay';
+// Overlay removed for now; revisit later
+import { useScanner } from '@/context/ScannerContext';
 
 interface TradingViewChartProps {
   result: ScanResult;
 }
 
 export function TradingViewChart({ result }: TradingViewChartProps) {
-  const [timeframe, setTimeframe] = useState('60'); // TradingView uses minutes
+  const { selectedMode } = useScanner();
+  const modeName = selectedMode?.name || result.sniper_mode || 'recon';
+  // TradingView handles timeframe changes internally; we just set an initial interval.
+  const timeframe = '60'; // initial 1H view
   const [showLevels, setShowLevels] = useState({
     entry: true,
     stopLoss: true,
     takeProfits: true,
   });
-  const [showSMC, setShowSMC] = useState({
-    orderBlocks: true,
-    fvgs: true,
-    bosChoch: true,
-    sweeps: true,
-  });
-  const [density, setDensity] = useState<'low' | 'medium' | 'high'>('medium');
+  const [showOverlay, setShowOverlay] = useState(false);
 
   // Convert pair format (e.g., "BTC/USDT" -> "BTCUSDT")
   const symbol = result.pair.replace('/', '');
   
   // TradingView embed URL with parameters and drawing studies
   const getTradingViewUrl = () => {
-    const studies: any[] = [];
-    
-    // Add horizontal lines for trading levels
-    if (showLevels.entry) {
-      studies.push({
-        id: 'HorizontalLine@tv-basicstudies',
-        inputs: { price: result.entryZone.high },
-        // Entry zone high - green dashed
-      });
-      studies.push({
-        id: 'HorizontalLine@tv-basicstudies', 
-        inputs: { price: result.entryZone.low },
-        // Entry zone low - green dashed
-      });
-    }
-    
-    if (showLevels.stopLoss) {
-      studies.push({
-        id: 'HorizontalLine@tv-basicstudies',
-        inputs: { price: result.stopLoss },
-        // Stop loss - red solid
-      });
-    }
-    
-    if (showLevels.takeProfits) {
-      // Limit embedded TP lines to avoid oversized query strings (TradingView 494)
-      const maxTP = 3;
-      result.takeProfits.slice(0, maxTP).forEach(tp => {
-        studies.push({
-          id: 'HorizontalLine@tv-basicstudies',
-          inputs: { price: tp },
-        });
-      });
-    }
-
-    // SMC geometry overlays (basic mapping to horizontal lines/boxes)
-    // Do NOT embed SMC geometry via TradingView "studies" to avoid huge URLs
-    // The SVG `SMCOverlay` renders these on top of the chart.
+    // Keep URL minimal; render trading levels via our SVG overlay instead
     
     const params = new URLSearchParams({
       symbol: `PHEMEX:${symbol}`,
@@ -85,7 +45,7 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
       hide_legend: 'false',
       save_image: 'false',
       hide_volume: 'false',
-      studies: JSON.stringify(studies),
+      // studies removed due to TradingView errors (cannot_get_metainfo, study inserter failures)
     });
     
     return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
@@ -93,16 +53,7 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <Tabs value={timeframe} onValueChange={setTimeframe}>
-          <TabsList className="bg-muted/50">
-            <TabsTrigger value="15">15m</TabsTrigger>
-            <TabsTrigger value="60">1H</TabsTrigger>
-            <TabsTrigger value="240">4H</TabsTrigger>
-            <TabsTrigger value="D">1D</TabsTrigger>
-          </TabsList>
-        </Tabs>
-
+      <div className="flex items-center justify-end flex-wrap gap-3">
         <div className="flex gap-2 flex-wrap">
           <Button
             size="sm"
@@ -131,50 +82,9 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
             <TrendUp size={14} />
             Take Profits
           </Button>
-          {/* SMC toggles */}
-          <Button
-            size="sm"
-            variant={showSMC.orderBlocks ? 'default' : 'outline'}
-            onClick={() => setShowSMC(prev => ({ ...prev, orderBlocks: !prev.orderBlocks }))}
-            className="text-xs"
-          >
-            OBs
-          </Button>
-          <Button
-            size="sm"
-            variant={showSMC.fvgs ? 'default' : 'outline'}
-            onClick={() => setShowSMC(prev => ({ ...prev, fvgs: !prev.fvgs }))}
-            className="text-xs"
-          >
-            FVGs
-          </Button>
-          <Button
-            size="sm"
-            variant={showSMC.bosChoch ? 'default' : 'outline'}
-            onClick={() => setShowSMC(prev => ({ ...prev, bosChoch: !prev.bosChoch }))}
-            className="text-xs"
-          >
-            BOS/CHoCH
-          </Button>
-          <Button
-            size="sm"
-            variant={showSMC.sweeps ? 'default' : 'outline'}
-            onClick={() => setShowSMC(prev => ({ ...prev, sweeps: !prev.sweeps }))}
-            className="text-xs"
-          >
-            Sweeps
-          </Button>
-          {/* Density selector */}
-          <div className="flex items-center gap-1 ml-2">
-            <span className="text-xs text-muted-foreground">Density</span>
-            <Tabs value={density} onValueChange={(v) => setDensity(v as any)}>
-              <TabsList className="bg-muted/50">
-                <TabsTrigger value="low">Low</TabsTrigger>
-                <TabsTrigger value="medium">Med</TabsTrigger>
-                <TabsTrigger value="high">High</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
+          {/* SMC toggles removed */}
+          {/* Density selector removed */}
+          {/* Overlay toggle disabled */}
         </div>
       </div>
 
@@ -188,7 +98,7 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
           </span>
         </div>
         
-        <div className="w-full h-[500px] rounded-lg overflow-hidden bg-[#141416]">
+        <div className="relative w-full h-[500px] rounded-lg overflow-hidden bg-[#141416]">
           <iframe
             key={`${symbol}-${timeframe}`} // Re-render on symbol/timeframe change
             src={getTradingViewUrl()}
@@ -196,8 +106,7 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
             title={`${result.pair} Chart`}
             allow="clipboard-write"
           />
-          {/* SVG overlay on top of iframe */}
-          <SMCOverlay result={result} show={showSMC} timeframe={timeframe} density={density} />
+          {/* SVG overlay removed */}
         </div>
       </div>
 

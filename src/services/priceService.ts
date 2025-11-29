@@ -34,6 +34,7 @@ class PriceService {
   private isConnecting = false;
   private pollers: Map<string, number> = new Map();
   private exchange: string = 'phemex';
+  private backoff: Map<string, { fails: number; next: number }> = new Map();
 
   constructor() {
     // Disable direct Binance WebSocket in browser to avoid CORS/network blocks.
@@ -179,32 +180,56 @@ class PriceService {
   }
 
   async fetchPrice(symbol: string): Promise<PriceData> {
+    // Respect per-symbol backoff to avoid hammering backend on 5xx
+    const b = this.backoff.get(symbol);
+    if (b && Date.now() < b.next) {
+      throw new Error('backoff');
+    }
+
     const cached = this.priceCache.get(symbol);
     if (cached && Date.now() - cached.timestamp < 5000) {
       return cached;
     }
 
     // Use bulk endpoint with single symbol
-    const { data, error } = await api.getPrices([symbol], this.exchange);
-    if (error || !data || data.prices.length === 0) {
-      throw new Error(error || `Failed to fetch price for ${symbol}`);
+    try {
+      const { data, error } = await api.getPrices([symbol], this.exchange);
+      if (error || !data || data.prices.length === 0) {
+        throw new Error(error || `Failed to fetch price for ${symbol}`);
+      }
+
+      const item = data.prices[0];
+      const priceData: PriceData = {
+        symbol: item.symbol,
+        price: Number(item.price) || 0,
+        change24h: 0,
+        changePercent24h: 0,
+        high24h: 0,
+        low24h: 0,
+        volume24h: 0,
+        timestamp: new Date(item.timestamp).getTime() || Date.now(),
+        exchange: data.exchange,
+      };
+
+      this.priceCache.set(symbol, priceData);
+      // Reset backoff on success
+      this.backoff.delete(symbol);
+      return priceData;
+    } catch (err) {
+      // Update backoff on failure
+      const prev = this.backoff.get(symbol) || { fails: 0, next: 0 };
+      const fails = Math.min(prev.fails + 1, 6); // cap exponent
+      const delay = Math.min(60000, Math.pow(2, fails) * 1000); // up to 60s
+      this.backoff.set(symbol, { fails, next: Date.now() + delay });
+      throw err instanceof Error ? err : new Error('price fetch failed');
     }
+  }
 
-    const item = data.prices[0];
-    const priceData: PriceData = {
-      symbol: item.symbol,
-      price: Number(item.price) || 0,
-      change24h: 0,
-      changePercent24h: 0,
-      high24h: 0,
-      low24h: 0,
-      volume24h: 0,
-      timestamp: new Date(item.timestamp).getTime() || Date.now(),
-      exchange: data.exchange,
-    };
-
-    this.priceCache.set(symbol, priceData);
-    return priceData;
+  getBackoff(symbol: string): { fails: number; next: number } | null {
+    const b = this.backoff.get(symbol);
+    if (!b) return null;
+    if (Date.now() > b.next) return null; // expired
+    return b;
   }
 
   async fetchMultiplePrices(symbols: string[]): Promise<Map<string, PriceData>> {

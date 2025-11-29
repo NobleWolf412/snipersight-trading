@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Crosshair, Lightning } from '@phosphor-icons/react';
-import { convertSignalToScanResult } from '@/utils/mockData';
+import { convertSignalToScanResult, generateDemoScanResults } from '@/utils/mockData';
 import { SniperModeSelector } from '@/components/SniperModeSelector';
 import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
@@ -121,20 +121,29 @@ export function ScannerSetup() {
 
     } catch (error) {
       console.error('Scanner error:', error);
-      toast({
-        title: 'Scanner Error',
-        description: error instanceof Error ? error.message : 'Failed to complete scan',
-        variant: 'destructive',
-      });
-      
+      // Fallback to demo results to prevent empty UI when backend is unreachable (e.g., 504)
+      const demo = generateDemoScanResults(Math.min(scanConfig.topPairs || 5, 5), scanConfig.sniperMode);
+      localStorage.setItem('scan-results', JSON.stringify(demo));
       localStorage.setItem('scan-rejections', JSON.stringify({
         total_rejected: 0,
         by_reason: {},
         details: {},
       }));
-      localStorage.setItem('scan-results', JSON.stringify([]));
-      localStorage.removeItem('scan-metadata');
-      
+      localStorage.setItem('scan-metadata', JSON.stringify({
+        mode: scanConfig.sniperMode,
+        appliedTimeframes: scanConfig.timeframes,
+        effectiveMinScore: selectedMode?.min_confluence_score || 0,
+        baselineMinScore: selectedMode?.min_confluence_score || 0,
+        profile: selectedMode?.profile || 'default',
+        scanned: demo.length,
+        offline: true,
+      }));
+
+      toast({
+        title: 'Operating Offline',
+        description: `Backend unavailable (e.g., 504). Showing ${demo.length} demo setups.`,
+      });
+
       setIsScanning(false);
       setScanProgress(null);
       navigate('/results');
