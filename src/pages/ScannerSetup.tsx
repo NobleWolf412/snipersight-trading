@@ -46,8 +46,9 @@ export function ScannerSetup() {
     localStorage.removeItem('scan-rejections');
 
     try {
-      // Start background scan job
-      const createResponse = await api.createScanRun({
+      // Use direct signals endpoint (better for devtunnel/remote setups)
+      console.log('[ScannerSetup] Fetching signals directly...');
+      const signalsResponse = await api.getSignals({
         limit: scanConfig.topPairs || 20,
         min_score: selectedMode?.min_confluence_score || 0,
         sniper_mode: scanConfig.sniperMode,
@@ -58,120 +59,63 @@ export function ScannerSetup() {
         leverage: scanConfig.leverage || 1,
       });
 
-      if (createResponse.error || !createResponse.data) {
-        throw new Error(createResponse.error || 'Failed to start scan');
+      if (signalsResponse.error || !signalsResponse.data) {
+        throw new Error(signalsResponse.error || 'Failed to fetch signals');
       }
 
-      const runId = createResponse.data.run_id;
-      console.log('[ScannerSetup] Scan job started:', runId);
+      const data = signalsResponse.data;
+      console.log('[ScannerSetup] Signals received:', data.signals?.length || 0);
 
-      // Poll for progress with transient failure tolerance
-      const MAX_POLL_FAILURES = 5;
-      let consecutiveFailures = 0;
-      const pollInterval = setInterval(async () => {
-        let statusResponse;
-        try {
-          statusResponse = await api.getScanRun(runId);
-        } catch (e) {
-          statusResponse = { error: (e instanceof Error ? e.message : 'network_error') } as any;
-        }
-        if (statusResponse.error || !statusResponse.data) {
-          consecutiveFailures += 1;
-          console.warn('[ScannerSetup] Poll failure', consecutiveFailures, statusResponse.error);
-          // Allow transient 404 / network jitter until threshold
-          if (consecutiveFailures >= MAX_POLL_FAILURES) {
-            clearInterval(pollInterval);
-            throw new Error(statusResponse.error || 'Failed to get scan status after retries');
-          }
-          return; // Skip remainder this cycle
-        } else if (consecutiveFailures > 0) {
-          consecutiveFailures = 0; // Reset after success
-        }
-
-        const job = statusResponse.data;
-        console.log('[ScannerSetup] Job status:', job.status, `${job.progress}/${job.total}`);
-        
-        setScanProgress({
-          current: job.progress,
-          total: job.total,
-          symbol: job.current_symbol
+      // Process results immediately (no polling needed)
+      const results = (data.signals || []).map(convertSignalToScanResult);
+      
+      localStorage.setItem('scan-results', JSON.stringify(results));
+      
+      const metadata = {
+        mode: data.metadata?.mode || scanConfig.sniperMode,
+        appliedTimeframes: data.metadata?.applied_timeframes || [],
+        effectiveMinScore: data.metadata?.effective_min_score || 0,
+        baselineMinScore: selectedMode?.min_confluence_score || 0,
+        profile: data.metadata?.profile || 'default',
+        scanned: data.metadata?.scanned || 0,
+      };
+      localStorage.setItem('scan-metadata', JSON.stringify(metadata));
+      
+      if (data.rejections) {
+        localStorage.setItem('scan-rejections', JSON.stringify(data.rejections));
+      }
+      
+      scanHistoryService.saveScan({
+        mode: metadata.mode,
+        profile: metadata.profile,
+        timeframes: metadata.appliedTimeframes,
+        symbolsScanned: metadata.scanned,
+        signalsGenerated: results.length,
+        signalsRejected: data.metadata?.rejected || 0,
+        effectiveMinScore: metadata.effectiveMinScore,
+        rejectionBreakdown: data.rejections?.by_reason,
+        results: results,
+      });
+      
+      console.log('[ScannerSetup] Scan completed:', results.length, 'signals');
+      
+      // Show appropriate message based on results
+      if (results.length === 0) {
+        toast({
+          title: 'No Setups Found',
+          description: `Scanned ${metadata.scanned || 0} symbols - all rejected. Try adjusting mode or threshold.`,
+          variant: 'destructive',
         });
-
-        if (job.status === 'completed') {
-          clearInterval(pollInterval);
-          
-          const results = (job.signals || []).map(convertSignalToScanResult);
-          
-          localStorage.setItem('scan-results', JSON.stringify(results));
-          
-          const metadata = {
-            mode: job.metadata?.mode || scanConfig.sniperMode,
-            appliedTimeframes: job.metadata?.applied_timeframes || [],
-            effectiveMinScore: job.metadata?.effective_min_score || 0,
-            baselineMinScore: selectedMode?.min_confluence_score || 0,
-            profile: job.metadata?.profile || 'default',
-            scanned: job.metadata?.scanned || 0,
-          };
-          localStorage.setItem('scan-metadata', JSON.stringify(metadata));
-          
-          if (job.rejections) {
-            localStorage.setItem('scan-rejections', JSON.stringify(job.rejections));
-          }
-          
-          scanHistoryService.saveScan({
-            mode: metadata.mode,
-            profile: metadata.profile,
-            timeframes: metadata.appliedTimeframes,
-            symbolsScanned: metadata.scanned,
-            signalsGenerated: results.length,
-            signalsRejected: job.metadata?.rejected || 0,
-            effectiveMinScore: metadata.effectiveMinScore,
-            rejectionBreakdown: job.rejections?.by_reason,
-            results: results,
-          });
-          
-          console.log('[ScannerSetup] Scan completed:', results.length, 'signals');
-          
-          // Show appropriate message based on results
-          if (results.length === 0) {
-            toast({
-              title: 'No Setups Found',
-              description: `Scanned ${job.metadata?.scanned || 0} symbols - all rejected. Try adjusting mode or threshold.`,
-              variant: 'destructive',
-            });
-          } else {
-            toast({
-              title: 'Targets Acquired',
-              description: `${results.length} high-conviction setups identified`,
-            });
-          }
-          
-          setIsScanning(false);
-          setScanProgress(null);
-          navigate('/results');
-        } else if (job.status === 'failed') {
-          clearInterval(pollInterval);
-          throw new Error(job.error || 'Scan failed');
-        } else if (job.status === 'cancelled') {
-          clearInterval(pollInterval);
-          throw new Error('Scan cancelled');
-        }
-      }, 2000); // Poll every 2 seconds
-
-      // Timeout after 10 minutes (graceful abort)
-      setTimeout(() => {
-        if (isScanning) {
-          console.warn('[ScannerSetup] Scan timeout exceeded');
-          clearInterval(pollInterval);
-          toast({
-            title: 'Scan Timeout',
-            description: 'Job exceeded 10 minute limit',
-            variant: 'destructive'
-          });
-          setIsScanning(false);
-          setScanProgress(null);
-        }
-      }, 600000);
+      } else {
+        toast({
+          title: 'Targets Acquired',
+          description: `${results.length} high-conviction setups identified`,
+        });
+      }
+      
+      setIsScanning(false);
+      setScanProgress(null);
+      navigate('/results');
 
     } catch (error) {
       console.error('Scanner error:', error);
