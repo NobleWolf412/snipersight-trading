@@ -211,4 +211,31 @@ def select_symbols(
             if s not in selected:
                 selected.append(s)
 
+    # Emit a concise selection summary to enrich scanner console output
+    try:
+        fetched_cnt = len(all_symbols)
+        majors_cnt = len(majors_list) if majors else 0
+        memes_cnt = len([s for s in all_symbols if _is_meme_symbol(s)]) if meme_mode else 0
+        alts_cnt = len([s for s in all_symbols if s not in majors_list and not _is_meme_symbol(s)]) if altcoins else 0
+        logger.info(
+            "selection adapter=%s limit=%s leverage=%s toggles majors=%s memes=%s alts=%s fetched=%s final=%s buckets majors=%s memes=%s alts=%s examples majors=%s memes=%s alts=%s",
+            adapter.__class__.__name__,
+            limit,
+            (leverage or 1),
+            int(majors),
+            int(meme_mode),
+            int(altcoins),
+            fetched_cnt,
+            len(selected),
+            majors_cnt,
+            memes_cnt,
+            alts_cnt,
+            ",".join(majors_list[:3]),
+            ",".join([s for s in all_symbols if _is_meme_symbol(s)][:3]),
+            ",".join([s for s in all_symbols if s not in majors_list and not _is_meme_symbol(s)][:3]),
+        )
+    except Exception:
+        # Logging must never break selection
+        pass
+
     return selected[:limit]
