@@ -58,50 +58,19 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
     }
     
     if (showLevels.takeProfits) {
-      result.takeProfits.forEach(tp => {
+      // Limit embedded TP lines to avoid oversized query strings (TradingView 494)
+      const maxTP = 3;
+      result.takeProfits.slice(0, maxTP).forEach(tp => {
         studies.push({
           id: 'HorizontalLine@tv-basicstudies',
           inputs: { price: tp },
-          // Take profit - blue dashed
         });
       });
     }
 
     // SMC geometry overlays (basic mapping to horizontal lines/boxes)
-    const geo = result.smc_geometry || {};
-    if (showSMC.orderBlocks && Array.isArray(geo.order_blocks)) {
-      geo.order_blocks.forEach((ob: any) => {
-        // If geometry provides price level, draw line; if range, draw both bounds
-        if (typeof ob.price === 'number') {
-          studies.push({ id: 'HorizontalLine@tv-basicstudies', inputs: { price: ob.price } });
-        } else if (typeof ob.low === 'number' && typeof ob.high === 'number') {
-          studies.push({ id: 'HorizontalLine@tv-basicstudies', inputs: { price: ob.low } });
-          studies.push({ id: 'HorizontalLine@tv-basicstudies', inputs: { price: ob.high } });
-        }
-      });
-    }
-    if (showSMC.fvgs && Array.isArray(geo.fvgs)) {
-      geo.fvgs.forEach((fvg: any) => {
-        if (typeof fvg.low === 'number' && typeof fvg.high === 'number') {
-          studies.push({ id: 'HorizontalLine@tv-basicstudies', inputs: { price: fvg.low } });
-          studies.push({ id: 'HorizontalLine@tv-basicstudies', inputs: { price: fvg.high } });
-        }
-      });
-    }
-    if (showSMC.bosChoch && Array.isArray(geo.bos_choch)) {
-      geo.bos_choch.forEach((brk: any) => {
-        if (typeof brk.level === 'number') {
-          studies.push({ id: 'HorizontalLine@tv-basicstudies', inputs: { price: brk.level } });
-        }
-      });
-    }
-    if (showSMC.sweeps && Array.isArray(geo.liquidity_sweeps)) {
-      geo.liquidity_sweeps.forEach((sw: any) => {
-        if (typeof sw.level === 'number') {
-          studies.push({ id: 'HorizontalLine@tv-basicstudies', inputs: { price: sw.level } });
-        }
-      });
-    }
+    // Do NOT embed SMC geometry via TradingView "studies" to avoid huge URLs
+    // The SVG `SMCOverlay` renders these on top of the chart.
     
     const params = new URLSearchParams({
       symbol: `PHEMEX:${symbol}`,
