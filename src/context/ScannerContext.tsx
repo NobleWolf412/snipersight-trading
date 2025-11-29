@@ -76,9 +76,44 @@ const defaultBotConfig: BotConfig = {
   duration: 24,
 };
 
-// Dynamic scanner modes fetched from backend (source of truth)
+// Static scanner modes (fallback if backend unavailable)
+// Should mirror backend/shared/config/scanner_modes.py MODES dict
 const fallbackModes: ScannerMode[] = [
-  { name: 'recon', description: 'Balanced multi-timeframe', timeframes: ['1D','4H','1H','15m','5m'], min_confluence_score: 65, profile: 'balanced' },
+  { 
+    name: 'overwatch', 
+    description: 'High-altitude regime & trend surveillance (macro + swing alignment)', 
+    timeframes: ['1W','1D','4H','1H','15m','5m'], 
+    min_confluence_score: 75, 
+    profile: 'macro_surveillance' 
+  },
+  { 
+    name: 'recon', 
+    description: 'Broad multi-timeframe scouting for emerging momentum pivots', 
+    timeframes: ['1D','4H','1H','15m','5m'], 
+    min_confluence_score: 65, 
+    profile: 'balanced' 
+  },
+  { 
+    name: 'strike', 
+    description: 'Intraday execution focus (momentum + local liquidity)', 
+    timeframes: ['4H','1H','15m','5m'], 
+    min_confluence_score: 60, 
+    profile: 'intraday_aggressive' 
+  },
+  { 
+    name: 'surgical', 
+    description: 'Tight precision setups only (higher quality threshold)', 
+    timeframes: ['1H','15m','5m'], 
+    min_confluence_score: 70, 
+    profile: 'precision' 
+  },
+  { 
+    name: 'ghost', 
+    description: 'Stealth monitoring across mixed horizons (reduced surface area)', 
+    timeframes: ['1D','4H','1H','15m','5m'], 
+    min_confluence_score: 70, 
+    profile: 'stealth_balanced' 
+  },
 ];
 
 const ScannerContext = createContext<ScannerContextType | undefined>(undefined);
@@ -95,12 +130,15 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
   const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(null);
 
   const refreshModes = async (): Promise<void> => {
+    console.log('[ScannerContext] Fetching modes from backend...');
     const { data, error } = await api.getScannerModes();
     if (error) {
-      console.warn('[ScannerContext] Failed to fetch modes, using fallback:', error);
+      console.error('[ScannerContext] Failed to fetch modes:', error);
+      console.warn('[ScannerContext] Using fallback modes');
       setScannerModes(fallbackModes);
       return;
     }
+    console.log('[ScannerContext] Raw modes response:', data);
     const modes = (data?.modes || []).map(m => ({
       name: m.name,
       description: m.description,
@@ -108,12 +146,13 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
       min_confluence_score: m.min_confluence_score,
       profile: m.profile,
     }));
+    console.log('[ScannerContext] Processed modes:', modes);
     setScannerModes(modes.length ? modes : fallbackModes);
     // Ensure selectedMode aligned with scanConfig
     const desired = (scanConfig?.sniperMode as string) || 'recon';
     const match = modes.find(m => m.name === desired) || modes.find(m => m.name === 'recon') || modes[0] || fallbackModes[0];
     setSelectedMode(match);
-    console.log('[ScannerContext] Modes loaded. Active:', match?.name);
+    console.log('[ScannerContext] Modes loaded. Total:', modes.length, 'Active:', match?.name);
   };
 
   // On mount, fetch modes and set selectedMode from backend truth

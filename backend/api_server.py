@@ -649,6 +649,74 @@ async def get_signals(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@app.get("/api/debug/signals_schema")
+async def debug_signals_schema(
+    limit: int = Query(default=3, ge=1, le=10),
+    sniper_mode: str = Query(default="recon"),
+    exchange: str = Query(default="phemex")
+):
+    """
+    Debug endpoint to verify signals payload schema without verbose logs.
+    
+    Returns compact summary of signals with smc_geometry and analysis keys present.
+    Use to confirm backend enrichment contract without pipeline noise.
+    """
+    try:
+        # Get signals using main endpoint logic but return minimal schema summary
+        from backend.analysis.pair_selection import select_symbols
+        
+        exchange_key = exchange.lower()
+        if exchange_key not in EXCHANGE_ADAPTERS:
+            raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange}")
+        
+        current_adapter = EXCHANGE_ADAPTERS[exchange_key]()
+        mode = get_mode(sniper_mode)
+        orchestrator.apply_mode(mode)
+        orchestrator.exchange_adapter = current_adapter
+        orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
+        
+        symbols = select_symbols(adapter=current_adapter, limit=limit, majors=True, altcoins=True, meme_mode=False, leverage=1)
+        trade_plans, _ = orchestrator.scan(symbols)
+        
+        # Extract schema info
+        schema_summary = []
+        for plan in trade_plans:
+            schema_summary.append({
+                "symbol": plan.symbol,
+                "has_smc_geometry": all([
+                    plan.metadata.get('order_blocks_list') is not None,
+                    plan.metadata.get('fvgs_list') is not None,
+                    plan.metadata.get('structural_breaks_list') is not None,
+                    plan.metadata.get('liquidity_sweeps_list') is not None
+                ]),
+                "smc_geometry_keys": [
+                    k for k in ['order_blocks_list', 'fvgs_list', 'structural_breaks_list', 'liquidity_sweeps_list']
+                    if plan.metadata.get(k) is not None
+                ],
+                "smc_geometry_counts": {
+                    "order_blocks": len(plan.metadata.get('order_blocks_list', [])),
+                    "fvgs": len(plan.metadata.get('fvgs_list', [])),
+                    "bos_choch": len(plan.metadata.get('structural_breaks_list', [])),
+                    "liquidity_sweeps": len(plan.metadata.get('liquidity_sweeps_list', []))
+                },
+                "has_analysis": all([
+                    'risk_reward' in [plan.risk_reward],
+                    hasattr(plan, 'confluence_breakdown') or plan.confidence_score is not None
+                ]),
+                "analysis_keys": ["risk_reward", "confluence_score", "expected_value"]
+            })
+        
+        return {
+            "count": len(schema_summary),
+            "mode": mode.name,
+            "exchange": exchange,
+            "signals": schema_summary
+        }
+    except Exception as e:
+        logger.error("Debug schema error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @app.get("/api/scanner/diagnostics")
 async def get_scanner_diagnostics():
     """

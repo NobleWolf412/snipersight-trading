@@ -9,7 +9,7 @@ nohup ./.venv/bin/python -m uvicorn backend.api_server:app --host 0.0.0.0 --port
 BACK_PID=$!
 
 echo "Starting frontend on :$FRONTEND_PORT"
-nohup vite --host 0.0.0.0 --port $FRONTEND_PORT > logs/frontend.log 2>&1 &
+nohup env PORT=$FRONTEND_PORT npm run dev > logs/frontend.log 2>&1 &
 FRONT_PID=$!
 
 echo "Backend PID: $BACK_PID"
@@ -17,3 +17,4 @@ echo "Frontend PID: $FRONT_PID"
 
 echo "Use tail -f logs/backend.log or logs/frontend.log to view output."
 echo "Stop with: kill $BACK_PID $FRONT_PID"
+echo "Or run: pkill -f uvicorn; pkill -f vite"

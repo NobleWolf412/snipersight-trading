@@ -149,6 +149,69 @@ Retrieves detailed trade plan for a single signal.
     "factors": [
       {
         "name": "structure",
+        "score": 25.0,
+        "weight": 0.3
+      },
+      {
+        "name": "htf_alignment",
+        "score": 30.0,
+        "weight": 0.35
+      },
+      {
+        "name": "smc_confluence",
+        "score": 23.5,
+        "weight": 0.35
+      }
+    ]
+  },
+  "smc_geometry": {
+    "order_blocks": [
+      {
+        "timeframe": "4H",
+        "type": "bullish",
+        "price": 41850,
+        "low": 41800,
+        "high": 41900,
+        "timestamp": "2024-01-14T08:00:00Z",
+        "freshness_score": 0.92
+      }
+    ],
+    "fvgs": [
+      {
+        "timeframe": "1H",
+        "type": "bullish",
+        "low": 42000,
+        "high": 42100,
+        "timestamp": "2024-01-15T10:00:00Z"
+      }
+    ],
+    "bos_choch": [
+      {
+        "timeframe": "4H",
+        "type": "BOS",
+        "level": 42300,
+        "timestamp": "2024-01-15T12:00:00Z",
+        "direction": "bullish"
+      }
+    ],
+    "liquidity_sweeps": [
+      {
+        "timeframe": "1H",
+        "level": 41700,
+        "timestamp": "2024-01-15T09:00:00Z",
+        "type": "low_sweep"
+      }
+    ]
+  },
+  "analysis": {
+    "risk_reward": 3.2,
+    "confluence_score": 78.5,
+    "expected_value": 2.51,
+    "order_blocks": 1,
+    "fvgs": 1,
+    "structural_breaks": 1,
+    "liquidity_sweeps": 1,
+    "trend": "long"
         "score": 85,
         "weight": 0.3,
         "rationale": "HTF aligned BOS"

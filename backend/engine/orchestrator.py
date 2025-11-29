@@ -727,6 +727,50 @@ class Orchestrator:
                 multi_tf_data=context.multi_tf_data
             )
             
+            # Enrich plan metadata with SMC geometry for chart overlays
+            if plan and context.smc_snapshot:
+                plan.metadata['order_blocks_list'] = [
+                    {
+                        'timeframe': str(ob.timeframe),
+                        'type': str(ob.direction),
+                        'price': float(ob.midpoint),
+                        'low': float(ob.low),
+                        'high': float(ob.high),
+                        'timestamp': ob.timestamp.isoformat() if hasattr(ob, 'timestamp') and ob.timestamp else None,
+                        'freshness_score': float(ob.freshness_score)
+                    }
+                    for ob in context.smc_snapshot.order_blocks
+                ]
+                plan.metadata['fvgs_list'] = [
+                    {
+                        'timeframe': str(fvg.timeframe),
+                        'type': str(fvg.direction),
+                        'low': float(fvg.bottom),
+                        'high': float(fvg.top),
+                        'timestamp': fvg.timestamp.isoformat() if hasattr(fvg, 'timestamp') and fvg.timestamp else None
+                    }
+                    for fvg in context.smc_snapshot.fvgs
+                ]
+                plan.metadata['structural_breaks_list'] = [
+                    {
+                        'timeframe': str(brk.timeframe),
+                        'type': str(brk.break_type),
+                        'level': float(brk.level),
+                        'timestamp': brk.timestamp.isoformat() if hasattr(brk, 'timestamp') and brk.timestamp else None,
+                        'direction': 'bullish' if brk.break_type == 'BOS' else 'bearish'
+                    }
+                    for brk in context.smc_snapshot.structural_breaks
+                ]
+                plan.metadata['liquidity_sweeps_list'] = [
+                    {
+                        'level': float(sweep.level),
+                        'timestamp': sweep.timestamp.isoformat() if hasattr(sweep, 'timestamp') and sweep.timestamp else None,
+                        'type': str(sweep.sweep_type),
+                        'confirmed': bool(sweep.confirmation)
+                    }
+                    for sweep in context.smc_snapshot.liquidity_sweeps
+                ]
+            
             # Enrich plan with regime context
             if plan and self.current_regime:
                 plan.metadata['global_regime'] = {
