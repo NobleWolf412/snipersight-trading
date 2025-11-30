@@ -2,7 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TrendUp, ChartLine } from '@phosphor-icons/react';
 import { PriceCard } from '@/components/PriceCard';
 import { LiveTicker } from '@/components/LiveTicker';
-import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLayout';
+import { PageHeader, PageSection } from '@/components/layout/PageLayout';
+import { PageContainer } from '@/components/layout/PageContainer';
 import { HomeButton } from '@/components/layout/HomeButton';
 
 const MAJOR_PAIRS = [
@@ -16,8 +17,7 @@ const MAJOR_PAIRS = [
 
 export function MarketOverview() {
   return (
-    <PageLayout maxWidth="7xl">
-      <div className="space-y-10">
+    <PageContainer id="main-content" className="space-y-10">
         <div className="flex justify-start">
           <HomeButton />
         </div>
@@ -103,8 +103,7 @@ export function MarketOverview() {
             </Card>
           </div>
         </PageSection>
-      </div>
-    </PageLayout>
+    </PageContainer>
   );
 }
 

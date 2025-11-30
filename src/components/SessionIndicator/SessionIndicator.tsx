@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { getCurrentTradingSession, getSessionColor, type TradingSession } from '@/utils/tradingSessions';
-import { Globe, TrendUp } from '@phosphor-icons/react';
+import { getCurrentTradingSession, type TradingSession } from '@/utils/tradingSessions';
+import { Globe } from '@phosphor-icons/react';
 
 export function SessionIndicator() {
   const [currentSession, setCurrentSession] = useState<TradingSession>(getCurrentTradingSession());
@@ -60,28 +60,28 @@ export function SessionIndicator() {
   };
 
   return (
-    <div className="flex items-center gap-4 bg-background/60 border border-primary/30 px-5 py-2.5 rounded-sm backdrop-blur-sm shadow-[0_0_12px_rgba(0,255,170,0.15)]">
-      <div className="flex items-center gap-2">
-        <Globe size={20} weight="bold" className="text-primary" />
+    <div className="flex items-center gap-5 bg-black/55 border border-primary/40 px-6 py-3 rounded-md backdrop-blur-sm shadow-[0_0_16px_-2px_rgba(0,255,170,0.35)] w-full max-w-2xl md:max-w-3xl">
+      <div className="flex items-center gap-2 pr-2">
+        <Globe size={22} weight="bold" className="text-primary drop-shadow-[0_0_6px_rgba(0,255,170,0.4)]" />
       </div>
-      <div className="flex gap-4">
-        {sessions.map((session) => {
+      <div className="grid grid-cols-4 gap-3 w-full">
+        {sessions.map(session => {
           const isActive = currentSession === session;
           const activity = sessionActivity[session];
           return (
             <div
               key={session}
-              className={`relative px-4 py-2 rounded-sm text-xs font-bold tracking-[0.12em] uppercase transition-all ${
+              className={`relative px-4 py-2 rounded-sm text-sm md:text-base font-bold tracking-[0.18em] uppercase transition-all w-full ${
                 isActive
-                  ? 'text-primary bg-primary/20 border border-primary/60 shadow-[0_0_8px_rgba(0,255,170,0.3)]'
-                  : 'text-muted-foreground/60 bg-background/30 border border-border/20'
+                  ? 'text-primary bg-primary/15 border border-primary/60 shadow-[0_0_10px_rgba(0,255,170,0.45)]'
+                  : 'text-muted-foreground/70 bg-black/30 border border-border/30'
               }`}
             >
               {isActive && (
-                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-primary rounded-full scan-pulse shadow-[0_0_6px_currentColor]" />
+                <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full scan-pulse shadow-[0_0_8px_currentColor]" />
               )}
-              <div className="flex items-center gap-2">
-                <span className="relative z-10 hud-terminal">{sessionLabels[session]}</span>
+              <div className="flex flex-col items-center gap-1 text-center">
+                <span className="relative z-10 hud-terminal drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">{sessionLabels[session]}</span>
                 <div className="relative z-10" title={`${activity.charAt(0).toUpperCase() + activity.slice(1)} volume`}>
                   {getActivityIndicator(activity)}
                 </div>

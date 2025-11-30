@@ -7,7 +7,7 @@ regime analysis to produce a unified setup quality score.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 
 @dataclass
@@ -70,6 +70,11 @@ class ConfluenceBreakdown:
     regime: Literal["trend", "range", "risk_on", "risk_off"]
     htf_aligned: bool
     btc_impulse_gate: bool
+    # Optional HTF proximity context (for transparency in UI/telemetry)
+    htf_proximity_atr: Optional[float] = None
+    htf_proximity_pct: Optional[float] = None
+    nearest_htf_level_timeframe: Optional[str] = None
+    nearest_htf_level_type: Optional[Literal['support','resistance']] = None
     
     def __post_init__(self):
         """Validate confluence breakdown data."""

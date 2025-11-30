@@ -25,6 +25,16 @@ class ScanConfig:
     min_stop_atr: float = 1.0
     max_stop_atr: float = 6.0
 
+    # HTF proximity integration knobs
+    htf_proximity_enabled: bool = True
+    htf_proximity_weight: float = 0.12
+    htf_proximity_atr_max: float = 1.0
+    htf_proximity_pct_max: float = 2.0
+    htf_timeframes: Tuple[str, ...] = ('4H', '1D', '1W')
+    htf_bias_entry: bool = True
+    htf_bias_entry_offset_atr: float = 0.05
+    htf_touch_fresh_days_max: int = 14
+
 
 @dataclass
 class GlobalThresholds:

@@ -53,6 +53,7 @@ from backend.strategy.smc.bos_choch import detect_structural_breaks
 from backend.strategy.smc.liquidity_sweeps import detect_liquidity_sweeps
 from backend.shared.config.smc_config import SMCConfig
 from backend.strategy.confluence.scorer import calculate_confluence_score
+from backend.analysis.htf_levels import HTFLevelDetector
 from backend.strategy.planner.planner_service import generate_trade_plan
 from backend.risk.risk_manager import RiskManager
 from backend.risk.position_sizer import PositionSizer
@@ -637,18 +638,64 @@ class Orchestrator:
         if not context.smc_snapshot or not context.multi_tf_indicators:
             raise ValueError(f"{context.symbol}: Missing SMC snapshot or indicators for confluence scoring")
         
+        # Compute HTF proximity context for both directions (support/resistance)
+        htf_ctx_long = None
+        htf_ctx_short = None
+        try:
+            # Prepare HTF data map
+            ohlcv_map = {}
+            tf_map = {"4H": "4h", "1D": "1d", "1W": "1w"}
+            for k, v in context.multi_tf_data.timeframes.items():
+                if k in tf_map:
+                    ohlcv_map[tf_map[k]] = v
+            if ohlcv_map:
+                current_price = self._get_current_price(context.multi_tf_data)
+                # Use planning TF ATR for ATR-normalized distance
+                primary_tf = getattr(self.config, 'primary_planning_timeframe', '4H')
+                ind = context.multi_tf_indicators.by_timeframe.get(primary_tf)
+                atr = float(ind.atr) if ind and ind.atr else None
+                if current_price and atr and atr > 0:
+                    detector = HTFLevelDetector()
+                    levels = detector.detect_levels(context.symbol, ohlcv_map, current_price)
+                    if levels:
+                        # Nearest support and resistance
+                        supports = [lvl for lvl in levels if lvl.level_type == 'support' and current_price >= lvl.price]
+                        resistances = [lvl for lvl in levels if lvl.level_type == 'resistance' and current_price <= lvl.price]
+                        if supports:
+                            sup = min(supports, key=lambda l: abs(current_price - l.price))
+                            htf_ctx_long = {
+                                'within_atr': abs(current_price - sup.price) / atr,
+                                'within_pct': sup.proximity_pct,
+                                'timeframe': sup.timeframe,
+                                'type': 'support'
+                            }
+                        if resistances:
+                            res = min(resistances, key=lambda l: abs(current_price - l.price))
+                            htf_ctx_short = {
+                                'within_atr': abs(current_price - res.price) / atr,
+                                'within_pct': res.proximity_pct,
+                                'timeframe': res.timeframe,
+                                'type': 'resistance'
+                            }
+        except Exception:
+            # If HTF proximity computation fails, continue without it
+            htf_ctx_long = None
+            htf_ctx_short = None
+
         # Evaluate both directions and choose the stronger confluence
         long_breakdown = calculate_confluence_score(
             smc_snapshot=context.smc_snapshot,
             indicators=context.multi_tf_indicators,
             config=self.config,
-            direction="LONG"
+            direction="LONG",
+            htf_context=htf_ctx_long
         )
         short_breakdown = calculate_confluence_score(
             smc_snapshot=context.smc_snapshot,
             indicators=context.multi_tf_indicators,
             config=self.config,
-            direction="SHORT"
+            direction="SHORT",
+            htf_context=htf_ctx_short
         )
 
         # Regime-aware adjustment: optionally penalize contrarian setups

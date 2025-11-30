@@ -11,7 +11,8 @@ import { ChartModal } from '@/components/ChartModal/ChartModal';
 import { DetailsModal } from '@/components/DetailsModal/DetailsModal';
 import { LiveTicker } from '@/components/LiveTicker';
 import { PriceDisplay } from '@/components/PriceDisplay';
-import { PageLayout, PageHeader, PageSection } from '@/components/layout/PageLayout';
+import { PageHeader } from '@/components/layout/PageLayout';
+import { PageContainer } from '@/components/layout/PageContainer';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { RejectionSummary } from '@/components/RejectionSummary';
 import { RegimeIndicator } from '@/components/RegimeIndicator';
@@ -140,7 +141,7 @@ export function ScanResults() {
 
   if (isLoading) {
     return (
-      <PageLayout maxWidth="2xl">
+      <PageContainer id="main-content">
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center space-y-4">
             <div className="animate-pulse text-accent">
@@ -149,7 +150,7 @@ export function ScanResults() {
             <p className="text-muted-foreground">Loading...</p>
           </div>
         </div>
-      </PageLayout>
+      </PageContainer>
     );
   }
 
@@ -179,7 +180,7 @@ export function ScanResults() {
 
   if (results.length === 0) {
     return (
-      <PageLayout maxWidth="2xl">
+      <PageContainer id="main-content">
         <div className="space-y-6">
           <div className="flex justify-start">
             <HomeButton />
@@ -230,12 +231,12 @@ export function ScanResults() {
             }
           </p>
         </div>
-      </PageLayout>
+      </PageContainer>
     );
   }
 
   return (
-    <PageLayout maxWidth="2xl">
+    <PageContainer id="main-content">
       <div className="space-y-10">
         <div className="flex justify-start">
           <HomeButton />
@@ -486,6 +487,6 @@ export function ScanResults() {
           </>
         )}
       </div>
-    </PageLayout>
+    </PageContainer>
   );
 }

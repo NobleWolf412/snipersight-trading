@@ -30,7 +30,8 @@ def calculate_confluence_score(
     config: ScanConfig,
     direction: str,
     htf_trend: Optional[str] = None,
-    btc_impulse: Optional[str] = None
+    btc_impulse: Optional[str] = None,
+    htf_context: Optional[dict] = None
 ) -> ConfluenceBreakdown:
     """
     Calculate comprehensive confluence score for a trade setup.
@@ -132,6 +133,28 @@ def calculate_confluence_score(
                 rationale=f"Higher timeframe trend is {htf_trend}, aligns with {direction} setup"
             ))
     
+    # --- HTF Level Proximity ---
+    if getattr(config, 'htf_proximity_enabled', False) and htf_context:
+        try:
+            within_atr = float(htf_context.get('within_atr', 1e9))
+            within_pct = float(htf_context.get('within_pct', 1e9))
+            atr_cap = max(1e-6, float(getattr(config, 'htf_proximity_atr_max', 1.0)))
+            pct_cap = max(1e-6, float(getattr(config, 'htf_proximity_pct_max', 2.0)))
+            if within_atr <= atr_cap and within_pct <= pct_cap:
+                # Map proximity to score: closer => higher
+                proximity_score = max(0.0, min(100.0, 100.0 * (1.0 - (within_atr / atr_cap))))
+                weight = float(getattr(config, 'htf_proximity_weight', 0.12))
+                lvl_tf = htf_context.get('timeframe')
+                lvl_type = htf_context.get('type')
+                factors.append(ConfluenceFactor(
+                    name="HTF Level Proximity",
+                    score=proximity_score,
+                    weight=weight,
+                    rationale=f"Within {within_atr:.2f} ATR ({within_pct:.2f}%) of {lvl_tf} {lvl_type}"
+                ))
+        except Exception:
+            pass
+
     # --- BTC Impulse Gate ---
     
     btc_impulse_gate = True
@@ -196,7 +219,11 @@ def calculate_confluence_score(
         conflict_penalty=conflict_penalty,
         regime=regime,
         htf_aligned=htf_aligned,
-        btc_impulse_gate=btc_impulse_gate
+        btc_impulse_gate=btc_impulse_gate,
+        htf_proximity_atr=(htf_context or {}).get('within_atr'),
+        htf_proximity_pct=(htf_context or {}).get('within_pct'),
+        nearest_htf_level_timeframe=(htf_context or {}).get('timeframe'),
+        nearest_htf_level_type=(htf_context or {}).get('type')
     )
     
     return breakdown

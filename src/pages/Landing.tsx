@@ -3,6 +3,7 @@ import { SystemStatus } from '@/components/landing/SystemStatus';
 import { useTelemetry } from '@/hooks/useTelemetry';
 import { Crosshair, Target, ChartLine, Compass } from '@phosphor-icons/react';
 import { Link } from 'react-router-dom';
+import { PageContainer } from '@/components/layout/PageContainer';
 // Default logo path; update if your file name differs
 import sniperLogo from '@/assets/images/SniperLogo.png';
 
@@ -10,14 +11,14 @@ export function Landing() {
   const { system } = useTelemetry();
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background">
-      <main>
-        {/* Tactical grid background */}
+    <div className="relative min-h-screen overflow-hidden bg-background" id="main-content">
+      <main className="pb-12">
+        {/* Tactical grid background (global) */}
         <div className="fixed inset-0 tactical-grid opacity-10 pointer-events-none" aria-hidden="true" />
 
         {/* Hero section */}
         <section className="relative py-8 md:py-12">
-          <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10">
+          <PageContainer>
             <div className="relative space-y-4">
               {/* Status indicator */}
               <div className="flex items-center gap-3 text-xs tracking-widest text-accent">
@@ -37,17 +38,19 @@ export function Landing() {
                 <p className="hud-terminal text-primary/80 text-base md:text-lg max-w-3xl leading-relaxed mx-auto px-4">Precision crypto market reconnaissance and disciplined execution. Identify high-quality targets, validate confluence, deploy with risk control.</p>
               </div>
             </div>
-          </div>
+          </PageContainer>
         </section>
 
-        {/* Market ticker strip */}
+        {/* Market ticker strip (full bleed inside centered container) */}
         <section className="relative border-y border-border/40">
-          <LiveTicker />
+          <PageContainer className="py-2">
+            <LiveTicker />
+          </PageContainer>
         </section>
 
         {/* Main Features Grid */}
-        <section className="relative py-20 md:py-32">
-          <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10">
+        <section className="relative py-20 md:py-28">
+          <PageContainer>
             <div className="grid md:grid-cols-2 gap-12 md:gap-16">
               
               {/* Scanner Feature */}
@@ -170,14 +173,14 @@ export function Landing() {
               </div>
 
             </div>
-          </div>
+          </PageContainer>
         </section>
 
         {/* Footer with system status */}
         <footer className="relative py-12 border-t border-border/40">
-          <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10">
+          <PageContainer>
             <SystemStatus data={system} />
-          </div>
+          </PageContainer>
         </footer>
       </main>
     </div>

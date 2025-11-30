@@ -135,7 +135,8 @@ def generate_trade_plan(
         atr=atr,
         primary_tf=primary_tf,
         setup_archetype=setup_archetype,
-        config=config
+        config=config,
+        confluence_breakdown=confluence_breakdown
     )
     plan_composition['entry_from_structure'] = entry_used_structure
     
@@ -391,7 +392,8 @@ def _calculate_entry_zone(
     atr: float,
     primary_tf: str,
     setup_archetype: SetupArchetype,
-    config: ScanConfig
+    config: ScanConfig,
+    confluence_breakdown: Optional[ConfluenceBreakdown] = None
 ) -> tuple[EntryZone, bool]:
     """
     Calculate dual entry zone based on SMC structure.
@@ -422,8 +424,20 @@ def _calculate_entry_zone(
             # Use most recent/fresh OB
             best_ob = max(obs, key=_ob_score)
             logger.critical(f"ENTRY ZONE: Using bullish OB - high={best_ob.high}, low={best_ob.low}, ATR={atr}")
-            near_entry = best_ob.high - (0.1 * atr)  # Top of OB (aggressive entry)
-            far_entry = best_ob.low + (0.1 * atr)    # Bottom of OB (conservative, deeper)
+            offset = 0.1 * atr
+            # If HTF proximity aligns (support, within thresholds), bias entries closer to level
+            try:
+                if (
+                    getattr(config, 'htf_bias_entry', False)
+                    and confluence_breakdown is not None
+                    and confluence_breakdown.nearest_htf_level_type == 'support'
+                    and (confluence_breakdown.htf_proximity_atr or 99) <= getattr(config, 'htf_proximity_atr_max', 1.0)
+                ):
+                    offset = float(getattr(config, 'htf_bias_entry_offset_atr', 0.05)) * atr
+            except Exception:
+                pass
+            near_entry = best_ob.high - offset
+            far_entry = best_ob.low + offset
             logger.critical(f"ENTRY ZONE: Calculated near={near_entry}, far={far_entry}")
             rationale = f"Entry zone based on {best_ob.timeframe} bullish order block"
             used_structure = True
@@ -433,8 +447,19 @@ def _calculate_entry_zone(
             best_fvg = min([fvg for fvg in fvgs if fvg.overlap_with_price < 0.5], 
                           key=lambda fvg: abs(fvg.top - current_price), 
                           default=fvgs[0])
-            near_entry = best_fvg.top - (0.1 * atr)      # Top of FVG (aggressive)
-            far_entry = best_fvg.bottom + (0.1 * atr)    # Bottom of FVG (conservative)
+            offset = 0.1 * atr
+            try:
+                if (
+                    getattr(config, 'htf_bias_entry', False)
+                    and confluence_breakdown is not None
+                    and confluence_breakdown.nearest_htf_level_type == 'support'
+                    and (confluence_breakdown.htf_proximity_atr or 99) <= getattr(config, 'htf_proximity_atr_max', 1.0)
+                ):
+                    offset = float(getattr(config, 'htf_bias_entry_offset_atr', 0.05)) * atr
+            except Exception:
+                pass
+            near_entry = best_fvg.top - offset
+            far_entry = best_fvg.bottom + offset
             rationale = f"Entry zone based on {best_fvg.timeframe} bullish FVG"
             used_structure = True
         
@@ -459,8 +484,19 @@ def _calculate_entry_zone(
         
         if obs:
             best_ob = max(obs, key=_ob_score_b)
-            near_entry = best_ob.low + (0.1 * atr)   # Bottom of OB (aggressive entry)
-            far_entry = best_ob.high - (0.1 * atr)   # Top of OB (conservative, deeper)
+            offset = 0.1 * atr
+            try:
+                if (
+                    getattr(config, 'htf_bias_entry', False)
+                    and confluence_breakdown is not None
+                    and confluence_breakdown.nearest_htf_level_type == 'resistance'
+                    and (confluence_breakdown.htf_proximity_atr or 99) <= getattr(config, 'htf_proximity_atr_max', 1.0)
+                ):
+                    offset = float(getattr(config, 'htf_bias_entry_offset_atr', 0.05)) * atr
+            except Exception:
+                pass
+            near_entry = best_ob.low + offset
+            far_entry = best_ob.high - offset
             rationale = f"Entry zone based on {best_ob.timeframe} bearish order block"
             used_structure = True
         
@@ -468,8 +504,19 @@ def _calculate_entry_zone(
             best_fvg = min([fvg for fvg in fvgs if fvg.overlap_with_price < 0.5],
                           key=lambda fvg: abs(fvg.bottom - current_price),
                           default=fvgs[0])
-            near_entry = best_fvg.bottom + (0.1 * atr)
-            far_entry = best_fvg.top - (0.1 * atr)
+            offset = 0.1 * atr
+            try:
+                if (
+                    getattr(config, 'htf_bias_entry', False)
+                    and confluence_breakdown is not None
+                    and confluence_breakdown.nearest_htf_level_type == 'resistance'
+                    and (confluence_breakdown.htf_proximity_atr or 99) <= getattr(config, 'htf_proximity_atr_max', 1.0)
+                ):
+                    offset = float(getattr(config, 'htf_bias_entry_offset_atr', 0.05)) * atr
+            except Exception:
+                pass
+            near_entry = best_fvg.bottom + offset
+            far_entry = best_fvg.top - offset
             rationale = f"Entry zone based on {best_fvg.timeframe} bearish FVG"
             used_structure = True
         
