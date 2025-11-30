@@ -77,7 +77,7 @@ class FVG:
         bottom: Lower boundary of the gap
         timestamp: When the FVG was formed
         size: Gap size in price points
-        overlap_with_price: Whether current price is within the gap
+        overlap_with_price: Percentage of gap filled by price (0.0-1.0)
     """
     timeframe: str
     direction: Literal["bullish", "bearish"]
@@ -85,7 +85,7 @@ class FVG:
     bottom: float
     timestamp: datetime
     size: float
-    overlap_with_price: bool
+    overlap_with_price: float  # 0.0 (fresh) to 1.0 (completely filled)
     
     def __post_init__(self):
         """Validate FVG data."""

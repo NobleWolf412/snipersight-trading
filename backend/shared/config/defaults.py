@@ -4,7 +4,13 @@ Default configuration for SniperSight scanner.
 Following ARCHITECTURE.md institutional-grade defaults.
 """
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, Optional
+
+# Forward reference for PlannerConfig (avoid circular import)
+try:
+    from backend.shared.config.planner_config import PlannerConfig
+except ImportError:
+    PlannerConfig = None
 
 
 @dataclass
@@ -38,6 +44,9 @@ class ScanConfig:
     # Real-time price / drift validation knobs
     max_entry_drift_pct: float = 0.15  # Reject if price moved >15% from planned avg entry
     max_entry_drift_atr: float = 3.0   # Or if drift exceeds 3 ATRs
+    
+    # Planner configuration (optional - will use defaults_for_mode if not set)
+    planner: Optional['PlannerConfig'] = None
 
 
 @dataclass

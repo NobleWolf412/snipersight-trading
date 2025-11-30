@@ -40,9 +40,65 @@ from backend.shared.models.smc import SMCSnapshot, OrderBlock, FVG
 from backend.shared.models.indicators import IndicatorSet
 from backend.shared.models.scoring import ConfluenceBreakdown
 from backend.shared.config.defaults import ScanConfig
+from backend.shared.config.planner_config import PlannerConfig
 from backend.shared.config.rr_matrix import validate_rr, classify_conviction
 from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import create_signal_rejected_event, create_alt_stop_suggested_event
+
+
+def _classify_atr_regime(atr: float, current_price: float, planner_cfg: PlannerConfig) -> str:
+    """Classify current ATR regime based on ATR% of price.
+    
+    Args:
+        atr: Current ATR value
+        current_price: Current market price
+        planner_cfg: Planner configuration with regime thresholds
+        
+    Returns:
+        Regime label: "calm", "normal", "elevated", or "explosive"
+    """
+    atr_pct = (atr / max(current_price, 1e-12)) * 100.0
+    
+    thresholds = planner_cfg.atr_regime_thresholds
+    if atr_pct < thresholds.get("calm", 0.5):
+        return "calm"
+    elif atr_pct < thresholds.get("normal", 1.2):
+        return "normal"
+    elif atr_pct < thresholds.get("elevated", 2.0):
+        return "elevated"
+    else:
+        return "explosive"
+
+
+def _calculate_htf_bias_factor(
+    distance_atr: float,
+    planner_cfg: PlannerConfig
+) -> float:
+    """Calculate HTF bias offset factor using linear gradient.
+    
+    Closer to HTF level -> smaller offsets (factor approaches min_factor)
+    Further from HTF level -> normal offsets (factor approaches 1.0)
+    
+    Args:
+        distance_atr: Distance to nearest HTF level in ATRs (always >= 0)
+        planner_cfg: Planner configuration
+        
+    Returns:
+        Offset scaling factor between min_factor and 1.0
+    """
+    if not planner_cfg.htf_bias_enabled:
+        return 1.0
+    
+    max_dist = planner_cfg.htf_bias_max_atr_distance
+    min_factor = planner_cfg.htf_bias_offset_min_factor
+    
+    # Clamp distance to [0, max_dist]
+    distance_clamped = min(max(distance_atr, 0.0), max_dist)
+    
+    # Linear interpolation: t = 0 (on level) -> min_factor, t = 1 (far) -> 1.0
+    t = distance_clamped / max_dist if max_dist > 0 else 1.0
+    
+    return min_factor + (1.0 - min_factor) * t
 
 
 def _is_order_block_valid(ob: OrderBlock, df: pd.DataFrame, current_price: float) -> bool:
@@ -132,6 +188,9 @@ def generate_trade_plan(
     primary_tf = getattr(config, "primary_planning_timeframe", None) or list(indicators.by_timeframe.keys())[-1]
     primary_indicators = indicators.by_timeframe[primary_tf]
     
+    # Get or create PlannerConfig from ScanConfig
+    planner_cfg = getattr(config, 'planner', None) or PlannerConfig.defaults_for_mode(config.profile)
+    
     telemetry = get_telemetry_logger()
     run_id = datetime.utcnow().strftime("run-%Y%m%d")  # coarse run grouping
 
@@ -180,10 +239,25 @@ def generate_trade_plan(
         primary_tf=primary_tf,
         setup_archetype=setup_archetype,
         config=config,
+        planner_cfg=planner_cfg,
         confluence_breakdown=confluence_breakdown,
         multi_tf_data=multi_tf_data
     )
     plan_composition['entry_from_structure'] = entry_used_structure
+    
+    # --- Price Alignment Sanity Check ---
+    # Fail fast if structure and current price are massively mismatched
+    mid_entry = (entry_zone.near_entry + entry_zone.far_entry) / 2
+    rel_diff = abs(mid_entry - current_price) / max(current_price, 1e-12)
+    
+    if rel_diff > planner_cfg.price_alignment_max_rel_diff:
+        telemetry.log_event(create_signal_rejected_event(
+            run_id=run_id,
+            symbol=symbol,
+            reason="price_structure_mismatch",
+            diagnostics={"mid_entry": mid_entry, "current_price": current_price, "rel_diff": rel_diff, "threshold": planner_cfg.price_alignment_max_rel_diff}
+        ))
+        raise ValueError(f"Current price and structure prices diverge ({rel_diff:.1%} > {planner_cfg.price_alignment_max_rel_diff:.1%}); check symbol feed.")
     
     # --- Calculate Stop Loss ---
     
@@ -195,6 +269,7 @@ def generate_trade_plan(
         primary_tf=primary_tf,
         setup_archetype=setup_archetype,
         config=config,
+        planner_cfg=planner_cfg,
         multi_tf_data=multi_tf_data
     )
     plan_composition['stop_from_structure'] = stop_used_structure
@@ -231,9 +306,11 @@ def generate_trade_plan(
         smc_snapshot=smc_snapshot,
         atr=atr,
         config=config,
+        planner_cfg=planner_cfg,
         setup_archetype=setup_archetype,
         regime_label=confluence_breakdown.regime,
-        rr_scale=rr_scale
+        rr_scale=rr_scale,
+        confluence_breakdown=confluence_breakdown
     )
     
     # --- Calculate Risk:Reward ---
@@ -472,6 +549,7 @@ def _calculate_entry_zone(
     primary_tf: str,
     setup_archetype: SetupArchetype,
     config: ScanConfig,
+    planner_cfg: PlannerConfig,
     confluence_breakdown: Optional[ConfluenceBreakdown] = None,
     multi_tf_data: Optional[MultiTimeframeData] = None
 ) -> tuple[EntryZone, bool]:
@@ -493,6 +571,8 @@ def _calculate_entry_zone(
         # Filter out OBs too far (distance constraint)
         max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
         obs = [ob for ob in obs if (current_price - ob.high) / atr <= max_pullback_atr]
+        # Filter out heavily mitigated OBs
+        obs = [ob for ob in obs if ob.mitigation_level <= planner_cfg.ob_mitigation_max]
         # Validate OB integrity (not broken / not currently tapped)
         if multi_tf_data and primary_tf in getattr(multi_tf_data, 'timeframes', {}):
             df_primary = multi_tf_data.timeframes[primary_tf]
@@ -503,10 +583,13 @@ def _calculate_entry_zone(
                 else:
                     logger.debug(f"Filtered invalid bullish OB (broken or tapped): low={ob.low} high={ob.high} ts={ob.timestamp}")
             obs = validated
-        # Prefer higher timeframe / freshness
+        # Prefer higher timeframe / freshness / displacement / low mitigation
         tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
         def _ob_score(ob: OrderBlock) -> float:
-            return ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
+            base_score = ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
+            displacement_factor = 1.0 + (ob.displacement_strength * planner_cfg.ob_displacement_weight)
+            mitigation_penalty = (1.0 - min(ob.mitigation_level, 1.0))
+            return base_score * displacement_factor * mitigation_penalty
         fvgs = [fvg for fvg in smc_snapshot.fvgs if fvg.direction == "bullish" and fvg.top < current_price]
         
         logger.critical(f"Bullish entry zone: found {len(obs)} OBs and {len(fvgs)} FVGs below current price")
@@ -514,18 +597,27 @@ def _calculate_entry_zone(
             # Use most recent/fresh OB
             best_ob = max(obs, key=_ob_score)
             logger.critical(f"ENTRY ZONE: Using bullish OB - high={best_ob.high}, low={best_ob.low}, ATR={atr}")
-            offset = 0.1 * atr
-            # If HTF proximity aligns (support, within thresholds), bias entries closer to level
+            
+            # Calculate regime-aware base offset
+            regime = _classify_atr_regime(atr, current_price, planner_cfg)
+            regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
+            base_offset = planner_cfg.entry_zone_offset_atr * regime_multiplier
+            
+            # Apply HTF bias gradient if HTF support is nearby
+            htf_factor = 1.0
             try:
                 if (
-                    getattr(config, 'htf_bias_entry', False)
+                    planner_cfg.htf_bias_enabled
                     and confluence_breakdown is not None
                     and confluence_breakdown.nearest_htf_level_type == 'support'
-                    and (confluence_breakdown.htf_proximity_atr or 99) <= getattr(config, 'htf_proximity_atr_max', 1.0)
+                    and (confluence_breakdown.htf_proximity_atr or 99) <= planner_cfg.htf_bias_max_atr_distance
                 ):
-                    offset = float(getattr(config, 'htf_bias_entry_offset_atr', 0.05)) * atr
+                    htf_distance = confluence_breakdown.htf_proximity_atr or 99
+                    htf_factor = _calculate_htf_bias_factor(htf_distance, planner_cfg)
             except Exception:
                 pass
+            
+            offset = base_offset * htf_factor * atr
             near_entry = best_ob.high - offset
             far_entry = best_ob.low + offset
             logger.critical(f"ENTRY ZONE: Calculated near={near_entry}, far={far_entry}")
@@ -533,21 +625,31 @@ def _calculate_entry_zone(
             used_structure = True
         
         elif fvgs:
-            # Use nearest unfilled FVG
-            best_fvg = min([fvg for fvg in fvgs if fvg.overlap_with_price < 0.5], 
+            # Use nearest unfilled FVG (filter by overlap threshold)
+            best_fvg = min([fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max], 
                           key=lambda fvg: abs(fvg.top - current_price), 
                           default=fvgs[0])
-            offset = 0.1 * atr
+            
+            # Calculate regime-aware base offset
+            regime = _classify_atr_regime(atr, current_price, planner_cfg)
+            regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
+            base_offset = planner_cfg.entry_zone_offset_atr * regime_multiplier
+            
+            # Apply HTF bias gradient if HTF support is nearby
+            htf_factor = 1.0
             try:
                 if (
-                    getattr(config, 'htf_bias_entry', False)
+                    planner_cfg.htf_bias_enabled
                     and confluence_breakdown is not None
                     and confluence_breakdown.nearest_htf_level_type == 'support'
-                    and (confluence_breakdown.htf_proximity_atr or 99) <= getattr(config, 'htf_proximity_atr_max', 1.0)
+                    and (confluence_breakdown.htf_proximity_atr or 99) <= planner_cfg.htf_bias_max_atr_distance
                 ):
-                    offset = float(getattr(config, 'htf_bias_entry_offset_atr', 0.05)) * atr
+                    htf_distance = confluence_breakdown.htf_proximity_atr or 99
+                    htf_factor = _calculate_htf_bias_factor(htf_distance, planner_cfg)
             except Exception:
                 pass
+            
+            offset = base_offset * htf_factor * atr
             near_entry = best_fvg.top - offset
             far_entry = best_fvg.bottom + offset
             rationale = f"Entry zone based on {best_fvg.timeframe} bullish FVG"
@@ -556,8 +658,10 @@ def _calculate_entry_zone(
         else:
             # Fallback: use ATR-based zone below current price
             logger.critical(f"ENTRY ZONE FALLBACK: current_price={current_price}, atr={atr}")
-            near_entry = current_price - (0.5 * atr)
-            far_entry = current_price - (1.5 * atr)
+            regime = _classify_atr_regime(atr, current_price, planner_cfg)
+            regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
+            near_entry = current_price - (planner_cfg.fallback_entry_near_atr * regime_multiplier * atr)
+            far_entry = current_price - (planner_cfg.fallback_entry_far_atr * regime_multiplier * atr)
             logger.critical(f"ENTRY ZONE FALLBACK: near={near_entry}, far={far_entry}")
             rationale = "Entry zone based on ATR pullback (no clear SMC structure)"
             used_structure = False
@@ -567,6 +671,8 @@ def _calculate_entry_zone(
         obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bearish" and ob.low > current_price]
         max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
         obs = [ob for ob in obs if (ob.low - current_price) / atr <= max_pullback_atr]
+        # Filter out heavily mitigated OBs
+        obs = [ob for ob in obs if ob.mitigation_level <= planner_cfg.ob_mitigation_max]
         if multi_tf_data and primary_tf in getattr(multi_tf_data, 'timeframes', {}):
             df_primary = multi_tf_data.timeframes[primary_tf]
             validated_b = []
@@ -578,65 +684,98 @@ def _calculate_entry_zone(
             obs = validated_b
         tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
         def _ob_score_b(ob: OrderBlock) -> float:
-            return ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
+            base_score = ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
+            displacement_factor = 1.0 + (ob.displacement_strength * planner_cfg.ob_displacement_weight)
+            mitigation_penalty = (1.0 - min(ob.mitigation_level, 1.0))
+            return base_score * displacement_factor * mitigation_penalty
         fvgs = [fvg for fvg in smc_snapshot.fvgs if fvg.direction == "bearish" and fvg.bottom > current_price]
         
         if obs:
             best_ob = max(obs, key=_ob_score_b)
-            offset = 0.1 * atr
+            
+            # Calculate regime-aware base offset
+            regime = _classify_atr_regime(atr, current_price, planner_cfg)
+            regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
+            base_offset = planner_cfg.entry_zone_offset_atr * regime_multiplier
+            
+            # Apply HTF bias gradient if HTF resistance is nearby
+            htf_factor = 1.0
             try:
                 if (
-                    getattr(config, 'htf_bias_entry', False)
+                    planner_cfg.htf_bias_enabled
                     and confluence_breakdown is not None
                     and confluence_breakdown.nearest_htf_level_type == 'resistance'
-                    and (confluence_breakdown.htf_proximity_atr or 99) <= getattr(config, 'htf_proximity_atr_max', 1.0)
+                    and (confluence_breakdown.htf_proximity_atr or 99) <= planner_cfg.htf_bias_max_atr_distance
                 ):
-                    offset = float(getattr(config, 'htf_bias_entry_offset_atr', 0.05)) * atr
+                    htf_distance = confluence_breakdown.htf_proximity_atr or 99
+                    htf_factor = _calculate_htf_bias_factor(htf_distance, planner_cfg)
             except Exception:
                 pass
+            
+            offset = base_offset * htf_factor * atr
             near_entry = best_ob.low + offset
             far_entry = best_ob.high - offset
             rationale = f"Entry zone based on {best_ob.timeframe} bearish order block"
             used_structure = True
         
         elif fvgs:
-            best_fvg = min([fvg for fvg in fvgs if fvg.overlap_with_price < 0.5],
+            best_fvg = min([fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max],
                           key=lambda fvg: abs(fvg.bottom - current_price),
                           default=fvgs[0])
-            offset = 0.1 * atr
+            
+            # Calculate regime-aware base offset
+            regime = _classify_atr_regime(atr, current_price, planner_cfg)
+            regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
+            base_offset = planner_cfg.entry_zone_offset_atr * regime_multiplier
+            
+            # Apply HTF bias gradient if HTF resistance is nearby
+            htf_factor = 1.0
             try:
                 if (
-                    getattr(config, 'htf_bias_entry', False)
+                    planner_cfg.htf_bias_enabled
                     and confluence_breakdown is not None
                     and confluence_breakdown.nearest_htf_level_type == 'resistance'
-                    and (confluence_breakdown.htf_proximity_atr or 99) <= getattr(config, 'htf_proximity_atr_max', 1.0)
+                    and (confluence_breakdown.htf_proximity_atr or 99) <= planner_cfg.htf_bias_max_atr_distance
                 ):
-                    offset = float(getattr(config, 'htf_bias_entry_offset_atr', 0.05)) * atr
+                    htf_distance = confluence_breakdown.htf_proximity_atr or 99
+                    htf_factor = _calculate_htf_bias_factor(htf_distance, planner_cfg)
             except Exception:
                 pass
-            near_entry = best_fvg.bottom + offset
-            far_entry = best_fvg.top - offset
+            
+            offset = base_offset * htf_factor * atr
+            # FIX: For shorts, near_entry must be > far_entry (near is closer to price, higher value)
+            near_entry = best_fvg.top - offset
+            far_entry = best_fvg.bottom + offset
             rationale = f"Entry zone based on {best_fvg.timeframe} bearish FVG"
             used_structure = True
         
         else:
             # Fallback: use ATR-based zone above current price
-            near_entry = current_price + (0.5 * atr)
-            far_entry = current_price + (1.5 * atr)
+            # For shorts: near_entry > far_entry (near is farther from price, higher value)
+            # SWAP near/far offsets compared to longs to maintain semantic ordering
+            regime = _classify_atr_regime(atr, current_price, planner_cfg)
+            regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
+            near_entry = current_price + (planner_cfg.fallback_entry_far_atr * regime_multiplier * atr)  # Far offset = higher
+            far_entry = current_price + (planner_cfg.fallback_entry_near_atr * regime_multiplier * atr)  # Near offset = lower
             rationale = "Entry zone based on ATR retracement (no clear SMC structure)"
             used_structure = False
     
     # Final sanity: bullish entries must be below price; bearish above
     if is_bullish and near_entry >= current_price:
         logger.warning(f"Bullish entry sanity fail near={near_entry} price={current_price} -> fallback ATR zone")
-        near_entry = current_price - (0.5 * atr)
-        far_entry = current_price - (1.5 * atr)
+        regime = _classify_atr_regime(atr, current_price, planner_cfg)
+        regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
+        near_entry = current_price - (planner_cfg.fallback_entry_near_atr * regime_multiplier * atr)
+        far_entry = current_price - (planner_cfg.fallback_entry_far_atr * regime_multiplier * atr)
         rationale = "Sanity fallback ATR pullback (invalid bullish structure)"
         used_structure = False
-    if (not is_bullish) and far_entry <= current_price:
-        logger.warning(f"Bearish entry sanity fail far={far_entry} price={current_price} -> fallback ATR zone")
-        near_entry = current_price + (0.5 * atr)
-        far_entry = current_price + (1.5 * atr)
+    if (not is_bullish) and near_entry <= current_price:
+        logger.warning(f"Bearish entry sanity fail near={near_entry} price={current_price} -> fallback ATR zone")
+        regime = _classify_atr_regime(atr, current_price, planner_cfg)
+        regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
+        # For shorts: swap offsets so near > far (near is higher, farther from price)
+        near_entry = current_price + (planner_cfg.fallback_entry_far_atr * regime_multiplier * atr)  # Far offset = higher
+        far_entry = current_price + (planner_cfg.fallback_entry_near_atr * regime_multiplier * atr)  # Near offset = lower
         rationale = "Sanity fallback ATR retracement (invalid bearish structure)"
         used_structure = False
 
@@ -651,7 +790,7 @@ def _find_swing_level(
     is_bullish: bool,
     reference_price: float,
     candles_df: pd.DataFrame,
-    lookback: int = 20
+    lookback: int
 ) -> Optional[float]:
     """
     Find swing high or swing low from price action.
@@ -714,6 +853,7 @@ def _calculate_stop_loss(
     primary_tf: str,
     setup_archetype: SetupArchetype,
     config: ScanConfig,
+    planner_cfg: PlannerConfig,
     multi_tf_data: Optional[MultiTimeframeData] = None
 ) -> tuple[StopLoss, bool]:
     """
@@ -755,32 +895,50 @@ def _calculate_stop_loss(
         if valid_stops:
             # Use closest structure below entry (highest of the valid stops)
             stop_level = max(valid_stops)
-            stop_level -= (0.3 * atr)  # Buffer beyond structure
+            stop_level -= (planner_cfg.stop_buffer_atr * atr)  # Buffer beyond structure
             rationale = "Stop below entry structure invalidation point"
             logger.debug(f"Using structure-based stop: {stop_level} (before buffer: {max(valid_stops)})")
             distance_atr = (entry_zone.far_entry - stop_level) / atr
             used_structure = True
         else:
-            # Fallback: swing-based stop from primary timeframe
-            logger.info(f"No SMC structure for stop - attempting swing-based fallback on {primary_tf}")
+            # Fallback: swing-based stop from primary timeframe, then HTF if needed
+            logger.info(f"No SMC structure for stop - attempting swing-based fallback")
             swing_level = None
+            
+            # Try primary timeframe first
             if multi_tf_data and primary_tf in multi_tf_data.timeframes:
                 candles_df = multi_tf_data.timeframes[primary_tf]
                 swing_level = _find_swing_level(
                     is_bullish=True,
                     reference_price=entry_zone.far_entry,
                     candles_df=candles_df,
-                    lookback=20
+                    lookback=planner_cfg.stop_lookback_bars
                 )
             
+            # Try HTF if enabled and primary failed
+            if swing_level is None and planner_cfg.stop_use_htf_swings and multi_tf_data:
+                htf_candidates = ['4h', '4H', '1d', '1D', '1w', '1W']
+                for htf in htf_candidates:
+                    if htf in multi_tf_data.timeframes:
+                        candles_df = multi_tf_data.timeframes[htf]
+                        swing_level = _find_swing_level(
+                            is_bullish=True,
+                            reference_price=entry_zone.far_entry,
+                            candles_df=candles_df,
+                            lookback=planner_cfg.stop_htf_lookback_bars
+                        )
+                        if swing_level:
+                            logger.info(f"Found HTF swing on {htf}")
+                            break
+            
             if swing_level:
-                stop_level = swing_level - (0.3 * atr)  # Buffer below swing
-                rationale = f"Stop below swing low on {primary_tf} (no SMC structure)"
+                stop_level = swing_level - (planner_cfg.stop_buffer_atr * atr)  # Buffer below swing
+                rationale = f"Stop below swing low (no SMC structure)"
                 distance_atr = (entry_zone.far_entry - stop_level) / atr
                 used_structure = False  # Swing level, not SMC structure
                 logger.info(f"Using swing-based stop: {stop_level}")
             else:
-                # Last resort: check HTF for structure
+                # Last resort: reject trade
                 logger.warning(f"No swing level found - rejecting trade")
                 raise ValueError("Cannot generate trade plan: no clear structure or swing level for stop loss placement")
     
@@ -802,31 +960,49 @@ def _calculate_stop_loss(
         if valid_stops:
             # Use closest structure above entry (lowest of the valid stops)
             stop_level = min(valid_stops)
-            stop_level += (0.3 * atr)  # Buffer beyond structure
+            stop_level += (planner_cfg.stop_buffer_atr * atr)  # Buffer beyond structure
             rationale = "Stop above entry structure invalidation point"
             distance_atr = (stop_level - entry_zone.far_entry) / atr
             used_structure = True
         else:
-            # Fallback: swing-based stop from primary timeframe
-            logger.info(f"No SMC structure for stop - attempting swing-based fallback on {primary_tf}")
+            # Fallback: swing-based stop from primary timeframe, then HTF if needed
+            logger.info(f"No SMC structure for stop - attempting swing-based fallback")
             swing_level = None
+            
+            # Try primary timeframe first
             if multi_tf_data and primary_tf in multi_tf_data.timeframes:
                 candles_df = multi_tf_data.timeframes[primary_tf]
                 swing_level = _find_swing_level(
                     is_bullish=False,
                     reference_price=entry_zone.far_entry,
                     candles_df=candles_df,
-                    lookback=20
+                    lookback=planner_cfg.stop_lookback_bars
                 )
             
+            # Try HTF if enabled and primary failed
+            if swing_level is None and planner_cfg.stop_use_htf_swings and multi_tf_data:
+                htf_candidates = ['4h', '4H', '1d', '1D', '1w', '1W']
+                for htf in htf_candidates:
+                    if htf in multi_tf_data.timeframes:
+                        candles_df = multi_tf_data.timeframes[htf]
+                        swing_level = _find_swing_level(
+                            is_bullish=False,
+                            reference_price=entry_zone.far_entry,
+                            candles_df=candles_df,
+                            lookback=planner_cfg.stop_htf_lookback_bars
+                        )
+                        if swing_level:
+                            logger.info(f"Found HTF swing on {htf}")
+                            break
+            
             if swing_level:
-                stop_level = swing_level + (0.3 * atr)  # Buffer above swing
-                rationale = f"Stop above swing high on {primary_tf} (no SMC structure)"
+                stop_level = swing_level + (planner_cfg.stop_buffer_atr * atr)  # Buffer above swing
+                rationale = f"Stop above swing high (no SMC structure)"
                 distance_atr = (stop_level - entry_zone.far_entry) / atr
                 used_structure = False  # Swing level, not SMC structure
                 logger.info(f"Using swing-based stop: {stop_level}")
             else:
-                # Last resort: reject if no swing level
+                # Last resort: reject trade
                 logger.warning(f"No swing level found - rejecting trade")
                 raise ValueError("Cannot generate trade plan: no clear structure or swing level for stop loss placement")
     
@@ -847,9 +1023,11 @@ def _calculate_targets(
     smc_snapshot: SMCSnapshot,
     atr: float,
     config: ScanConfig,
+    planner_cfg: PlannerConfig,
     setup_archetype: SetupArchetype,
     regime_label: str,
-    rr_scale: float = 1.0
+    rr_scale: float = 1.0,
+    confluence_breakdown: Optional[ConfluenceBreakdown] = None
 ) -> List[Target]:
     """
     Calculate tiered targets based on structure and R:R multiples.
@@ -861,17 +1039,21 @@ def _calculate_targets(
     
     targets = []
     
-    # Determine RR ladder based on archetype and regime
+    # Use configured RR ladder (can be overridden by setup/regime)
     regime_lower = (regime_label or "").lower()
     trending = any(k in regime_lower for k in ["trend", "drive"]) or 'aligned' in regime_lower
+    
+    # Start with config defaults, adjust for specific setups
     if setup_archetype == "SWEEP_REVERSAL":
         base_rr = [1.2, 2.0, 3.0]
     elif setup_archetype == "RANGE_REVERSION":
         base_rr = [1.2, 2.0, 3.0]
-    elif setup_archetype == "BREAKOUT_RETEST":
-        base_rr = [1.5, 2.5, 4.0] if not trending else [2.0, 3.0, 5.0]
-    else:  # TREND_OB_PULLBACK
-        base_rr = [1.5, 2.5, 4.0] if not trending else [2.0, 3.0, 5.0]
+    elif trending and setup_archetype in ["BREAKOUT_RETEST", "TREND_OB_PULLBACK"]:
+        base_rr = [2.0, 3.0, 5.0]
+    else:
+        # Use planner_cfg defaults for most cases
+        base_rr = planner_cfg.target_rr_ladder[:3] if len(planner_cfg.target_rr_ladder) >= 3 else [1.5, 2.5, 4.0]
+    
     rr_levels = [r * rr_scale for r in base_rr]
     
     if is_bullish:
@@ -900,20 +1082,46 @@ def _calculate_targets(
             rationale=f"{target1_rationale} (RR≈{rr_levels[0]:.2f})"
         ))
         
-        # Target 2: Moderate
-        target2_level = avg_entry + (risk_distance * rr_levels[1])
+        # Target 2: Moderate (with structure clipping if enabled)
+        target2_rr = avg_entry + (risk_distance * rr_levels[1])
+        target2_level = target2_rr
+        target2_rationale = f"Mid target RR≈{rr_levels[1]:.2f}"
+        
+        if planner_cfg.target_clip_to_structure and resistances:
+            # Check if target would extend beyond nearest resistance
+            nearest_resist = min([r for r in resistances if r > avg_entry], default=None)
+            if nearest_resist and target2_rr > nearest_resist:
+                # Calculate R:R if clipped to structure
+                clipped_rr = (nearest_resist - avg_entry) / risk_distance
+                if clipped_rr >= planner_cfg.target_min_rr_after_clip:
+                    target2_level = nearest_resist
+                    target2_rationale = f"Clipped to resistance at {nearest_resist:.4f} (RR≈{clipped_rr:.2f})"
+        
         targets.append(Target(
             level=target2_level,
             percentage=30.0,
-            rationale=f"Mid target RR≈{rr_levels[1]:.2f}"
+            rationale=target2_rationale
         ))
         
-        # Target 3: Aggressive
-        target3_level = avg_entry + (risk_distance * rr_levels[2])
+        # Target 3: Aggressive (with structure clipping if enabled)
+        target3_rr = avg_entry + (risk_distance * rr_levels[2])
+        target3_level = target3_rr
+        target3_rationale = f"Aggressive RR≈{rr_levels[2]:.2f}"
+        
+        if planner_cfg.target_clip_to_structure and resistances:
+            # Check if target would extend beyond nearest resistance
+            nearest_resist = min([r for r in resistances if r > avg_entry], default=None)
+            if nearest_resist and target3_rr > nearest_resist:
+                # Calculate R:R if clipped to structure
+                clipped_rr = (nearest_resist - avg_entry) / risk_distance
+                if clipped_rr >= planner_cfg.target_min_rr_after_clip:
+                    target3_level = nearest_resist
+                    target3_rationale = f"Clipped to resistance at {nearest_resist:.4f} (RR≈{clipped_rr:.2f})"
+        
         targets.append(Target(
             level=target3_level,
             percentage=20.0,
-            rationale=f"Aggressive RR≈{rr_levels[2]:.2f}"
+            rationale=target3_rationale
         ))
     
     else:  # bearish
@@ -942,20 +1150,46 @@ def _calculate_targets(
             rationale=f"{target1_rationale} (RR≈{rr_levels[0]:.2f})"
         ))
         
-        # Target 2: Moderate
-        target2_level = avg_entry - (risk_distance * rr_levels[1])
+        # Target 2: Moderate (with structure clipping if enabled)
+        target2_rr = avg_entry - (risk_distance * rr_levels[1])
+        target2_level = target2_rr
+        target2_rationale = f"Mid target RR≈{rr_levels[1]:.2f}"
+        
+        if planner_cfg.target_clip_to_structure and supports:
+            # Check if target would extend beyond nearest support
+            nearest_support = max([s for s in supports if s < avg_entry], default=None)
+            if nearest_support and target2_rr < nearest_support:
+                # Calculate R:R if clipped to structure
+                clipped_rr = (avg_entry - nearest_support) / risk_distance
+                if clipped_rr >= planner_cfg.target_min_rr_after_clip:
+                    target2_level = nearest_support
+                    target2_rationale = f"Clipped to support at {nearest_support:.4f} (RR≈{clipped_rr:.2f})"
+        
         targets.append(Target(
             level=target2_level,
             percentage=30.0,
-            rationale=f"Mid target RR≈{rr_levels[1]:.2f}"
+            rationale=target2_rationale
         ))
         
-        # Target 3: Aggressive
-        target3_level = avg_entry - (risk_distance * rr_levels[2])
+        # Target 3: Aggressive (with structure clipping if enabled)
+        target3_rr = avg_entry - (risk_distance * rr_levels[2])
+        target3_level = target3_rr
+        target3_rationale = f"Aggressive RR≈{rr_levels[2]:.2f}"
+        
+        if planner_cfg.target_clip_to_structure and supports:
+            # Check if target would extend beyond nearest support
+            nearest_support = max([s for s in supports if s < avg_entry], default=None)
+            if nearest_support and target3_rr < nearest_support:
+                # Calculate R:R if clipped to structure
+                clipped_rr = (avg_entry - nearest_support) / risk_distance
+                if clipped_rr >= planner_cfg.target_min_rr_after_clip:
+                    target3_level = nearest_support
+                    target3_rationale = f"Clipped to support at {nearest_support:.4f} (RR≈{clipped_rr:.2f})"
+        
         targets.append(Target(
             level=target3_level,
             percentage=20.0,
-            rationale=f"Aggressive RR≈{rr_levels[2]:.2f}"
+            rationale=target3_rationale
         ))
     
     return targets
