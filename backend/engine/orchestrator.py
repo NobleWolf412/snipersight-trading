@@ -848,6 +848,77 @@ class Orchestrator:
             except Exception:
                 plan.metadata['ev'] = None
 
+            # --- Post-plan real-time price revalidation ---
+            # Fetch a fresh price (direct adapter ticker if available) to ensure the
+            # generated entry zone is still logically positioned relative to live market.
+            try:
+                live_price = None
+                # Prefer direct adapter ccxt call for freshest tick
+                if hasattr(self.exchange_adapter, 'exchange') and hasattr(self.exchange_adapter.exchange, 'fetch_ticker'):
+                    fetch_symbol = context.symbol
+                    # OKX swap symbol format handling (mirror api_server logic)
+                    if 'okx' in str(type(self.exchange_adapter)).lower() and '/USDT' in fetch_symbol and ':USDT' not in fetch_symbol:
+                        fetch_symbol = fetch_symbol.replace('/USDT', '/USDT:USDT')
+                    try:
+                        ticker = self.exchange_adapter.exchange.fetch_ticker(fetch_symbol)
+                        live_price = ticker.get('last') or ticker.get('close')
+                    except Exception:
+                        live_price = None
+                if live_price is None:
+                    # Fallback to previously computed price from multi timeframe data
+                    live_price = self._get_current_price(context.multi_tf_data)
+                live_price = float(live_price) if live_price is not None else current_price
+
+                # Drift & sanity checks vs fresh price
+                avg_entry = (plan.entry_zone.near_entry + plan.entry_zone.far_entry) / 2.0
+                drift_abs = abs(live_price - avg_entry)
+                atr_val = float(plan.metadata.get('atr') or 0.0)
+                drift_pct = drift_abs / max(avg_entry, 1e-12)
+                drift_atr = drift_abs / max(atr_val, 1e-12) if atr_val > 0 else 0.0
+                max_drift_pct = float(getattr(self.config, 'max_entry_drift_pct', 0.15))
+                max_drift_atr = float(getattr(self.config, 'max_entry_drift_atr', 3.0))
+                is_bullish = (plan.direction == 'LONG')
+
+                invalid_reason = None
+                if is_bullish and plan.entry_zone.near_entry >= live_price:
+                    invalid_reason = 'revalidation_entry_above_price'
+                elif (not is_bullish) and plan.entry_zone.far_entry <= live_price:
+                    invalid_reason = 'revalidation_entry_below_price'
+                elif drift_pct > max_drift_pct or drift_atr > max_drift_atr:
+                    invalid_reason = 'revalidation_price_drift'
+
+                if invalid_reason:
+                    # Emit telemetry rejection and drop plan
+                    self.telemetry.log_event(create_signal_rejected_event(
+                        run_id=context.run_id,
+                        symbol=context.symbol,
+                        reason=invalid_reason,
+                        gate_name='post_plan_revalidation',
+                        diagnostics={
+                            'live_price': live_price,
+                            'near_entry': plan.entry_zone.near_entry,
+                            'far_entry': plan.entry_zone.far_entry,
+                            'drift_pct': drift_pct,
+                            'drift_atr': drift_atr,
+                            'max_drift_pct': max_drift_pct,
+                            'max_drift_atr': max_drift_atr
+                        }
+                    ))
+                    return None
+                else:
+                    # Store live price & drift metrics for downstream visibility
+                    plan.metadata['live_price_revalidation'] = {
+                        'live_price': live_price,
+                        'drift_pct': round(drift_pct, 6),
+                        'drift_atr': round(drift_atr, 6),
+                        'max_drift_pct': max_drift_pct,
+                        'max_drift_atr': max_drift_atr,
+                        'validated': True
+                    }
+            except Exception as _reval_err:
+                # Non-fatal; log debug and proceed with original plan
+                logger.debug("Post-plan revalidation skipped: %s", _reval_err)
+
             return plan
             
         except Exception as e:  # noqa: BLE001  # type: ignore[misc] - intentional broad catch for robustness

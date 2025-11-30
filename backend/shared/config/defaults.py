@@ -35,6 +35,10 @@ class ScanConfig:
     htf_bias_entry_offset_atr: float = 0.05
     htf_touch_fresh_days_max: int = 14
 
+    # Real-time price / drift validation knobs
+    max_entry_drift_pct: float = 0.15  # Reject if price moved >15% from planned avg entry
+    max_entry_drift_atr: float = 3.0   # Or if drift exceeds 3 ATRs
+
 
 @dataclass
 class GlobalThresholds:

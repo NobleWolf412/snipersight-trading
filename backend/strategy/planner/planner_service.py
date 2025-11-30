@@ -45,6 +45,50 @@ from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import create_signal_rejected_event, create_alt_stop_suggested_event
 
 
+def _is_order_block_valid(ob: OrderBlock, df: pd.DataFrame, current_price: float) -> bool:
+    """Validate an order block is not broken and not currently being mitigated."""
+    if df is None or len(df) == 0:
+        return True
+    try:
+        future_candles = df[df.index > ob.timestamp]
+    except Exception:
+        return True
+    if len(future_candles) == 0:
+        return True
+    if ob.direction == "bullish":
+        lowest = future_candles['low'].min()
+        if lowest < ob.low:  # broken through
+            return False
+        if ob.low <= current_price <= ob.high:  # currently inside zone
+            return False
+    else:
+        highest = future_candles['high'].max()
+        if highest > ob.high:
+            return False
+        if ob.low <= current_price <= ob.high:
+            return False
+    return True
+
+def _time_since_last_touch(ob: OrderBlock, df: pd.DataFrame) -> float:
+    """Hours since OB last touched; infinity if never."""
+    if df is None or len(df) == 0:
+        return float('inf')
+    try:
+        future_candles = df[df.index > ob.timestamp]
+    except Exception:
+        return float('inf')
+    if len(future_candles) == 0:
+        return float('inf')
+    if ob.direction == "bullish":
+        touches = future_candles[future_candles['low'] <= ob.high]
+    else:
+        touches = future_candles[future_candles['high'] >= ob.low]
+    if len(touches) == 0:
+        return float('inf')
+    last_touch = touches.index[-1]
+    return (df.index[-1] - last_touch).total_seconds() / 3600.0
+
+
 def generate_trade_plan(
     symbol: str,
     direction: str,
@@ -136,7 +180,8 @@ def generate_trade_plan(
         primary_tf=primary_tf,
         setup_archetype=setup_archetype,
         config=config,
-        confluence_breakdown=confluence_breakdown
+        confluence_breakdown=confluence_breakdown,
+        multi_tf_data=multi_tf_data
     )
     plan_composition['entry_from_structure'] = entry_used_structure
     
@@ -339,6 +384,40 @@ def generate_trade_plan(
                 recommended_buffer_atr=extended_buffer
             ))
 
+    # --- Final real-time price sanity (optional drift gate) ---
+    max_drift_pct = float(getattr(config, 'max_entry_drift_pct', 0.15))  # 15% default
+    max_drift_atr = float(getattr(config, 'max_entry_drift_atr', 3.0))    # 3 ATR default
+    avg_entry_live = (entry_zone.near_entry + entry_zone.far_entry) / 2.0
+    drift_abs = abs(current_price - avg_entry_live)
+    drift_pct = drift_abs / max(avg_entry_live, 1e-12)
+    drift_atr = drift_abs / max(atr, 1e-12)
+    # Allow equality (touch) as valid; only reject if strictly above for bullish
+    if is_bullish and entry_zone.near_entry > current_price:
+        telemetry.log_event(create_signal_rejected_event(
+            run_id=run_id,
+            symbol=symbol,
+            reason="entry_above_price",
+            diagnostics={"near_entry": entry_zone.near_entry, "price": current_price}
+        ))
+        raise ValueError("Invalid bullish entry: entry above current price")
+    # For bearish, reject only if far_entry strictly below price (zone flipped)
+    if (not is_bullish) and entry_zone.far_entry < current_price:
+        telemetry.log_event(create_signal_rejected_event(
+            run_id=run_id,
+            symbol=symbol,
+            reason="entry_below_price",
+            diagnostics={"far_entry": entry_zone.far_entry, "price": current_price}
+        ))
+        raise ValueError("Invalid bearish entry: entry below current price")
+    if drift_pct > max_drift_pct or drift_atr > max_drift_atr:
+        telemetry.log_event(create_signal_rejected_event(
+            run_id=run_id,
+            symbol=symbol,
+            reason="price_drift",
+            diagnostics={"drift_pct": drift_pct, "drift_atr": drift_atr, "max_drift_pct": max_drift_pct, "max_drift_atr": max_drift_atr}
+        ))
+        raise ValueError("Price drift invalidates entry zone")
+
     trade_plan = TradePlan(
         symbol=symbol,
         direction=trade_direction,
@@ -393,7 +472,8 @@ def _calculate_entry_zone(
     primary_tf: str,
     setup_archetype: SetupArchetype,
     config: ScanConfig,
-    confluence_breakdown: Optional[ConfluenceBreakdown] = None
+    confluence_breakdown: Optional[ConfluenceBreakdown] = None,
+    multi_tf_data: Optional[MultiTimeframeData] = None
 ) -> tuple[EntryZone, bool]:
     """
     Calculate dual entry zone based on SMC structure.
@@ -413,6 +493,16 @@ def _calculate_entry_zone(
         # Filter out OBs too far (distance constraint)
         max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
         obs = [ob for ob in obs if (current_price - ob.high) / atr <= max_pullback_atr]
+        # Validate OB integrity (not broken / not currently tapped)
+        if multi_tf_data and primary_tf in getattr(multi_tf_data, 'timeframes', {}):
+            df_primary = multi_tf_data.timeframes[primary_tf]
+            validated = []
+            for ob in obs:
+                if _is_order_block_valid(ob, df_primary, current_price):
+                    validated.append(ob)
+                else:
+                    logger.debug(f"Filtered invalid bullish OB (broken or tapped): low={ob.low} high={ob.high} ts={ob.timestamp}")
+            obs = validated
         # Prefer higher timeframe / freshness
         tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
         def _ob_score(ob: OrderBlock) -> float:
@@ -477,6 +567,15 @@ def _calculate_entry_zone(
         obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bearish" and ob.low > current_price]
         max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
         obs = [ob for ob in obs if (ob.low - current_price) / atr <= max_pullback_atr]
+        if multi_tf_data and primary_tf in getattr(multi_tf_data, 'timeframes', {}):
+            df_primary = multi_tf_data.timeframes[primary_tf]
+            validated_b = []
+            for ob in obs:
+                if _is_order_block_valid(ob, df_primary, current_price):
+                    validated_b.append(ob)
+                else:
+                    logger.debug(f"Filtered invalid bearish OB (broken or tapped): low={ob.low} high={ob.high} ts={ob.timestamp}")
+            obs = validated_b
         tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
         def _ob_score_b(ob: OrderBlock) -> float:
             return ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
@@ -527,6 +626,20 @@ def _calculate_entry_zone(
             rationale = "Entry zone based on ATR retracement (no clear SMC structure)"
             used_structure = False
     
+    # Final sanity: bullish entries must be below price; bearish above
+    if is_bullish and near_entry >= current_price:
+        logger.warning(f"Bullish entry sanity fail near={near_entry} price={current_price} -> fallback ATR zone")
+        near_entry = current_price - (0.5 * atr)
+        far_entry = current_price - (1.5 * atr)
+        rationale = "Sanity fallback ATR pullback (invalid bullish structure)"
+        used_structure = False
+    if (not is_bullish) and far_entry <= current_price:
+        logger.warning(f"Bearish entry sanity fail far={far_entry} price={current_price} -> fallback ATR zone")
+        near_entry = current_price + (0.5 * atr)
+        far_entry = current_price + (1.5 * atr)
+        rationale = "Sanity fallback ATR retracement (invalid bearish structure)"
+        used_structure = False
+
     return EntryZone(
         near_entry=near_entry,
         far_entry=far_entry,
