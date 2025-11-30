@@ -34,6 +34,7 @@ from backend.bot.notifications.notification_manager import (
     NotificationType,
     NotificationEvent,
 )
+from backend.routers.htf_opportunities import router as htf_router
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,9 @@ app = FastAPI(
     description="Crypto trading scanner and bot API",
     version="1.0.0"
 )
+
+# Include routers
+app.include_router(htf_router)
 
 # CORS middleware for frontend
 app.add_middleware(

@@ -26,15 +26,92 @@ export function ChartAnalysis({ result }: ChartAnalysisProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
 
+  const generateLocalAnalysis = () => {
+    const rr = ((result.takeProfits[0] - result.entryZone.high) / (result.entryZone.high - result.stopLoss));
+    const maxGain = ((result.takeProfits[2] - result.entryZone.high) / result.entryZone.high * 100);
+    const maxRisk = ((result.entryZone.high - result.stopLoss) / result.entryZone.high * 100);
+    
+    const trendAnalysis = result.trendBias === 'BULLISH' 
+      ? '📈 **Bullish Setup**: Price action shows upward momentum with higher timeframe alignment supporting long positions.'
+      : result.trendBias === 'BEARISH'
+      ? '📉 **Bearish Setup**: Downward pressure evident with HTF structure favoring short positions.'
+      : '↔️ **Neutral Setup**: Mixed signals suggest caution; wait for clearer directional bias.';
+    
+    const confidenceAnalysis = result.confidenceScore >= 80
+      ? `🎯 **High Confidence (${result.confidenceScore.toFixed(0)}%)**: Strong confluence across multiple timeframes with fresh SMC structures.`
+      : result.confidenceScore >= 65
+      ? `✅ **Moderate Confidence (${result.confidenceScore.toFixed(0)}%)**: Decent setup with acceptable confluence, proceed with standard position sizing.`
+      : `⚠️ **Lower Confidence (${result.confidenceScore.toFixed(0)}%)**: Marginal setup; consider reducing size or waiting for confirmation.`;
+    
+    const riskAnalysis = result.riskScore < 4
+      ? '🛡️ **Low Risk**: Favorable setup with controlled downside exposure.'
+      : result.riskScore < 7
+      ? '⚖️ **Medium Risk**: Balanced risk profile; maintain proper position sizing.'
+      : '🚨 **High Risk**: Elevated exposure; consider tighter stops or smaller positions.';
+    
+    const conviction = result.conviction_class === 'A'
+      ? '⭐ **Grade A Conviction**: Premium setup with complete SMC structure and HTF alignment.'
+      : result.conviction_class === 'B'
+      ? '✨ **Grade B Conviction**: Solid setup meeting quality thresholds.'
+      : '💡 **Grade C Conviction**: Acceptable setup but monitor closely for invalidation.';
+    
+    const entryStrategy = result.classification === 'SWING'
+      ? `**Swing Trade Approach**: Enter within the zone $${formatAdaptive(result.entryZone.low)} - $${formatAdaptive(result.entryZone.high)} using limit orders. Allow 4H+ candles to confirm structure before full position.`
+      : `**Scalp Trade Approach**: Quick entry on lower timeframe confirmation within $${formatAdaptive(result.entryZone.low)} - $${formatAdaptive(result.entryZone.high)}. Target TP1-TP2 for rapid exits.`;
+    
+    const targets = result.takeProfits.map((tp, i) => 
+      `- **TP${i + 1}**: $${formatAdaptive(tp)} (+${((tp - result.entryZone.high) / result.entryZone.high * 100).toFixed(2)}%)`
+    ).join('\n');
+    
+    return `## ${result.pair} Trade Analysis
+
+${trendAnalysis}
+
+${confidenceAnalysis}
+
+${conviction}
+
+### Trade Setup
+
+${entryStrategy}
+
+**Stop Loss**: $${formatAdaptive(result.stopLoss)} (-${maxRisk.toFixed(2)}%)
+- ${result.plan_type === 'SMC' ? 'Structure-based stop below key order block' : 'ATR-based stop for volatility protection'}
+
+**Take Profit Targets**:
+${targets}
+
+**Risk/Reward Ratio**: ${rr.toFixed(2)}:1
+
+${riskAnalysis}
+
+### Smart Money Concepts
+
+${result.orderBlocks.length > 0 ? `📦 **Order Blocks Identified**: ${result.orderBlocks.length} zone(s) providing institutional support/resistance.` : ''}
+
+${result.fairValueGaps.length > 0 ? `⚡ **Fair Value Gaps**: ${result.fairValueGaps.length} imbalance zone(s) likely to attract price for rebalancing.` : ''}
+
+${result.regime?.global_regime ? `🌍 **Market Regime**: ${result.regime.global_regime.composite} (Score: ${result.regime.global_regime.score}) - Adjust sizing based on broader market conditions.` : ''}
+
+### Execution Notes
+
+- **Entry Type**: ${result.classification}
+- **Max Gain Potential**: +${maxGain.toFixed(2)}% at TP3
+- **Max Risk**: -${maxRisk.toFixed(2)}% at stop loss
+- Monitor HTF structure for invalidation signals
+- Scale out at targets; don't wait for TP3 on full position
+
+---
+*This analysis is generated from Smart Money Concepts confluence scoring and structural analysis. Always validate with your own research.*`;
+  };
+
   const generateAnalysis = async () => {
     setIsAnalyzing(true);
     
     try {
-      if (!(window as any).spark || typeof (window as any).spark.llm !== 'function') {
-        throw new Error('Spark is not available in this environment.');
-      }
-
-      const promptText = `You are a professional crypto trader analyzing a ${result.pair} trading setup.
+      // Try Spark LLM first if available
+      if ((window as any).spark && typeof (window as any).spark.llm === 'function') {
+        const promptText = `You are a professional crypto trader analyzing a ${result.pair} trading setup.
 
 **Market Data:**
 - Trend Bias: ${result.trendBias}
@@ -67,37 +144,33 @@ Identify possible obstacles or scenarios that could invalidate the setup.
 Be professional, concise, and actionable. Use bullet points where appropriate.`;
 
       const prompt = (window as any).spark.llmPrompt([promptText], promptText);
-      // Try model, and provide a graceful fallback if the selected model is unavailable
-      let response: string | undefined;
-      const models = ['gpt-4o-mini'];
-      let lastError: any = null;
-      for (const model of models) {
-        try {
-          response = await (window as any).spark.llm(prompt, model);
-          break;
-        } catch (err) {
-          lastError = err;
+        // Try model, and provide a graceful fallback if the selected model is unavailable
+        let response: string | undefined;
+        const models = ['gpt-4o-mini'];
+        let lastError: any = null;
+        for (const model of models) {
+          try {
+            response = await (window as any).spark.llm(prompt, model);
+            break;
+          } catch (err) {
+            lastError = err;
+          }
         }
+        if (!response) {
+          throw lastError || new Error('Spark LLM call failed');
+        }
+        setAnalysis(response);
+      } else {
+        // Spark not available - use local analysis generator
+        console.log('[ChartAnalysis] Spark not available, using local analysis generator');
+        const localAnalysis = generateLocalAnalysis();
+        setAnalysis(localAnalysis);
       }
-      if (!response) {
-        throw lastError || new Error('Spark LLM call failed');
-      }
-      setAnalysis(response);
     } catch (error) {
-      console.error('[ChartAnalysis] Spark LLM error:', error);
-      const host = window.location.host;
-      const tips = [
-        'Make sure you are logged into GitHub in this browser.',
-        'If using Codespaces, ensure the frontend port is Public in the Ports tab.',
-        'On mobile browsers, allow cookies/site data for app.github.dev and github.com.',
-      ];
-      setAnalysis(
-        `Failed to generate analysis via Spark.
-        
-Environment: ${host}
-Tips:
-- ${tips.join('\n- ')}`
-      );
+      console.error('[ChartAnalysis] Analysis generation error:', error);
+      // Fallback to local analysis on any error
+      const localAnalysis = generateLocalAnalysis();
+      setAnalysis(localAnalysis);
     } finally {
       setIsAnalyzing(false);
     }

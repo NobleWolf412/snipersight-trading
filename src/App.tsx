@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { Routes, Route } from 'react-router-dom';
 import { SniperReticle } from '@/components/SniperReticle';
+import { TopBarLite } from '@/components/TopBar/TopBarLite';
 
 const Landing = lazy(() => import('@/pages/Landing').then(m => ({ default: m.Landing })));
 const ScannerSetup = lazy(() => import('@/pages/ScannerSetup').then(m => ({ default: m.ScannerSetup })));
@@ -12,6 +13,7 @@ const ScanResults = lazy(() => import('@/pages/ScanResults').then(m => ({ defaul
 const TrainingGround = lazy(() => import('@/pages/TrainingGround').then(m => ({ default: m.TrainingGround })));
 const MarketOverview = lazy(() => import('@/pages/MarketOverview').then(m => ({ default: m.MarketOverview })));
 const Intel = lazy(() => import('@/pages/Intel').then(m => ({ default: m.Intel })));
+const HTFOpportunities = lazy(() => import('@/pages/HTFOpportunities').then(m => ({ default: m.HTFOpportunities })));
 
 function LoadingFallback() {
   return (
@@ -30,6 +32,7 @@ function App() {
   return (
     <div className="min-h-screen w-screen bg-background text-foreground">
       <SniperReticle />
+      <TopBarLite />
       <main className="w-full h-full tactical-grid">
         <Suspense fallback={<LoadingFallback />}>
           <Routes>
@@ -43,6 +46,7 @@ function App() {
             <Route path="/training" element={<TrainingGround />} />
             <Route path="/market" element={<MarketOverview />} />
             <Route path="/intel" element={<Intel />} />
+            <Route path="/htf" element={<HTFOpportunities />} />
           </Routes>
         </Suspense>
       </main>

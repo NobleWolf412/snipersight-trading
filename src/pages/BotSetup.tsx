@@ -1,6 +1,5 @@
-import { TopBar } from '@/components/TopBar/TopBar';
 import { Link } from 'react-router-dom';
-import { PageShell } from '@/components/layout/PageShell';
+import { PageContainer } from '@/components/layout/PageContainer';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Robot, Key, Shield, Activity, Gear, TrendUp } from '@phosphor-icons/react';
@@ -73,12 +72,9 @@ export function BotSetup() {
   ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/95 backdrop-blur-sm">
-        <TopBar />
-      </header>
-      <main>
-        <PageShell>
+    <div className="min-h-screen bg-background text-foreground" id="main-content">
+      <main className="py-10 md:py-14">
+        <PageContainer>
           <div className="space-y-10 md:space-y-12">
             <div className="flex justify-start">
               <HomeButton />
@@ -192,7 +188,7 @@ export function BotSetup() {
               </div>
             </TacticalPanel>
           </div>
-        </PageShell>
+        </PageContainer>
       </main>
     </div>
   );

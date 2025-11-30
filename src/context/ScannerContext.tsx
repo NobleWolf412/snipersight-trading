@@ -49,6 +49,16 @@ interface ScannerContextType {
   consoleLogs: ConsoleLog[];
   addConsoleLog: (message: string, type?: ConsoleLog['type']) => void;
   clearConsoleLogs: () => void;
+  htfOpportunities: Array<{
+    symbol: string;
+    recommended_mode: string;
+    confidence: number;
+    expected_move_pct: number;
+    rationale: string;
+    level: { timeframe: string; level_type: string; price: number; proximity_pct: number };
+  }>;
+  refreshHTFOpportunities: () => Promise<void>;
+  hasHTFAlert: boolean;
 }
 
 export interface ConsoleLog {
@@ -139,6 +149,8 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
   const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(null);
   // Console logs should be ephemeral per session; do NOT persist in localStorage
   const [consoleLogs, setConsoleLogs] = useState<ConsoleLog[]>([]);
+  const [htfOpportunities, setHtfOpportunities] = useState<ScannerContextType['htfOpportunities']>([]);
+  const [hasHTFAlert, setHasHTFAlert] = useState(false);
 
   const addConsoleLog = (message: string, type: ConsoleLog['type'] = 'info') => {
     setConsoleLogs([...consoleLogs, { timestamp: Date.now(), message, type }]);
@@ -147,6 +159,39 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
   const clearConsoleLogs = () => {
     setConsoleLogs([]);
   };
+
+  const refreshHTFOpportunities = async (): Promise<void> => {
+    try {
+      const res = await api.getHTFOpportunities({ min_confidence: 65 });
+      if (res.data) {
+        const mapped = res.data.opportunities.map(o => ({
+          symbol: o.symbol,
+          recommended_mode: o.recommended_mode,
+          confidence: o.confidence,
+          expected_move_pct: o.expected_move_pct,
+          rationale: o.rationale,
+          level: {
+            timeframe: o.level.timeframe,
+            level_type: o.level.level_type,
+            price: o.level.price,
+            proximity_pct: o.level.proximity_pct,
+          }
+        }));
+        setHtfOpportunities(mapped);
+        // Alert now triggers if ANY opportunities exist (user prefers persistent red beacon)
+        setHasHTFAlert(mapped.length > 0);
+      }
+    } catch (e) {
+      // Silent ignore
+    }
+  };
+
+  // Poll HTF tactical opportunities every 60s
+  useEffect(() => {
+    refreshHTFOpportunities();
+    const id = setInterval(() => refreshHTFOpportunities(), 60000);
+    return () => clearInterval(id);
+  }, []);
 
   const refreshModes = async (): Promise<void> => {
     console.log('[ScannerContext] Fetching modes from backend...');
@@ -200,6 +245,9 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
         consoleLogs,
         addConsoleLog,
         clearConsoleLogs,
+        htfOpportunities,
+        refreshHTFOpportunities,
+        hasHTFAlert,
       }}
     >
       {children}

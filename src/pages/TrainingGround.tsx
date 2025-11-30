@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Target, PlayCircle, BookOpen } from '@phosphor-icons/react';
-import { PageShell } from '@/components/layout/PageShell';
+import { PageContainer } from '@/components/layout/PageContainer';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { TacticalPanel } from '@/components/TacticalPanel';
 
@@ -39,7 +39,7 @@ export function TrainingGround() {
   };
 
   return (
-    <PageShell>
+    <PageContainer id="main-content">
       <div className="space-y-10 md:space-y-12">
         <div className="flex justify-start">
           <HomeButton />
@@ -138,7 +138,7 @@ export function TrainingGround() {
           </div>
         </TacticalPanel>
       </div>
-    </PageShell>
+    </PageContainer>
   );
 }
 

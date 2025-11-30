@@ -1,5 +1,5 @@
+import { PageContainer } from '@/components/layout/PageContainer';
 import { useState, useEffect } from 'react';
-import { TopBar } from '@/components/TopBar/TopBar';
 import { useNavigate } from 'react-router-dom';
 import { useScanner } from '@/context/ScannerContext';
 import { Button } from '@/components/ui/button';
@@ -147,11 +147,9 @@ export function ScannerSetup() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background">
-      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/95 backdrop-blur-sm">
-        <TopBar />
-      </header>
-      <main className="p-8">
+    <div className="relative min-h-screen overflow-hidden bg-background" id="main-content">
+      <main className="py-10 md:py-14">
+        <PageContainer>
         <div className="fixed inset-0 tactical-grid opacity-20 pointer-events-none" aria-hidden="true" />
         <div className="max-w-6xl mx-auto space-y-8">
         <div className="text-center space-y-2">
@@ -352,6 +350,7 @@ export function ScannerSetup() {
           </div>
         )}
         </div>
+        </PageContainer>
       </main>
     </div>
   );

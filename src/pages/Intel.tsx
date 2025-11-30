@@ -15,7 +15,7 @@ import {
   ArrowDown,
   Minus
 } from '@phosphor-icons/react';
-import { PageShell } from '@/components/layout/PageShell';
+import { PageContainer } from '@/components/layout/PageContainer';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { TacticalPanel } from '@/components/TacticalPanel';
 import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
@@ -197,7 +197,7 @@ export function Intel() {
     : "Choppy market conditions with mixed signals. Favor Surgical and Recon modes. Wait for clearer price action before deploying aggressive setups.";
 
   return (
-    <PageShell>
+    <PageContainer id="main-content">
       <div className="space-y-6 md:space-y-8">
         <div className="flex justify-start">
           <HomeButton />
@@ -465,7 +465,7 @@ export function Intel() {
           </div>
         </TacticalPanel>
       </div>
-    </PageShell>
+    </PageContainer>
   );
 }
 

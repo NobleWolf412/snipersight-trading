@@ -307,6 +307,23 @@ class ApiClient {
     }>('/market/regime');
   }
 
+  // HTF tactical opportunities
+  async getHTFOpportunities(params?: { min_confidence?: number; proximity_threshold?: number }) {
+    const qp = new URLSearchParams();
+    if (params?.min_confidence !== undefined) qp.set('min_confidence', params.min_confidence.toString());
+    if (params?.proximity_threshold !== undefined) qp.set('proximity_threshold', params.proximity_threshold.toString());
+    return this.request<{ opportunities: Array<{
+      symbol: string;
+      level: { price: number; level_type: string; timeframe: string; strength: number; touches: number; proximity_pct: number };
+      current_price: number;
+      recommended_mode: string;
+      rationale: string;
+      confluence_factors: string[];
+      expected_move_pct: number;
+      confidence: number;
+    }>; total: number; timestamp: string }>(`/htf/opportunities${qp.toString() ? `?${qp.toString()}` : ''}`);
+  }
+
   // Optional: symbol-specific regime (if backend supports symbol query)
   async getSymbolRegime(symbol: string) {
     return this.request<{
