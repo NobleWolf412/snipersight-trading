@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p logs
-FRONTEND_PORT=${FRONTEND_PORT:-5000}
-BACKEND_PORT=${BACKEND_PORT:-8000}
+# Standard dev ports: Backend 5000 (FastAPI), Frontend 5173 (Vite)
+FRONTEND_PORT=${FRONTEND_PORT:-5173}
+BACKEND_PORT=${BACKEND_PORT:-5000}
 
 # Load local environment overrides if present (auto-export)
 if [[ -f .env.local ]]; then
@@ -13,6 +14,22 @@ if [[ -f .env.local ]]; then
 fi
 
 echo "Starting backend on :$BACKEND_PORT"
+# Pre-flight: free ports if occupied
+if ss -ltnp | grep -q ":$BACKEND_PORT"; then
+	echo "Port $BACKEND_PORT in use — attempting to free it"
+	ss -ltnp | grep ":$BACKEND_PORT" || true
+	pkill -f "uvicorn backend.api_server:app" || true
+	pkill -f "python backend/api_server.py" || true
+fi
+
+if ss -ltnp | grep -q ":$FRONTEND_PORT"; then
+	echo "Port $FRONTEND_PORT in use — attempting to free it"
+	ss -ltnp | grep ":$FRONTEND_PORT" || true
+	pkill -f "vite" || true
+	pkill -f "npm run dev" || true
+	pkill -f "node" || true
+fi
+
 nohup ./.venv/bin/python -m uvicorn backend.api_server:app --host 0.0.0.0 --port $BACKEND_PORT --reload > logs/backend.log 2>&1 &
 BACK_PID=$!
 
@@ -30,12 +47,18 @@ if [[ -n "${PUBLIC_HOST:-}" ]]; then
 	export HMR_CLIENT_PORT="${HMR_CLIENT_PORT:-443}"
 fi
 
-nohup env PORT=$FRONTEND_PORT HOST_BIND=0.0.0.0 npm run dev > logs/frontend.log 2>&1 &
+# Explicitly set Vite dev server host/port via exported env
+export PORT=$FRONTEND_PORT
+export FRONTEND_PORT=$FRONTEND_PORT
+export HOST_BIND=0.0.0.0
+export BACKEND_URL="http://localhost:$BACKEND_PORT"
+nohup npm run dev > logs/frontend.log 2>&1 &
 FRONT_PID=$!
 
 echo "Backend PID: $BACK_PID"
 echo "Frontend PID: $FRONT_PID"
 
-echo "Use tail -f logs/backend.log or logs/frontend.log to view output."
+echo "Use: tail -f logs/backend.log | sed -n '1,120p' and tail -f logs/frontend.log"
 echo "Stop with: kill $BACK_PID $FRONT_PID"
+echo "Quick health: curl -sS http://127.0.0.1:$BACKEND_PORT/api/health"
 echo "Or run: pkill -f uvicorn; pkill -f vite"

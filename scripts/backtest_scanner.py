@@ -134,17 +134,33 @@ def run_backtest(multi: bool = False):
 		if aggregate_frames:
 			all_df = pd.concat(aggregate_frames, ignore_index=True)
 			if not all_df.empty:
-				print("\nFactor Averages by Scenario (Momentum & Structure focus):")
-				pivot = all_df.groupby('scenario').agg({
+				print("\nFactor Averages by Scenario (incl. Volatility & Volume):")
+				agg_map = {
 					'total_score': 'mean',
 					'Momentum': 'mean',
+					'Volatility': 'mean',
+					'Volume': 'mean',
 					'Market Structure': 'mean'
-				}).round(2)
+				}
+				pivot = all_df.groupby('scenario').agg({k: v for k, v in agg_map.items() if k in all_df.columns}).round(2)
 				print(pivot.to_string())
 				# Momentum contribution distribution
 				print("\nMomentum Score Distribution (all scenarios):")
 				desc = all_df['Momentum'].describe().round(2)
 				print(desc.to_string())
+				# Volatility contribution distribution
+				if 'Volatility' in all_df.columns:
+					print("\nVolatility Score Distribution (all scenarios):")
+					vdesc = all_df['Volatility'].describe().round(2)
+					print(vdesc.to_string())
+				# Per-signal breakdown sample
+				print("\nSample Signal Breakdown:")
+				cols = ['scenario', 'symbol', 'direction', 'total_score']
+				for c in ['Momentum', 'Volatility', 'Volume', 'HTF Alignment', 'Order Block', 'Fair Value Gap']:
+					if c in all_df.columns:
+						cols.append(c)
+				sample = all_df[cols].head(10).round(2)
+				print(sample.to_string(index=False))
 		return
 
 	# Single scenario default (mixed)

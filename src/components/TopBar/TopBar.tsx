@@ -4,6 +4,7 @@ import { SessionIndicator } from '@/components/SessionIndicator/SessionIndicator
 import { WalletConnect } from '@/components/WalletConnect';
 import { NotificationStatus } from '@/components/NotificationStatus';
 import { HTFAlertBeacon } from '@/components/htf/HTFAlertBeacon';
+import { BackendStatusPill } from '@/components/BackendStatusPill';
 
 export function TopBar() {
   const location = useLocation();
@@ -64,6 +65,7 @@ export function TopBar() {
           {/* Right utilities */}
           <div className="flex items-center gap-2 sm:gap-3 ml-auto">
             <HTFAlertBeacon />
+            <BackendStatusPill />
             <NotificationStatus />
             <WalletConnect />
           </div>
