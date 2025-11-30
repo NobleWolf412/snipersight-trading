@@ -36,6 +36,7 @@ def _map_setup_to_archetype(setup_type: str) -> SetupArchetype:
     if "RANGE" in s or "MEAN" in s:
         return cast(SetupArchetype, "RANGE_REVERSION")
     return cast(SetupArchetype, "TREND_OB_PULLBACK")
+
 from backend.shared.models.smc import SMCSnapshot, OrderBlock, FVG
 from backend.shared.models.indicators import IndicatorSet
 from backend.shared.models.scoring import ConfluenceBreakdown
@@ -44,6 +45,16 @@ from backend.shared.config.planner_config import PlannerConfig
 from backend.shared.config.rr_matrix import validate_rr, classify_conviction
 from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import create_signal_rejected_event, create_alt_stop_suggested_event
+
+
+def _get_allowed_structure_tfs(config: ScanConfig) -> tuple:
+    """Extract structure_timeframes from config, or return empty tuple if unrestricted."""
+    return getattr(config, 'structure_timeframes', ())
+
+
+def _get_allowed_entry_tfs(config: ScanConfig) -> tuple:
+    """Extract entry_timeframes from config, or return empty tuple if unrestricted."""
+    return getattr(config, 'entry_timeframes', ())
 
 
 def _classify_atr_regime(atr: float, current_price: float, planner_cfg: PlannerConfig) -> str:
@@ -374,6 +385,29 @@ def generate_trade_plan(
     if not is_valid_rr:
         raise ValueError(rr_reason)
     
+    # --- Minimum Target Move % Validation (TF Responsibility Enforcement) ---
+    min_target_move_pct = getattr(config, 'min_target_move_pct', 0.0)
+    if min_target_move_pct > 0:
+        # Calculate TP1 move % from current price
+        tp1_move_pct = abs(targets[0].level - current_price) / max(current_price, 1e-12) * 100.0
+        if tp1_move_pct < min_target_move_pct:
+            logger.warning(f"Rejecting plan: TP1 move {tp1_move_pct:.2f}% < threshold {min_target_move_pct:.2f}%")
+            telemetry.log_event(create_signal_rejected_event(
+                run_id=run_id,
+                symbol=symbol,
+                reason="insufficient_target_move",
+                diagnostics={
+                    "tp1_level": targets[0].level,
+                    "current_price": current_price,
+                    "move_pct": tp1_move_pct,
+                    "threshold": min_target_move_pct,
+                    "mode": config.profile
+                }
+            ))
+            raise ValueError(f"TP1 move {tp1_move_pct:.2f}% below mode minimum {min_target_move_pct:.2f}%")
+    else:
+        tp1_move_pct = abs(targets[0].level - current_price) / max(current_price, 1e-12) * 100.0
+    
     # --- Classify Conviction ---
     
     has_all_critical_tfs = len(missing_critical_timeframes) == 0
@@ -534,7 +568,17 @@ def generate_trade_plan(
                 "recommended_stop_buffer_atr": recommended_buffer_atr,
                 "used_stop_buffer_atr": used_stop_buffer_atr
             },
-            "alt_stop": alt_stop_meta
+            "alt_stop": alt_stop_meta,
+            "tf_responsibility": {
+                "bias_tfs": list(getattr(config, 'bias_timeframes', config.timeframes)),  # Use bias_timeframes or fallback
+                "entry_tfs_allowed": list(getattr(config, 'entry_timeframes', [])),  # Entry TFs for precise triggers
+                "structure_tfs_allowed": list(getattr(config, 'structure_timeframes', [])),  # Structure TFs for SL/TP
+                "entry_tf_used": getattr(entry_zone, 'entry_tf_used', None),
+                "structure_tf_used": getattr(stop_loss, 'structure_tf_used', None),
+                "move_pct": round(tp1_move_pct, 4),
+                "min_move_threshold": min_target_move_pct,
+                "min_rr_passed": is_valid_rr
+            }
         }
     )
     
@@ -565,9 +609,15 @@ def _calculate_entry_zone(
     logger.critical(f"_calculate_entry_zone CALLED: is_bullish={is_bullish}, current_price={current_price}, atr={atr}, num_obs={len(smc_snapshot.order_blocks)}, num_fvgs={len(smc_snapshot.fvgs)}")
     
     # Find relevant order block or FVG
+    allowed_tfs = _get_allowed_entry_tfs(config)  # CHANGED: Use entry TFs, not structure TFs
+    
     if is_bullish:
         # Look for bullish OB or FVG below current price
         obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bullish" and ob.high < current_price]
+        # Filter to allowed ENTRY timeframes if specified
+        if allowed_tfs:
+            obs = [ob for ob in obs if ob.timeframe in allowed_tfs]
+            logger.debug(f"Filtered bullish OBs to entry_timeframes {allowed_tfs}: {len(obs)} remain")
         # Filter out OBs too far (distance constraint)
         max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
         obs = [ob for ob in obs if (current_price - ob.high) / atr <= max_pullback_atr]
@@ -591,12 +641,17 @@ def _calculate_entry_zone(
             mitigation_penalty = (1.0 - min(ob.mitigation_level, 1.0))
             return base_score * displacement_factor * mitigation_penalty
         fvgs = [fvg for fvg in smc_snapshot.fvgs if fvg.direction == "bullish" and fvg.top < current_price]
+        # Filter to allowed ENTRY timeframes if specified
+        if allowed_tfs:
+            fvgs = [fvg for fvg in fvgs if fvg.timeframe in allowed_tfs]
+            logger.debug(f"Filtered bullish FVGs to entry_timeframes {allowed_tfs}: {len(fvgs)} remain")
         
         logger.critical(f"Bullish entry zone: found {len(obs)} OBs and {len(fvgs)} FVGs below current price")
         if obs:
             # Use most recent/fresh OB
             best_ob = max(obs, key=_ob_score)
-            logger.critical(f"ENTRY ZONE: Using bullish OB - high={best_ob.high}, low={best_ob.low}, ATR={atr}")
+            entry_tf_used = best_ob.timeframe  # Track for metadata
+            logger.critical(f"ENTRY ZONE: Using bullish OB - high={best_ob.high}, low={best_ob.low}, ATR={atr}, TF={entry_tf_used}")
             
             # Calculate regime-aware base offset
             regime = _classify_atr_regime(atr, current_price, planner_cfg)
@@ -623,12 +678,21 @@ def _calculate_entry_zone(
             logger.critical(f"ENTRY ZONE: Calculated near={near_entry}, far={far_entry}")
             rationale = f"Entry zone based on {best_ob.timeframe} bullish order block"
             used_structure = True
+            entry_zone = EntryZone(
+                near_entry=near_entry,
+                far_entry=far_entry,
+                rationale=rationale
+            )
+            # Attach entry_tf_used for metadata tracking
+            entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+            return entry_zone, used_structure
         
         elif fvgs:
             # Use nearest unfilled FVG (filter by overlap threshold)
             best_fvg = min([fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max], 
                           key=lambda fvg: abs(fvg.top - current_price), 
                           default=fvgs[0])
+            entry_tf_used = best_fvg.timeframe  # Track for metadata
             
             # Calculate regime-aware base offset
             regime = _classify_atr_regime(atr, current_price, planner_cfg)
@@ -654,6 +718,13 @@ def _calculate_entry_zone(
             far_entry = best_fvg.bottom + offset
             rationale = f"Entry zone based on {best_fvg.timeframe} bullish FVG"
             used_structure = True
+            entry_zone = EntryZone(
+                near_entry=near_entry,
+                far_entry=far_entry,
+                rationale=rationale
+            )
+            entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+            return entry_zone, used_structure
         
         else:
             # Fallback: use ATR-based zone below current price
@@ -665,10 +736,21 @@ def _calculate_entry_zone(
             logger.critical(f"ENTRY ZONE FALLBACK: near={near_entry}, far={far_entry}")
             rationale = "Entry zone based on ATR pullback (no clear SMC structure)"
             used_structure = False
+            entry_zone = EntryZone(
+                near_entry=near_entry,
+                far_entry=far_entry,
+                rationale=rationale
+            )
+            entry_zone.entry_tf_used = None  # type: ignore
+            return entry_zone, used_structure
     
     else:  # bearish
         # Look for bearish OB or FVG above current price
         obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bearish" and ob.low > current_price]
+        # Filter to allowed ENTRY timeframes if specified
+        if allowed_tfs:
+            obs = [ob for ob in obs if ob.timeframe in allowed_tfs]
+            logger.debug(f"Filtered bearish OBs to entry_timeframes {allowed_tfs}: {len(obs)} remain")
         max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
         obs = [ob for ob in obs if (ob.low - current_price) / atr <= max_pullback_atr]
         # Filter out heavily mitigated OBs
@@ -689,9 +771,14 @@ def _calculate_entry_zone(
             mitigation_penalty = (1.0 - min(ob.mitigation_level, 1.0))
             return base_score * displacement_factor * mitigation_penalty
         fvgs = [fvg for fvg in smc_snapshot.fvgs if fvg.direction == "bearish" and fvg.bottom > current_price]
+        # Filter to allowed ENTRY timeframes if specified
+        if allowed_tfs:
+            fvgs = [fvg for fvg in fvgs if fvg.timeframe in allowed_tfs]
+            logger.debug(f"Filtered bearish FVGs to entry_timeframes {allowed_tfs}: {len(fvgs)} remain")
         
         if obs:
             best_ob = max(obs, key=_ob_score_b)
+            entry_tf_used = best_ob.timeframe  # Track for metadata
             
             # Calculate regime-aware base offset
             regime = _classify_atr_regime(atr, current_price, planner_cfg)
@@ -717,11 +804,19 @@ def _calculate_entry_zone(
             far_entry = best_ob.high - offset
             rationale = f"Entry zone based on {best_ob.timeframe} bearish order block"
             used_structure = True
+            entry_zone = EntryZone(
+                near_entry=near_entry,
+                far_entry=far_entry,
+                rationale=rationale
+            )
+            entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+            return entry_zone, used_structure
         
         elif fvgs:
             best_fvg = min([fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max],
                           key=lambda fvg: abs(fvg.bottom - current_price),
                           default=fvgs[0])
+            entry_tf_used = best_fvg.timeframe  # Track for metadata
             
             # Calculate regime-aware base offset
             regime = _classify_atr_regime(atr, current_price, planner_cfg)
@@ -748,6 +843,13 @@ def _calculate_entry_zone(
             far_entry = best_fvg.bottom + offset
             rationale = f"Entry zone based on {best_fvg.timeframe} bearish FVG"
             used_structure = True
+            entry_zone = EntryZone(
+                near_entry=near_entry,
+                far_entry=far_entry,
+                rationale=rationale
+            )
+            entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+            return entry_zone, used_structure
         
         else:
             # Fallback: use ATR-based zone above current price
@@ -759,6 +861,13 @@ def _calculate_entry_zone(
             far_entry = current_price + (planner_cfg.fallback_entry_near_atr * regime_multiplier * atr)  # Near offset = lower
             rationale = "Entry zone based on ATR retracement (no clear SMC structure)"
             used_structure = False
+            entry_zone = EntryZone(
+                near_entry=near_entry,
+                far_entry=far_entry,
+                rationale=rationale
+            )
+            entry_zone.entry_tf_used = None  # type: ignore
+            return entry_zone, used_structure
     
     # Final sanity: bullish entries must be below price; bearish above
     if is_bullish and near_entry >= current_price:
@@ -769,6 +878,13 @@ def _calculate_entry_zone(
         far_entry = current_price - (planner_cfg.fallback_entry_far_atr * regime_multiplier * atr)
         rationale = "Sanity fallback ATR pullback (invalid bullish structure)"
         used_structure = False
+        entry_zone = EntryZone(
+            near_entry=near_entry,
+            far_entry=far_entry,
+            rationale=rationale
+        )
+        entry_zone.entry_tf_used = None  # type: ignore
+        return entry_zone, used_structure
     # Bearish sanity: both entries must be strictly above current price
     if (not is_bullish) and (near_entry <= current_price or far_entry <= current_price):
         logger.warning(
@@ -781,7 +897,16 @@ def _calculate_entry_zone(
         far_entry = current_price + (planner_cfg.fallback_entry_near_atr * regime_multiplier * atr)  # Near offset = lower
         rationale = "Sanity fallback ATR retracement (invalid bearish structure)"
         used_structure = False
+        entry_zone = EntryZone(
+            near_entry=near_entry,
+            far_entry=far_entry,
+            rationale=rationale
+        )
+        entry_zone.entry_tf_used = None  # type: ignore
+        return entry_zone, used_structure
 
+    # Return final entry zone (if we didn't hit sanity fallbacks, this was already returned above)
+    # This should be unreachable but satisfies type checker
     return EntryZone(
         near_entry=near_entry,
         far_entry=far_entry,
@@ -868,6 +993,8 @@ def _calculate_stop_loss(
         Tuple of (StopLoss, used_structure_flag)
     """
     # Direction provided via is_bullish
+    allowed_tfs = _get_allowed_structure_tfs(config)
+    structure_tf_used = None  # Track which TF provided stop
     
     if is_bullish:
         # Stop below the entry structure
@@ -878,29 +1005,35 @@ def _calculate_stop_loss(
         
         # Check for OBs near entry
         for ob in smc_snapshot.order_blocks:
+            # Filter to allowed structure timeframes if specified
+            if allowed_tfs and ob.timeframe not in allowed_tfs:
+                continue
             if ob.direction == "bullish" and ob.low < entry_zone.far_entry:
-                potential_stops.append(ob.low)
-                logger.debug(f"Found bullish OB: low={ob.low}, high={ob.high}")
+                potential_stops.append((ob.low, ob.timeframe))
+                logger.debug(f"Found bullish OB: low={ob.low}, high={ob.high}, tf={ob.timeframe}")
         
         # Check for FVGs
         for fvg in smc_snapshot.fvgs:
+            # Filter to allowed structure timeframes if specified
+            if allowed_tfs and fvg.timeframe not in allowed_tfs:
+                continue
             if fvg.direction == "bullish" and fvg.bottom < entry_zone.far_entry:
-                potential_stops.append(fvg.bottom)
-                logger.debug(f"Found bullish FVG: bottom={fvg.bottom}, top={fvg.top}")
+                potential_stops.append((fvg.bottom, fvg.timeframe))
+                logger.debug(f"Found bullish FVG: bottom={fvg.bottom}, top={fvg.top}, tf={fvg.timeframe}")
         
-        logger.debug(f"Potential stops before filtering: {potential_stops}")
+        logger.debug(f"Potential stops before filtering: {[s[0] for s in potential_stops]}")
         
         # Filter stops that are actually below entry
-        valid_stops = [s for s in potential_stops if s < entry_zone.far_entry]
+        valid_stops = [(level, tf) for level, tf in potential_stops if level < entry_zone.far_entry]
         
-        logger.debug(f"Valid stops after filtering: {valid_stops}")
+        logger.debug(f"Valid stops after filtering: {[s[0] for s in valid_stops]}")
         
         if valid_stops:
             # Use closest structure below entry (highest of the valid stops)
-            stop_level = max(valid_stops)
+            stop_level, structure_tf_used = max(valid_stops, key=lambda x: x[0])
             stop_level -= (planner_cfg.stop_buffer_atr * atr)  # Buffer beyond structure
-            rationale = "Stop below entry structure invalidation point"
-            logger.debug(f"Using structure-based stop: {stop_level} (before buffer: {max(valid_stops)})")
+            rationale = f"Stop below {structure_tf_used} entry structure invalidation point"
+            logger.debug(f"Using structure-based stop: {stop_level} from {structure_tf_used} (before buffer: {max(valid_stops, key=lambda x: x[0])[0]})")
             distance_atr = (entry_zone.far_entry - stop_level) / atr
             used_structure = True
         else:
@@ -950,21 +1083,27 @@ def _calculate_stop_loss(
         potential_stops = []
         
         for ob in smc_snapshot.order_blocks:
+            # Filter to allowed structure timeframes if specified
+            if allowed_tfs and ob.timeframe not in allowed_tfs:
+                continue
             if ob.direction == "bearish" and ob.high > entry_zone.far_entry:
-                potential_stops.append(ob.high)
+                potential_stops.append((ob.high, ob.timeframe))
         
         for fvg in smc_snapshot.fvgs:
+            # Filter to allowed structure timeframes if specified
+            if allowed_tfs and fvg.timeframe not in allowed_tfs:
+                continue
             if fvg.direction == "bearish" and fvg.top > entry_zone.far_entry:
-                potential_stops.append(fvg.top)
+                potential_stops.append((fvg.top, fvg.timeframe))
         
         # Filter stops that are actually above entry
-        valid_stops = [s for s in potential_stops if s > entry_zone.far_entry]
+        valid_stops = [(level, tf) for level, tf in potential_stops if level > entry_zone.far_entry]
         
         if valid_stops:
             # Use closest structure above entry (lowest of the valid stops)
-            stop_level = min(valid_stops)
+            stop_level, structure_tf_used = min(valid_stops, key=lambda x: x[0])
             stop_level += (planner_cfg.stop_buffer_atr * atr)  # Buffer beyond structure
-            rationale = "Stop above entry structure invalidation point"
+            rationale = f"Stop above {structure_tf_used} entry structure invalidation point"
             distance_atr = (stop_level - entry_zone.far_entry) / atr
             used_structure = True
         else:
@@ -1012,11 +1151,14 @@ def _calculate_stop_loss(
     # CRITICAL DEBUG
     logger.critical(f"STOP CALC: is_bullish={is_bullish}, entry_near={entry_zone.near_entry}, entry_far={entry_zone.far_entry}, stop={stop_level}, atr={atr}")
     
-    return StopLoss(
+    stop_loss = StopLoss(
         level=stop_level,
         distance_atr=distance_atr,
         rationale=rationale
-    ), used_structure
+    )
+    # Attach structure_tf_used for metadata tracking
+    stop_loss.structure_tf_used = structure_tf_used  # type: ignore
+    return stop_loss, used_structure
 
 
 def _calculate_targets(
@@ -1039,6 +1181,7 @@ def _calculate_targets(
     """
     avg_entry = (entry_zone.near_entry + entry_zone.far_entry) / 2
     risk_distance = abs(avg_entry - stop_loss.level)
+    allowed_tfs = _get_allowed_structure_tfs(config)
     
     targets = []
     
@@ -1066,9 +1209,15 @@ def _calculate_targets(
         # Look for FVG or OB resistance
         resistances = []
         for fvg in smc_snapshot.fvgs:
+            # Filter to allowed structure timeframes if specified
+            if allowed_tfs and fvg.timeframe not in allowed_tfs:
+                continue
             if fvg.direction == "bearish" and fvg.bottom > avg_entry:
                 resistances.append(fvg.bottom)
         for ob in smc_snapshot.order_blocks:
+            # Filter to allowed structure timeframes if specified
+            if allowed_tfs and ob.timeframe not in allowed_tfs:
+                continue
             if ob.direction == "bearish" and ob.low > avg_entry:
                 resistances.append(ob.low)
         
@@ -1134,9 +1283,15 @@ def _calculate_targets(
         # Look for support
         supports = []
         for fvg in smc_snapshot.fvgs:
+            # Filter to allowed structure timeframes if specified
+            if allowed_tfs and fvg.timeframe not in allowed_tfs:
+                continue
             if fvg.direction == "bullish" and fvg.top < avg_entry:
                 supports.append(fvg.top)
         for ob in smc_snapshot.order_blocks:
+            # Filter to allowed structure timeframes if specified
+            if allowed_tfs and ob.timeframe not in allowed_tfs:
+                continue
             if ob.direction == "bullish" and ob.high < avg_entry:
                 supports.append(ob.high)
         

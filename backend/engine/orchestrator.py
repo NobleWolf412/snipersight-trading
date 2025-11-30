@@ -44,9 +44,9 @@ from backend.bot.telemetry.events import (
     create_error_event
 )
 from backend.data.ingestion_pipeline import IngestionPipeline
-from backend.indicators.momentum import compute_rsi, compute_stoch_rsi, compute_mfi
-from backend.indicators.volatility import compute_atr, compute_bollinger_bands
-from backend.indicators.volume import detect_volume_spike, compute_obv, compute_vwap
+from backend.indicators.momentum import compute_rsi, compute_stoch_rsi, compute_mfi, compute_macd
+from backend.indicators.volatility import compute_atr, compute_bollinger_bands, compute_realized_volatility
+from backend.indicators.volume import detect_volume_spike, compute_obv, compute_vwap, compute_relative_volume
 from backend.strategy.smc.order_blocks import detect_order_blocks
 from backend.strategy.smc.fvg import detect_fvgs
 from backend.strategy.smc.bos_choch import detect_structural_breaks
@@ -534,23 +534,46 @@ class Orchestrator:
                 rsi = compute_rsi(df)
                 stoch_rsi = compute_stoch_rsi(df)
                 mfi = compute_mfi(df)
+                macd_line, macd_signal, macd_hist = (None, None, None)
+                try:
+                    macd_line, macd_signal, macd_hist = compute_macd(df)
+                except Exception:
+                    macd_line, macd_signal = (None, None)
                 
                 # Volatility indicators  
                 atr = compute_atr(df)
                 bb_upper, bb_middle, bb_lower = compute_bollinger_bands(df)
+                realized_vol = None
+                try:
+                    realized_vol = compute_realized_volatility(df)
+                except Exception:
+                    pass
                 
                 # Volume indicators
                 volume_spike = detect_volume_spike(df)
                 obv = compute_obv(df)
                 _ = compute_vwap(df)  # Computed for side effects
+                volume_ratio = None
+                try:
+                    volume_ratio = compute_relative_volume(df)
+                except Exception:
+                    pass
                 
                 # Create indicator snapshot
-                # Handle stoch_rsi tuple (K, D) - extract K value
+                # Handle stoch_rsi tuple (K, D) - extract both K and D values
+                stoch_k_value = None
+                stoch_d_value = None
                 if isinstance(stoch_rsi, tuple):
-                    stoch_k, _ = stoch_rsi
+                    stoch_k, stoch_d = stoch_rsi
                     stoch_k_value = stoch_k.iloc[-1]
+                    stoch_d_value = stoch_d.iloc[-1]
                 else:
                     stoch_k_value = stoch_rsi.iloc[-1]  # pyright: ignore - type narrowed by isinstance check
+                
+                # Get current price for ATR percentage
+                current_price = df['close'].iloc[-1]
+                atr_value = atr.iloc[-1]
+                atr_pct = (atr_value / current_price * 100) if current_price > 0 else None
                 
                 snapshot = IndicatorSnapshot(
                     # Momentum (required)
@@ -561,13 +584,27 @@ class Orchestrator:
                     bb_middle=bb_middle.iloc[-1],
                     bb_lower=bb_lower.iloc[-1],
                     # Volatility (required)
-                    atr=atr.iloc[-1],
+                    atr=atr_value,
                     # Volume (required)
                     volume_spike=bool(volume_spike.iloc[-1]),
-                    # Optional fields
+                    # Optional fields - Momentum
                     mfi=mfi.iloc[-1],
-                    obv=obv.iloc[-1]
+                    stoch_rsi_k=stoch_k_value,
+                    stoch_rsi_d=stoch_d_value,
+                    # Optional fields - Volatility
+                    atr_percent=atr_pct,
+                    realized_volatility=realized_vol.iloc[-1] if realized_vol is not None else None,
+                    # Optional fields - Volume
+                    obv=obv.iloc[-1],
+                    volume_ratio=volume_ratio.iloc[-1] if volume_ratio is not None else None
                 )
+                # Attach MACD values if available
+                if macd_line is not None and macd_signal is not None:
+                    try:
+                        snapshot.macd_line = float(macd_line.iloc[-1])  # type: ignore[attr-defined]
+                        snapshot.macd_signal = float(macd_signal.iloc[-1])  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
                 
                 by_timeframe[timeframe] = snapshot
                 
@@ -761,11 +798,32 @@ class Orchestrator:
         setup_type = self._classify_setup_type(context.smc_snapshot)
         
         try:
+            # Enforce TF responsibility by filtering SMC snapshot to allowed TFs
+            mode = self.scanner_mode
+            allowed_entry = set(getattr(self.config, 'entry_timeframes', getattr(mode, 'entry_timeframes', ())))
+            allowed_structure = set(getattr(self.config, 'structure_timeframes', getattr(mode, 'structure_timeframes', ())))
+            allowed_stop = set(getattr(self.config, 'stop_timeframes', getattr(mode, 'stop_timeframes', ()))) or allowed_structure
+            allowed_target = set(getattr(self.config, 'target_timeframes', getattr(mode, 'target_timeframes', ()))) or allowed_structure
+
+            def _tf(val):
+                try:
+                    return str(getattr(val, 'timeframe', '')).lower()
+                except Exception:
+                    return ''
+
+            # Build filtered snapshot respecting responsibilities
+            filtered_snapshot = SMCSnapshot(
+                order_blocks=[ob for ob in context.smc_snapshot.order_blocks if _tf(ob) in (allowed_entry | allowed_structure)],
+                fvgs=[fvg for fvg in context.smc_snapshot.fvgs if _tf(fvg) in allowed_target],
+                structural_breaks=[brk for brk in context.smc_snapshot.structural_breaks if _tf(brk) in allowed_structure],
+                liquidity_sweeps=context.smc_snapshot.liquidity_sweeps  # sweeps used for context; keep as-is
+            )
+
             plan = generate_trade_plan(
                 symbol=context.symbol,
                 direction=direction,
                 setup_type=setup_type,
-                smc_snapshot=context.smc_snapshot,
+                smc_snapshot=filtered_snapshot,
                 indicators=context.multi_tf_indicators,
                 confluence_breakdown=context.confluence_breakdown,
                 config=self.config,
@@ -818,6 +876,64 @@ class Orchestrator:
                     for sweep in context.smc_snapshot.liquidity_sweeps
                 ]
             
+            # Add timeframe responsibility metadata
+            if plan:
+                try:
+                    # Infer source timeframes heuristically since core models do not carry TF fields
+                    allowed_entry = set(getattr(self.config, 'entry_timeframes', ()))
+                    allowed_stop = set(getattr(self.config, 'stop_timeframes', ())) or set(getattr(self.config, 'structure_timeframes', ()))
+                    allowed_target = set(getattr(self.config, 'target_timeframes', ())) or set(getattr(self.config, 'structure_timeframes', ()))
+
+                    order_blocks_list = plan.metadata.get('order_blocks_list', [])
+                    fvgs_list = plan.metadata.get('fvgs_list', [])
+
+                    avg_entry = (plan.entry_zone.near_entry + plan.entry_zone.far_entry) / 2.0 if plan.entry_zone else None
+                    # Entry OB: closest OB midpoint from allowed entry TFs matching direction
+                    entry_tf_inferred = None
+                    if avg_entry is not None:
+                        candidate_obs = [ob for ob in order_blocks_list if ob.get('timeframe') in allowed_entry]
+                        if candidate_obs:
+                            entry_tf_inferred = min(candidate_obs, key=lambda ob: abs(ob.get('price', ob.get('midpoint', 0)) - avg_entry)).get('timeframe')
+
+                    # Stop TF: choose OB of opposite direction whose boundary near stop level within allowed_stop
+                    sl_level = plan.stop_loss.level if plan.stop_loss else None
+                    sl_tf_inferred = None
+                    if sl_level is not None:
+                        opposite_obs = [ob for ob in order_blocks_list if ob.get('timeframe') in allowed_stop]
+                        if opposite_obs:
+                            sl_tf_inferred = min(opposite_obs, key=lambda ob: min(abs(ob.get('low', sl_level) - sl_level), abs(ob.get('high', sl_level) - sl_level))).get('timeframe')
+
+                    # Target TF: pick highest percentage target and map to closest structure (FVG or OB) in allowed_target
+                    tp_tf_inferred = None
+                    if plan.targets:
+                        primary_target = max(plan.targets, key=lambda t: t.percentage)
+                        tgt_level = primary_target.level
+                        structures = [s for s in fvgs_list + order_blocks_list if s.get('timeframe') in allowed_target]
+                        if structures:
+                            tp_tf_inferred = min(structures, key=lambda s: min(abs(s.get('low', s.get('bottom', tgt_level)) - tgt_level), abs(s.get('high', s.get('top', tgt_level)) - tgt_level))).get('timeframe')
+
+                    # RR source TF: attribute to target timeframe inferred
+                    rr_source_tf = tp_tf_inferred
+                    min_rr_passed = bool(plan.risk_reward >= getattr(self.config, 'min_rr_ratio', 0))
+
+                    tf_meta = {
+                        'bias_tfs': list(getattr(self.scanner_mode, 'bias_timeframes', ())),
+                        'entry_tfs_allowed': list(getattr(self.config, 'entry_timeframes', ())),
+                        'structure_tfs_allowed': list(getattr(self.config, 'structure_timeframes', ())),
+                        'stop_tfs_allowed': list(getattr(self.config, 'stop_timeframes', ())),
+                        'target_tfs_allowed': list(getattr(self.config, 'target_timeframes', ())),
+                        'entry_timeframe': entry_tf_inferred,
+                        'sl_timeframe': sl_tf_inferred,
+                        'tp_timeframe': tp_tf_inferred,
+                        'rr_source_tf': rr_source_tf,
+                        'min_rr_passed': min_rr_passed
+                    }
+                    plan.metadata['tf_responsibility'] = tf_meta
+                except Exception:
+                    plan.metadata['tf_responsibility'] = {
+                        'bias_tfs': list(getattr(self.scanner_mode, 'bias_timeframes', ()))
+                    }
+
             # Enrich plan with regime context
             if plan and self.current_regime:
                 plan.metadata['global_regime'] = {
@@ -1034,8 +1150,9 @@ class Orchestrator:
         try:
             # Update configuration fields
             self.config.profile = mode.profile
-            # Some configs may not store timeframes as tuple; ensure list assignment compatibility
-            self.config.timeframes = mode.timeframes
+            # Build minimal ingestion set = union of responsibility TFs to avoid unused overhead
+            tf_union = set(mode.timeframes) | set(mode.entry_timeframes) | set(mode.structure_timeframes) | set(getattr(mode, 'stop_timeframes', ())) | set(getattr(mode, 'target_timeframes', ()))
+            self.config.timeframes = tuple(sorted(tf_union, key=lambda x: ["1m","5m","15m","1h","4h","1d","1w"].index(x) if x in ["1m","5m","15m","1h","4h","1d","1w"] else 999))
             # Keep existing min_confluence_score if caller intentionally raised it; otherwise adopt baseline
             if hasattr(self.config, 'min_confluence_score'):
                 self.config.min_confluence_score = max(self.config.min_confluence_score, mode.min_confluence_score)
@@ -1045,13 +1162,27 @@ class Orchestrator:
             self.config.max_pullback_atr = mode.max_pullback_atr
             self.config.min_stop_atr = mode.min_stop_atr
             self.config.max_stop_atr = mode.max_stop_atr
+            # Enforce timeframe responsibility into config for planner
+            self.config.entry_timeframes = mode.entry_timeframes
+            self.config.structure_timeframes = mode.structure_timeframes
+            self.config.stop_timeframes = getattr(mode, 'stop_timeframes', ())
+            self.config.target_timeframes = getattr(mode, 'target_timeframes', ())
+            # Apply per-mode overrides if present
+            if getattr(mode, 'overrides', None):
+                ov = mode.overrides
+                if 'min_rr_ratio' in ov:
+                    self.config.min_rr_ratio = ov['min_rr_ratio']
+                if 'atr_floor' in ov:
+                    self.config.atr_floor = ov['atr_floor']
+                if 'bias_gate' in ov:
+                    self.config.bias_gate = ov['bias_gate']
             
             # Refresh scanner_mode reference and regime policy
             self.scanner_mode = mode
             from backend.analysis.regime_policies import get_regime_policy
             self.regime_policy = get_regime_policy(mode.profile)
             logger.debug("Applied scanner mode: %s | timeframes=%s | critical=%s | planning_tf=%s", 
-                        mode.name, mode.timeframes, mode.critical_timeframes, mode.primary_planning_timeframe)
+                        mode.name, self.config.timeframes, mode.critical_timeframes, mode.primary_planning_timeframe)
         except Exception as e:
             logger.warning("Failed to apply mode %s: %s", getattr(mode, 'name', 'unknown'), e)
 

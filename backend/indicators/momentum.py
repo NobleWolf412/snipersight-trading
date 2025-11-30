@@ -5,6 +5,7 @@ Implements technical momentum indicators:
 - RSI (Relative Strength Index)
 - Stochastic RSI
 - MFI (Money Flow Index)
+- MACD (Moving Average Convergence Divergence)
 
 All functions return pandas Series with proper index alignment.
 """
@@ -56,6 +57,44 @@ def compute_rsi(df: pd.DataFrame, period: int = 14) -> pd.Series:
     rsi = rsi.fillna(100)
     
     return rsi
+
+
+def compute_macd(
+    df: pd.DataFrame,
+    fast: int = 12,
+    slow: int = 26,
+    signal: int = 9
+) -> Tuple[pd.Series, pd.Series, pd.Series]:
+    """
+    Compute MACD (Moving Average Convergence Divergence).
+
+    Returns MACD line, signal line, and histogram.
+
+    Args:
+        df: DataFrame with 'close' column
+        fast: Fast EMA period (default 12)
+        slow: Slow EMA period (default 26)
+        signal: Signal EMA period (default 9)
+
+    Returns:
+        Tuple[pd.Series, pd.Series, pd.Series]: (macd_line, signal_line, histogram)
+
+    Raises:
+        ValueError: If df is too short or missing required columns
+    """
+    if 'close' not in df.columns:
+        raise ValueError("DataFrame must contain 'close' column")
+    min_len = max(fast, slow) + signal + 1
+    if len(df) < min_len:
+        raise ValueError(f"DataFrame too short for MACD (need {min_len} rows, got {len(df)})")
+
+    ema_fast = df['close'].ewm(span=fast, adjust=False).mean()
+    ema_slow = df['close'].ewm(span=slow, adjust=False).mean()
+    macd_line = ema_fast - ema_slow
+    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+    histogram = macd_line - signal_line
+
+    return macd_line, signal_line, histogram
 
 
 def compute_stoch_rsi(
@@ -217,3 +256,41 @@ def validate_momentum_indicators(df: pd.DataFrame) -> dict:
         results['valid'] = False
     
     return results
+
+
+def compute_macd(
+    df: pd.DataFrame,
+    fast: int = 12,
+    slow: int = 26,
+    signal: int = 9
+) -> Tuple[pd.Series, pd.Series, pd.Series]:
+    """
+    Compute MACD (Moving Average Convergence Divergence).
+
+    Returns MACD line, signal line, and histogram.
+
+    Args:
+        df: DataFrame with 'close' column
+        fast: Fast EMA period (default 12)
+        slow: Slow EMA period (default 26)
+        signal: Signal EMA period (default 9)
+
+    Returns:
+        Tuple[pd.Series, pd.Series, pd.Series]: (macd_line, signal_line, histogram)
+
+    Raises:
+        ValueError: If df is too short or missing required columns
+    """
+    if 'close' not in df.columns:
+        raise ValueError("DataFrame must contain 'close' column")
+    min_len = max(fast, slow) + signal + 1
+    if len(df) < min_len:
+        raise ValueError(f"DataFrame too short for MACD (need {min_len} rows, got {len(df)})")
+
+    ema_fast = df['close'].ewm(span=fast, adjust=False).mean()
+    ema_slow = df['close'].ewm(span=slow, adjust=False).mean()
+    macd_line = ema_fast - ema_slow
+    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+    histogram = macd_line - signal_line
+
+    return macd_line, signal_line, histogram

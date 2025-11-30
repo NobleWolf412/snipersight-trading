@@ -45,6 +45,8 @@ class IndicatorSnapshot:
         ema_21: 21-period EMA
         ema_50: 50-period EMA
         ema_200: 200-period EMA
+        macd_line: MACD line value
+        macd_signal: MACD signal line value
     """
     # Momentum (required fields)
     rsi: float
@@ -82,6 +84,8 @@ class IndicatorSnapshot:
     ema_21: Optional[float] = None
     ema_50: Optional[float] = None
     ema_200: Optional[float] = None
+    macd_line: Optional[float] = None
+    macd_signal: Optional[float] = None
     
     def __post_init__(self):
         """Validate indicator ranges."""

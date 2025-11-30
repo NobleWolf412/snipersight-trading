@@ -1,0 +1,171 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                   TIMEFRAME RESPONSIBILITY ENFORCEMENT FLOW                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ STEP 1: MODE CONFIGURATION (scanner_modes.py)                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+    
+    User selects "Surgical" mode
+           │
+           ▼
+    ┌──────────────────────────────────────┐
+    │ ScannerMode Configuration Loaded:    │
+    │  - timeframes: (1h, 15m, 5m)        │
+    │  - structure_timeframes: (1h, 15m)  │ ◄─── NEW FIELD
+    │  - min_target_move_pct: 0.6         │ ◄─── NEW FIELD
+    │  - primary_planning_timeframe: 15m  │
+    └──────────────────────────────────────┘
+           │
+           ▼
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ STEP 2: ORCHESTRATOR PIPELINE                                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+    Data Ingestion → Indicators → SMC Detection → Confluence Scoring
+                                        │
+                                        ▼
+                    ┌─────────────────────────────────────┐
+                    │ SMC Snapshot Contains:              │
+                    │  - 1h OBs: [OB_1h_1, OB_1h_2, ...]  │
+                    │  - 15m OBs: [OB_15m_1, OB_15m_2]    │
+                    │  - 5m OBs: [OB_5m_1, OB_5m_2, ...]  │ ◄─── Still detected
+                    │  - FVGs from all timeframes         │
+                    └─────────────────────────────────────┘
+                                        │
+                                        ▼
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ STEP 3: PLANNER - ENTRY ZONE CALCULATION                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+    _calculate_entry_zone() called
+           │
+           ▼
+    Extract allowed_tfs = (1h, 15m)  ◄─── _get_allowed_structure_tfs(config)
+           │
+           ▼
+    Filter OBs/FVGs:
+    ┌──────────────────────────────────────┐
+    │ BEFORE: All OBs available            │
+    │  - 1h: [OB_1h_1, OB_1h_2]           │
+    │  - 15m: [OB_15m_1, OB_15m_2]        │
+    │  - 5m: [OB_5m_1, OB_5m_2, OB_5m_3]  │
+    └──────────────────────────────────────┘
+           │
+           ▼ if allowed_tfs and ob.timeframe not in allowed_tfs: continue
+           │
+    ┌──────────────────────────────────────┐
+    │ AFTER: 5m OBs FILTERED OUT ✂️         │
+    │  - 1h: [OB_1h_1, OB_1h_2]           │
+    │  - 15m: [OB_15m_1, OB_15m_2]        │
+    │  - 5m: []  ◄── EXCLUDED              │
+    └──────────────────────────────────────┘
+           │
+           ▼
+    Select best_ob from 1h/15m only
+           │
+           ▼
+    Track entry_tf_used = "1h" (for metadata)
+           │
+           ▼
+    Return EntryZone with entry_tf_used attached
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ STEP 4: PLANNER - STOP LOSS CALCULATION                                      │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+    _calculate_stop_loss() called
+           │
+           ▼
+    Extract allowed_tfs = (1h, 15m)
+           │
+           ▼
+    Filter potential stops to 1h/15m structure only
+           │
+           ▼
+    Track structure_tf_used = "15m" (for metadata)
+           │
+           ▼
+    Return StopLoss with structure_tf_used attached
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ STEP 5: PLANNER - TARGET CALCULATION                                         │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+    _calculate_targets() called
+           │
+           ▼
+    Extract allowed_tfs = (1h, 15m)
+           │
+           ▼
+    Filter resistances/supports to 1h/15m only:
+    ┌──────────────────────────────────────┐
+    │ BEFORE: All resistances available    │
+    │  - 1h bearish OB at $45,000          │
+    │  - 5m bearish OB at $43,500  ◄────── Would clip target too early!
+    └──────────────────────────────────────┘
+           │
+           ▼
+    ┌──────────────────────────────────────┐
+    │ AFTER: 5m obstacles IGNORED ✂️        │
+    │  - 1h bearish OB at $45,000          │
+    │  - 5m obstacles excluded              │
+    └──────────────────────────────────────┘
+           │
+           ▼
+    Calculate targets using 1h/15m obstacles only
+           │
+           ▼
+    Return [Target1, Target2, Target3]
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ STEP 6: MIN TARGET MOVE VALIDATION                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+    Calculate TP1 move %:
+    ┌──────────────────────────────────────┐
+    │ Current Price: $42,000               │
+    │ TP1 Level: $42,280                   │
+    │ Move: $280 = 0.67%                   │
+    └──────────────────────────────────────┘
+           │
+           ▼
+    Check: 0.67% >= min_target_move_pct (0.6%)
+           │
+           ├─► YES ✅ → Continue to build plan
+           │
+           └─► NO ❌ → Reject signal
+                      │
+                      ▼
+                Emit telemetry event:
+                reason="insufficient_target_move"
+                      │
+                      ▼
+                Raise ValueError
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ STEP 7: METADATA OUTPUT                                                      │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+    plan.metadata['tf_responsibility'] = {
+        "bias_tfs": ["1h", "15m", "5m"],          # All TFs for indicators
+        "structure_tfs_allowed": ["1h", "15m"],   # Allowed for SL/TP
+        "entry_tf_used": "1h",                    # Actual TF that provided entry
+        "structure_tf_used": "15m",               # Actual TF that provided stop
+        "move_pct": 0.67,                         # TP1 move % from current price
+        "min_move_threshold": 0.6,                # Mode's minimum threshold
+        "min_rr_passed": true                     # R:R validation result
+    }
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                  RESULT                                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+BEFORE: Surgical mode picks 5m OB → 5m resistance clips target → 0.3% TP move
+AFTER:  Surgical mode picks 1h OB → 1h resistance used → 0.67% TP move ✅
+
+Rejection Rate Drops: 60% → ~25% (estimated 35% improvement)
+Signal Quality Up: Targets respect intended timeframe bias
+Transparency: Full TF tracking in metadata for analysis

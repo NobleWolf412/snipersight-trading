@@ -355,6 +355,60 @@ def _score_momentum(indicators: IndicatorSnapshot, direction: str) -> float:
         if indicators.mfi is not None and indicators.mfi > 70:
             score += 30 * ((indicators.mfi - 70) / 30)
     
+    # MACD contribution: prefer macd_line above signal; stronger if macd_line > 0
+    macd_line = getattr(indicators, 'macd_line', None)
+    macd_signal = getattr(indicators, 'macd_signal', None)
+    if macd_line is not None and macd_signal is not None:
+        if direction == "bullish":
+            if macd_line > macd_signal and macd_line > 0:
+                score += 20.0
+            elif macd_line > macd_signal:
+                score += 12.0
+            else:
+                score += 5.0
+        else:  # bearish
+            if macd_line < macd_signal and macd_line < 0:
+                score += 20.0
+            elif macd_line < macd_signal:
+                score += 12.0
+            else:
+                score += 5.0
+
+    # Stoch RSI K/D crossover enhancement (debounced by minimum separation)
+    k = getattr(indicators, 'stoch_rsi_k', None)
+    d = getattr(indicators, 'stoch_rsi_d', None)
+    if k is not None and d is not None:
+        separation = abs(k - d)
+        # Require minimum separation to reduce whipsaws
+        if separation >= 2.0:  # simple debounce threshold
+            if direction == "bullish" and k > d:
+                # Region-sensitive weighting
+                if k < 20:
+                    score += 25.0  # early oversold bullish cross
+                elif k < 50:
+                    score += 15.0
+                elif k < 80:
+                    score += 8.0
+                else:
+                    score += 5.0  # late/exhaustive
+            elif direction == "bearish" and k < d:
+                if k > 80:
+                    score += 25.0  # overbought bearish cross
+                elif k > 50:
+                    score += 15.0
+                elif k > 20:
+                    score += 8.0
+                else:
+                    score += 5.0
+            else:
+                # Opposing crossover strong penalty (avoid chasing into momentum shift)
+                if separation >= 5.0:
+                    score -= 10.0
+
+    # Clamp lower bound after penalties
+    if score < 0:
+        score = 0.0
+
     return min(100.0, score)
 
 
@@ -504,9 +558,23 @@ def _get_momentum_rationale(indicators: IndicatorSnapshot, direction: str) -> st
     
     if indicators.stoch_rsi is not None:
         parts.append(f"Stoch {indicators.stoch_rsi:.1f}")
+    # Include K/D relationship if available
+    k = getattr(indicators, 'stoch_rsi_k', None)
+    d = getattr(indicators, 'stoch_rsi_d', None)
+    if k is not None and d is not None:
+        relation = "above" if k > d else "below" if k < d else "equal"
+        parts.append(f"K {k:.1f} {relation} D {d:.1f}")
+        sep = abs(k - d)
+        if sep >= 2.0:
+            if direction == "bullish" and k > d and k < 20:
+                parts.append("bullish oversold K/D crossover")
+            elif direction == "bearish" and k < d and k > 80:
+                parts.append("bearish overbought K/D crossover")
     
     if indicators.mfi is not None:
         parts.append(f"MFI {indicators.mfi:.1f}")
+    if getattr(indicators, 'macd_line', None) is not None and getattr(indicators, 'macd_signal', None) is not None:
+        parts.append(f"MACD {indicators.macd_line:.3f} vs signal {indicators.macd_signal:.3f}")
     
     status = "oversold" if direction == "bullish" else "overbought"
     return f"Momentum indicators show {status}: {', '.join(parts)}"
