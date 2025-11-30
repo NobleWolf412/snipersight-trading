@@ -880,9 +880,10 @@ class Orchestrator:
                 is_bullish = (plan.direction == 'LONG')
 
                 invalid_reason = None
-                if is_bullish and plan.entry_zone.near_entry >= live_price:
+                # Use strict inequality for consistency with planner validation
+                if is_bullish and plan.entry_zone.near_entry > live_price:
                     invalid_reason = 'revalidation_entry_above_price'
-                elif (not is_bullish) and plan.entry_zone.far_entry <= live_price:
+                elif (not is_bullish) and plan.entry_zone.far_entry < live_price:
                     invalid_reason = 'revalidation_entry_below_price'
                 elif drift_pct > max_drift_pct or drift_atr > max_drift_atr:
                     invalid_reason = 'revalidation_price_drift'

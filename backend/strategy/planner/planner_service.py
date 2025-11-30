@@ -769,8 +769,11 @@ def _calculate_entry_zone(
         far_entry = current_price - (planner_cfg.fallback_entry_far_atr * regime_multiplier * atr)
         rationale = "Sanity fallback ATR pullback (invalid bullish structure)"
         used_structure = False
-    if (not is_bullish) and near_entry <= current_price:
-        logger.warning(f"Bearish entry sanity fail near={near_entry} price={current_price} -> fallback ATR zone")
+    # Bearish sanity: both entries must be strictly above current price
+    if (not is_bullish) and (near_entry <= current_price or far_entry <= current_price):
+        logger.warning(
+            f"Bearish entry sanity fail near={near_entry} far={far_entry} price={current_price} -> fallback ATR zone"
+        )
         regime = _classify_atr_regime(atr, current_price, planner_cfg)
         regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
         # For shorts: swap offsets so near > far (near is higher, farther from price)
