@@ -21,6 +21,7 @@ class EventType(str, Enum):
     # Signal generation
     SIGNAL_GENERATED = "signal_generated"
     SIGNAL_REJECTED = "signal_rejected"
+    ALT_STOP_SUGGESTED = "alt_stop_suggested"
     
     # Quality gates
     QUALITY_GATE_PASSED = "quality_gate_passed"
@@ -176,6 +177,37 @@ def create_signal_rejected_event(
         run_id=run_id,
         symbol=symbol,
         data=data
+    )
+
+
+def create_alt_stop_suggested_event(
+    run_id: str,
+    symbol: str,
+    direction: str,
+    cushion_pct: float,
+    risk_band: str,
+    suggested_level: float,
+    current_stop: float,
+    leverage: int,
+    regime_label: str,
+    recommended_buffer_atr: float
+) -> TelemetryEvent:
+    """Create alternative stop suggestion event for high liquidation risk scenarios."""
+    return TelemetryEvent(
+        event_type=EventType.ALT_STOP_SUGGESTED,
+        timestamp=datetime.now(timezone.utc),
+        run_id=run_id,
+        symbol=symbol,
+        data={
+            'direction': direction,
+            'cushion_pct': round(cushion_pct, 4),
+            'risk_band': risk_band,
+            'suggested_level': suggested_level,
+            'current_stop': current_stop,
+            'leverage': leverage,
+            'regime_label': regime_label,
+            'recommended_buffer_atr': recommended_buffer_atr
+        }
     )
 
 

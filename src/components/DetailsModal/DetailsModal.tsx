@@ -14,10 +14,21 @@ interface DetailsModalProps {
 }
 
 export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
-  const formatNum = (value: number | undefined | null, digits = 2) => {
+  const adaptiveDigits = (v: number) => {
+    if (v >= 1000) return 2; // large numbers
+    if (v >= 100) return 2;
+    if (v >= 10) return 2;
+    if (v >= 1) return 3; // mid-priced
+    if (v >= 0.1) return 4; // low-priced
+    if (v >= 0.01) return 5; // micro-priced
+    return 6; // ultra low
+  };
+  const formatNum = (value: number | undefined | null, digits?: number) => {
     if (value === undefined || value === null || Number.isNaN(value as number)) return '-';
+    const v = value as number;
+    const d = typeof digits === 'number' ? digits : adaptiveDigits(v);
     try {
-      return (value as number).toFixed(digits);
+      return v.toFixed(d);
     } catch {
       return '-';
     }
@@ -207,13 +218,63 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
                 <div>
                   <div className="text-xs text-muted-foreground mb-1">Entry Range</div>
                   <div className="font-mono text-sm">
-                    ${formatNum(result.entryZone.low, 2)} - ${formatNum(result.entryZone.high, 2)}
+                    ${formatNum(result.entryZone.low)} - ${formatNum(result.entryZone.high)}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground mb-1">Stop Loss</div>
-                  <div className="font-mono text-sm text-red-500">${formatNum(result.stopLoss, 2)}</div>
+                  <div className="font-mono text-sm text-red-500">${formatNum(result.stopLoss)}</div>
                 </div>
+                {result.liqPrice && (
+                  <div className="col-span-2 mt-2 bg-muted/40 rounded p-3 border border-border/40">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="text-xs text-muted-foreground">Approx Liq Price:</div>
+                      <div className="font-mono text-sm">${formatNum(result.liqPrice)}</div>
+                      {typeof result.liqCushionPct === 'number' && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-muted-foreground">Cushion</span>
+                          <div
+                            className={
+                              `px-2 py-1 rounded text-xxs font-mono border ` +
+                              (result.liqRiskBand === 'high'
+                                ? 'bg-red-500/15 text-red-400 border-red-500/40'
+                                : result.liqRiskBand === 'moderate'
+                                ? 'bg-amber-500/15 text-amber-400 border-amber-500/40'
+                                : 'bg-green-500/15 text-green-400 border-green-500/40')
+                            }
+                            title="(Stop − Liq) / (Entry − Liq) for longs; inverse for shorts"
+                          >
+                            {formatNum(result.liqCushionPct, 2)}% {result.liqRiskBand?.toUpperCase()}
+                          </div>
+                        </div>
+                      )}
+                      <div className="text-[10px] text-muted-foreground ml-auto">
+                        Maintenance margin assumed 0.4%; actual exchange tiers vary.
+                      </div>
+                    </div>
+                    {/* ATR Regime & Alt Stop Suggestion */}
+                    {result.atrRegimeLabel && (
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <div className="text-xs text-muted-foreground">ATR Regime:</div>
+                        <Badge variant="outline" className="font-mono">
+                          {result.atrRegimeLabel.toUpperCase()} • {formatNum(result.atrPct, 2)}%
+                        </Badge>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <span>Buffer (used/recommended):</span>
+                          <span className="font-mono">{formatNum(result.usedStopBufferAtr, 2)} ATR / {formatNum(result.recommendedStopBufferAtr, 2)} ATR</span>
+                        </div>
+                        {result.altStopLevel && (
+                          <div className="flex items-center gap-2 ml-auto">
+                            <Badge variant="outline" className="bg-warning/15 border-warning/40 text-warning font-mono" title={result.altStopRationale || 'Alternative stop suggestion'}>
+                              ALT STOP ${formatNum(result.altStopLevel)}
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground">Suggestion due to high liquidation risk.</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="col-span-2">
                   <div className="text-xs text-muted-foreground mb-1">Risk/Reward (computed)</div>
                   <div className="font-mono text-sm">
@@ -223,8 +284,8 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
                       const firstTarget = result.takeProfits && result.takeProfits.length > 0 ? result.takeProfits[0] : undefined;
                       if (!firstTarget || risk <= 0) return '-';
                       const reward = Math.abs(firstTarget - avgEntry);
-                      const rr = reward / risk;
-                      return `${formatNum(rr, 2)}:1`;
+                        const rr = reward / risk;
+                        return `${formatNum(rr, 2)}:1`;
                     })()}
                   </div>
                 </div>
@@ -267,7 +328,7 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
                           {idx + 1}
                         </Badge>
                         <div>
-                          <div className="font-mono text-sm font-semibold">${formatNum(price, 2)}</div>
+                          <div className="font-mono text-sm font-semibold">${formatNum(price)}</div>
                           <div className="text-xs text-muted-foreground">Target {idx + 1}</div>
                         </div>
                       </div>

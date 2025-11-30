@@ -130,6 +130,7 @@ export function ActivityFeed({
                 <SelectItem value="scan_completed">Scans Completed</SelectItem>
                 <SelectItem value="signal_generated">Signals Generated</SelectItem>
                 <SelectItem value="signal_rejected">Signals Rejected</SelectItem>
+                <SelectItem value="alt_stop_suggested">Alt Stop Suggested</SelectItem>
                 <SelectItem value="error_occurred">Errors</SelectItem>
               </SelectContent>
             </Select>
@@ -234,6 +235,14 @@ function getEventDisplay(event: TelemetryEvent): {
         color: 'bg-orange-500/20 text-orange-400',
         title: 'Signal Rejected',
         description: data.reason || 'Failed quality gate'
+      };
+
+    case 'alt_stop_suggested':
+      return {
+        icon: <Warning size={20} weight="fill" />,
+        color: 'bg-amber-500/20 text-amber-400',
+        title: 'Alt Stop Suggested',
+        description: `Cushion ${typeof data.cushion_pct === 'number' ? data.cushion_pct.toFixed(2) : '?'}% (${data.risk_band || 'unknown'}) → ${typeof data.suggested_level === 'number' ? data.suggested_level : 'n/a'}`
       };
 
     case 'error_occurred':

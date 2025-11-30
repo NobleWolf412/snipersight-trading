@@ -17,6 +17,7 @@ class ScanConfig:
     btc_impulse_gate_enabled: bool = True
     max_symbols: int = 20
     max_risk_pct: float = 2.0
+    leverage: int = 1  # Added: user-selected leverage to allow planner adaptive buffers/targets
     
     # Planner-specific knobs (wired from scanner mode)
     primary_planning_timeframe: str = "4H"

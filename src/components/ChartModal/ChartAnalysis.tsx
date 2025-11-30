@@ -22,6 +22,15 @@ export function ChartAnalysis({ result }: ChartAnalysisProps) {
       if (!(window as any).spark || typeof (window as any).spark.llm !== 'function') {
         throw new Error('Spark is not available in this environment.');
       }
+      const formatAdaptive = (v: number) => {
+        if (v >= 1000) return v.toFixed(2);
+        if (v >= 100) return v.toFixed(2);
+        if (v >= 10) return v.toFixed(2);
+        if (v >= 1) return v.toFixed(3);
+        if (v >= 0.1) return v.toFixed(4);
+        if (v >= 0.01) return v.toFixed(5);
+        return v.toFixed(6);
+      };
       const promptText = `You are a professional crypto trader analyzing a ${result.pair} trading setup.
 
 **Market Data:**
@@ -29,9 +38,9 @@ export function ChartAnalysis({ result }: ChartAnalysisProps) {
 - Confidence Score: ${result.confidenceScore}%
 - Risk Score: ${result.riskScore}/10
 - Classification: ${result.classification}
-- Entry Zone: $${result.entryZone.low} - $${result.entryZone.high}
-- Stop Loss: $${result.stopLoss}
-- Take Profits: ${result.takeProfits.map((tp, i) => `TP${i + 1}: $${tp}`).join(', ')}
+- Entry Zone: $${formatAdaptive(result.entryZone.low)} - $${formatAdaptive(result.entryZone.high)}
+- Stop Loss: $${formatAdaptive(result.stopLoss)}
+- Take Profits: ${result.takeProfits.map((tp, i) => `TP${i + 1}: $${formatAdaptive(tp)}`).join(', ')}
 - Order Blocks: ${result.orderBlocks.map(ob => `${ob.type} at $${ob.price} (${ob.timeframe})`).join(', ')}
 - Fair Value Gaps: ${result.fairValueGaps.map(fvg => `${fvg.type} $${fvg.low}-$${fvg.high}`).join(', ')}
 
@@ -168,7 +177,7 @@ Tips:
                   +{((result.takeProfits[2] - result.entryZone.high) / result.entryZone.high * 100).toFixed(2)}%
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  At TP3: ${result.takeProfits[2].toFixed(2)}
+                  At TP3: ${formatAdaptive(result.takeProfits[2])}
                 </div>
               </div>
 
@@ -181,7 +190,7 @@ Tips:
                   -{((result.entryZone.high - result.stopLoss) / result.entryZone.high * 100).toFixed(2)}%
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  At SL: ${result.stopLoss.toFixed(2)}
+                  At SL: ${formatAdaptive(result.stopLoss)}
                 </div>
               </div>
 

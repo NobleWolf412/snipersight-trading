@@ -42,7 +42,7 @@ from backend.shared.models.scoring import ConfluenceBreakdown
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.rr_matrix import validate_rr, classify_conviction
 from backend.bot.telemetry.logger import get_telemetry_logger
-from backend.bot.telemetry.events import create_signal_rejected_event
+from backend.bot.telemetry.events import create_signal_rejected_event, create_alt_stop_suggested_event
 
 
 def generate_trade_plan(
@@ -100,6 +100,17 @@ def generate_trade_plan(
         ))
         raise ValueError("ATR required for trade planning and must be positive")
     atr = primary_indicators.atr
+
+    # --- Leverage parameters (RR scaling removed) ---
+    # We preserve incoming leverage for metadata transparency but do NOT adapt
+    # target RR ladder or structural buffers based on it for manual scanning.
+    leverage = max(1, int(getattr(config, 'leverage', 1) or 1))
+    rr_scale = 1.0  # Explicitly neutralized
+    leverage_adjustments = {
+        "leverage": leverage,
+        "rr_scale": rr_scale,
+        "mode": "neutral"
+    }
     
     # Track plan composition for type classification
     plan_composition = {
@@ -175,7 +186,8 @@ def generate_trade_plan(
         atr=atr,
         config=config,
         setup_archetype=setup_archetype,
-        regime_label=confluence_breakdown.regime
+        regime_label=confluence_breakdown.regime,
+        rr_scale=rr_scale
     )
     
     # --- Calculate Risk:Reward ---
@@ -270,6 +282,62 @@ def generate_trade_plan(
     trade_direction = "LONG" if is_bullish else "SHORT"
     trade_setup = setup_type if setup_type in ["scalp", "swing", "intraday"] else "intraday"
 
+    # Extract ATR regime & alt stop metadata (flattened logic replaced by helpers)
+    atr_pct = (atr / max(current_price, 1e-12)) * 100.0
+    regime_label = (
+        "calm" if atr_pct < 0.5 else
+        "normal" if atr_pct < 1.2 else
+        "elevated" if atr_pct < 2.0 else
+        "explosive"
+    )
+    recommended_buffer_atr = (
+        0.25 if atr_pct < 0.5 else
+        0.30 if atr_pct < 1.2 else
+        0.40 if atr_pct < 2.0 else
+        0.50
+    )
+    used_stop_buffer_atr = round(abs(stop_loss.level - entry_zone.far_entry) / atr, 4)
+
+    liquidation_meta = _calculate_liquidation_metadata(
+        is_bullish=is_bullish,
+        near_entry=entry_zone.near_entry,
+        stop_level=stop_loss.level,
+        leverage=leverage
+    )
+
+    alt_stop_meta = None
+    if liquidation_meta.get("risk_band") == "high":
+        # Suggest extended stop only if structurally further away
+        extended_buffer = (
+            0.35 if atr_pct < 0.5 else
+            0.40 if atr_pct < 1.2 else
+            0.50 if atr_pct < 2.0 else
+            0.60
+        )
+        suggested_level = (
+            entry_zone.far_entry - extended_buffer * atr if is_bullish
+            else entry_zone.far_entry + extended_buffer * atr
+        )
+        if (is_bullish and suggested_level < stop_loss.level) or ((not is_bullish) and suggested_level > stop_loss.level):
+            alt_stop_meta = {
+                "level": suggested_level,
+                "rationale": f"Extended buffer for high liquidation risk ({liquidation_meta.get('risk_band')})",
+                "recommended_buffer_atr": extended_buffer
+            }
+            # Emit telemetry event
+            telemetry.log_event(create_alt_stop_suggested_event(
+                run_id=run_id,
+                symbol=symbol,
+                direction=trade_direction,
+                cushion_pct=liquidation_meta.get('cushion_pct', 0.0),
+                risk_band=liquidation_meta.get('risk_band', ''),
+                suggested_level=suggested_level,
+                current_stop=stop_loss.level,
+                leverage=leverage,
+                regime_label=regime_label,
+                recommended_buffer_atr=extended_buffer
+            ))
+
     trade_plan = TradePlan(
         symbol=symbol,
         direction=trade_direction,
@@ -300,7 +368,16 @@ def generate_trade_plan(
                 "p_win": p_win,
                 "risk_reward": risk_reward,
                 "expected_value": expected_value
-            }
+            },
+            "leverage_adjustments": leverage_adjustments,
+            "liquidation": liquidation_meta,
+            "atr_regime": {
+                "label": regime_label,
+                "atr_pct": round(atr_pct, 4),
+                "recommended_stop_buffer_atr": recommended_buffer_atr,
+                "used_stop_buffer_atr": used_stop_buffer_atr
+            },
+            "alt_stop": alt_stop_meta
         }
     )
     
@@ -611,7 +688,8 @@ def _calculate_targets(
     atr: float,
     config: ScanConfig,
     setup_archetype: SetupArchetype,
-    regime_label: str
+    regime_label: str,
+    rr_scale: float = 1.0
 ) -> List[Target]:
     """
     Calculate tiered targets based on structure and R:R multiples.
@@ -627,13 +705,14 @@ def _calculate_targets(
     regime_lower = (regime_label or "").lower()
     trending = any(k in regime_lower for k in ["trend", "drive"]) or 'aligned' in regime_lower
     if setup_archetype == "SWEEP_REVERSAL":
-        rr_levels = [1.2, 2.0, 3.0]
+        base_rr = [1.2, 2.0, 3.0]
     elif setup_archetype == "RANGE_REVERSION":
-        rr_levels = [1.2, 2.0, 3.0]
+        base_rr = [1.2, 2.0, 3.0]
     elif setup_archetype == "BREAKOUT_RETEST":
-        rr_levels = [1.5, 2.5, 4.0] if not trending else [2.0, 3.0, 5.0]
+        base_rr = [1.5, 2.5, 4.0] if not trending else [2.0, 3.0, 5.0]
     else:  # TREND_OB_PULLBACK
-        rr_levels = [1.5, 2.5, 4.0] if not trending else [2.0, 3.0, 5.0]
+        base_rr = [1.5, 2.5, 4.0] if not trending else [2.0, 3.0, 5.0]
+    rr_levels = [r * rr_scale for r in base_rr]
     
     if is_bullish:
         # Target 1: Conservative (1.5R or nearest resistance)
@@ -657,24 +736,24 @@ def _calculate_targets(
         
         targets.append(Target(
             level=target1_level,
-            percentage=50.0,  # Close 50% of position at first target
-            rationale=target1_rationale
+            percentage=50.0,
+            rationale=f"{target1_rationale} (RR≈{rr_levels[0]:.2f})"
         ))
         
         # Target 2: Moderate
         target2_level = avg_entry + (risk_distance * rr_levels[1])
         targets.append(Target(
             level=target2_level,
-            percentage=30.0,  # Close 30% of position at second target
-            rationale="2.5R target (moderate)"
+            percentage=30.0,
+            rationale=f"Mid target RR≈{rr_levels[1]:.2f}"
         ))
         
         # Target 3: Aggressive
         target3_level = avg_entry + (risk_distance * rr_levels[2])
         targets.append(Target(
             level=target3_level,
-            percentage=20.0,  # Close final 20% at third target
-            rationale="4R target (aggressive)"
+            percentage=20.0,
+            rationale=f"Aggressive RR≈{rr_levels[2]:.2f}"
         ))
     
     else:  # bearish
@@ -699,24 +778,24 @@ def _calculate_targets(
         
         targets.append(Target(
             level=target1_level,
-            percentage=50.0,  # Close 50% of position at first target
-            rationale=target1_rationale
+            percentage=50.0,
+            rationale=f"{target1_rationale} (RR≈{rr_levels[0]:.2f})"
         ))
         
         # Target 2: Moderate
         target2_level = avg_entry - (risk_distance * rr_levels[1])
         targets.append(Target(
             level=target2_level,
-            percentage=30.0,  # Close 30% of position at second target
-            rationale="2.5R target (moderate)"
+            percentage=30.0,
+            rationale=f"Mid target RR≈{rr_levels[1]:.2f}"
         ))
         
         # Target 3: Aggressive
         target3_level = avg_entry - (risk_distance * rr_levels[2])
         targets.append(Target(
             level=target3_level,
-            percentage=20.0,  # Close final 20% at third target
-            rationale="4R target (aggressive)"
+            percentage=20.0,
+            rationale=f"Aggressive RR≈{rr_levels[2]:.2f}"
         ))
     
     return targets
@@ -831,3 +910,45 @@ def validate_trade_plan(plan: TradePlan, config: ScanConfig) -> bool:
             return False
     
     return True
+
+
+def _calculate_liquidation_metadata(
+    is_bullish: bool,
+    near_entry: float,
+    stop_level: float,
+    leverage: int,
+    mmr: float = 0.004
+) -> dict:
+    """Approximate liquidation price and cushion.
+
+    Formula (simplified isolated margin):
+      Long:  P_liq = Entry * (1 + mmr - 1/L)
+      Short: P_liq = Entry * (1 - mmr + 1/L)
+
+    Cushion pct (long): (stop - liq) / (entry - liq) * 100
+    Cushion pct (short): (liq - stop) / (liq - entry) * 100
+    """
+    leverage = max(1, leverage)
+    entry = near_entry
+    if is_bullish:
+        liq_price = entry * (1 + mmr - (1.0 / leverage))
+        cushion_raw = (stop_level - liq_price) / max(entry - liq_price, 1e-12)
+    else:
+        liq_price = entry * (1 - mmr + (1.0 / leverage))
+        cushion_raw = (liq_price - stop_level) / max(liq_price - entry, 1e-12)
+
+    cushion_pct = round(cushion_raw * 100, 4)
+    if cushion_pct < 30:
+        risk_band = "high"
+    elif cushion_pct < 55:
+        risk_band = "moderate"
+    else:
+        risk_band = "comfortable"
+
+    return {
+        "assumed_mmr": mmr,
+        "approx_liq_price": round(liq_price, 8),
+        "cushion_pct": cushion_pct,
+        "risk_band": risk_band,
+        "direction": "long" if is_bullish else "short"
+    }

@@ -14,6 +14,15 @@ export interface ScanResult {
   orderBlocks: Array<{ type: 'bullish' | 'bearish'; price: number; timeframe: string }>;
   fairValueGaps: Array<{ low: number; high: number; type: 'bullish' | 'bearish' }>;
   timestamp: string;
+  liqPrice?: number;
+  liqCushionPct?: number;
+  liqRiskBand?: 'high' | 'moderate' | 'comfortable';
+  atrRegimeLabel?: string;
+  atrPct?: number;
+  recommendedStopBufferAtr?: number;
+  usedStopBufferAtr?: number;
+  altStopLevel?: number;
+  altStopRationale?: string;
   
   // Phase 1-5 enhancements
   plan_type?: PlanType;
@@ -109,6 +118,15 @@ export function convertSignalToScanResult(signal: any): ScanResult {
         }))
       : [],
     timestamp: new Date().toISOString(),
+    liqPrice: signal.liquidation?.approx_liq_price,
+    liqCushionPct: signal.liquidation?.cushion_pct,
+    liqRiskBand: signal.liquidation?.risk_band,
+    atrRegimeLabel: signal.atr_regime?.label,
+    atrPct: signal.atr_regime?.atr_pct,
+    recommendedStopBufferAtr: signal.atr_regime?.recommended_stop_buffer_atr,
+    usedStopBufferAtr: signal.atr_regime?.used_stop_buffer_atr,
+    altStopLevel: signal.alt_stop?.level,
+    altStopRationale: signal.alt_stop?.rationale,
 
     // Phase enhancements
     plan_type: (signal.plan_type as PlanType) || 'SMC',

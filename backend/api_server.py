@@ -539,6 +539,11 @@ async def get_signals(
         orchestrator.apply_mode(mode)
         # If caller provided a higher override score, update after mode baseline applied
         orchestrator.config.min_confluence_score = effective_min
+        # Inject leverage into config for planner adaptive logic
+        try:
+            setattr(orchestrator.config, 'leverage', leverage)
+        except Exception:
+            pass
         
         # Update orchestrator's exchange adapter
         orchestrator.exchange_adapter = current_adapter
@@ -590,6 +595,9 @@ async def get_signals(
                     "confluence_score": plan.confluence_breakdown.total_score if hasattr(plan, 'confluence_breakdown') else plan.confidence_score,
                     "expected_value": plan.metadata.get('expected_value')
                 },
+                "liquidation": plan.metadata.get('liquidation'),
+                "atr_regime": plan.metadata.get('atr_regime'),
+                "alt_stop": plan.metadata.get('alt_stop'),
                 # Optional SMC geometry for chart overlays (if provided by pipeline)
                 "smc_geometry": {
                     "order_blocks": plan.metadata.get('order_blocks_list'),
