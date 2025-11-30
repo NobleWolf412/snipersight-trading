@@ -118,6 +118,16 @@ def calculate_confluence_score(
                 weight=0.10,
                 rationale=_get_volume_rationale(primary_indicators)
             ))
+
+        # Volatility normalization (ATR%) - prefer moderate volatility
+        volatility_score = _score_volatility(primary_indicators)
+        if volatility_score > 0:
+            factors.append(ConfluenceFactor(
+                name="Volatility",
+                score=volatility_score,
+                weight=0.08,
+                rationale=_get_volatility_rationale(primary_indicators)
+            ))
     
     # --- HTF Alignment ---
     
@@ -420,6 +430,42 @@ def _score_volume(indicators: IndicatorSnapshot, direction: str) -> float:
         return 50.0  # Neutral if no spike
 
 
+def _score_volatility(indicators: IndicatorSnapshot) -> float:
+    """Score volatility using ATR% (price-normalized ATR). Prefer moderate volatility.
+
+    Bracket logic (atr_pct in % terms):
+    - <0.25%: very low -> 30 (risk of chop)
+    - 0.25% - 0.75%: linear ramp to 100 (ideal development range)
+    - 0.75% - 1.5%: gentle decline from 95 to 70 (still acceptable)
+    - 1.5% - 3.0%: decline from 70 to 40 (moves become erratic)
+    - >3.0%: 25 (excessive volatility, unreliable structure)
+    """
+    atr_pct = getattr(indicators, 'atr_percent', None)
+    if atr_pct is None:
+        return 0.0
+
+    # Ensure positive
+    if atr_pct <= 0:
+        return 0.0
+
+    # Convert fraction to percent if given as ratio (heuristic: assume atr_pct already % if > 1.0)
+    val = atr_pct
+
+    if val < 0.25:
+        return 30.0
+    if val < 0.75:
+        # Map 0.25 -> 30 up to 0.75 -> 100
+        return 30.0 + (val - 0.25) / (0.75 - 0.25) * (100.0 - 30.0)
+    if val < 1.5:
+        # 0.75 -> 95 down to 1.5 -> 70
+        return 95.0 - (val - 0.75) / (1.5 - 0.75) * (95.0 - 70.0)
+    if val < 3.0:
+        # 1.5 -> 70 down to 3.0 -> 40
+        return 70.0 - (val - 1.5) / (3.0 - 1.5) * (70.0 - 40.0)
+    # >3.0
+    return 25.0
+
+
 def _score_htf_alignment(htf_trend: str, direction: str) -> float:
     """Score higher timeframe alignment."""
     if htf_trend == direction:
@@ -586,3 +632,22 @@ def _get_volume_rationale(indicators: IndicatorSnapshot) -> str:
         return "Elevated volume confirms price action"
     else:
         return "Normal volume levels"
+
+
+def _get_volatility_rationale(indicators: IndicatorSnapshot) -> str:
+    """Generate rationale for volatility factor."""
+    atr_pct = getattr(indicators, 'atr_percent', None)
+    if atr_pct is None:
+        return "ATR% unavailable"
+    val = atr_pct
+    if val < 0.25:
+        zone = "very low volatility (range risk)"
+    elif val < 0.75:
+        zone = "healthy development volatility"
+    elif val < 1.5:
+        zone = "elevated but acceptable volatility"
+    elif val < 3.0:
+        zone = "high volatility (structure reliability reduced)"
+    else:
+        zone = "extreme volatility (erratic price action)"
+    return f"ATR% {val:.2f}% - {zone}"
