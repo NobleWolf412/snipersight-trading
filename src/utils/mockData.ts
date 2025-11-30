@@ -189,7 +189,14 @@ export function generateDemoScanResults(count = 5, mode: string = 'recon'): Scan
       plan_type: 'SMC',
       conviction_class: confidence >= 80 ? 'A' : confidence >= 60 ? 'B' : 'C',
       missing_critical_timeframes: [],
-      regime: undefined,
+      regime: {
+        // Provide local regime metadata for better UI rendering
+        symbol_regime: {
+          trend: long ? 'up' : 'down',
+          volatility: confidence >= 85 ? 'elevated' : confidence >= 70 ? 'normal' : 'compressed',
+          score: Math.min(95, Math.max(35, Math.round(confidence)))
+        }
+      },
       smc_geometry: {
         order_blocks: [],
         fvgs: [],

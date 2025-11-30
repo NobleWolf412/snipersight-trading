@@ -44,8 +44,6 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
         setScanPhaseLogs(prev => [...prev, { timestamp: Date.now(), message: `… working (elapsed ${m}:${s})`, type: 'info' }]);
       };
       timers.current.push(setInterval(heartbeat, 5000) as unknown as ReturnType<typeof setTimeout>);
-      // Snapshot current config (persistent)
-      addConsoleLog(`CONFIG SNAPSHOT: mode=${scanConfig.sniperMode} leverage=${scanConfig.leverage}x exchange=${scanConfig.exchange} topPairs=${scanConfig.topPairs}`, 'config');
       setScanPhaseLogs(prev => [...prev, { timestamp: Date.now(), message: '> Initializing scanner systems...', type: 'info' }]);
 
       const push = (ms: number, msg: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {

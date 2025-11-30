@@ -52,7 +52,7 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="h-full flex flex-col space-y-4">
       <div className="flex items-center justify-end flex-wrap gap-3">
         <div className="flex gap-2 flex-wrap">
           <Button
@@ -88,7 +88,7 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
         </div>
       </div>
 
-      <div className="bg-card/30 rounded-lg border border-border p-2">
+      <div className="bg-card/30 rounded-lg border border-border p-2 flex-1">
         <div className="flex items-center gap-2 mb-2 px-2">
           <Badge variant="outline" className="bg-accent/20 text-accent border-accent/50 font-bold">
             {result.pair}
@@ -98,13 +98,15 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
           </span>
         </div>
         
-        <div className="relative w-full h-[500px] rounded-lg overflow-hidden bg-[#141416]">
+        {/* Fixed aspect is controlled by parent; keep iframe contained without stretching */}
+        <div className="relative w-full h-full rounded-lg overflow-hidden bg-[#141416]">
           <iframe
             key={`${symbol}-${timeframe}`} // Re-render on symbol/timeframe change
             src={getTradingViewUrl()}
-            className="w-full h-full border-0"
+            className="absolute inset-0 w-full h-full border-0"
             title={`${result.pair} Chart`}
             allow="clipboard-write"
+            allowFullScreen
           />
           {/* SVG overlay removed */}
         </div>
@@ -122,13 +124,13 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
                 <div className="flex-1 bg-success/10 border border-success/50 rounded px-3 py-2">
                   <div className="text-xs text-muted-foreground">High</div>
                   <div className="font-mono text-sm text-success font-bold">
-                    ${result.entryZone.high.toFixed(2)}
+                    ${result.entryZone.high.toFixed(5)}
                   </div>
                 </div>
                 <div className="flex-1 bg-success/10 border border-success/50 rounded px-3 py-2">
                   <div className="text-xs text-muted-foreground">Low</div>
                   <div className="font-mono text-sm text-success font-bold">
-                    ${result.entryZone.low.toFixed(2)}
+                    ${result.entryZone.low.toFixed(5)}
                   </div>
                 </div>
               </div>
@@ -140,7 +142,7 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
               <div className="text-xs text-muted-foreground uppercase">Stop Loss</div>
               <div className="bg-destructive/10 border border-destructive/50 rounded px-3 py-2">
                 <div className="font-mono text-sm text-destructive font-bold">
-                  ${result.stopLoss.toFixed(2)}
+                  ${result.stopLoss.toFixed(5)}
                 </div>
               </div>
             </div>
@@ -154,7 +156,7 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
                   <div key={i} className="bg-accent/10 border border-accent/50 rounded px-3 py-2">
                     <div className="text-xs text-muted-foreground">TP{i + 1}</div>
                     <div className="font-mono text-sm text-accent font-bold">
-                      ${tp.toFixed(2)}
+                      ${tp.toFixed(5)}
                     </div>
                   </div>
                 ))}

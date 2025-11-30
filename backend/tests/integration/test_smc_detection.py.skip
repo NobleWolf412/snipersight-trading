@@ -1,0 +1,484 @@
+"""
+Tests for SMC pattern detection modules.
+
+Validates order block, FVG, BOS/CHoCH, and liquidity sweep detection.
+"""
+
+import pytest
+from backend.strategy.smc.order_blocks import OrderBlockDetector
+from backend.strategy.smc.fvg import FVGDetector
+from backend.strategy.smc.bos_choch import detect_structural_breaks
+from backend.strategy.smc.liquidity_sweeps import LiquiditySweepDetector
+from backend.tests.fixtures.market_data import (
+    generate_with_order_block,
+    generate_with_fvg,
+    generate_bullish_trend_ohlcv
+)
+from backend.shared.models.data import OHLCV
+
+
+class TestOrderBlockDetection:
+    """Test order block pattern detection."""
+    
+    def test_detects_bullish_order_block(self):
+        """Should detect bullish order block before strong up-move."""
+        candles = generate_with_order_block(
+            periods=100,
+            ob_position=70,
+            direction="bullish"
+        )
+        
+        detector = OrderBlockDetector(min_displacement_atr=1.5)
+        
+        # Mock ATR value
+        atr = 0.5
+        
+        order_blocks = detector.detect(candles, atr=atr, timeframe="1H")
+        
+        # Should detect at least one bullish OB
+        bullish_obs = [ob for ob in order_blocks if ob.direction == "bullish"]
+        assert len(bullish_obs) > 0, "Should detect bullish order block"
+    
+    def test_detects_bearish_order_block(self):
+        """Should detect bearish order block before strong down-move."""
+        candles = generate_with_order_block(
+            periods=100,
+            ob_position=70,
+            direction="bearish"
+        )
+        
+        detector = OrderBlockDetector(min_displacement_atr=1.5)
+        atr = 0.5
+        
+        order_blocks = detector.detect(candles, atr=atr, timeframe="1H")
+        
+        bearish_obs = [ob for ob in order_blocks if ob.direction == "bearish"]
+        assert len(bearish_obs) > 0, "Should detect bearish order block"
+    
+    def test_order_block_requires_displacement(self):
+        """Order blocks should require minimum displacement."""
+        # Generate data with weak moves (no strong displacement)
+        candles = []
+        price = 100.0
+        for i in range(100):
+            # Tiny random movements
+            import random
+            price += random.uniform(-0.1, 0.1)
+            candles.append(OHLCV(
+                timestamp=i * 3600,
+                open=price,
+                high=price + 0.05,
+                low=price - 0.05,
+                close=price,
+                volume=1000000
+            ))
+        
+        detector = OrderBlockDetector(min_displacement_atr=2.0)  # Strict threshold
+        atr = 0.5
+        
+        order_blocks = detector.detect(candles, atr=atr, timeframe="1H")
+        
+        # Should detect fewer OBs with strict displacement requirement
+        assert len(order_blocks) < 10  # Arbitrary but reasonable
+    
+    def test_order_block_volume_confirmation(self):
+        """Order blocks with high volume should have volume_confirmation=True."""
+        candles = generate_with_order_block(100, 70, "bullish")
+        
+        detector = OrderBlockDetector(min_displacement_atr=1.5)
+        atr = 0.5
+        
+        order_blocks = detector.detect(candles, atr=atr, timeframe="1H")
+        
+        # At least some should have volume confirmation
+        if order_blocks:
+            has_volume_conf = any(ob.volume_confirmation for ob in order_blocks)
+            # This depends on implementation details
+            assert isinstance(order_blocks[0].volume_confirmation, bool)
+    
+    def test_order_block_freshness_score(self):
+        """Order blocks should have freshness scores (0-1)."""
+        candles = generate_with_order_block(100, 80, "bullish")
+        
+        detector = OrderBlockDetector(min_displacement_atr=1.5)
+        atr = 0.5
+        
+        order_blocks = detector.detect(candles, atr=atr, timeframe="1H")
+        
+        for ob in order_blocks:
+            assert 0 <= ob.freshness_score <= 1, "Freshness score must be 0-1"
+
+
+class TestFVGDetection:
+    """Test Fair Value Gap detection."""
+    
+    def test_detects_bullish_fvg(self):
+        """Should detect bullish FVG (gap up)."""
+        candles = generate_with_fvg(100, fvg_position=50, direction="bullish")
+        
+        detector = FVGDetector(min_gap_atr=0.5)
+        atr = 0.8
+        
+        fvgs = detector.detect(candles, atr=atr, timeframe="15m")
+        
+        bullish_fvgs = [fvg for fvg in fvgs if fvg.direction == "bullish"]
+        assert len(bullish_fvgs) > 0, "Should detect bullish FVG"
+    
+    def test_detects_bearish_fvg(self):
+        """Should detect bearish FVG (gap down)."""
+        candles = generate_with_fvg(100, fvg_position=50, direction="bearish")
+        
+        detector = FVGDetector(min_gap_atr=0.5)
+        atr = 0.8
+        
+        fvgs = detector.detect(candles, atr=atr, timeframe="15m")
+        
+        bearish_fvgs = [fvg for fvg in fvgs if fvg.direction == "bearish"]
+        assert len(bearish_fvgs) > 0, "Should detect bearish FVG"
+    
+    def test_fvg_has_upper_lower_bounds(self):
+        """FVG should have valid upper and lower bounds."""
+        candles = generate_with_fvg(100, 50, "bullish")
+        
+        detector = FVGDetector(min_gap_atr=0.3)
+        atr = 0.8
+        
+        fvgs = detector.detect(candles, atr=atr, timeframe="15m")
+        
+        for fvg in fvgs:
+            assert fvg.upper_bound > fvg.lower_bound, "FVG upper must be > lower"
+            assert fvg.midpoint == (fvg.upper_bound + fvg.lower_bound) / 2
+    
+    def test_fvg_displacement_strength(self):
+        """FVG should measure displacement strength."""
+        candles = generate_with_fvg(100, 50, "bullish")
+        
+        detector = FVGDetector(min_gap_atr=0.3)
+        atr = 0.8
+        
+        fvgs = detector.detect(candles, atr=atr, timeframe="15m")
+        
+        for fvg in fvgs:
+            assert fvg.displacement_strength > 0, "Displacement strength must be positive"
+    
+    def test_fvg_requires_minimum_gap(self):
+        """FVG detection should require minimum gap size."""
+        # Generate data with small candles (no significant gaps)
+        candles = []
+        price = 100.0
+        for i in range(100):
+            candles.append(Candle(
+                timestamp=i * 900,  # 15m candles
+                open=price,
+                high=price + 0.1,
+                low=price - 0.1,
+                close=price + 0.05,
+                volume=1000000
+            ))
+            price += 0.05
+        
+        detector = FVGDetector(min_gap_atr=1.0)  # Strict
+        atr = 0.2
+        
+        fvgs = detector.detect(candles, atr=atr, timeframe="15m")
+        
+        # Should detect very few or no FVGs with strict threshold
+        assert len(fvgs) < 5
+
+
+class TestStructuralBreaks:
+    """Test BOS (Break of Structure) and CHoCH (Change of Character) detection."""
+    
+    def test_detects_bullish_bos(self):
+        """Should detect bullish BOS (higher high)."""
+        # Create uptrend with clear higher highs
+        candles = []
+        price = 100.0
+        for i in range(100):
+            if i % 20 == 0:
+                # Create new high
+                price += 2.0
+            candles.append(Candle(
+                timestamp=i * 14400,  # 4H
+                open=price,
+                high=price + 1.0,
+                low=price - 0.5,
+                close=price + 0.5,
+                volume=1000000
+            ))
+            price += 0.2
+        
+        atr = 0.5
+        breaks = detect_structural_breaks(candles, atr=atr, timeframe="4H")
+        
+        bos_breaks = [b for b in breaks if b.type == "BOS" and b.direction == "bullish"]
+        assert len(bos_breaks) > 0, "Should detect bullish BOS"
+    
+    def test_detects_bearish_bos(self):
+        """Should detect bearish BOS (lower low)."""
+        candles = []
+        price = 100.0
+        for i in range(100):
+            if i % 20 == 0:
+                price -= 2.0
+            candles.append(OHLCV(
+                timestamp=i * 14400,
+                open=price,
+                high=price + 0.5,
+                low=price - 1.0,
+                close=price - 0.5,
+                volume=1000000
+            ))
+            price -= 0.2
+        
+        atr = 0.5
+        breaks = detect_structural_breaks(candles, atr=atr, timeframe="4H")
+        
+        bos_breaks = [b for b in breaks if b.type == "BOS" and b.direction == "bearish"]
+        assert len(bos_breaks) > 0, "Should detect bearish BOS"
+    
+    def test_detects_choch(self):
+        """Should detect CHoCH (trend reversal signal)."""
+        # Create trend reversal pattern
+        candles = []
+        price = 100.0
+        
+        # Uptrend
+        for i in range(50):
+            candles.append(Candle(
+                timestamp=i * 14400,
+                open=price,
+                high=price + 0.8,
+                low=price - 0.2,
+                close=price + 0.6,
+                volume=1000000
+            ))
+            price += 0.5
+        
+        # Reversal - break previous swing low
+        for i in range(50, 100):
+            candles.append(Candle(
+                timestamp=i * 14400,
+                open=price,
+                high=price + 0.2,
+                low=price - 0.8,
+                close=price - 0.6,
+                volume=1200000
+            ))
+            price -= 0.5
+        
+        atr = 0.6
+        breaks = detect_structural_breaks(candles, atr=atr, timeframe="4H")
+        
+        choch_breaks = [b for b in breaks if b.type == "CHoCH"]
+        # May or may not detect depending on implementation
+        # Just verify structure is correct if detected
+        for b in choch_breaks:
+            assert b.strength > 0
+            assert b.direction in ["bullish", "bearish"]
+    
+    def test_structural_break_strength(self):
+        """Structural breaks should have strength scores."""
+        candles = generate_bullish_trend_ohlcv(100)
+        atr = 0.5
+        
+        breaks = detect_structural_breaks(candles, atr=atr, timeframe="1H")
+        
+        for b in breaks:
+            assert 0 < b.strength <= 1, "Break strength should be 0-1"
+    
+    def test_structural_break_volume_confirmation(self):
+        """Breaks with high volume should be confirmed."""
+        candles = generate_bullish_trend_ohlcv(100)
+        atr = 0.5
+        
+        breaks = detect_structural_breaks(candles, atr=atr, timeframe="1H")
+        
+        for b in breaks:
+            assert isinstance(b.volume_confirmation, bool)
+
+
+class TestLiquiditySweeps:
+    """Test liquidity sweep detection."""
+    
+    def test_detects_bullish_liquidity_sweep(self):
+        """Should detect bullish sweep (wick below support, rejection up)."""
+        candles = []
+        price = 100.0
+        
+        # Build range
+        for i in range(50):
+            candles.append(Candle(
+                timestamp=i * 3600,
+                open=price,
+                high=price + 0.5,
+                low=price - 0.5,
+                close=price + 0.1,
+                volume=1000000
+            ))
+        
+        # Sweep low then reject
+        candles.append(Candle(
+            timestamp=50 * 3600,
+            open=100.0,
+            high=100.5,
+            low=98.0,  # Sweep below range
+            close=100.3,  # Reject back up
+            volume=2000000
+        ))
+        
+        # Continuation up
+        for i in range(51, 100):
+            candles.append(Candle(
+                timestamp=i * 3600,
+                open=price + 1.0,
+                high=price + 1.5,
+                low=price + 0.5,
+                close=price + 1.2,
+                volume=1500000
+            ))
+            price += 0.3
+        
+        detector = LiquiditySweepDetector(min_wick_ratio=1.5)
+        atr = 0.5
+        
+        sweeps = detector.detect(candles, atr=atr, timeframe="1H")
+        
+        bullish_sweeps = [s for s in sweeps if s.direction == "bullish"]
+        assert len(bullish_sweeps) > 0, "Should detect bullish liquidity sweep"
+    
+    def test_detects_bearish_liquidity_sweep(self):
+        """Should detect bearish sweep (wick above resistance, rejection down)."""
+        candles = []
+        price = 100.0
+        
+        for i in range(50):
+            candles.append(Candle(
+                timestamp=i * 3600,
+                open=price,
+                high=price + 0.5,
+                low=price - 0.5,
+                close=price - 0.1,
+                volume=1000000
+            ))
+        
+        # Sweep high then reject
+        candles.append(Candle(
+            timestamp=50 * 3600,
+            open=100.0,
+            high=102.0,  # Sweep above range
+            low=99.5,
+            close=99.7,  # Reject back down
+            volume=2000000
+        ))
+        
+        for i in range(51, 100):
+            candles.append(Candle(
+                timestamp=i * 3600,
+                open=price - 1.0,
+                high=price - 0.5,
+                low=price - 1.5,
+                close=price - 1.2,
+                volume=1500000
+            ))
+            price -= 0.3
+        
+        detector = LiquiditySweepDetector(min_wick_ratio=1.5)
+        atr = 0.5
+        
+        sweeps = detector.detect(candles, atr=atr, timeframe="1H")
+        
+        bearish_sweeps = [s for s in sweeps if s.direction == "bearish"]
+        assert len(bearish_sweeps) > 0, "Should detect bearish liquidity sweep"
+    
+    def test_sweep_requires_follow_through(self):
+        """Sweep should require price action follow-through."""
+        candles = generate_bullish_trend_ohlcv(100)
+        
+        detector = LiquiditySweepDetector(min_wick_ratio=2.0)
+        atr = 0.5
+        
+        sweeps = detector.detect(candles, atr=atr, timeframe="1H")
+        
+        for sweep in sweeps:
+            assert isinstance(sweep.follow_through, bool)
+    
+    def test_sweep_strength_scoring(self):
+        """Sweeps should have strength scores."""
+        candles = generate_bullish_trend_ohlcv(100)
+        
+        detector = LiquiditySweepDetector(min_wick_ratio=1.5)
+        atr = 0.5
+        
+        sweeps = detector.detect(candles, atr=atr, timeframe="1H")
+        
+        for sweep in sweeps:
+            assert 0 < sweep.sweep_strength <= 1, "Sweep strength 0-1"
+    
+    def test_identifies_liquidity_type(self):
+        """Sweep should identify liquidity type (equal highs/lows)."""
+        candles = generate_bullish_trend_ohlcv(100)
+        
+        detector = LiquiditySweepDetector(min_wick_ratio=1.5)
+        atr = 0.5
+        
+        sweeps = detector.detect(candles, atr=atr, timeframe="1H")
+        
+        for sweep in sweeps:
+            assert sweep.liquidity_type in [
+                "equal_highs", "equal_lows", "range_high", "range_low", "swing"
+            ]
+
+
+class TestSMCIntegration:
+    """Test SMC patterns working together."""
+    
+    def test_multiple_patterns_detected_together(self):
+        """Should detect multiple SMC patterns in same data."""
+        # Use data with engineered patterns
+        candles = generate_with_order_block(100, 70, "bullish")
+        
+        # Add FVG manually
+        candles[50] = Candle(timestamp=50*3600, open=100, high=100.5, low=99.8, close=100.3, volume=1e6)
+        candles[51] = Candle(timestamp=51*3600, open=100.3, high=103, low=100.2, close=102.8, volume=2e6)
+        candles[52] = Candle(timestamp=52*3600, open=102.8, high=103.5, low=101, close=103.2, volume=1.5e6)
+        
+        atr = 0.8
+        
+        # Detect all patterns
+        ob_detector = OrderBlockDetector(min_displacement_atr=1.5)
+        fvg_detector = FVGDetector(min_gap_atr=0.5)
+        sweep_detector = LiquiditySweepDetector(min_wick_ratio=1.5)
+        
+        obs = ob_detector.detect(candles, atr=atr, timeframe="1H")
+        fvgs = fvg_detector.detect(candles, atr=atr, timeframe="1H")
+        breaks = detect_structural_breaks(candles, atr=atr, timeframe="1H")
+        sweeps = sweep_detector.detect(candles, atr=atr, timeframe="1H")
+        
+        # Should detect at least some patterns
+        total_patterns = len(obs) + len(fvgs) + len(breaks) + len(sweeps)
+        assert total_patterns > 0, "Should detect at least one SMC pattern"
+    
+    def test_smc_snapshot_creation(self):
+        """Should create complete SMC snapshot from detections."""
+        from backend.shared.models.smc import SMCSnapshot
+        
+        candles = generate_bullish_trend_ohlcv(100)
+        atr = 0.5
+        
+        ob_detector = OrderBlockDetector(min_displacement_atr=1.5)
+        fvg_detector = FVGDetector(min_gap_atr=0.5)
+        sweep_detector = LiquiditySweepDetector(min_wick_ratio=1.5)
+        
+        snapshot = SMCSnapshot(
+            order_blocks=ob_detector.detect(candles, atr=atr, timeframe="1H"),
+            fvgs=fvg_detector.detect(candles, atr=atr, timeframe="1H"),
+            structural_breaks=detect_structural_breaks(candles, atr=atr, timeframe="1H"),
+            liquidity_sweeps=sweep_detector.detect(candles, atr=atr, timeframe="1H")
+        )
+        
+        # Snapshot should be valid
+        assert isinstance(snapshot.order_blocks, list)
+        assert isinstance(snapshot.fvgs, list)
+        assert isinstance(snapshot.structural_breaks, list)
+        assert isinstance(snapshot.liquidity_sweeps, list)

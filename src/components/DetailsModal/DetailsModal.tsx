@@ -7,6 +7,31 @@ import { RegimeIndicator } from '@/components/RegimeIndicator';
 import { ConvictionBadge } from '@/components/ConvictionBadge';
 import { TrendUp, TrendDown, Activity, Shield, Warning } from '@phosphor-icons/react';
 
+function formatAtrLabel(label: string, atrPct?: number) {
+  const raw = (label || '').toString();
+  const normalized = raw.trim().toUpperCase();
+  // Hide opaque codes like "LOCAL53" or "SYMBOL53"; show friendly volatility bands
+  const isOpaque = /^(LOCAL|SYMBOL)[0-9]+$/.test(normalized);
+  if (isOpaque) {
+    const pct = typeof atrPct === 'number' ? atrPct : undefined;
+    if (typeof pct === 'number') {
+      if (pct >= 3.0) return 'Volatility: Chaotic';
+      if (pct >= 2.0) return 'Volatility: Elevated';
+      if (pct >= 1.2) return 'Volatility: Normal';
+      return 'Volatility: Compressed';
+    }
+    return 'Volatility: Unknown';
+  }
+  // Map known regime labels if provided by backend
+  const map: Record<string, string> = {
+    COMPRESSED: 'Volatility: Compressed',
+    NORMAL: 'Volatility: Normal',
+    ELEVATED: 'Volatility: Elevated',
+    CHAOTIC: 'Volatility: Chaotic',
+  };
+  return map[normalized] || normalized;
+}
+
 interface DetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -15,13 +40,13 @@ interface DetailsModalProps {
 
 export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
   const adaptiveDigits = (v: number) => {
-    if (v >= 1000) return 2; // large numbers
-    if (v >= 100) return 2;
-    if (v >= 10) return 2;
-    if (v >= 1) return 3; // mid-priced
-    if (v >= 0.1) return 4; // low-priced
-    if (v >= 0.01) return 5; // micro-priced
-    return 6; // ultra low
+    if (v >= 1000) return 5; // large numbers - show more precision
+    if (v >= 100) return 5;
+    if (v >= 10) return 5;
+    if (v >= 1) return 5; // mid-priced
+    if (v >= 0.1) return 5; // low-priced
+    if (v >= 0.01) return 6; // micro-priced
+    return 7; // ultra low
   };
   const formatNum = (value: number | undefined | null, digits?: number) => {
     if (value === undefined || value === null || Number.isNaN(value as number)) return '-';
@@ -257,7 +282,7 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
                       <div className="mt-3 flex flex-wrap items-center gap-3">
                         <div className="text-xs text-muted-foreground">ATR Regime:</div>
                         <Badge variant="outline" className="font-mono">
-                          {result.atrRegimeLabel.toUpperCase()} • {formatNum(result.atrPct, 2)}%
+                          {formatAtrLabel(result.atrRegimeLabel, result.atrPct)} • {formatNum(result.atrPct, 2)}%
                         </Badge>
                         <div className="text-xs text-muted-foreground flex items-center gap-1">
                           <span>Buffer (used/recommended):</span>

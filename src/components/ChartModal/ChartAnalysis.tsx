@@ -11,6 +11,17 @@ interface ChartAnalysisProps {
   result: ScanResult;
 }
 
+// Helper function for adaptive number formatting
+const formatAdaptive = (v: number) => {
+  if (v >= 1000) return v.toFixed(5);
+  if (v >= 100) return v.toFixed(5);
+  if (v >= 10) return v.toFixed(5);
+  if (v >= 1) return v.toFixed(5);
+  if (v >= 0.1) return v.toFixed(5);
+  if (v >= 0.01) return v.toFixed(6);
+  return v.toFixed(7);
+};
+
 export function ChartAnalysis({ result }: ChartAnalysisProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
@@ -22,15 +33,7 @@ export function ChartAnalysis({ result }: ChartAnalysisProps) {
       if (!(window as any).spark || typeof (window as any).spark.llm !== 'function') {
         throw new Error('Spark is not available in this environment.');
       }
-      const formatAdaptive = (v: number) => {
-        if (v >= 1000) return v.toFixed(2);
-        if (v >= 100) return v.toFixed(2);
-        if (v >= 10) return v.toFixed(2);
-        if (v >= 1) return v.toFixed(3);
-        if (v >= 0.1) return v.toFixed(4);
-        if (v >= 0.01) return v.toFixed(5);
-        return v.toFixed(6);
-      };
+
       const promptText = `You are a professional crypto trader analyzing a ${result.pair} trading setup.
 
 **Market Data:**

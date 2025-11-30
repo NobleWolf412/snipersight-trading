@@ -17,7 +17,7 @@ import { ScannerConsole } from '@/components/ScannerConsole';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
-  const { scanConfig, setScanConfig, selectedMode, addConsoleLog } = useScanner();
+  const { scanConfig, setScanConfig, selectedMode, addConsoleLog, clearConsoleLogs } = useScanner();
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<{ current: number; total: number; symbol?: string } | null>(null);
   const { toast } = useToast();
@@ -29,17 +29,13 @@ export function ScannerSetup() {
     setTopPairsInput(scanConfig.topPairs.toString());
   }, [scanConfig.topPairs]);
 
+  // Clear any stale console logs when arriving on setup screen if not actively scanning
+  useEffect(() => {
+    clearConsoleLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleArmScanner = async () => {
-    console.log(`[ScannerSetup] 🎯 ARMING SCANNER with mode: ${scanConfig.sniperMode.toUpperCase()}`);
-    console.log('[ScannerSetup] Scan configuration:', {
-      mode: scanConfig.sniperMode,
-      exchange: scanConfig.exchange,
-      leverage: scanConfig.leverage,
-      topPairs: scanConfig.topPairs,
-      minScore: selectedMode?.min_confluence_score,
-      timeframes: scanConfig.timeframes,
-      categories: scanConfig.categories
-    });
     setIsScanning(true);
     setScanProgress({ current: 0, total: 0 });
     

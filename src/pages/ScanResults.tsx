@@ -16,6 +16,8 @@ import { HomeButton } from '@/components/layout/HomeButton';
 import { RejectionSummary } from '@/components/RejectionSummary';
 import { RegimeIndicator } from '@/components/RegimeIndicator';
 import { ConvictionBadge } from '@/components/ConvictionBadge';
+import { api } from '@/utils/api';
+import type { RegimeMetadata } from '@/types/regime';
 
 export function ScanResults() {
   const navigate = useNavigate();
@@ -28,6 +30,8 @@ export function ScanResults() {
   const [showMetadata, setShowMetadata] = useState(true);
   const [showResults, setShowResults] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [globalRegime, setGlobalRegime] = useState<RegimeMetadata | undefined>(undefined);
+  const [symbolRegimes, setSymbolRegimes] = useState<Record<string, RegimeMetadata | undefined>>({});
 
   useEffect(() => {
     try {
@@ -75,6 +79,50 @@ export function ScanResults() {
       setIsLoading(false);
     }
   }, []);
+
+  // Fetch global market regime as a fallback when per-result regime is missing
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await api.getMarketRegime();
+      if (cancelled || !data) return;
+      const meta: RegimeMetadata = {
+        global_regime: {
+          composite: data.composite,
+          score: data.score,
+          trend: data.dimensions.trend as RegimeMetadata['global_regime']['trend'],
+          volatility: data.dimensions.volatility as RegimeMetadata['global_regime']['volatility'],
+          liquidity: data.dimensions.liquidity as RegimeMetadata['global_regime']['liquidity'],
+        }
+      };
+      setGlobalRegime(meta);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Hydrate top N results with per-symbol regime if available
+  useEffect(() => {
+    const topSymbols = (scanResults || []).slice(0, 6).map(r => r.pair);
+    if (!topSymbols.length) return;
+    let cancelled = false;
+    (async () => {
+      const updates: Record<string, RegimeMetadata | undefined> = {};
+      await Promise.all(topSymbols.map(async (pair) => {
+        const symbol = pair; // API expects same format as getPrice (e.g., 'BTC/USDT')
+        const { data } = await api.getSymbolRegime(symbol);
+        if (!data) return;
+        updates[pair] = {
+          symbol_regime: {
+            trend: data.trend as RegimeMetadata['symbol_regime']['trend'],
+            volatility: data.volatility as RegimeMetadata['symbol_regime']['volatility'],
+            score: data.score,
+          }
+        };
+      }));
+      if (!cancelled) setSymbolRegimes(prev => ({ ...prev, ...updates }));
+    })();
+    return () => { cancelled = true; };
+  }, [scanResults]);
 
   const results = scanResults || [];
   
@@ -361,7 +409,7 @@ export function ScanResults() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <RegimeIndicator regime={result.regime} size="sm" />
+                          <RegimeIndicator regime={symbolRegimes[result.pair] || result.regime || globalRegime} size="sm" />
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">

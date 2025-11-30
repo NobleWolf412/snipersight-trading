@@ -19,24 +19,47 @@ export function RegimeIndicator({ regime, size = 'md' }: RegimeIndicatorProps) {
 
   const global = regime.global_regime;
   const symbol = regime.symbol_regime;
+  const labelMap: Record<string, { label: string }> = {
+    ALTSEASON: { label: 'Altseason' },
+    BTC_DRIVE: { label: 'BTC Drive' },
+    DEFENSIVE: { label: 'Defensive' },
+    PANIC: { label: 'Panic' },
+    CHOPPY: { label: 'Choppy' },
+    NEUTRAL: { label: 'Choppy' },
+  };
+  const guidanceMap: Record<string, string> = {
+    ALTSEASON: 'Risk-on; favor alt momentum entries',
+    BTC_DRIVE: 'Favor BTC-led trends; be selective on alts',
+    DEFENSIVE: 'Size down; prefer high-quality setups',
+    PANIC: 'Avoid fresh entries; wait for stabilization',
+    CHOPPY: 'Range-bound; avoid breakouts, trade extremes',
+    NEUTRAL: 'Range-bound; avoid breakouts, trade extremes',
+  };
+  const globalComposite = (global?.composite || 'NEUTRAL').toUpperCase();
+  const friendlyGlobalLabel = labelMap[globalComposite]?.label || globalComposite;
+  const guidance = guidanceMap[globalComposite] || '';
 
   return (
     <div className={`flex items-center gap-2 ${size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-base' : 'text-sm'}`}>
       {global && (
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-background/50 border border-border/50">
+        <div className="flex items-center gap-2 px-2 py-1 rounded bg-background/50 border border-border/50" title="Global market regime: affects scoring and risk controls">
+          <span className="font-semibold text-foreground">{friendlyGlobalLabel}</span>
           <TrendIcon trend={global.trend} size={size} />
-          <span className="font-medium text-muted-foreground">
-            {formatTrend(global.trend)}
-          </span>
+          <span className="font-medium text-muted-foreground">{formatTrend(global.trend)}</span>
           <VolatilityIcon volatility={global.volatility} size={size} />
           <RegimeScore score={global.score} size={size} />
+          {guidance && (
+            <span className="ml-2 text-muted-foreground/80">
+              {guidance}
+            </span>
+          )}
         </div>
       )}
       
       {symbol && (
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-accent/10 border border-accent/30">
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-accent/10 border border-accent/30" title="Symbol-specific regime: local trend and volatility context">
           <TrendIcon trend={symbol.trend} size={size} />
-          <span className="text-xs text-accent">Local</span>
+          <span className="text-xs text-accent">Symbol</span>
           <RegimeScore score={symbol.score} size={size} accent />
         </div>
       )}

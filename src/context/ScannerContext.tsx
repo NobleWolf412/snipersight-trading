@@ -137,7 +137,8 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
   
   const [scannerModes, setScannerModes] = useState<ScannerMode[]>(fallbackModes);
   const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(null);
-  const [consoleLogs, setConsoleLogs] = useLocalStorage<ConsoleLog[]>('scanner-console-logs', []);
+  // Console logs should be ephemeral per session; do NOT persist in localStorage
+  const [consoleLogs, setConsoleLogs] = useState<ConsoleLog[]>([]);
 
   const addConsoleLog = (message: string, type: ConsoleLog['type'] = 'info') => {
     setConsoleLogs([...consoleLogs, { timestamp: Date.now(), message, type }]);

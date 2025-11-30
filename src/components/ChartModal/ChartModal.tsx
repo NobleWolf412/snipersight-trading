@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -16,7 +18,8 @@ interface ChartModalProps {
 export function ChartModal({ isOpen, onClose, result }: ChartModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto">
+      {/* Responsive: use viewport width on mobile; keep content simple */}
+      <DialogContent className="w-[95vw] sm:max-w-5xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <span>{result.pair}</span>
@@ -35,8 +38,11 @@ export function ChartModal({ isOpen, onClose, result }: ChartModalProps) {
             <TabsTrigger value="levels">Level Details</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="chart" className="space-y-4">
-            <TradingViewChart result={result} />
+          <TabsContent value="chart" className={"space-y-4"}>
+            {/* Simple fixed-height container; TradingView fills it without stretching */}
+            <div className="w-full h-[60vh]">
+              <TradingViewChart result={result} />
+            </div>
           </TabsContent>
 
           <TabsContent value="analysis" className="space-y-4">
@@ -54,11 +60,11 @@ export function ChartModal({ isOpen, onClose, result }: ChartModalProps) {
                 <div className="bg-success/10 border border-success/50 rounded p-3 space-y-1">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">High:</span>
-                    <span className="font-mono text-success">${result.entryZone.high.toFixed(2)}</span>
+                    <span className="font-mono text-success">${result.entryZone.high.toFixed(5)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Low:</span>
-                    <span className="font-mono text-success">${result.entryZone.low.toFixed(2)}</span>
+                    <span className="font-mono text-success">${result.entryZone.low.toFixed(5)}</span>
                   </div>
                 </div>
               </div>
@@ -68,7 +74,7 @@ export function ChartModal({ isOpen, onClose, result }: ChartModalProps) {
                 <div className="bg-destructive/10 border border-destructive/50 rounded p-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Level:</span>
-                    <span className="font-mono text-destructive">${result.stopLoss.toFixed(2)}</span>
+                    <span className="font-mono text-destructive">${result.stopLoss.toFixed(5)}</span>
                   </div>
                 </div>
               </div>
@@ -80,7 +86,7 @@ export function ChartModal({ isOpen, onClose, result }: ChartModalProps) {
                 {result.takeProfits.map((tp, i) => (
                   <div key={i} className="bg-accent/10 border border-accent/50 rounded p-3">
                     <div className="text-xs text-muted-foreground mb-1">TP{i + 1}</div>
-                    <div className="font-mono text-accent font-bold">${tp.toFixed(2)}</div>
+                    <div className="font-mono text-accent font-bold">${tp.toFixed(5)}</div>
                   </div>
                 ))}
               </div>
@@ -100,7 +106,7 @@ export function ChartModal({ isOpen, onClose, result }: ChartModalProps) {
                         </Badge>
                         <span className="text-muted-foreground">{ob.timeframe}</span>
                       </div>
-                      <div className="font-mono mt-1">${ob.price.toFixed(2)}</div>
+                      <div className="font-mono mt-1">${ob.price.toFixed(5)}</div>
                     </div>
                   ))}
                 </div>
@@ -117,11 +123,11 @@ export function ChartModal({ isOpen, onClose, result }: ChartModalProps) {
                       <div className="space-y-1">
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">High:</span>
-                          <span className="font-mono">${fvg.high.toFixed(2)}</span>
+                          <span className="font-mono">${fvg.high.toFixed(5)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Low:</span>
-                          <span className="font-mono">${fvg.low.toFixed(2)}</span>
+                          <span className="font-mono">${fvg.low.toFixed(5)}</span>
                         </div>
                       </div>
                     </div>

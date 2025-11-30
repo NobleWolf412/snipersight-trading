@@ -307,6 +307,17 @@ class ApiClient {
     }>('/market/regime');
   }
 
+  // Optional: symbol-specific regime (if backend supports symbol query)
+  async getSymbolRegime(symbol: string) {
+    return this.request<{
+      symbol: string;
+      trend: string;
+      volatility: string;
+      score: number;
+      timestamp: string;
+    }>(`/market/regime?symbol=${encodeURIComponent(symbol)}`);
+  }
+
   // Background scan jobs
   async createScanRun(params: {
     limit?: number;

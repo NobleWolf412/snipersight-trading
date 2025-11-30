@@ -5,7 +5,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -198,6 +198,9 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                               Close
                             </Button>
                           </div>
+                          <DialogDescription className="text-sm text-muted-foreground">
+                            Detailed breakdown of all {reasonDetails.length} symbols rejected for {config.label.toLowerCase()}
+                          </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4">
                           {reasonDetails.map((detail, idx) => (
@@ -278,6 +281,9 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                             <TrendDown className="w-5 h-5 text-yellow-400" />
                             Rejection Analysis: {detail.symbol}
                           </DialogTitle>
+                          <DialogDescription className="text-sm text-muted-foreground">
+                            Detailed confluence factor breakdown and rejection rationale for {detail.symbol}
+                          </DialogDescription>
                         </DialogHeader>
                         
                         <div className="space-y-6">
