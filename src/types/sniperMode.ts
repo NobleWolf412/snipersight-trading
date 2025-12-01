@@ -3,7 +3,7 @@ export type SniperMode =
   | 'recon'
   | 'strike'
   | 'surgical'
-  | 'rapid-fire'
+  | 'ghost'
   | 'custom';
 
 export interface SniperModeConfig {
@@ -58,15 +58,15 @@ export const SNIPER_MODES: Record<SniperMode, SniperModeConfig> = {
     riskReward: 2.2,
     icon: '🎯'
   },
-  'rapid-fire': {
-    mode: 'rapid-fire',
-    name: '🔥 Rapid Fire',
-    description: 'High-frequency engagement. Multiple quick strikes, maximum precision required.',
-    timeframes: ['15m', '5m', '1m'],
-    minConfluence: 65,
-    holdingPeriod: 'Seconds to minutes',
-    riskReward: 2.0,
-    icon: '🔥'
+  'ghost': {
+    mode: 'ghost',
+    name: '👻 Ghost',
+    description: 'Stealth surveillance across mixed horizons. Nimble, low profile, reduced macro drag.',
+    timeframes: ['1d', '4h', '1h', '15m', '5m'],
+    minConfluence: 70,
+    holdingPeriod: 'Hours to days',
+    riskReward: 1.8,
+    icon: '👻'
   },
   'custom': {
     mode: 'custom',

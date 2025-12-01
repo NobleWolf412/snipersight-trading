@@ -1,5 +1,5 @@
 /* @refresh skip */
-import { createContext, useContext, ReactNode, useEffect, useState } from 'react';
+import { createContext, useContext, ReactNode, useEffect, useState, useCallback } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import type { SniperMode } from '@/types/sniperMode';
 import { api } from '@/utils/api';
@@ -184,15 +184,15 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
   const [htfOpportunities, setHtfOpportunities] = useState<ScannerContextType['htfOpportunities']>([]);
   const [hasHTFAlert, setHasHTFAlert] = useState(false);
 
-  const addConsoleLog = (message: string, type: ConsoleLog['type'] = 'info') => {
-    setConsoleLogs([...consoleLogs, { timestamp: Date.now(), message, type }]);
-  };
+  const addConsoleLog = useCallback((message: string, type: ConsoleLog['type'] = 'info') => {
+    setConsoleLogs(prev => [...prev, { timestamp: Date.now(), message, type }]);
+  }, []);
 
-  const clearConsoleLogs = () => {
+  const clearConsoleLogs = useCallback(() => {
     setConsoleLogs([]);
-  };
+  }, []);
 
-  const refreshHTFOpportunities = async (): Promise<void> => {
+  const refreshHTFOpportunities = useCallback(async (): Promise<void> => {
     try {
       const res = await api.getHTFOpportunities({ min_confidence: 65 });
       if (res.data) {
@@ -216,14 +216,14 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       // Silent ignore
     }
-  };
+  }, []);
 
   // Poll HTF tactical opportunities every 60s
   useEffect(() => {
     refreshHTFOpportunities();
     const id = setInterval(() => refreshHTFOpportunities(), 60000);
     return () => clearInterval(id);
-  }, []);
+  }, [refreshHTFOpportunities]);
 
   const refreshModes = async (): Promise<void> => {
     console.log('[ScannerContext] Fetching modes from backend...');

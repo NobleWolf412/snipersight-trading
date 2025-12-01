@@ -4,6 +4,7 @@ import { priceService } from '@/services/priceService';
 import { ArrowUp, ArrowDown } from '@phosphor-icons/react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { formatPrice } from '@/utils/formatters';
 
 interface PriceDisplayProps {
   symbol: string;
@@ -52,12 +53,6 @@ export function PriceDisplay({
 
   const isPositive = priceData.changePercent24h >= 0;
   const changeColor = isPositive ? 'text-success' : 'text-destructive';
-
-  const formatPrice = (price: number) => {
-    if (price >= 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    if (price >= 1) return price.toFixed(4);
-    return price.toFixed(6);
-  };
 
   const formatVolume = (volume: number) => {
     if (volume >= 1e9) return `${(volume / 1e9).toFixed(2)}B`;

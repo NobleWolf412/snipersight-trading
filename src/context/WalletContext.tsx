@@ -1,5 +1,5 @@
 /* @refresh skip */
-import { createContext, useContext, ReactNode, useEffect } from 'react';
+import { createContext, useContext, ReactNode, useEffect, useCallback } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 
 export interface WalletConnection {
@@ -29,6 +29,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const isConnected = !!(wallet && wallet.address);
 
   console.log('[WalletContext] Provider ready, isConnected:', isConnected);
+
+  // Define disconnect first since it's used in useEffect handlers
+  const disconnect = useCallback(async () => {
+    setWallet(null);
+  }, [setWallet]);
 
   useEffect(() => {
     if (wallet && wallet.address && window.ethereum) {
@@ -60,7 +65,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         eth.removeListener('disconnect', handleDisconnect);
       };
     }
-  }, [wallet?.address]);
+  }, [wallet?.address, disconnect, setWallet]);
 
   const connect = async (provider: 'metamask' | 'walletconnect' | 'coinbase') => {
     setIsConnecting(true);
@@ -96,10 +101,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsConnecting(false);
     }
-  };
-
-  const disconnect = async () => {
-    setWallet(null);
   };
 
   const switchChain = async (chainId: number) => {

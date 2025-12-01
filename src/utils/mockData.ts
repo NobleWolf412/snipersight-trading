@@ -29,6 +29,19 @@ export interface ScanResult {
   conviction_class?: ConvictionClass;
   missing_critical_timeframes?: string[];
   regime?: RegimeMetadata;
+  // Trade rationale and metadata from backend
+  rationale?: string;
+  metadata?: {
+    exchange?: string;
+    leverage?: number;
+    mode?: string;
+    scanned?: number;
+    rejected?: number;
+    appliedTimeframes?: string[];
+    effectiveMinScore?: number;
+    criticalTimeframes?: string[];
+    [key: string]: unknown;
+  };
   // Optional SMC geometry from backend for accurate overlays
   smc_geometry?: {
     order_blocks?: any[];

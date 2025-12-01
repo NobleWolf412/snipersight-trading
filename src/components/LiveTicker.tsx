@@ -30,11 +30,7 @@ const DEFAULT_SYMBOLS = [
   'FIL/USDT',
 ];
 
-const formatPrice = (price: number) => {
-  if (price >= 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (price >= 1) return price.toFixed(4);
-  return price.toFixed(6);
-};
+import { formatPrice } from '@/utils/formatters';
 
 const TickerItem = memo(({ symbol, price, changePercent24h }: { symbol: string; price?: number; changePercent24h?: number }) => {
   const [flash, setFlash] = useState<'up' | 'down' | null>(null);
