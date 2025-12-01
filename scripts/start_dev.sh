@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p logs
-# Standard dev ports: Backend 5000 (FastAPI), Frontend 5173 (Vite)
-FRONTEND_PORT=${FRONTEND_PORT:-5173}
-BACKEND_PORT=${BACKEND_PORT:-5000}
+# Preferred (user env): Frontend 5000 (Vite), Backend 8001 (FastAPI)
+FRONTEND_PORT_DEFAULT=5000
+BACKEND_PORT_DEFAULT=8001
+FORCE_PORTS=${FORCE_PORTS:-1}
+FRONTEND_PORT=${FRONTEND_PORT:-$FRONTEND_PORT_DEFAULT}
+BACKEND_PORT=${BACKEND_PORT:-$BACKEND_PORT_DEFAULT}
 
 # Load local environment overrides if present (auto-export)
 if [[ -f .env.local ]]; then
@@ -11,6 +14,12 @@ if [[ -f .env.local ]]; then
 	set -a
 	source .env.local
 	set +a
+fi
+
+# Force ports to known-good defaults unless explicitly disabled
+if [[ "$FORCE_PORTS" == "1" ]]; then
+	FRONTEND_PORT="$FRONTEND_PORT_DEFAULT"
+	BACKEND_PORT="$BACKEND_PORT_DEFAULT"
 fi
 
 echo "Starting backend on :$BACKEND_PORT"
@@ -30,7 +39,20 @@ if ss -ltnp | grep -q ":$FRONTEND_PORT"; then
 	pkill -f "node" || true
 fi
 
-nohup ./.venv/bin/python -m uvicorn backend.api_server:app --host 0.0.0.0 --port $BACKEND_PORT --reload > logs/backend.log 2>&1 &
+# Backend hot-reload controls
+# - By default we run with --reload for live iteration
+# - Set START_DEV_NO_RELOAD=1 to disable reload (stability for long curls/tests)
+# - Use UVICORN_EXTRA to pass additional flags (e.g., "--reload-include backend --reload-exclude logs")
+START_DEV_NO_RELOAD=${START_DEV_NO_RELOAD:-0}
+UVICORN_EXTRA=${UVICORN_EXTRA:-}
+
+if [[ "$START_DEV_NO_RELOAD" == "1" ]]; then
+	echo "Starting backend WITHOUT reload on :$BACKEND_PORT"
+	nohup ./.venv/bin/python -m uvicorn backend.api_server:app --host 0.0.0.0 --port $BACKEND_PORT $UVICORN_EXTRA > logs/backend.log 2>&1 &
+else
+	echo "Starting backend WITH reload on :$BACKEND_PORT"
+	nohup ./.venv/bin/python -m uvicorn backend.api_server:app --host 0.0.0.0 --port $BACKEND_PORT --reload $UVICORN_EXTRA > logs/backend.log 2>&1 &
+fi
 BACK_PID=$!
 
 echo "Starting frontend on :$FRONTEND_PORT"
@@ -52,9 +74,8 @@ export PORT=$FRONTEND_PORT
 export FRONTEND_PORT=$FRONTEND_PORT
 export HOST_BIND=0.0.0.0
 export BACKEND_URL="http://localhost:$BACKEND_PORT"
-nohup npm run dev > logs/frontend.log 2>&1 &
+nohup npm run dev:frontend > logs/frontend.log 2>&1 &
 FRONT_PID=$!
-
 echo "Backend PID: $BACK_PID"
 echo "Frontend PID: $FRONT_PID"
 
@@ -62,3 +83,16 @@ echo "Use: tail -f logs/backend.log | sed -n '1,120p' and tail -f logs/frontend.
 echo "Stop with: kill $BACK_PID $FRONT_PID"
 echo "Quick health: curl -sS http://127.0.0.1:$BACKEND_PORT/api/health"
 echo "Or run: pkill -f uvicorn; pkill -f vite"
+
+# Optional: wait for backend to be ready before returning
+HEALTH_CHECK=${HEALTH_CHECK:-1}
+if [[ "$HEALTH_CHECK" == "1" ]]; then
+	echo "Waiting for backend health on :$BACKEND_PORT ..."
+	for _ in {1..30}; do
+		if curl -sS "http://127.0.0.1:$BACKEND_PORT/api/health" >/dev/null; then
+			echo "Backend is healthy."
+			break
+		fi
+		sleep 1
+	done
+fi
