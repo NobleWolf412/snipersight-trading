@@ -517,8 +517,9 @@ class Orchestrator:
                 symbol=symbol,
                 timeframes=list(self.config.timeframes)
             )
-        except Exception:  # pyright: ignore - intentional broad catch for robustness
-            logger.error("Data ingestion failed for %s", symbol)
+        except Exception as e:
+            logger.error("Data ingestion failed for %s: %s", symbol, e)
+            self.diagnostics['data_failures'].append({'symbol': symbol, 'error': str(e)})
             return None
     
     def _compute_indicators(self, multi_tf_data: MultiTimeframeData) -> IndicatorSet:
@@ -547,7 +548,8 @@ class Orchestrator:
                 macd_line, macd_signal, macd_hist = (None, None, None)
                 try:
                     macd_line, macd_signal, macd_hist = compute_macd(df)
-                except Exception:
+                except Exception as e:
+                    logger.debug("MACD computation failed for %s: %s", timeframe, e)
                     macd_line, macd_signal = (None, None)
                 
                 # Volatility indicators  
@@ -556,8 +558,8 @@ class Orchestrator:
                 realized_vol = None
                 try:
                     realized_vol = compute_realized_volatility(df)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Realized volatility computation failed for %s: %s", timeframe, e)
                 
                 # Volume indicators
                 volume_spike = detect_volume_spike(df)
@@ -566,8 +568,8 @@ class Orchestrator:
                 volume_ratio = None
                 try:
                     volume_ratio = compute_relative_volume(df)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Volume ratio computation failed for %s: %s", timeframe, e)
                 
                 # Create indicator snapshot
                 # Handle stoch_rsi tuple (K, D) - extract both K and D values
@@ -620,13 +622,14 @@ class Orchestrator:
                             snapshot.macd_line_series = macd_line.iloc[-n_persist:].tolist()  # type: ignore[attr-defined]
                             snapshot.macd_signal_series = macd_signal.iloc[-n_persist:].tolist()  # type: ignore[attr-defined]
                             snapshot.macd_histogram_series = macd_hist.iloc[-n_persist:].tolist()  # type: ignore[attr-defined]
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("MACD series persistence failed for %s: %s", timeframe, e)
                 
                 by_timeframe[timeframe] = snapshot
                 
-            except Exception:  # noqa: BLE001  # type: ignore[misc] - intentional broad catch for robustness
-                logger.warning("Indicator computation failed")
+            except Exception as e:
+                logger.warning("Indicator computation failed for %s: %s", timeframe, e)
+                self.diagnostics['indicator_failures'].append({'timeframe': timeframe, 'error': str(e)})
                 continue
         
         return IndicatorSet(by_timeframe=by_timeframe)
@@ -667,8 +670,9 @@ class Orchestrator:
                 sweeps = detect_liquidity_sweeps(df, self.smc_config)
                 all_liquidity_sweeps.extend(sweeps)
                 
-            except Exception:  # noqa: BLE001  # type: ignore[misc] - intentional broad catch for robustness
-                logger.warning("SMC detection failed")
+            except Exception as e:
+                logger.warning("SMC detection failed for %s: %s", _timeframe, e)
+                self.diagnostics['smc_rejections'].append({'timeframe': _timeframe, 'error': str(e)})
                 continue
         
         return SMCSnapshot(

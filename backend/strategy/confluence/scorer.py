@@ -391,6 +391,18 @@ def calculate_confluence_score(
     
     # --- Normalize Weights ---
     
+    # If no factors present, return minimal breakdown
+    if not factors:
+        return ConfluenceBreakdown(
+            total_score=0.0,
+            factors=[],
+            synergy_bonus=0.0,
+            conflict_penalty=0.0,
+            regime="unknown",
+            htf_aligned=False,
+            btc_impulse_gate=True
+        )
+    
     # If not all factors present, weights won't sum to 1.0 - normalize them
     total_weight = sum(f.weight for f in factors)
     if total_weight > 0 and abs(total_weight - 1.0) > 0.01:

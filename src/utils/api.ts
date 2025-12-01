@@ -2,6 +2,7 @@
  * API Client for SniperSight Backend
  * 
  * Provides typed methods for interacting with the FastAPI backend.
+ * Includes retry logic with exponential backoff and request timeouts.
  */
 
 // Resolve API base: prefer Vite env, fallback to same-origin '/api' or localhost:8001
@@ -11,9 +12,21 @@ const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env
       ? 'http://localhost:8001/api'
       : '/api');
 
+// Retry configuration
+const DEFAULT_TIMEOUT_MS = 30000; // 30 seconds
+const DEFAULT_MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 1000;
+const RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504];
+
 interface ApiResponse<T> {
   data?: T;
   error?: string;
+}
+
+interface RequestOptions extends RequestInit {
+  timeout?: number;
+  maxRetries?: number;
+  skipRetry?: boolean;
 }
 
 // Scanner types
@@ -119,48 +132,120 @@ export interface OrderRequest {
 class ApiClient {
   public readonly baseURL = API_BASE;
 
+  /**
+   * Sleep for specified milliseconds
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Check if error is retryable
+   */
+  private isRetryable(status: number): boolean {
+    return RETRYABLE_STATUS_CODES.includes(status);
+  }
+
+  /**
+   * Calculate exponential backoff delay with jitter
+   */
+  private getRetryDelay(attempt: number): number {
+    const baseDelay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+    const jitter = Math.random() * 0.3 * baseDelay; // 0-30% jitter
+    return Math.min(baseDelay + jitter, 10000); // Cap at 10s
+  }
+
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestOptions = {}
   ): Promise<ApiResponse<T>> {
-    try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-      });
+    const {
+      timeout = DEFAULT_TIMEOUT_MS,
+      maxRetries = DEFAULT_MAX_RETRIES,
+      skipRetry = false,
+      ...fetchOptions
+    } = options;
 
-      if (!response.ok) {
-        // Try JSON error first; fall back to text or generic message.
-        try {
-          const errJson = await response.json();
-          return { error: (errJson && (errJson.detail || errJson.error)) || `${response.status} ${response.statusText}` };
-        } catch {
-          try {
-            const errText = await response.text();
-            return { error: errText || `${response.status} ${response.statusText}` };
-          } catch {
-            return { error: `${response.status} ${response.statusText}` };
-          }
-        }
+    let lastError: string = 'Unknown error';
+    
+    for (let attempt = 0; attempt <= (skipRetry ? 0 : maxRetries); attempt++) {
+      // Add delay before retry (not on first attempt)
+      if (attempt > 0) {
+        const delay = this.getRetryDelay(attempt - 1);
+        console.log(`[API] Retry attempt ${attempt}/${maxRetries} after ${Math.round(delay)}ms`);
+        await this.sleep(delay);
       }
 
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        return { data: undefined };
-      }
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
 
       try {
-        const data = await response.json();
-        return { data };
-      } catch {
-        return { data: undefined };
+        const response = await fetch(`${API_BASE}${endpoint}`, {
+          ...fetchOptions,
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            ...fetchOptions.headers,
+          },
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          // Check if retryable status
+          if (!skipRetry && this.isRetryable(response.status) && attempt < maxRetries) {
+            lastError = `${response.status} ${response.statusText}`;
+            continue; // Retry
+          }
+
+          // Try JSON error first; fall back to text or generic message.
+          try {
+            const errJson = await response.json();
+            return { error: (errJson && (errJson.detail || errJson.error)) || `${response.status} ${response.statusText}` };
+          } catch {
+            try {
+              const errText = await response.text();
+              return { error: errText || `${response.status} ${response.statusText}` };
+            } catch {
+              return { error: `${response.status} ${response.statusText}` };
+            }
+          }
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          return { data: undefined };
+        }
+
+        try {
+          const data = await response.json();
+          return { data };
+        } catch {
+          return { data: undefined };
+        }
+      } catch (error) {
+        clearTimeout(timeoutId);
+        
+        if (error instanceof Error) {
+          if (error.name === 'AbortError') {
+            lastError = `Request timeout after ${timeout}ms`;
+          } else {
+            lastError = error.message;
+          }
+          
+          // Network errors are retryable
+          if (!skipRetry && attempt < maxRetries && 
+              (error.name === 'AbortError' || error.message.includes('network') || error.message.includes('fetch'))) {
+            continue; // Retry
+          }
+        }
+        
+        return { error: lastError };
       }
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : 'Unknown error' };
     }
+
+    return { error: `Failed after ${maxRetries} retries: ${lastError}` };
   }
 
   // Health check

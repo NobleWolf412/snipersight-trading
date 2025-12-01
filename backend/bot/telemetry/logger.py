@@ -52,6 +52,7 @@ class TelemetryLogger:
         Log telemetry event.
         
         Persists to storage and adds to in-memory cache.
+        Thread-safe: lock covers both database write and cache update.
         
         Args:
             event: TelemetryEvent to log
@@ -59,33 +60,33 @@ class TelemetryLogger:
         Returns:
             True if successfully logged, False otherwise
         """
-        try:
-            # Store in database
-            db_id = self.storage.store_event(event)
-            
-            # Add to in-memory cache with ID
-            event_dict = event.to_dict()
-            event_dict['id'] = db_id
-            
-            with self._lock:
-                self._cache.append(event_dict)
-            
-            logger.debug(f"Logged event: {event.event_type.value} (id={db_id})")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to log telemetry event: {e}")
-            # Still add to cache even if DB fails
+        # Acquire lock for entire operation to prevent race conditions
+        # between concurrent database writes and cache updates
+        with self._lock:
             try:
+                # Store in database (now under lock)
+                db_id = self.storage.store_event(event)
+                
+                # Add to in-memory cache with ID
                 event_dict = event.to_dict()
-                with self._lock:
+                event_dict['id'] = db_id
+                self._cache.append(event_dict)
+                
+                logger.debug(f"Logged event: {event.event_type.value} (id={db_id})")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Failed to log telemetry event: {e}")
+                # Still add to cache even if DB fails
+                try:
+                    event_dict = event.to_dict()
                     # Use local cache ID if DB failed
                     event_dict['id'] = self._next_cache_id
                     self._next_cache_id += 1
                     self._cache.append(event_dict)
-            except Exception as cache_error:
-                logger.error(f"Failed to cache event: {cache_error}")
-            return False
+                except Exception as cache_error:
+                    logger.error(f"Failed to cache event: {cache_error}")
+                return False
     
     def get_cached_events(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """

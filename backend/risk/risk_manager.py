@@ -217,6 +217,8 @@ class RiskManager:
         5. Weekly loss limit check
         6. Position concentration check
         
+        Thread-safe: acquires lock for reading positions state.
+        
         Args:
             symbol: Trading pair (e.g., 'BTC/USDT')
             direction: 'LONG' or 'SHORT'
@@ -228,43 +230,49 @@ class RiskManager:
         """
         limits_hit = []
         
-        # Check 1: Max open positions
-        if len(self.positions) >= self.max_open_positions:
-            # Allow if replacing existing position in same symbol
-            if symbol not in self.positions:
+        # Acquire lock for thread-safe position reads
+        with self._lock:
+            position_count = len(self.positions)
+            symbol_in_positions = symbol in self.positions
+            
+            # Check 1: Max open positions
+            if position_count >= self.max_open_positions:
+                # Allow if replacing existing position in same symbol
+                if not symbol_in_positions:
+                    return RiskCheck(
+                        passed=False,
+                        reason=f"Max open positions reached ({self.max_open_positions})",
+                        limits_hit=['max_open_positions']
+                    )
+            
+            # Check 2: Asset exposure limit
+            current_exposure = self._get_asset_exposure_unsafe(symbol)
+            new_exposure = current_exposure + position_value
+            max_exposure = self.account_balance * (self.max_asset_exposure_pct / 100)
+            
+            if new_exposure > max_exposure:
                 return RiskCheck(
                     passed=False,
-                    reason=f"Max open positions reached ({self.max_open_positions})",
-                    limits_hit=['max_open_positions']
+                    reason=f"Asset exposure limit exceeded: ${new_exposure:.2f} > ${max_exposure:.2f} "
+                           f"({self.max_asset_exposure_pct}% of account)",
+                    limits_hit=['asset_exposure']
+                )
+            
+            # Check 3: Correlated exposure
+            correlated_exposure = self._get_correlated_exposure_unsafe(symbol)
+            new_correlated_exposure = correlated_exposure + position_value
+            max_correlated = self.account_balance * (self.max_correlated_exposure_pct / 100)
+            
+            if new_correlated_exposure > max_correlated:
+                limits_hit.append('correlated_exposure')
+                return RiskCheck(
+                    passed=False,
+                    reason=f"Correlated exposure limit exceeded: ${new_correlated_exposure:.2f} > "
+                           f"${max_correlated:.2f} ({self.max_correlated_exposure_pct}% of account)",
+                    limits_hit=limits_hit
                 )
         
-        # Check 2: Asset exposure limit
-        current_exposure = self._get_asset_exposure(symbol)
-        new_exposure = current_exposure + position_value
-        max_exposure = self.account_balance * (self.max_asset_exposure_pct / 100)
-        
-        if new_exposure > max_exposure:
-            return RiskCheck(
-                passed=False,
-                reason=f"Asset exposure limit exceeded: ${new_exposure:.2f} > ${max_exposure:.2f} "
-                       f"({self.max_asset_exposure_pct}% of account)",
-                limits_hit=['asset_exposure']
-            )
-        
-        # Check 3: Correlated exposure
-        correlated_exposure = self._get_correlated_exposure(symbol)
-        new_correlated_exposure = correlated_exposure + position_value
-        max_correlated = self.account_balance * (self.max_correlated_exposure_pct / 100)
-        
-        if new_correlated_exposure > max_correlated:
-            limits_hit.append('correlated_exposure')
-            return RiskCheck(
-                passed=False,
-                reason=f"Correlated exposure limit exceeded: ${new_correlated_exposure:.2f} > "
-                       f"${max_correlated:.2f} ({self.max_correlated_exposure_pct}% of account)",
-                limits_hit=limits_hit
-            )
-        
+        # Checks 4-6 don't need lock (use _get_period_loss which has its own considerations)
         # Check 4: Daily loss limit
         daily_loss = self._get_period_loss(hours=24)
         max_daily_loss = self.account_balance * (self.max_daily_loss_pct / 100)
@@ -302,6 +310,56 @@ class RiskManager:
         
         # All checks passed
         return RiskCheck(passed=True, reason="All risk checks passed")
+    
+    def _get_asset_exposure_unsafe(self, symbol: str) -> float:
+        """
+        Calculate current exposure to specific asset (without lock).
+        Caller must hold self._lock.
+        
+        Args:
+            symbol: Trading pair
+            
+        Returns:
+            Total exposure value in quote currency
+        """
+        if symbol in self.positions:
+            return self.positions[symbol].notional_value
+        return 0.0
+    
+    def _get_correlated_exposure_unsafe(self, symbol: str) -> float:
+        """
+        Calculate exposure to correlated assets (without lock).
+        Caller must hold self._lock.
+        
+        Args:
+            symbol: Trading pair to check
+            
+        Returns:
+            Total correlated exposure
+        """
+        correlated_exposure = 0.0
+        
+        # Use dynamic correlation matrix if available
+        if symbol in self.correlation_matrix:
+            for pos_symbol, position in self.positions.items():
+                correlation = self.correlation_matrix.get(symbol, {}).get(pos_symbol, 0.0)
+                if abs(correlation) >= self.correlation_threshold:
+                    correlated_exposure += position.notional_value
+        else:
+            # Fallback to static correlation groups
+            correlated_symbols = set()
+            for group_symbols in self.correlation_groups.values():
+                if symbol in group_symbols:
+                    correlated_symbols.update(group_symbols)
+            
+            if not correlated_symbols:
+                return self._get_asset_exposure_unsafe(symbol)
+            
+            for pos_symbol, position in self.positions.items():
+                if pos_symbol in correlated_symbols:
+                    correlated_exposure += position.notional_value
+        
+        return correlated_exposure
     
     def add_position(
         self,

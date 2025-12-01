@@ -40,9 +40,45 @@ from backend.routers.htf_opportunities import router as htf_router
 
 logger = logging.getLogger(__name__)
 
-# In-memory price cache with TTL to reduce exchange API load
-PRICE_CACHE: Dict[str, Dict[str, Any]] = {}
-PRICE_CACHE_TTL = 5  # seconds
+# Thread-safe price cache with TTL to reduce exchange API load
+import threading
+from collections import OrderedDict
+
+class ThreadSafeCache:
+    """Thread-safe LRU cache with TTL support."""
+    def __init__(self, max_size: int = 1000, ttl: int = 5):
+        self._cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
+        self._lock = threading.Lock()
+        self._max_size = max_size
+        self._ttl = ttl
+    
+    def get(self, key: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            if key not in self._cache:
+                return None
+            entry = self._cache[key]
+            if time.time() - entry.get('_cached_at', 0) > self._ttl:
+                del self._cache[key]
+                return None
+            # Move to end (LRU)
+            self._cache.move_to_end(key)
+            return entry
+    
+    def set(self, key: str, value: Dict[str, Any]) -> None:
+        with self._lock:
+            value['_cached_at'] = time.time()
+            self._cache[key] = value
+            self._cache.move_to_end(key)
+            # Evict oldest if over capacity
+            while len(self._cache) > self._max_size:
+                self._cache.popitem(last=False)
+    
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
+
+PRICE_CACHE = ThreadSafeCache(max_size=1000, ttl=5)
+PRICE_CACHE_TTL = 5  # seconds (for backward compat references)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -177,6 +213,10 @@ from typing import Literal
 
 ScanJobStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
 
+# Scan job configuration
+SCAN_JOB_MAX_AGE_SECONDS = 3600  # Cleanup jobs older than 1 hour
+SCAN_JOB_MAX_COMPLETED = 100  # Keep at most this many completed jobs
+
 class ScanJob:
     def __init__(self, run_id: str, params: dict):
         self.run_id = run_id
@@ -195,6 +235,49 @@ class ScanJob:
         self.task: Optional[asyncio.Task] = None
 
 scan_jobs: Dict[str, ScanJob] = {}
+scan_jobs_lock = threading.Lock()
+
+# Global orchestrator lock for thread-safe config mutations
+orchestrator_lock = threading.Lock()
+
+def cleanup_old_scan_jobs() -> int:
+    """Remove completed/failed jobs older than SCAN_JOB_MAX_AGE_SECONDS.
+    
+    Returns number of jobs cleaned up.
+    """
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(seconds=SCAN_JOB_MAX_AGE_SECONDS)
+    cleaned = 0
+    
+    with scan_jobs_lock:
+        # Collect jobs to remove
+        to_remove = []
+        completed_jobs = []
+        
+        for run_id, job in scan_jobs.items():
+            if job.status in ('completed', 'failed', 'cancelled'):
+                completed_jobs.append((job.completed_at or job.created_at, run_id))
+                if job.completed_at and job.completed_at < cutoff:
+                    to_remove.append(run_id)
+                elif job.created_at < cutoff:
+                    to_remove.append(run_id)
+        
+        # Also remove oldest completed if over limit
+        completed_jobs.sort()
+        if len(completed_jobs) > SCAN_JOB_MAX_COMPLETED:
+            excess = len(completed_jobs) - SCAN_JOB_MAX_COMPLETED
+            for _, run_id in completed_jobs[:excess]:
+                if run_id not in to_remove:
+                    to_remove.append(run_id)
+        
+        for run_id in to_remove:
+            del scan_jobs[run_id]
+            cleaned += 1
+    
+    if cleaned > 0:
+        logger.info("Cleaned up %d old scan jobs", cleaned)
+    
+    return cleaned
 
 # Initialize trading components
 position_sizer = PositionSizer(account_balance=10000, max_risk_pct=2.0)
@@ -546,23 +629,7 @@ async def get_signals(
         logger.info("Scan request: mode=%s, exchange=%s, leverage=%dx, categories=(majors=%s, alts=%s, meme=%s)", 
                    mode.name, exchange, leverage, majors, altcoins, meme_mode)
 
-        # Apply mode safely (profile, timeframes, critical TFs, regime policy)
-        orchestrator.apply_mode(mode)
-        # If caller provided a higher override score, update after mode baseline applied
-        orchestrator.config.min_confluence_score = effective_min
-        # Inject leverage into config for planner adaptive logic
-        try:
-            setattr(orchestrator.config, 'leverage', leverage)
-        except Exception:
-            pass
-        # Enable macro overlay if requested
-        orchestrator.config.macro_overlay_enabled = macro_overlay
-        
-        # Update orchestrator's exchange adapter
-        orchestrator.exchange_adapter = current_adapter
-        orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
-
-        # Resolve symbols via centralized selector
+        # Resolve symbols via centralized selector (outside lock - independent operation)
         symbols = select_symbols(
             adapter=current_adapter,
             limit=limit,
@@ -574,8 +641,30 @@ async def get_signals(
         logger.info("Filtering %d symbols by categories (majors=%s, altcoins=%s, meme=%s)", 
                    len(symbols), majors, altcoins, meme_mode)
 
-        # Run scan pipeline
-        trade_plans, rejection_summary = orchestrator.scan(symbols)
+        # Acquire orchestrator lock for thread-safe config mutation and scan execution
+        # This prevents concurrent requests from corrupting each other's mode/config
+        with orchestrator_lock:
+            # Apply mode safely (profile, timeframes, critical TFs, regime policy)
+            orchestrator.apply_mode(mode)
+            # If caller provided a higher override score, update after mode baseline applied
+            orchestrator.config.min_confluence_score = effective_min
+            # Inject leverage into config for planner adaptive logic
+            try:
+                setattr(orchestrator.config, 'leverage', leverage)
+            except Exception:
+                pass
+            # Enable macro overlay if requested
+            orchestrator.config.macro_overlay_enabled = macro_overlay
+            
+            # Update orchestrator's exchange adapter
+            orchestrator.exchange_adapter = current_adapter
+            orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
+
+            # Run scan pipeline (under lock to ensure config consistency)
+            trade_plans, rejection_summary = orchestrator.scan(symbols)
+        
+        # Cleanup old scan jobs periodically (fire-and-forget)
+        cleanup_old_scan_jobs()
 
         rejected_count = len(symbols) - len(trade_plans)
         logger.info("Scan completed: %d signals generated, %d rejected from %d symbols", 
