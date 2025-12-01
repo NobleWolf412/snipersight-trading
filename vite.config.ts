@@ -24,7 +24,7 @@ const frontendPort = process.env.FRONTEND_PORT ? Number(process.env.FRONTEND_POR
 const hostBind = process.env.HOST_BIND || '0.0.0.0';
 const strictPort = process.env.DISABLE_STRICT_PORT === '1' ? false : true;
 const proxyTimeout = process.env.PUBLIC_PROXY_TIMEOUT_MS ? Number(process.env.PUBLIC_PROXY_TIMEOUT_MS) : 300000;
-const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
+const backendUrl = process.env.BACKEND_URL || 'http://localhost:8001';
 // If hostBind is 0.0.0.0 and we're behind an HTTPS dev tunnel, forcing HMR host to 0.0.0.0 generates wss://0.0.0.0 which the browser rejects.
 // Allow automatic fallback to window.location.hostname by omitting host when bound to 0.0.0.0 unless HMR_HOST is explicitly provided.
 const hmrHost: string | undefined = process.env.HMR_HOST || (hostBind === '0.0.0.0' ? undefined : hostBind);

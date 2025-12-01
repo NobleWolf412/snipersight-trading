@@ -4,11 +4,11 @@
  * Provides typed methods for interacting with the FastAPI backend.
  */
 
-// Resolve API base: prefer Vite env, fallback to same-origin '/api' or localhost:5000
+// Resolve API base: prefer Vite env, fallback to same-origin '/api' or localhost:8001
 const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE)
   ? (import.meta as any).env.VITE_API_BASE
-  : (typeof window !== 'undefined' && window.location && window.location.port === '5173'
-      ? 'http://localhost:5000/api'
+  : (typeof window !== 'undefined' && window.location && window.location.port === '5000'
+      ? 'http://localhost:8001/api'
       : '/api');
 
 interface ApiResponse<T> {

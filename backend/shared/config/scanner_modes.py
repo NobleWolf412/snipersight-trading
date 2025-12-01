@@ -15,6 +15,103 @@ from typing import Tuple, Dict, List, Optional, Any
 
 
 @dataclass(frozen=True)
+class MACDModeConfig:
+    """
+    Mode-aware MACD scoring configuration.
+    
+    Controls how MACD is interpreted per scanner mode:
+    - HTF/Swing modes: MACD as primary directional bias (heavy weight)
+    - Balanced modes: MACD as weighted confluence factor
+    - Scalp/Surgical modes: MACD as HTF context + LTF veto only
+    
+    Attributes:
+        use_htf_bias: Whether to pull HTF MACD for directional context
+        treat_as_primary: If True, MACD drives scoring; if False, it filters
+        min_persistence_bars: Consecutive bars MACD must align before counting
+        weight: Multiplier for MACD contribution to confluence score (0.5-1.5)
+        use_histogram_strict: If True, histogram expansion/contraction affects score
+        allow_ltf_veto: If True, LTF MACD opposition can block/downgrade trades
+        htf_timeframe: Which timeframe to use for HTF MACD bias (e.g., '1h', '4h')
+        macd_settings: Tuple of (fast, slow, signal) periods for this mode
+        min_amplitude: Minimum |MACD - Signal| to count (filters chop)
+    """
+    use_htf_bias: bool = True
+    treat_as_primary: bool = False
+    min_persistence_bars: int = 2
+    weight: float = 1.0
+    use_histogram_strict: bool = False
+    allow_ltf_veto: bool = True
+    htf_timeframe: str = "1h"
+    macd_settings: Tuple[int, int, int] = (12, 26, 9)  # (fast, slow, signal)
+    min_amplitude: float = 0.0  # Minimum separation to avoid chop
+
+
+# Default MACD configs per mode profile
+MACD_MODE_CONFIGS: Dict[str, MACDModeConfig] = {
+    "macro_surveillance": MACDModeConfig(
+        use_htf_bias=True,
+        treat_as_primary=True,
+        min_persistence_bars=3,
+        weight=1.5,
+        use_histogram_strict=True,
+        allow_ltf_veto=False,
+        htf_timeframe="4h",
+        macd_settings=(12, 26, 9),
+        min_amplitude=0.0,
+    ),
+    "balanced": MACDModeConfig(
+        use_htf_bias=True,
+        treat_as_primary=False,
+        min_persistence_bars=2,
+        weight=1.0,
+        use_histogram_strict=False,
+        allow_ltf_veto=True,
+        htf_timeframe="1h",
+        macd_settings=(12, 26, 9),
+        min_amplitude=0.0,
+    ),
+    "intraday_aggressive": MACDModeConfig(
+        use_htf_bias=True,
+        treat_as_primary=False,
+        min_persistence_bars=2,
+        weight=0.7,
+        use_histogram_strict=False,
+        allow_ltf_veto=True,
+        htf_timeframe="1h",
+        macd_settings=(12, 26, 9),
+        min_amplitude=0.0,
+    ),
+    "precision": MACDModeConfig(
+        use_htf_bias=True,
+        treat_as_primary=False,
+        min_persistence_bars=3,
+        weight=0.6,
+        use_histogram_strict=True,
+        allow_ltf_veto=True,
+        htf_timeframe="1h",
+        macd_settings=(24, 52, 9),  # Longer settings for LTF noise reduction
+        min_amplitude=0.0001,
+    ),
+    "stealth_balanced": MACDModeConfig(
+        use_htf_bias=True,
+        treat_as_primary=False,
+        min_persistence_bars=2,
+        weight=0.8,
+        use_histogram_strict=False,
+        allow_ltf_veto=True,
+        htf_timeframe="1h",
+        macd_settings=(12, 26, 9),
+        min_amplitude=0.0,
+    ),
+}
+
+
+def get_macd_config(profile: str) -> MACDModeConfig:
+    """Get MACD configuration for a scanner mode profile."""
+    return MACD_MODE_CONFIGS.get(profile, MACD_MODE_CONFIGS["balanced"])
+
+
+@dataclass(frozen=True)
 class ScannerMode:
     name: str
     description: str

@@ -9,11 +9,12 @@ Evaluates setups across multiple dimensions:
 - Higher timeframe alignment
 - Market regime detection
 - BTC impulse gate (for altcoins)
+- Mode-aware MACD evaluation (primary/filter/veto based on scanner mode)
 
 Outputs a comprehensive ConfluenceBreakdown with synergy bonuses and conflict penalties.
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from dataclasses import replace
 import pandas as pd
 import numpy as np
@@ -22,6 +23,176 @@ from backend.shared.models.smc import SMCSnapshot, OrderBlock, FVG, StructuralBr
 from backend.shared.models.indicators import IndicatorSet, IndicatorSnapshot
 from backend.shared.models.scoring import ConfluenceFactor, ConfluenceBreakdown
 from backend.shared.config.defaults import ScanConfig
+from backend.shared.config.scanner_modes import MACDModeConfig, get_macd_config
+
+
+# --- Mode-Aware MACD Evaluation ---
+
+def evaluate_macd_for_mode(
+    indicators: IndicatorSnapshot,
+    direction: str,
+    macd_config: MACDModeConfig,
+    htf_indicators: Optional[IndicatorSnapshot] = None,
+    timeframe: str = "15m"
+) -> Dict:
+    """
+    Evaluate MACD based on scanner mode configuration.
+    
+    Different modes use MACD differently:
+    - HTF/Swing (treat_as_primary=True): MACD drives directional scoring (high weight)
+    - Balanced (treat_as_primary=False): MACD is weighted confluence factor
+    - Scalp/Surgical (allow_ltf_veto=True): HTF MACD for bias, LTF only vetoes
+    
+    Args:
+        indicators: Current timeframe indicators with MACD data
+        direction: Trade direction ("bullish" or "bearish")
+        macd_config: Mode-specific MACD configuration
+        htf_indicators: Higher timeframe indicators for HTF bias (optional)
+        timeframe: Current timeframe string for logging
+        
+    Returns:
+        Dict with score, reasons, role, and veto_active flag
+    """
+    score = 0.0
+    reasons = []
+    veto_active = False
+    role = "PRIMARY" if macd_config.treat_as_primary else "FILTER"
+    
+    # Extract MACD values
+    macd_line = getattr(indicators, 'macd_line', None)
+    macd_signal = getattr(indicators, 'macd_signal', None)
+    macd_histogram = getattr(indicators, 'macd_histogram', None)
+    macd_line_series = getattr(indicators, 'macd_line_series', None) or []
+    macd_signal_series = getattr(indicators, 'macd_signal_series', None) or []
+    histogram_series = getattr(indicators, 'macd_histogram_series', None) or []
+    
+    if macd_line is None or macd_signal is None:
+        return {"score": 0.0, "reasons": ["MACD data unavailable"], "role": role, "veto_active": False}
+    
+    # Check minimum amplitude filter (avoid chop)
+    amplitude = abs(macd_line - macd_signal)
+    if macd_config.min_amplitude > 0 and amplitude < macd_config.min_amplitude:
+        return {"score": 0.0, "reasons": ["MACD in chop zone (below amplitude threshold)"], "role": "NEUTRAL", "veto_active": False}
+    
+    is_bullish = direction.lower() in ("bullish", "long")
+    
+    # --- HTF Bias Check (if enabled and HTF indicators available) ---
+    htf_bias = "neutral"
+    if macd_config.use_htf_bias and htf_indicators:
+        htf_macd = getattr(htf_indicators, 'macd_line', None)
+        htf_signal = getattr(htf_indicators, 'macd_signal', None)
+        
+        if htf_macd is not None and htf_signal is not None:
+            if htf_macd > htf_signal:
+                htf_bias = "bullish"
+                if is_bullish:
+                    score += 15.0 * macd_config.weight
+                    reasons.append(f"HTF MACD bullish bias supports {direction}")
+                else:
+                    score -= 10.0 * macd_config.weight
+                    reasons.append(f"HTF MACD bullish conflicts with {direction}")
+            elif htf_macd < htf_signal:
+                htf_bias = "bearish"
+                if not is_bullish:
+                    score += 15.0 * macd_config.weight
+                    reasons.append(f"HTF MACD bearish bias supports {direction}")
+                else:
+                    score -= 10.0 * macd_config.weight
+                    reasons.append(f"HTF MACD bearish conflicts with {direction}")
+    
+    # --- Persistence Check ---
+    # Check if MACD/Signal relationship held for min_persistence_bars
+    n_persist = min(macd_config.min_persistence_bars, len(macd_line_series), len(macd_signal_series))
+    
+    bullish_persistent = False
+    bearish_persistent = False
+    
+    if n_persist >= 2 and len(macd_line_series) >= n_persist and len(macd_signal_series) >= n_persist:
+        recent_macd = macd_line_series[-n_persist:]
+        recent_signal = macd_signal_series[-n_persist:]
+        bullish_persistent = all(m > s for m, s in zip(recent_macd, recent_signal))
+        bearish_persistent = all(m < s for m, s in zip(recent_macd, recent_signal))
+    
+    # --- Primary vs Filter Scoring ---
+    if macd_config.treat_as_primary:
+        # HTF/Swing mode: MACD is a decision-maker with heavy impact
+        if is_bullish and bullish_persistent:
+            score += 25.0 * macd_config.weight
+            reasons.append(f"{timeframe} MACD > Signal with {n_persist}-bar persistence (PRIMARY)")
+            if macd_line > 0:
+                score += 10.0 * macd_config.weight
+                reasons.append(f"{timeframe} MACD above zero line (strong bullish)")
+        elif not is_bullish and bearish_persistent:
+            score += 25.0 * macd_config.weight
+            reasons.append(f"{timeframe} MACD < Signal with {n_persist}-bar persistence (PRIMARY)")
+            if macd_line < 0:
+                score += 10.0 * macd_config.weight
+                reasons.append(f"{timeframe} MACD below zero line (strong bearish)")
+        elif (is_bullish and bearish_persistent) or (not is_bullish and bullish_persistent):
+            score -= 20.0 * macd_config.weight
+            reasons.append(f"{timeframe} MACD opposing direction with persistence (PRIMARY CONFLICT)")
+        else:
+            # No persistence - current bar only
+            if is_bullish and macd_line > macd_signal:
+                score += 8.0 * macd_config.weight
+                reasons.append(f"{timeframe} MACD > Signal (no persistence)")
+            elif not is_bullish and macd_line < macd_signal:
+                score += 8.0 * macd_config.weight
+                reasons.append(f"{timeframe} MACD < Signal (no persistence)")
+    else:
+        # Filter/Veto mode: MACD supports but doesn't drive
+        if is_bullish and bullish_persistent:
+            score += 10.0 * macd_config.weight
+            reasons.append(f"{timeframe} MACD supportive bullish (FILTER)")
+        elif not is_bullish and bearish_persistent:
+            score += 10.0 * macd_config.weight
+            reasons.append(f"{timeframe} MACD supportive bearish (FILTER)")
+        elif macd_config.allow_ltf_veto:
+            # Check for veto conditions
+            if is_bullish and bearish_persistent:
+                score -= 15.0 * macd_config.weight
+                veto_active = True
+                role = "VETO"
+                reasons.append(f"{timeframe} MACD bearish veto active against bullish setup")
+            elif not is_bullish and bullish_persistent:
+                score -= 15.0 * macd_config.weight
+                veto_active = True
+                role = "VETO"
+                reasons.append(f"{timeframe} MACD bullish veto active against bearish setup")
+    
+    # --- Histogram Analysis (if strict mode enabled) ---
+    if macd_config.use_histogram_strict and len(histogram_series) >= 2:
+        hist_expanding = histogram_series[-1] > histogram_series[-2]
+        hist_contracting = histogram_series[-1] < histogram_series[-2]
+        
+        # Histogram should expand in trend direction
+        if is_bullish:
+            if macd_histogram and macd_histogram > 0 and hist_expanding:
+                score += 8.0 * macd_config.weight
+                reasons.append(f"{timeframe} histogram expanding bullish")
+            elif macd_histogram and macd_histogram < 0 and hist_contracting:
+                score -= 5.0 * macd_config.weight
+                reasons.append(f"{timeframe} histogram contracting against bullish")
+        else:
+            if macd_histogram and macd_histogram < 0 and hist_expanding:
+                # For bearish, "expanding" means histogram getting more negative
+                score += 8.0 * macd_config.weight
+                reasons.append(f"{timeframe} histogram expanding bearish")
+            elif macd_histogram and macd_histogram > 0 and hist_contracting:
+                score -= 5.0 * macd_config.weight
+                reasons.append(f"{timeframe} histogram contracting against bearish")
+    
+    # Clamp score
+    score = max(-30.0, min(50.0, score))
+    
+    return {
+        "score": score,
+        "reasons": reasons,
+        "role": role,
+        "veto_active": veto_active,
+        "htf_bias": htf_bias,
+        "persistent_bars": n_persist if (bullish_persistent or bearish_persistent) else 0
+    }
 
 
 def calculate_confluence_score(
@@ -96,17 +267,38 @@ def calculate_confluence_score(
     # Get primary timeframe indicators (assume first in dict or specified)
     primary_tf = list(indicators.by_timeframe.keys())[0] if indicators.by_timeframe else None
     
+    # Get MACD mode config based on profile
+    profile = getattr(config, 'profile', 'balanced')
+    macd_config = get_macd_config(profile)
+    
+    # Get HTF indicators for MACD bias (if available)
+    htf_tf = macd_config.htf_timeframe
+    htf_indicators = indicators.by_timeframe.get(htf_tf) if indicators.by_timeframe else None
+    
+    macd_analysis = None
+    
     if primary_tf:
         primary_indicators = indicators.by_timeframe[primary_tf]
         
-        # Momentum indicators
-        momentum_score = _score_momentum(primary_indicators, direction)
+        # Momentum indicators (with mode-aware MACD)
+        momentum_score, macd_analysis = _score_momentum(
+            primary_indicators, 
+            direction,
+            macd_config=macd_config,
+            htf_indicators=htf_indicators,
+            timeframe=primary_tf
+        )
         if momentum_score > 0:
+            # Build momentum rationale including MACD analysis
+            momentum_rationale = _get_momentum_rationale(primary_indicators, direction)
+            if macd_analysis and macd_analysis.get("reasons"):
+                momentum_rationale += f" | MACD [{macd_analysis['role']}]: {'; '.join(macd_analysis['reasons'][:2])}"
+            
             factors.append(ConfluenceFactor(
                 name="Momentum",
                 score=momentum_score,
                 weight=0.10,
-                rationale=_get_momentum_rationale(primary_indicators, direction)
+                rationale=momentum_rationale
             ))
         
         # Volume confirmation
@@ -128,6 +320,16 @@ def calculate_confluence_score(
                 weight=0.08,
                 rationale=_get_volatility_rationale(primary_indicators)
             ))
+    
+    # --- MACD Veto Check (for scalp/surgical modes) ---
+    # If MACD veto is active, add a conflict factor
+    if macd_analysis and macd_analysis.get("veto_active"):
+        factors.append(ConfluenceFactor(
+            name="MACD Veto",
+            score=0.0,
+            weight=0.05,
+            rationale=f"MACD opposing direction with veto active: {'; '.join(macd_analysis.get('reasons', []))}"
+        ))
     
     # --- HTF Alignment ---
     
@@ -339,9 +541,28 @@ def _score_liquidity_sweeps(sweeps: List[LiquiditySweep], direction: str) -> flo
 
 # --- Indicator Scoring Functions ---
 
-def _score_momentum(indicators: IndicatorSnapshot, direction: str) -> float:
-    """Score momentum indicators."""
+def _score_momentum(
+    indicators: IndicatorSnapshot, 
+    direction: str,
+    macd_config: Optional[MACDModeConfig] = None,
+    htf_indicators: Optional[IndicatorSnapshot] = None,
+    timeframe: str = "15m"
+) -> Tuple[float, Optional[Dict]]:
+    """
+    Score momentum indicators with mode-aware MACD evaluation.
+    
+    Args:
+        indicators: Current timeframe indicators
+        direction: Trade direction ("bullish" or "bearish")
+        macd_config: Mode-specific MACD configuration (if None, uses legacy scoring)
+        htf_indicators: HTF indicators for MACD bias check
+        timeframe: Current timeframe string
+        
+    Returns:
+        Tuple of (score, macd_analysis_dict or None)
+    """
     score = 0.0
+    macd_analysis = None
     
     if direction == "bullish":
         # Bullish momentum: oversold RSI, low Stoch RSI, low MFI
@@ -365,24 +586,36 @@ def _score_momentum(indicators: IndicatorSnapshot, direction: str) -> float:
         if indicators.mfi is not None and indicators.mfi > 70:
             score += 30 * ((indicators.mfi - 70) / 30)
     
-    # MACD contribution: prefer macd_line above signal; stronger if macd_line > 0
-    macd_line = getattr(indicators, 'macd_line', None)
-    macd_signal = getattr(indicators, 'macd_signal', None)
-    if macd_line is not None and macd_signal is not None:
-        if direction == "bullish":
-            if macd_line > macd_signal and macd_line > 0:
-                score += 20.0
-            elif macd_line > macd_signal:
-                score += 12.0
-            else:
-                score += 5.0
-        else:  # bearish
-            if macd_line < macd_signal and macd_line < 0:
-                score += 20.0
-            elif macd_line < macd_signal:
-                score += 12.0
-            else:
-                score += 5.0
+    # --- Mode-Aware MACD Evaluation ---
+    if macd_config:
+        # Use new mode-aware MACD scoring
+        macd_analysis = evaluate_macd_for_mode(
+            indicators=indicators,
+            direction=direction,
+            macd_config=macd_config,
+            htf_indicators=htf_indicators,
+            timeframe=timeframe
+        )
+        score += macd_analysis["score"]
+    else:
+        # Legacy MACD scoring (fallback for backward compatibility)
+        macd_line = getattr(indicators, 'macd_line', None)
+        macd_signal = getattr(indicators, 'macd_signal', None)
+        if macd_line is not None and macd_signal is not None:
+            if direction == "bullish":
+                if macd_line > macd_signal and macd_line > 0:
+                    score += 20.0
+                elif macd_line > macd_signal:
+                    score += 12.0
+                else:
+                    score += 5.0
+            else:  # bearish
+                if macd_line < macd_signal and macd_line < 0:
+                    score += 20.0
+                elif macd_line < macd_signal:
+                    score += 12.0
+                else:
+                    score += 5.0
 
     # Stoch RSI K/D crossover enhancement (debounced by minimum separation)
     k = getattr(indicators, 'stoch_rsi_k', None)
@@ -419,7 +652,7 @@ def _score_momentum(indicators: IndicatorSnapshot, direction: str) -> float:
     if score < 0:
         score = 0.0
 
-    return min(100.0, score)
+    return (min(100.0, score), macd_analysis)
 
 
 def _score_volume(indicators: IndicatorSnapshot, direction: str) -> float:

@@ -6,11 +6,11 @@
   "scripts": {
     "dev": "vite",
     "dev:frontend": "vite --host 0.0.0.0 --port ${FRONTEND_PORT:-5000}",
-    "backend": "./.venv/bin/python -m uvicorn backend.api_server:app --host 0.0.0.0 --port ${BACKEND_PORT:-8000} --reload",
+    "backend": "./.venv/bin/python -m uvicorn backend.api_server:app --host 0.0.0.0 --port ${BACKEND_PORT:-8001} --reload",
     "dev:all": "concurrently \"npm run backend\" \"npm run dev:frontend\"",
     "sync": "bash scripts/auto_sync.sh",
     "sync:safe": "bash scripts/safe_sync.sh",
-    "kill": "fuser -k ${FRONTEND_PORT:-5000}/tcp || true && fuser -k ${BACKEND_PORT:-8000}/tcp || true",
+    "kill": "fuser -k ${FRONTEND_PORT:-5000}/tcp || true && fuser -k ${BACKEND_PORT:-8001}/tcp || true",
     "dev:nohup": "bash scripts/start_dev.sh",
     "build:frontend": "vite build",
     "build:backend": "echo 'Backend build step placeholder'",

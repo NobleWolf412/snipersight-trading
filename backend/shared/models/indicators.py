@@ -86,6 +86,11 @@ class IndicatorSnapshot:
     ema_200: Optional[float] = None
     macd_line: Optional[float] = None
     macd_signal: Optional[float] = None
+    macd_histogram: Optional[float] = None
+    # MACD series for persistence checks (last N values, newest last)
+    macd_line_series: Optional[list] = None
+    macd_signal_series: Optional[list] = None
+    macd_histogram_series: Optional[list] = None
     
     def __post_init__(self):
         """Validate indicator ranges."""

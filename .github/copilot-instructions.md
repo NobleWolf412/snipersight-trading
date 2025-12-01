@@ -43,17 +43,20 @@ Always check `response.error` before accessing `response.data`—fallback to moc
 
 ### Running the Full Stack
 ```bash
-# Backend (FastAPI server on :5000)
+# Backend (FastAPI server on :8001)
 cd /workspaces/snipersight-trading
-python -m uvicorn backend.api_server:app --host 0.0.0.0 --port 5000 --reload
+python -m uvicorn backend.api_server:app --host 0.0.0.0 --port 8001 --reload
 
-# Frontend (Vite dev server on :5173)
-npm run dev
+# Frontend (Vite dev server on :5000)
+npm run dev:frontend
+
+# Or use the combined startup script (recommended)
+./scripts/start_dev.sh
 
 # Production build
 npm run build
 
-# Kill port 5000 if needed
+# Kill ports if needed
 npm run kill
 ```
 

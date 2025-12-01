@@ -608,11 +608,18 @@ class Orchestrator:
                     obv=obv.iloc[-1],
                     volume_ratio=volume_ratio.iloc[-1] if volume_ratio is not None else None
                 )
-                # Attach MACD values if available
+                # Attach MACD values and series if available (for mode-aware persistence checks)
                 if macd_line is not None and macd_signal is not None:
                     try:
                         snapshot.macd_line = float(macd_line.iloc[-1])  # type: ignore[attr-defined]
                         snapshot.macd_signal = float(macd_signal.iloc[-1])  # type: ignore[attr-defined]
+                        if macd_hist is not None:
+                            snapshot.macd_histogram = float(macd_hist.iloc[-1])  # type: ignore[attr-defined]
+                            # Store last 5 values for persistence checks (newest last)
+                            n_persist = 5
+                            snapshot.macd_line_series = macd_line.iloc[-n_persist:].tolist()  # type: ignore[attr-defined]
+                            snapshot.macd_signal_series = macd_signal.iloc[-n_persist:].tolist()  # type: ignore[attr-defined]
+                            snapshot.macd_histogram_series = macd_hist.iloc[-n_persist:].tolist()  # type: ignore[attr-defined]
                     except Exception:
                         pass
                 
