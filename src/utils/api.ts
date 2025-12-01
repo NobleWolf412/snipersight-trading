@@ -44,6 +44,13 @@ export interface ScannerMode {
   timeframes: string[];
   min_confluence_score: number;
   profile: string;
+  // Extended fields synced with backend scanner_modes.py
+  critical_timeframes?: string[];
+  primary_planning_timeframe?: string;
+  entry_timeframes?: string[];
+  structure_timeframes?: string[];
+  atr_multiplier?: number;
+  min_rr_ratio?: number;
 }
 
 export interface Signal {

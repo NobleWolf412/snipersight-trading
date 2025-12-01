@@ -98,42 +98,72 @@ const defaultBotConfig: BotConfig = {
 };
 
 // Static scanner modes (fallback if backend unavailable)
-// Should mirror backend/shared/config/scanner_modes.py MODES dict
+// Synced with backend/shared/config/scanner_modes.py MODES dict as of 2025-12-01
 const fallbackModes: ScannerMode[] = [
   {
     name: 'overwatch',
     description: 'High-altitude overwatch: macro recon and regime alignment; fewer shots, higher conviction.',
-    timeframes: ['1W','1D','4H','1H','15m','5m'],
+    timeframes: ['1w','1d','4h','1h','15m','5m'],
     min_confluence_score: 75,
-    profile: 'macro_surveillance'
+    profile: 'macro_surveillance',
+    critical_timeframes: ['1w', '1d'],
+    primary_planning_timeframe: '4h',
+    entry_timeframes: ['4h', '1h'],
+    structure_timeframes: ['1w', '1d', '4h'],
+    atr_multiplier: 4.0,
+    min_rr_ratio: 2.0,
   },
   {
     name: 'recon',
     description: 'Balanced recon: multi-timeframe scouting for momentum pivots; adaptable and mission-ready.',
-    timeframes: ['1D','4H','1H','15m','5m'],
+    timeframes: ['1d','4h','1h','15m','5m'],
     min_confluence_score: 65,
-    profile: 'balanced'
+    profile: 'balanced',
+    critical_timeframes: ['4h', '1h'],
+    primary_planning_timeframe: '1h',
+    entry_timeframes: ['1h', '15m'],
+    structure_timeframes: ['1d', '4h', '1h'],
+    atr_multiplier: 3.0,
+    min_rr_ratio: 1.8,
   },
   {
     name: 'strike',
     description: 'Strike ops: intraday assault on momentum with local liquidity reads; fast entry, fast exfil.',
-    timeframes: ['4H','1H','15m','5m'],
+    timeframes: ['4h','1h','15m','5m'],
     min_confluence_score: 60,
-    profile: 'intraday_aggressive'
+    profile: 'intraday_aggressive',
+    critical_timeframes: ['15m'],
+    primary_planning_timeframe: '15m',
+    entry_timeframes: ['15m', '5m'],
+    structure_timeframes: ['4h', '1h', '15m'],
+    atr_multiplier: 2.5,
+    min_rr_ratio: 1.6,
   },
   {
     name: 'surgical',
     description: 'Surgical precision: tight, high-quality entries only; minimal exposure, maximum control.',
-    timeframes: ['1H','15m','5m'],
+    timeframes: ['1h','15m','5m'],
     min_confluence_score: 70,
-    profile: 'precision'
+    profile: 'precision',
+    critical_timeframes: ['15m', '5m'],
+    primary_planning_timeframe: '15m',
+    entry_timeframes: ['5m'],
+    structure_timeframes: ['1h', '15m'],
+    atr_multiplier: 2.0,
+    min_rr_ratio: 2.0,
   },
   {
     name: 'ghost',
     description: 'Ghost mode: stealth surveillance across mixed horizons; nimble, low profile, reduced macro drag.',
-    timeframes: ['1D','4H','1H','15m','5m'],
+    timeframes: ['1d','4h','1h','15m','5m'],
     min_confluence_score: 70,
-    profile: 'stealth_balanced'
+    profile: 'stealth_balanced',
+    critical_timeframes: ['4h', '1h'],
+    primary_planning_timeframe: '1h',
+    entry_timeframes: ['1h', '15m'],
+    structure_timeframes: ['1d', '4h', '1h'],
+    atr_multiplier: 2.5,
+    min_rr_ratio: 1.8,
   },
 ];
 

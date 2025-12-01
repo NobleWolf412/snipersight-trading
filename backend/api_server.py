@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 import logging
 import asyncio
@@ -1297,13 +1297,8 @@ async def get_price(symbol: str, exchange: str | None = Query(default=None)):
         adapter = EXCHANGE_ADAPTERS[exchange_key]()
 
         request_symbol = symbol
-        fetch_symbol = symbol
-        # OKX uses suffix ":USDT" for swap markets in ccxt
-        if exchange_key == 'okx' and '/USDT' in symbol and ':USDT' not in symbol:
-            fetch_symbol = symbol.replace('/USDT', '/USDT:USDT')
-
-        # Use ccxt to fetch ticker
-        ticker = adapter.exchange.fetch_ticker(fetch_symbol)
+        # Use adapter's fetch_ticker - adapters handle symbol format internally
+        ticker = adapter.fetch_ticker(symbol)
         last_price = ticker.get('last') or ticker.get('close') or 0.0
         ts_ms = ticker.get('timestamp')
         if ts_ms is None:
@@ -1364,14 +1359,10 @@ async def get_prices(
                 return cached['data'], None
             
             try:
-                fetch_symbol = symbol
-                # OKX uses suffix ":USDT" for swap markets
-                if exchange_key == 'okx' and '/USDT' in symbol and ':USDT' not in symbol:
-                    fetch_symbol = symbol.replace('/USDT', '/USDT:USDT')
-                
+                # Use adapter's fetch_ticker - adapters handle symbol format internally
                 # Run blocking fetch_ticker in thread pool to avoid blocking event loop
                 loop = asyncio.get_event_loop()
-                ticker = await loop.run_in_executor(None, adapter.exchange.fetch_ticker, fetch_symbol)
+                ticker = await loop.run_in_executor(None, adapter.fetch_ticker, symbol)
                 
                 last_price = ticker.get('last') or ticker.get('close') or 0.0
                 ts_ms = ticker.get('timestamp')
@@ -1442,17 +1433,15 @@ async def get_candles(
 
         adapter = EXCHANGE_ADAPTERS[exchange_key]()
 
-        fetch_symbol = symbol
-        if exchange_key == 'okx' and '/USDT' in symbol and ':USDT' not in symbol:
-            fetch_symbol = symbol.replace('/USDT', '/USDT:USDT')
-
-        df = adapter.fetch_ohlcv(fetch_symbol, timeframe.value, limit=limit)
+        # Fetch candles - OKX adapter handles symbol format conversion internally
+        df = adapter.fetch_ohlcv(symbol, timeframe.value, limit=limit)
         candles = []
         if not df.empty:
             for _, row in df.iterrows():
                 candles.append({
                     'timestamp': row['timestamp'].to_pydatetime().isoformat(),
                     'open': float(row['open']),
+                    'high': float(row['high']),
                     'low': float(row['low']),
                     'close': float(row['close']),
                     'volume': float(row['volume']),
@@ -1472,12 +1461,13 @@ async def get_candles(
 
 
 @app.get("/api/market/regime")
-async def get_market_regime():
+async def get_market_regime(symbol: Optional[str] = Query(None, description="Optional symbol for symbol-specific regime (returns global + symbol context)")):
     """
-    Get current global market regime.
+    Get current market regime, optionally for a specific symbol.
     
     Analyzes BTC/USDT market data to determine regime state across
     trend, volatility, liquidity, risk appetite, and derivatives dimensions.
+    If symbol is provided, returns global regime with symbol-specific context.
     
     Returns:
         MarketRegime with composite label, score, and dimension breakdown

@@ -10,44 +10,7 @@ import pandas as pd
 import ccxt
 from loguru import logger
 
-
-def _retry_on_rate_limit(max_retries: int = 3, backoff: float = 1.0):
-    """Decorator to retry function calls on rate limit errors."""
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            retries = 0
-            current_backoff = backoff
-
-            while retries < max_retries:
-                try:
-                    return func(*args, **kwargs)
-                except ccxt.RateLimitExceeded as e:
-                    retries += 1
-                    if retries >= max_retries:
-                        logger.error(f"Rate limit exceeded after {max_retries} retries")
-                        raise
-                    
-                    logger.warning(
-                        f"Rate limit hit, retrying in {current_backoff}s "
-                        f"(attempt {retries}/{max_retries})"
-                    )
-                    time.sleep(current_backoff)
-                    current_backoff *= 2
-                except ccxt.NetworkError as e:
-                    retries += 1
-                    if retries >= max_retries:
-                        logger.error(f"Network error after {max_retries} retries: {e}")
-                        raise
-                    
-                    logger.warning(f"Network error, retrying in {current_backoff}s: {e}")
-                    time.sleep(current_backoff)
-                    current_backoff *= 2
-            
-            return func(*args, **kwargs)
-        
-        return wrapper
-    return decorator
+from backend.data.adapters.retry import retry_on_rate_limit
 
 
 class BybitAdapter:
@@ -76,7 +39,7 @@ class BybitAdapter:
         else:
             logger.info("Bybit adapter initialized in PRODUCTION mode")
 
-    @_retry_on_rate_limit(max_retries=3)
+    @retry_on_rate_limit(max_retries=3)
     def fetch_ohlcv(
         self,
         symbol: str,
@@ -123,7 +86,27 @@ class BybitAdapter:
             logger.error(f"Unexpected error fetching {symbol} {timeframe}: {e}")
             raise
 
-    @_retry_on_rate_limit(max_retries=3)
+    @retry_on_rate_limit(max_retries=3)
+    def fetch_ticker(self, symbol: str) -> Dict[str, Any]:
+        """
+        Fetch current ticker data for a symbol.
+        
+        Args:
+            symbol: Trading pair symbol (e.g., 'BTC/USDT')
+            
+        Returns:
+            Ticker data dict with last, bid, ask, volume, etc.
+        """
+        try:
+            return self.exchange.fetch_ticker(symbol)
+        except ccxt.ExchangeError as e:
+            logger.error(f"Bybit exchange error fetching ticker for {symbol}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error fetching ticker for {symbol}: {e}")
+            raise
+
+    @retry_on_rate_limit(max_retries=3)
     def get_top_symbols(
         self,
         n: int = 50,
