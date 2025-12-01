@@ -227,7 +227,15 @@ class Orchestrator:
             future_map = {executor.submit(_safe_process, s): s for s in symbols}
             for future in concurrent.futures.as_completed(future_map):
                 symbol = future_map[future]
-                result, rejection_info = future.result()
+                try:
+                    result, rejection_info = future.result(timeout=30)  # 30s timeout per symbol
+                except concurrent.futures.TimeoutError:
+                    logger.warning("⏱️ %s: Symbol processing timed out after 30s", symbol)
+                    result, rejection_info = None, {
+                        "symbol": symbol,
+                        "reason_type": "errors",
+                        "reason": "Processing timed out after 30 seconds"
+                    }
                 if result:
                     signals.append(result)
                     logger.info("✅ %s: Signal generated (%.1f%%)", symbol, result.confidence_score)

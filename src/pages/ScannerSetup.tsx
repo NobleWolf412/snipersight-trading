@@ -70,13 +70,18 @@ export function ScannerSetup() {
       
       localStorage.setItem('scan-results', JSON.stringify(results));
       
+      // Read from root level - backend returns flat structure, not nested metadata
       const metadata = {
-        mode: data.metadata?.mode || scanConfig.sniperMode,
-        appliedTimeframes: data.metadata?.applied_timeframes || [],
-        effectiveMinScore: data.metadata?.effective_min_score || 0,
-        baselineMinScore: selectedMode?.min_confluence_score || 0,
-        profile: data.metadata?.profile || 'default',
-        scanned: data.metadata?.scanned || 0,
+        mode: data.mode || scanConfig.sniperMode,
+        appliedTimeframes: data.applied_timeframes || [],
+        effectiveMinScore: data.effective_min_score || 0,
+        baselineMinScore: data.baseline_min_score || selectedMode?.min_confluence_score || 0,
+        profile: data.profile || 'default',
+        scanned: data.scanned || 0,
+        rejected: data.rejected || 0,
+        exchange: data.exchange,
+        leverage: data.leverage,
+        criticalTimeframes: data.critical_timeframes || [],
       };
       localStorage.setItem('scan-metadata', JSON.stringify(metadata));
       
@@ -90,7 +95,7 @@ export function ScannerSetup() {
         timeframes: metadata.appliedTimeframes,
         symbolsScanned: metadata.scanned,
         signalsGenerated: results.length,
-        signalsRejected: data.metadata?.rejected || 0,
+        signalsRejected: metadata.rejected,
         effectiveMinScore: metadata.effectiveMinScore,
         rejectionBreakdown: data.rejections?.by_reason,
         results: results,

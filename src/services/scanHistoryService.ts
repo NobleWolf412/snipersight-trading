@@ -15,13 +15,8 @@ export interface ScanHistoryEntry {
   signalsGenerated: number;
   signalsRejected: number;
   effectiveMinScore: number;
-  rejectionBreakdown?: {
-    low_confluence: number;
-    no_data: number;
-    risk_validation: number;
-    no_trade_plan: number;
-    errors: number;
-  };
+  // Flexible record type to accommodate backend's dynamic rejection reasons
+  rejectionBreakdown?: Record<string, number>;
   results: any[]; // Actual scan results (signals)
 }
 

@@ -81,11 +81,37 @@ export interface SignalsResponse {
   signals: Signal[];
   total: number;
   scanned: number;
+  rejected: number;
   mode: string;
   applied_timeframes: string[];
+  critical_timeframes: string[];
+  active_mode: {
+    name: string;
+    profile: string;
+    timeframes: string[];
+    critical_timeframes: string[];
+    baseline_min_confluence: number;
+  };
   effective_min_score: number;
   baseline_min_score: number;
   profile: string;
+  exchange: string;
+  leverage: number;
+  categories: {
+    majors: boolean;
+    altcoins: boolean;
+    meme_mode: boolean;
+  };
+  rejections: {
+    total_rejected: number;
+    by_reason: Record<string, number>;
+    details: Record<string, any[]>;
+    regime?: {
+      composite: string;
+      score: number;
+      policy_min_score: number;
+    };
+  };
 }
 
 // Bot types
