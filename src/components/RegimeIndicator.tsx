@@ -10,34 +10,73 @@ import { TrendingUp, TrendingDown, Minus, Activity, Droplets } from 'lucide-reac
 interface RegimeIndicatorProps {
   regime?: RegimeMetadata;
   size?: 'sm' | 'md' | 'lg';
+  compact?: boolean; // If true, show only the regime label as a badge (for table cells)
 }
 
-export function RegimeIndicator({ regime, size = 'md' }: RegimeIndicatorProps) {
+export function RegimeIndicator({ regime, size = 'md', compact = false }: RegimeIndicatorProps) {
   if (!regime?.global_regime && !regime?.symbol_regime) {
     return null;
   }
 
   const global = regime.global_regime;
   const symbol = regime.symbol_regime;
+  
+  // UI-friendly regime labels per sniper_ui_theme.md: Trend/Range/Risk-On/Risk-Off
   const labelMap: Record<string, { label: string }> = {
-    ALTSEASON: { label: 'Altseason' },
-    BTC_DRIVE: { label: 'BTC Drive' },
-    DEFENSIVE: { label: 'Defensive' },
-    PANIC: { label: 'Panic' },
-    CHOPPY: { label: 'Choppy' },
-    NEUTRAL: { label: 'Choppy' },
+    // Backend sends lowercase with underscores (e.g., 'sideways_elevated')
+    altseason: { label: 'Risk On' },
+    ALTSEASON: { label: 'Risk On' },
+    btc_drive: { label: 'Trend' },
+    BTC_DRIVE: { label: 'Trend' },
+    defensive: { label: 'Risk Off' },
+    DEFENSIVE: { label: 'Risk Off' },
+    panic: { label: 'Risk Off' },
+    PANIC: { label: 'Risk Off' },
+    choppy: { label: 'Range' },
+    CHOPPY: { label: 'Range' },
+    neutral: { label: 'Range' },
+    NEUTRAL: { label: 'Range' },
+    sideways_elevated: { label: 'Range' },
+    sideways_compressed: { label: 'Range' },
+    trending_stable: { label: 'Trend' },
+    trending_volatile: { label: 'Trend' },
   };
   const guidanceMap: Record<string, string> = {
+    altseason: 'Risk-on; favor alt momentum entries',
     ALTSEASON: 'Risk-on; favor alt momentum entries',
+    btc_drive: 'Favor BTC-led trends; be selective on alts',
     BTC_DRIVE: 'Favor BTC-led trends; be selective on alts',
+    defensive: 'Size down; prefer high-quality setups',
     DEFENSIVE: 'Size down; prefer high-quality setups',
+    panic: 'Avoid fresh entries; wait for stabilization',
     PANIC: 'Avoid fresh entries; wait for stabilization',
+    choppy: 'Range-bound; avoid breakouts, trade extremes',
     CHOPPY: 'Range-bound; avoid breakouts, trade extremes',
+    neutral: 'Range-bound; avoid breakouts, trade extremes',
     NEUTRAL: 'Range-bound; avoid breakouts, trade extremes',
+    sideways_elevated: 'Range-bound with elevated volatility; caution on breakouts',
+    sideways_compressed: 'Range-bound with low volatility; breakout watch',
+    trending_stable: 'Healthy trend; favor pullback entries',
+    trending_volatile: 'Strong trend but choppy; wider stops advised',
   };
-  const globalComposite = (global?.composite || 'NEUTRAL').toUpperCase();
-  const friendlyGlobalLabel = labelMap[globalComposite]?.label || globalComposite;
+  const globalComposite = (global?.composite || 'neutral');
+  const friendlyGlobalLabel = labelMap[globalComposite]?.label || globalComposite.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   const guidance = guidanceMap[globalComposite] || '';
+
+  // Compact mode: just show the regime label as a simple badge
+  if (compact && global) {
+    const colorClass = 
+      friendlyGlobalLabel === 'Risk On' ? 'bg-success/20 text-success border-success/50' :
+      friendlyGlobalLabel === 'Risk Off' ? 'bg-destructive/20 text-destructive border-destructive/50' :
+      friendlyGlobalLabel === 'Trend' ? 'bg-primary/20 text-primary border-primary/50' :
+      'bg-warning/20 text-warning border-warning/50'; // Range
+    
+    return (
+      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold border ${colorClass}`}>
+        {friendlyGlobalLabel}
+      </span>
+    );
+  }
 
   return (
     <div className={`flex items-center gap-2 ${size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-base' : 'text-sm'}`}>

@@ -354,7 +354,7 @@ export function ScanResults() {
                       <TableHead className="heading-hud text-xs">PAIR</TableHead>
                       <TableHead className="heading-hud text-xs">LIVE PRICE</TableHead>
                       <TableHead className="heading-hud text-xs">EV</TableHead>
-                      <TableHead className="heading-hud text-xs">TREND</TableHead>
+                      <TableHead className="heading-hud text-xs">BIAS</TableHead>
                       <TableHead className="heading-hud text-xs">CONVICTION</TableHead>
                       <TableHead className="heading-hud text-xs">REGIME</TableHead>
                       <TableHead className="heading-hud text-xs">CONFIDENCE</TableHead>
@@ -410,7 +410,7 @@ export function ScanResults() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <RegimeIndicator regime={symbolRegimes[result.pair] || result.regime || globalRegime} size="sm" />
+                          <RegimeIndicator regime={symbolRegimes[result.pair] || result.regime || globalRegime} size="sm" compact />
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
