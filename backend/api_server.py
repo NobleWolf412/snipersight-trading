@@ -12,6 +12,8 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 from enum import Enum
 import logging
+import asyncio
+import time
 
 from backend.risk.position_sizer import PositionSizer
 from backend.risk.risk_manager import RiskManager
@@ -37,6 +39,10 @@ from backend.bot.notifications.notification_manager import (
 from backend.routers.htf_opportunities import router as htf_router
 
 logger = logging.getLogger(__name__)
+
+# In-memory price cache with TTL to reduce exchange API load
+PRICE_CACHE: Dict[str, Dict[str, Any]] = {}
+PRICE_CACHE_TTL = 5  # seconds
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -496,7 +502,8 @@ async def get_signals(
     altcoins: bool = Query(default=True),
     meme_mode: bool = Query(default=False),
     exchange: str = Query(default="phemex"),
-    leverage: int = Query(default=1, ge=1, le=125)
+    leverage: int = Query(default=1, ge=1, le=125),
+    macro_overlay: bool = Query(default=False)
 ):
     """Generate trading signals applying selected sniper mode configuration.
 
@@ -548,6 +555,8 @@ async def get_signals(
             setattr(orchestrator.config, 'leverage', leverage)
         except Exception:
             pass
+        # Enable macro overlay if requested
+        orchestrator.config.macro_overlay_enabled = macro_overlay
         
         # Update orchestrator's exchange adapter
         orchestrator.exchange_adapter = current_adapter
@@ -615,7 +624,9 @@ async def get_signals(
                 "plan_type": getattr(plan, 'plan_type', 'SMC'),
                 "conviction_class": getattr(plan, 'conviction_class', None),
                 "missing_critical_timeframes": plan.metadata.get('missing_critical_timeframes', []),
-                "regime": plan.metadata.get('regime')
+                "regime": plan.metadata.get('regime'),
+                # Optional macro overlay metadata (if computed and enabled)
+                "macro": plan.metadata.get('macro')
             }
             signals.append(signal)
 
@@ -991,7 +1002,8 @@ async def create_scan_run(
     altcoins: bool = Query(default=True),
     meme_mode: bool = Query(default=False),
     exchange: str = Query(default="phemex"),
-    leverage: int = Query(default=1, ge=1, le=125)
+    leverage: int = Query(default=1, ge=1, le=125),
+    macro_overlay: bool = Query(default=False)
 ):
     """Start a background scan job and return immediately with run_id."""
     run_id = str(uuid.uuid4())
@@ -1003,7 +1015,8 @@ async def create_scan_run(
         "altcoins": altcoins,
         "meme_mode": meme_mode,
         "exchange": exchange,
-        "leverage": leverage
+        "leverage": leverage,
+        "macro_overlay": macro_overlay
     }
     
     job = ScanJob(run_id, params)
@@ -1094,6 +1107,7 @@ async def _execute_scan_job(job: ScanJob):
         # Apply mode to orchestrator
         orchestrator.apply_mode(mode)
         orchestrator.config.min_confluence_score = effective_min
+        orchestrator.config.macro_overlay_enabled = params["macro_overlay"]
         orchestrator.exchange_adapter = current_adapter
         orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
         
@@ -1147,7 +1161,8 @@ async def _execute_scan_job(job: ScanJob):
                 "plan_type": getattr(plan, 'plan_type', 'SMC'),
                 "conviction_class": getattr(plan, 'conviction_class', None),
                 "missing_critical_timeframes": plan.metadata.get('missing_critical_timeframes', []),
-                "regime": plan.metadata.get('regime')
+                "regime": plan.metadata.get('regime'),
+                "macro": plan.metadata.get('macro')
             }
             signals.append(signal)
         
@@ -1250,14 +1265,25 @@ async def get_prices(
         results = []
         errors = []
         
-        for symbol in symbol_list:
+        # Parallelize ticker fetches using asyncio
+        async def fetch_one(symbol: str):
+            # Check cache first
+            cache_key = f"{exchange_key}:{symbol}"
+            cached = PRICE_CACHE.get(cache_key)
+            if cached and (time.time() - cached['cached_at']) < PRICE_CACHE_TTL:
+                logger.debug(f"Cache hit for {cache_key}")
+                return cached['data'], None
+            
             try:
                 fetch_symbol = symbol
                 # OKX uses suffix ":USDT" for swap markets
                 if exchange_key == 'okx' and '/USDT' in symbol and ':USDT' not in symbol:
                     fetch_symbol = symbol.replace('/USDT', '/USDT:USDT')
                 
-                ticker = adapter.exchange.fetch_ticker(fetch_symbol)
+                # Run blocking fetch_ticker in thread pool to avoid blocking event loop
+                loop = asyncio.get_event_loop()
+                ticker = await loop.run_in_executor(None, adapter.exchange.fetch_ticker, fetch_symbol)
+                
                 last_price = ticker.get('last') or ticker.get('close') or 0.0
                 ts_ms = ticker.get('timestamp')
                 
@@ -1269,17 +1295,34 @@ async def get_prices(
                     except Exception:
                         dt_iso = datetime.now(timezone.utc).isoformat()
                 
-                results.append({
+                result = {
                     "symbol": symbol,
                     "price": float(last_price) if last_price is not None else 0.0,
                     "timestamp": dt_iso,
-                })
+                }
+                
+                # Store in cache
+                PRICE_CACHE[cache_key] = {
+                    'data': result,
+                    'cached_at': time.time()
+                }
+                
+                return result, None
             except Exception as e:
                 logger.warning("Failed to fetch price for %s: %s", symbol, e)
-                errors.append({
+                return None, {
                     "symbol": symbol,
                     "error": str(e)
-                })
+                }
+        
+        # Fetch all tickers in parallel
+        fetch_results = await asyncio.gather(*[fetch_one(sym) for sym in symbol_list])
+        
+        for result, error in fetch_results:
+            if result:
+                results.append(result)
+            if error:
+                errors.append(error)
         
         return {
             "prices": results,

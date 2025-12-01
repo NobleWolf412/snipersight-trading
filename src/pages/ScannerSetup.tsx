@@ -55,6 +55,7 @@ export function ScannerSetup() {
         meme_mode: scanConfig.categories.memeMode,
         exchange: scanConfig.exchange,
         leverage: scanConfig.leverage || 1,
+        macro_overlay: scanConfig.macroOverlay,
       });
 
       if (signalsResponse.error || !signalsResponse.data) {
@@ -302,6 +303,31 @@ export function ScannerSetup() {
                         categories: { ...scanConfig.categories, memeMode: checked },
                       })
                     }
+                  />
+                </div>
+
+                <div className="h-px bg-border/50 my-4" />
+
+                <div className="flex items-center justify-between p-3 rounded border border-border/40 bg-background/40 hover:border-primary/30 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <span className="hud-terminal text-primary/90 tracking-wide">MACRO OVERLAY</span>
+                    {scanConfig.macroOverlay && (
+                      <Badge variant="outline" className="text-xs hud-text-green border-accent/50">DOMINANCE FLOW</Badge>
+                    )}
+                  </div>
+                  <Switch
+                    id="macro-overlay"
+                    checked={scanConfig.macroOverlay}
+                    onCheckedChange={(checked) => {
+                      setScanConfig({
+                        ...scanConfig,
+                        macroOverlay: checked,
+                      });
+                      addConsoleLog(
+                        `CONFIG: Macro overlay ${checked ? 'enabled' : 'disabled'} (BTC/ALT dominance flow)`,
+                        'config'
+                      );
+                    }}
                   />
                 </div>
               </div>

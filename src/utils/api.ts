@@ -201,6 +201,7 @@ class ApiClient {
     meme_mode?: boolean;
     exchange?: string;
     leverage?: number;
+    macro_overlay?: boolean;
   }) {
     const queryParams: Record<string, string> = {};
     if (params) {
@@ -212,6 +213,7 @@ class ApiClient {
       if (params.meme_mode !== undefined) queryParams.meme_mode = params.meme_mode.toString();
       if (params.exchange) queryParams.exchange = params.exchange;
       if (params.leverage !== undefined) queryParams.leverage = params.leverage.toString();
+      if (params.macro_overlay !== undefined) queryParams.macro_overlay = params.macro_overlay.toString();
     }
     const query = new URLSearchParams(queryParams).toString();
     return this.request<SignalsResponse>(

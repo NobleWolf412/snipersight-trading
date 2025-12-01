@@ -18,6 +18,7 @@ export interface ScanConfig {
   leverage: number;
   sniperMode: SniperMode;
   customTimeframes?: string[];
+  macroOverlay: boolean;
 }
 
 export interface BotConfig {
@@ -80,6 +81,7 @@ const defaultScanConfig: ScanConfig = {
   leverage: 1,
   sniperMode: 'recon',
   customTimeframes: [],
+  macroOverlay: false,
 };
 
 const defaultBotConfig: BotConfig = {

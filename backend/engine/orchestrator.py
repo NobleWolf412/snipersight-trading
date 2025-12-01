@@ -57,6 +57,7 @@ from backend.analysis.htf_levels import HTFLevelDetector
 from backend.strategy.planner.planner_service import generate_trade_plan
 from backend.risk.risk_manager import RiskManager
 from backend.risk.position_sizer import PositionSizer
+from backend.analysis.macro_context import MacroContext, compute_macro_score
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,8 @@ class Orchestrator:
         self.regime_detector = get_regime_detector()
         self.regime_policy = get_regime_policy(self.config.profile)
         self.current_regime: Optional[MarketRegime] = None
+        # Macro context (dominance/flows); compute once per scan when available
+        self.macro_context: Optional[MacroContext] = None
         
         # Concurrency settings
         self.concurrency_workers = max(1, concurrency_workers)
@@ -187,6 +190,13 @@ class Orchestrator:
         except Exception as e:
             logger.warning("Regime detection failed: %s - continuing without regime context", e)
             self.current_regime = None
+
+        # Optionally compute macro dominance context once (safe no-op if unavailable)
+        try:
+            self.macro_context = self._compute_macro_context(symbols)
+        except Exception as _mc_err:
+            logger.debug("Macro context computation skipped: %s", _mc_err)
+            self.macro_context = None
         
         signals = []
         rejected_count = 0
@@ -769,6 +779,41 @@ class Orchestrator:
             )
             chosen.total_score = adjusted_score
 
+        # Apply macro overlay adjustments if enabled and context available
+        try:
+            if getattr(self.config, 'macro_overlay_enabled', False) and self.macro_context:
+                direction = context.metadata.get('chosen_direction', 'LONG')
+                sym_upper = (context.symbol or '').upper()
+                is_btc = sym_upper.startswith('BTC/') or sym_upper == 'BTCUSDT'
+                is_alt = not is_btc
+                mac_adj = compute_macro_score(
+                    ctx=self.macro_context,
+                    direction=direction,
+                    is_btc=is_btc,
+                    is_alt=is_alt,
+                )
+                # Adjust chosen score and clamp 0-100
+                chosen.total_score = max(0.0, min(100.0, chosen.total_score + float(mac_adj)))
+                # Surface macro metadata for UI/telemetry via context
+                try:
+                    ctx = self.macro_context
+                    context.metadata['macro'] = {
+                        'state': getattr(ctx.macro_state, 'name', 'NEUTRAL').lower(),
+                        'score': int(getattr(ctx, 'macro_score', 0)),
+                        'cluster_score': int(getattr(ctx, 'cluster_score', 0)),
+                        'btc_velocity_1h': float(getattr(ctx, 'btc_velocity_1h', 0.0)),
+                        'alt_velocity_1h': float(getattr(ctx, 'alt_velocity_1h', 0.0)),
+                        'stable_velocity_1h': float(getattr(ctx, 'stable_velocity_1h', 0.0)),
+                        'velocity_spread_1h': float(getattr(ctx, 'velocity_spread_1h', 0.0)),
+                        'percent_alts_up': float(getattr(ctx, 'percent_alts_up', 0.0)),
+                        'btc_volatility_1h': float(getattr(ctx, 'btc_volatility_1h', 0.0)),
+                        'notes': list(getattr(ctx, 'notes', []))
+                    }
+                except Exception:
+                    pass
+        except Exception as _macro_err:
+            logger.debug("Macro overlay adjustment skipped: %s", _macro_err)
+
         return chosen
     
     def _generate_trade_plan(self, context: SniperContext, current_price: float) -> Optional[TradePlan]:
@@ -951,6 +996,13 @@ class Orchestrator:
                         'volatility': symbol_regime.volatility,
                         'score': symbol_regime.score
                     }
+
+            # Attach macro metadata if present from confluence stage
+            if plan and 'macro' in context.metadata:
+                try:
+                    plan.metadata['macro'] = context.metadata.get('macro')
+                except Exception:
+                    pass
             
             # Compute simple EV estimate for ranking/prioritization
             try:
@@ -1288,6 +1340,115 @@ class Orchestrator:
             'diagnostics': self.diagnostics,
             'debug_mode': self.debug_mode
         }
+
+    def _compute_macro_context(self, symbols: List[str]) -> Optional[MacroContext]:
+        """
+        Compute macro dominance/flow context.
+
+        Uses basket-based proxies from available market data:
+        - btc_velocity_1h: 1h percent change for BTC/USDT
+        - alt_velocity_1h: equal-weight 1h percent change across non-BTC symbols in scan set
+        - stable_velocity_1h: inferred from breadth (alts up/down %) as a proxy for stables flow
+        - percent_alts_up: share of alts with last close > previous close on 1h
+        - btc_volatility_1h: ATR(14) / price for BTC on 1h
+        """
+        try:
+            # Ensure BTC present for reference
+            btc_symbol = 'BTC/USDT'
+            scan_symbols = list({s for s in symbols if isinstance(s, str) and s})
+            if btc_symbol not in scan_symbols:
+                scan_symbols.append(btc_symbol)
+
+            # Fetch 1h data for all symbols involved (limit small for percent change)
+            data_map = self.ingestion_pipeline.parallel_fetch(
+                symbols=scan_symbols,
+                timeframes=['1h'],
+                limit=60,
+                max_workers=max(2, self.concurrency_workers)
+            )
+
+            def pct_change_last(df) -> Optional[float]:
+                try:
+                    closes = df['close'].tail(2).to_list()
+                    if len(closes) < 2:
+                        return None
+                    prev, curr = float(closes[-2]), float(closes[-1])
+                    if prev == 0:
+                        return None
+                    return (curr - prev) / prev * 100.0
+                except Exception:
+                    return None
+
+            # BTC 1h velocity and volatility
+            btc_data = data_map.get(btc_symbol)
+            if not btc_data or '1h' not in btc_data.timeframes:
+                return None
+            btc_df = btc_data.timeframes['1h']
+            btc_vel = pct_change_last(btc_df) or 0.0
+
+            # ATR% proxy for BTC on 1h
+            try:
+                from backend.indicators.volatility import compute_atr
+                atr_series = compute_atr(btc_df)
+                atr_val = float(atr_series.iloc[-1]) if atr_series is not None and len(atr_series) else 0.0
+                price = float(btc_df['close'].iloc[-1]) if len(btc_df) else 0.0
+                btc_vol_pct = (atr_val / price) if price > 0 else 0.0
+            except Exception:
+                btc_vol_pct = 0.0
+
+            # Alt basket = non-BTC symbols in provided list that we have data for
+            alt_syms = [s for s in scan_symbols if s != btc_symbol]
+            alt_velocities: List[float] = []
+            alts_up = 0
+            alts_total = 0
+            for s in alt_syms:
+                mtf = data_map.get(s)
+                if not mtf or '1h' not in mtf.timeframes:
+                    continue
+                df = mtf.timeframes['1h']
+                change = pct_change_last(df)
+                if change is None:
+                    continue
+                alt_velocities.append(change)
+                alts_total += 1
+                if change > 0:
+                    alts_up += 1
+
+            alt_vel = (sum(alt_velocities) / len(alt_velocities)) if alt_velocities else 0.0
+            percent_alts_up = (alts_up / alts_total * 100.0) if alts_total > 0 else 50.0
+
+            # Infer stable flow direction from breadth
+            # Heuristic: strong breadth up -> stables down, strong breadth down -> stables up
+            if percent_alts_up >= 65.0:
+                stable_vel = -0.3
+            elif percent_alts_up <= 35.0:
+                stable_vel = 0.3
+            else:
+                stable_vel = 0.0
+
+            # Build MacroContext directly
+            from backend.analysis.macro_context import MacroContext, _dir_from_pct, compute_cluster_score
+            ctx = MacroContext(
+                btc_dom=0.0,
+                alt_dom=0.0,
+                stable_dom=0.0,
+                percent_alts_up=percent_alts_up,
+                btc_volatility_1h=btc_vol_pct,
+            )
+            ctx.btc_velocity_1h = btc_vel
+            ctx.alt_velocity_1h = alt_vel
+            ctx.stable_velocity_1h = stable_vel
+            ctx.velocity_spread_1h = btc_vel - alt_vel
+            ctx.btc_dir = _dir_from_pct(btc_vel)
+            ctx.alt_dir = _dir_from_pct(alt_vel)
+            ctx.stable_dir = _dir_from_pct(stable_vel)
+
+            from backend.analysis.macro_context import classify_macro_state
+            ctx.macro_state = classify_macro_state(ctx)
+            ctx.cluster_score = compute_cluster_score(ctx)
+            return ctx
+        except Exception:
+            return None
     
     def export_debug_bundle(self, symbol: str, trace_id: str, **data) -> Optional[str]:
         """

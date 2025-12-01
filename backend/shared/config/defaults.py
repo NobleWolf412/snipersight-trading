@@ -21,6 +21,8 @@ class ScanConfig:
     min_confluence_score: float = 65.0
     min_rr_ratio: float = 0.8  # Temporarily lowered for testing
     btc_impulse_gate_enabled: bool = True
+    # Macro overlay (dominance/flows) toggle - disabled by default until fully wired
+    macro_overlay_enabled: bool = False
     max_symbols: int = 20
     max_risk_pct: float = 2.0
     leverage: int = 1  # Added: user-selected leverage to allow planner adaptive buffers/targets
