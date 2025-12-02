@@ -101,10 +101,9 @@ wait_for_health() {
     sleep 1
   done
   echo "Warning: backend health check did not pass in time."
-
+}
 
 # -------------------- main --------------------
-
 
 # Manual restart mode: kill backend/frontend, free ports, restart servers
 if [[ "${1:-}" == "restart" ]]; then
@@ -140,7 +139,6 @@ kill_by_port "$FRONTEND_PORT"
 start_backend
 start_frontend
 wait_for_health
-start_tunnels
 
 echo
 echo "================ DEV ENV READY ================"
