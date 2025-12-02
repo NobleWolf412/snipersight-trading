@@ -21,6 +21,13 @@ const DEFAULT_MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;
 const RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504];
 
+// Circuit breaker - prevents hammering a dead backend
+let circuitBreakerOpen = false;
+let circuitBreakerTrippedAt = 0;
+let consecutiveFailures = 0;
+const CIRCUIT_BREAKER_THRESHOLD = 5; // Open circuit after 5 consecutive failures
+const CIRCUIT_BREAKER_RESET_MS = 30000; // Try again after 30 seconds
+
 interface ApiResponse<T> {
   data?: T;
   error?: string;
@@ -205,6 +212,20 @@ class ApiClient {
     const method = fetchOptions.method || 'GET';
     const fullUrl = `${API_BASE}${endpoint}`;
     
+    // Circuit breaker check - fail fast if backend is known to be down
+    if (circuitBreakerOpen) {
+      const elapsed = Date.now() - circuitBreakerTrippedAt;
+      if (elapsed < CIRCUIT_BREAKER_RESET_MS) {
+        const remaining = Math.round((CIRCUIT_BREAKER_RESET_MS - elapsed) / 1000);
+        debugLogger.warning(`⚡ Circuit breaker OPEN - skipping request (retry in ${remaining}s)`, 'api');
+        return { error: `Backend unavailable - retry in ${remaining}s` };
+      }
+      // Reset circuit breaker and try again
+      circuitBreakerOpen = false;
+      consecutiveFailures = 0;
+      debugLogger.info(`⚡ Circuit breaker RESET - attempting connection`, 'api');
+    }
+    
     debugLogger.api(`→ ${method} ${endpoint}`);
     debugLogger.info(`Connecting to: ${fullUrl}`, 'api');
     debugLogger.info(`Timeout: ${timeout / 1000}s | Retries: ${skipRetry ? 'disabled' : maxRetries}`, 'api');
@@ -270,15 +291,18 @@ class ApiClient {
         const contentType = response.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
           debugLogger.success(`✓ Request completed (no JSON body)`, 'api');
+          consecutiveFailures = 0; // Reset on success
           return { data: undefined };
         }
 
         try {
           const data = await response.json();
           debugLogger.success(`✓ Request successful`, 'api');
+          consecutiveFailures = 0; // Reset on success
           return { data };
         } catch {
           debugLogger.warning('Response was not valid JSON', 'api');
+          consecutiveFailures = 0; // Reset on success (even if JSON parse fails, backend responded)
           return { data: undefined };
         }
       } catch (error) {
@@ -302,9 +326,25 @@ class ApiClient {
           }
         }
         
+        // Track consecutive failures for circuit breaker
+        consecutiveFailures++;
+        if (consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+          circuitBreakerOpen = true;
+          circuitBreakerTrippedAt = Date.now();
+          debugLogger.error(`⚡ Circuit breaker TRIPPED after ${consecutiveFailures} failures - pausing requests for 30s`, 'api');
+        }
+        
         debugLogger.error(`✗ Request failed: ${lastError}`, 'api');
         return { error: lastError };
       }
+    }
+
+    // Track consecutive failures for circuit breaker
+    consecutiveFailures++;
+    if (consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+      circuitBreakerOpen = true;
+      circuitBreakerTrippedAt = Date.now();
+      debugLogger.error(`⚡ Circuit breaker TRIPPED after ${consecutiveFailures} failures - pausing requests for 30s`, 'api');
     }
 
     debugLogger.error(`✗ All ${maxRetries} retries exhausted: ${lastError}`, 'api');

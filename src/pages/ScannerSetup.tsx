@@ -360,7 +360,7 @@ export function ScannerSetup() {
             <h2 className="text-xl font-semibold mb-4 hud-headline hud-text-green">SCANNER CONSOLE</h2>
             <ScannerConsole
               isScanning={isScanning}
-              className="min-h-[300px]"
+              className=""
             />
           </div>
         </div>

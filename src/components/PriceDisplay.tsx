@@ -21,7 +21,7 @@ export function PriceDisplay({
   className,
   size = 'md'
 }: PriceDisplayProps) {
-  const { priceData, isLoading } = usePrice(symbol);
+  const { priceData, isLoading, error } = usePrice(symbol);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
@@ -43,10 +43,25 @@ export function PriceDisplay({
     );
   }
 
+  // Check if we're in backoff state (price fetch failed and waiting to retry)
+  const backoff = priceService.getBackoff(symbol);
+  
   if (!priceData) {
+    // Show backoff indicator if fetch failed, otherwise generic "No data"
+    if (backoff) {
+      const eta = Math.max(0, Math.ceil((backoff.next - now) / 1000));
+      return (
+        <div className={cn('flex items-center gap-2', className)}>
+          <span className={cn('text-muted-foreground', sizeClasses[size])}>--</span>
+          <span className="text-[10px] px-2 py-1 rounded bg-warning/20 border border-warning/40 text-warning font-mono">
+            RETRY {eta}s
+          </span>
+        </div>
+      );
+    }
     return (
       <div className={cn('text-muted-foreground', sizeClasses[size], className)}>
-        No data
+        {error ? 'Fetch error' : 'No data'}
       </div>
     );
   }

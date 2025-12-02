@@ -32,9 +32,10 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
   // TradingView embed URL with parameters and drawing studies
   const getTradingViewUrl = () => {
     // Keep URL minimal; render trading levels via our SVG overlay instead
-    
+    // Use BINANCE exchange which has better symbol coverage than PHEMEX on TradingView
+    // For major symbols, TradingView has good coverage; fallback to no exchange prefix lets TradingView auto-resolve
     const params = new URLSearchParams({
-      symbol: `PHEMEX:${symbol}`,
+      symbol: `BINANCE:${symbol}`,
       interval: timeframe,
       theme: 'dark',
       style: '1', // Candlestick
@@ -94,7 +95,7 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
             {result.pair}
           </Badge>
           <span className="text-xs text-muted-foreground font-mono">
-            PHEMEX
+            BINANCE
           </span>
         </div>
         
