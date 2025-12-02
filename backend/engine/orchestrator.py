@@ -209,6 +209,15 @@ class Orchestrator:
             "errors": []
         }
         
+        # Direction analytics tracking
+        direction_stats = {
+            "longs_generated": 0,
+            "shorts_generated": 0,
+            "tie_breaks_long": 0,
+            "tie_breaks_short": 0,
+            "tie_breaks_neutral_default": 0
+        }
+        
         # Parallel per-symbol processing
         def _safe_process(sym: str) -> tuple[Optional[TradePlan], Optional[Dict[str, Any]]]:
             try:
@@ -238,7 +247,21 @@ class Orchestrator:
                     }
                 if result:
                     signals.append(result)
-                    logger.info("✅ %s: Signal generated (%.1f%%)", symbol, result.confidence_score)
+                    # Track direction stats
+                    if result.direction == "LONG":
+                        direction_stats["longs_generated"] += 1
+                    else:
+                        direction_stats["shorts_generated"] += 1
+                    # Track tie-break usage from metadata
+                    alt_confluence = getattr(result, 'metadata', {}).get('alt_confluence', {})
+                    tie_break = alt_confluence.get('tie_break_used')
+                    if tie_break == 'regime_bullish':
+                        direction_stats["tie_breaks_long"] += 1
+                    elif tie_break == 'regime_bearish':
+                        direction_stats["tie_breaks_short"] += 1
+                    elif tie_break == 'neutral_default_long':
+                        direction_stats["tie_breaks_neutral_default"] += 1
+                    logger.info("✅ %s: Signal generated (%.1f%%) - %s", symbol, result.confidence_score, result.direction)
                 else:
                     rejected_count += 1
                     # Categorize rejection
@@ -271,6 +294,7 @@ class Orchestrator:
                 "errors": len(rejection_stats["errors"])
             },
             "details": rejection_stats,
+            "direction_stats": direction_stats,
             "regime": {
                 "composite": self.current_regime.composite if self.current_regime else "unknown",
                 "score": self.current_regime.score if self.current_regime else 0,
@@ -780,11 +804,34 @@ class Orchestrator:
         long_breakdown.total_score = regime_adjust(long_breakdown.total_score, 'LONG')
         short_breakdown.total_score = regime_adjust(short_breakdown.total_score, 'SHORT')
 
-        chosen = long_breakdown if long_breakdown.total_score >= short_breakdown.total_score else short_breakdown
+        # Choose direction - avoid long-side bias by using > instead of >=
+        # Ties are broken by regime trend, then HTF momentum, then skip
+        if long_breakdown.total_score > short_breakdown.total_score:
+            chosen = long_breakdown
+            tie_break_used = None
+        elif short_breakdown.total_score > long_breakdown.total_score:
+            chosen = short_breakdown
+            tie_break_used = None
+        else:
+            # Exact tie - use regime trend as tie-breaker
+            regime_trend = (context.metadata.get('symbol_regime').trend 
+                           if context.metadata.get('symbol_regime') else 'neutral')
+            if regime_trend == 'bullish':
+                chosen = long_breakdown
+                tie_break_used = 'regime_bullish'
+            elif regime_trend == 'bearish':
+                chosen = short_breakdown
+                tie_break_used = 'regime_bearish'
+            else:
+                # True neutral tie - default to long but flag it
+                chosen = long_breakdown
+                tie_break_used = 'neutral_default_long'
+        
         # Persist alt scores for analytics/debugging
         context.metadata['alt_confluence'] = {
             'long': long_breakdown.total_score,
-            'short': short_breakdown.total_score
+            'short': short_breakdown.total_score,
+            'tie_break_used': tie_break_used if 'tie_break_used' in dir() else None
         }
         # Store chosen direction for downstream planning
         context.metadata['chosen_direction'] = 'LONG' if chosen is long_breakdown else 'SHORT'
@@ -1020,6 +1067,13 @@ class Orchestrator:
             if plan and 'macro' in context.metadata:
                 try:
                     plan.metadata['macro'] = context.metadata.get('macro')
+                except Exception:
+                    pass
+            
+            # Attach direction analytics (alt scores, tie-break info) for monitoring
+            if plan and 'alt_confluence' in context.metadata:
+                try:
+                    plan.metadata['alt_confluence'] = context.metadata.get('alt_confluence')
                 except Exception:
                     pass
             

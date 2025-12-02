@@ -33,6 +33,14 @@ interface RejectionDetail {
   risk_reward?: number;
 }
 
+interface DirectionStats {
+  longs_generated: number;
+  shorts_generated: number;
+  tie_breaks_long: number;
+  tie_breaks_short: number;
+  tie_breaks_neutral_default: number;
+}
+
 interface RejectionStats {
   total_rejected: number;
   by_reason: {
@@ -53,6 +61,7 @@ interface RejectionStats {
     missing_critical_tf?: RejectionDetail[]; // Add details list
     [key: string]: RejectionDetail[] | undefined; // Future-proof
   };
+  direction_stats?: DirectionStats; // Direction analytics tracking
 }
 
 interface Props {
@@ -450,6 +459,60 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
           );
         })}
       </div>
+
+      {/* Direction Analytics - shows signal distribution */}
+      {rejections.direction_stats && (rejections.direction_stats.longs_generated > 0 || rejections.direction_stats.shorts_generated > 0) && (
+        <div className="mt-4 pt-4 border-t border-border/50">
+          <h4 className="text-xs font-semibold mb-3 flex items-center gap-2 text-muted-foreground uppercase tracking-wider">
+            <Target className="w-4 h-4" />
+            Direction Analytics
+          </h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+              <div className="flex items-center gap-2 mb-1">
+                <ChartLineUp className="w-4 h-4 text-green-400" />
+                <span className="text-xs text-muted-foreground">Longs</span>
+              </div>
+              <div className="text-lg font-mono font-bold text-green-400">
+                {rejections.direction_stats.longs_generated}
+              </div>
+            </div>
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+              <div className="flex items-center gap-2 mb-1">
+                <ChartLineDown className="w-4 h-4 text-red-400" />
+                <span className="text-xs text-muted-foreground">Shorts</span>
+              </div>
+              <div className="text-lg font-mono font-bold text-red-400">
+                {rejections.direction_stats.shorts_generated}
+              </div>
+            </div>
+            {(rejections.direction_stats.tie_breaks_long > 0 || rejections.direction_stats.tie_breaks_short > 0 || rejections.direction_stats.tie_breaks_neutral_default > 0) && (
+              <>
+                <div className="p-3 rounded-lg bg-accent/10 border border-accent/20 col-span-2 md:col-span-2">
+                  <div className="text-xs text-muted-foreground mb-2">Tie-Break Resolution</div>
+                  <div className="flex items-center gap-4 text-xs">
+                    {rejections.direction_stats.tie_breaks_long > 0 && (
+                      <span className="text-green-400">
+                        Regime→Long: {rejections.direction_stats.tie_breaks_long}
+                      </span>
+                    )}
+                    {rejections.direction_stats.tie_breaks_short > 0 && (
+                      <span className="text-red-400">
+                        Regime→Short: {rejections.direction_stats.tie_breaks_short}
+                      </span>
+                    )}
+                    {rejections.direction_stats.tie_breaks_neutral_default > 0 && (
+                      <span className="text-yellow-400">
+                        Neutral→Long: {rejections.direction_stats.tie_breaks_neutral_default}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 pt-4 border-t border-border/50">
         <p className="text-xs text-muted-foreground">

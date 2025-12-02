@@ -47,6 +47,72 @@ from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import create_signal_rejected_event, create_alt_stop_suggested_event
 
 
+def _adjust_stop_for_leverage(
+    stop_level: float,
+    near_entry: float,
+    leverage: int,
+    is_bullish: bool,
+    min_cushion_pct: float = 30.0,
+    mmr: float = 0.004
+) -> tuple[float, bool, dict]:
+    """
+    Adjust stop loss to ensure minimum cushion from liquidation price.
+    
+    For high leverage positions, the original structure-based stop may be
+    too close to liquidation. This function tightens the stop if needed
+    to maintain at least min_cushion_pct distance from liquidation.
+    
+    Args:
+        stop_level: Original stop loss level
+        near_entry: Near entry price (used as entry reference)
+        leverage: Position leverage (1x = no adjustment)
+        is_bullish: True for long, False for short
+        min_cushion_pct: Minimum cushion percentage from liquidation (default 30%)
+        mmr: Maintenance margin rate (default 0.4%)
+        
+    Returns:
+        Tuple of (adjusted_stop, was_adjusted, adjustment_meta)
+    """
+    if leverage <= 1:
+        return stop_level, False, {}
+    
+    entry = near_entry
+    
+    # Calculate liquidation price
+    if is_bullish:
+        liq_price = entry * (1 + mmr - (1.0 / leverage))
+        # For longs: stop must be above liq_price by at least min_cushion_pct of (entry - liq)
+        cushion_distance = (entry - liq_price) * (min_cushion_pct / 100.0)
+        min_safe_stop = liq_price + cushion_distance
+        
+        if stop_level < min_safe_stop:
+            # Original stop too close to liquidation - tighten it
+            adjustment_meta = {
+                'original_stop': stop_level,
+                'adjusted_stop': min_safe_stop,
+                'liq_price': liq_price,
+                'reason': f'Tightened stop to maintain {min_cushion_pct}% cushion from liquidation at {leverage}x leverage'
+            }
+            return min_safe_stop, True, adjustment_meta
+    else:
+        liq_price = entry * (1 - mmr + (1.0 / leverage))
+        # For shorts: stop must be below liq_price by at least min_cushion_pct of (liq - entry)
+        cushion_distance = (liq_price - entry) * (min_cushion_pct / 100.0)
+        max_safe_stop = liq_price - cushion_distance
+        
+        if stop_level > max_safe_stop:
+            # Original stop too close to liquidation - tighten it
+            adjustment_meta = {
+                'original_stop': stop_level,
+                'adjusted_stop': max_safe_stop,
+                'liq_price': liq_price,
+                'reason': f'Tightened stop to maintain {min_cushion_pct}% cushion from liquidation at {leverage}x leverage'
+            }
+            return max_safe_stop, True, adjustment_meta
+    
+    return stop_level, False, {}
+
+
 def _get_allowed_structure_tfs(config: ScanConfig) -> tuple:
     """Extract structure_timeframes from config, or return empty tuple if unrestricted."""
     return getattr(config, 'structure_timeframes', ())
@@ -284,6 +350,28 @@ def generate_trade_plan(
         multi_tf_data=multi_tf_data
     )
     plan_composition['stop_from_structure'] = stop_used_structure
+    
+    # --- Leverage-Aware Stop Adjustment ---
+    # For high leverage, ensure stop maintains safe distance from liquidation
+    if leverage > 1:
+        adjusted_stop_level, was_adjusted, leverage_adj_meta = _adjust_stop_for_leverage(
+            stop_level=stop_loss.level,
+            near_entry=entry_zone.near_entry,
+            leverage=leverage,
+            is_bullish=is_bullish,
+            min_cushion_pct=30.0  # Require 30% cushion from liquidation
+        )
+        if was_adjusted:
+            # Update stop loss with tightened level
+            old_stop = stop_loss.level
+            stop_loss = StopLoss(
+                level=adjusted_stop_level,
+                distance_atr=(abs(entry_zone.far_entry - adjusted_stop_level) / atr),
+                rationale=f"{stop_loss.rationale} [Adjusted for {leverage}x leverage]"
+            )
+            logger.info(f"Leverage adjustment: stop moved from {old_stop:.6f} to {adjusted_stop_level:.6f} for {leverage}x leverage")
+            leverage_adjustments['stop_adjusted'] = True
+            leverage_adjustments['adjustment_meta'] = leverage_adj_meta
     
     # --- Structural collapse guards before targets (prevent .15 DOGE case) ---
     avg_entry_pre = (entry_zone.near_entry + entry_zone.far_entry) / 2.0
