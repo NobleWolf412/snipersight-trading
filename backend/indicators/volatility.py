@@ -11,8 +11,10 @@ All functions return pandas Series with proper index alignment.
 import pandas as pd
 import numpy as np
 
+from backend.indicators.validation_utils import validate_ohlcv, DataValidationError
 
-def compute_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+
+def compute_atr(df: pd.DataFrame, period: int = 14, validate_input: bool = True) -> pd.Series:
     """
     Compute Average True Range (ATR).
     
@@ -25,12 +27,14 @@ def compute_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     Args:
         df: DataFrame with 'high', 'low', 'close' columns
         period: ATR period (default 14)
+        validate_input: If True, validate input data (default True)
         
     Returns:
         pd.Series: ATR values
         
     Raises:
         ValueError: If df is too short or missing required columns
+        DataValidationError: If input data has NaN or invalid values
     """
     required_cols = ['high', 'low', 'close']
     missing_cols = [col for col in required_cols if col not in df.columns]
@@ -39,6 +43,15 @@ def compute_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     
     if len(df) < period + 1:
         raise ValueError(f"DataFrame too short for ATR calculation (need {period + 1} rows, got {len(df)})")
+    
+    # Validate input data quality
+    if validate_input:
+        validate_ohlcv(
+            df, 
+            require_volume=False, 
+            min_rows=period + 1,
+            raise_on_error=True
+        )
     
     # Calculate True Range components
     high_low = df['high'] - df['low']

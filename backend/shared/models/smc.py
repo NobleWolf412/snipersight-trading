@@ -78,6 +78,7 @@ class FVG:
         timestamp: When the FVG was formed
         size: Gap size in price points
         overlap_with_price: Percentage of gap filled by price (0.0-1.0)
+        freshness_score: Recency score, decreases over time (0.0-1.0)
     """
     timeframe: str
     direction: Literal["bullish", "bearish"]
@@ -86,6 +87,7 @@ class FVG:
     timestamp: datetime
     size: float
     overlap_with_price: float  # 0.0 (fresh) to 1.0 (completely filled)
+    freshness_score: float = 1.0  # Time-based decay, similar to OB
     
     def __post_init__(self):
         """Validate FVG data."""
@@ -99,6 +101,11 @@ class FVG:
     def midpoint(self) -> float:
         """Calculate midpoint of the FVG."""
         return (self.top + self.bottom) / 2
+    
+    @property
+    def is_fresh(self) -> bool:
+        """Check if FVG is fresh (freshness > 0.5 and less than 50% filled)."""
+        return self.freshness_score > 0.5 and self.overlap_with_price < 0.5
     
     def contains_price(self, price: float) -> bool:
         """Check if a price is within the FVG."""

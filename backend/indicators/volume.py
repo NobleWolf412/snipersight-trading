@@ -11,26 +11,40 @@ All functions return pandas Series with proper index alignment.
 
 import pandas as pd
 import numpy as np
+import logging
+
+from backend.indicators.validation_utils import validate_ohlcv, DataValidationError
+
+logger = logging.getLogger(__name__)
+
+
+# Anomaly threshold: volumes exceeding this multiple are flagged as potential data errors
+VOLUME_ANOMALY_THRESHOLD = 100.0
 
 
 def detect_volume_spike(
     df: pd.DataFrame, 
     threshold: float = 2.0,
-    lookback: int = 20
+    lookback: int = 20,
+    anomaly_threshold: float = VOLUME_ANOMALY_THRESHOLD,
+    flag_anomalies: bool = True
 ) -> pd.Series:
     """
-    Detect volume spikes.
+    Detect volume spikes with anomaly detection.
     
     A volume spike occurs when current volume exceeds the rolling average
-    by the specified threshold multiplier.
+    by the specified threshold multiplier. Optionally flags extreme outliers
+    that may indicate data errors.
     
     Args:
         df: DataFrame with 'volume' column
         threshold: Multiplier for average volume (default 2.0)
         lookback: Rolling window for average calculation (default 20)
+        anomaly_threshold: Upper bound multiplier to flag potential data errors (default 100.0)
+        flag_anomalies: If True, log warnings for anomalous volumes (default True)
         
     Returns:
-        pd.Series: Boolean series indicating volume spikes
+        pd.Series: Boolean series indicating volume spikes (excludes anomalies)
         
     Raises:
         ValueError: If df is too short or missing required columns
@@ -44,10 +58,63 @@ def detect_volume_spike(
     # Calculate rolling average volume
     avg_volume = df['volume'].rolling(window=lookback).mean()
     
-    # Detect spikes: current volume > threshold * average volume
-    volume_spikes = df['volume'] > (avg_volume * threshold)
+    # Calculate relative volume
+    relative_volume = df['volume'] / avg_volume
+    
+    # Detect anomalies (potential data errors)
+    anomalies = relative_volume > anomaly_threshold
+    if flag_anomalies and anomalies.any():
+        anomaly_count = anomalies.sum()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            f"Volume anomaly detected: {anomaly_count} bar(s) with volume >{anomaly_threshold}x average. "
+            f"Max ratio: {relative_volume.max():.1f}x. These may be data errors."
+        )
+    
+    # Detect legitimate spikes: above threshold but below anomaly threshold
+    volume_spikes = (relative_volume > threshold) & (relative_volume <= anomaly_threshold)
     
     return volume_spikes
+
+
+def detect_volume_spike_with_metadata(
+    df: pd.DataFrame,
+    threshold: float = 2.0,
+    lookback: int = 20,
+    anomaly_threshold: float = VOLUME_ANOMALY_THRESHOLD
+) -> dict:
+    """
+    Detect volume spikes and return detailed metadata.
+    
+    Args:
+        df: DataFrame with 'volume' column
+        threshold: Multiplier for average volume (default 2.0)
+        lookback: Rolling window for average calculation (default 20)
+        anomaly_threshold: Upper bound multiplier for anomaly detection
+        
+    Returns:
+        dict with keys:
+            - spikes: Boolean series of legitimate spikes
+            - anomalies: Boolean series of potential data errors
+            - relative_volume: Series of volume/average ratios
+            - avg_volume: Rolling average volume series
+    """
+    if 'volume' not in df.columns:
+        raise ValueError("DataFrame must contain 'volume' column")
+    
+    if len(df) < lookback:
+        raise ValueError(f"DataFrame too short for volume spike detection (need {lookback} rows, got {len(df)})")
+    
+    avg_volume = df['volume'].rolling(window=lookback).mean()
+    relative_volume = df['volume'] / avg_volume
+    
+    return {
+        'spikes': (relative_volume > threshold) & (relative_volume <= anomaly_threshold),
+        'anomalies': relative_volume > anomaly_threshold,
+        'relative_volume': relative_volume,
+        'avg_volume': avg_volume,
+    }
 
 
 def compute_obv(df: pd.DataFrame) -> pd.Series:

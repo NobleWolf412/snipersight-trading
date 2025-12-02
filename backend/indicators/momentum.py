@@ -14,29 +14,45 @@ from typing import Tuple
 import pandas as pd
 import numpy as np
 
+from backend.indicators.validation_utils import validate_ohlcv, DataValidationError
 
-def compute_rsi(df: pd.DataFrame, period: int = 14) -> pd.Series:
+
+def compute_rsi(df: pd.DataFrame, period: int = 14, validate_input: bool = True) -> pd.Series:
     """
     Compute Relative Strength Index (RSI).
     
     RSI measures the magnitude of recent price changes to evaluate
     overbought or oversold conditions.
     
+    Note: Uses EMA smoothing (more responsive) rather than Wilder's RMA.
+    This produces slightly different values than TA-Lib (~0.1 tolerance).
+    
     Args:
         df: DataFrame with 'close' column
         period: RSI period (default 14)
+        validate_input: If True, validate input data (default True)
         
     Returns:
         pd.Series: RSI values (0-100)
         
     Raises:
         ValueError: If df is too short or missing required columns
+        DataValidationError: If input data has NaN or invalid values
     """
     if len(df) < period + 1:
         raise ValueError(f"DataFrame too short for RSI calculation (need {period + 1} rows, got {len(df)})")
     
     if 'close' not in df.columns:
         raise ValueError("DataFrame must contain 'close' column")
+    
+    # Validate input data quality
+    if validate_input:
+        validate_ohlcv(
+            df, 
+            require_volume=False, 
+            min_rows=period + 1,
+            raise_on_error=True
+        )
     
     # Calculate price changes
     delta = df['close'].diff()
@@ -258,39 +274,5 @@ def validate_momentum_indicators(df: pd.DataFrame) -> dict:
     return results
 
 
-def compute_macd(
-    df: pd.DataFrame,
-    fast: int = 12,
-    slow: int = 26,
-    signal: int = 9
-) -> Tuple[pd.Series, pd.Series, pd.Series]:
-    """
-    Compute MACD (Moving Average Convergence Divergence).
-
-    Returns MACD line, signal line, and histogram.
-
-    Args:
-        df: DataFrame with 'close' column
-        fast: Fast EMA period (default 12)
-        slow: Slow EMA period (default 26)
-        signal: Signal EMA period (default 9)
-
-    Returns:
-        Tuple[pd.Series, pd.Series, pd.Series]: (macd_line, signal_line, histogram)
-
-    Raises:
-        ValueError: If df is too short or missing required columns
-    """
-    if 'close' not in df.columns:
-        raise ValueError("DataFrame must contain 'close' column")
-    min_len = max(fast, slow) + signal + 1
-    if len(df) < min_len:
-        raise ValueError(f"DataFrame too short for MACD (need {min_len} rows, got {len(df)})")
-
-    ema_fast = df['close'].ewm(span=fast, adjust=False).mean()
-    ema_slow = df['close'].ewm(span=slow, adjust=False).mean()
-    macd_line = ema_fast - ema_slow
-    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
-    histogram = macd_line - signal_line
-
-    return macd_line, signal_line, histogram
+# Note: compute_macd is defined once above (around line 53)
+# A duplicate definition was removed during code quality audit (Dec 2025)

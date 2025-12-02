@@ -19,7 +19,9 @@ from backend.shared.config.smc_config import SMCConfig
 
 def detect_structural_breaks(
     df: pd.DataFrame,
-    config: SMCConfig | dict | None = None
+    config: SMCConfig | dict | None = None,
+    htf_df: Optional[pd.DataFrame] = None,
+    htf_trend: Optional[str] = None
 ) -> List[StructuralBreak]:
     """
     Detect Break of Structure (BOS) and Change of Character (CHoCH) patterns.
@@ -28,12 +30,16 @@ def detect_structural_breaks(
     1. Identify swing highs and swing lows
     2. Track current market structure (uptrend/downtrend)
     3. Detect when structure breaks (BOS) or changes (CHoCH)
+    4. Check alignment with higher timeframe trend if provided
     
     Args:
         df: DataFrame with OHLC data and DatetimeIndex
         config: Configuration dict with:
             - swing_lookback: Candles to each side for swing detection (default 5)
             - min_break_distance_atr: Minimum break distance in ATR (default 0.5)
+        htf_df: Optional higher timeframe DataFrame for alignment checks
+        htf_trend: Optional explicit HTF trend ("uptrend", "downtrend") to use
+                   instead of calculating from htf_df
             
     Returns:
         List[StructuralBreak]: Detected structural breaks
@@ -70,6 +76,14 @@ def detect_structural_breaks(
     # Calculate ATR for filtering
     from backend.indicators.volatility import compute_atr
     atr = compute_atr(df, period=14)
+    
+    # Determine HTF trend for alignment checks
+    # Priority: explicit htf_trend > calculated from htf_df > None
+    computed_htf_trend = None
+    if htf_trend:
+        computed_htf_trend = htf_trend
+    elif htf_df is not None and len(htf_df) >= 20:
+        computed_htf_trend = _calculate_htf_trend(htf_df)
     
     # Detect swing highs and lows
     swing_highs = _detect_swing_highs(df, swing_lookback)
@@ -108,8 +122,8 @@ def detect_structural_breaks(
         if current_trend == "uptrend":
             # BOS: Break above previous swing high (continuation)
             if current_close > last_swing_high + (min_break_distance_atr * atr_value):
-                # Check HTF alignment (simplified - would need multi-timeframe data)
-                htf_aligned = True  # Placeholder - would check higher timeframe trend
+                # HTF alignment: BOS in uptrend aligns if HTF is also uptrend or unknown
+                htf_aligned = _check_bos_htf_alignment("uptrend", computed_htf_trend)
                 
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),
@@ -122,7 +136,8 @@ def detect_structural_breaks(
             
             # CHoCH: Break below previous swing low (reversal)
             elif current_close < last_swing_low - (min_break_distance_atr * atr_value):
-                htf_aligned = False  # Counter to higher timeframe trend
+                # HTF alignment: CHoCH in uptrend aligns if HTF is downtrend
+                htf_aligned = _check_choch_htf_alignment("uptrend", computed_htf_trend)
                 
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),
@@ -140,7 +155,8 @@ def detect_structural_breaks(
         elif current_trend == "downtrend":
             # BOS: Break below previous swing low (continuation)
             if current_close < last_swing_low - (min_break_distance_atr * atr_value):
-                htf_aligned = True
+                # HTF alignment: BOS in downtrend aligns if HTF is also downtrend or unknown
+                htf_aligned = _check_bos_htf_alignment("downtrend", computed_htf_trend)
                 
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),
@@ -153,7 +169,8 @@ def detect_structural_breaks(
             
             # CHoCH: Break above previous swing high (reversal)
             elif current_close > last_swing_high + (min_break_distance_atr * atr_value):
-                htf_aligned = False
+                # HTF alignment: CHoCH in downtrend aligns if HTF is uptrend
+                htf_aligned = _check_choch_htf_alignment("downtrend", computed_htf_trend)
                 
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),
@@ -282,6 +299,105 @@ def _determine_initial_trend(swing_highs: pd.Series, swing_lows: pd.Series) -> s
             return "downtrend"
     
     return "ranging"
+
+
+def _calculate_htf_trend(htf_df: pd.DataFrame) -> str:
+    """
+    Calculate trend direction from higher timeframe data.
+    
+    Uses EMA crossover and swing structure to determine trend.
+    
+    Args:
+        htf_df: Higher timeframe OHLC DataFrame (must have >= 20 rows)
+        
+    Returns:
+        str: "uptrend", "downtrend", or "ranging"
+    """
+    if len(htf_df) < 20:
+        return "ranging"
+    
+    recent_closes = htf_df['close'].tail(50) if len(htf_df) >= 50 else htf_df['close']
+    
+    # Calculate EMAs
+    ema_fast = recent_closes.ewm(span=8, adjust=False).mean()
+    ema_slow = recent_closes.ewm(span=21, adjust=False).mean()
+    
+    # Current EMA positions
+    fast_current = ema_fast.iloc[-1]
+    slow_current = ema_slow.iloc[-1]
+    
+    # EMA slope (compare current to 5 bars ago)
+    if len(ema_fast) > 5:
+        fast_slope = fast_current - ema_fast.iloc[-6]
+        slow_slope = slow_current - ema_slow.iloc[-6]
+    else:
+        fast_slope = 0
+        slow_slope = 0
+    
+    # Determine trend
+    if fast_current > slow_current and fast_slope > 0:
+        return "uptrend"
+    elif fast_current < slow_current and fast_slope < 0:
+        return "downtrend"
+    else:
+        return "ranging"
+
+
+def _check_bos_htf_alignment(ltf_trend: str, htf_trend: Optional[str]) -> bool:
+    """
+    Check if a BOS (continuation) aligns with HTF trend.
+    
+    BOS is HTF-aligned when:
+    - LTF uptrend BOS + HTF uptrend = aligned (bullish continuation confirmed by HTF)
+    - LTF downtrend BOS + HTF downtrend = aligned (bearish continuation confirmed by HTF)
+    - If HTF trend is unknown/ranging, give benefit of the doubt (True)
+    
+    Args:
+        ltf_trend: Lower timeframe trend ("uptrend" or "downtrend")
+        htf_trend: Higher timeframe trend or None
+        
+    Returns:
+        bool: True if HTF supports the continuation
+    """
+    if htf_trend is None or htf_trend == "ranging":
+        # No HTF context - can't confirm alignment, default to True
+        # (BOS is trend-following, so it's at least consistent with LTF)
+        return True
+    
+    # BOS aligns when LTF and HTF trends match
+    return ltf_trend == htf_trend
+
+
+def _check_choch_htf_alignment(ltf_trend: str, htf_trend: Optional[str]) -> bool:
+    """
+    Check if a CHoCH (reversal) aligns with HTF trend.
+    
+    CHoCH is HTF-aligned when:
+    - LTF uptrend CHoCH (turning bearish) + HTF downtrend = aligned
+    - LTF downtrend CHoCH (turning bullish) + HTF uptrend = aligned
+    - If HTF is ranging/unknown, CHoCH might be early reversal = False
+    
+    Args:
+        ltf_trend: Lower timeframe trend BEFORE the CHoCH
+        htf_trend: Higher timeframe trend or None
+        
+    Returns:
+        bool: True if HTF supports the reversal direction
+    """
+    if htf_trend is None or htf_trend == "ranging":
+        # No clear HTF context - CHoCH is counter-trend by nature
+        # Without HTF confirmation, treat as unaligned
+        return False
+    
+    # CHoCH aligns when it reverses TOWARD the HTF trend
+    # LTF uptrend + CHoCH => turning bearish => aligns if HTF is downtrend
+    # LTF downtrend + CHoCH => turning bullish => aligns if HTF is uptrend
+    if ltf_trend == "uptrend":
+        # CHoCH in uptrend means turning bearish
+        return htf_trend == "downtrend"
+    else:
+        # CHoCH in downtrend means turning bullish
+        return htf_trend == "uptrend"
 
 
 def check_htf_alignment(

@@ -97,7 +97,8 @@ def detect_fvgs(df: pd.DataFrame, config: SMCConfig | dict | None = None) -> Lis
                         bottom=gap_bottom,
                         timestamp=candle_2.name.to_pydatetime(),
                         size=gap_size,
-                        overlap_with_price=0.0  # Will be updated if price revisits
+                        overlap_with_price=0.0,  # Will be updated if price revisits
+                        freshness_score=1.0  # Start fresh, decay applied later
                     )
                     fvgs.append(fvg)
         
@@ -122,19 +123,30 @@ def detect_fvgs(df: pd.DataFrame, config: SMCConfig | dict | None = None) -> Lis
                         bottom=gap_bottom,
                         timestamp=candle_2.name.to_pydatetime(),
                         size=gap_size,
-                        overlap_with_price=0.0
+                        overlap_with_price=0.0,
+                        freshness_score=1.0  # Start fresh, decay applied later
                     )
                     fvgs.append(fvg)
     
-    # Update overlap_with_price for all FVGs based on current price
+    # Update overlap_with_price and freshness_score for all FVGs based on current price and time
     if len(fvgs) > 0 and len(df) > 0:
         current_price = df['close'].iloc[-1]
+        current_time = df.index[-1].to_pydatetime()
+        
+        # Get timeframe decay factor (similar to OB freshness)
+        tf_str = _infer_timeframe(df)
+        decay_factor = _get_freshness_decay_factor(tf_str)
         
         for i, fvg in enumerate(fvgs):
             overlap = check_price_overlap(current_price, fvg)
+            
+            # Calculate freshness based on candles since formation
+            candles_since = len(df[df.index > fvg.timestamp])
+            freshness = max(0.0, 1.0 - (candles_since * decay_factor))
+            
             # Update FVG (since dataclass is frozen, we need to replace)
             from dataclasses import replace
-            fvgs[i] = replace(fvg, overlap_with_price=overlap)
+            fvgs[i] = replace(fvg, overlap_with_price=overlap, freshness_score=freshness)
     
     return fvgs
 
@@ -229,13 +241,15 @@ def check_price_overlap(price: float, fvg: FVG) -> float:
     return min(1.0, max(0.0, overlap_ratio))
 
 
-def check_fvg_fill(df: pd.DataFrame, fvg: FVG) -> bool:
+def check_fvg_fill(df: pd.DataFrame, fvg: FVG, use_wicks: bool = True) -> bool:
     """
     Check if an FVG has been filled (price fully closed the gap).
     
     Args:
         df: DataFrame with OHLC data
         fvg: FVG to check
+        use_wicks: If True, use high/low for fill detection (more accurate).
+                   If False, use close price only (more conservative).
         
     Returns:
         bool: True if FVG has been completely filled
@@ -247,14 +261,24 @@ def check_fvg_fill(df: pd.DataFrame, fvg: FVG) -> bool:
         return False  # No future data, FVG unfilled
     
     if fvg.direction == "bullish":
-        # Bullish FVG is filled if price drops back and closes below the gap bottom
-        lowest_close = future_candles['close'].min()
-        return lowest_close < fvg.bottom
+        # Bullish FVG is filled if price drops back through the gap
+        if use_wicks:
+            # Check if any wick touched below the gap bottom
+            lowest_price = future_candles['low'].min()
+        else:
+            # Conservative: only count closes below
+            lowest_price = future_candles['close'].min()
+        return lowest_price < fvg.bottom
     
     else:  # bearish
-        # Bearish FVG is filled if price rises and closes above the gap top
-        highest_close = future_candles['close'].max()
-        return highest_close > fvg.top
+        # Bearish FVG is filled if price rises through the gap
+        if use_wicks:
+            # Check if any wick touched above the gap top
+            highest_price = future_candles['high'].max()
+        else:
+            # Conservative: only count closes above
+            highest_price = future_candles['close'].max()
+        return highest_price > fvg.top
 
 
 def filter_unfilled_fvgs(df: pd.DataFrame, fvgs: List[FVG]) -> List[FVG]:
@@ -300,6 +324,45 @@ def get_nearest_fvg(fvgs: List[FVG], price: float, direction: str = None) -> FVG
     
     nearest = min(fvgs, key=distance_to_fvg)
     return nearest
+
+
+def _get_freshness_decay_factor(timeframe: str) -> float:
+    """
+    Get freshness decay rate per candle based on timeframe.
+    
+    Higher timeframes decay slower (OBs/FVGs stay relevant longer).
+    Lower timeframes decay faster (zones go stale quicker).
+    
+    Args:
+        timeframe: Timeframe string (e.g., "1H", "4H", "1D")
+        
+    Returns:
+        float: Decay per candle (0.01 = 1% per candle)
+    """
+    # Map timeframes to decay factors
+    # After N candles at decay D, freshness = 1 - (N * D)
+    # Goal: ~50% freshness after typical "good" number of candles
+    decay_map = {
+        '1W': 0.02,   # ~50% after 25 candles (25 weeks)
+        '1D': 0.025,  # ~50% after 20 candles (20 days)
+        '4H': 0.03,   # ~50% after 17 candles (68 hours)
+        '1H': 0.04,   # ~50% after 12-13 candles (12 hours)
+        '15m': 0.05,  # ~50% after 10 candles (2.5 hours)
+        '5m': 0.06,   # ~50% after 8 candles (40 minutes)
+    }
+    
+    # Try exact match first
+    tf_upper = timeframe.upper()
+    if tf_upper in decay_map:
+        return decay_map[tf_upper]
+    
+    # Normalize common variants
+    tf_normalized = tf_upper.replace('MIN', 'm').replace('H', 'H').replace('D', 'D')
+    if tf_normalized in decay_map:
+        return decay_map[tf_normalized]
+    
+    # Default moderate decay
+    return 0.04
 
 
 def _infer_timeframe(df: pd.DataFrame) -> str:

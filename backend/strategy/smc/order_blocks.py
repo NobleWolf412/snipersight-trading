@@ -116,13 +116,17 @@ def detect_order_blocks(
                 # Volume confirmation (optional)
                 volume_spike = candle['volume'] > (avg_volume.iloc[i] * volume_threshold) if pd.notna(avg_volume.iloc[i]) else False
                 
+                # Normalize displacement to 0-100 scale
+                # 1.5 ATR = 50 (minimum), 3.0 ATR = 100 (maximum)
+                normalized_displacement = min(100.0, (displacement_atr / 3.0) * 100.0)
+                
                 ob = OrderBlock(
                     timeframe=_infer_timeframe(df),
                     direction="bullish",
                     high=candle['high'],
                     low=candle['low'],
                     timestamp=candle.name.to_pydatetime(),
-                    displacement_strength=displacement_atr,
+                    displacement_strength=normalized_displacement,
                     mitigation_level=0.0,  # Not yet mitigated
                     freshness_score=1.0  # Will be updated later
                 )
@@ -137,13 +141,16 @@ def detect_order_blocks(
             if displacement_atr >= min_displacement_atr:
                 volume_spike = candle['volume'] > (avg_volume.iloc[i] * volume_threshold) if pd.notna(avg_volume.iloc[i]) else False
                 
+                # Normalize displacement to 0-100 scale
+                normalized_displacement = min(100.0, (displacement_atr / 3.0) * 100.0)
+                
                 ob = OrderBlock(
                     timeframe=_infer_timeframe(df),
                     direction="bearish",
                     high=candle['high'],
                     low=candle['low'],
                     timestamp=candle.name.to_pydatetime(),
-                    displacement_strength=displacement_atr,
+                    displacement_strength=normalized_displacement,
                     mitigation_level=0.0,
                     freshness_score=1.0
                 )
@@ -244,7 +251,7 @@ def calculate_displacement_strength(df: pd.DataFrame, ob: OrderBlock) -> float:
         ob: OrderBlock to analyze
         
     Returns:
-        float: Displacement strength in ATR units
+        float: Displacement strength normalized to 0-100 scale
     """
     # Find the order block candle in the DataFrame
     ob_candles = df[df.index == ob.timestamp]
@@ -267,7 +274,10 @@ def calculate_displacement_strength(df: pd.DataFrame, ob: OrderBlock) -> float:
     
     displacement_atr = displacement / atr_value if atr_value > 0 else 0
     
-    return displacement_atr
+    # Normalize to 0-100 scale (1.5 ATR = 50, 3.0 ATR = 100)
+    normalized = min(100.0, (displacement_atr / 3.0) * 100.0)
+    
+    return normalized
 
 
 def check_mitigation(df: pd.DataFrame, ob: OrderBlock) -> float:
