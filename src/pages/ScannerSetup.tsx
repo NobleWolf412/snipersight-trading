@@ -14,6 +14,7 @@ import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
 import { scanHistoryService } from '@/services/scanHistoryService';
 import { ScannerConsole } from '@/components/ScannerConsole';
+import { debugLogger } from '@/utils/debugLogger';
 
 export function ScannerSetup() {
   const navigate = useNavigate();
@@ -39,13 +40,21 @@ export function ScannerSetup() {
     setIsScanning(true);
     setScanProgress({ current: 0, total: 0 });
     
+    // Clear previous results
     localStorage.removeItem('scan-results');
     localStorage.removeItem('scan-metadata');
     localStorage.removeItem('scan-rejections');
 
+    // Log scan initialization
+    debugLogger.info('━━━ SCAN INITIATED ━━━', 'scanner');
+    debugLogger.info(`Mode: ${scanConfig.sniperMode.toUpperCase()}`, 'scanner');
+    debugLogger.info(`Exchange: ${scanConfig.exchange} | Leverage: ${scanConfig.leverage}x`, 'scanner');
+    debugLogger.info(`Categories: Majors=${scanConfig.categories.majors}, Alts=${scanConfig.categories.altcoins}, Meme=${scanConfig.categories.memeMode}`, 'scanner');
+    debugLogger.info(`Target pairs: ${scanConfig.topPairs} | Min Score: ${selectedMode?.min_confluence_score || 0}`, 'scanner');
+    debugLogger.info(`API Base URL: ${api.baseURL}`, 'scanner');
+
     try {
-      // Use direct signals endpoint (better for devtunnel/remote setups)
-      console.log('[ScannerSetup] Fetching signals directly...');
+      debugLogger.info('Sending request to backend...', 'scanner');
       const signalsResponse = await api.getSignals({
         limit: scanConfig.topPairs || 20,
         min_score: selectedMode?.min_confluence_score || 0,
@@ -59,11 +68,13 @@ export function ScannerSetup() {
       });
 
       if (signalsResponse.error || !signalsResponse.data) {
+        debugLogger.error(`Scan failed: ${signalsResponse.error || 'No data received'}`, 'scanner');
         throw new Error(signalsResponse.error || 'Failed to fetch signals');
       }
 
       const data = signalsResponse.data;
-      console.log('[ScannerSetup] Signals received:', data.signals?.length || 0);
+      debugLogger.success(`✓ Received response: ${data.signals?.length || 0} signals`, 'scanner');
+      debugLogger.info(`Scanned: ${data.scanned} | Rejected: ${data.rejected}`, 'scanner');
 
       // Process results immediately (no polling needed)
       const results = (data.signals || []).map(convertSignalToScanResult);
@@ -101,7 +112,7 @@ export function ScannerSetup() {
         results: results,
       });
       
-      console.log('[ScannerSetup] Scan completed:', results.length, 'signals');
+      debugLogger.success(`━━━ SCAN COMPLETE: ${results.length} signals ━━━`, 'scanner');
       
       // Show appropriate message based on results
       if (results.length === 0) {
@@ -122,6 +133,11 @@ export function ScannerSetup() {
       navigate('/results');
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      debugLogger.error(`━━━ SCAN FAILED ━━━`, 'scanner');
+      debugLogger.error(`Error: ${errorMessage}`, 'scanner');
+      debugLogger.warning('Falling back to demo results...', 'scanner');
+      
       console.error('Scanner error:', error);
       // Fallback to demo results to prevent empty UI when backend is unreachable (e.g., 504)
       const demo = generateDemoScanResults(Math.min(scanConfig.topPairs || 5, 5), scanConfig.sniperMode);

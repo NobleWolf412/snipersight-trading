@@ -5,6 +5,8 @@
  * Includes retry logic with exponential backoff and request timeouts.
  */
 
+import { debugLogger } from './debugLogger';
+
 // Resolve API base: prefer Vite env, fallback to same-origin '/api' or localhost:8001
 const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE)
   ? (import.meta as any).env.VITE_API_BASE
@@ -14,6 +16,7 @@ const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env
 
 // Retry configuration
 const DEFAULT_TIMEOUT_MS = 30000; // 30 seconds
+const SCANNER_TIMEOUT_MS = 120000; // 2 minutes for scanner (fetches multi-TF data)
 const DEFAULT_MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;
 const RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504];
@@ -199,12 +202,20 @@ class ApiClient {
       ...fetchOptions
     } = options;
 
+    const method = fetchOptions.method || 'GET';
+    const fullUrl = `${API_BASE}${endpoint}`;
+    
+    debugLogger.api(`→ ${method} ${endpoint}`);
+    debugLogger.info(`Connecting to: ${fullUrl}`, 'api');
+    debugLogger.info(`Timeout: ${timeout / 1000}s | Retries: ${skipRetry ? 'disabled' : maxRetries}`, 'api');
+
     let lastError: string = 'Unknown error';
     
     for (let attempt = 0; attempt <= (skipRetry ? 0 : maxRetries); attempt++) {
       // Add delay before retry (not on first attempt)
       if (attempt > 0) {
         const delay = this.getRetryDelay(attempt - 1);
+        debugLogger.warning(`⟳ Retry ${attempt}/${maxRetries} (waiting ${Math.round(delay)}ms)`, 'api');
         console.log(`[API] Retry attempt ${attempt}/${maxRetries} after ${Math.round(delay)}ms`);
         await this.sleep(delay);
       }
@@ -212,8 +223,11 @@ class ApiClient {
       // Create AbortController for timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
+      const startTime = Date.now();
 
       try {
+        debugLogger.info(`Sending request... (attempt ${attempt + 1})`, 'api');
+        
         const response = await fetch(`${API_BASE}${endpoint}`, {
           ...fetchOptions,
           signal: controller.signal,
@@ -224,23 +238,30 @@ class ApiClient {
         });
 
         clearTimeout(timeoutId);
+        const elapsed = Date.now() - startTime;
+        debugLogger.info(`Response: ${response.status} ${response.statusText} (${elapsed}ms)`, 'api');
 
         if (!response.ok) {
           // Check if retryable status
           if (!skipRetry && this.isRetryable(response.status) && attempt < maxRetries) {
             lastError = `${response.status} ${response.statusText}`;
+            debugLogger.warning(`Retryable error: ${lastError}`, 'api');
             continue; // Retry
           }
 
           // Try JSON error first; fall back to text or generic message.
           try {
             const errJson = await response.json();
-            return { error: (errJson && (errJson.detail || errJson.error)) || `${response.status} ${response.statusText}` };
+            const errMsg = (errJson && (errJson.detail || errJson.error)) || `${response.status} ${response.statusText}`;
+            debugLogger.error(`API Error: ${errMsg}`, 'api');
+            return { error: errMsg };
           } catch {
             try {
               const errText = await response.text();
+              debugLogger.error(`API Error: ${errText || response.statusText}`, 'api');
               return { error: errText || `${response.status} ${response.statusText}` };
             } catch {
+              debugLogger.error(`API Error: ${response.status} ${response.statusText}`, 'api');
               return { error: `${response.status} ${response.statusText}` };
             }
           }
@@ -248,36 +269,45 @@ class ApiClient {
 
         const contentType = response.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
+          debugLogger.success(`✓ Request completed (no JSON body)`, 'api');
           return { data: undefined };
         }
 
         try {
           const data = await response.json();
+          debugLogger.success(`✓ Request successful`, 'api');
           return { data };
         } catch {
+          debugLogger.warning('Response was not valid JSON', 'api');
           return { data: undefined };
         }
       } catch (error) {
         clearTimeout(timeoutId);
+        const elapsed = Date.now() - startTime;
         
         if (error instanceof Error) {
           if (error.name === 'AbortError') {
-            lastError = `Request timeout after ${timeout}ms`;
+            lastError = `Request timeout after ${timeout / 1000}s`;
+            debugLogger.error(`⏱ Timeout after ${elapsed}ms (limit: ${timeout}ms)`, 'api');
           } else {
             lastError = error.message;
+            debugLogger.error(`Network error: ${error.message}`, 'api');
           }
           
           // Network errors are retryable
           if (!skipRetry && attempt < maxRetries && 
               (error.name === 'AbortError' || error.message.includes('network') || error.message.includes('fetch'))) {
+            debugLogger.info('Will retry...', 'api');
             continue; // Retry
           }
         }
         
+        debugLogger.error(`✗ Request failed: ${lastError}`, 'api');
         return { error: lastError };
       }
     }
 
+    debugLogger.error(`✗ All ${maxRetries} retries exhausted: ${lastError}`, 'api');
     return { error: `Failed after ${maxRetries} retries: ${lastError}` };
   }
 
@@ -335,7 +365,8 @@ class ApiClient {
     }
     const query = new URLSearchParams(queryParams).toString();
     return this.request<SignalsResponse>(
-      `/scanner/signals${query ? `?${query}` : ''}`
+      `/scanner/signals${query ? `?${query}` : ''}`,
+      { timeout: SCANNER_TIMEOUT_MS, skipRetry: true } // Scanner needs more time, don't retry
     );
   }
 
