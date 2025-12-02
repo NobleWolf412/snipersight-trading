@@ -11,71 +11,22 @@ BACKEND_PORT_DEFAULT=8001
 FORCE_PORTS=${FORCE_PORTS:-1}
 FRONTEND_PORT=${FRONTEND_PORT:-$FRONTEND_PORT_DEFAULT}
 BACKEND_PORT=${BACKEND_PORT:-$BACKEND_PORT_DEFAULT}
-START_TUNNELS=${START_TUNNELS:-1}
 HEALTH_CHECK=${HEALTH_CHECK:-1}
 START_DEV_NO_RELOAD=${START_DEV_NO_RELOAD:-0}
 UVICORN_EXTRA=${UVICORN_EXTRA:-}
 
 BACK_PID=""
 FRONT_PID=""
-TUNNEL_BACK_PID=""
-TUNNEL_FRONT_PID=""
-FRONT_URL=""
-BACK_URL=""
 
 cleanup() {
   echo "Cleaning up background processes..."
-  for pid in "$BACK_PID" "$FRONT_PID" "$TUNNEL_BACK_PID" "$TUNNEL_FRONT_PID"; do
+  for pid in "$BACK_PID" "$FRONT_PID"; do
     if [[ -n "${pid:-}" ]]; then
       kill "$pid" 2>/dev/null || true
     fi
   done
 }
 trap cleanup EXIT
-
-print_links() {
-  printf "\n--- Current Tunnel Links ---\n"
-  local front back
-  front=$(grep -o 'https://[^ |]*\.trycloudflare\.com' logs/tunnel_frontend.log 2>/dev/null | head -n1 || true)
-  back=$(grep -o 'https://[^ |]*\.trycloudflare\.com' logs/tunnel_backend.log 2>/dev/null | head -n1 || true)
-
-  if [[ -n "$front" ]]; then
-    echo "Frontend: $front"
-  else
-    echo "Frontend: (not found)"
-  fi
-
-  if [[ -n "$back" ]]; then
-    echo "Backend:  $back"
-  else
-    echo "Backend:  (not found)"
-  fi
-
-  printf "---------------------------\n\n"
-}
-
-resolve_cloudflared() {
-  # 1) Explicit override
-  if [[ -n "${CLOUDFLARED_BIN:-}" ]]; then
-    echo "$CLOUDFLARED_BIN"
-    return
-  fi
-
-  # 2) scripts/cloudflared
-  if [[ -x "scripts/cloudflared" ]]; then
-    echo "scripts/cloudflared"
-    return
-  fi
-
-  # 3) system cloudflared
-  if command -v cloudflared >/dev/null 2>&1; then
-    command -v cloudflared
-    return
-  fi
-
-  echo "ERROR: cloudflared not found. Put a binary at scripts/cloudflared or install cloudflared in PATH." >&2
-  exit 1
-}
 
 kill_by_port() {
   local port="$1"
@@ -150,75 +101,20 @@ wait_for_health() {
     sleep 1
   done
   echo "Warning: backend health check did not pass in time."
-}
 
-start_tunnels_cloudflare() {
-  local cf_bin
-  cf_bin=$(resolve_cloudflared)
-
-  echo "Using cloudflared binary: $cf_bin"
-  chmod +x "$cf_bin" 2>/dev/null || true
-
-  echo "Starting public tunnels with cloudflared..."
-  nohup "$cf_bin" tunnel --url "http://localhost:$BACKEND_PORT" > logs/tunnel_backend.log 2>&1 &
-  TUNNEL_BACK_PID=$!
-
-  nohup "$cf_bin" tunnel --url "http://localhost:$FRONTEND_PORT" > logs/tunnel_frontend.log 2>&1 &
-  TUNNEL_FRONT_PID=$!
-
-  echo "Tunnel PIDs — backend: $TUNNEL_BACK_PID, frontend: $TUNNEL_FRONT_PID"
-  echo "Waiting for Cloudflare URLs (this may take up to 30s)..."
-
-  # Backend URL
-  for i in {1..30}; do
-    if grep -q "trycloudflare.com" logs/tunnel_backend.log 2>/dev/null; then
-      BACK_URL=$(grep "trycloudflare.com" logs/tunnel_backend.log | grep -o 'https://[^ |]*\.trycloudflare\.com' | head -n1)
-      if [[ -n "$BACK_URL" ]]; then
-        echo "✅ Backend tunnel: $BACK_URL"
-        break
-      fi
-    fi
-    (( i % 5 == 0 )) && echo "   ...still waiting for backend tunnel..."
-    sleep 1
-  done
-
-  # Frontend URL
-  for i in {1..30}; do
-    if grep -q "trycloudflare.com" logs/tunnel_frontend.log 2>/dev/null; then
-      FRONT_URL=$(grep "trycloudflare.com" logs/tunnel_frontend.log | grep -o 'https://[^ |]*\.trycloudflare\.com' | head -n1)
-      if [[ -n "$FRONT_URL" ]]; then
-        echo "✅ Frontend tunnel: $FRONT_URL"
-        break
-      fi
-    fi
-    (( i % 5 == 0 )) && echo "   ...still waiting for frontend tunnel..."
-    sleep 1
-  done
-
-  if [[ -z "$BACK_URL" || -z "$FRONT_URL" ]]; then
-    echo "⚠️  Could not auto-detect URLs yet. Check logs manually:"
-    echo "   grep -o 'https://.*\.trycloudflare\.com' logs/tunnel_*.log"
-  else
-    echo ""
-    echo "🎉 Tunnels Active!"
-    echo "   Frontend: $FRONT_URL"
-    echo "   Backend:  $BACK_URL"
-    echo ""
-  fi
-}
-
-start_tunnels() {
-  if [[ "$START_TUNNELS" != "1" ]]; then
-    echo "Skipping tunnels (START_TUNNELS=0)"
-    return
-  fi
-  start_tunnels_cloudflare
-}
 
 # -------------------- main --------------------
 
-if [[ "${1:-}" == "print-links" ]]; then
-  print_links
+
+# Manual restart mode: kill backend/frontend, free ports, restart servers
+if [[ "${1:-}" == "restart" ]]; then
+  echo "Restarting backend and frontend..."
+  pkill -f "uvicorn" || true
+  pkill -f "vite" || true
+  sleep 2
+  kill_by_port "$BACKEND_PORT"
+  kill_by_port "$FRONTEND_PORT"
+  bash "$0"
   exit 0
 fi
 
