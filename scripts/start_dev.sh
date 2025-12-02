@@ -18,16 +18,6 @@ UVICORN_EXTRA=${UVICORN_EXTRA:-}
 BACK_PID=""
 FRONT_PID=""
 
-cleanup() {
-  echo "Cleaning up background processes..."
-  for pid in "$BACK_PID" "$FRONT_PID"; do
-    if [[ -n "${pid:-}" ]]; then
-      kill "$pid" 2>/dev/null || true
-    fi
-  done
-}
-trap cleanup EXIT
-
 kill_by_port() {
   local port="$1"
 
@@ -144,16 +134,9 @@ echo
 echo "================ DEV ENV READY ================"
 echo "Backend:  http://127.0.0.1:$BACKEND_PORT"
 echo "Frontend: http://127.0.0.1:$FRONTEND_PORT"
-if [[ -n "$FRONT_URL" || -n "$BACK_URL" ]]; then
-  echo
-  echo "Cloudflare URLs:"
-  echo "  Frontend: ${FRONT_URL:-(not detected)}"
-  echo "  Backend:  ${BACK_URL:-(not detected)}"
-fi
 echo
 echo "Logs:"
 echo "  Backend:  tail -f logs/backend.log"
 echo "  Frontend: tail -f logs/frontend.log"
-echo "  Tunnels:  tail -f logs/tunnel_backend.log logs/tunnel_frontend.log"
 echo "================================================"
 echo
