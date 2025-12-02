@@ -315,12 +315,6 @@ orchestrator = Orchestrator(
 )
 
 
-# Serve built frontend at root (only if dist exists - for production)
-import os
-if os.path.exists("dist"):
-    app.mount("/", StaticFiles(directory="dist", html=True), name="frontend")
-
-
 @app.get("/api/health")
 async def health_check():
     """Detailed health check."""
@@ -1382,10 +1376,10 @@ async def get_prices(
                 }
                 
                 # Store in cache
-                PRICE_CACHE[cache_key] = {
+                PRICE_CACHE.set(cache_key, {
                     'data': result,
                     'cached_at': time.time()
-                }
+                })
                 
                 return result, None
             except Exception as e:
@@ -1693,6 +1687,13 @@ async def get_telemetry_analytics(
     except Exception as e:
         logger.error("Error calculating analytics: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# Serve built frontend at root (only if dist exists - for production)
+# IMPORTANT: This MUST be at the end, after all API routes, otherwise it catches /api/* requests
+import os
+if os.path.exists("dist"):
+    app.mount("/", StaticFiles(directory="dist", html=True), name="frontend")
 
 
 if __name__ == "__main__":
