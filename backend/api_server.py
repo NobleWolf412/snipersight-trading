@@ -14,6 +14,7 @@ from enum import Enum
 import logging
 import asyncio
 import time
+import threading
 
 from backend.risk.position_sizer import PositionSizer
 from backend.risk.risk_manager import RiskManager
@@ -39,6 +40,46 @@ from backend.bot.notifications.notification_manager import (
 from backend.routers.htf_opportunities import router as htf_router
 
 logger = logging.getLogger(__name__)
+
+
+# Custom logging handler to capture orchestrator logs for ScanJob
+class ScanJobLogHandler(logging.Handler):
+    """Captures logs from orchestrator and appends to current ScanJob."""
+    
+    def __init__(self):
+        super().__init__()
+        self.current_job: Optional['ScanJob'] = None
+        self._lock = threading.Lock()
+        
+    def set_current_job(self, job: Optional['ScanJob']):
+        """Set the current job to receive logs."""
+        with self._lock:
+            self.current_job = job
+    
+    def emit(self, record: logging.LogRecord):
+        """Capture log record and append to current job."""
+        try:
+            with self._lock:
+                if self.current_job and record.name.startswith('backend.engine'):
+                    # Format the log message
+                    msg = self.format(record)
+                    # Add to job's log list
+                    self.current_job.logs.append(msg)
+        except Exception:
+            # Never let logging errors break the scanner
+            pass
+
+
+# Global log handler for orchestrator logs
+scan_job_log_handler = ScanJobLogHandler()
+scan_job_log_handler.setFormatter(logging.Formatter('%(levelname)s | %(message)s'))
+
+# Attach handler to orchestrator logger
+orchestrator_logger = logging.getLogger('backend.engine.orchestrator')
+orchestrator_logger.addHandler(scan_job_log_handler)
+orchestrator_logger.setLevel(logging.INFO)
+# Prevent duplicate logs by not propagating to root logger
+orchestrator_logger.propagate = False
 
 # Thread-safe price cache with TTL to reduce exchange API load
 import threading
@@ -233,6 +274,7 @@ class ScanJob:
         self.started_at: Optional[datetime] = None
         self.completed_at: Optional[datetime] = None
         self.task: Optional[asyncio.Task] = None
+        self.logs: List[str] = []  # Capture workflow logs for frontend display
 
 scan_jobs: Dict[str, ScanJob] = {}
 scan_jobs_lock = threading.Lock()
@@ -1132,6 +1174,7 @@ async def get_scan_run(run_id: str):
         "created_at": job.created_at.isoformat(),
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+        "logs": job.logs[-100:]  # Return last 100 log entries to avoid huge payloads
     }
     
     if job.status == "completed":
@@ -1166,6 +1209,9 @@ async def cancel_scan_run(run_id: str):
 
 async def _execute_scan_job(job: ScanJob):
     """Execute scan in background, updating job status as it progresses."""
+    # Set this job as the current log recipient
+    scan_job_log_handler.set_current_job(job)
+    
     try:
         job.status = "running"
         job.started_at = datetime.now(timezone.utc)
@@ -1274,6 +1320,9 @@ async def _execute_scan_job(job: ScanJob):
         job.status = "failed"
         job.error = str(e)
         job.completed_at = datetime.now(timezone.utc)
+    finally:
+        # Clear the current job from log handler
+        scan_job_log_handler.set_current_job(None)
 
 
 # Market data endpoints (mock for now)

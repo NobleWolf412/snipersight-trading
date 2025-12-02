@@ -193,7 +193,7 @@ class PriceService {
 
     // Use bulk endpoint with single symbol
     try {
-      const { data, error } = await api.getPrices([symbol], this.exchange);
+      const { data, error } = await api.getPrices([symbol], this.exchange, { silent: true });
       if (error || !data || data.prices.length === 0) {
         throw new Error(error || `Failed to fetch price for ${symbol}`);
       }
@@ -238,7 +238,7 @@ class PriceService {
     // Use bulk endpoint if more than 3 symbols
     if (symbols.length > 3) {
       try {
-        const { data, error } = await api.getPrices(symbols, this.exchange);
+        const { data, error } = await api.getPrices(symbols, this.exchange, { silent: true });
         if (error || !data) {
           throw new Error(error || 'Failed to fetch bulk prices');
         }

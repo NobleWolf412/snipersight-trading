@@ -145,8 +145,30 @@ class Orchestrator:
         # Concurrency settings
         self.concurrency_workers = max(1, concurrency_workers)
 
-        logger.info("Orchestrator initialized with SniperSight pipeline (mode=%s, workers=%d)", 
-                   self.config.profile, self.concurrency_workers)
+        # Log detailed mode configuration
+        critical_tfs = list(getattr(self.scanner_mode, 'critical_timeframes', ()))
+        entry_tfs = list(getattr(self.config, 'entry_timeframes', getattr(self.scanner_mode, 'entry_timeframes', ())))
+        structure_tfs = list(getattr(self.config, 'structure_timeframes', getattr(self.scanner_mode, 'structure_timeframes', ())))
+        min_score = float(getattr(self.config, 'min_confluence_score', getattr(self.scanner_mode, 'min_confluence_score', 0)))
+        min_rr = float(getattr(self.config, 'min_rr_ratio', getattr(self.scanner_mode, 'min_rr_ratio', 0)))
+        
+        logger.info("🚀 Orchestrator initialized: mode=%s | workers=%d", 
+                   self.config.profile.upper(), self.concurrency_workers)
+        logger.info("📋 Mode config: MinScore=%.1f%% | MinRR=%.1f:1 | CriticalTFs=%s",
+                   min_score, min_rr, ', '.join(critical_tfs))
+        logger.info("⏱️  TF Responsibility: Entry=%s | Structure=%s",
+                   ', '.join(entry_tfs), ', '.join(structure_tfs))
+        
+        self._progress("BOOT", {
+            "mode": getattr(self.scanner_mode, 'name', self.config.profile),
+            "profile": self.config.profile,
+            "critical_timeframes": critical_tfs,
+            "entry_timeframes": entry_tfs,
+            "structure_timeframes": structure_tfs,
+            "ingestion_timeframes": list(self.config.timeframes),
+            "min_confluence": min_score,
+            "min_rr": min_rr
+        })
     
     def scan(self, symbols: List[str]) -> tuple[List[TradePlan], Dict[str, Any]]:
         """
@@ -166,6 +188,18 @@ class Orchestrator:
         start_time = time.time()
         
         logger.info("🎯 Starting scan %s for %d symbols", run_id, len(symbols))
+        self._progress("START", {
+            "run_id": run_id,
+            "mode": getattr(self.scanner_mode, 'name', self.config.profile),
+            "symbols": symbols,
+            "timeframes": list(self.config.timeframes),
+            "critical_timeframes": list(getattr(self.scanner_mode, 'critical_timeframes', ())),
+            "gates": {
+                "regime_min_score": float(getattr(self.regime_policy, 'min_regime_score', 0)),
+                "confluence_min": float(getattr(self.config, 'min_confluence_score', 0)),
+                "min_rr_ratio": float(getattr(self.config, 'min_rr_ratio', 0))
+            }
+        })
         
         # Log scan started event
         self.telemetry.log_event(create_scan_started_event(
@@ -181,6 +215,12 @@ class Orchestrator:
                 logger.info("🌍 Global regime: %s (score=%.1f)", 
                            self.current_regime.composite, 
                            self.current_regime.score)
+                self._progress("REGIME", {
+                    "composite": self.current_regime.composite,
+                    "score": float(self.current_regime.score),
+                    "min_required": float(getattr(self.regime_policy, 'min_regime_score', 0)),
+                    "gate_passed": bool(self.current_regime.score >= getattr(self.regime_policy, 'min_regime_score', 0))
+                })
                 
                 # Check regime gate for mode
                 if self.current_regime.score < self.regime_policy.min_regime_score:
@@ -302,6 +342,13 @@ class Orchestrator:
             } if self.current_regime else None
         }
         
+        self._progress("COMPLETE", {
+            "run_id": run_id,
+            "signals_generated": len(signals),
+            "symbols_scanned": len(symbols),
+            "rejected": rejected_count,
+            "duration_sec": round(duration, 2)
+        })
         return signals, rejection_summary
     
     def _process_symbol(
@@ -335,6 +382,13 @@ class Orchestrator:
         # Stage 2: Data ingestion
         logger.debug("%s [%s]: Fetching multi-timeframe data", symbol, trace_id)
         context.multi_tf_data = self._ingest_data(symbol)
+        try:
+            tf_list = list(context.multi_tf_data.timeframes.keys()) if context.multi_tf_data else []
+            candle_counts = {tf: len(df) for tf, df in (context.multi_tf_data.timeframes.items() if context.multi_tf_data else [])}
+            logger.info("📊 %s data: TFs=%s | Candles=%s", symbol, ', '.join(tf_list), candle_counts)
+            self._progress("INGEST", {"symbol": symbol, "timeframes": tf_list, "candle_counts": candle_counts})
+        except Exception:
+            pass
         
         if not context.multi_tf_data or not context.multi_tf_data.timeframes:
             logger.info("%s [%s]: REJECTED - No market data available", symbol, trace_id)
@@ -349,7 +403,16 @@ class Orchestrator:
         # Stage 2.5: Check critical timeframe availability
         missing_critical_tfs = self._check_critical_timeframes(context.multi_tf_data)
         if missing_critical_tfs:
-            logger.info("%s: REJECTED - Missing critical timeframes: %s", symbol, ', '.join(missing_critical_tfs))
+            logger.info("%s: ❌ GATE FAIL (critical_tfs) | Missing: %s | Required: %s",
+                       symbol,
+                       ', '.join(missing_critical_tfs),
+                       ', '.join(self.scanner_mode.critical_timeframes))
+            self._progress("GATE_FAIL", {
+                "symbol": symbol,
+                "gate": "critical_timeframes",
+                "missing": missing_critical_tfs,
+                "required": list(self.scanner_mode.critical_timeframes)
+            })
             
             # Log telemetry event
             self.telemetry.log_event(create_signal_rejected_event(
@@ -373,6 +436,11 @@ class Orchestrator:
         # Stage 3: Indicator computation
         logger.debug("%s: Computing indicators", symbol)
         context.multi_tf_indicators = self._compute_indicators(context.multi_tf_data)
+        try:
+            ind_tfs = list(context.multi_tf_indicators.by_timeframe.keys()) if context.multi_tf_indicators else []
+            self._progress("INDICATORS", {"symbol": symbol, "timeframes": ind_tfs})
+        except Exception:
+            pass
         
         # Stage 3.5: Detect symbol-specific regime (after indicators computed)
         if context.multi_tf_data and context.multi_tf_indicators and self.regime_detector:
@@ -390,17 +458,54 @@ class Orchestrator:
         # Stage 4: SMC detection
         logger.debug("%s: Detecting SMC patterns", symbol)
         context.smc_snapshot = self._detect_smc_patterns(context.multi_tf_data)
+        try:
+            snap = context.smc_snapshot
+            self._progress("SMC", {
+                "symbol": symbol,
+                "order_blocks": len(getattr(snap, 'order_blocks', []) or []),
+                "fvgs": len(getattr(snap, 'fvgs', []) or []),
+                "structure_breaks": len(getattr(snap, 'structural_breaks', []) or []),
+                "liquidity_sweeps": len(getattr(snap, 'liquidity_sweeps', []) or [])
+            })
+        except Exception:
+            pass
         
         # Stage 5: Confluence scoring
         logger.debug("%s [%s]: Computing confluence score", symbol, trace_id)
         context.confluence_breakdown = self._compute_confluence_score(context)
+        try:
+            br = context.confluence_breakdown
+            top_factors = [
+                {
+                    "name": f.name,
+                    "score": float(f.score),
+                    "weight": float(f.weight),
+                    "contrib": float(f.score * f.weight)
+                }
+                for f in (br.factors[:5] if getattr(br, 'factors', None) else [])
+            ]
+            self._progress("CONFLUENCE", {
+                "symbol": symbol,
+                "direction": context.metadata.get('chosen_direction', 'LONG'),
+                "score": float(getattr(br, 'total_score', 0)),
+                "min_required": float(getattr(self.config, 'min_confluence_score', 0)),
+                "htf_aligned": bool(getattr(br, 'htf_aligned', False)),
+                "btc_impulse_gate": bool(getattr(br, 'btc_impulse_gate', False)),
+                "synergy_bonus": float(getattr(br, 'synergy_bonus', 0)),
+                "conflict_penalty": float(getattr(br, 'conflict_penalty', 0)),
+                "top_factors": top_factors
+            })
+        except Exception:
+            pass
         
         # Check quality gate
         if context.confluence_breakdown.total_score < self.config.min_confluence_score:
-            logger.info("%s [%s]: REJECTED - Confluence too low (%.1f < %.1f)", 
+            top_factors_str = ' | '.join([f"{f.name}={f.score:.1f}" for f in context.confluence_breakdown.factors[:3]])
+            logger.info("%s [%s]: ❌ GATE FAIL (confluence) | Score=%.1f < %.1f | Top: %s", 
                        symbol, trace_id,
                        context.confluence_breakdown.total_score, 
-                       self.config.min_confluence_score)
+                       self.config.min_confluence_score,
+                       top_factors_str)
             
             self.diagnostics['confluence_rejections'].append({
                 'symbol': symbol,
@@ -418,6 +523,12 @@ class Orchestrator:
                 score=context.confluence_breakdown.total_score,
                 threshold=self.config.min_confluence_score
             ))
+            self._progress("GATE_FAIL", {
+                "symbol": symbol,
+                "gate": "confluence",
+                "score": float(context.confluence_breakdown.total_score),
+                "threshold": float(self.config.min_confluence_score)
+            })
             
             return None, {
                 "symbol": symbol,
@@ -446,6 +557,30 @@ class Orchestrator:
         logger.debug("%s [%s]: Generating trade plan", symbol, trace_id)
         current_price = self._get_current_price(context.multi_tf_data)
         context.plan = self._generate_trade_plan(context, current_price)
+        try:
+            if context.plan:
+                tf_meta = context.plan.metadata.get('tf_responsibility', {})
+                self._progress("PLANNER", {
+                    "symbol": symbol,
+                    "direction": context.plan.direction,
+                    "setup": context.plan.setup_type,
+                    "rr": float(getattr(context.plan, 'risk_reward', 0)),
+                    "entry": {
+                        "near": float(context.plan.entry_zone.near_entry),
+                        "far": float(context.plan.entry_zone.far_entry)
+                    },
+                    "stop": float(context.plan.stop_loss.level) if context.plan.stop_loss else None,
+                    "targets": [float(t.level) for t in (context.plan.targets or [])],
+                    "tf": {
+                        "entry": tf_meta.get('entry_timeframe'),
+                        "stop": tf_meta.get('sl_timeframe'),
+                        "target": tf_meta.get('tp_timeframe')
+                    }
+                })
+            else:
+                self._progress("PLANNER_FAIL", {"symbol": symbol, "reason": "no_plan"})
+        except Exception:
+            pass
         
         # Stage 7: Risk validation
         logger.debug("%s [%s]: Validating risk parameters", symbol, trace_id)
@@ -455,6 +590,14 @@ class Orchestrator:
             if not self._validate_risk(context.plan):
                 # Extract actual reason from last risk_manager call (stored in instance variable)
                 risk_failure_reason = getattr(self, '_last_risk_failure', 'Failed risk validation')
+                logger.info("%s [%s]: ❌ GATE FAIL (risk) | R:R=%.2f | Reason: %s",
+                           symbol, trace_id,
+                           context.plan.risk_reward if hasattr(context.plan, 'risk_reward') else 0,
+                           risk_failure_reason)
+            else:
+                logger.info("%s [%s]: ✅ GATE PASS (risk) | R:R=%.2f",
+                           symbol, trace_id,
+                           context.plan.risk_reward if hasattr(context.plan, 'risk_reward') else 0)
         
         if not context.plan or risk_failure_reason:
             reason = "No trade plan generated" if not context.plan else risk_failure_reason
@@ -517,6 +660,15 @@ class Orchestrator:
                 gate_name="risk_validation",
                 diagnostics=diagnostics
             ))
+            try:
+                self._progress("GATE_FAIL", {
+                    "symbol": symbol,
+                    "gate": "risk_validation",
+                    "reason": reason,
+                    "rr": float(getattr(context.plan, 'risk_reward', 0)) if context.plan else None
+                })
+            except Exception:
+                pass
             
             return None, rejection_info
         
@@ -531,6 +683,11 @@ class Orchestrator:
                 entry_price=context.plan.entry_zone.near_entry,
                 risk_reward_ratio=context.plan.risk_reward
             ))
+        try:
+            if context.plan:
+                self._progress("PASS", {"symbol": symbol, "stage": "risk_validation"})
+        except Exception:
+            pass
         
         return context.plan, None
     
@@ -602,6 +759,17 @@ class Orchestrator:
                     volume_ratio = compute_relative_volume(df)
                 except Exception as e:
                     logger.debug("Volume ratio computation failed for %s: %s", timeframe, e)
+                
+                # Log detailed indicator values for visibility
+                current_price = df['close'].iloc[-1]
+                logger.info("📊 %s indicators: RSI=%.1f | MFI=%.1f | ATR=%.2f (%.2f%%) | BB(%.2f-%.2f-%.2f) | VolSpike=%s",
+                           timeframe,
+                           rsi.iloc[-1],
+                           mfi.iloc[-1],
+                           atr.iloc[-1],
+                           (atr.iloc[-1] / current_price * 100) if current_price > 0 else 0,
+                           bb_lower.iloc[-1], bb_middle.iloc[-1], bb_upper.iloc[-1],
+                           bool(volume_spike.iloc[-1]))
                 
                 # Create indicator snapshot
                 # Handle stoch_rsi tuple (K, D) - extract both K and D values
@@ -702,6 +870,14 @@ class Orchestrator:
                 sweeps = detect_liquidity_sweeps(df, self.smc_config)
                 all_liquidity_sweeps.extend(sweeps)
                 
+                # Log SMC detections per timeframe
+                logger.info("🎯 %s SMC: OB=%d | FVG=%d | BOS/CHoCH=%d | Sweeps=%d",
+                           _timeframe,
+                           len(obs),
+                           len(fvgs),
+                           len(breaks),
+                           len(sweeps))
+                
             except Exception as e:
                 logger.warning("SMC detection failed for %s: %s", _timeframe, e)
                 self.diagnostics['smc_rejections'].append({'timeframe': _timeframe, 'error': str(e)})
@@ -788,14 +964,21 @@ class Orchestrator:
             htf_context=htf_ctx_short
         )
 
+        # Log bidirectional confluence comparison
+        logger.info("⚖️  Direction eval: LONG=%.1f vs SHORT=%.1f",
+                   long_breakdown.total_score,
+                   short_breakdown.total_score)
+
         # Regime-aware adjustment: optionally penalize contrarian setups
         def regime_adjust(score: float, direction: str) -> float:
             try:
                 symbol_regime = context.metadata.get('symbol_regime')
                 trend = (symbol_regime.trend if symbol_regime else None) or 'neutral'
                 if trend == 'bullish' and direction == 'SHORT':
+                    logger.debug("⚠️  Regime penalty: SHORT setup in bullish regime (-2.0)")
                     return score - 2.0
                 if trend == 'bearish' and direction == 'LONG':
+                    logger.debug("⚠️  Regime penalty: LONG setup in bearish regime (-2.0)")
                     return score - 2.0
             except Exception:
                 pass
@@ -809,9 +992,13 @@ class Orchestrator:
         if long_breakdown.total_score > short_breakdown.total_score:
             chosen = long_breakdown
             tie_break_used = None
+            logger.info("✅ Direction: LONG selected (score %.1f > %.1f)",
+                       long_breakdown.total_score, short_breakdown.total_score)
         elif short_breakdown.total_score > long_breakdown.total_score:
             chosen = short_breakdown
             tie_break_used = None
+            logger.info("✅ Direction: SHORT selected (score %.1f > %.1f)",
+                       short_breakdown.total_score, long_breakdown.total_score)
         else:
             # Exact tie - use regime trend as tie-breaker
             regime_trend = (context.metadata.get('symbol_regime').trend 
@@ -819,13 +1006,16 @@ class Orchestrator:
             if regime_trend == 'bullish':
                 chosen = long_breakdown
                 tie_break_used = 'regime_bullish'
+                logger.info("🔄 TIE (%.1f) broken by regime: LONG (bullish regime)", long_breakdown.total_score)
             elif regime_trend == 'bearish':
                 chosen = short_breakdown
                 tie_break_used = 'regime_bearish'
+                logger.info("🔄 TIE (%.1f) broken by regime: SHORT (bearish regime)", short_breakdown.total_score)
             else:
                 # True neutral tie - default to long but flag it
                 chosen = long_breakdown
                 tie_break_used = 'neutral_default_long'
+                logger.info("🔄 TIE (%.1f) with neutral regime: defaulting to LONG", long_breakdown.total_score)
         
         # Persist alt scores for analytics/debugging
         context.metadata['alt_confluence'] = {
@@ -1600,3 +1790,28 @@ class Orchestrator:
                 'profile': self.config.profile
             }
         }
+
+    def _progress(self, stage: str, payload: Dict[str, Any]) -> None:
+        """Emit a standardized progress snapshot for user-facing consoles and telemetry.
+
+        Writes a concise line to the console and mirrors the payload into telemetry as an INFO event.
+        Safe to call anywhere; failures are swallowed.
+        """
+        try:
+            line = {
+                "stage": stage,
+                "ts": int(time.time()),
+                **payload
+            }
+            logger.info("PIPELINE %s | %s", stage, json.dumps(line, default=str))
+            if hasattr(self, 'telemetry') and self.telemetry:
+                try:
+                    self.telemetry.log_event({
+                        "type": "pipeline_progress",
+                        "stage": stage,
+                        "payload": payload
+                    })
+                except Exception:
+                    pass
+        except Exception:
+            pass

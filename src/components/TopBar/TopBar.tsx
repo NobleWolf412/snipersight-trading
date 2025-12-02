@@ -5,9 +5,19 @@ import { WalletConnect } from '@/components/WalletConnect';
 import { NotificationStatus } from '@/components/NotificationStatus';
 import { HTFAlertBeacon } from '@/components/htf/HTFAlertBeacon';
 import { BackendStatusPill } from '@/components/BackendStatusPill';
+import { debugLogger, LogLevel } from '@/utils/debugLogger';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 
 export function TopBar() {
   const location = useLocation();
+  const [verbosity, setVerbosity] = useLocalStorage<'silent' | 'essential' | 'verbose'>(
+    'log-verbosity',
+    (import.meta.env.MODE === 'production') ? 'essential' : 'verbose'
+  );
+
+  // Apply verbosity to debugLogger
+  const appliedLevel = verbosity === 'silent' ? LogLevel.SILENT : verbosity === 'essential' ? LogLevel.WARN : LogLevel.INFO;
+  debugLogger.setLogLevel(appliedLevel);
   const links = [
     { to: '/scanner/setup', label: 'Scanner', icon: <Crosshair size={16} /> },
     { to: '/bot/setup', label: 'Bot', icon: <Lightning size={16} /> },
@@ -68,6 +78,20 @@ export function TopBar() {
             <BackendStatusPill />
             <NotificationStatus />
             <WalletConnect />
+            {/* Log verbosity selector */}
+            <label className="hidden md:flex items-center gap-2 px-2 py-1 rounded-md text-xs text-muted-foreground bg-card/50 border border-border/50">
+              <span>Logs</span>
+              <select
+                aria-label="Log verbosity"
+                className="bg-transparent outline-none text-foreground"
+                value={verbosity}
+                onChange={(e) => setVerbosity(e.target.value as any)}
+              >
+                <option value="silent">Silent</option>
+                <option value="essential">Essential</option>
+                <option value="verbose">Verbose</option>
+              </select>
+            </label>
           </div>
         </div>
       </div>

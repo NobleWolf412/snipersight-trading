@@ -37,6 +37,7 @@ interface RequestOptions extends RequestInit {
   timeout?: number;
   maxRetries?: number;
   skipRetry?: boolean;
+  silent?: boolean; // Suppress debug logs for this request
 }
 
 // Scanner types
@@ -206,6 +207,7 @@ class ApiClient {
       timeout = DEFAULT_TIMEOUT_MS,
       maxRetries = DEFAULT_MAX_RETRIES,
       skipRetry = false,
+      silent = false,
       ...fetchOptions
     } = options;
 
@@ -217,18 +219,20 @@ class ApiClient {
       const elapsed = Date.now() - circuitBreakerTrippedAt;
       if (elapsed < CIRCUIT_BREAKER_RESET_MS) {
         const remaining = Math.round((CIRCUIT_BREAKER_RESET_MS - elapsed) / 1000);
-        debugLogger.warning(`⚡ Circuit breaker OPEN - skipping request (retry in ${remaining}s)`, 'api');
+        if (!silent) debugLogger.warning(`⚡ Circuit breaker OPEN - skipping request (retry in ${remaining}s)`, 'api');
         return { error: `Backend unavailable - retry in ${remaining}s` };
       }
       // Reset circuit breaker and try again
       circuitBreakerOpen = false;
       consecutiveFailures = 0;
-      debugLogger.info(`⚡ Circuit breaker RESET - attempting connection`, 'api');
+      if (!silent) debugLogger.info(`⚡ Circuit breaker RESET - attempting connection`, 'api');
     }
     
-    debugLogger.api(`→ ${method} ${endpoint}`);
-    debugLogger.info(`Connecting to: ${fullUrl}`, 'api');
-    debugLogger.info(`Timeout: ${timeout / 1000}s | Retries: ${skipRetry ? 'disabled' : maxRetries}`, 'api');
+    if (!silent) {
+      debugLogger.api(`→ ${method} ${endpoint}`);
+      debugLogger.info(`Connecting to: ${fullUrl}`, 'api');
+      debugLogger.info(`Timeout: ${timeout / 1000}s | Retries: ${skipRetry ? 'disabled' : maxRetries}`, 'api');
+    }
 
     let lastError: string = 'Unknown error';
     
@@ -236,8 +240,8 @@ class ApiClient {
       // Add delay before retry (not on first attempt)
       if (attempt > 0) {
         const delay = this.getRetryDelay(attempt - 1);
-        debugLogger.warning(`⟳ Retry ${attempt}/${maxRetries} (waiting ${Math.round(delay)}ms)`, 'api');
-        console.log(`[API] Retry attempt ${attempt}/${maxRetries} after ${Math.round(delay)}ms`);
+        if (!silent) debugLogger.warning(`⟳ Retry ${attempt}/${maxRetries} (waiting ${Math.round(delay)}ms)`, 'api');
+        // console.log(`[API] Retry attempt ${attempt}/${maxRetries} after ${Math.round(delay)}ms`);
         await this.sleep(delay);
       }
 
@@ -247,7 +251,7 @@ class ApiClient {
       const startTime = Date.now();
 
       try {
-        debugLogger.info(`Sending request... (attempt ${attempt + 1})`, 'api');
+        if (!silent) debugLogger.info(`Sending request... (attempt ${attempt + 1})`, 'api');
         
         const response = await fetch(`${API_BASE}${endpoint}`, {
           ...fetchOptions,
@@ -260,13 +264,13 @@ class ApiClient {
 
         clearTimeout(timeoutId);
         const elapsed = Date.now() - startTime;
-        debugLogger.info(`Response: ${response.status} ${response.statusText} (${elapsed}ms)`, 'api');
+        if (!silent) debugLogger.info(`Response: ${response.status} ${response.statusText} (${elapsed}ms)`, 'api');
 
         if (!response.ok) {
           // Check if retryable status
           if (!skipRetry && this.isRetryable(response.status) && attempt < maxRetries) {
             lastError = `${response.status} ${response.statusText}`;
-            debugLogger.warning(`Retryable error: ${lastError}`, 'api');
+            if (!silent) debugLogger.warning(`Retryable error: ${lastError}`, 'api');
             continue; // Retry
           }
 
@@ -274,15 +278,15 @@ class ApiClient {
           try {
             const errJson = await response.json();
             const errMsg = (errJson && (errJson.detail || errJson.error)) || `${response.status} ${response.statusText}`;
-            debugLogger.error(`API Error: ${errMsg}`, 'api');
+            if (!silent) debugLogger.error(`API Error: ${errMsg}`, 'api');
             return { error: errMsg };
           } catch {
             try {
               const errText = await response.text();
-              debugLogger.error(`API Error: ${errText || response.statusText}`, 'api');
+              if (!silent) debugLogger.error(`API Error: ${errText || response.statusText}`, 'api');
               return { error: errText || `${response.status} ${response.statusText}` };
             } catch {
-              debugLogger.error(`API Error: ${response.status} ${response.statusText}`, 'api');
+              if (!silent) debugLogger.error(`API Error: ${response.status} ${response.statusText}`, 'api');
               return { error: `${response.status} ${response.statusText}` };
             }
           }
@@ -290,18 +294,18 @@ class ApiClient {
 
         const contentType = response.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
-          debugLogger.success(`✓ Request completed (no JSON body)`, 'api');
+          if (!silent) debugLogger.success(`✓ Request completed (no JSON body)`, 'api');
           consecutiveFailures = 0; // Reset on success
           return { data: undefined };
         }
 
         try {
           const data = await response.json();
-          debugLogger.success(`✓ Request successful`, 'api');
+          if (!silent) debugLogger.success(`✓ Request successful`, 'api');
           consecutiveFailures = 0; // Reset on success
           return { data };
         } catch {
-          debugLogger.warning('Response was not valid JSON', 'api');
+          if (!silent) debugLogger.warning('Response was not valid JSON', 'api');
           consecutiveFailures = 0; // Reset on success (even if JSON parse fails, backend responded)
           return { data: undefined };
         }
@@ -312,16 +316,16 @@ class ApiClient {
         if (error instanceof Error) {
           if (error.name === 'AbortError') {
             lastError = `Request timeout after ${timeout / 1000}s`;
-            debugLogger.error(`⏱ Timeout after ${elapsed}ms (limit: ${timeout}ms)`, 'api');
+            if (!silent) debugLogger.error(`⏱ Timeout after ${elapsed}ms (limit: ${timeout}ms)`, 'api');
           } else {
             lastError = error.message;
-            debugLogger.error(`Network error: ${error.message}`, 'api');
+            if (!silent) debugLogger.error(`Network error: ${error.message}`, 'api');
           }
           
           // Network errors are retryable
           if (!skipRetry && attempt < maxRetries && 
               (error.name === 'AbortError' || error.message.includes('network') || error.message.includes('fetch'))) {
-            debugLogger.info('Will retry...', 'api');
+            if (!silent) debugLogger.info('Will retry...', 'api');
             continue; // Retry
           }
         }
@@ -331,10 +335,10 @@ class ApiClient {
         if (consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
           circuitBreakerOpen = true;
           circuitBreakerTrippedAt = Date.now();
-          debugLogger.error(`⚡ Circuit breaker TRIPPED after ${consecutiveFailures} failures - pausing requests for 30s`, 'api');
+          if (!silent) debugLogger.error(`⚡ Circuit breaker TRIPPED after ${consecutiveFailures} failures - pausing requests for 30s`, 'api');
         }
         
-        debugLogger.error(`✗ Request failed: ${lastError}`, 'api');
+        if (!silent) debugLogger.error(`✗ Request failed: ${lastError}`, 'api');
         return { error: lastError };
       }
     }
@@ -344,10 +348,10 @@ class ApiClient {
     if (consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
       circuitBreakerOpen = true;
       circuitBreakerTrippedAt = Date.now();
-      debugLogger.error(`⚡ Circuit breaker TRIPPED after ${consecutiveFailures} failures - pausing requests for 30s`, 'api');
+      if (!silent) debugLogger.error(`⚡ Circuit breaker TRIPPED after ${consecutiveFailures} failures - pausing requests for 30s`, 'api');
     }
 
-    debugLogger.error(`✗ All ${maxRetries} retries exhausted: ${lastError}`, 'api');
+    if (!silent) debugLogger.error(`✗ All ${maxRetries} retries exhausted: ${lastError}`, 'api');
     return { error: `Failed after ${maxRetries} retries: ${lastError}` };
   }
 
@@ -458,22 +462,28 @@ class ApiClient {
   async getPrice(symbol: string, exchange?: string) {
     const qp = exchange ? `?exchange=${encodeURIComponent(exchange)}` : '';
     return this.request<{ symbol: string; price: number; timestamp: string }>(
-      `/market/price/${encodeURIComponent(symbol)}${qp}`
+      `/market/price/${encodeURIComponent(symbol)}${qp}`,
+      { silent: import.meta.env.MODE === 'production' }
     );
   }
 
-  async getPrices(symbols: string[], exchange?: string) {
+  async getPrices(symbols: string[], exchange?: string, options?: { silent?: boolean }) {
     const symbolsParam = symbols.join(',');
     const qp = new URLSearchParams();
     qp.set('symbols', symbolsParam);
     if (exchange) qp.set('exchange', exchange);
+    
+    // Merge environment-aware default with explicit options
+    const silent = options?.silent ?? (import.meta.env.MODE === 'production');
     
     return this.request<{
       prices: Array<{ symbol: string; price: number; timestamp: string }>;
       total: number;
       errors?: Array<{ symbol: string; error: string }>;
       exchange: string;
-    }>(`/market/prices?${qp.toString()}`);
+    }>(`/market/prices?${qp.toString()}`,
+      { silent }
+    );
   }
 
   async getCandles(symbol: string, timeframe = '1h', limit = 100) {
@@ -500,7 +510,7 @@ class ApiClient {
       risk_score: number;
       derivatives_score: number;
       timestamp: string;
-    }>('/market/regime');
+    }>('/market/regime', { silent: import.meta.env.MODE === 'production' });
   }
 
   // HTF tactical opportunities
@@ -541,6 +551,7 @@ class ApiClient {
     meme_mode?: boolean;
     exchange?: string;
     leverage?: number;
+    macro_overlay?: boolean;
   }) {
     const queryParams: Record<string, string> = {};
     if (params.limit !== undefined) queryParams.limit = params.limit.toString();
@@ -551,6 +562,7 @@ class ApiClient {
     if (params.meme_mode !== undefined) queryParams.meme_mode = params.meme_mode.toString();
     if (params.exchange) queryParams.exchange = params.exchange;
     if (params.leverage !== undefined) queryParams.leverage = params.leverage.toString();
+    if (params.macro_overlay !== undefined) queryParams.macro_overlay = params.macro_overlay.toString();
 
     const query = new URLSearchParams(queryParams).toString();
     return this.request<{
@@ -560,7 +572,7 @@ class ApiClient {
     }>(`/scanner/runs${query ? `?${query}` : ''}`, { method: 'POST' });
   }
 
-  async getScanRun(runId: string) {
+  async getScanRun(runId: string, options?: { silent?: boolean }) {
     return this.request<{
       run_id: string;
       status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -570,11 +582,12 @@ class ApiClient {
       created_at: string;
       started_at?: string;
       completed_at?: string;
+      logs?: string[]; // Backend workflow logs from orchestrator
       signals?: Signal[];
       metadata?: Record<string, any>;
       rejections?: Record<string, any>;
       error?: string;
-    }>(`/scanner/runs/${runId}`);
+    }>(`/scanner/runs/${runId}`, { ...options });
   }
 
   async cancelScanRun(runId: string) {

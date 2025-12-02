@@ -14,10 +14,19 @@ export interface DebugLogEntry {
 
 type LogListener = (entry: DebugLogEntry) => void;
 
+export enum LogLevel {
+  SILENT = 0,
+  ERROR = 1,
+  WARN = 2,
+  INFO = 3,
+  DEBUG = 4,
+}
+
 class DebugLoggerService {
   private logs: DebugLogEntry[] = [];
   private listeners: Set<LogListener> = new Set();
   private maxLogs = 200;
+  private level: LogLevel = (import.meta.env.MODE === 'production') ? LogLevel.WARN : LogLevel.INFO;
 
   /**
    * Add a log entry and notify all listeners
@@ -27,6 +36,18 @@ class DebugLoggerService {
     type: DebugLogEntry['type'] = 'info',
     source: DebugLogEntry['source'] = 'system'
   ): void {
+    const neededLevel = ((): LogLevel => {
+      if (type === 'error') return LogLevel.ERROR;
+      if (type === 'warning') return LogLevel.WARN;
+      if (type === 'api') return LogLevel.DEBUG;
+      // Treat scanner info/success as Essential so they show at WARN level
+      if ((type === 'info' || type === 'success') && source === 'scanner') return LogLevel.WARN;
+      if (type === 'info' || type === 'success') return LogLevel.INFO;
+      return LogLevel.INFO;
+    })();
+
+    if (this.level < neededLevel) return;
+
     const entry: DebugLogEntry = {
       timestamp: Date.now(),
       message,
@@ -101,6 +122,14 @@ class DebugLoggerService {
    */
   clear(): void {
     this.logs = [];
+  }
+
+  setLogLevel(level: LogLevel): void {
+    this.level = level;
+  }
+
+  getLogLevel(): LogLevel {
+    return this.level;
   }
 }
 

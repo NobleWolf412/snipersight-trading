@@ -7,6 +7,8 @@ BACKEND_PORT_DEFAULT=8001
 FORCE_PORTS=${FORCE_PORTS:-1}
 FRONTEND_PORT=${FRONTEND_PORT:-$FRONTEND_PORT_DEFAULT}
 BACKEND_PORT=${BACKEND_PORT:-$BACKEND_PORT_DEFAULT}
+START_TUNNELS=${START_TUNNELS:-1}
+LT_BIN=${LT_BIN:-npx localtunnel}
 
 # Load local environment overrides if present (auto-export)
 if [[ -f .env.local ]]; then
@@ -24,19 +26,20 @@ fi
 
 echo "Starting backend on :$BACKEND_PORT"
 # Pre-flight: free ports if occupied
-if ss -ltnp | grep -q ":$BACKEND_PORT"; then
-	echo "Port $BACKEND_PORT in use — attempting to free it"
-	ss -ltnp | grep ":$BACKEND_PORT" || true
-	pkill -f "uvicorn backend.api_server:app" || true
-	pkill -f "python backend/api_server.py" || true
+echo "Checking ports..."
+
+# Kill process on Backend Port
+if fuser -n tcp $BACKEND_PORT >/dev/null 2>&1; then
+    echo "Port $BACKEND_PORT is in use. Killing process..."
+    fuser -k -n tcp $BACKEND_PORT >/dev/null 2>&1 || true
+    sleep 1
 fi
 
-if ss -ltnp | grep -q ":$FRONTEND_PORT"; then
-	echo "Port $FRONTEND_PORT in use — attempting to free it"
-	ss -ltnp | grep ":$FRONTEND_PORT" || true
-	pkill -f "vite" || true
-	pkill -f "npm run dev" || true
-	pkill -f "node" || true
+# Kill process on Frontend Port
+if fuser -n tcp $FRONTEND_PORT >/dev/null 2>&1; then
+    echo "Port $FRONTEND_PORT is in use. Killing process..."
+    fuser -k -n tcp $FRONTEND_PORT >/dev/null 2>&1 || true
+    sleep 1
 fi
 
 # Backend hot-reload controls
@@ -95,4 +98,34 @@ if [[ "$HEALTH_CHECK" == "1" ]]; then
 		fi
 		sleep 1
 	done
+fi
+
+# Optional: start public tunnels for backend/frontend via localtunnel
+if [[ "$START_TUNNELS" == "1" ]]; then
+	echo "Starting public tunnels with localtunnel..."
+	# Backend tunnel
+	nohup $LT_BIN --port $BACKEND_PORT > logs/tunnel_backend.log 2>&1 &
+	TUNNEL_BACK_PID=$!
+	# Frontend tunnel
+	nohup $LT_BIN --port $FRONTEND_PORT > logs/tunnel_frontend.log 2>&1 &
+	TUNNEL_FRONT_PID=$!
+	echo "Tunnel PIDs — backend: $TUNNEL_BACK_PID, frontend: $TUNNEL_FRONT_PID"
+	# Attempt to surface the URLs once files have content
+	for _ in {1..10}; do
+		if grep -q "your url is:" logs/tunnel_backend.log 2>/dev/null; then
+			BACK_URL=$(grep -m1 "your url is:" logs/tunnel_backend.log | awk '{print $4}')
+			echo "Backend tunnel: $BACK_URL"
+			break
+		fi
+		sleep 1
+	done
+	for _ in {1..10}; do
+		if grep -q "your url is:" logs/tunnel_frontend.log 2>/dev/null; then
+			FRONT_URL=$(grep -m1 "your url is:" logs/tunnel_frontend.log | awk '{print $4}')
+			echo "Frontend tunnel: $FRONT_URL"
+			break
+		fi
+		sleep 1
+	done
+	echo "Tip: tail -f logs/tunnel_backend.log | logs/tunnel_frontend.log to monitor tunnel status."
 fi

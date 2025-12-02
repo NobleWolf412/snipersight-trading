@@ -39,6 +39,8 @@ export function ScannerSetup() {
   const handleArmScanner = async () => {
     setIsScanning(true);
     setScanProgress({ current: 0, total: 0 });
+    const startedAt = Date.now();
+    let heartbeatId: number | null = null;
     
     // Clear previous results
     localStorage.removeItem('scan-results');
@@ -55,7 +57,9 @@ export function ScannerSetup() {
 
     try {
       debugLogger.info('Sending request to backend...', 'scanner');
-      const signalsResponse = await api.getSignals({
+      
+      // 1. Start the scan run (Async)
+      const runResponse = await api.createScanRun({
         limit: scanConfig.topPairs || 20,
         min_score: selectedMode?.min_confluence_score || 0,
         sniper_mode: scanConfig.sniperMode,
@@ -67,76 +71,183 @@ export function ScannerSetup() {
         macro_overlay: scanConfig.macroOverlay,
       });
 
-      if (signalsResponse.error || !signalsResponse.data) {
-        debugLogger.error(`Scan failed: ${signalsResponse.error || 'No data received'}`, 'scanner');
-        throw new Error(signalsResponse.error || 'Failed to fetch signals');
+      if (runResponse.error || !runResponse.data) {
+        debugLogger.error(`Scan failed to start: ${runResponse.error || 'No data received'}`, 'scanner');
+        throw new Error(runResponse.error || 'Failed to start scan');
       }
 
-      const data = signalsResponse.data;
-      debugLogger.success(`✓ Received response: ${data.signals?.length || 0} signals`, 'scanner');
-      debugLogger.info(`Scanned: ${data.scanned} | Rejected: ${data.rejected}`, 'scanner');
+      const runId = runResponse.data.run_id;
+      debugLogger.success(`✓ Scan queued (ID: ${runId.slice(0, 8)}...)`, 'scanner');
+      debugLogger.info(`━━━ STARTING ANALYSIS PIPELINE ━━━`, 'scanner');
 
-      // Process results immediately (no polling needed)
-      const results = (data.signals || []).map(convertSignalToScanResult);
-      
-      localStorage.setItem('scan-results', JSON.stringify(results));
-      
-      // Read from root level - backend returns flat structure, not nested metadata
-      const metadata = {
-        mode: data.mode || scanConfig.sniperMode,
-        appliedTimeframes: data.applied_timeframes || [],
-        effectiveMinScore: data.effective_min_score || 0,
-        baselineMinScore: data.baseline_min_score || selectedMode?.min_confluence_score || 0,
-        profile: data.profile || 'default',
-        scanned: data.scanned || 0,
-        rejected: data.rejected || 0,
-        exchange: data.exchange,
-        leverage: data.leverage,
-        criticalTimeframes: data.critical_timeframes || [],
-      };
-      localStorage.setItem('scan-metadata', JSON.stringify(metadata));
-      
-      if (data.rejections) {
-        localStorage.setItem('scan-rejections', JSON.stringify(data.rejections));
-      }
-      
-      scanHistoryService.saveScan({
-        mode: metadata.mode,
-        profile: metadata.profile,
-        timeframes: metadata.appliedTimeframes,
-        symbolsScanned: metadata.scanned,
-        signalsGenerated: results.length,
-        signalsRejected: metadata.rejected,
-        effectiveMinScore: metadata.effectiveMinScore,
-        rejectionBreakdown: data.rejections?.by_reason,
-        results: results,
-      });
-      
-      debugLogger.success(`━━━ SCAN COMPLETE: ${results.length} signals ━━━`, 'scanner');
-      
-      // Show appropriate message based on results
-      if (results.length === 0) {
-        toast({
-          title: 'No Setups Found',
-          description: `Scanned ${metadata.scanned || 0} symbols - all rejected. Try adjusting mode or threshold.`,
-          variant: 'destructive',
+      // Start heartbeat to show liveness during scan
+      heartbeatId = window.setInterval(() => {
+        const elapsed = Math.round((Date.now() - startedAt) / 1000);
+        debugLogger.info(`⏳ Scanning... ${elapsed}s elapsed`, 'scanner');
+      }, 2000);
+
+      // 2. Poll for status
+      let jobStatus = 'queued';
+      let pollAttempts = 0;
+      const MAX_POLL_ATTEMPTS = 300; // 5 minutes max
+      let lastSymbol = '';
+      let lastProgress = 0;
+      let lastLogCount = 0; // Track how many backend logs we've displayed
+
+      while ((jobStatus === 'queued' || jobStatus === 'running') && pollAttempts < MAX_POLL_ATTEMPTS) {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Poll every 1s
+        pollAttempts++;
+
+        const statusRes = await api.getScanRun(runId, { silent: true });
+        if (statusRes.error || !statusRes.data) {
+          // Only log warning if it's not a timeout (which is silent now)
+          if (!statusRes.error?.includes('timeout')) {
+             debugLogger.warning(`Poll attempt ${pollAttempts}: ${statusRes.error}`, 'scanner');
+          }
+          continue; // Retry polling
+        }
+
+        const job = statusRes.data;
+        jobStatus = job.status;
+        
+        // Update progress UI
+        setScanProgress({ 
+          current: job.progress, 
+          total: job.total, 
+          symbol: job.current_symbol 
         });
-      } else {
-        toast({
-          title: 'Targets Acquired',
-          description: `${results.length} high-conviction setups identified`,
-        });
+
+        // Display new backend logs from orchestrator
+        try {
+          if (job.logs && Array.isArray(job.logs) && job.logs.length > lastLogCount) {
+            const newLogs = job.logs.slice(lastLogCount);
+            newLogs.forEach((logMsg: string) => {
+              if (!logMsg || typeof logMsg !== 'string') return;
+              
+              // Parse log level and message
+              const parts = logMsg.split(' | ');
+              if (parts.length < 2) {
+                // No level prefix, just log as info
+                debugLogger.info(logMsg, 'scanner');
+                return;
+              }
+              
+              const [level, ...msgParts] = parts;
+              const msg = msgParts.join(' | ');
+              
+              if (level === 'INFO') {
+                debugLogger.info(msg, 'scanner');
+              } else if (level === 'WARNING') {
+                debugLogger.warning(msg, 'scanner');
+              } else if (level === 'ERROR') {
+                debugLogger.error(msg, 'scanner');
+              } else {
+                debugLogger.info(msg, 'scanner');
+              }
+            });
+            lastLogCount = job.logs.length;
+          }
+        } catch (logError) {
+          // Silently fail - don't let log parsing break the scanner
+          console.error('[Scanner] Log parsing error:', logError);
+        }
+
+        // Show progress updates every 5 symbols
+        if (job.total > 0 && job.progress !== lastProgress && job.progress % 5 === 0) {
+          debugLogger.info(`⚡ Progress: ${job.progress}/${job.total} symbols analyzed`, 'scanner');
+          lastProgress = job.progress;
+        }
+
+        if (jobStatus === 'completed') {
+          // Process results
+          const data = job;
+          debugLogger.info(`━━━ ANALYSIS COMPLETE ━━━`, 'scanner');
+          debugLogger.success(`✓ Signals Generated: ${data.signals?.length || 0}`, 'scanner');
+          debugLogger.info(`📊 Symbols Scanned: ${data.metadata?.scanned || 0}`, 'scanner');
+          debugLogger.info(`🚫 Rejected: ${data.metadata?.rejected || 0}`, 'scanner');
+
+          const results = (data.signals || []).map(convertSignalToScanResult);
+          localStorage.setItem('scan-results', JSON.stringify(results));
+          
+          // Metadata handling
+          const metadata = {
+            mode: data.metadata?.mode || scanConfig.sniperMode,
+            appliedTimeframes: data.metadata?.applied_timeframes || [],
+            effectiveMinScore: data.metadata?.effective_min_score || 0,
+            baselineMinScore: selectedMode?.min_confluence_score || 0,
+            profile: selectedMode?.profile || 'default',
+            scanned: data.metadata?.scanned || 0,
+            rejected: data.metadata?.rejected || 0,
+            exchange: data.metadata?.exchange,
+            leverage: data.metadata?.leverage,
+            criticalTimeframes: selectedMode?.critical_timeframes || [],
+          };
+          localStorage.setItem('scan-metadata', JSON.stringify(metadata));
+          
+          if (data.rejections) {
+            localStorage.setItem('scan-rejections', JSON.stringify(data.rejections));
+          }
+          
+          scanHistoryService.saveScan({
+            mode: metadata.mode,
+            profile: metadata.profile,
+            timeframes: metadata.appliedTimeframes,
+            symbolsScanned: metadata.scanned,
+            signalsGenerated: results.length,
+            signalsRejected: metadata.rejected,
+            effectiveMinScore: metadata.effectiveMinScore,
+            rejectionBreakdown: data.rejections?.by_reason,
+            results: results,
+          });
+          
+          debugLogger.success(`━━━ SCAN COMPLETE: ${results.length} signals ━━━`, 'scanner');
+          
+          // Show appropriate message based on results
+          if (results.length === 0) {
+            toast({
+              title: 'No Setups Found',
+              description: `Scanned ${metadata.scanned || 0} symbols - all rejected. Try adjusting mode or threshold.`,
+              variant: 'destructive',
+            });
+          } else {
+            toast({
+              title: 'Targets Acquired',
+              description: `${results.length} high-conviction setups identified`,
+            });
+          }
+          
+          if (heartbeatId) {
+            clearInterval(heartbeatId);
+            heartbeatId = null;
+          }
+          setIsScanning(false);
+          setScanProgress(null);
+          navigate('/results');
+          return; // Exit function
+        } 
+        
+        if (jobStatus === 'failed') {
+          throw new Error(job.error || 'Scan job failed on backend');
+        } 
+        
+        if (jobStatus === 'cancelled') {
+          throw new Error('Scan job was cancelled');
+        }
       }
-      
-      setIsScanning(false);
-      setScanProgress(null);
-      navigate('/results');
+
+      if (pollAttempts >= MAX_POLL_ATTEMPTS) {
+        throw new Error('Scan timed out waiting for completion');
+      }
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       debugLogger.error(`━━━ SCAN FAILED ━━━`, 'scanner');
       debugLogger.error(`Error: ${errorMessage}`, 'scanner');
       debugLogger.warning('Falling back to demo results...', 'scanner');
+      if (heartbeatId) {
+        clearInterval(heartbeatId);
+        heartbeatId = null;
+      }
       
       console.error('Scanner error:', error);
       // Fallback to demo results to prevent empty UI when backend is unreachable (e.g., 504)
@@ -159,7 +270,7 @@ export function ScannerSetup() {
 
       toast({
         title: 'Operating Offline',
-        description: `Backend unavailable (e.g., 504). Showing ${demo.length} demo setups.`,
+        description: `Backend unavailable or scan failed. Showing ${demo.length} demo setups.`,
       });
 
       setIsScanning(false);
@@ -356,11 +467,11 @@ export function ScannerSetup() {
           </div>
 
           {/* Console */}
-          <div className="rounded-2xl p-6 md:p-8 backdrop-blur-sm card-3d mb-6 relative z-0">
+          <div className="rounded-2xl p-6 md:p-8 backdrop-blur-sm card-3d relative z-0 flex flex-col h-full overflow-hidden">
             <h2 className="text-xl font-semibold mb-4 hud-headline hud-text-green">SCANNER CONSOLE</h2>
             <ScannerConsole
               isScanning={isScanning}
-              className=""
+              className="flex-1 min-h-[400px] lg:min-h-0"
             />
           </div>
         </div>
