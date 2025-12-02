@@ -139,47 +139,76 @@ class PhemexAdapter:
             logger.error(f"Exchange error fetching markets: {e}")
             raise
 
+    @retry_on_rate_limit(max_retries=3)
     def get_top_symbols(self, n: int = 20, quote_currency: str = 'USDT') -> List[str]:
         """
-        Get top N trading pairs by 24h volume.
+        Get top N trading pairs by 24h volume from Phemex.
+
+        Uses real-time ticker data sorted by quote volume for accurate rankings.
+        Falls back to curated list if API call fails.
 
         Args:
             n: Number of top symbols to return
             quote_currency: Quote currency to filter by (e.g., 'USDT')
 
         Returns:
-            List of symbol strings
+            List of symbol strings sorted by 24h volume
         """
+        markets = None
         try:
-            # For Phemex, we'll use a curated list of liquid pairs
-            # This avoids rate limits from fetch_tickers() and works reliably
-            
-            # Common liquid perpetual pairs on Phemex
-            popular_pairs = [
-                'BTC/USDT', 'ETH/USDT', 'XRP/USDT', 'SOL/USDT', 'DOGE/USDT',
-                'ADA/USDT', 'AVAX/USDT', 'MATIC/USDT', 'DOT/USDT', 'LINK/USDT',
-                'UNI/USDT', 'LTC/USDT', 'BCH/USDT', 'NEAR/USDT', 'ATOM/USDT',
-                'FIL/USDT', 'APT/USDT', 'ARB/USDT', 'OP/USDT', 'TRX/USDT'
-            ]
-            
-            # Verify these pairs exist on the exchange
             markets = self.exchange.load_markets()
-            available_pairs = [
-                pair for pair in popular_pairs 
-                if pair in markets
-            ]
-            
-            logger.info(f"Top {n} popular symbols: {', '.join(available_pairs[:n])}")
-            return available_pairs[:n]
+            tickers = self.exchange.fetch_tickers()
+
+            # Filter for active USDT perpetual/swap markets
+            valid_symbols = []
+            for symbol, market in markets.items():
+                if (
+                    market.get('active', False) and
+                    market.get('quote') == quote_currency and
+                    market.get('type') == 'swap' and
+                    symbol in tickers
+                ):
+                    valid_symbols.append(symbol)
+
+            # Sort by 24h quote volume (descending)
+            sorted_symbols = sorted(
+                valid_symbols,
+                key=lambda s: tickers[s].get('quoteVolume', 0) or 0,
+                reverse=True
+            )
+
+            result = sorted_symbols[:n]
+            logger.info(f"Retrieved top {len(result)} Phemex symbols by volume")
+            return result
 
         except Exception as e:
-            logger.warning(f"Error getting top symbols: {e}. Using default list.")
-            # Fallback to basic list
-            default_pairs = [
-                'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'DOGE/USDT',
-                'ADA/USDT', 'MATIC/USDT', 'DOT/USDT', 'LINK/USDT', 'AVAX/USDT'
+            logger.warning(f"Error fetching top symbols dynamically: {e}. Using curated fallback.")
+            # Expanded fallback list including meme coins for category support
+            fallback_pairs = [
+                # Majors
+                'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'BNB/USDT',
+                'ADA/USDT', 'AVAX/USDT', 'DOT/USDT', 'LINK/USDT', 'MATIC/USDT',
+                # Popular alts (2024-2025)
+                'NEAR/USDT', 'ATOM/USDT', 'APT/USDT', 'ARB/USDT', 'OP/USDT',
+                'SUI/USDT', 'INJ/USDT', 'SEI/USDT', 'TIA/USDT', 'FIL/USDT',
+                'JUP/USDT', 'WLD/USDT', 'STX/USDT', 'IMX/USDT', 'RENDER/USDT',
+                # Meme coins
+                'DOGE/USDT', 'SHIB/USDT', 'PEPE/USDT', 'BONK/USDT', 'WIF/USDT',
+                'FLOKI/USDT', 'MEME/USDT', 'TURBO/USDT',
             ]
-            return default_pairs[:n]
+            
+            # Validate against available markets if possible
+            try:
+                if not markets:
+                    markets = self.exchange.load_markets()
+                available = [p for p in fallback_pairs if p in markets]
+                if available:
+                    logger.info(f"Fallback: {len(available)} pairs available on Phemex")
+                    return available[:n]
+            except Exception:
+                pass
+            
+            return fallback_pairs[:n]
 
     def is_perp(self, symbol: str) -> bool:
         """Detect if a symbol is a USDT perpetual swap on Phemex.

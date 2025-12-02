@@ -95,3 +95,67 @@ def retry_on_rate_limit(
 
 # Backward compatibility alias
 _retry_on_rate_limit = retry_on_rate_limit
+
+
+# ---------------------------------------------------------------------------
+# Optional caching layer for expensive ticker fetches
+# ---------------------------------------------------------------------------
+
+from threading import Lock
+from dataclasses import dataclass, field
+from typing import Dict, Optional
+import time as time_module
+
+
+@dataclass
+class CachedTickers:
+    """
+    Simple TTL cache for exchange tickers to reduce API calls.
+    
+    Usage:
+        cache = CachedTickers(ttl_seconds=300)  # 5 minute cache
+        
+        tickers = cache.get("phemex")
+        if tickers is None:
+            tickers = exchange.fetch_tickers()
+            cache.set("phemex", tickers)
+    """
+    ttl_seconds: float = 300.0  # 5 minutes default
+    _cache: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    _timestamps: Dict[str, float] = field(default_factory=dict)
+    _lock: Lock = field(default_factory=Lock)
+    
+    def get(self, exchange_id: str) -> Optional[Dict[str, Any]]:
+        """Get cached tickers if not expired."""
+        with self._lock:
+            if exchange_id not in self._cache:
+                return None
+            
+            cached_time = self._timestamps.get(exchange_id, 0)
+            if time_module.time() - cached_time > self.ttl_seconds:
+                # Expired - remove from cache
+                del self._cache[exchange_id]
+                del self._timestamps[exchange_id]
+                return None
+            
+            return self._cache[exchange_id]
+    
+    def set(self, exchange_id: str, tickers: Dict[str, Any]) -> None:
+        """Store tickers in cache with current timestamp."""
+        with self._lock:
+            self._cache[exchange_id] = tickers
+            self._timestamps[exchange_id] = time_module.time()
+    
+    def invalidate(self, exchange_id: Optional[str] = None) -> None:
+        """Clear cache for specific exchange or all exchanges."""
+        with self._lock:
+            if exchange_id:
+                self._cache.pop(exchange_id, None)
+                self._timestamps.pop(exchange_id, None)
+            else:
+                self._cache.clear()
+                self._timestamps.clear()
+
+
+# Global shared cache instance (optional - adapters can use their own)
+ticker_cache = CachedTickers(ttl_seconds=300)

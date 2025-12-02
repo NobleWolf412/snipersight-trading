@@ -5,9 +5,16 @@
 - Leverage-aware perp detection (adapter-first, heuristic fallback)
 - Majors, memes, alts bucket selection with curated majors semantics
 - Safe fallback behavior when adapter data is unavailable
+- Uses SymbolClassifier for accurate category detection (CoinGecko + heuristics)
 """
 from typing import List, Protocol, Optional
 from loguru import logger
+
+from backend.analysis.symbol_classifier import (
+    get_classifier,
+    SymbolCategory,
+    HEURISTIC_MAJORS,
+)
 
 
 class SupportsTopSymbols(Protocol):
@@ -36,36 +43,25 @@ DEFAULT_FALLBACK = [
 ]
 
 # Curated crypto majors used when present in adapter list; preserves list ranking
-HARDCODED_MAJORS = {
-    "BTC/USDT",
-    "ETH/USDT",
-    "BNB/USDT",
-    "SOL/USDT",
-    "XRP/USDT",
-    "ADA/USDT",
-    "AVAX/USDT",
-    "MATIC/USDT",
-}
+# Now uses centralized HEURISTIC_MAJORS from symbol_classifier but keeps pair format
+HARDCODED_MAJORS = {f"{base}/USDT" for base in HEURISTIC_MAJORS}
+
+
+# Get the shared classifier instance (defaults to heuristics, no auto-fetch)
+_classifier = get_classifier()
 
 
 def _is_meme_symbol(symbol: str) -> bool:
-    """Heuristic meme classification based on symbol token names.
-
-    Avoids hardcoded full sets while catching common meme tokens.
+    """Classify symbol as meme using SymbolClassifier.
+    
+    Uses CoinGecko data when cached, falls back to heuristics.
     """
-    name = symbol.split("/")[0].upper()
-    MEME_HINTS = (
-        "DOGE",
-        "SHIB",
-        "PEPE",
-        "BONK",
-        "FLOKI",
-        "WIF",
-        "TURBO",
-        "MEME",
-        "SATS",
-    )
-    return any(hint in name for hint in MEME_HINTS)
+    return _classifier.is_meme(symbol)
+
+
+def _is_major_symbol(symbol: str) -> bool:
+    """Classify symbol as major using SymbolClassifier."""
+    return _classifier.is_major(symbol)
 
 
 def _normalize_token(token: str) -> str:
