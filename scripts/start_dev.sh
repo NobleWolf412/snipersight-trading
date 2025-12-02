@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 mkdir -p logs
 # Preferred (user env): Frontend 5000 (Vite), Backend 8001 (FastAPI)
@@ -10,23 +11,85 @@ BACKEND_PORT=${BACKEND_PORT:-$BACKEND_PORT_DEFAULT}
 START_TUNNELS=${START_TUNNELS:-1}
 LT_BIN=${LT_BIN:-npx localtunnel}
 
+# Manual print-links mode
+if [[ "${1:-}" == "print-links" ]]; then
+    echo "\n--- Current Tunnel Links ---"
+    FRONT_URL=$(grep -o 'https://[^ |]*\.trycloudflare\.com' logs/tunnel_frontend.log | head -n1)
+    BACK_URL=$(grep -o 'https://[^ |]*\.trycloudflare\.com' logs/tunnel_backend.log | head -n1)
+    if [[ -n "$FRONT_URL" ]]; then
+        echo "Frontend: $FRONT_URL"
+    else
+        echo "Frontend: (not found)"
+    fi
+    if [[ -n "$BACK_URL" ]]; then
+        echo "Backend:  $BACK_URL"
+    else
+        echo "Backend:  (not found)"
+    fi
+    echo "---------------------------\n"
+    exit 0
+fi
+
+# Manual restart mode: kill servers/tunnels, restart everything, print new links
+if [[ "${1:-}" == "restart" ]]; then
+    PRINT_LINKS=0
+    if [[ "${2:-}" == "print-links" ]]; then
+        PRINT_LINKS=1
+    fi
+    echo "Restarting backend, frontend, and tunnels..."
+    pkill -f "cloudflared tunnel" || true
+    pkill -f "lt --port" || true
+    pkill -f "localtunnel" || true
+    pkill -f "uvicorn" || true
+    pkill -f "vite" || true
+    sleep 2
+    rm -f logs/backend.log logs/frontend.log logs/tunnel_backend.log logs/tunnel_frontend.log
+    # Start everything in a subshell so we can wait and print links after
+    (
+        bash "$0"
+        if [[ $PRINT_LINKS -eq 1 ]]; then
+            echo "Waiting for new tunnel links..."
+            for i in {1..30}; do
+                FRONT_URL=$(grep -o 'https://[^ |]*\.trycloudflare\.com' logs/tunnel_frontend.log | head -n1)
+                BACK_URL=$(grep -o 'https://[^ |]*\.trycloudflare\.com' logs/tunnel_backend.log | head -n1)
+                if [[ -n "$FRONT_URL" && -n "$BACK_URL" ]]; then
+                    echo "\n--- New Tunnel Links ---"
+                    echo "Frontend: $FRONT_URL"
+                    echo "Backend:  $BACK_URL"
+                    echo "------------------------\n"
+                    exit 0
+                fi
+                sleep 1
+            done
+            echo "Could not detect new tunnel links after restart. Check logs manually."
+            exit 1
+        fi
+    )
+    exit 0
+fi
+
 # Load local environment overrides if present (auto-export)
 if [[ -f .env.local ]]; then
-	echo "Loading .env.local"
-	set -a
-	source .env.local
-	set +a
+    echo "Loading .env.local"
+    set -a
+    source .env.local
+    set +a
 fi
 
 # Force ports to known-good defaults unless explicitly disabled
 if [[ "$FORCE_PORTS" == "1" ]]; then
-	FRONTEND_PORT="$FRONTEND_PORT_DEFAULT"
-	BACKEND_PORT="$BACKEND_PORT_DEFAULT"
+    FRONTEND_PORT="$FRONTEND_PORT_DEFAULT"
+    BACKEND_PORT="$BACKEND_PORT_DEFAULT"
 fi
 
 echo "Starting backend on :$BACKEND_PORT"
 # Pre-flight: free ports if occupied
-echo "Checking ports..."
+echo "Checking ports and cleaning up..."
+
+# Kill any existing tunnel processes
+pkill -f "cloudflared tunnel" || true
+pkill -f "lt --port" || true
+pkill -f "localtunnel" || true
 
 # Kill process on Backend Port
 if fuser -n tcp $BACKEND_PORT >/dev/null 2>&1; then
@@ -100,32 +163,92 @@ if [[ "$HEALTH_CHECK" == "1" ]]; then
 	done
 fi
 
-# Optional: start public tunnels for backend/frontend via localtunnel
+# Optional: start public tunnels for backend/frontend via cloudflared or localtunnel
 if [[ "$START_TUNNELS" == "1" ]]; then
-	echo "Starting public tunnels with localtunnel..."
-	# Backend tunnel
-	nohup $LT_BIN --port $BACKEND_PORT > logs/tunnel_backend.log 2>&1 &
-	TUNNEL_BACK_PID=$!
-	# Frontend tunnel
-	nohup $LT_BIN --port $FRONTEND_PORT > logs/tunnel_frontend.log 2>&1 &
-	TUNNEL_FRONT_PID=$!
-	echo "Tunnel PIDs — backend: $TUNNEL_BACK_PID, frontend: $TUNNEL_FRONT_PID"
-	# Attempt to surface the URLs once files have content
-	for _ in {1..10}; do
-		if grep -q "your url is:" logs/tunnel_backend.log 2>/dev/null; then
-			BACK_URL=$(grep -m1 "your url is:" logs/tunnel_backend.log | awk '{print $4}')
-			echo "Backend tunnel: $BACK_URL"
-			break
-		fi
-		sleep 1
-	done
-	for _ in {1..10}; do
-		if grep -q "your url is:" logs/tunnel_frontend.log 2>/dev/null; then
-			FRONT_URL=$(grep -m1 "your url is:" logs/tunnel_frontend.log | awk '{print $4}')
-			echo "Frontend tunnel: $FRONT_URL"
-			break
-		fi
-		sleep 1
-	done
-	echo "Tip: tail -f logs/tunnel_backend.log | logs/tunnel_frontend.log to monitor tunnel status."
+    # Check for cloudflared binary in scripts/
+    if [[ -f "scripts/cloudflared" ]]; then
+        echo "Starting public tunnels with cloudflared..."
+        chmod +x scripts/cloudflared
+        
+        # Backend tunnel
+        nohup ./scripts/cloudflared tunnel --url http://localhost:$BACKEND_PORT > logs/tunnel_backend.log 2>&1 &
+        TUNNEL_BACK_PID=$!
+        
+        # Frontend tunnel
+        nohup ./scripts/cloudflared tunnel --url http://localhost:$FRONTEND_PORT > logs/tunnel_frontend.log 2>&1 &
+        TUNNEL_FRONT_PID=$!
+        
+        echo "Tunnel PIDs — backend: $TUNNEL_BACK_PID, frontend: $TUNNEL_FRONT_PID"
+        
+        # Attempt to surface the URLs
+        echo "Waiting for Cloudflare URLs (this may take up to 30s)..."
+        
+        # Wait for Backend URL
+        BACK_URL=""
+        for i in {1..30}; do
+            if grep -q "trycloudflare.com" logs/tunnel_backend.log 2>/dev/null; then
+                # Use a simpler grep to avoid regex issues with different grep versions
+                BACK_URL=$(grep "trycloudflare.com" logs/tunnel_backend.log | grep -o 'https://[^ |]*\.trycloudflare\.com' | head -n1)
+                if [[ -n "$BACK_URL" ]]; then
+                    echo "✅ Backend tunnel: $BACK_URL"
+                    break
+                fi
+            fi
+            if (( i % 5 == 0 )); then echo "   ...still waiting for backend..."; fi
+            sleep 1
+        done
+        
+        # Wait for Frontend URL
+        FRONT_URL=""
+        for i in {1..30}; do
+            if grep -q "trycloudflare.com" logs/tunnel_frontend.log 2>/dev/null; then
+                FRONT_URL=$(grep "trycloudflare.com" logs/tunnel_frontend.log | grep -o 'https://[^ |]*\.trycloudflare\.com' | head -n1)
+                if [[ -n "$FRONT_URL" ]]; then
+                    echo "✅ Frontend tunnel: $FRONT_URL"
+                    break
+                fi
+            fi
+            if (( i % 5 == 0 )); then echo "   ...still waiting for frontend..."; fi
+            sleep 1
+        done
+
+        if [[ -z "$BACK_URL" || -z "$FRONT_URL" ]]; then
+            echo "⚠️  Could not auto-detect URLs yet. Check logs manually:"
+            echo "   grep -o 'https://.*\.trycloudflare\.com' logs/tunnel_*.log"
+        else
+            echo ""
+            echo "🎉 Tunnels Active!"
+            echo "   Frontend: $FRONT_URL"
+            echo "   Backend:  $BACK_URL"
+            echo ""
+        fi
+        
+    else
+        echo "Starting public tunnels with localtunnel..."
+        # Backend tunnel
+        nohup $LT_BIN --port $BACKEND_PORT > logs/tunnel_backend.log 2>&1 &
+        TUNNEL_BACK_PID=$!
+        # Frontend tunnel
+        nohup $LT_BIN --port $FRONTEND_PORT > logs/tunnel_frontend.log 2>&1 &
+        TUNNEL_FRONT_PID=$!
+        echo "Tunnel PIDs — backend: $TUNNEL_BACK_PID, frontend: $TUNNEL_FRONT_PID"
+        # Attempt to surface the URLs once files have content
+        for _ in {1..10}; do
+            if grep -q "your url is:" logs/tunnel_backend.log 2>/dev/null; then
+                BACK_URL=$(grep -m1 "your url is:" logs/tunnel_backend.log | awk '{print $4}')
+                echo "Backend tunnel: $BACK_URL"
+                break
+            fi
+            sleep 1
+        done
+        for _ in {1..10}; do
+            if grep -q "your url is:" logs/tunnel_frontend.log 2>/dev/null; then
+                FRONT_URL=$(grep -m1 "your url is:" logs/tunnel_frontend.log | awk '{print $4}')
+                echo "Frontend tunnel: $FRONT_URL"
+                break
+            fi
+            sleep 1
+        done
+    fi
+    echo "Tip: tail -f logs/tunnel_backend.log logs/tunnel_frontend.log to monitor tunnel status."
 fi

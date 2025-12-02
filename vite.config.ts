@@ -40,6 +40,7 @@ export default defineConfig({
     port: frontendPort,
     host: hostBind,
     strictPort,
+    allowedHosts: true,
     hmr: {
       overlay: true,
       protocol: (process.env.HMR_PROTOCOL) || (hostBind === 'localhost' ? 'ws' : 'wss'),

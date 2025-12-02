@@ -70,6 +70,7 @@
     "input-otp": "^1.4.2",
     "jotai": "^2.15.1",
     "jotai-devtools": "^0.13.0",
+    "localtunnel": "^2.0.2",
     "lucide-react": "^0.484.0",
     "marked": "^15.0.7",
     "numeral": "^2.0.6",
