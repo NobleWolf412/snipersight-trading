@@ -290,8 +290,8 @@ export function ScannerSetup() {
           <p className="hud-terminal text-primary/80">Configure your scanner parameters</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:items-start">
-          <div className="lg:col-span-2 space-y-6 flex flex-col">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:items-stretch">
+          <div className="lg:col-span-2 space-y-6">
             {/* Scan Mode */}
             <div className="rounded-2xl p-6 md:p-8 backdrop-blur-sm card-3d">
               <h2 className="text-xl font-semibold mb-4 hud-headline hud-text-green">SCAN MODE & PROFILE</h2>
@@ -467,9 +467,9 @@ export function ScannerSetup() {
           </div>
 
           {/* Console */}
-          <div className="rounded-2xl p-6 md:p-8 backdrop-blur-sm card-3d relative z-0 flex flex-col">
+          <div className="rounded-2xl p-6 md:p-8 backdrop-blur-sm card-3d relative z-0 flex flex-col h-full lg:sticky lg:top-6">
             <h2 className="text-xl font-semibold mb-4 hud-headline hud-text-green">SCANNER CONSOLE</h2>
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-[600px] lg:min-h-0">
               <ScannerConsole
                 isScanning={isScanning}
                 className="h-full"
