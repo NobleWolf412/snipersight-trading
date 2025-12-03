@@ -15,7 +15,7 @@ import pandas as pd
 import numpy as np
 
 from backend.shared.models.smc import LiquiditySweep
-from backend.shared.config.smc_config import SMCConfig
+from backend.shared.config.smc_config import SMCConfig, scale_lookback
 
 
 def detect_liquidity_sweeps(
@@ -69,7 +69,11 @@ def detect_liquidity_sweeps(
         smc_cfg = SMCConfig.from_dict(mapped)
     else:
         smc_cfg = config
-    swing_lookback = smc_cfg.sweep_swing_lookback
+    
+    # Infer timeframe and apply scaling to lookback
+    from backend.strategy.smc.bos_choch import _infer_timeframe
+    inferred_tf = _infer_timeframe(df)
+    swing_lookback = scale_lookback(smc_cfg.sweep_swing_lookback, inferred_tf)
     max_sweep_candles = smc_cfg.sweep_max_sweep_candles
     min_reversal_atr = smc_cfg.sweep_min_reversal_atr
     require_volume_spike = smc_cfg.sweep_require_volume_spike

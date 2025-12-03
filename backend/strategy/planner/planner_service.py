@@ -43,6 +43,7 @@ from backend.shared.models.scoring import ConfluenceBreakdown
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.planner_config import PlannerConfig
 from backend.shared.config.rr_matrix import validate_rr, classify_conviction
+from backend.shared.config.smc_config import scale_lookback
 from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import create_signal_rejected_event, create_alt_stop_suggested_event
 from backend.strategy.smc.reversal_detector import get_reversal_rationale_for_plan
@@ -1007,7 +1008,8 @@ def _find_swing_level(
     is_bullish: bool,
     reference_price: float,
     candles_df: pd.DataFrame,
-    lookback: int
+    lookback: int,
+    timeframe: Optional[str] = None
 ) -> Optional[float]:
     """
     Find swing high or swing low from price action.
@@ -1021,7 +1023,8 @@ def _find_swing_level(
         is_bullish: If True, find swing low (for stop). If False, find swing high.
         reference_price: Entry price to anchor search from
         candles_df: OHLCV dataframe for the timeframe
-        lookback: Number of bars to search back
+        lookback: Base number of bars to search back (scaled by timeframe)
+        timeframe: Timeframe string for lookback scaling (e.g., '5m', '4h', '1d')
         
     Returns:
         Swing level price or None if no valid level found
@@ -1029,8 +1032,11 @@ def _find_swing_level(
     if candles_df is None or len(candles_df) < 5:
         return None
     
+    # Scale lookback based on timeframe (LTF needs more bars, HTF needs fewer)
+    scaled_lookback = scale_lookback(lookback, timeframe) if timeframe else lookback
+    
     # Use last N candles
-    recent = candles_df.tail(lookback)
+    recent = candles_df.tail(scaled_lookback)
     
     if is_bullish:
         # Find swing lows below reference price
@@ -1177,7 +1183,8 @@ def _calculate_stop_loss(
                     is_bullish=True,
                     reference_price=entry_zone.far_entry,
                     candles_df=candles_df,
-                    lookback=planner_cfg.stop_lookback_bars
+                    lookback=planner_cfg.stop_lookback_bars,
+                    timeframe=primary_tf
                 )
             
             # Try HTF if enabled and primary failed
@@ -1190,7 +1197,8 @@ def _calculate_stop_loss(
                             is_bullish=True,
                             reference_price=entry_zone.far_entry,
                             candles_df=candles_df,
-                            lookback=planner_cfg.stop_htf_lookback_bars
+                            lookback=planner_cfg.stop_lookback_bars,  # Same base, scaled by timeframe
+                            timeframe=htf
                         )
                         if swing_level:
                             logger.info(f"Found HTF swing on {htf}")
@@ -1247,7 +1255,8 @@ def _calculate_stop_loss(
                     is_bullish=False,
                     reference_price=entry_zone.far_entry,
                     candles_df=candles_df,
-                    lookback=planner_cfg.stop_lookback_bars
+                    lookback=planner_cfg.stop_lookback_bars,
+                    timeframe=primary_tf
                 )
             
             # Try HTF if enabled and primary failed
@@ -1260,7 +1269,8 @@ def _calculate_stop_loss(
                             is_bullish=False,
                             reference_price=entry_zone.far_entry,
                             candles_df=candles_df,
-                            lookback=planner_cfg.stop_htf_lookback_bars
+                            lookback=planner_cfg.stop_lookback_bars,  # Same base, scaled by timeframe
+                            timeframe=htf
                         )
                         if swing_level:
                             logger.info(f"Found HTF swing on {htf}")

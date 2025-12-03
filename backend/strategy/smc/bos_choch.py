@@ -14,7 +14,7 @@ import pandas as pd
 import numpy as np
 
 from backend.shared.models.smc import StructuralBreak
-from backend.shared.config.smc_config import SMCConfig
+from backend.shared.config.smc_config import SMCConfig, scale_lookback
 
 # Conditional import for type hints to avoid circular imports
 if TYPE_CHECKING:
@@ -74,7 +74,10 @@ def detect_structural_breaks(
         smc_cfg = SMCConfig.from_dict(mapped)
     else:
         smc_cfg = config
-    swing_lookback = smc_cfg.structure_swing_lookback
+    
+    # Infer timeframe and apply scaling to lookback
+    inferred_tf = _infer_timeframe(df)
+    swing_lookback = scale_lookback(smc_cfg.structure_swing_lookback, inferred_tf)
     min_break_distance_atr = smc_cfg.structure_min_break_distance_atr
     
     if len(df) < swing_lookback * 2 + 20:

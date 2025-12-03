@@ -16,7 +16,96 @@ are non-negative and within simple bounds where applicable.
 """
 
 from dataclasses import dataclass, asdict
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+
+
+# ============================================================================
+# TIMEFRAME-AWARE LOOKBACK SCALING
+# ============================================================================
+# 
+# The core insight: a "7 candle lookback" means very different things:
+#   5m chart:  7 candles =  35 minutes (noise!)
+#   4H chart:  7 candles =  28 hours   (short-term)
+#   1D chart:  7 candles =   1 week    (significant)
+#   1W chart:  7 candles =  ~2 months  (major swings)
+#
+# Solution: Scale lookbacks based on timeframe to ensure we're looking at
+# equivalent "significance" of price action regardless of timeframe.
+
+# Timeframe minutes mapping
+TIMEFRAME_MINUTES: Dict[str, int] = {
+    '1m': 1, '3m': 3, '5m': 5, '15m': 15, '30m': 30,
+    '1h': 60, '1H': 60,
+    '2h': 120, '2H': 120,
+    '4h': 240, '4H': 240,
+    '6h': 360, '6H': 360,
+    '8h': 480, '8H': 480,
+    '12h': 720, '12H': 720,
+    '1d': 1440, '1D': 1440,
+    '3d': 4320, '3D': 4320,
+    '1w': 10080, '1W': 10080,
+}
+
+# Lookback multipliers by timeframe category
+# LTF (5m-15m): More candles needed to filter noise
+# MTF (1H-4H): Balanced lookback
+# HTF (1D+): Fewer candles - each one is significant
+LOOKBACK_MULTIPLIERS: Dict[str, float] = {
+    '1m': 3.0,   # Very noisy - need 3x lookback
+    '3m': 2.5,
+    '5m': 2.5,   # Noisy - need 2.5x lookback
+    '15m': 2.0,  # Still noisy - need 2x lookback
+    '30m': 1.5,
+    '1h': 1.3, '1H': 1.3,
+    '2h': 1.2, '2H': 1.2,
+    '4h': 1.0, '4H': 1.0,   # Base reference (multiplier = 1.0)
+    '6h': 1.0, '6H': 1.0,
+    '8h': 0.9, '8H': 0.9,
+    '12h': 0.8, '12H': 0.8,
+    '1d': 0.7, '1D': 0.7,   # Each candle is significant
+    '3d': 0.6, '3D': 0.6,
+    '1w': 0.5, '1W': 0.5,   # Major swings only
+}
+
+
+def get_timeframe_minutes(timeframe: str) -> int:
+    """Get minutes for a timeframe string."""
+    return TIMEFRAME_MINUTES.get(timeframe, 240)  # Default to 4H
+
+
+def get_lookback_multiplier(timeframe: str) -> float:
+    """
+    Get lookback multiplier for a timeframe.
+    
+    Returns multiplier to scale base lookback values:
+    - LTF (5m-15m): 2.0-2.5x (more candles to filter noise)
+    - MTF (1H-4H): 1.0-1.3x (balanced)
+    - HTF (1D+): 0.5-0.7x (fewer candles, each is significant)
+    """
+    return LOOKBACK_MULTIPLIERS.get(timeframe, 1.0)
+
+
+def scale_lookback(base_lookback: int, timeframe: str, min_lookback: int = 3, max_lookback: int = 50) -> int:
+    """
+    Scale a base lookback value for a specific timeframe.
+    
+    Args:
+        base_lookback: Base lookback (calibrated for 4H)
+        timeframe: Timeframe string (e.g., '15m', '4H', '1D')
+        min_lookback: Minimum lookback (safety floor)
+        max_lookback: Maximum lookback (prevent excessive computation)
+        
+    Returns:
+        Scaled lookback value, clamped to [min, max]
+        
+    Example:
+        scale_lookback(7, '5m')  -> 17  (7 * 2.5 = 17.5 -> 17)
+        scale_lookback(7, '4H')  ->  7  (7 * 1.0 = 7)
+        scale_lookback(7, '1D')  ->  5  (7 * 0.7 = 4.9 -> 5)
+    """
+    multiplier = get_lookback_multiplier(timeframe)
+    scaled = int(round(base_lookback * multiplier))
+    return max(min_lookback, min(max_lookback, scaled))
 
 
 @dataclass
@@ -76,6 +165,22 @@ class SMCConfig:
     def to_dict(self) -> Dict[str, Any]:
         """Return a dict representation suitable for serialization."""
         return asdict(self)
+
+    def get_scaled_lookbacks(self, timeframe: str) -> Dict[str, int]:
+        """
+        Get all lookback values scaled for a specific timeframe.
+        
+        Args:
+            timeframe: Timeframe string (e.g., '15m', '4H', '1D')
+            
+        Returns:
+            Dict with scaled lookback values for each SMC pattern type
+        """
+        return {
+            'ob_lookback': scale_lookback(self.ob_lookback_candles, timeframe),
+            'structure_swing_lookback': scale_lookback(self.structure_swing_lookback, timeframe),
+            'sweep_swing_lookback': scale_lookback(self.sweep_swing_lookback, timeframe),
+        }
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "SMCConfig":

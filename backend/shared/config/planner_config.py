@@ -55,9 +55,12 @@ class PlannerConfig:
     ob_displacement_weight: float = 0.5  # Weight for displacement in scoring
     
     # Swing stop search
-    stop_lookback_bars: int = 30  # Primary timeframe swing lookback (increased from 20)
-    stop_htf_lookback_bars: int = 60  # HTF swing lookback (if MTF data available)
-    stop_use_htf_swings: bool = True  # Enable HTF swing searching
+    # NOTE: stop_lookback_bars is the BASE value - it gets scaled by timeframe automatically
+    # (LTF like 5m scales UP 2.5x, HTF like 1D scales DOWN 0.7x)
+    # See scale_lookback() in smc_config.py for details
+    stop_lookback_bars: int = 30  # Base swing lookback (calibrated for 4H, auto-scaled per TF)
+    stop_htf_lookback_bars: int = 60  # DEPRECATED: no longer used, kept for backward compat
+    stop_use_htf_swings: bool = True  # Enable HTF swing searching as fallback
     
     # Price alignment sanity
     price_alignment_max_rel_diff: float = 0.5  # Max relative diff between mid_entry and current_price

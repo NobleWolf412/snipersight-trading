@@ -17,7 +17,7 @@ import pandas as pd
 import numpy as np
 
 from backend.shared.models.smc import OrderBlock
-from backend.shared.config.smc_config import SMCConfig
+from backend.shared.config.smc_config import SMCConfig, scale_lookback
 
 
 def detect_order_blocks(
@@ -78,7 +78,9 @@ def detect_order_blocks(
 
     min_wick_ratio = smc_cfg.min_wick_ratio
     min_displacement_atr = smc_cfg.min_displacement_atr
-    lookback_candles = smc_cfg.ob_lookback_candles
+    # Apply timeframe-aware scaling to lookback
+    inferred_tf = _infer_timeframe(df)
+    lookback_candles = scale_lookback(smc_cfg.ob_lookback_candles, inferred_tf)
     volume_threshold = smc_cfg.ob_volume_threshold
     
     if len(df) < lookback_candles + 20:  # Need enough data for ATR calculation
