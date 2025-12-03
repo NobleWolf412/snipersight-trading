@@ -55,8 +55,8 @@ class PlannerConfig:
     ob_displacement_weight: float = 0.5  # Weight for displacement in scoring
     
     # Swing stop search
-    stop_lookback_bars: int = 20  # Primary timeframe swing lookback
-    stop_htf_lookback_bars: int = 50  # HTF swing lookback (if MTF data available)
+    stop_lookback_bars: int = 30  # Primary timeframe swing lookback (increased from 20)
+    stop_htf_lookback_bars: int = 60  # HTF swing lookback (if MTF data available)
     stop_use_htf_swings: bool = True  # Enable HTF swing searching
     
     # Price alignment sanity

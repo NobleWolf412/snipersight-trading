@@ -5,7 +5,8 @@ import { Separator } from '@/components/ui/separator';
 import type { ScanResult } from '@/utils/mockData';
 import { RegimeIndicator } from '@/components/RegimeIndicator';
 import { ConvictionBadge } from '@/components/ConvictionBadge';
-import { TrendUp, TrendDown, Activity, Shield, Warning } from '@phosphor-icons/react';
+import { CycleIndicator } from '@/components/CycleIndicator';
+import { TrendUp, TrendDown, Activity, Shield, Warning, Recycle } from '@phosphor-icons/react';
 
 function formatAtrLabel(label: string, atrPct?: number) {
   const raw = (label || '').toString();
@@ -199,6 +200,58 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
             </div>
 
             <Separator />
+
+            {/* Cycle Theory Context (Phase 7) */}
+            {result.cycle_context && (
+              <>
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <Recycle size={16} weight="bold" />
+                    Cycle Analysis
+                  </h3>
+                  <CycleIndicator cycle={result.cycle_context} size="md" />
+                  {result.reversal_context && (
+                    <div className="bg-muted/40 rounded-lg p-3 mt-2">
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                        Reversal Context
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Structure Broken:</span>
+                          <Badge variant="outline" className={result.reversal_context.structure_broken ? 'text-success' : 'text-muted-foreground'}>
+                            {result.reversal_context.structure_broken ? 'Yes' : 'No'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Volume Displacement:</span>
+                          <Badge variant="outline" className={result.reversal_context.volume_displacement ? 'text-success' : 'text-muted-foreground'}>
+                            {result.reversal_context.volume_displacement ? 'Yes' : 'No'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">At Cycle Extreme:</span>
+                          <Badge variant="outline" className={result.reversal_context.at_cycle_extreme ? 'text-warning' : 'text-muted-foreground'}>
+                            {result.reversal_context.at_cycle_extreme ? 'Yes' : 'No'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Reversal Score:</span>
+                          <Badge variant="outline" className="font-mono text-accent">
+                            {result.reversal_context.reversal_score}%
+                          </Badge>
+                        </div>
+                      </div>
+                      {result.reversal_context.reversal_rationale && (
+                        <div className="text-sm text-muted-foreground mt-2 italic">
+                          {result.reversal_context.reversal_rationale}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <Separator />
+              </>
+            )}
 
             {/* Critical Timeframes Warning */}
             {result.missing_critical_timeframes && result.missing_critical_timeframes.length > 0 && (

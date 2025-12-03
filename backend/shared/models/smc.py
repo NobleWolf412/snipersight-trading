@@ -8,9 +8,58 @@ This module defines data structures for institutional trading patterns:
 - Liquidity Sweeps: Stop hunt patterns
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Literal
+from typing import List, Literal, Optional
+from enum import Enum
+
+
+class CyclePhase(str, Enum):
+    """
+    Market cycle phase based on Camel Finance methodology.
+    
+    Phases represent where we are in the cycle relative to lows/highs:
+    - ACCUMULATION: At or near cycle low (DCL/WCL), smart money accumulating
+    - MARKUP: Rising from cycle low toward high, trend in progress
+    - DISTRIBUTION: At or near cycle high, smart money distributing
+    - MARKDOWN: Falling from cycle high toward next low
+    """
+    ACCUMULATION = "accumulation"
+    MARKUP = "markup"
+    DISTRIBUTION = "distribution"
+    MARKDOWN = "markdown"
+    UNKNOWN = "unknown"
+
+
+class CycleTranslation(str, Enum):
+    """
+    Cycle translation indicates when the cycle topped relative to midpoint.
+    
+    Per Camel Finance:
+    - LTR (Left-Translated): Topped early (before midpoint) = bearish bias
+    - MTR (Mid-Translated): Topped mid-cycle = neutral
+    - RTR (Right-Translated): Topped late (after midpoint) = bullish bias
+    """
+    LTR = "left_translated"   # 🟥 Bearish - topped early
+    MTR = "mid_translated"    # 🟧 Neutral - topped mid-cycle
+    RTR = "right_translated"  # 🟩 Bullish - topped late
+    UNKNOWN = "unknown"
+
+
+class CycleConfirmation(str, Enum):
+    """
+    Confirmation state of a cycle low/high detection.
+    
+    Based on Camel Finance confirmation logic:
+    - CONFIRMED: All rules align, high-confidence trigger
+    - UNCONFIRMED: Provisional, not ready yet
+    - CANCELLED: Broke down post-trigger, invalidated
+    - UPDATED: New low/high replaced an invalidated one
+    """
+    CONFIRMED = "confirmed"      # ✅
+    UNCONFIRMED = "unconfirmed"  # 🕓
+    CANCELLED = "cancelled"      # ❌
+    UPDATED = "updated"          # 🔄
 
 
 @dataclass
@@ -183,11 +232,15 @@ class SMCSnapshot:
         fvgs: List of all detected fair value gaps
         structural_breaks: List of all detected BOS/CHoCH patterns
         liquidity_sweeps: List of all detected liquidity sweeps
+        equal_highs: Price levels with clustered equal highs (liquidity pools)
+        equal_lows: Price levels with clustered equal lows (liquidity pools)
     """
     order_blocks: List[OrderBlock]
     fvgs: List[FVG]
     structural_breaks: List[StructuralBreak]
     liquidity_sweeps: List[LiquiditySweep]
+    equal_highs: List[float] = field(default_factory=list)
+    equal_lows: List[float] = field(default_factory=list)
     
     def __post_init__(self):
         """Initialize empty lists if None provided."""
@@ -199,6 +252,10 @@ class SMCSnapshot:
             self.structural_breaks = []
         if self.liquidity_sweeps is None:
             self.liquidity_sweeps = []
+        if self.equal_highs is None:
+            self.equal_highs = []
+        if self.equal_lows is None:
+            self.equal_lows = []
     
     def get_fresh_order_blocks(self) -> List[OrderBlock]:
         """Get only fresh, unmitigated order blocks."""
@@ -220,3 +277,168 @@ class SMCSnapshot:
         """Check if any SMC patterns were detected."""
         return bool(self.order_blocks or self.fvgs or 
                    self.structural_breaks or self.liquidity_sweeps)
+
+
+@dataclass
+class CycleContext:
+    """
+    Cycle timing context based on Camel Finance methodology.
+    
+    Tracks Daily Cycle Low (DCL), Weekly Cycle Low (WCL), and cycle translation
+    to determine optimal entry/exit timing for both long and short trades.
+    
+    Crypto timing windows (per Camel Finance):
+    - DCL: 18-28 trading days
+    - WCL: 35-50 trading days (nests 2-3 DCLs)
+    - YCL: 200-250 trading days
+    
+    Attributes:
+        phase: Current market cycle phase (accumulation/markup/distribution/markdown)
+        translation: Cycle translation (LTR/MTR/RTR) - indicates bearish/neutral/bullish bias
+        
+        dcl_days_since: Days since last Daily Cycle Low
+        dcl_confirmation: Confirmation state of current DCL
+        dcl_price: Price level of last confirmed DCL
+        dcl_timestamp: Timestamp of last DCL
+        
+        wcl_days_since: Days since last Weekly Cycle Low
+        wcl_confirmation: Confirmation state of current WCL
+        wcl_price: Price level of last confirmed WCL
+        wcl_timestamp: Timestamp of last WCL
+        
+        cycle_high_price: Price of current cycle high (for translation calc)
+        cycle_high_timestamp: When cycle high occurred
+        cycle_midpoint_price: Price at cycle midpoint (DCL high + DCL low) / 2
+        
+        in_dcl_zone: Whether price is in DCL timing window (ready for long entry)
+        in_wcl_zone: Whether price is in WCL timing window (major reversal zone)
+        
+        trade_bias: Recommended trade direction based on cycle ('LONG', 'SHORT', 'NEUTRAL')
+        confidence: Confidence in cycle assessment (0-100)
+    """
+    phase: CyclePhase = CyclePhase.UNKNOWN
+    translation: CycleTranslation = CycleTranslation.UNKNOWN
+    
+    # Daily Cycle Low tracking
+    dcl_days_since: Optional[int] = None
+    dcl_confirmation: CycleConfirmation = CycleConfirmation.UNCONFIRMED
+    dcl_price: Optional[float] = None
+    dcl_timestamp: Optional[datetime] = None
+    
+    # Weekly Cycle Low tracking
+    wcl_days_since: Optional[int] = None
+    wcl_confirmation: CycleConfirmation = CycleConfirmation.UNCONFIRMED
+    wcl_price: Optional[float] = None
+    wcl_timestamp: Optional[datetime] = None
+    
+    # Cycle high tracking (for translation)
+    cycle_high_price: Optional[float] = None
+    cycle_high_timestamp: Optional[datetime] = None
+    cycle_midpoint_price: Optional[float] = None
+    
+    # Timing zone flags
+    in_dcl_zone: bool = False
+    in_wcl_zone: bool = False
+    
+    # Trade recommendation
+    trade_bias: Literal["LONG", "SHORT", "NEUTRAL"] = "NEUTRAL"
+    confidence: float = 0.0
+    
+    def __post_init__(self):
+        """Validate confidence range."""
+        self.confidence = max(0.0, min(100.0, self.confidence))
+    
+    @property
+    def is_at_cycle_low(self) -> bool:
+        """Check if currently at a confirmed cycle low (DCL or WCL)."""
+        return (
+            self.in_dcl_zone or self.in_wcl_zone
+        ) and self.phase == CyclePhase.ACCUMULATION
+    
+    @property
+    def is_at_cycle_high(self) -> bool:
+        """Check if currently at cycle high (distribution phase with LTR)."""
+        return self.phase == CyclePhase.DISTRIBUTION
+    
+    @property
+    def suggests_long(self) -> bool:
+        """Check if cycle context suggests looking for longs."""
+        return (
+            self.trade_bias == "LONG" or 
+            self.phase == CyclePhase.ACCUMULATION or
+            self.translation == CycleTranslation.RTR
+        )
+    
+    @property
+    def suggests_short(self) -> bool:
+        """Check if cycle context suggests looking for shorts."""
+        return (
+            self.trade_bias == "SHORT" or
+            self.phase == CyclePhase.DISTRIBUTION or
+            self.translation == CycleTranslation.LTR
+        )
+
+
+@dataclass
+class ReversalContext:
+    """
+    Reversal detection context combining cycle timing with SMC signals.
+    
+    Identifies high-probability reversal setups by combining:
+    - Cycle extreme (DCL/WCL zone or distribution zone)
+    - CHoCH (Change of Character) structural break
+    - Volume displacement confirmation
+    - Liquidity sweep (stop hunt before reversal)
+    
+    Attributes:
+        is_reversal_setup: Whether conditions meet reversal criteria
+        direction: Reversal direction ('LONG' for bullish reversal, 'SHORT' for bearish)
+        
+        cycle_aligned: Whether cycle context supports the reversal
+        choch_detected: Whether CHoCH was detected
+        volume_displacement: Whether volume spike confirmed the move
+        liquidity_swept: Whether recent liquidity sweep occurred
+        
+        htf_bypass_active: Whether to bypass HTF EMA alignment (cycle extreme + structure broken)
+        
+        signals: List of component signals that formed the reversal context
+        confidence: Overall reversal confidence (0-100)
+        rationale: Human-readable explanation of reversal setup
+    """
+    is_reversal_setup: bool = False
+    direction: Literal["LONG", "SHORT", "NONE"] = "NONE"
+    
+    # Component signals
+    cycle_aligned: bool = False
+    choch_detected: bool = False
+    volume_displacement: bool = False
+    liquidity_swept: bool = False
+    
+    # Bypass flag for HTF alignment
+    htf_bypass_active: bool = False
+    
+    # Details
+    signals: List[str] = field(default_factory=list)
+    confidence: float = 0.0
+    rationale: str = ""
+    
+    def __post_init__(self):
+        """Validate and ensure signals list exists."""
+        if self.signals is None:
+            self.signals = []
+        self.confidence = max(0.0, min(100.0, self.confidence))
+    
+    @property
+    def component_count(self) -> int:
+        """Count how many reversal components are present."""
+        return sum([
+            self.cycle_aligned,
+            self.choch_detected,
+            self.volume_displacement,
+            self.liquidity_swept
+        ])
+    
+    @property
+    def is_high_confidence(self) -> bool:
+        """Check if reversal has high confidence (3+ components)."""
+        return self.component_count >= 3 and self.confidence >= 70.0

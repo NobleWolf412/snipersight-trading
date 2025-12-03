@@ -3,8 +3,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { CaretDown, CaretUp, TrendUp, TrendDown, ArrowRight } from '@phosphor-icons/react';
+import { CaretDown, CaretUp, TrendUp, TrendDown, ArrowRight, Recycle } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
+import type { CyclePhase, CycleTranslation } from '@/types/cycle';
+import { PHASE_DISPLAY, TRANSLATION_DISPLAY } from '@/types/cycle';
 
 export type RegimeLabel = 'ALTSEASON' | 'BTC_DRIVE' | 'DEFENSIVE' | 'PANIC' | 'CHOPPY';
 export type Visibility = 'HIGH' | 'MEDIUM' | 'LOW' | 'VERY_LOW';
@@ -22,6 +24,11 @@ export interface MarketRegimeLensProps {
   previousBtcDominance?: number;
   previousUsdtDominance?: number;
   previousAltDominance?: number;
+  // Cycle Theory context (Phase 7)
+  cyclePhase?: CyclePhase;
+  cycleTranslation?: CycleTranslation;
+  daysSinceDCL?: number;
+  daysSinceWCL?: number;
 }
 
 const REGIME_DISPLAY_NAMES: Record<RegimeLabel, string> = {
@@ -105,6 +112,10 @@ export function MarketRegimeLens({
   previousBtcDominance,
   previousUsdtDominance,
   previousAltDominance,
+  cyclePhase,
+  cycleTranslation,
+  daysSinceDCL,
+  daysSinceWCL,
 }: MarketRegimeLensProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   
@@ -118,6 +129,10 @@ export function MarketRegimeLens({
     LOW: 35,
     VERY_LOW: 15,
   }[visibility];
+
+  // Cycle display info
+  const phaseDisplay = cyclePhase ? PHASE_DISPLAY[cyclePhase] : null;
+  const translationDisplay = cycleTranslation ? TRANSLATION_DISPLAY[cycleTranslation] : null;
 
   return (
     <Card className={cn('bg-card/80 border-2', colorClasses.lens, colorClasses.glow)}>
@@ -196,6 +211,36 @@ export function MarketRegimeLens({
                     <span className="font-mono font-bold">{altDominance.toFixed(1)}%</span>
                     <DominanceTrend current={altDominance} previous={previousAltDominance} />
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* Cycle Theory Context */}
+            {(phaseDisplay || translationDisplay) && (
+              <div className="flex gap-3 md:gap-4 text-xs flex-wrap items-center border-t border-border/30 pt-3 mt-3">
+                <div className="flex items-center gap-1">
+                  <Recycle size={14} className="text-muted-foreground" />
+                  <span className="text-muted-foreground uppercase tracking-wider text-[10px]">Cycle:</span>
+                </div>
+                {phaseDisplay && (
+                  <Badge variant="outline" className={cn('font-semibold', phaseDisplay.color, 'border-current/30')}>
+                    {phaseDisplay.icon} {phaseDisplay.label}
+                  </Badge>
+                )}
+                {translationDisplay && (
+                  <Badge variant="outline" className={cn('font-semibold', translationDisplay.color, 'border-current/30')}>
+                    {translationDisplay.emoji} {translationDisplay.label}
+                  </Badge>
+                )}
+                {daysSinceDCL !== undefined && (
+                  <span className="text-muted-foreground font-mono">
+                    DCL: {daysSinceDCL}d
+                  </span>
+                )}
+                {daysSinceWCL !== undefined && (
+                  <span className="text-muted-foreground font-mono">
+                    WCL: {daysSinceWCL}d
+                  </span>
                 )}
               </div>
             )}

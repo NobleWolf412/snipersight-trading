@@ -22,25 +22,25 @@ from typing import Dict, Any
 @dataclass
 class SMCConfig:
     # Order Block parameters
-    min_wick_ratio: float = 2.0
-    min_displacement_atr: float = 1.5
-    ob_lookback_candles: int = 5
-    ob_volume_threshold: float = 1.5
-    ob_max_mitigation: float = 0.8
-    ob_min_freshness: float = 0.1
+    min_wick_ratio: float = 1.5  # Lowered from 2.0 - still requires significant wick
+    min_displacement_atr: float = 1.0  # Lowered from 1.5 - more OBs detected
+    ob_lookback_candles: int = 7  # Increased from 5 - more time to verify displacement
+    ob_volume_threshold: float = 1.3  # Lowered from 1.5 - easier volume confirmation
+    ob_max_mitigation: float = 0.85  # Increased from 0.8 - keep slightly more mitigated OBs
+    ob_min_freshness: float = 0.05  # Lowered from 0.1 - keep older OBs longer
 
     # Fair Value Gap parameters
-    fvg_min_gap_atr: float = 0.3
-    fvg_max_overlap: float = 0.1
+    fvg_min_gap_atr: float = 0.2  # Lowered from 0.3 - detect smaller FVGs
+    fvg_max_overlap: float = 0.15  # Increased from 0.1 - allow slightly more overlap
 
     # Structural Break parameters
-    structure_swing_lookback: int = 5
-    structure_min_break_distance_atr: float = 0.5
+    structure_swing_lookback: int = 7  # Increased from 5 - wider search
+    structure_min_break_distance_atr: float = 0.4  # Lowered from 0.5 - detect smaller breaks
 
     # Liquidity Sweep parameters
-    sweep_swing_lookback: int = 10
-    sweep_max_sweep_candles: int = 3
-    sweep_min_reversal_atr: float = 1.0
+    sweep_swing_lookback: int = 12  # Increased from 10 - wider search
+    sweep_max_sweep_candles: int = 4  # Increased from 3 - more flexible sweep detection
+    sweep_min_reversal_atr: float = 0.8  # Lowered from 1.0 - detect smaller reversals
     sweep_require_volume_spike: bool = False
 
     @staticmethod

@@ -1,4 +1,5 @@
 import type { PlanType, ConvictionClass, RegimeMetadata } from '@/types/regime';
+import type { CycleContext, ReversalContext } from '@/types/cycle';
 
 export interface ScanResult {
   id: string;
@@ -49,6 +50,10 @@ export interface ScanResult {
     bos_choch?: any[];
     liquidity_sweeps?: any[];
   };
+  
+  // Cycle Theory context (Phase 7 - Camel Finance methodology)
+  cycle_context?: CycleContext;
+  reversal_context?: ReversalContext;
 }
 
 export interface BotActivity {

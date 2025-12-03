@@ -10,20 +10,29 @@ Evaluates setups across multiple dimensions:
 - Market regime detection
 - BTC impulse gate (for altcoins)
 - Mode-aware MACD evaluation (primary/filter/veto based on scanner mode)
+- Cycle-aware synergy bonuses (cycle turns, distribution breaks)
 
 Outputs a comprehensive ConfluenceBreakdown with synergy bonuses and conflict penalties.
 """
 
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, TYPE_CHECKING
 from dataclasses import replace
 import pandas as pd
 import numpy as np
+import logging
 
 from backend.shared.models.smc import SMCSnapshot, OrderBlock, FVG, StructuralBreak, LiquiditySweep
 from backend.shared.models.indicators import IndicatorSet, IndicatorSnapshot
 from backend.shared.models.scoring import ConfluenceFactor, ConfluenceBreakdown
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.scanner_modes import MACDModeConfig, get_macd_config
+from backend.strategy.smc.volume_profile import VolumeProfile, calculate_volume_confluence_factor
+
+# Conditional imports for type hints
+if TYPE_CHECKING:
+    from backend.shared.models.smc import CycleContext, ReversalContext
+
+logger = logging.getLogger(__name__)
 
 
 # --- Mode-Aware MACD Evaluation ---
@@ -202,7 +211,11 @@ def calculate_confluence_score(
     direction: str,
     htf_trend: Optional[str] = None,
     btc_impulse: Optional[str] = None,
-    htf_context: Optional[dict] = None
+    htf_context: Optional[dict] = None,
+    cycle_context: Optional["CycleContext"] = None,
+    reversal_context: Optional["ReversalContext"] = None,
+    volume_profile: Optional[VolumeProfile] = None,
+    current_price: Optional[float] = None
 ) -> ConfluenceBreakdown:
     """
     Calculate comprehensive confluence score for a trade setup.
@@ -214,6 +227,11 @@ def calculate_confluence_score(
         direction: Trade direction ("bullish" or "bearish")
         htf_trend: Higher timeframe trend ("bullish", "bearish", "neutral")
         btc_impulse: BTC trend for altcoin gate ("bullish", "bearish", "neutral")
+        htf_context: HTF level proximity context
+        cycle_context: Optional cycle timing context for cycle-aware bonuses
+        reversal_context: Optional reversal detection context for synergy bonuses
+        volume_profile: Optional volume profile for institutional-grade VAP analysis
+        current_price: Optional current price for volume profile entry analysis
         
     Returns:
         ConfluenceBreakdown: Complete scoring breakdown with factors
@@ -321,6 +339,27 @@ def calculate_confluence_score(
                 rationale=_get_volatility_rationale(primary_indicators)
             ))
     
+    # --- Volume Profile (Institutional VAP Analysis) ---
+    # Only if volume profile and current price are available
+    if volume_profile and current_price:
+        try:
+            vp_factor = calculate_volume_confluence_factor(
+                entry_price=current_price,
+                volume_profile=volume_profile,
+                direction=direction
+            )
+            if vp_factor and vp_factor.get('score', 0) > 0:
+                factors.append(ConfluenceFactor(
+                    name=vp_factor['name'],
+                    score=vp_factor['score'],
+                    weight=vp_factor['weight'],
+                    rationale=vp_factor['rationale']
+                ))
+                logger.debug("📊 Volume Profile factor: %.1f (weight=%.2f)",
+                            vp_factor['score'], vp_factor['weight'])
+        except Exception as e:
+            logger.debug("Volume profile scoring skipped: %s", e)
+    
     # --- MACD Veto Check (for scalp/surgical modes) ---
     # If MACD veto is active, add a conflict factor
     if macd_analysis and macd_analysis.get("veto_active"):
@@ -421,7 +460,13 @@ def calculate_confluence_score(
     
     # --- Synergy Bonuses ---
     
-    synergy_bonus = _calculate_synergy_bonus(factors, smc_snapshot)
+    synergy_bonus = _calculate_synergy_bonus(
+        factors, 
+        smc_snapshot,
+        cycle_context=cycle_context,
+        reversal_context=reversal_context,
+        direction=direction
+    )
     
     # --- Conflict Penalties ---
     
@@ -723,11 +768,36 @@ def _score_htf_alignment(htf_trend: str, direction: str) -> float:
 
 # --- Synergy and Conflict ---
 
-def _calculate_synergy_bonus(factors: List[ConfluenceFactor], smc: SMCSnapshot) -> float:
-    """Calculate synergy bonus when multiple strong factors align."""
+def _calculate_synergy_bonus(
+    factors: List[ConfluenceFactor], 
+    smc: SMCSnapshot,
+    cycle_context: Optional["CycleContext"] = None,
+    reversal_context: Optional["ReversalContext"] = None,
+    direction: str = ""
+) -> float:
+    """
+    Calculate synergy bonus when multiple strong factors align.
+    
+    Includes cycle-aware bonuses when cycle/reversal context provided:
+    - Cycle Turn Bonus (+15): CHoCH + cycle extreme + volume
+    - Distribution Break Bonus (+15): CHoCH + LTR + distribution phase
+    - Accumulation Zone Bonus (+12): Liquidity sweep + DCL/WCL + bullish OB
+    
+    Args:
+        factors: List of confluence factors
+        smc: SMC snapshot with patterns
+        cycle_context: Optional cycle timing context
+        reversal_context: Optional reversal detection context
+        direction: Trade direction ("LONG" or "SHORT")
+        
+    Returns:
+        Total synergy bonus
+    """
     bonus = 0.0
     
     factor_names = [f.name for f in factors]
+    
+    # --- EXISTING SYNERGIES ---
     
     # Order Block + FVG + Structure = strong setup
     if "Order Block" in factor_names and "Fair Value Gap" in factor_names and "Market Structure" in factor_names:
@@ -742,6 +812,69 @@ def _calculate_synergy_bonus(factors: List[ConfluenceFactor], smc: SMCSnapshot) 
         momentum_factor = next((f for f in factors if f.name == "Momentum"), None)
         if momentum_factor and momentum_factor.score > 70:
             bonus += 5.0
+    
+    # --- CYCLE-AWARE SYNERGIES ---
+    
+    # Use reversal_context if available (combines cycle + SMC)
+    if reversal_context and reversal_context.is_reversal_setup:
+        # Import here to avoid circular import
+        try:
+            from backend.strategy.smc.reversal_detector import combine_reversal_with_cycle_bonus
+            if cycle_context:
+                cycle_bonus = combine_reversal_with_cycle_bonus(reversal_context, cycle_context)
+                bonus += cycle_bonus
+                if cycle_bonus > 0:
+                    logger.debug("📊 Cycle synergy bonus: +%.1f", cycle_bonus)
+        except ImportError:
+            pass  # Module not available, skip cycle bonus
+    
+    # Direct cycle context bonuses (when reversal_context not available)
+    elif cycle_context:
+        try:
+            from backend.shared.models.smc import CyclePhase, CycleTranslation, CycleConfirmation
+            
+            direction_upper = direction.upper() if direction else ""
+            
+            # === CYCLE TURN BONUS (Long at cycle low) ===
+            if direction_upper == "LONG":
+                # At confirmed DCL/WCL with structure alignment
+                if (cycle_context.phase == CyclePhase.ACCUMULATION and 
+                    "Market Structure" in factor_names):
+                    bonus += 10.0
+                    logger.debug("📈 Accumulation + Structure bonus (+10)")
+                
+                # DCL/WCL zone with confirmed cycle low
+                if ((cycle_context.in_dcl_zone or cycle_context.in_wcl_zone) and
+                    cycle_context.dcl_confirmation == CycleConfirmation.CONFIRMED):
+                    bonus += 8.0
+                    logger.debug("📈 Confirmed cycle low bonus (+8)")
+                
+                # RTR translation supports longs
+                if cycle_context.translation == CycleTranslation.RTR:
+                    bonus += 5.0
+                    logger.debug("📈 RTR translation bonus (+5)")
+            
+            # === DISTRIBUTION BREAK BONUS (Short at distribution) ===
+            elif direction_upper == "SHORT":
+                # LTR translation + distribution/markdown phase
+                if (cycle_context.translation == CycleTranslation.LTR and
+                    cycle_context.phase in [CyclePhase.DISTRIBUTION, CyclePhase.MARKDOWN]):
+                    bonus += 12.0
+                    logger.debug("📉 LTR Distribution bonus (+12)")
+                
+                # Distribution phase with structure break
+                if (cycle_context.phase == CyclePhase.DISTRIBUTION and
+                    "Market Structure" in factor_names):
+                    bonus += 8.0
+                    logger.debug("📉 Distribution + Structure bonus (+8)")
+                
+                # LTR translation alone (moderate bonus)
+                elif cycle_context.translation == CycleTranslation.LTR:
+                    bonus += 5.0
+                    logger.debug("📉 LTR translation bonus (+5)")
+        
+        except ImportError:
+            pass  # Cycle models not available
     
     return bonus
 

@@ -8,7 +8,7 @@ Implements Smart Money Concept structural break detection:
 These patterns identify shifts in market structure and potential trend changes.
 """
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TYPE_CHECKING
 from datetime import datetime
 import pandas as pd
 import numpy as np
@@ -16,12 +16,17 @@ import numpy as np
 from backend.shared.models.smc import StructuralBreak
 from backend.shared.config.smc_config import SMCConfig
 
+# Conditional import for type hints to avoid circular imports
+if TYPE_CHECKING:
+    from backend.shared.models.smc import CycleContext
+
 
 def detect_structural_breaks(
     df: pd.DataFrame,
     config: SMCConfig | dict | None = None,
     htf_df: Optional[pd.DataFrame] = None,
-    htf_trend: Optional[str] = None
+    htf_trend: Optional[str] = None,
+    cycle_context: Optional["CycleContext"] = None
 ) -> List[StructuralBreak]:
     """
     Detect Break of Structure (BOS) and Change of Character (CHoCH) patterns.
@@ -31,6 +36,7 @@ def detect_structural_breaks(
     2. Track current market structure (uptrend/downtrend)
     3. Detect when structure breaks (BOS) or changes (CHoCH)
     4. Check alignment with higher timeframe trend if provided
+    5. Apply cycle-aware bypass for CHoCH at cycle extremes (if cycle_context provided)
     
     Args:
         df: DataFrame with OHLC data and DatetimeIndex
@@ -40,6 +46,7 @@ def detect_structural_breaks(
         htf_df: Optional higher timeframe DataFrame for alignment checks
         htf_trend: Optional explicit HTF trend ("uptrend", "downtrend") to use
                    instead of calculating from htf_df
+        cycle_context: Optional CycleContext for cycle-aware HTF bypass at extremes
             
     Returns:
         List[StructuralBreak]: Detected structural breaks
@@ -137,7 +144,8 @@ def detect_structural_breaks(
             # CHoCH: Break below previous swing low (reversal)
             elif current_close < last_swing_low - (min_break_distance_atr * atr_value):
                 # HTF alignment: CHoCH in uptrend aligns if HTF is downtrend
-                htf_aligned = _check_choch_htf_alignment("uptrend", computed_htf_trend)
+                # Or bypassed if at cycle extreme (structure broken at cycle low/high)
+                htf_aligned = _check_choch_htf_alignment("uptrend", computed_htf_trend, cycle_context)
                 
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),
@@ -170,7 +178,8 @@ def detect_structural_breaks(
             # CHoCH: Break above previous swing high (reversal)
             elif current_close > last_swing_high + (min_break_distance_atr * atr_value):
                 # HTF alignment: CHoCH in downtrend aligns if HTF is uptrend
-                htf_aligned = _check_choch_htf_alignment("downtrend", computed_htf_trend)
+                # Or bypassed if at cycle extreme (structure broken at cycle low/high)
+                htf_aligned = _check_choch_htf_alignment("downtrend", computed_htf_trend, cycle_context)
                 
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),
@@ -368,7 +377,11 @@ def _check_bos_htf_alignment(ltf_trend: str, htf_trend: Optional[str]) -> bool:
     return ltf_trend == htf_trend
 
 
-def _check_choch_htf_alignment(ltf_trend: str, htf_trend: Optional[str]) -> bool:
+def _check_choch_htf_alignment(
+    ltf_trend: str, 
+    htf_trend: Optional[str],
+    cycle_context: Optional["CycleContext"] = None
+) -> bool:
     """
     Check if a CHoCH (reversal) aligns with HTF trend.
     
@@ -377,13 +390,45 @@ def _check_choch_htf_alignment(ltf_trend: str, htf_trend: Optional[str]) -> bool
     - LTF downtrend CHoCH (turning bullish) + HTF uptrend = aligned
     - If HTF is ranging/unknown, CHoCH might be early reversal = False
     
+    CYCLE BYPASS: When cycle_context indicates we're at a cycle extreme,
+    the HTF alignment requirement is bypassed because:
+    - At DCL/WCL zone: Bullish reversal is valid even without HTF confirmation
+    - At distribution with LTR: Bearish reversal is valid even without HTF confirmation
+    
     Args:
         ltf_trend: Lower timeframe trend BEFORE the CHoCH
         htf_trend: Higher timeframe trend or None
+        cycle_context: Optional cycle context for bypass logic
         
     Returns:
-        bool: True if HTF supports the reversal direction
+        bool: True if HTF supports the reversal direction OR cycle bypass active
     """
+    # === CYCLE BYPASS CHECK ===
+    # If we have cycle context, check for bypass conditions
+    if cycle_context is not None:
+        # Import here to avoid circular imports at module level
+        from backend.shared.models.smc import CyclePhase, CycleTranslation, CycleConfirmation
+        
+        # Bullish CHoCH (from downtrend) - bypass at cycle lows
+        if ltf_trend == "downtrend":
+            # At confirmed DCL/WCL zone - allow bullish reversal
+            if (cycle_context.in_dcl_zone or cycle_context.in_wcl_zone):
+                return True
+            if cycle_context.phase == CyclePhase.ACCUMULATION:
+                return True
+            if cycle_context.dcl_confirmation == CycleConfirmation.CONFIRMED:
+                return True
+        
+        # Bearish CHoCH (from uptrend) - bypass at distribution with LTR
+        if ltf_trend == "uptrend":
+            # LTR translation confirmed - bearish bias
+            if cycle_context.translation == CycleTranslation.LTR:
+                return True
+            # Distribution/markdown phase - bearish context
+            if cycle_context.phase in [CyclePhase.DISTRIBUTION, CyclePhase.MARKDOWN]:
+                return True
+    
+    # === STANDARD HTF ALIGNMENT CHECK ===
     if htf_trend is None or htf_trend == "ranging":
         # No clear HTF context - CHoCH is counter-trend by nature
         # Without HTF confirmation, treat as unaligned

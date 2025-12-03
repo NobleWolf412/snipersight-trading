@@ -50,7 +50,10 @@ from backend.indicators.volume import detect_volume_spike, compute_obv, compute_
 from backend.strategy.smc.order_blocks import detect_order_blocks
 from backend.strategy.smc.fvg import detect_fvgs
 from backend.strategy.smc.bos_choch import detect_structural_breaks
-from backend.strategy.smc.liquidity_sweeps import detect_liquidity_sweeps
+from backend.strategy.smc.liquidity_sweeps import detect_liquidity_sweeps, detect_equal_highs_lows
+from backend.strategy.smc.cycle_detector import detect_cycle_context, should_boost_direction, CycleConfig
+from backend.strategy.smc.reversal_detector import detect_reversal_context, get_reversal_rationale_for_plan
+from backend.strategy.smc.volume_profile import calculate_volume_profile, VolumeProfile
 from backend.shared.config.smc_config import SMCConfig
 from backend.strategy.confluence.scorer import calculate_confluence_score
 from backend.analysis.htf_levels import HTFLevelDetector
@@ -380,7 +383,6 @@ class Orchestrator:
         )
         
         # Stage 2: Data ingestion
-        logger.debug("%s [%s]: Fetching multi-timeframe data", symbol, trace_id)
         context.multi_tf_data = self._ingest_data(symbol)
         try:
             tf_list = list(context.multi_tf_data.timeframes.keys()) if context.multi_tf_data else []
@@ -434,7 +436,6 @@ class Orchestrator:
         context.metadata['missing_critical_timeframes'] = missing_critical_tfs
         
         # Stage 3: Indicator computation
-        logger.debug("%s: Computing indicators", symbol)
         context.multi_tf_indicators = self._compute_indicators(context.multi_tf_data)
         try:
             ind_tfs = list(context.multi_tf_indicators.by_timeframe.keys()) if context.multi_tf_indicators else []
@@ -456,7 +457,6 @@ class Orchestrator:
                 logger.debug("%s: Symbol regime detection skipped: %s", symbol, e)
         
         # Stage 4: SMC detection
-        logger.debug("%s: Detecting SMC patterns", symbol)
         context.smc_snapshot = self._detect_smc_patterns(context.multi_tf_data)
         try:
             snap = context.smc_snapshot
@@ -465,13 +465,48 @@ class Orchestrator:
                 "order_blocks": len(getattr(snap, 'order_blocks', []) or []),
                 "fvgs": len(getattr(snap, 'fvgs', []) or []),
                 "structure_breaks": len(getattr(snap, 'structural_breaks', []) or []),
-                "liquidity_sweeps": len(getattr(snap, 'liquidity_sweeps', []) or [])
+                "liquidity_sweeps": len(getattr(snap, 'liquidity_sweeps', []) or []),
+                "equal_highs": len(getattr(snap, 'equal_highs', []) or []),
+                "equal_lows": len(getattr(snap, 'equal_lows', []) or [])
             })
         except Exception:
             pass
         
+        # Stage 4b: Volume Profile calculation (institutional-grade VAP analysis)
+        try:
+            # Use 4H timeframe for volume profile (balance of detail and significance)
+            vp_tf = '4h'
+            vp_df = context.multi_tf_data.timeframes.get(vp_tf)
+            if vp_df is None or len(vp_df) < 50:
+                # Fallback to 1H if 4H not available
+                vp_tf = '1h'
+                vp_df = context.multi_tf_data.timeframes.get(vp_tf)
+            
+            if vp_df is not None and len(vp_df) >= 50:
+                volume_profile = calculate_volume_profile(vp_df, num_bins=40)
+                context.metadata['volume_profile'] = {
+                    'poc': volume_profile.poc.price_level,
+                    'poc_volume_pct': volume_profile.poc.volume_pct,
+                    'value_area_high': volume_profile.value_area_high,
+                    'value_area_low': volume_profile.value_area_low,
+                    'hvn_count': len(volume_profile.high_volume_nodes),
+                    'lvn_count': len(volume_profile.low_volume_nodes),
+                    'timeframe': vp_tf
+                }
+                # Store full profile object for confluence scoring
+                context.metadata['_volume_profile_obj'] = volume_profile
+                logger.info("📊 Volume Profile (%s): POC=%.4f (%.1f%%), VA=%.4f-%.4f, %d HVN, %d LVN",
+                           vp_tf,
+                           volume_profile.poc.price_level,
+                           volume_profile.poc.volume_pct,
+                           volume_profile.value_area_low,
+                           volume_profile.value_area_high,
+                           len(volume_profile.high_volume_nodes),
+                           len(volume_profile.low_volume_nodes))
+        except Exception as e:
+            logger.debug("Volume profile calculation skipped: %s", e)
+        
         # Stage 5: Confluence scoring
-        logger.debug("%s [%s]: Computing confluence score", symbol, trace_id)
         context.confluence_breakdown = self._compute_confluence_score(context)
         try:
             br = context.confluence_breakdown
@@ -848,6 +883,8 @@ class Orchestrator:
         all_fvgs = []
         all_structure_breaks = []
         all_liquidity_sweeps = []
+        all_equal_highs = []
+        all_equal_lows = []
         
         for _timeframe, df in multi_tf_data.timeframes.items():
             if df.empty or len(df) < 20:
@@ -870,6 +907,14 @@ class Orchestrator:
                 sweeps = detect_liquidity_sweeps(df, self.smc_config)
                 all_liquidity_sweeps.extend(sweeps)
                 
+                # Equal highs/lows (liquidity pools)
+                try:
+                    ehl = detect_equal_highs_lows(df)
+                    all_equal_highs.extend(ehl.get('equal_highs', []))
+                    all_equal_lows.extend(ehl.get('equal_lows', []))
+                except Exception:
+                    pass  # Non-critical, continue without
+                
                 # Log SMC detections per timeframe
                 logger.info("🎯 %s SMC: OB=%d | FVG=%d | BOS/CHoCH=%d | Sweeps=%d",
                            _timeframe,
@@ -883,11 +928,21 @@ class Orchestrator:
                 self.diagnostics['smc_rejections'].append({'timeframe': _timeframe, 'error': str(e)})
                 continue
         
+        # Deduplicate equal highs/lows (they may repeat across TFs)
+        unique_equal_highs = list(set(all_equal_highs))
+        unique_equal_lows = list(set(all_equal_lows))
+        
+        if unique_equal_highs or unique_equal_lows:
+            logger.info("💧 Liquidity pools: %d equal highs, %d equal lows",
+                       len(unique_equal_highs), len(unique_equal_lows))
+        
         return SMCSnapshot(
             order_blocks=all_order_blocks,
             fvgs=all_fvgs,
             structural_breaks=all_structure_breaks,
-            liquidity_sweeps=all_liquidity_sweeps
+            liquidity_sweeps=all_liquidity_sweeps,
+            equal_highs=unique_equal_highs,
+            equal_lows=unique_equal_lows
         )
     
     def _compute_confluence_score(self, context: SniperContext) -> ConfluenceBreakdown:
@@ -948,20 +1003,94 @@ class Orchestrator:
             htf_ctx_long = None
             htf_ctx_short = None
 
+        # --- CYCLE CONTEXT DETECTION ---
+        # Detect cycle timing context from daily/weekly data for cycle-aware scoring
+        cycle_context = None
+        reversal_context_long = None
+        reversal_context_short = None
+        
+        try:
+            # Prefer daily data for cycle detection, fall back to 4H
+            daily_df = context.multi_tf_data.timeframes.get('1D') or context.multi_tf_data.timeframes.get('1d')
+            weekly_df = context.multi_tf_data.timeframes.get('1W') or context.multi_tf_data.timeframes.get('1w')
+            
+            # Use daily if available, otherwise try 4H (less accurate for cycle timing)
+            cycle_df = daily_df if daily_df is not None and len(daily_df) >= 50 else None
+            
+            if cycle_df is not None:
+                cycle_context = detect_cycle_context(
+                    df=cycle_df,
+                    config=None,  # Use crypto defaults
+                    structural_breaks=context.smc_snapshot.structural_breaks if context.smc_snapshot else None
+                )
+                
+                # Detect reversal contexts for both directions
+                if context.smc_snapshot:
+                    primary_tf = getattr(self.config, 'primary_planning_timeframe', '15m')
+                    primary_indicators = context.multi_tf_indicators.by_timeframe.get(primary_tf) if context.multi_tf_indicators else None
+                    
+                    reversal_context_long = detect_reversal_context(
+                        smc_snapshot=context.smc_snapshot,
+                        cycle_context=cycle_context,
+                        indicators=primary_indicators,
+                        direction="LONG"
+                    )
+                    reversal_context_short = detect_reversal_context(
+                        smc_snapshot=context.smc_snapshot,
+                        cycle_context=cycle_context,
+                        indicators=primary_indicators,
+                        direction="SHORT"
+                    )
+                
+                # Log cycle context
+                if cycle_context and cycle_context.phase.value != "unknown":
+                    logger.info("🔄 Cycle: phase=%s, translation=%s, DCL_days=%s, bias=%s (%.0f%%)",
+                               cycle_context.phase.value,
+                               cycle_context.translation.value,
+                               cycle_context.dcl_days_since,
+                               cycle_context.trade_bias,
+                               cycle_context.confidence)
+                    
+                    # Store in context metadata for downstream use
+                    context.metadata['cycle'] = {
+                        'phase': cycle_context.phase.value,
+                        'translation': cycle_context.translation.value,
+                        'dcl_days_since': cycle_context.dcl_days_since,
+                        'wcl_days_since': cycle_context.wcl_days_since,
+                        'in_dcl_zone': cycle_context.in_dcl_zone,
+                        'in_wcl_zone': cycle_context.in_wcl_zone,
+                        'trade_bias': cycle_context.trade_bias,
+                        'confidence': cycle_context.confidence
+                    }
+        except Exception as e:
+            logger.debug("Cycle detection skipped: %s", e)
+            cycle_context = None
+
+        # Get volume profile for confluence scoring
+        volume_profile_obj = context.metadata.get('_volume_profile_obj')
+        
         # Evaluate both directions and choose the stronger confluence
         long_breakdown = calculate_confluence_score(
             smc_snapshot=context.smc_snapshot,
             indicators=context.multi_tf_indicators,
             config=self.config,
             direction="LONG",
-            htf_context=htf_ctx_long
+            htf_context=htf_ctx_long,
+            cycle_context=cycle_context,
+            reversal_context=reversal_context_long,
+            volume_profile=volume_profile_obj,
+            current_price=current_price
         )
         short_breakdown = calculate_confluence_score(
             smc_snapshot=context.smc_snapshot,
             indicators=context.multi_tf_indicators,
             config=self.config,
             direction="SHORT",
-            htf_context=htf_ctx_short
+            htf_context=htf_ctx_short,
+            cycle_context=cycle_context,
+            reversal_context=reversal_context_short,
+            volume_profile=volume_profile_obj,
+            current_price=current_price
         )
 
         # Log bidirectional confluence comparison
@@ -969,23 +1098,41 @@ class Orchestrator:
                    long_breakdown.total_score,
                    short_breakdown.total_score)
 
-        # Regime-aware adjustment: optionally penalize contrarian setups
-        def regime_adjust(score: float, direction: str) -> float:
+        # Cycle + Regime aware adjustment: BONUS for aligned setups, NO PENALTY for contrarian
+        # This replaces the old penalty system with additive bonuses
+        def cycle_regime_adjust(score: float, direction: str) -> float:
+            bonus = 0.0
             try:
+                # === CYCLE-BASED BONUS ===
+                # Add bonus when direction aligns with cycle context
+                if cycle_context:
+                    should_boost, boost_amount = should_boost_direction(cycle_context, direction)
+                    if should_boost:
+                        bonus += boost_amount
+                        logger.debug("📊 Cycle bonus: %s setup aligns with cycle (+%.1f)",
+                                   direction, boost_amount)
+                
+                # === REGIME-BASED BONUS ===
+                # Add bonus when direction aligns with regime trend
+                # NO PENALTY for contrarian - just no bonus
                 symbol_regime = context.metadata.get('symbol_regime')
                 trend = (symbol_regime.trend if symbol_regime else None) or 'neutral'
-                if trend == 'bullish' and direction == 'SHORT':
-                    logger.debug("⚠️  Regime penalty: SHORT setup in bullish regime (-2.0)")
-                    return score - 2.0
-                if trend == 'bearish' and direction == 'LONG':
-                    logger.debug("⚠️  Regime penalty: LONG setup in bearish regime (-2.0)")
-                    return score - 2.0
+                
+                if trend == 'bullish' and direction == 'LONG':
+                    bonus += 3.0
+                    logger.debug("📈 Regime bonus: LONG aligns with bullish regime (+3.0)")
+                elif trend == 'bearish' and direction == 'SHORT':
+                    bonus += 3.0
+                    logger.debug("📉 Regime bonus: SHORT aligns with bearish regime (+3.0)")
+                # Note: No penalty for contrarian trades - they just don't get the bonus
+                # This allows cycle turns at regime extremes to pass through
+                
             except Exception:
                 pass
-            return score
+            return score + bonus
 
-        long_breakdown.total_score = regime_adjust(long_breakdown.total_score, 'LONG')
-        short_breakdown.total_score = regime_adjust(short_breakdown.total_score, 'SHORT')
+        long_breakdown.total_score = cycle_regime_adjust(long_breakdown.total_score, 'LONG')
+        short_breakdown.total_score = cycle_regime_adjust(short_breakdown.total_score, 'SHORT')
 
         # Choose direction - avoid long-side bias by using > instead of >=
         # Ties are broken by regime trend, then HTF momentum, then skip
@@ -1024,7 +1171,19 @@ class Orchestrator:
             'tie_break_used': tie_break_used if 'tie_break_used' in dir() else None
         }
         # Store chosen direction for downstream planning
-        context.metadata['chosen_direction'] = 'LONG' if chosen is long_breakdown else 'SHORT'
+        chosen_direction = 'LONG' if chosen is long_breakdown else 'SHORT'
+        context.metadata['chosen_direction'] = chosen_direction
+        
+        # Store reversal context for the chosen direction (used in plan rationale generation)
+        chosen_reversal = reversal_context_long if chosen_direction == 'LONG' else reversal_context_short
+        if chosen_reversal and chosen_reversal.is_reversal:
+            context.metadata['reversal'] = {
+                'is_reversal': chosen_reversal.is_reversal,
+                'reversal_type': chosen_reversal.reversal_type,
+                'cycle_aligned': chosen_reversal.cycle_aligned,
+                'confidence': chosen_reversal.confidence,
+                'rationale': chosen_reversal.rationale
+            }
         
         # Apply regime adjustments if regime is available
         if self.current_regime:
@@ -1257,6 +1416,46 @@ class Orchestrator:
             if plan and 'macro' in context.metadata:
                 try:
                     plan.metadata['macro'] = context.metadata.get('macro')
+                except Exception:
+                    pass
+            
+            # Attach cycle context for rationale enrichment and UI display
+            if plan and 'cycle' in context.metadata:
+                try:
+                    plan.metadata['cycle'] = context.metadata.get('cycle')
+                except Exception:
+                    pass
+            
+            # Attach reversal context for rationale enrichment and UI display
+            if plan and 'reversal' in context.metadata:
+                try:
+                    plan.metadata['reversal'] = context.metadata.get('reversal')
+                    
+                    # Enrich rationale with cycle/reversal context
+                    reversal_rationale = get_reversal_rationale_for_plan(
+                        reversal_metadata=context.metadata.get('reversal'),
+                        cycle_metadata=context.metadata.get('cycle')
+                    )
+                    if reversal_rationale:
+                        plan.rationale = f"{reversal_rationale}\n\n{plan.rationale}"
+                except Exception:
+                    pass
+            
+            # Attach volume profile for UI display
+            if plan and 'volume_profile' in context.metadata:
+                try:
+                    plan.metadata['volume_profile'] = context.metadata.get('volume_profile')
+                except Exception:
+                    pass
+            
+            # Attach liquidity pools (equal highs/lows) for UI display
+            if plan and context.smc_snapshot:
+                try:
+                    if context.smc_snapshot.equal_highs or context.smc_snapshot.equal_lows:
+                        plan.metadata['liquidity_pools'] = {
+                            'equal_highs': context.smc_snapshot.equal_highs[:5],  # Top 5
+                            'equal_lows': context.smc_snapshot.equal_lows[:5]
+                        }
                 except Exception:
                     pass
             

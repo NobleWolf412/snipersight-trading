@@ -45,6 +45,7 @@ from backend.shared.config.planner_config import PlannerConfig
 from backend.shared.config.rr_matrix import validate_rr, classify_conviction
 from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import create_signal_rejected_event, create_alt_stop_suggested_event
+from backend.strategy.smc.reversal_detector import get_reversal_rationale_for_plan
 
 
 def _adjust_stop_for_leverage(
@@ -1011,8 +1012,10 @@ def _find_swing_level(
     """
     Find swing high or swing low from price action.
     
-    A swing low is a bar where the low is lower than N bars before and after.
-    A swing high is a bar where the high is higher than N bars before and after.
+    Uses a tiered approach:
+    1. Try to find strict swing (2 bars before/after)
+    2. Fall back to relaxed swing (1 bar before/after)
+    3. Fall back to simple min/max in the lookback period
     
     Args:
         is_bullish: If True, find swing low (for stop). If False, find swing high.
@@ -1021,7 +1024,7 @@ def _find_swing_level(
         lookback: Number of bars to search back
         
     Returns:
-        Swing level price or None if no clear swing found
+        Swing level price or None if no valid level found
     """
     if candles_df is None or len(candles_df) < 5:
         return None
@@ -1031,34 +1034,72 @@ def _find_swing_level(
     
     if is_bullish:
         # Find swing lows below reference price
-        swing_lows = []
+        # Tier 1: Strict swing (2 bars before/after)
+        strict_swing_lows = []
         for i in range(2, len(recent) - 2):
             low = recent.iloc[i]['low']
-            # Check if local minimum (lower than 2 bars before and after)
             if (low < recent.iloc[i-1]['low'] and 
                 low < recent.iloc[i-2]['low'] and
                 low < recent.iloc[i+1]['low'] and 
                 low < recent.iloc[i+2]['low'] and
                 low < reference_price):
-                swing_lows.append(low)
+                strict_swing_lows.append(low)
         
-        # Return the highest swing low (closest to entry)
-        return max(swing_lows) if swing_lows else None
-    else:
-        # Find swing highs above reference price
-        swing_highs = []
+        if strict_swing_lows:
+            return max(strict_swing_lows)  # Highest swing low (closest to entry)
+        
+        # Tier 2: Relaxed swing (1 bar before/after)
+        relaxed_swing_lows = []
+        for i in range(1, len(recent) - 1):
+            low = recent.iloc[i]['low']
+            if (low < recent.iloc[i-1]['low'] and 
+                low < recent.iloc[i+1]['low'] and
+                low < reference_price):
+                relaxed_swing_lows.append(low)
+        
+        if relaxed_swing_lows:
+            return max(relaxed_swing_lows)  # Highest swing low (closest to entry)
+        
+        # Tier 3: Simple minimum below reference price
+        below_price = recent[recent['low'] < reference_price]['low']
+        if len(below_price) > 0:
+            return below_price.min()  # Absolute lowest point as stop
+        
+        return None
+    
+    else:  # bearish - find swing highs above reference price
+        # Tier 1: Strict swing (2 bars before/after)
+        strict_swing_highs = []
         for i in range(2, len(recent) - 2):
             high = recent.iloc[i]['high']
-            # Check if local maximum (higher than 2 bars before and after)
             if (high > recent.iloc[i-1]['high'] and 
                 high > recent.iloc[i-2]['high'] and
                 high > recent.iloc[i+1]['high'] and 
                 high > recent.iloc[i+2]['high'] and
                 high > reference_price):
-                swing_highs.append(high)
+                strict_swing_highs.append(high)
         
-        # Return the lowest swing high (closest to entry)
-        return min(swing_highs) if swing_highs else None
+        if strict_swing_highs:
+            return min(strict_swing_highs)  # Lowest swing high (closest to entry)
+        
+        # Tier 2: Relaxed swing (1 bar before/after)
+        relaxed_swing_highs = []
+        for i in range(1, len(recent) - 1):
+            high = recent.iloc[i]['high']
+            if (high > recent.iloc[i-1]['high'] and 
+                high > recent.iloc[i+1]['high'] and
+                high > reference_price):
+                relaxed_swing_highs.append(high)
+        
+        if relaxed_swing_highs:
+            return min(relaxed_swing_highs)  # Lowest swing high (closest to entry)
+        
+        # Tier 3: Simple maximum above reference price
+        above_price = recent[recent['high'] > reference_price]['high']
+        if len(above_price) > 0:
+            return above_price.max()  # Absolute highest point as stop
+        
+        return None
 
 
 def _calculate_stop_loss(
