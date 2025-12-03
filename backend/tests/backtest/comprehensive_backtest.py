@@ -822,18 +822,27 @@ def run_holding_period_analysis(
     
     results_by_period = {}
     
-    # Generate data once
-    base_data = generate_market_data(regime=regime, bars=600, seed=seed)
-    
     mode_cfg = get_mode(mode)
-    data_by_tf = {'1h': base_data.copy()}
     
-    for tf in ['5m', '15m', '4h', '1d']:
-        tf_minutes = {'5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440}[tf]
-        data_by_tf[tf] = generate_market_data(
+    # Map timeframe strings to minutes for data generation
+    tf_minutes_map = {
+        '1m': 1, '5m': 5, '15m': 15, '30m': 30,
+        '1h': 60, '4h': 240, '1d': 1440, '1w': 10080
+    }
+    
+    # Generate data for ALL timeframes required by this mode
+    required_tfs = set(mode_cfg.timeframes) | set(mode_cfg.critical_timeframes)
+    
+    data_by_tf = {}
+    for tf in required_tfs:
+        tf_lower = tf.lower()
+        if tf_lower not in tf_minutes_map:
+            continue
+        tf_minutes = tf_minutes_map[tf_lower]
+        data_by_tf[tf_lower] = generate_market_data(
             regime=regime,
             bars=600,
-            seed=seed + hash(tf) % 1000,
+            seed=seed + hash(tf_lower) % 1000,
             timeframe_minutes=tf_minutes
         )
     
@@ -841,11 +850,11 @@ def run_holding_period_analysis(
     
     # Get signals once
     cfg = ScanConfig(profile=mode)  # Use mode name, not mode_cfg.profile
-    cfg.timeframes = tuple([tf for tf in mode_cfg.timeframes if tf in data_by_tf])
+    cfg.timeframes = tuple(data_by_tf.keys())  # Use all generated TFs
     cfg.min_confluence_score = mode_cfg.min_confluence_score
-    cfg.primary_planning_timeframe = mode_cfg.primary_planning_timeframe
-    cfg.entry_timeframes = mode_cfg.entry_timeframes
-    cfg.structure_timeframes = mode_cfg.structure_timeframes
+    cfg.primary_planning_timeframe = mode_cfg.primary_planning_timeframe.lower()  # Normalize case
+    cfg.entry_timeframes = tuple(tf.lower() for tf in mode_cfg.entry_timeframes)
+    cfg.structure_timeframes = tuple(tf.lower() for tf in mode_cfg.structure_timeframes)
     
     orch = Orchestrator(config=cfg, exchange_adapter=adapter, debug_mode=False)
     
@@ -865,8 +874,8 @@ def run_holding_period_analysis(
         ))
         
         for plan in plans:
-            primary_tf = mode_cfg.primary_planning_timeframe
-            sim_data = data_by_tf.get(primary_tf, data_by_tf['1h'])
+            primary_tf = mode_cfg.primary_planning_timeframe.lower()  # Normalize case
+            sim_data = data_by_tf.get(primary_tf, list(data_by_tf.values())[0])
             start_bar = len(sim_data) // 2
             
             simulator.simulate_trade(
