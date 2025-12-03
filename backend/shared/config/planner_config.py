@@ -42,6 +42,14 @@ class PlannerConfig:
         "explosive": 1.5,
     })
     
+    # Dynamic stop buffer by ATR regime (NEW - addresses Issue #3)
+    stop_buffer_by_regime: Dict[str, float] = field(default_factory=lambda: {
+        "calm": 0.25,      # Tighter stops in calm markets
+        "normal": 0.35,    # Standard buffer
+        "elevated": 0.45,  # Wider stops in volatile markets
+        "explosive": 0.55, # Much wider stops in extreme volatility
+    })
+    
     # Higher timeframe bias (gradient-based)
     htf_bias_enabled: bool = True
     htf_bias_max_atr_distance: float = 1.0  # Max ATR distance where HTF levels influence offsets

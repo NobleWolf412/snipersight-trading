@@ -339,6 +339,7 @@ def calculate_freshness(ob: OrderBlock, current_time: datetime) -> float:
     Calculate freshness score for an order block.
     
     Freshness decays over time - older order blocks are less reliable.
+    UPDATED: Faster decay based on timeframe (Issue #5 fix)
     
     Args:
         ob: OrderBlock to score
@@ -350,8 +351,35 @@ def calculate_freshness(ob: OrderBlock, current_time: datetime) -> float:
     age = current_time - ob.timestamp
     age_hours = age.total_seconds() / 3600
     
-    # Decay function: exponential decay with half-life of 168 hours (1 week)
-    half_life_hours = 168
+    # UPDATED: Timeframe-aware half-life (faster decay for LTF)
+    # This prevents using stale OBs from days ago on short timeframes
+    half_life_map = {
+        '1m': 4,     # 4 hours for 1m OBs
+        '5m': 12,    # 12 hours for 5m OBs
+        '15m': 24,   # 24 hours for 15m OBs
+        '1H': 48,    # 2 days for 1H OBs
+        '4H': 96,    # 4 days for 4H OBs
+        '1D': 168,   # 1 week for daily OBs
+        '1W': 336,   # 2 weeks for weekly OBs
+    }
+    
+    # Normalize timeframe format for lookup
+    tf_normalized = ob.timeframe.upper().replace('M', 'm').replace('H', 'H')
+    # Try exact match first, then pattern match
+    half_life_hours = half_life_map.get(tf_normalized)
+    if half_life_hours is None:
+        # Pattern match fallback
+        if 'm' in ob.timeframe.lower():
+            mins = int(''.join(filter(str.isdigit, ob.timeframe)) or 15)
+            half_life_hours = 12 if mins <= 5 else 24
+        elif 'h' in ob.timeframe.lower():
+            hours = int(''.join(filter(str.isdigit, ob.timeframe)) or 1)
+            half_life_hours = 48 if hours <= 1 else 96
+        elif 'd' in ob.timeframe.lower():
+            half_life_hours = 168
+        else:
+            half_life_hours = 72  # Default fallback
+    
     freshness = 2 ** (-age_hours / half_life_hours)
     
     # Scale to 0-100 (model expects 0-100, is_fresh checks > 70)

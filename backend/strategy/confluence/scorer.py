@@ -897,33 +897,68 @@ def _calculate_conflict_penalty(factors: List[ConfluenceFactor], direction: str)
         if momentum_factor.score < 30 and structure_factor.score > 70:
             penalty += 10.0  # Structure says go, momentum says no
     
+    # === HTF ALIGNMENT PENALTY (NEW) ===
+    # If HTF is NOT aligned, apply significant penalty (was just a bonus before)
+    htf_factor = next((f for f in factors if f.name == "HTF Alignment"), None)
+    if htf_factor and htf_factor.score == 0.0:
+        # HTF opposing direction - major penalty
+        penalty += 15.0
+        logger.debug("HTF opposition penalty applied: +15")
+    elif htf_factor and htf_factor.score == 50.0:
+        # HTF neutral (ranging) - moderate penalty for counter-trend risk
+        penalty += 8.0
+        logger.debug("HTF neutral penalty applied: +8")
+    
     return penalty
 
 
 def _detect_regime(smc: SMCSnapshot, indicators: IndicatorSet) -> str:
-    """Detect current market regime."""
-    # Simplified regime detection
-    # Would typically use more sophisticated analysis
+    """Detect current market regime with enhanced choppy detection.
     
+    Returns:
+        str: 'trend', 'risk_off', 'range', or 'choppy'
+    """
+    # Get primary timeframe indicators for volatility analysis
+    if not indicators.by_timeframe:
+        return "range"
+    
+    primary_tf = list(indicators.by_timeframe.keys())[0]
+    primary_ind = indicators.by_timeframe[primary_tf]
+    
+    # === ENHANCED CHOPPY DETECTION ===
+    # Check ATR% for volatility contraction (choppy market sign)
+    atr_pct = getattr(primary_ind, 'atr_percent', None)
+    rsi = getattr(primary_ind, 'rsi', 50)
+    
+    # Choppy indicators:
+    # 1. Low ATR% (volatility squeeze)
+    # 2. RSI in neutral zone (40-60) - no momentum
+    # 3. No clear structural breaks
+    is_low_volatility = atr_pct is not None and atr_pct < 0.4
+    is_neutral_momentum = rsi is not None and 40 <= rsi <= 60
+    
+    # Check structural breaks
+    recent_bos = [b for b in smc.structural_breaks if b.break_type == "BOS"] if smc.structural_breaks else []
+    recent_choch = [b for b in smc.structural_breaks if b.break_type == "CHoCH"] if smc.structural_breaks else []
+    
+    # CHOPPY: Low volatility + neutral RSI + no structure
+    if is_low_volatility and is_neutral_momentum and not recent_bos:
+        logger.debug("Market regime: CHOPPY (low ATR, neutral RSI, no BOS)")
+        return "choppy"
+    
+    # Check for clear trend via structural breaks
     if smc.structural_breaks:
         latest_break = max(smc.structural_breaks, key=lambda b: b.timestamp)
         
-        if latest_break.break_type == "BOS":
+        if latest_break.break_type == "BOS" and latest_break.htf_aligned:
             return "trend"
         elif latest_break.break_type == "CHoCH":
             return "risk_off"  # Reversal suggests risk-off
+        elif latest_break.break_type == "BOS":
+            return "trend"  # BOS even without HTF alignment is trend-ish
     
-    # Check volatility from indicators
-    if indicators.by_timeframe:
-        primary_tf = list(indicators.by_timeframe.keys())[0]
-        primary_ind = indicators.by_timeframe[primary_tf]
-        
-        # High ATR suggests volatile/trending, low ATR suggests ranging
-        if primary_ind.atr is not None:
-            # This is simplified - would need historical context
-            return "range"  # Default
-    
-    return "range"  # Default to range if unclear
+    # Range: moderate volatility, no clear structure
+    return "range"
 
 
 # --- Rationale Generators ---
