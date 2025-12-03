@@ -581,37 +581,48 @@ def run_comprehensive_backtest(
                 print(f"  [SKIP] Unknown mode: {mode_name}")
                 continue
             
-            # Generate data for all required timeframes
-            base_data = generate_market_data(
-                regime=regime,
-                bars=bars_per_tf,
-                seed=seed + hash(regime.value) % 1000
-            )
+            # Map timeframe strings to minutes for data generation
+            tf_minutes_map = {
+                '1m': 1, '5m': 5, '15m': 15, '30m': 30,
+                '1h': 60, '4h': 240, '1d': 1440, '1w': 10080
+            }
             
-            # Create adapter with resampled data
-            data_by_tf = {'1h': base_data.copy()}
+            # Generate data for ALL timeframes required by this mode
+            # Include both mode.timeframes AND mode.critical_timeframes
+            required_tfs = set(mode.timeframes) | set(mode.critical_timeframes)
+            print(f"  Required TFs: {sorted(required_tfs)}")
+            print(f"  Critical TFs: {list(mode.critical_timeframes)}")
             
-            # Add other timeframes via resampling
-            for tf in ['5m', '15m', '4h', '1d']:
-                # Can't resample up, only down - so we generate separately for now
-                tf_minutes = {'5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440}[tf]
-                data_by_tf[tf] = generate_market_data(
+            data_by_tf = {}
+            for tf in required_tfs:
+                tf_lower = tf.lower()
+                if tf_lower not in tf_minutes_map:
+                    print(f"  [WARN] Unknown timeframe: {tf}")
+                    continue
+                tf_minutes = tf_minutes_map[tf_lower]
+                data_by_tf[tf_lower] = generate_market_data(
                     regime=regime,
                     bars=bars_per_tf,
-                    seed=seed + hash(f"{regime.value}_{tf}") % 1000,
+                    seed=seed + hash(f"{regime.value}_{tf_lower}") % 1000,
                     timeframe_minutes=tf_minutes
                 )
+            
+            # Verify critical timeframes are present
+            missing_critical = [tf for tf in mode.critical_timeframes if tf.lower() not in data_by_tf]
+            if missing_critical:
+                print(f"  [SKIP] Missing critical TFs: {missing_critical}")
+                continue
             
             adapter = BacktestAdapter(data_by_tf)
             
             # Configure scan - NOTE: config.profile must be the MODE NAME not profile type
             # The orchestrator calls get_mode(config.profile) in __init__
             cfg = ScanConfig(profile=mode_name)  # Use mode name, not mode.profile
-            cfg.timeframes = tuple([tf for tf in mode.timeframes if tf in data_by_tf or tf.lower() in data_by_tf])
+            cfg.timeframes = tuple(data_by_tf.keys())  # Use all generated TFs
             cfg.min_confluence_score = mode.min_confluence_score
-            cfg.primary_planning_timeframe = mode.primary_planning_timeframe
-            cfg.entry_timeframes = mode.entry_timeframes
-            cfg.structure_timeframes = mode.structure_timeframes
+            cfg.primary_planning_timeframe = mode.primary_planning_timeframe.lower()  # Normalize case
+            cfg.entry_timeframes = tuple(tf.lower() for tf in mode.entry_timeframes)
+            cfg.structure_timeframes = tuple(tf.lower() for tf in mode.structure_timeframes)
             
             # Run scanner
             try:
@@ -642,12 +653,13 @@ def run_comprehensive_backtest(
             ))
             
             for plan in plans:
-                # Get the primary TF data for simulation
-                primary_tf = mode.primary_planning_timeframe
+                # Get the primary TF data for simulation (normalize case)
+                primary_tf = mode.primary_planning_timeframe.lower()
                 if primary_tf in data_by_tf:
                     sim_data = data_by_tf[primary_tf]
                 else:
-                    sim_data = data_by_tf['1h']
+                    # Fallback to first available TF
+                    sim_data = list(data_by_tf.values())[0]
                 
                 # Find a reasonable starting point (middle of data)
                 start_bar = len(sim_data) // 2

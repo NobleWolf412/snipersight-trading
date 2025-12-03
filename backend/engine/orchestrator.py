@@ -113,6 +113,11 @@ class Orchestrator:
             'risk_rejections': []
         }
         
+        # Entry cooldown tracking - prevents re-entry after recent stop-outs
+        # Structure: {symbol: {'timestamp': datetime, 'price': float, 'direction': str}}
+        self._symbol_cooldowns: Dict[str, Dict[str, Any]] = {}
+        self._cooldown_hours = 24  # Hours to wait after a stop-out before re-entering same direction
+        
         # Initialize telemetry
         self.telemetry = get_telemetry_logger()
         
@@ -250,6 +255,7 @@ class Orchestrator:
             "missing_critical_tf": [],
             "risk_validation": [],
             "no_trade_plan": [],
+            "cooldown_active": [],  # Added: symbols in cooldown after recent stop-out
             "errors": []
         }
         
@@ -335,6 +341,7 @@ class Orchestrator:
                 "missing_critical_tf": len(rejection_stats["missing_critical_tf"]),
                 "risk_validation": len(rejection_stats["risk_validation"]),
                 "no_trade_plan": len(rejection_stats["no_trade_plan"]),
+                "cooldown_active": len(rejection_stats["cooldown_active"]),
                 "errors": len(rejection_stats["errors"])
             },
             "details": rejection_stats,
@@ -589,9 +596,39 @@ class Orchestrator:
                 "btc_impulse_gate": context.confluence_breakdown.btc_impulse_gate
             }
         
+        # Stage 5.5: Check cooldown before trade planning
+        proposed_direction = context.metadata.get('chosen_direction', 'LONG')
+        current_price = self._get_current_price(context.multi_tf_data)
+        
+        cooldown_rejection = self._check_cooldown(symbol, proposed_direction, current_price)
+        if cooldown_rejection:
+            logger.info("%s [%s]: ❌ GATE FAIL (cooldown) | Direction=%s | %s",
+                       symbol, trace_id, proposed_direction, cooldown_rejection['reason'])
+            
+            self._progress("GATE_FAIL", {
+                "symbol": symbol,
+                "gate": "cooldown",
+                "direction": proposed_direction,
+                "hours_remaining": cooldown_rejection.get('cooldown_hours_remaining', 0),
+                "stop_price": cooldown_rejection.get('stop_price', 0)
+            })
+            
+            # Log telemetry event
+            self.telemetry.log_event(create_signal_rejected_event(
+                run_id=run_id,
+                symbol=symbol,
+                reason=cooldown_rejection['reason'],
+                gate_name="cooldown",
+                score=context.confluence_breakdown.total_score,
+                threshold=0
+            ))
+            
+            cooldown_rejection['trace_id'] = trace_id
+            return None, cooldown_rejection
+        
         # Stage 6: Trade planning
         logger.debug("%s [%s]: Generating trade plan", symbol, trace_id)
-        current_price = self._get_current_price(context.multi_tf_data)
+        # current_price already computed above for cooldown check
         context.plan = self._generate_trade_plan(context, current_price)
         try:
             if context.plan:
@@ -2000,6 +2037,137 @@ class Orchestrator:
                 'profile': self.config.profile
             }
         }
+
+    # ======================== COOLDOWN MANAGEMENT ========================
+    
+    def register_stop_out(
+        self, 
+        symbol: str, 
+        price: float, 
+        direction: str,
+        timestamp: Optional[datetime] = None
+    ) -> None:
+        """
+        Register a stop-out event to prevent immediate re-entry.
+        
+        Called after a trade hits its stop-loss. Prevents the system from
+        immediately generating a new signal at the same price level.
+        
+        Args:
+            symbol: Trading pair (e.g., 'BTC/USDT')
+            price: Stop-out price level
+            direction: Trade direction ('LONG' or 'SHORT')
+            timestamp: When the stop-out occurred (defaults to now)
+        """
+        ts = timestamp or datetime.now(timezone.utc)
+        key = f"{symbol}_{direction}"  # Direction-specific cooldown
+        
+        self._symbol_cooldowns[key] = {
+            'timestamp': ts,
+            'price': price,
+            'direction': direction,
+            'symbol': symbol
+        }
+        
+        logger.info("🚫 %s: Registered stop-out (dir=%s, price=%.4f) - cooldown for %d hours",
+                   symbol, direction, price, self._cooldown_hours)
+        
+        # Log telemetry event
+        self.telemetry.log_event(create_info_event(
+            message=f"Stop-out registered for {symbol} {direction}",
+            stage="COOLDOWN",
+            payload={
+                'symbol': symbol,
+                'direction': direction,
+                'stop_price': price,
+                'cooldown_hours': self._cooldown_hours,
+                'cooldown_expires': (ts.timestamp() + self._cooldown_hours * 3600)
+            }
+        ))
+    
+    def _check_cooldown(
+        self, 
+        symbol: str, 
+        proposed_direction: str,
+        current_price: float
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Check if a symbol is in cooldown and should not receive new signals.
+        
+        Args:
+            symbol: Trading pair
+            proposed_direction: Direction of the proposed new trade
+            current_price: Current market price
+            
+        Returns:
+            None if no cooldown active, or rejection dict with reason
+        """
+        key = f"{symbol}_{proposed_direction}"
+        
+        if key not in self._symbol_cooldowns:
+            return None
+        
+        cooldown_info = self._symbol_cooldowns[key]
+        cooldown_ts = cooldown_info['timestamp']
+        now = datetime.now(timezone.utc)
+        
+        # Calculate time since stop-out
+        hours_elapsed = (now - cooldown_ts).total_seconds() / 3600
+        
+        # Check if cooldown has expired
+        if hours_elapsed >= self._cooldown_hours:
+            # Cooldown expired - remove entry and allow trading
+            del self._symbol_cooldowns[key]
+            logger.debug("%s: Cooldown expired (%.1f hours elapsed)", symbol, hours_elapsed)
+            return None
+        
+        # Still in cooldown - check if price has moved significantly
+        stop_price = cooldown_info['price']
+        price_move_pct = abs(current_price - stop_price) / stop_price * 100
+        
+        # Allow re-entry if price moved >5% away from stop-out level
+        if price_move_pct > 5.0:
+            logger.info("%s: Cooldown bypassed - price moved %.1f%% from stop-out level",
+                       symbol, price_move_pct)
+            del self._symbol_cooldowns[key]
+            return None
+        
+        # Still in cooldown - reject
+        hours_remaining = self._cooldown_hours - hours_elapsed
+        logger.info("%s: 🚫 COOLDOWN ACTIVE | %.1f hours remaining | Stop-out price=%.4f | Current=%.4f",
+                   symbol, hours_remaining, stop_price, current_price)
+        
+        return {
+            "symbol": symbol,
+            "reason_type": "cooldown_active",
+            "reason": f"Recent stop-out at {stop_price:.4f} ({hours_elapsed:.1f}h ago) - wait {hours_remaining:.1f}h or until price moves >5%",
+            "cooldown_hours_remaining": hours_remaining,
+            "stop_price": stop_price,
+            "current_price": current_price,
+            "price_distance_pct": price_move_pct,
+            "direction": proposed_direction
+        }
+    
+    def clear_cooldown(self, symbol: str, direction: Optional[str] = None) -> None:
+        """
+        Manually clear cooldown for a symbol.
+        
+        Args:
+            symbol: Trading pair
+            direction: Specific direction to clear, or None to clear both
+        """
+        if direction:
+            key = f"{symbol}_{direction}"
+            if key in self._symbol_cooldowns:
+                del self._symbol_cooldowns[key]
+                logger.info("%s: Cooldown cleared for %s", symbol, direction)
+        else:
+            # Clear both directions
+            for dir in ['LONG', 'SHORT']:
+                key = f"{symbol}_{dir}"
+                if key in self._symbol_cooldowns:
+                    del self._symbol_cooldowns[key]
+            logger.info("%s: All cooldowns cleared", symbol)
 
     def _progress(self, stage: str, payload: Dict[str, Any]) -> None:
         """Emit a standardized progress snapshot for user-facing consoles and telemetry.

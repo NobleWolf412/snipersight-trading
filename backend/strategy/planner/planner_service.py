@@ -265,6 +265,10 @@ def generate_trade_plan(
         raise ValueError("No indicators available for trade planning")
     
     primary_tf = getattr(config, "primary_planning_timeframe", None) or list(indicators.by_timeframe.keys())[-1]
+    # Normalize timeframe to match data keys (handle case mismatches)
+    primary_tf_lower = primary_tf.lower()
+    if primary_tf not in indicators.by_timeframe and primary_tf_lower in indicators.by_timeframe:
+        primary_tf = primary_tf_lower
     primary_indicators = indicators.by_timeframe[primary_tf]
     
     # Get or create PlannerConfig from ScanConfig
@@ -349,7 +353,8 @@ def generate_trade_plan(
         setup_archetype=setup_archetype,
         config=config,
         planner_cfg=planner_cfg,
-        multi_tf_data=multi_tf_data
+        multi_tf_data=multi_tf_data,
+        current_price=current_price  # Pass for regime-aware stop buffer
     )
     plan_composition['stop_from_structure'] = stop_used_structure
     
@@ -1117,12 +1122,14 @@ def _calculate_stop_loss(
     setup_archetype: SetupArchetype,
     config: ScanConfig,
     planner_cfg: PlannerConfig,
-    multi_tf_data: Optional[MultiTimeframeData] = None
+    multi_tf_data: Optional[MultiTimeframeData] = None,
+    current_price: Optional[float] = None  # NEW: for regime-aware buffer
 ) -> tuple[StopLoss, bool]:
     """
     Calculate structure-based stop loss.
     
     Never arbitrary - always beyond invalidation point.
+    NOW with dynamic regime-aware stop buffer (Issue #3 fix).
     
     Returns:
         Tuple of (StopLoss, used_structure_flag)
@@ -1130,6 +1137,16 @@ def _calculate_stop_loss(
     # Direction provided via is_bullish
     allowed_tfs = _get_allowed_structure_tfs(config)
     structure_tf_used = None  # Track which TF provided stop
+    
+    # === DYNAMIC STOP BUFFER BASED ON ATR REGIME (Issue #3 fix) ===
+    # Calculate regime-aware stop buffer instead of static value
+    if current_price and current_price > 0:
+        regime = _classify_atr_regime(atr, current_price, planner_cfg)
+        stop_buffer = planner_cfg.stop_buffer_by_regime.get(regime, planner_cfg.stop_buffer_atr)
+        logger.debug(f"Using regime-aware stop buffer: {regime} -> {stop_buffer:.3f} ATR")
+    else:
+        stop_buffer = planner_cfg.stop_buffer_atr
+        regime = "unknown"
     
     if is_bullish:
         # Stop below the entry structure
@@ -1166,7 +1183,7 @@ def _calculate_stop_loss(
         if valid_stops:
             # Use closest structure below entry (highest of the valid stops)
             stop_level, structure_tf_used = max(valid_stops, key=lambda x: x[0])
-            stop_level -= (planner_cfg.stop_buffer_atr * atr)  # Buffer beyond structure
+            stop_level -= (stop_buffer * atr)  # Dynamic regime-aware buffer beyond structure
             rationale = f"Stop below {structure_tf_used} entry structure invalidation point"
             logger.debug(f"Using structure-based stop: {stop_level} from {structure_tf_used} (before buffer: {max(valid_stops, key=lambda x: x[0])[0]})")
             distance_atr = (entry_zone.far_entry - stop_level) / atr
@@ -1205,7 +1222,7 @@ def _calculate_stop_loss(
                             break
             
             if swing_level:
-                stop_level = swing_level - (planner_cfg.stop_buffer_atr * atr)  # Buffer below swing
+                stop_level = swing_level - (stop_buffer * atr)  # Dynamic regime-aware buffer below swing
                 rationale = f"Stop below swing low (no SMC structure)"
                 distance_atr = (entry_zone.far_entry - stop_level) / atr
                 used_structure = False  # Swing level, not SMC structure
@@ -1239,7 +1256,7 @@ def _calculate_stop_loss(
         if valid_stops:
             # Use closest structure above entry (lowest of the valid stops)
             stop_level, structure_tf_used = min(valid_stops, key=lambda x: x[0])
-            stop_level += (planner_cfg.stop_buffer_atr * atr)  # Buffer beyond structure
+            stop_level += (stop_buffer * atr)  # Dynamic regime-aware buffer beyond structure
             rationale = f"Stop above {structure_tf_used} entry structure invalidation point"
             distance_atr = (stop_level - entry_zone.far_entry) / atr
             used_structure = True
@@ -1277,7 +1294,7 @@ def _calculate_stop_loss(
                             break
             
             if swing_level:
-                stop_level = swing_level + (planner_cfg.stop_buffer_atr * atr)  # Buffer above swing
+                stop_level = swing_level + (stop_buffer * atr)  # Dynamic regime-aware buffer above swing
                 rationale = f"Stop above swing high (no SMC structure)"
                 distance_atr = (stop_level - entry_zone.far_entry) / atr
                 used_structure = False  # Swing level, not SMC structure
