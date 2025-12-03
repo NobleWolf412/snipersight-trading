@@ -90,7 +90,7 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
 
   return (
     <div className={cn(
-      "flex flex-col overflow-hidden rounded-lg relative z-0 border border-primary/20 bg-black/90 shadow-[0_0_30px_rgba(0,255,0,0.1)]", 
+      "flex flex-col h-full overflow-hidden rounded-lg relative z-0 border border-primary/20 bg-black/90 shadow-[0_0_30px_rgba(0,255,0,0.1)]", 
       className
     )}>
       
