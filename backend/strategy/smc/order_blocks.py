@@ -345,7 +345,7 @@ def calculate_freshness(ob: OrderBlock, current_time: datetime) -> float:
         current_time: Current timestamp for comparison
         
     Returns:
-        float: Freshness score (1.0 = just formed, approaches 0 as time passes)
+        float: Freshness score (0-100 scale, 100 = just formed, decays over time)
     """
     age = current_time - ob.timestamp
     age_hours = age.total_seconds() / 3600
@@ -354,7 +354,8 @@ def calculate_freshness(ob: OrderBlock, current_time: datetime) -> float:
     half_life_hours = 168
     freshness = 2 ** (-age_hours / half_life_hours)
     
-    return freshness
+    # Scale to 0-100 (model expects 0-100, is_fresh checks > 70)
+    return freshness * 100.0
 
 
 def _infer_timeframe(df: pd.DataFrame) -> str:

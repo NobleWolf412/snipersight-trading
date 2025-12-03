@@ -876,7 +876,8 @@ def _calculate_synergy_bonus(
         except ImportError:
             pass  # Cycle models not available
     
-    return bonus
+    # Clamp synergy bonus to max 10 (validation constraint)
+    return min(bonus, 10.0)
 
 
 def _calculate_conflict_penalty(factors: List[ConfluenceFactor], direction: str) -> float:

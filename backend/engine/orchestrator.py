@@ -959,6 +959,11 @@ class Orchestrator:
         if not context.smc_snapshot or not context.multi_tf_indicators:
             raise ValueError(f"{context.symbol}: Missing SMC snapshot or indicators for confluence scoring")
         
+        # Get current price EARLY - required for confluence scoring
+        current_price = self._get_current_price(context.multi_tf_data)
+        if current_price is None or current_price <= 0:
+            raise ValueError(f"{context.symbol}: Cannot determine current price for confluence scoring")
+        
         # Compute HTF proximity context for both directions (support/resistance)
         htf_ctx_long = None
         htf_ctx_short = None
@@ -970,7 +975,7 @@ class Orchestrator:
                 if k in tf_map:
                     ohlcv_map[tf_map[k]] = v
             if ohlcv_map:
-                current_price = self._get_current_price(context.multi_tf_data)
+                # current_price already defined above
                 # Use planning TF ATR for ATR-normalized distance
                 primary_tf = getattr(self.config, 'primary_planning_timeframe', '4H')
                 ind = context.multi_tf_indicators.by_timeframe.get(primary_tf)
@@ -1176,11 +1181,12 @@ class Orchestrator:
         
         # Store reversal context for the chosen direction (used in plan rationale generation)
         chosen_reversal = reversal_context_long if chosen_direction == 'LONG' else reversal_context_short
-        if chosen_reversal and chosen_reversal.is_reversal:
+        if chosen_reversal and chosen_reversal.is_reversal_setup:
             context.metadata['reversal'] = {
-                'is_reversal': chosen_reversal.is_reversal,
-                'reversal_type': chosen_reversal.reversal_type,
+                'is_reversal_setup': chosen_reversal.is_reversal_setup,
+                'direction': chosen_reversal.direction,
                 'cycle_aligned': chosen_reversal.cycle_aligned,
+                'htf_bypass_active': chosen_reversal.htf_bypass_active,
                 'confidence': chosen_reversal.confidence,
                 'rationale': chosen_reversal.rationale
             }
