@@ -90,7 +90,7 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
 
   return (
     <div className={cn(
-      "flex flex-col h-full overflow-hidden rounded-lg relative z-0 border border-primary/20 bg-black/90 shadow-[0_0_30px_rgba(0,255,0,0.1)]", 
+      "flex flex-col h-full max-h-full overflow-hidden rounded-lg relative z-0 border border-primary/20 bg-black/90 shadow-[0_0_30px_rgba(0,255,0,0.1)]", 
       className
     )}>
       
@@ -137,12 +137,12 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
       </div>
 
       {/* Main Content Area */}
-      <div className="relative flex-1 flex min-h-0">
+      <div className="relative flex-1 flex min-h-0 max-h-full overflow-hidden">
         
         {/* Log Stream */}
         <div 
           ref={scrollRef}
-          className="flex-1 p-4 font-mono text-xs space-y-1.5 overflow-y-auto scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent"
+          className="flex-1 p-4 font-mono text-xs space-y-1.5 overflow-y-auto overflow-x-hidden min-h-0 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent"
         >
           <AnimatePresence initial={false}>
             {mergedLogs.length > 0 ? (
@@ -151,7 +151,7 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
                   key={`${log.timestamp}-${i}`}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="flex gap-3 group hover:bg-primary/5 p-0.5 rounded transition-colors"
+                  className="flex gap-3 group hover:bg-primary/5 p-0.5 rounded transition-colors min-w-0"
                 >
                   <span className="text-primary/40 shrink-0 select-none">
                     {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -168,7 +168,8 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
                   </span>
 
                   <span className={cn(
-                    "flex-1 break-all",
+                    "flex-1 break-words overflow-hidden whitespace-pre-wrap",
+                    "[word-break:break-word]",
                     log.type === 'success' && "text-emerald-400 font-bold",
                     log.type === 'warning' && "text-amber-400",
                     log.type === 'error' && "text-rose-500 font-bold",

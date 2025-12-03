@@ -467,9 +467,9 @@ export function ScannerSetup() {
           </div>
 
           {/* Console */}
-          <div className="rounded-2xl p-6 md:p-8 backdrop-blur-sm card-3d relative z-0 flex flex-col h-full lg:sticky lg:top-6">
-            <h2 className="text-xl font-semibold mb-4 hud-headline hud-text-green">SCANNER CONSOLE</h2>
-            <div className="flex-1 min-h-[600px] lg:min-h-0">
+          <div className="rounded-2xl p-6 md:p-8 backdrop-blur-sm card-3d relative z-0 flex flex-col h-[1200px]">
+            <h2 className="text-xl font-semibold mb-4 hud-headline hud-text-green shrink-0">SCANNER CONSOLE</h2>
+            <div className="flex-1 min-h-0 overflow-hidden">
               <ScannerConsole
                 isScanning={isScanning}
                 className="h-full"
