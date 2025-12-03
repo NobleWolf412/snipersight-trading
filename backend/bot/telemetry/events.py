@@ -277,3 +277,28 @@ def create_bot_stopped_event(reason: str = "user_requested") -> TelemetryEvent:
             'reason': reason
         }
     )
+
+
+def create_info_event(
+    message: str,
+    stage: Optional[str] = None,
+    symbol: Optional[str] = None,
+    run_id: Optional[str] = None,
+    payload: Optional[Dict[str, Any]] = None
+) -> TelemetryEvent:
+    """Create info message event for pipeline progress."""
+    data = {
+        'message': message
+    }
+    if stage:
+        data['stage'] = stage
+    if payload:
+        data['payload'] = payload
+    
+    return TelemetryEvent(
+        event_type=EventType.INFO_MESSAGE,
+        timestamp=datetime.now(timezone.utc),
+        run_id=run_id,
+        symbol=symbol,
+        data=data
+    )

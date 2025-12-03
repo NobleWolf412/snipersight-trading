@@ -41,7 +41,8 @@ from backend.bot.telemetry.events import (
     create_scan_completed_event,
     create_signal_generated_event,
     create_signal_rejected_event,
-    create_error_event
+    create_error_event,
+    create_info_event
 )
 from backend.data.ingestion_pipeline import IngestionPipeline
 from backend.indicators.momentum import compute_rsi, compute_stoch_rsi, compute_mfi, compute_macd
@@ -658,15 +659,17 @@ class Orchestrator:
                 }
             else:
                 logger.info("%s [%s]: REJECTED - No trade plan generated", symbol, trace_id)
+                # Use actual failure reason if available from planner
+                actual_reason = context.metadata.get('plan_failure_reason', 'Insufficient SMC patterns for entry/stop placement')
                 self.diagnostics['planner_rejections'].append({
                     'symbol': symbol,
                     'trace_id': trace_id,
-                    'reason': 'no_plan'
+                    'reason': actual_reason
                 })
                 rejection_info = {
                     "symbol": symbol,
                     "reason_type": reason_type,
-                    "reason": "Insufficient SMC patterns for entry/stop placement",
+                    "reason": actual_reason,
                     "trace_id": trace_id
                 }
             
@@ -1560,6 +1563,8 @@ class Orchestrator:
             
         except Exception as e:  # noqa: BLE001  # type: ignore[misc] - intentional broad catch for robustness
             logger.error("Trade plan generation failed: %s", e)
+            # Store the actual failure reason for accurate rejection reporting
+            context.metadata['plan_failure_reason'] = str(e)
             return None
     
     def _classify_setup_type(self, smc_snapshot: SMCSnapshot) -> str:
@@ -2011,11 +2016,11 @@ class Orchestrator:
             logger.info("PIPELINE %s | %s", stage, json.dumps(line, default=str))
             if hasattr(self, 'telemetry') and self.telemetry:
                 try:
-                    self.telemetry.log_event({
-                        "type": "pipeline_progress",
-                        "stage": stage,
-                        "payload": payload
-                    })
+                    self.telemetry.log_event(create_info_event(
+                        message=f"Pipeline progress: {stage}",
+                        stage=stage,
+                        payload=payload
+                    ))
                 except Exception:
                     pass
         except Exception:
