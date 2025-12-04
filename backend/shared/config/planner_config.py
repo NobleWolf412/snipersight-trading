@@ -26,6 +26,9 @@ class PlannerConfig:
     fallback_entry_near_atr: float = 0.5  # ATR fallback: near entry offset
     fallback_entry_far_atr: float = 1.5  # ATR fallback: far entry offset
     
+    # Stop loss floor (% of price) - prevents micro-stops
+    min_stop_pct: float = 0.2  # NEW: Minimum stop as % of price (0.2% floor)
+    
     # ATR regime classification (thresholds in ATR% of price)
     atr_regime_thresholds: Dict[str, float] = field(default_factory=lambda: {
         "calm": 0.5,      # ATR < 0.5% of price
@@ -42,12 +45,12 @@ class PlannerConfig:
         "explosive": 1.5,
     })
     
-    # Dynamic stop buffer by ATR regime (NEW - addresses Issue #3)
+    # Dynamic stop buffer by ATR regime (TUNED - reduced from original)
     stop_buffer_by_regime: Dict[str, float] = field(default_factory=lambda: {
         "calm": 0.25,      # Tighter stops in calm markets
-        "normal": 0.35,    # Standard buffer
-        "elevated": 0.45,  # Wider stops in volatile markets
-        "explosive": 0.55, # Much wider stops in extreme volatility
+        "normal": 0.30,    # TUNED: was 0.35 - tighter standard buffer
+        "elevated": 0.35,  # TUNED: was 0.45 - reduced volatile buffer
+        "explosive": 0.40, # TUNED: was 0.55 - significantly reduced extreme buffer
     })
     
     # Higher timeframe bias (gradient-based)
@@ -69,6 +72,15 @@ class PlannerConfig:
     stop_lookback_bars: int = 30  # Base swing lookback (calibrated for 4H, auto-scaled per TF)
     stop_htf_lookback_bars: int = 60  # DEPRECATED: no longer used, kept for backward compat
     stop_use_htf_swings: bool = True  # Enable HTF swing searching as fallback
+    
+    # HTF swing timeframe allowlist per mode profile (NEW - prevents 1w/1d swings for scalp modes)
+    htf_swing_allowed: Dict[str, tuple] = field(default_factory=lambda: {
+        "precision": ("1h", "15m"),           # surgical: LTF only, no HTF swings
+        "intraday_aggressive": ("1h", "15m"), # strike: LTF only, no HTF swings
+        "balanced": ("4h", "1h"),             # recon: up to 4h swings
+        "macro_surveillance": ("1d", "4h"),   # overwatch: HTF swings allowed
+        "stealth_balanced": ("4h", "1h"),     # ghost: up to 4h swings
+    })
     
     # Price alignment sanity
     price_alignment_max_rel_diff: float = 0.5  # Max relative diff between mid_entry and current_price

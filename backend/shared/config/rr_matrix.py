@@ -18,7 +18,7 @@ class RRThreshold:
     description: str
 
 
-# Base R:R validation matrix (production-ready values)
+# Base R:R validation matrix (production-ready values - TUNED for stricter quality)
 RR_MATRIX: Dict[str, RRThreshold] = {
     
     "SMC": RRThreshold(
@@ -30,14 +30,14 @@ RR_MATRIX: Dict[str, RRThreshold] = {
     
     "ATR_FALLBACK": RRThreshold(
         plan_type="ATR_FALLBACK",
-        min_rr=1.0,
-        ideal_rr=1.8,
+        min_rr=1.5,       # TUNED: was 1.0 - force better R:R when no structure
+        ideal_rr=2.0,     # TUNED: was 1.8 - higher ideal for fallback plans
         description="ATR-based entry/stop when clear SMC structure unavailable"
     ),
     
     "HYBRID": RRThreshold(
         plan_type="HYBRID",
-        min_rr=0.9,
+        min_rr=1.2,       # TUNED: was 0.9 - raise floor for mixed plans
         ideal_rr=2.0,
         description="Mixed SMC structure + ATR-based components"
     ),

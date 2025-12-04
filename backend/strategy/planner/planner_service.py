@@ -1204,10 +1204,23 @@ def _calculate_stop_loss(
                     timeframe=primary_tf
                 )
             
-            # Try HTF if enabled and primary failed
+            # Try HTF if enabled and primary failed (MODE-AWARE HTF FILTERING)
             if swing_level is None and planner_cfg.stop_use_htf_swings and multi_tf_data:
+                # Get mode-specific HTF allowlist from config overrides or planner_cfg
+                mode_profile = getattr(config, 'profile', 'balanced')
+                htf_allowed = planner_cfg.htf_swing_allowed.get(mode_profile, ('4h', '1h', '1d'))
+                # Also check config.overrides for htf_swing_allowed
+                overrides = getattr(config, 'overrides', None) or {}
+                if 'htf_swing_allowed' in overrides:
+                    htf_allowed = overrides['htf_swing_allowed']
+                
                 htf_candidates = ['4h', '4H', '1d', '1D', '1w', '1W']
                 for htf in htf_candidates:
+                    # Skip HTFs not in allowlist for this mode
+                    htf_lower = htf.lower()
+                    if htf_lower not in [h.lower() for h in htf_allowed]:
+                        logger.debug(f"Skipping HTF {htf} - not in allowlist {htf_allowed} for {mode_profile}")
+                        continue
                     if htf in multi_tf_data.timeframes:
                         candles_df = multi_tf_data.timeframes[htf]
                         swing_level = _find_swing_level(
@@ -1228,9 +1241,23 @@ def _calculate_stop_loss(
                 used_structure = False  # Swing level, not SMC structure
                 logger.info(f"Using swing-based stop: {stop_level}")
             else:
-                # Last resort: reject trade
-                logger.warning(f"No swing level found - rejecting trade")
-                raise ValueError("Cannot generate trade plan: no clear structure or swing level for stop loss placement")
+                # Emergency ATR fallback for scalp modes (precision/intraday_aggressive)
+                mode_profile = getattr(config, 'profile', 'balanced')
+                overrides = getattr(config, 'overrides', None) or {}
+                emergency_atr_fallback = overrides.get('emergency_atr_fallback', False)
+                
+                if emergency_atr_fallback:
+                    # Use ATR-based stop for scalp modes when no structure/swing found
+                    fallback_atr_mult = 1.5  # Conservative fallback
+                    stop_level = entry_zone.far_entry - (fallback_atr_mult * atr)
+                    rationale = f"Emergency ATR fallback ({fallback_atr_mult}x ATR) - no swing structure found"
+                    distance_atr = fallback_atr_mult
+                    used_structure = False
+                    logger.warning(f"Using emergency ATR fallback stop: {stop_level} for {mode_profile} mode")
+                else:
+                    # Last resort: reject trade
+                    logger.warning(f"No swing level found - rejecting trade")
+                    raise ValueError("Cannot generate trade plan: no clear structure or swing level for stop loss placement")
     
     else:  # bearish
         # Stop above the entry structure
@@ -1276,10 +1303,23 @@ def _calculate_stop_loss(
                     timeframe=primary_tf
                 )
             
-            # Try HTF if enabled and primary failed
+            # Try HTF if enabled and primary failed (MODE-AWARE HTF FILTERING)
             if swing_level is None and planner_cfg.stop_use_htf_swings and multi_tf_data:
+                # Get mode-specific HTF allowlist from config overrides or planner_cfg
+                mode_profile = getattr(config, 'profile', 'balanced')
+                htf_allowed = planner_cfg.htf_swing_allowed.get(mode_profile, ('4h', '1h', '1d'))
+                # Also check config.overrides for htf_swing_allowed
+                overrides = getattr(config, 'overrides', None) or {}
+                if 'htf_swing_allowed' in overrides:
+                    htf_allowed = overrides['htf_swing_allowed']
+                
                 htf_candidates = ['4h', '4H', '1d', '1D', '1w', '1W']
                 for htf in htf_candidates:
+                    # Skip HTFs not in allowlist for this mode
+                    htf_lower = htf.lower()
+                    if htf_lower not in [h.lower() for h in htf_allowed]:
+                        logger.debug(f"Skipping HTF {htf} - not in allowlist {htf_allowed} for {mode_profile}")
+                        continue
                     if htf in multi_tf_data.timeframes:
                         candles_df = multi_tf_data.timeframes[htf]
                         swing_level = _find_swing_level(
@@ -1300,9 +1340,23 @@ def _calculate_stop_loss(
                 used_structure = False  # Swing level, not SMC structure
                 logger.info(f"Using swing-based stop: {stop_level}")
             else:
-                # Last resort: reject trade
-                logger.warning(f"No swing level found - rejecting trade")
-                raise ValueError("Cannot generate trade plan: no clear structure or swing level for stop loss placement")
+                # Emergency ATR fallback for scalp modes (precision/intraday_aggressive)
+                mode_profile = getattr(config, 'profile', 'balanced')
+                overrides = getattr(config, 'overrides', None) or {}
+                emergency_atr_fallback = overrides.get('emergency_atr_fallback', False)
+                
+                if emergency_atr_fallback:
+                    # Use ATR-based stop for scalp modes when no structure/swing found
+                    fallback_atr_mult = 1.5  # Conservative fallback
+                    stop_level = entry_zone.far_entry + (fallback_atr_mult * atr)
+                    rationale = f"Emergency ATR fallback ({fallback_atr_mult}x ATR) - no swing structure found"
+                    distance_atr = fallback_atr_mult
+                    used_structure = False
+                    logger.warning(f"Using emergency ATR fallback stop: {stop_level} for {mode_profile} mode")
+                else:
+                    # Last resort: reject trade
+                    logger.warning(f"No swing level found - rejecting trade")
+                    raise ValueError("Cannot generate trade plan: no clear structure or swing level for stop loss placement")
     
     # CRITICAL DEBUG
     logger.critical(f"STOP CALC: is_bullish={is_bullish}, entry_near={entry_zone.near_entry}, entry_far={entry_zone.far_entry}, stop={stop_level}, atr={atr}")
@@ -1506,7 +1560,35 @@ def _calculate_targets(
             rationale=target3_rationale
         ))
     
-    return targets
+    # === PRE-TARGET VALIDATION (NEW - catches negative/invalid targets) ===
+    # Validate all targets are positive and in correct direction
+    validated_targets = []
+    for i, target in enumerate(targets):
+        # Check for negative/zero targets
+        if target.level <= 0:
+            logger.warning(f"Target {i+1} has invalid level {target.level:.6f} - skipping")
+            continue
+        
+        # Check direction validity
+        if is_bullish and target.level <= avg_entry:
+            logger.warning(f"Bullish target {i+1} at {target.level:.6f} <= avg_entry {avg_entry:.6f} - skipping")
+            continue
+        if not is_bullish and target.level >= avg_entry:
+            logger.warning(f"Bearish target {i+1} at {target.level:.6f} >= avg_entry {avg_entry:.6f} - skipping")
+            continue
+        
+        validated_targets.append(target)
+    
+    # Must have at least one valid target
+    if len(validated_targets) == 0:
+        logger.error(f"All targets invalid - entry={avg_entry:.6f}, stop={stop_loss.level:.6f}, risk_dist={risk_distance:.6f}")
+        raise ValueError("Cannot generate valid targets: all computed targets failed validation")
+    
+    # Warn if some targets were filtered
+    if len(validated_targets) < len(targets):
+        logger.warning(f"Filtered {len(targets) - len(validated_targets)} invalid targets")
+    
+    return validated_targets
 
 
 def _generate_rationale(

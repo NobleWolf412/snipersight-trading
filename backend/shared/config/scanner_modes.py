@@ -153,13 +153,13 @@ MODES: Dict[str, ScannerMode] = {
         primary_planning_timeframe="4h",
         max_pullback_atr=4.0,
         min_stop_atr=0.4,
-        max_stop_atr=8.0,
+        max_stop_atr=6.5,  # TUNED: was 8.0 - cap via max_stop_atr validation
         entry_timeframes=("4h", "1h"),  # Swing position entries, not scalping
-        structure_timeframes=("1w", "1d", "4h"),  # Only HTF structure for SL/TP
+        structure_timeframes=("1w", "1d", "4h"),  # RESTORED: HTF structure for target clipping
         stop_timeframes=("4h", "1h"),
         target_timeframes=("1d", "4h"),
         min_target_move_pct=1.5,  # Macro moves require >= 1.5% TP1
-        overrides={"min_rr_ratio": 2.0, "atr_floor": 0.0025, "bias_gate": 0.7},
+        overrides={"min_rr_ratio": 2.0, "atr_floor": 0.0025, "bias_gate": 0.7, "htf_swing_allowed": ("1d", "4h")},
     ),
     "recon": ScannerMode(
         name="recon",
@@ -170,14 +170,14 @@ MODES: Dict[str, ScannerMode] = {
         critical_timeframes=("4h", "1h"),  # 4H and 1H essential for swing context
         primary_planning_timeframe="1h",
         max_pullback_atr=3.0,
-        min_stop_atr=0.3,
-        max_stop_atr=6.0,
-        entry_timeframes=("1h", "15m"),  # Balanced swing/intraday entries
-        structure_timeframes=("1d", "4h", "1h"),  # Swing structure from daily/4h/1h
+        min_stop_atr=0.25,  # TUNED: was 0.3 - allow slightly tighter precision stops
+        max_stop_atr=5.0,   # TUNED: was 6.0 - cap via max_stop_atr validation
+        entry_timeframes=("1h", "15m", "5m"),  # TUNED: added 5m for flexible entries
+        structure_timeframes=("1d", "4h", "1h"),  # RESTORED: HTF structure for target clipping
         stop_timeframes=("1h", "15m"),
         target_timeframes=("4h", "1h"),
         min_target_move_pct=0.8,  # Balanced swing requires >= 0.8% TP1
-        overrides={"min_rr_ratio": 1.8, "atr_floor": 0.0015, "bias_gate": 0.65},
+        overrides={"min_rr_ratio": 1.8, "atr_floor": 0.0015, "bias_gate": 0.65, "htf_swing_allowed": ("4h", "1h")},
     ),
     "strike": ScannerMode(
         name="strike",
@@ -188,14 +188,14 @@ MODES: Dict[str, ScannerMode] = {
         critical_timeframes=("15m",),  # 15m is essential for intraday entries
         primary_planning_timeframe="15m",
         max_pullback_atr=2.5,
-        min_stop_atr=0.25,
-        max_stop_atr=5.0,
+        min_stop_atr=0.2,   # TUNED: was 0.25 - allow tighter scalp stops
+        max_stop_atr=3.5,   # TUNED: was 5.0 - cap via max_stop_atr validation
         entry_timeframes=("15m", "5m"),  # Fast aggressive scalp entries (5m NOW ALLOWED)
-        structure_timeframes=("4h", "1h", "15m"),  # Intraday structure from 4h/1h/15m
-        stop_timeframes=("15m",),
-        target_timeframes=("1h",),
-        min_target_move_pct=0.5,  # Aggressive intraday requires >= 0.5% TP1
-        overrides={"min_rr_ratio": 1.6, "atr_floor": 0.0012, "bias_gate": 0.6},
+        structure_timeframes=("4h", "1h", "15m"),  # RESTORED: 4h structure for target clipping
+        stop_timeframes=("15m", "5m"),  # TUNED: added 5m for tighter scalp stops
+        target_timeframes=("1h", "15m"),  # TUNED: added 15m for faster targets
+        min_target_move_pct=0.4,  # TUNED: was 0.5 - allow tighter scalp targets
+        overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0010, "bias_gate": 0.6, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True},
     ),
     "surgical": ScannerMode(
         name="surgical",
@@ -206,14 +206,14 @@ MODES: Dict[str, ScannerMode] = {
         critical_timeframes=("15m",),  # 15m essential for precision scalping
         primary_planning_timeframe="15m",
         max_pullback_atr=2.0,
-        min_stop_atr=0.25,
-        max_stop_atr=4.0,
-        entry_timeframes=("5m",),  # PRECISION 5m ONLY for surgical entries (CRITICAL FIX)
+        min_stop_atr=0.15,  # TUNED: was 0.25 - surgical needs tightest stops
+        max_stop_atr=3.0,   # TUNED: was 4.0 - surgical can't afford wide stops
+        entry_timeframes=("15m", "5m"),  # TUNED: added 15m - 5m-only was too restrictive
         structure_timeframes=("1h", "15m"),  # Precision structure from 1h/15m ONLY (no 5m)
-        stop_timeframes=("15m",),
-        target_timeframes=("1h",),
-        min_target_move_pct=0.6,  # Precision scalp requires >= 0.6% TP1 (prevents micro-moves)
-        overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0010, "bias_gate": 0.7},
+        stop_timeframes=("15m", "5m"),  # TUNED: added 5m for tightest stops
+        target_timeframes=("1h", "15m"),  # TUNED: added 15m for faster exits
+        min_target_move_pct=0.4,  # TUNED: was 0.6 - allow tighter surgical precision
+        overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0008, "bias_gate": 0.7, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True},
     ),
     "ghost": ScannerMode(
         name="ghost",
@@ -224,14 +224,14 @@ MODES: Dict[str, ScannerMode] = {
         critical_timeframes=("1h",),  # 1H essential for multi-horizon context
         primary_planning_timeframe="1h",
         max_pullback_atr=3.0,
-        min_stop_atr=0.3,
-        max_stop_atr=6.0,
-        entry_timeframes=("15m", "5m"),  # Flexible stealth entries (5m NOW ALLOWED)
-        structure_timeframes=("1d", "4h", "1h", "15m"),  # Stealth balanced structure (no 5m)
-        stop_timeframes=("15m",),
-        target_timeframes=("1h",),
-        min_target_move_pct=0.7,  # Stealth requires >= 0.7% TP1
-        overrides={"min_rr_ratio": 1.6, "atr_floor": 0.0012, "bias_gate": 0.7},
+        min_stop_atr=0.2,   # TUNED: was 0.3 - ghost needs flexibility
+        max_stop_atr=4.5,   # TUNED: was 6.0 - cap via max_stop_atr validation
+        entry_timeframes=("1h", "15m", "5m"),  # TUNED: added 1h - more entry flexibility
+        structure_timeframes=("1d", "4h", "1h", "15m"),  # RESTORED: HTF structure for target clipping
+        stop_timeframes=("15m", "5m"),  # TUNED: added 5m for tighter stops
+        target_timeframes=("1h", "15m"),  # TUNED: added 15m for nimble exits
+        min_target_move_pct=0.5,  # TUNED: was 0.7 - allow tighter stealth scalps
+        overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0010, "bias_gate": 0.7, "htf_swing_allowed": ("4h", "1h")},
     ),
 }
 
