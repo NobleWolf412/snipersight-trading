@@ -2010,12 +2010,16 @@ class Orchestrator:
             else:
                 stable_vel = 0.0
 
+            # Fetch real dominance data from DominanceService
+            from backend.analysis.dominance_service import get_dominance_for_macro
+            btc_dom, alt_dom, stable_dom = get_dominance_for_macro()
+            
             # Build MacroContext directly
             from backend.analysis.macro_context import MacroContext, _dir_from_pct, compute_cluster_score
             ctx = MacroContext(
-                btc_dom=0.0,
-                alt_dom=0.0,
-                stable_dom=0.0,
+                btc_dom=btc_dom,
+                alt_dom=alt_dom,
+                stable_dom=stable_dom,
                 percent_alts_up=percent_alts_up,
                 btc_volatility_1h=btc_vol_pct,
             )
