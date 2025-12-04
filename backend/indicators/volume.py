@@ -2,11 +2,17 @@
 Volume Indicators Module
 
 Implements volume-based indicators:
-- Volume Spike Detection
+- Volume Spike Detection (CUSTOM - kept as-is, has anomaly detection logic)
 - OBV (On-Balance Volume)
 - Volume-Weighted Average Price (VWAP)
+- Volume Profile (CUSTOM - kept as-is)
+- Relative Volume (RVOL)
 
 All functions return pandas Series with proper index alignment.
+
+Uses pandas-ta for OBV and VWAP when available, with fallback to manual
+implementations. Volume spike detection and volume profile are kept custom
+as they contain specialized logic not available in standard libraries.
 """
 
 import pandas as pd
@@ -17,6 +23,15 @@ from backend.indicators.validation_utils import validate_ohlcv, DataValidationEr
 
 logger = logging.getLogger(__name__)
 
+# Try to import pandas-ta for optimized indicator computation
+try:
+    import pandas_ta as ta
+    PANDAS_TA_AVAILABLE = True
+    logger.debug("pandas-ta available - using optimized indicator computation")
+except ImportError:
+    ta = None  # type: ignore[assignment]
+    PANDAS_TA_AVAILABLE = False
+    logger.info("pandas-ta not available - using fallback implementations")
 
 # Anomaly threshold: volumes exceeding this multiple are flagged as potential data errors
 VOLUME_ANOMALY_THRESHOLD = 100.0
@@ -35,6 +50,9 @@ def detect_volume_spike(
     A volume spike occurs when current volume exceeds the rolling average
     by the specified threshold multiplier. Optionally flags extreme outliers
     that may indicate data errors.
+    
+    NOTE: This is kept as custom implementation because it includes anomaly
+    detection logic not available in standard TA libraries.
     
     Args:
         df: DataFrame with 'volume' column
@@ -65,8 +83,6 @@ def detect_volume_spike(
     anomalies = relative_volume > anomaly_threshold
     if flag_anomalies and anomalies.any():
         anomaly_count = anomalies.sum()
-        import logging
-        logger = logging.getLogger(__name__)
         logger.warning(
             f"Volume anomaly detected: {anomaly_count} bar(s) with volume >{anomaly_threshold}x average. "
             f"Max ratio: {relative_volume.max():.1f}x. These may be data errors."
@@ -141,16 +157,18 @@ def compute_obv(df: pd.DataFrame) -> pd.Series:
     if len(df) < 2:
         raise ValueError(f"DataFrame too short for OBV calculation (need at least 2 rows, got {len(df)})")
     
-    # Calculate price direction
-    price_change = df['close'].diff()
+    # Use pandas-ta if available
+    if PANDAS_TA_AVAILABLE:
+        result = ta.obv(df['close'], df['volume'])
+        if result is not None:
+            return result
+        logger.warning("pandas-ta OBV returned None, falling back to manual implementation")
     
-    # Assign volume based on price direction
-    # Up day: +volume, Down day: -volume, No change: 0
+    # Fallback: Manual implementation
+    price_change = df['close'].diff()
     signed_volume = df['volume'].copy()
     signed_volume[price_change < 0] = -df['volume']
     signed_volume[price_change == 0] = 0
-    
-    # Cumulative sum
     obv = signed_volume.cumsum()
     
     return obv
@@ -162,6 +180,9 @@ def compute_vwap(df: pd.DataFrame, reset_period: str = None) -> pd.Series:
     
     VWAP is the average price weighted by volume. It can be reset
     periodically (e.g., daily for intraday data).
+    
+    Note: pandas-ta VWAP is cumulative without reset. For reset_period
+    functionality, manual implementation is always used.
     
     Args:
         df: DataFrame with 'high', 'low', 'close', 'volume' columns
@@ -182,10 +203,15 @@ def compute_vwap(df: pd.DataFrame, reset_period: str = None) -> pd.Series:
     if len(df) < 1:
         raise ValueError("DataFrame must contain at least 1 row")
     
-    # Calculate typical price
-    typical_price = (df['high'] + df['low'] + df['close']) / 3
+    # Use pandas-ta for cumulative VWAP (no reset_period)
+    if reset_period is None and PANDAS_TA_AVAILABLE:
+        result = ta.vwap(df['high'], df['low'], df['close'], df['volume'])
+        if result is not None:
+            return result
+        logger.warning("pandas-ta VWAP returned None, falling back to manual implementation")
     
-    # Calculate price * volume
+    # Manual implementation (required for reset_period functionality)
+    typical_price = (df['high'] + df['low'] + df['close']) / 3
     pv = typical_price * df['volume']
     
     if reset_period:
@@ -221,6 +247,9 @@ def compute_volume_profile(
     Compute Volume Profile (Volume at Price).
     
     Aggregates volume traded at different price levels.
+    
+    NOTE: This is kept as custom implementation because standard TA libraries
+    don't provide volume profile functionality.
     
     Args:
         df: DataFrame with 'high', 'low', 'close', 'volume' columns
@@ -282,6 +311,9 @@ def compute_relative_volume(df: pd.DataFrame, period: int = 20) -> pd.Series:
     
     RVOL compares current volume to average volume over a period.
     
+    Note: pandas-ta doesn't have a direct RVOL function, so this uses
+    manual implementation.
+    
     Args:
         df: DataFrame with 'volume' column
         period: Rolling window for average volume (default 20)
@@ -320,7 +352,8 @@ def validate_volume_indicators(df: pd.DataFrame) -> dict:
     results = {
         'valid': True,
         'errors': [],
-        'warnings': []
+        'warnings': [],
+        'using_pandas_ta': PANDAS_TA_AVAILABLE
     }
     
     try:

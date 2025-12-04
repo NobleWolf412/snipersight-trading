@@ -4,14 +4,32 @@ Volatility Indicators Module
 Implements volatility measurement indicators:
 - ATR (Average True Range)
 - Realized Volatility
+- Bollinger Bands
+- Keltner Channels
 
 All functions return pandas Series with proper index alignment.
+
+Uses pandas-ta for optimized computation when available, with fallback
+to manual implementations for environments without the library.
 """
 
 import pandas as pd
 import numpy as np
+import logging
 
 from backend.indicators.validation_utils import validate_ohlcv, DataValidationError
+
+logger = logging.getLogger(__name__)
+
+# Try to import pandas-ta for optimized indicator computation
+try:
+    import pandas_ta as ta
+    PANDAS_TA_AVAILABLE = True
+    logger.debug("pandas-ta available - using optimized indicator computation")
+except ImportError:
+    ta = None  # type: ignore[assignment]
+    PANDAS_TA_AVAILABLE = False
+    logger.info("pandas-ta not available - using fallback implementations")
 
 
 def compute_atr(df: pd.DataFrame, period: int = 14, validate_input: bool = True) -> pd.Series:
@@ -53,15 +71,18 @@ def compute_atr(df: pd.DataFrame, period: int = 14, validate_input: bool = True)
             raise_on_error=True
         )
     
-    # Calculate True Range components
+    # Use pandas-ta if available (faster)
+    if PANDAS_TA_AVAILABLE:
+        result = ta.atr(df['high'], df['low'], df['close'], length=period)
+        if result is not None:
+            return result
+        logger.warning("pandas-ta ATR returned None, falling back to manual implementation")
+    
+    # Fallback: Manual implementation
     high_low = df['high'] - df['low']
     high_close = (df['high'] - df['close'].shift()).abs()
     low_close = (df['low'] - df['close'].shift()).abs()
-    
-    # True Range is the maximum of the three
     true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-    
-    # ATR is the exponential moving average of True Range
     atr = true_range.ewm(span=period, adjust=False).mean()
     
     return atr
@@ -77,6 +98,9 @@ def compute_realized_volatility(
     Compute Realized Volatility (Historical Volatility).
     
     Measures the standard deviation of logarithmic returns over a rolling window.
+    
+    Note: pandas-ta doesn't have a direct equivalent, so this always uses
+    manual implementation.
     
     Args:
         df: DataFrame with 'close' column
@@ -139,13 +163,22 @@ def compute_bollinger_bands(
     if len(df) < period:
         raise ValueError(f"DataFrame too short for Bollinger Bands (need {period} rows, got {len(df)})")
     
-    # Calculate middle band (SMA)
+    # Use pandas-ta if available
+    if PANDAS_TA_AVAILABLE:
+        bb_df = ta.bbands(df['close'], length=period, std=std_dev)
+        if bb_df is not None and not bb_df.empty:
+            # pandas-ta column naming: BBL_20_2.0, BBM_20_2.0, BBU_20_2.0
+            upper_col = f'BBU_{period}_{std_dev}'
+            middle_col = f'BBM_{period}_{std_dev}'
+            lower_col = f'BBL_{period}_{std_dev}'
+            
+            if all(col in bb_df.columns for col in [upper_col, middle_col, lower_col]):
+                return bb_df[upper_col], bb_df[middle_col], bb_df[lower_col]
+        logger.warning("pandas-ta Bollinger Bands failed, falling back to manual implementation")
+    
+    # Fallback: Manual implementation
     middle_band = df['close'].rolling(window=period).mean()
-    
-    # Calculate standard deviation
     std = df['close'].rolling(window=period).std()
-    
-    # Calculate upper and lower bands
     upper_band = middle_band + (std * std_dev)
     lower_band = middle_band - (std * std_dev)
     
@@ -185,13 +218,22 @@ def compute_keltner_channels(
     if len(df) < min_length:
         raise ValueError(f"DataFrame too short for Keltner Channels (need {min_length} rows, got {len(df)})")
     
-    # Calculate middle line (EMA)
+    # Use pandas-ta if available
+    if PANDAS_TA_AVAILABLE:
+        kc_df = ta.kc(df['high'], df['low'], df['close'], length=ema_period, scalar=atr_multiplier, mamode='ema')
+        if kc_df is not None and not kc_df.empty:
+            # pandas-ta column naming: KCLe_20_2.0, KCBe_20_2.0, KCUe_20_2.0
+            upper_col = f'KCUe_{ema_period}_{atr_multiplier}'
+            middle_col = f'KCBe_{ema_period}_{atr_multiplier}'
+            lower_col = f'KCLe_{ema_period}_{atr_multiplier}'
+            
+            if all(col in kc_df.columns for col in [upper_col, middle_col, lower_col]):
+                return kc_df[upper_col], kc_df[middle_col], kc_df[lower_col]
+        logger.warning("pandas-ta Keltner Channels failed, falling back to manual implementation")
+    
+    # Fallback: Manual implementation
     middle_line = df['close'].ewm(span=ema_period, adjust=False).mean()
-    
-    # Calculate ATR
-    atr = compute_atr(df, period=atr_period)
-    
-    # Calculate upper and lower channels
+    atr = compute_atr(df, period=atr_period, validate_input=False)
     upper_channel = middle_line + (atr * atr_multiplier)
     lower_channel = middle_line - (atr * atr_multiplier)
     
@@ -211,7 +253,8 @@ def validate_volatility_indicators(df: pd.DataFrame) -> dict:
     results = {
         'valid': True,
         'errors': [],
-        'warnings': []
+        'warnings': [],
+        'using_pandas_ta': PANDAS_TA_AVAILABLE
     }
     
     try:

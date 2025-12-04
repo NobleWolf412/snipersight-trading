@@ -1,6 +1,8 @@
 # Data & Analysis
 pandas>=2.0.0
 numpy>=1.24.0
+ta>=0.11.0  # Technical Analysis library (works with all Python versions)
+# pandas-ta>=0.3.14b  # Optional: requires Python >=3.12 for latest versions
 ccxt>=4.0.0  # Multi-exchange crypto library
 python-binance>=1.0.0
 polars>=0.19.0  # Optional: faster dataframes

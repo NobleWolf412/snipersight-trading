@@ -8,13 +8,29 @@ Implements technical momentum indicators:
 - MACD (Moving Average Convergence Divergence)
 
 All functions return pandas Series with proper index alignment.
+
+Uses pandas-ta for optimized computation when available, with fallback
+to manual implementations for environments without the library.
 """
 
 from typing import Tuple
 import pandas as pd
 import numpy as np
+import logging
 
 from backend.indicators.validation_utils import validate_ohlcv, DataValidationError
+
+logger = logging.getLogger(__name__)
+
+# Try to import pandas-ta for optimized indicator computation
+try:
+    import pandas_ta as ta
+    PANDAS_TA_AVAILABLE = True
+    logger.debug("pandas-ta available - using optimized indicator computation")
+except ImportError:
+    ta = None  # type: ignore[assignment]
+    PANDAS_TA_AVAILABLE = False
+    logger.info("pandas-ta not available - using fallback implementations")
 
 
 def compute_rsi(df: pd.DataFrame, period: int = 14, validate_input: bool = True) -> pd.Series:
@@ -23,9 +39,6 @@ def compute_rsi(df: pd.DataFrame, period: int = 14, validate_input: bool = True)
     
     RSI measures the magnitude of recent price changes to evaluate
     overbought or oversold conditions.
-    
-    Note: Uses EMA smoothing (more responsive) rather than Wilder's RMA.
-    This produces slightly different values than TA-Lib (~0.1 tolerance).
     
     Args:
         df: DataFrame with 'close' column
@@ -54,22 +67,22 @@ def compute_rsi(df: pd.DataFrame, period: int = 14, validate_input: bool = True)
             raise_on_error=True
         )
     
-    # Calculate price changes
-    delta = df['close'].diff()
+    # Use pandas-ta if available (faster, C-optimized under the hood)
+    if PANDAS_TA_AVAILABLE:
+        result = ta.rsi(df['close'], length=period)
+        # pandas-ta returns None on error, handle gracefully
+        if result is not None:
+            return result
+        logger.warning("pandas-ta RSI returned None, falling back to manual implementation")
     
-    # Separate gains and losses
+    # Fallback: Manual implementation
+    delta = df['close'].diff()
     gains = delta.where(delta > 0, 0.0)
     losses = -delta.where(delta < 0, 0.0)
-    
-    # Calculate exponential moving averages
     avg_gains = gains.ewm(span=period, adjust=False).mean()
     avg_losses = losses.ewm(span=period, adjust=False).mean()
-    
-    # Calculate RS and RSI
     rs = avg_gains / avg_losses
     rsi = 100 - (100 / (1 + rs))
-    
-    # Handle division by zero (when avg_losses is 0)
     rsi = rsi.fillna(100)
     
     return rsi
@@ -104,6 +117,20 @@ def compute_macd(
     if len(df) < min_len:
         raise ValueError(f"DataFrame too short for MACD (need {min_len} rows, got {len(df)})")
 
+    # Use pandas-ta if available
+    if PANDAS_TA_AVAILABLE:
+        macd_df = ta.macd(df['close'], fast=fast, slow=slow, signal=signal)
+        if macd_df is not None and not macd_df.empty:
+            # pandas-ta column naming: MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9
+            macd_col = f'MACD_{fast}_{slow}_{signal}'
+            signal_col = f'MACDs_{fast}_{slow}_{signal}'
+            hist_col = f'MACDh_{fast}_{slow}_{signal}'
+            
+            if all(col in macd_df.columns for col in [macd_col, signal_col, hist_col]):
+                return macd_df[macd_col], macd_df[signal_col], macd_df[hist_col]
+        logger.warning("pandas-ta MACD failed, falling back to manual implementation")
+
+    # Fallback: Manual implementation
     ema_fast = df['close'].ewm(span=fast, adjust=False).mean()
     ema_slow = df['close'].ewm(span=slow, adjust=False).mean()
     macd_line = ema_fast - ema_slow
@@ -143,23 +170,29 @@ def compute_stoch_rsi(
     if len(df) < min_length:
         raise ValueError(f"DataFrame too short for Stoch RSI (need {min_length} rows, got {len(df)})")
     
-    # Calculate RSI first
-    rsi = compute_rsi(df, period=rsi_period)
+    if 'close' not in df.columns:
+        raise ValueError("DataFrame must contain 'close' column")
     
-    # Calculate Stochastic on RSI values
+    # Use pandas-ta if available
+    if PANDAS_TA_AVAILABLE:
+        stoch_df = ta.stochrsi(df['close'], length=rsi_period, rsi_length=stoch_period, k=smooth_k, d=smooth_d)
+        if stoch_df is not None and not stoch_df.empty:
+            # pandas-ta column naming: STOCHRSIk_14_14_3_3, STOCHRSId_14_14_3_3
+            k_col = f'STOCHRSIk_{rsi_period}_{stoch_period}_{smooth_k}_{smooth_d}'
+            d_col = f'STOCHRSId_{rsi_period}_{stoch_period}_{smooth_k}_{smooth_d}'
+            
+            if k_col in stoch_df.columns and d_col in stoch_df.columns:
+                # pandas-ta returns 0-100 already
+                return stoch_df[k_col], stoch_df[d_col]
+        logger.warning("pandas-ta Stoch RSI failed, falling back to manual implementation")
+    
+    # Fallback: Manual implementation
+    rsi = compute_rsi(df, period=rsi_period, validate_input=False)
     rsi_min = rsi.rolling(window=stoch_period).min()
     rsi_max = rsi.rolling(window=stoch_period).max()
-    
-    # Stochastic formula
     stoch_rsi = ((rsi - rsi_min) / (rsi_max - rsi_min)) * 100
-    
-    # Handle division by zero (when range is 0)
     stoch_rsi = stoch_rsi.fillna(50)
-    
-    # Smooth %K
     stoch_k = stoch_rsi.rolling(window=smooth_k).mean()
-    
-    # %D is moving average of %K
     stoch_d = stoch_k.rolling(window=smooth_d).mean()
     
     return stoch_k, stoch_d
@@ -189,28 +222,23 @@ def compute_mfi(df: pd.DataFrame, period: int = 14) -> pd.Series:
     if len(df) < period + 1:
         raise ValueError(f"DataFrame too short for MFI calculation (need {period + 1} rows, got {len(df)})")
     
-    # Calculate typical price
+    # Use pandas-ta if available
+    if PANDAS_TA_AVAILABLE:
+        result = ta.mfi(df['high'], df['low'], df['close'], df['volume'], length=period)
+        if result is not None:
+            return result
+        logger.warning("pandas-ta MFI returned None, falling back to manual implementation")
+    
+    # Fallback: Manual implementation
     typical_price = (df['high'] + df['low'] + df['close']) / 3
-    
-    # Calculate raw money flow
     money_flow = typical_price * df['volume']
-    
-    # Determine positive and negative money flow
     price_change = typical_price.diff()
     positive_flow = money_flow.where(price_change > 0, 0.0)
     negative_flow = money_flow.where(price_change < 0, 0.0)
-    
-    # Sum over the period
     positive_mf_sum = positive_flow.rolling(window=period).sum()
     negative_mf_sum = negative_flow.rolling(window=period).sum()
-    
-    # Calculate money flow ratio
     mf_ratio = positive_mf_sum / negative_mf_sum
-    
-    # Calculate MFI
     mfi = 100 - (100 / (1 + mf_ratio))
-    
-    # Handle division by zero (when negative_mf_sum is 0)
     mfi = mfi.fillna(100)
     
     return mfi
@@ -229,7 +257,8 @@ def validate_momentum_indicators(df: pd.DataFrame) -> dict:
     results = {
         'valid': True,
         'errors': [],
-        'warnings': []
+        'warnings': [],
+        'using_pandas_ta': PANDAS_TA_AVAILABLE
     }
     
     try:
@@ -272,7 +301,3 @@ def validate_momentum_indicators(df: pd.DataFrame) -> dict:
         results['valid'] = False
     
     return results
-
-
-# Note: compute_macd is defined once above (around line 53)
-# A duplicate definition was removed during code quality audit (Dec 2025)
