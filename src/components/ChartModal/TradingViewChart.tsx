@@ -27,15 +27,52 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
   const [showOverlay, setShowOverlay] = useState(false);
 
   // Convert pair format (e.g., "BTC/USDT" -> "BTCUSDT")
-  const symbol = result.pair.replace('/', '');
+  const baseSymbol = result.pair.replace('/', '');
+  
+  /**
+   * Map our symbols to TradingView-compatible format.
+   * TradingView supports: BINANCE (spot), BYBIT (perps), OKX, etc.
+   * For perpetual futures, BYBIT has the best coverage on TradingView.
+   * Symbol formats:
+   * - BYBIT perpetuals: BYBIT:BTCUSDT.P or BYBIT:BTCUSDT
+   * - BINANCE spot: BINANCE:BTCUSDT
+   * - Auto-detect lets TradingView find the best match
+   */
+  const getTradingViewSymbol = (): string => {
+    // Remove any trailing .P or perp suffix that might be in our symbol
+    const cleanSymbol = baseSymbol.replace(/\.P$/i, '').replace(/PERP$/i, '');
+    
+    // For perpetuals, BYBIT has better coverage on TradingView
+    // Try BYBIT perpetual format first (most of our signals are perps)
+    const exchange = result.metadata?.exchange?.toLowerCase() || 'phemex';
+    
+    // Map exchanges to TradingView-compatible exchanges
+    const tvExchangeMap: Record<string, string> = {
+      'phemex': 'BYBIT',    // Phemex not on TradingView, use BYBIT perps
+      'bybit': 'BYBIT',
+      'okx': 'OKX',
+      'bitget': 'BITGET',
+      'binance': 'BINANCE',
+    };
+    
+    const tvExchange = tvExchangeMap[exchange] || 'BYBIT';
+    
+    // For major pairs, both spot and perp charts are similar
+    // Use perpetual format for BYBIT (.P suffix for perps)
+    if (tvExchange === 'BYBIT') {
+      return `BYBIT:${cleanSymbol}.P`;
+    }
+    
+    return `${tvExchange}:${cleanSymbol}`;
+  };
+  
+  const tradingViewSymbol = getTradingViewSymbol();
   
   // TradingView embed URL with parameters and drawing studies
   const getTradingViewUrl = () => {
     // Keep URL minimal; render trading levels via our SVG overlay instead
-    // Use BINANCE exchange which has better symbol coverage than PHEMEX on TradingView
-    // For major symbols, TradingView has good coverage; fallback to no exchange prefix lets TradingView auto-resolve
     const params = new URLSearchParams({
-      symbol: `BINANCE:${symbol}`,
+      symbol: tradingViewSymbol,
       interval: timeframe,
       theme: 'dark',
       style: '1', // Candlestick
@@ -95,14 +132,14 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
             {result.pair}
           </Badge>
           <span className="text-xs text-muted-foreground font-mono">
-            BINANCE
+            {tradingViewSymbol.split(':')[0]}
           </span>
         </div>
         
         {/* Fixed aspect is controlled by parent; keep iframe contained without stretching */}
         <div className="relative w-full h-full rounded-lg overflow-hidden bg-[#141416]">
           <iframe
-            key={`${symbol}-${timeframe}`} // Re-render on symbol/timeframe change
+            key={`${tradingViewSymbol}-${timeframe}`} // Re-render on symbol/timeframe change
             src={getTradingViewUrl()}
             className="absolute inset-0 w-full h-full border-0"
             title={`${result.pair} Chart`}
