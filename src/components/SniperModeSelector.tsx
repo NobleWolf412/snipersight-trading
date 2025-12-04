@@ -174,6 +174,14 @@ function getModeStyle(modeName: string) {
       bgClass: 'bg-cyan-700/35',
       textEffect: 'drop-shadow-[0_0_6px_rgba(200,200,200,0.3)] opacity-80',
     },
+    stealth: {
+      icon: Skull,
+      color: 'text-violet-300',
+      glowClass: 'bg-violet-500/30',
+      borderClass: 'ring-violet-400/60',
+      bgClass: 'bg-violet-700/35',
+      textEffect: 'drop-shadow-[0_0_6px_rgba(139,92,246,0.4)]',
+    },
   };
   
   return styles[modeName.toLowerCase()] || styles.recon;

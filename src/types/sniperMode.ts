@@ -3,7 +3,8 @@ export type SniperMode =
   | 'recon'
   | 'strike'
   | 'surgical'
-  | 'ghost'
+  | 'ghost'   // legacy alias → stealth
+  | 'stealth'
   | 'custom';
 
 export interface SniperModeConfig {
@@ -61,12 +62,22 @@ export const SNIPER_MODES: Record<SniperMode, SniperModeConfig> = {
   'ghost': {
     mode: 'ghost',
     name: '👻 Ghost',
-    description: 'Stealth surveillance across mixed horizons. Nimble, low profile, reduced macro drag.',
+    description: 'Legacy alias for Stealth mode. Use stealth for new setups.',
     timeframes: ['1d', '4h', '1h', '15m', '5m'],
     minConfluence: 70,
     holdingPeriod: 'Hours to days',
     riskReward: 1.8,
     icon: '👻'
+  },
+  'stealth': {
+    mode: 'stealth',
+    name: '🥷 Stealth',
+    description: 'Balanced swing trading with multi-TF confluence. Adaptable and mission-ready.',
+    timeframes: ['1d', '4h', '1h', '15m', '5m'],
+    minConfluence: 65,
+    holdingPeriod: 'Hours to days',
+    riskReward: 1.8,
+    icon: '🥷'
   },
   'custom': {
     mode: 'custom',
