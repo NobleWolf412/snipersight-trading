@@ -14,7 +14,7 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 
-from backend.shared.models.smc import LiquiditySweep
+from backend.shared.models.smc import LiquiditySweep, grade_pattern
 from backend.shared.config.smc_config import SMCConfig, scale_lookback
 
 
@@ -113,21 +113,28 @@ def detect_liquidity_sweeps(
             
             # Check if candle wicked above the high
             if current_candle['high'] > target_high and current_candle['close'] < target_high:
-                # Check for reversal in next few candles
-                reversal_confirmed = _check_downside_reversal(
-                    df, i, max_sweep_candles, target_high, min_reversal_atr * atr_value
+                # Check for reversal and get distance for grading
+                reversal_distance = _get_downside_reversal_distance(
+                    df, i, max_sweep_candles, target_high
                 )
                 
-                if reversal_confirmed:
+                if reversal_distance > 0:  # Any reversal detected
                     # Check volume if required
                     volume_spike = current_candle['volume'] > (avg_volume.iloc[i] * 1.5) if pd.notna(avg_volume.iloc[i]) else False
                     
                     if not require_volume_spike or volume_spike:
+                        # Grade the sweep based on reversal strength
+                        reversal_atr = reversal_distance / atr_value if atr_value > 0 else 0.0
+                        grade_a_threshold = smc_cfg.grade_a_threshold * min_reversal_atr
+                        grade_b_threshold = smc_cfg.grade_b_threshold * min_reversal_atr
+                        grade = grade_pattern(reversal_atr, grade_a_threshold, grade_b_threshold)
+                        
                         sweep = LiquiditySweep(
                             level=target_high,
                             sweep_type="high",
                             confirmation=volume_spike,
-                            timestamp=current_candle.name.to_pydatetime()
+                            timestamp=current_candle.name.to_pydatetime(),
+                            grade=grade
                         )
                         liquidity_sweeps.append(sweep)
         
@@ -137,25 +144,96 @@ def detect_liquidity_sweeps(
             
             # Check if candle wicked below the low
             if current_candle['low'] < target_low and current_candle['close'] > target_low:
-                # Check for reversal in next few candles
-                reversal_confirmed = _check_upside_reversal(
-                    df, i, max_sweep_candles, target_low, min_reversal_atr * atr_value
+                # Check for reversal and get distance for grading
+                reversal_distance = _get_upside_reversal_distance(
+                    df, i, max_sweep_candles, target_low
                 )
                 
-                if reversal_confirmed:
+                if reversal_distance > 0:  # Any reversal detected
                     # Check volume if required
                     volume_spike = current_candle['volume'] > (avg_volume.iloc[i] * 1.5) if pd.notna(avg_volume.iloc[i]) else False
                     
                     if not require_volume_spike or volume_spike:
+                        # Grade the sweep based on reversal strength
+                        reversal_atr = reversal_distance / atr_value if atr_value > 0 else 0.0
+                        grade_a_threshold = smc_cfg.grade_a_threshold * min_reversal_atr
+                        grade_b_threshold = smc_cfg.grade_b_threshold * min_reversal_atr
+                        grade = grade_pattern(reversal_atr, grade_a_threshold, grade_b_threshold)
+                        
                         sweep = LiquiditySweep(
                             level=target_low,
                             sweep_type="low",
                             confirmation=volume_spike,
-                            timestamp=current_candle.name.to_pydatetime()
+                            timestamp=current_candle.name.to_pydatetime(),
+                            grade=grade
                         )
                         liquidity_sweeps.append(sweep)
     
     return liquidity_sweeps
+
+
+def _get_downside_reversal_distance(
+    df: pd.DataFrame,
+    sweep_idx: int,
+    max_candles: int,
+    level: float
+) -> float:
+    """
+    Get the maximum downside reversal distance after sweeping a high.
+    
+    Args:
+        df: OHLCV DataFrame
+        sweep_idx: Index of the sweep candle
+        max_candles: Maximum candles to check for reversal
+        level: The level that was swept
+        
+    Returns:
+        float: Maximum distance below the level (0 if no reversal)
+    """
+    max_distance = 0.0
+    
+    # Check subsequent candles
+    for i in range(sweep_idx + 1, min(sweep_idx + max_candles + 1, len(df))):
+        candle = df.iloc[i]
+        
+        # Check distance below the swept level
+        if candle['close'] < level:
+            distance = level - candle['close']
+            max_distance = max(max_distance, distance)
+    
+    return max_distance
+
+
+def _get_upside_reversal_distance(
+    df: pd.DataFrame,
+    sweep_idx: int,
+    max_candles: int,
+    level: float
+) -> float:
+    """
+    Get the maximum upside reversal distance after sweeping a low.
+    
+    Args:
+        df: OHLCV DataFrame
+        sweep_idx: Index of the sweep candle
+        max_candles: Maximum candles to check for reversal
+        level: The level that was swept
+        
+    Returns:
+        float: Maximum distance above the level (0 if no reversal)
+    """
+    max_distance = 0.0
+    
+    # Check subsequent candles
+    for i in range(sweep_idx + 1, min(sweep_idx + max_candles + 1, len(df))):
+        candle = df.iloc[i]
+        
+        # Check distance above the swept level
+        if candle['close'] > level:
+            distance = candle['close'] - level
+            max_distance = max(max_distance, distance)
+    
+    return max_distance
 
 
 def _check_downside_reversal(
@@ -167,6 +245,7 @@ def _check_downside_reversal(
 ) -> bool:
     """
     Check if price reversed to downside after sweeping a high.
+    DEPRECATED: Use _get_downside_reversal_distance for grading.
     
     Args:
         df: OHLCV DataFrame
@@ -178,15 +257,7 @@ def _check_downside_reversal(
     Returns:
         bool: True if reversal confirmed
     """
-    # Check subsequent candles
-    for i in range(sweep_idx + 1, min(sweep_idx + max_candles + 1, len(df))):
-        candle = df.iloc[i]
-        
-        # Check if price moved significantly below the swept level
-        if candle['close'] < level - min_distance:
-            return True
-    
-    return False
+    return _get_downside_reversal_distance(df, sweep_idx, max_candles, level) >= min_distance
 
 
 def _check_upside_reversal(
@@ -198,6 +269,7 @@ def _check_upside_reversal(
 ) -> bool:
     """
     Check if price reversed to upside after sweeping a low.
+    DEPRECATED: Use _get_upside_reversal_distance for grading.
     
     Args:
         df: OHLCV DataFrame
@@ -209,15 +281,7 @@ def _check_upside_reversal(
     Returns:
         bool: True if reversal confirmed
     """
-    # Check subsequent candles
-    for i in range(sweep_idx + 1, min(sweep_idx + max_candles + 1, len(df))):
-        candle = df.iloc[i]
-        
-        # Check if price moved significantly above the swept level
-        if candle['close'] > level + min_distance:
-            return True
-    
-    return False
+    return _get_upside_reversal_distance(df, sweep_idx, max_candles, level) >= min_distance
 
 
 def detect_equal_highs_lows(

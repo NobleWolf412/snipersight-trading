@@ -204,6 +204,213 @@ def evaluate_macd_for_mode(
     }
 
 
+def evaluate_weekly_stoch_rsi_bonus(
+    indicators: IndicatorSet,
+    direction: str,
+    oversold_threshold: float = 20.0,
+    overbought_threshold: float = 80.0,
+    max_bonus: float = 15.0,
+    max_penalty: float = 10.0
+) -> Dict:
+    """
+    Evaluate Weekly StochRSI as a directional BONUS system (not a hard gate).
+    
+    This function calculates a score bonus/penalty based on Weekly StochRSI position
+    and crossover events. It influences direction selection through scoring, not gating.
+    
+    Bonus Logic:
+    - K line crossing ABOVE 20 (from oversold): +15 bonus for LONG, -10 for SHORT
+    - K line crossing BELOW 80 (from overbought): +15 bonus for SHORT, -10 for LONG
+    - K in oversold zone (<20): +10 for LONG (anticipation), +5 for SHORT (momentum)
+    - K in overbought zone (>80): +10 for SHORT (anticipation), +5 for LONG (momentum)
+    - K in neutral zone (20-80): No bonus either direction
+    
+    The bonus system means BOTH directions can still trade, but the direction aligned
+    with Weekly StochRSI gets a meaningful score advantage.
+    
+    Args:
+        indicators: Technical indicators across timeframes (must contain '1W')
+        direction: Trade direction ("bullish" or "bearish")
+        oversold_threshold: K value below this is oversold (default 20)
+        overbought_threshold: K value above this is overbought (default 80)
+        max_bonus: Maximum bonus for aligned direction (default 15)
+        max_penalty: Maximum penalty for contra direction (default 10)
+        
+    Returns:
+        Dict with:
+            - bonus: float - score adjustment for this direction (can be negative)
+            - reason: str - explanation of bonus calculation
+            - weekly_k: float - current Weekly StochRSI K value
+            - weekly_k_prev: float - previous Weekly StochRSI K value
+            - crossover_type: str - 'bullish_cross', 'bearish_cross', 'entering_oversold', 
+                              'entering_overbought', 'in_oversold', 'in_overbought', 'neutral'
+            - aligned: bool - whether this direction is aligned with Weekly StochRSI
+    """
+    result = {
+        "bonus": 0.0,
+        "reason": "Weekly StochRSI data unavailable",
+        "weekly_k": None,
+        "weekly_k_prev": None,
+        "crossover_type": "neutral",
+        "aligned": True  # Default to aligned if no data
+    }
+    
+    # Get weekly indicators
+    weekly_ind = indicators.by_timeframe.get('1W') or indicators.by_timeframe.get('1w')
+    if not weekly_ind:
+        return result
+    
+    # Get current and previous K values
+    k_current = getattr(weekly_ind, 'stoch_rsi_k', None)
+    if k_current is None:
+        k_current = getattr(weekly_ind, 'stoch_rsi', None)
+    k_prev = getattr(weekly_ind, 'stoch_rsi_k_prev', None)
+    
+    if k_current is None:
+        return result
+    
+    result["weekly_k"] = k_current
+    result["weekly_k_prev"] = k_prev
+    
+    is_bullish = direction.lower() in ("bullish", "long")
+    
+    # === CROSSOVER DETECTION (requires previous value) ===
+    if k_prev is not None:
+        # Bullish crossover: K crosses UP through oversold threshold (20)
+        bullish_cross = k_prev < oversold_threshold and k_current >= oversold_threshold
+        
+        # Bearish crossover: K crosses DOWN through overbought threshold (80)
+        bearish_cross = k_prev > overbought_threshold and k_current <= overbought_threshold
+        
+        # Entering oversold (bearish momentum building)
+        entering_oversold = k_prev >= oversold_threshold and k_current < oversold_threshold
+        
+        # Entering overbought (bullish momentum building)
+        entering_overbought = k_prev <= overbought_threshold and k_current > overbought_threshold
+        
+        if bullish_cross:
+            result["crossover_type"] = "bullish_cross"
+            if is_bullish:
+                result["bonus"] = max_bonus
+                result["aligned"] = True
+                result["reason"] = f"Weekly StochRSI bullish cross ({k_prev:.1f}→{k_current:.1f}) - LONG strongly favored (+{max_bonus:.0f})"
+            else:
+                result["bonus"] = -max_penalty
+                result["aligned"] = False
+                result["reason"] = f"Weekly StochRSI bullish cross conflicts with SHORT (-{max_penalty:.0f})"
+                
+        elif bearish_cross:
+            result["crossover_type"] = "bearish_cross"
+            if not is_bullish:
+                result["bonus"] = max_bonus
+                result["aligned"] = True
+                result["reason"] = f"Weekly StochRSI bearish cross ({k_prev:.1f}→{k_current:.1f}) - SHORT strongly favored (+{max_bonus:.0f})"
+            else:
+                result["bonus"] = -max_penalty
+                result["aligned"] = False
+                result["reason"] = f"Weekly StochRSI bearish cross conflicts with LONG (-{max_penalty:.0f})"
+                
+        elif entering_oversold:
+            result["crossover_type"] = "entering_oversold"
+            if not is_bullish:
+                result["bonus"] = 8.0  # Following momentum
+                result["aligned"] = True
+                result["reason"] = f"Weekly StochRSI entering oversold ({k_current:.1f}) - SHORT momentum bonus (+8)"
+            else:
+                result["bonus"] = 5.0  # Anticipation (could reverse soon)
+                result["aligned"] = True  # Not contra, just waiting
+                result["reason"] = f"Weekly StochRSI entering oversold ({k_current:.1f}) - LONG anticipation (+5)"
+                
+        elif entering_overbought:
+            result["crossover_type"] = "entering_overbought"
+            if is_bullish:
+                result["bonus"] = 8.0  # Following momentum
+                result["aligned"] = True
+                result["reason"] = f"Weekly StochRSI entering overbought ({k_current:.1f}) - LONG momentum bonus (+8)"
+            else:
+                result["bonus"] = 5.0  # Anticipation (could reverse soon)
+                result["aligned"] = True  # Not contra, just waiting
+                result["reason"] = f"Weekly StochRSI entering overbought ({k_current:.1f}) - SHORT anticipation (+5)"
+        else:
+            # No crossover - use position-based bonuses
+            result = _position_based_stoch_bonus(k_current, is_bullish, oversold_threshold, 
+                                                  overbought_threshold, result)
+    else:
+        # No previous value - use position-based bonuses only
+        result = _position_based_stoch_bonus(k_current, is_bullish, oversold_threshold,
+                                              overbought_threshold, result)
+    
+    return result
+
+
+def _position_based_stoch_bonus(
+    k_current: float,
+    is_bullish: bool,
+    oversold_threshold: float,
+    overbought_threshold: float,
+    result: Dict
+) -> Dict:
+    """
+    Calculate position-based Weekly StochRSI bonus when no crossover detected.
+    """
+    if k_current < oversold_threshold:
+        result["crossover_type"] = "in_oversold"
+        if is_bullish:
+            result["bonus"] = 10.0  # In prime reversal zone
+            result["aligned"] = True
+            result["reason"] = f"Weekly StochRSI oversold ({k_current:.1f}) - LONG reversal zone (+10)"
+        else:
+            result["bonus"] = 5.0  # Following momentum, but may reverse
+            result["aligned"] = True
+            result["reason"] = f"Weekly StochRSI oversold ({k_current:.1f}) - SHORT momentum (+5)"
+            
+    elif k_current > overbought_threshold:
+        result["crossover_type"] = "in_overbought"
+        if not is_bullish:
+            result["bonus"] = 10.0  # In prime reversal zone
+            result["aligned"] = True
+            result["reason"] = f"Weekly StochRSI overbought ({k_current:.1f}) - SHORT reversal zone (+10)"
+        else:
+            result["bonus"] = 5.0  # Following momentum, but may reverse
+            result["aligned"] = True
+            result["reason"] = f"Weekly StochRSI overbought ({k_current:.1f}) - LONG momentum (+5)"
+    else:
+        result["crossover_type"] = "neutral"
+        result["bonus"] = 0.0
+        result["aligned"] = True
+        result["reason"] = f"Weekly StochRSI neutral ({k_current:.1f}) - no directional bonus"
+    
+    return result
+
+
+# Legacy alias for backward compatibility
+def evaluate_weekly_stoch_rsi_gate(
+    indicators: IndicatorSet,
+    direction: str,
+    oversold_threshold: float = 20.0,
+    overbought_threshold: float = 80.0
+) -> Dict:
+    """
+    Legacy gate function - now wraps the bonus system.
+    
+    For backward compatibility, converts bonus to gate_passed based on whether
+    the bonus is negative (failed gate) or non-negative (passed gate).
+    """
+    bonus_result = evaluate_weekly_stoch_rsi_bonus(
+        indicators, direction, oversold_threshold, overbought_threshold
+    )
+    
+    return {
+        "gate_passed": bonus_result["bonus"] >= 0,
+        "reason": bonus_result["reason"],
+        "weekly_k": bonus_result["weekly_k"],
+        "weekly_k_prev": bonus_result["weekly_k_prev"],
+        "crossover_type": bonus_result["crossover_type"],
+        "bonus": bonus_result["bonus"],
+        "aligned": bonus_result["aligned"]
+    }
+
+
 def calculate_confluence_score(
     smc_snapshot: SMCSnapshot,
     indicators: IndicatorSet,
@@ -428,6 +635,84 @@ def calculate_confluence_score(
                 rationale=f"BTC trend ({btc_impulse}) supports {direction} setup"
             ))
     
+    # --- Weekly StochRSI Bonus ---
+    # Directional bonus/penalty system based on weekly momentum
+    # Replaces the old hard gate - no longer blocks, just influences score
+    weekly_stoch_rsi_bonus = 0.0
+    weekly_stoch_rsi_analysis = None
+    
+    if getattr(config, 'weekly_stoch_rsi_gate_enabled', True):  # Config key kept for backward compat
+        weekly_stoch_rsi_analysis = evaluate_weekly_stoch_rsi_bonus(
+            indicators=indicators,
+            direction=direction,
+            oversold_threshold=getattr(config, 'weekly_stoch_rsi_oversold', 20.0),
+            overbought_threshold=getattr(config, 'weekly_stoch_rsi_overbought', 80.0)
+        )
+        
+        weekly_stoch_rsi_bonus = weekly_stoch_rsi_analysis["bonus"]
+        is_aligned = weekly_stoch_rsi_analysis.get("aligned", True)
+        
+        # Add as a factor that influences but doesn't block
+        if weekly_stoch_rsi_bonus > 0:
+            # Positive bonus - momentum aligned with direction
+            # Convert bonus to 0-100 scale for factor (bonus max is ~15, so scale by 6.67)
+            factor_score = min(100.0, 50.0 + weekly_stoch_rsi_bonus * 3.33)
+            factors.append(ConfluenceFactor(
+                name="Weekly StochRSI Bonus",
+                score=factor_score,
+                weight=0.10,
+                rationale=f"[+{weekly_stoch_rsi_bonus:.1f}] {weekly_stoch_rsi_analysis['reason']}"
+            ))
+            logger.debug("📈 Weekly StochRSI BONUS +%.1f: %s", weekly_stoch_rsi_bonus, weekly_stoch_rsi_analysis["reason"])
+        elif weekly_stoch_rsi_bonus < 0:
+            # Negative bonus (penalty) - momentum opposes direction
+            # Penalty reduces score but doesn't block (penalty max is -10)
+            factor_score = max(0.0, 50.0 + weekly_stoch_rsi_bonus * 5.0)  # -10 penalty = 0 score
+            factors.append(ConfluenceFactor(
+                name="Weekly StochRSI Bonus",
+                score=factor_score,
+                weight=0.08,  # Lower weight for penalties
+                rationale=f"[{weekly_stoch_rsi_bonus:.1f}] {weekly_stoch_rsi_analysis['reason']}"
+            ))
+            logger.debug("📉 Weekly StochRSI PENALTY %.1f: %s", weekly_stoch_rsi_bonus, weekly_stoch_rsi_analysis["reason"])
+        # For zero bonus (neutral), no factor added - doesn't help or hurt
+    
+    # --- HTF Structure Bias (HH/HL/LH/LL) ---
+    # Score based on swing structure alignment with trade direction
+    # This is KEY for pullback trading - HTF trend defines preferred direction
+    htf_structure_bonus = 0.0
+    htf_structure_analysis = None
+    
+    if smc_snapshot.swing_structure:
+        htf_structure_analysis = _score_htf_structure_bias(
+            swing_structure=smc_snapshot.swing_structure,
+            direction=direction
+        )
+        htf_structure_bonus = htf_structure_analysis['bonus']
+        
+        if htf_structure_bonus != 0:
+            # Add as weighted factor
+            if htf_structure_bonus > 0:
+                # Aligned with HTF structure → bonus
+                factor_score = min(100.0, 50.0 + htf_structure_bonus * 3.33)
+                factors.append(ConfluenceFactor(
+                    name="HTF Structure Bias",
+                    score=factor_score,
+                    weight=0.12,  # Significant weight for HTF alignment
+                    rationale=f"[+{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}"
+                ))
+                logger.debug("📊 HTF Structure BONUS +%.1f: %s", htf_structure_bonus, htf_structure_analysis['reason'])
+            else:
+                # Counter-trend → penalty (but not blocking)
+                factor_score = max(0.0, 50.0 + htf_structure_bonus * 5.0)
+                factors.append(ConfluenceFactor(
+                    name="HTF Structure Bias",
+                    score=factor_score,
+                    weight=0.08,
+                    rationale=f"[{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}"
+                ))
+                logger.debug("⚠️ HTF Structure PENALTY %.1f: %s", htf_structure_bonus, htf_structure_analysis['reason'])
+    
     # --- Normalize Weights ---
     
     # If no factors present, return minimal breakdown
@@ -439,7 +724,8 @@ def calculate_confluence_score(
             conflict_penalty=0.0,
             regime="unknown",
             htf_aligned=False,
-            btc_impulse_gate=True
+            btc_impulse_gate=True,
+            weekly_stoch_rsi_gate=True
         )
     
     # If not all factors present, weights won't sum to 1.0 - normalize them
@@ -489,6 +775,8 @@ def calculate_confluence_score(
         regime=regime,
         htf_aligned=htf_aligned,
         btc_impulse_gate=btc_impulse_gate,
+        weekly_stoch_rsi_gate=True,  # DEPRECATED - always True (no longer a hard gate)
+        weekly_stoch_rsi_bonus=weekly_stoch_rsi_bonus,  # NEW bonus system
         htf_proximity_atr=(htf_context or {}).get('within_atr'),
         htf_proximity_pct=(htf_context or {}).get('within_pct'),
         nearest_htf_level_timeframe=(htf_context or {}).get('timeframe'),
@@ -498,10 +786,113 @@ def calculate_confluence_score(
     return breakdown
 
 
+# --- HTF Structure Bias Scoring ---
+
+def _score_htf_structure_bias(swing_structure: dict, direction: str) -> dict:
+    """
+    Score setup based on HTF swing structure (HH/HL/LH/LL).
+    
+    This is the key function for pullback trading:
+    - If Weekly/Daily shows bullish structure (HH/HL), LONG setups get bonus
+    - If Weekly/Daily shows bearish structure (LH/LL), SHORT setups get bonus
+    - Pullback entries (LTF against HTF → BOS back toward HTF) score highest
+    
+    Args:
+        swing_structure: Dict of {timeframe: SwingStructure.to_dict()}
+        direction: "LONG" or "SHORT"
+        
+    Returns:
+        dict with 'bonus' (float), 'reason' (str), 'htf_bias' (str)
+    """
+    if not swing_structure:
+        return {'bonus': 0.0, 'reason': 'No HTF swing structure data', 'htf_bias': 'neutral'}
+    
+    # Prioritize timeframes: Weekly > Daily > 4H
+    htf_priority = ['1W', '1D', '4H']
+    
+    bullish_tfs = []
+    bearish_tfs = []
+    
+    for tf in htf_priority:
+        if tf in swing_structure:
+            ss = swing_structure[tf]
+            trend = ss.get('trend', 'neutral')
+            if trend == 'bullish':
+                bullish_tfs.append(tf)
+            elif trend == 'bearish':
+                bearish_tfs.append(tf)
+    
+    # Calculate bias strength based on HTF alignment
+    # Weekly trend = 2 points, Daily = 1.5 points, 4H = 1 point
+    tf_weights = {'1W': 2.0, '1D': 1.5, '4H': 1.0}
+    
+    bullish_strength = sum(tf_weights.get(tf, 0) for tf in bullish_tfs)
+    bearish_strength = sum(tf_weights.get(tf, 0) for tf in bearish_tfs)
+    
+    # Determine overall HTF bias
+    if bullish_strength > bearish_strength + 0.5:
+        htf_bias = 'bullish'
+        bias_strength = bullish_strength
+    elif bearish_strength > bullish_strength + 0.5:
+        htf_bias = 'bearish'
+        bias_strength = bearish_strength
+    else:
+        htf_bias = 'neutral'
+        bias_strength = 0.0
+    
+    # Calculate directional bonus
+    bonus = 0.0
+    reason_parts = []
+    
+    # Direction aligns with HTF bias → strong bonus
+    if (direction == 'LONG' and htf_bias == 'bullish'):
+        # Bonus scales with strength: max +15 for full Weekly+Daily+4H alignment
+        bonus = min(15.0, bias_strength * 3.5)
+        reason_parts.append(f"HTF structure bullish ({', '.join(bullish_tfs)})")
+        reason_parts.append("LONG aligns with HTF trend")
+        
+    elif (direction == 'SHORT' and htf_bias == 'bearish'):
+        bonus = min(15.0, bias_strength * 3.5)
+        reason_parts.append(f"HTF structure bearish ({', '.join(bearish_tfs)})")
+        reason_parts.append("SHORT aligns with HTF trend")
+        
+    # Counter-trend setup → penalty (but not blocking)
+    elif (direction == 'LONG' and htf_bias == 'bearish'):
+        bonus = max(-8.0, -bias_strength * 2.0)
+        reason_parts.append(f"HTF structure bearish ({', '.join(bearish_tfs)})")
+        reason_parts.append("LONG is counter-trend (caution)")
+        
+    elif (direction == 'SHORT' and htf_bias == 'bullish'):
+        bonus = max(-8.0, -bias_strength * 2.0)
+        reason_parts.append(f"HTF structure bullish ({', '.join(bullish_tfs)})")
+        reason_parts.append("SHORT is counter-trend (caution)")
+    
+    else:
+        # Neutral HTF - no bonus or penalty
+        reason_parts.append("HTF structure neutral/mixed")
+    
+    return {
+        'bonus': bonus,
+        'reason': '; '.join(reason_parts) if reason_parts else 'No HTF bias detected',
+        'htf_bias': htf_bias,
+        'bullish_tfs': bullish_tfs,
+        'bearish_tfs': bearish_tfs
+    }
+
+
+# --- Grade Weighting Constants ---
+# Pattern grades affect base score: A = 100%, B = 70%, C = 40%
+GRADE_WEIGHTS = {'A': 1.0, 'B': 0.7, 'C': 0.4}
+
+def _get_grade_weight(grade: str) -> float:
+    """Get weight multiplier for a pattern grade."""
+    return GRADE_WEIGHTS.get(grade, 0.7)  # Default to B weight if unknown
+
+
 # --- SMC Scoring Functions ---
 
 def _score_order_blocks(order_blocks: List[OrderBlock], direction: str) -> float:
-    """Score order blocks based on quality and alignment."""
+    """Score order blocks based on quality, alignment, and grade."""
     if not order_blocks:
         return 0.0
     
@@ -511,25 +902,30 @@ def _score_order_blocks(order_blocks: List[OrderBlock], direction: str) -> float
     if not aligned_obs:
         return 0.0
     
-    # Find best OB (highest freshness and displacement, lowest mitigation)
+    # Find best OB (highest freshness and displacement, lowest mitigation, best grade)
     best_ob = max(aligned_obs, key=lambda ob: (
-        ob.freshness_score * 0.4 +
-        min(ob.displacement_strength / 3.0, 1.0) * 0.4 +
-        (1.0 - ob.mitigation_level) * 0.2
+        ob.freshness_score * 0.3 +
+        min(ob.displacement_strength / 3.0, 1.0) * 0.3 +
+        (1.0 - ob.mitigation_level) * 0.2 +
+        _get_grade_weight(getattr(ob, 'grade', 'B')) * 0.2  # Grade factor
     ))
     
     # Score based on OB quality
-    score = (
+    base_score = (
         best_ob.freshness_score * 40 +
         min(best_ob.displacement_strength / 2.0, 1.0) * 40 +
         (1.0 - best_ob.mitigation_level) * 20
     )
     
+    # Apply grade weighting to final score
+    grade_weight = _get_grade_weight(getattr(best_ob, 'grade', 'B'))
+    score = base_score * grade_weight
+    
     return min(100.0, score)
 
 
 def _score_fvgs(fvgs: List[FVG], direction: str) -> float:
-    """Score FVGs based on size and unfilled status."""
+    """Score FVGs based on size, unfilled status, and grade."""
     if not fvgs:
         return 0.0
     
@@ -542,18 +938,28 @@ def _score_fvgs(fvgs: List[FVG], direction: str) -> float:
     unfilled = [fvg for fvg in aligned_fvgs if fvg.overlap_with_price < 0.5]
     
     if not unfilled:
-        return 30.0  # Some credit even if filled
+        # Still give credit for filled FVGs, weighted by grade
+        best_filled = max(aligned_fvgs, key=lambda fvg: fvg.size * _get_grade_weight(getattr(fvg, 'grade', 'B')))
+        grade_weight = _get_grade_weight(getattr(best_filled, 'grade', 'B'))
+        return 30.0 * grade_weight
     
-    # Score based on size and unfilled status
-    best_fvg = max(unfilled, key=lambda fvg: fvg.size * (1.0 - fvg.overlap_with_price))
+    # Score based on size, unfilled status, and grade
+    best_fvg = max(unfilled, key=lambda fvg: (
+        fvg.size * (1.0 - fvg.overlap_with_price) * 
+        _get_grade_weight(getattr(fvg, 'grade', 'B'))
+    ))
     
-    score = 70 + (1.0 - best_fvg.overlap_with_price) * 30
+    base_score = 70 + (1.0 - best_fvg.overlap_with_price) * 30
+    
+    # Apply grade weighting
+    grade_weight = _get_grade_weight(getattr(best_fvg, 'grade', 'B'))
+    score = base_score * grade_weight
     
     return min(100.0, score)
 
 
 def _score_structural_breaks(breaks: List[StructuralBreak], direction: str) -> float:
-    """Score structural breaks (BOS/CHoCH)."""
+    """Score structural breaks (BOS/CHoCH) with grade weighting."""
     if not breaks:
         return 0.0
     
@@ -570,11 +976,15 @@ def _score_structural_breaks(breaks: List[StructuralBreak], direction: str) -> f
     if latest_break.htf_aligned:
         base_score += 20.0
     
-    return min(100.0, base_score)
+    # Apply grade weighting
+    grade_weight = _get_grade_weight(getattr(latest_break, 'grade', 'B'))
+    score = base_score * grade_weight
+    
+    return min(100.0, score)
 
 
 def _score_liquidity_sweeps(sweeps: List[LiquiditySweep], direction: str) -> float:
-    """Score liquidity sweeps."""
+    """Score liquidity sweeps with grade weighting."""
     if not sweeps:
         return 0.0
     
@@ -591,7 +1001,11 @@ def _score_liquidity_sweeps(sweeps: List[LiquiditySweep], direction: str) -> flo
     latest_sweep = max(aligned_sweeps, key=lambda s: s.timestamp)
     
     # Score based on confirmation
-    score = 70.0 if latest_sweep.confirmation else 50.0
+    base_score = 70.0 if latest_sweep.confirmation else 50.0
+    
+    # Apply grade weighting
+    grade_weight = _get_grade_weight(getattr(latest_sweep, 'grade', 'B'))
+    score = base_score * grade_weight
     
     return score
 
@@ -970,7 +1384,8 @@ def _get_ob_rationale(order_blocks: List[OrderBlock], direction: str) -> str:
         return "No aligned order blocks"
     
     best = max(aligned, key=lambda ob: ob.freshness_score)
-    return f"Fresh {direction} OB with {best.displacement_strength:.1f}x ATR displacement, {best.mitigation_level*100:.0f}% mitigated"
+    grade = getattr(best, 'grade', 'B')
+    return f"Fresh {direction} OB [Grade {grade}] with {best.displacement_strength:.1f}x ATR displacement, {best.mitigation_level*100:.0f}% mitigated"
 
 
 def _get_fvg_rationale(fvgs: List[FVG], direction: str) -> str:
@@ -981,7 +1396,9 @@ def _get_fvg_rationale(fvgs: List[FVG], direction: str) -> str:
     
     unfilled = [fvg for fvg in aligned if fvg.overlap_with_price < 0.5]
     if unfilled:
-        return f"{len(unfilled)} unfilled {direction} FVG(s) present"
+        grades = [getattr(fvg, 'grade', 'B') for fvg in unfilled]
+        grade_summary = f"[Grades: {', '.join(grades)}]" if len(grades) <= 3 else f"[Best: {min(grades)}]"
+        return f"{len(unfilled)} unfilled {direction} FVG(s) {grade_summary}"
     else:
         return f"{len(aligned)} {direction} FVG(s), partially filled"
 
@@ -993,7 +1410,8 @@ def _get_structure_rationale(breaks: List[StructuralBreak], direction: str) -> s
     
     latest = max(breaks, key=lambda b: b.timestamp)
     htf_status = "HTF aligned" if latest.htf_aligned else "LTF only"
-    return f"Recent {latest.break_type} ({htf_status})"
+    grade = getattr(latest, 'grade', 'B')
+    return f"Recent {latest.break_type} [Grade {grade}] ({htf_status})"
 
 
 def _get_sweep_rationale(sweeps: List[LiquiditySweep], direction: str) -> str:
@@ -1006,7 +1424,8 @@ def _get_sweep_rationale(sweeps: List[LiquiditySweep], direction: str) -> str:
     
     latest = max(aligned, key=lambda s: s.timestamp)
     conf_status = "volume confirmed" if latest.confirmation else "no volume confirmation"
-    return f"Recent {target_type} sweep ({conf_status})"
+    grade = getattr(latest, 'grade', 'B')
+    return f"Recent {target_type} sweep [Grade {grade}] ({conf_status})"
 
 
 def _get_momentum_rationale(indicators: IndicatorSnapshot, direction: str) -> str:

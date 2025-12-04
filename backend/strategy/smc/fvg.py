@@ -14,7 +14,7 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 
-from backend.shared.models.smc import FVG
+from backend.shared.models.smc import FVG, grade_pattern
 from backend.shared.config.smc_config import SMCConfig
 
 
@@ -83,24 +83,31 @@ def detect_fvgs(df: pd.DataFrame, config: SMCConfig | dict | None = None) -> Lis
             gap_bottom = candle_0['high']
             gap_size = gap_top - gap_bottom
             
-            # Filter by minimum gap size
-            atr_value = atr.iloc[i] if pd.notna(atr.iloc[i]) else 0
-            if atr_value > 0 and gap_size / atr_value >= min_gap_atr:
-                # Check overlap with middle candle (should be minimal)
-                overlap = _calculate_overlap_bullish(candle_1, gap_bottom, gap_top)
+            # Check overlap with middle candle (should be minimal)
+            overlap = _calculate_overlap_bullish(candle_1, gap_bottom, gap_top)
+            
+            if overlap <= max_overlap:
+                # Calculate gap size in ATR units for grading (not rejection)
+                atr_value = atr.iloc[i] if pd.notna(atr.iloc[i]) else 0
+                gap_atr = gap_size / atr_value if atr_value > 0 else 0.0
                 
-                if overlap <= max_overlap:
-                    fvg = FVG(
-                        timeframe=_infer_timeframe(df),
-                        direction="bullish",
-                        top=gap_top,
-                        bottom=gap_bottom,
-                        timestamp=candle_2.name.to_pydatetime(),
-                        size=gap_size,
-                        overlap_with_price=0.0,  # Will be updated if price revisits
-                        freshness_score=1.0  # Start fresh, decay applied later
-                    )
-                    fvgs.append(fvg)
+                # Grade the FVG based on gap size (A = significant, B = moderate, C = small)
+                grade_a_threshold = smc_cfg.grade_a_threshold * min_gap_atr
+                grade_b_threshold = smc_cfg.grade_b_threshold * min_gap_atr
+                grade = grade_pattern(gap_atr, grade_a_threshold, grade_b_threshold)
+                
+                fvg = FVG(
+                    timeframe=_infer_timeframe(df),
+                    direction="bullish",
+                    top=gap_top,
+                    bottom=gap_bottom,
+                    timestamp=candle_2.name.to_pydatetime(),
+                    size=gap_size,
+                    overlap_with_price=0.0,  # Will be updated if price revisits
+                    freshness_score=1.0,  # Start fresh, decay applied later
+                    grade=grade
+                )
+                fvgs.append(fvg)
         
         # Check for bearish FVG
         # Gap exists if candle_0.low > candle_2.high
@@ -109,24 +116,31 @@ def detect_fvgs(df: pd.DataFrame, config: SMCConfig | dict | None = None) -> Lis
             gap_bottom = candle_2['high']
             gap_size = gap_top - gap_bottom
             
-            # Filter by minimum gap size
-            atr_value = atr.iloc[i] if pd.notna(atr.iloc[i]) else 0
-            if atr_value > 0 and gap_size / atr_value >= min_gap_atr:
-                # Check overlap with middle candle (should be minimal)
-                overlap = _calculate_overlap_bearish(candle_1, gap_bottom, gap_top)
+            # Check overlap with middle candle (should be minimal)
+            overlap = _calculate_overlap_bearish(candle_1, gap_bottom, gap_top)
+            
+            if overlap <= max_overlap:
+                # Calculate gap size in ATR units for grading (not rejection)
+                atr_value = atr.iloc[i] if pd.notna(atr.iloc[i]) else 0
+                gap_atr = gap_size / atr_value if atr_value > 0 else 0.0
                 
-                if overlap <= max_overlap:
-                    fvg = FVG(
-                        timeframe=_infer_timeframe(df),
-                        direction="bearish",
-                        top=gap_top,
-                        bottom=gap_bottom,
-                        timestamp=candle_2.name.to_pydatetime(),
-                        size=gap_size,
-                        overlap_with_price=0.0,
-                        freshness_score=1.0  # Start fresh, decay applied later
-                    )
-                    fvgs.append(fvg)
+                # Grade the FVG based on gap size (A = significant, B = moderate, C = small)
+                grade_a_threshold = smc_cfg.grade_a_threshold * min_gap_atr
+                grade_b_threshold = smc_cfg.grade_b_threshold * min_gap_atr
+                grade = grade_pattern(gap_atr, grade_a_threshold, grade_b_threshold)
+                
+                fvg = FVG(
+                    timeframe=_infer_timeframe(df),
+                    direction="bearish",
+                    top=gap_top,
+                    bottom=gap_bottom,
+                    timestamp=candle_2.name.to_pydatetime(),
+                    size=gap_size,
+                    overlap_with_price=0.0,
+                    freshness_score=1.0,  # Start fresh, decay applied later
+                    grade=grade
+                )
+                fvgs.append(fvg)
     
     # Update overlap_with_price and freshness_score for all FVGs based on current price and time
     if len(fvgs) > 0 and len(df) > 0:

@@ -111,32 +111,26 @@ def scale_lookback(base_lookback: int, timeframe: str, min_lookback: int = 3, ma
 @dataclass
 class SMCConfig:
     # Order Block parameters
-    min_wick_ratio: float = 1.5  # Lowered from 2.0 - still requires significant wick
-    min_displacement_atr: float = 1.0  # Lowered from 1.5 - more OBs detected
-    ob_lookback_candles: int = 7  # Increased from 5 - more time to verify displacement
-    ob_volume_threshold: float = 1.3  # Lowered from 1.5 - easier volume confirmation
-    ob_max_mitigation: float = 0.85  # Increased from 0.8 - keep slightly more mitigated OBs
-    ob_min_freshness: float = 0.05  # Lowered from 0.1 - keep older OBs longer
+    min_wick_ratio: float = 2.0  # Require significant rejection wick (2x body)
+    min_displacement_atr: float = 1.5  # Strong displacement required
+    ob_lookback_candles: int = 10  # Wider lookback for OB displacement check
+    ob_volume_threshold: float = 1.5  # Require volume spike for valid OB
+    ob_max_mitigation: float = 0.75  # Reject heavily mitigated OBs
+    ob_min_freshness: float = 0.1  # Require reasonably fresh OBs
 
     # Fair Value Gap parameters
-    fvg_min_gap_atr: float = 0.2  # Lowered from 0.3 - detect smaller FVGs
-    fvg_max_overlap: float = 0.15  # Increased from 0.1 - allow slightly more overlap
+    fvg_min_gap_atr: float = 0.5  # Only significant FVGs (0.5 ATR minimum)
+    fvg_max_overlap: float = 0.10  # Strict overlap tolerance
 
     # Structural Break parameters
-    structure_swing_lookback: int = 7  # Increased from 5 - wider search
-    structure_min_break_distance_atr: float = 0.4  # Lowered from 0.5 - detect smaller breaks
+    structure_swing_lookback: int = 15  # Wider lookback catches real swings, not noise
+    structure_min_break_distance_atr: float = 1.0  # Only count significant breaks (1 ATR)
 
     # Liquidity Sweep parameters
-    sweep_swing_lookback: int = 12  # Increased from 10 - wider search
-    sweep_max_sweep_candles: int = 4  # Increased from 3 - more flexible sweep detection
-    sweep_min_reversal_atr: float = 0.8  # Lowered from 1.0 - detect smaller reversals
-    sweep_require_volume_spike: bool = False
-
-    # Grade thresholds for pattern quality scoring (new grading system)
-    # Patterns are graded A/B/C instead of rejected
-    grade_a_threshold: float = 1.0   # ATR multiplier for Grade A (excellent)
-    grade_b_threshold: float = 0.5   # ATR multiplier for Grade B (good)
-    # Below grade_b_threshold = Grade C (marginal but still detected)
+    sweep_swing_lookback: int = 20  # Wider search for sweep targets
+    sweep_max_sweep_candles: int = 3  # Tight sweep window
+    sweep_min_reversal_atr: float = 1.0  # Require meaningful reversal
+    sweep_require_volume_spike: bool = False  # Keep flexible for now
 
     @staticmethod
     def defaults() -> "SMCConfig":
@@ -153,7 +147,7 @@ class SMCConfig:
         - Rare FVGs (only large, unfilled gaps)
         - Only fresh, unmitigated order blocks
         
-        Higher grade thresholds mean only the strongest patterns get Grade A.
+        Expect ~1-2% of candles to have structure labels.
         """
         return SMCConfig(
             # Order Blocks: Only strong rejections with clear displacement
@@ -176,11 +170,7 @@ class SMCConfig:
             sweep_swing_lookback=30,
             sweep_max_sweep_candles=2,     # Tight window
             sweep_min_reversal_atr=1.5,    # Strong reversal required
-            sweep_require_volume_spike=True,  # Must have volume confirmation
-            
-            # Grade thresholds: Stricter for high-quality only
-            grade_a_threshold=1.5,         # 1.5x ATR for Grade A
-            grade_b_threshold=1.0,         # 1.0x ATR for Grade B
+            sweep_require_volume_spike=True  # Must have volume confirmation
         )
     
     @staticmethod
@@ -190,7 +180,6 @@ class SMCConfig:
         
         Finds more patterns at the cost of more noise.
         Useful for understanding market structure or backtesting.
-        Lower grade thresholds mean more patterns get higher grades.
         """
         return SMCConfig(
             min_wick_ratio=1.5,
@@ -206,11 +195,7 @@ class SMCConfig:
             sweep_swing_lookback=15,
             sweep_max_sweep_candles=4,
             sweep_min_reversal_atr=0.7,
-            sweep_require_volume_spike=False,
-            
-            # Grade thresholds: Lenient for research
-            grade_a_threshold=0.5,         # 0.5x ATR for Grade A
-            grade_b_threshold=0.3,         # 0.3x ATR for Grade B
+            sweep_require_volume_spike=False
         )
 
     def validate(self) -> None:
@@ -267,39 +252,3 @@ class SMCConfig:
                 setattr(base, key, value)
         base.validate()
         return base
-    
-    def calculate_grade(self, atr_ratio: float) -> str:
-        """
-        Calculate pattern grade based on ATR ratio and this config's thresholds.
-        
-        Args:
-            atr_ratio: The ATR-normalized value (e.g., displacement/ATR)
-            
-        Returns:
-            'A' (excellent), 'B' (good), or 'C' (marginal)
-        """
-        if atr_ratio >= self.grade_a_threshold:
-            return 'A'
-        elif atr_ratio >= self.grade_b_threshold:
-            return 'B'
-        else:
-            return 'C'
-
-
-def get_preset(preset_name: str) -> SMCConfig:
-    """
-    Get an SMC configuration preset by name.
-    
-    Args:
-        preset_name: One of 'defaults', 'luxalgo_strict', 'sensitive'
-        
-    Returns:
-        SMCConfig instance
-    """
-    presets = {
-        'defaults': SMCConfig.defaults,
-        'luxalgo_strict': SMCConfig.luxalgo_strict,
-        'sensitive': SMCConfig.sensitive,
-    }
-    factory = presets.get(preset_name, SMCConfig.defaults)
-    return factory()

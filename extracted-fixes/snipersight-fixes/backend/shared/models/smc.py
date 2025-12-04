@@ -10,12 +10,8 @@ This module defines data structures for institutional trading patterns:
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Dict, Any
 from enum import Enum
-
-
-# Pattern quality grade - A (excellent), B (good), C (marginal)
-PatternGrade = Literal['A', 'B', 'C']
 
 
 class CyclePhase(str, Enum):
@@ -92,8 +88,6 @@ class OrderBlock:
     displacement_strength: float
     mitigation_level: float
     freshness_score: float
-    grade: PatternGrade = 'B'  # Quality grade: A (excellent), B (good), C (marginal)
-    displacement_atr: float = 0.0  # ATR-normalized displacement for reference
     
     def __post_init__(self):
         """Validate order block data."""
@@ -143,8 +137,6 @@ class FVG:
     size: float
     overlap_with_price: float  # 0.0 (fresh) to 1.0 (completely filled)
     freshness_score: float = 1.0  # Time-based decay, similar to OB
-    grade: PatternGrade = 'B'  # Quality grade: A (excellent), B (good), C (marginal)
-    size_atr: float = 0.0  # ATR-normalized gap size for reference
     
     def __post_init__(self):
         """Validate FVG data."""
@@ -189,9 +181,6 @@ class StructuralBreak:
     level: float
     timestamp: datetime
     htf_aligned: bool
-    grade: PatternGrade = 'B'  # Quality grade: A (excellent), B (good), C (marginal)
-    break_distance_atr: float = 0.0  # ATR-normalized break distance for reference
-    direction: Literal["bullish", "bearish"] = "bullish"  # Direction of the break
     
     @property
     def is_continuation(self) -> bool:
@@ -217,13 +206,11 @@ class LiquiditySweep:
         sweep_type: 'high' (swept above) or 'low' (swept below)
         confirmation: Whether sweep was confirmed by reversal
         timestamp: When the sweep occurred
-        grade: Pattern quality grade (A/B/C) based on reversal strength
     """
     level: float
     sweep_type: Literal["high", "low"]
     confirmation: bool
     timestamp: datetime
-    grade: PatternGrade = 'B'  # Graded by reversal strength in ATR units
     
     @property
     def is_confirmed(self) -> bool:
@@ -247,6 +234,9 @@ class SMCSnapshot:
         liquidity_sweeps: List of all detected liquidity sweeps
         equal_highs: Price levels with clustered equal highs (liquidity pools)
         equal_lows: Price levels with clustered equal lows (liquidity pools)
+        swing_structure: Swing point labels (HH/HL/LH/LL) per timeframe
+        key_levels: PWH/PWL/PDH/PDL levels
+        premium_discount: Premium/Discount zone analysis
     """
     order_blocks: List[OrderBlock]
     fvgs: List[FVG]
@@ -254,9 +244,10 @@ class SMCSnapshot:
     liquidity_sweeps: List[LiquiditySweep]
     equal_highs: List[float] = field(default_factory=list)
     equal_lows: List[float] = field(default_factory=list)
-    swing_structure: dict = field(default_factory=dict)  # {timeframe: SwingStructure.to_dict()}
-    premium_discount: dict = field(default_factory=dict)  # {timeframe: PremiumDiscountZone.to_dict()}
-    key_levels: Optional[dict] = None  # KeyLevels.to_dict()
+    # New LuxAlgo-style fields
+    swing_structure: Optional[Dict[str, Any]] = None  # TF -> SwingStructure
+    key_levels: Optional[Any] = None  # KeyLevels object
+    premium_discount: Optional[Dict[str, Any]] = None  # TF -> PremiumDiscountZone
     
     def __post_init__(self):
         """Initialize empty lists if None provided."""
@@ -462,41 +453,3 @@ class ReversalContext:
     def is_high_confidence(self) -> bool:
         """Check if reversal has high confidence (3+ components)."""
         return self.component_count >= 3 and self.confidence >= 70.0
-
-
-# --- Pattern Grading Helper ---
-
-def grade_pattern(
-    value: float,
-    atr: float,
-    a_threshold: float = 1.5,
-    b_threshold: float = 1.0
-) -> PatternGrade:
-    """
-    Grade a pattern based on its ATR-relative strength.
-    
-    This replaces hard rejection with soft grading:
-    - Grade A: Excellent pattern (value >= a_threshold * ATR)
-    - Grade B: Good pattern (value >= b_threshold * ATR)  
-    - Grade C: Marginal pattern (below b_threshold)
-    
-    Args:
-        value: The pattern's characteristic value (displacement, gap size, etc.)
-        atr: Current ATR for normalization
-        a_threshold: ATR multiplier for Grade A (default 1.5)
-        b_threshold: ATR multiplier for Grade B (default 1.0)
-        
-    Returns:
-        PatternGrade: 'A', 'B', or 'C'
-    """
-    if atr <= 0:
-        return 'B'  # Can't grade without ATR, default to B
-    
-    atr_ratio = value / atr
-    
-    if atr_ratio >= a_threshold:
-        return 'A'
-    elif atr_ratio >= b_threshold:
-        return 'B'
-    else:
-        return 'C'

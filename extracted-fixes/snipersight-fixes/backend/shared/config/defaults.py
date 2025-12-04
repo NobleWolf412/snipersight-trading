@@ -21,10 +21,6 @@ class ScanConfig:
     min_confluence_score: float = 65.0
     min_rr_ratio: float = 0.8  # Temporarily lowered for testing
     btc_impulse_gate_enabled: bool = True
-    # Weekly StochRSI gate - universal directional filter
-    weekly_stoch_rsi_gate_enabled: bool = True
-    weekly_stoch_rsi_oversold: float = 20.0  # Below this = bullish bias
-    weekly_stoch_rsi_overbought: float = 80.0  # Above this = bearish bias
     # Macro overlay (dominance/flows) toggle - disabled by default until fully wired
     macro_overlay_enabled: bool = False
     max_symbols: int = 20
@@ -32,7 +28,7 @@ class ScanConfig:
     leverage: int = 1  # Added: user-selected leverage to allow planner adaptive buffers/targets
     
     # SMC detection preset: 'defaults', 'luxalgo_strict', or 'sensitive'
-    smc_preset: str = "defaults"
+    smc_preset: str = "luxalgo_strict"
     
     # Planner-specific knobs (wired from scanner mode)
     primary_planning_timeframe: str = "4H"

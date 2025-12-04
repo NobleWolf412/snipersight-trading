@@ -1431,6 +1431,14 @@ def _calculate_targets(
             if ob.direction == "bearish" and ob.low > avg_entry:
                 resistances.append(ob.low)
         
+        # Add key levels as resistance targets (PWH, PDH)
+        if smc_snapshot.key_levels:
+            kl = smc_snapshot.key_levels
+            if kl.get('pdh') and kl['pdh'].get('price', 0) > avg_entry:
+                resistances.append(kl['pdh']['price'])
+            if kl.get('pwh') and kl['pwh'].get('price', 0) > avg_entry:
+                resistances.append(kl['pwh']['price'])
+        
         if resistances and min(resistances) < target1_rr:
             target1_level = min(resistances)
             target1_rationale = "Nearest bearish structure (resistance)"
@@ -1504,6 +1512,14 @@ def _calculate_targets(
                 continue
             if ob.direction == "bullish" and ob.high < avg_entry:
                 supports.append(ob.high)
+        
+        # Add key levels as support targets (PWL, PDL)
+        if smc_snapshot.key_levels:
+            kl = smc_snapshot.key_levels
+            if kl.get('pdl') and kl['pdl'].get('price', 0) < avg_entry:
+                supports.append(kl['pdl']['price'])
+            if kl.get('pwl') and kl['pwl'].get('price', 0) < avg_entry:
+                supports.append(kl['pwl']['price'])
         
         if supports and max(supports) > target1_rr:
             target1_level = max(supports)

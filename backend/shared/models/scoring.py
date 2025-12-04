@@ -62,14 +62,18 @@ class ConfluenceBreakdown:
         regime: Market regime classification
         htf_aligned: Whether setup aligns with higher timeframe trend
         btc_impulse_gate: Whether BTC impulse gate is passed (if enabled)
+        weekly_stoch_rsi_gate: DEPRECATED - Always True (kept for backward compat)
+        weekly_stoch_rsi_bonus: Weekly StochRSI directional bonus/penalty (-10 to +15)
     """
     total_score: float
     factors: List[ConfluenceFactor]
     synergy_bonus: float
     conflict_penalty: float
-    regime: Literal["trend", "range", "risk_on", "risk_off"]
+    regime: Literal["trend", "range", "risk_on", "risk_off", "choppy", "unknown"]
     htf_aligned: bool
     btc_impulse_gate: bool
+    weekly_stoch_rsi_gate: bool = True  # DEPRECATED - always True now
+    weekly_stoch_rsi_bonus: float = 0.0  # NEW - directional bonus/penalty
     # Optional HTF proximity context (for transparency in UI/telemetry)
     htf_proximity_atr: Optional[float] = None
     htf_proximity_pct: Optional[float] = None
@@ -127,6 +131,7 @@ class ConfluenceBreakdown:
         lines.append(f"Regime: {self.regime.upper()}")
         lines.append(f"HTF Aligned: {'✓' if self.htf_aligned else '✗'}")
         lines.append(f"BTC Impulse Gate: {'✓' if self.btc_impulse_gate else '✗'}")
+        lines.append(f"Weekly StochRSI Gate: {'✓' if self.weekly_stoch_rsi_gate else '✗'}")
         lines.append("")
         lines.append("Factor Breakdown:")
         

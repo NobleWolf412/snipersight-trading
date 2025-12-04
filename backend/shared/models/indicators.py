@@ -66,6 +66,9 @@ class IndicatorSnapshot:
     # Momentum (optional fields)
     stoch_rsi_k: Optional[float] = None
     stoch_rsi_d: Optional[float] = None
+    # Previous bar values for crossover detection (Weekly StochRSI gate)
+    stoch_rsi_k_prev: Optional[float] = None
+    stoch_rsi_d_prev: Optional[float] = None
     mfi: Optional[float] = None
     
     # Mean Reversion (optional fields)
@@ -78,6 +81,11 @@ class IndicatorSnapshot:
     # Volume (optional fields)
     volume_ratio: Optional[float] = None
     obv: Optional[float] = None
+    obv_trend: Optional[str] = None  # 'rising', 'falling', 'flat' for scoring
+    
+    # VWAP context
+    vwap: Optional[float] = None
+    price_vs_vwap: Optional[float] = None  # Current price - VWAP (positive = above)
     
     # Trend (all optional)
     ema_9: Optional[float] = None

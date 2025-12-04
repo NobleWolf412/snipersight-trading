@@ -114,25 +114,30 @@ def detect_order_blocks(
             displacement = _calculate_displacement_bullish(df, i, lookback_candles)
             displacement_atr = displacement / atr.iloc[i] if atr.iloc[i] > 0 else 0
             
-            if displacement_atr >= min_displacement_atr:
-                # Volume confirmation (optional)
-                volume_spike = candle['volume'] > (avg_volume.iloc[i] * volume_threshold) if pd.notna(avg_volume.iloc[i]) else False
-                
-                # Normalize displacement to 0-100 scale
-                # 1.5 ATR = 50 (minimum), 3.0 ATR = 100 (maximum)
-                normalized_displacement = min(100.0, (displacement_atr / 3.0) * 100.0)
-                
-                ob = OrderBlock(
-                    timeframe=_infer_timeframe(df),
-                    direction="bullish",
-                    high=candle['high'],
-                    low=candle['low'],
-                    timestamp=candle.name.to_pydatetime(),
-                    displacement_strength=normalized_displacement,
-                    mitigation_level=0.0,  # Not yet mitigated
-                    freshness_score=1.0  # Will be updated later
-                )
-                order_blocks.append(ob)
+            # NEW GRADING MODEL: Always detect, assign grade based on ATR ratio
+            # Grade A = strong, Grade B = moderate, Grade C = weak but detected
+            grade = smc_cfg.calculate_grade(displacement_atr)
+            
+            # Volume confirmation (optional)
+            volume_spike = candle['volume'] > (avg_volume.iloc[i] * volume_threshold) if pd.notna(avg_volume.iloc[i]) else False
+            
+            # Normalize displacement to 0-100 scale
+            # 1.5 ATR = 50 (minimum), 3.0 ATR = 100 (maximum)
+            normalized_displacement = min(100.0, (displacement_atr / 3.0) * 100.0)
+            
+            ob = OrderBlock(
+                timeframe=_infer_timeframe(df),
+                direction="bullish",
+                high=candle['high'],
+                low=candle['low'],
+                timestamp=candle.name.to_pydatetime(),
+                displacement_strength=normalized_displacement,
+                mitigation_level=0.0,  # Not yet mitigated
+                freshness_score=1.0,  # Will be updated later
+                grade=grade,
+                displacement_atr=displacement_atr,
+            )
+            order_blocks.append(ob)
         
         # Check for bearish order block (strong rejection from resistance)
         if upper_wick / body >= min_wick_ratio:
@@ -140,23 +145,27 @@ def detect_order_blocks(
             displacement = _calculate_displacement_bearish(df, i, lookback_candles)
             displacement_atr = displacement / atr.iloc[i] if atr.iloc[i] > 0 else 0
             
-            if displacement_atr >= min_displacement_atr:
-                volume_spike = candle['volume'] > (avg_volume.iloc[i] * volume_threshold) if pd.notna(avg_volume.iloc[i]) else False
-                
-                # Normalize displacement to 0-100 scale
-                normalized_displacement = min(100.0, (displacement_atr / 3.0) * 100.0)
-                
-                ob = OrderBlock(
-                    timeframe=_infer_timeframe(df),
-                    direction="bearish",
-                    high=candle['high'],
-                    low=candle['low'],
-                    timestamp=candle.name.to_pydatetime(),
-                    displacement_strength=normalized_displacement,
-                    mitigation_level=0.0,
-                    freshness_score=1.0
-                )
-                order_blocks.append(ob)
+            # NEW GRADING MODEL: Always detect, assign grade based on ATR ratio
+            grade = smc_cfg.calculate_grade(displacement_atr)
+            
+            volume_spike = candle['volume'] > (avg_volume.iloc[i] * volume_threshold) if pd.notna(avg_volume.iloc[i]) else False
+            
+            # Normalize displacement to 0-100 scale
+            normalized_displacement = min(100.0, (displacement_atr / 3.0) * 100.0)
+            
+            ob = OrderBlock(
+                timeframe=_infer_timeframe(df),
+                direction="bearish",
+                high=candle['high'],
+                low=candle['low'],
+                timestamp=candle.name.to_pydatetime(),
+                displacement_strength=normalized_displacement,
+                mitigation_level=0.0,
+                freshness_score=1.0,
+                grade=grade,
+                displacement_atr=displacement_atr,
+            )
+            order_blocks.append(ob)
     
     # Update mitigation and freshness for all order blocks
     current_time = df.index[-1].to_pydatetime()

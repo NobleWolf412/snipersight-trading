@@ -215,23 +215,31 @@ MODES: Dict[str, ScannerMode] = {
         min_target_move_pct=0.4,  # TUNED: was 0.6 - allow tighter surgical precision
         overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0008, "bias_gate": 0.7, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True},
     ),
-    "ghost": ScannerMode(
-        name="ghost",
-        description="Ghost mode: stealth surveillance across mixed horizons; nimble, low profile, reduced macro drag.",
+    # STEALTH replaces both RECON and GHOST (merged per SMC_PIPELINE_REFACTOR.md)
+    # Use stealth_strict=False for balanced (was RECON), stealth_strict=True for higher conviction (was GHOST)
+    "stealth": ScannerMode(
+        name="stealth",
+        description="Stealth mode: balanced swing trading with multi-TF confluence; adaptable and mission-ready.",
         timeframes=("1d", "4h", "1h", "15m", "5m"),
-        min_confluence_score=70.0,
+        min_confluence_score=65.0,  # Base threshold (use 70.0 with stealth_strict=True)
         profile="stealth_balanced",
-        critical_timeframes=("1h",),  # 1H essential for multi-horizon context
+        critical_timeframes=("4h", "1h"),  # Essential for swing context
         primary_planning_timeframe="1h",
         max_pullback_atr=3.0,
-        min_stop_atr=0.2,   # TUNED: was 0.3 - ghost needs flexibility
-        max_stop_atr=4.5,   # TUNED: was 6.0 - cap via max_stop_atr validation
-        entry_timeframes=("1h", "15m", "5m"),  # TUNED: added 1h - more entry flexibility
-        structure_timeframes=("1d", "4h", "1h", "15m"),  # RESTORED: HTF structure for target clipping
-        stop_timeframes=("15m", "5m"),  # TUNED: added 5m for tighter stops
-        target_timeframes=("1h", "15m"),  # TUNED: added 15m for nimble exits
-        min_target_move_pct=0.5,  # TUNED: was 0.7 - allow tighter stealth scalps
-        overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0010, "bias_gate": 0.7, "htf_swing_allowed": ("4h", "1h")},
+        min_stop_atr=0.2,
+        max_stop_atr=4.5,
+        entry_timeframes=("1h", "15m", "5m"),
+        structure_timeframes=("1d", "4h", "1h"),  # HTF structure for target clipping
+        stop_timeframes=("15m", "5m"),
+        target_timeframes=("1h", "15m"),
+        min_target_move_pct=0.5,
+        overrides={
+            "min_rr_ratio": 1.8,
+            "atr_floor": 0.0015,
+            "bias_gate": 0.65,
+            "htf_swing_allowed": ("4h", "1h"),
+            "stealth_strict": False,  # Set True for higher conviction mode
+        },
     ),
 }
 
@@ -261,8 +269,44 @@ def list_modes() -> List[Dict[str, object]]:
 
 
 def get_mode(name: str) -> ScannerMode:
-    """Lookup a scanner mode by name (case-insensitive)."""
+    """
+    Lookup a scanner mode by name (case-insensitive).
+    
+    Backward compatibility mappings:
+    - 'recon' → 'stealth' (stealth_strict=False)
+    - 'ghost' → 'stealth' (stealth_strict=True, higher min_confluence)
+    """
     key = name.lower()
+    
+    # Backward compatibility: map old mode names to stealth
+    if key == "recon":
+        # RECON → STEALTH with relaxed settings (default stealth behavior)
+        return MODES["stealth"]
+    elif key == "ghost":
+        # GHOST → STEALTH with strict settings
+        # Create new instance with modified values (dataclass is frozen)
+        base = MODES["stealth"]
+        new_overrides = dict(base.overrides or {})
+        new_overrides["stealth_strict"] = True
+        return ScannerMode(
+            name=base.name,
+            description="Stealth mode (strict): higher conviction threshold for quality setups.",
+            timeframes=base.timeframes,
+            min_confluence_score=70.0,  # Higher conviction
+            profile=base.profile,
+            critical_timeframes=base.critical_timeframes,
+            primary_planning_timeframe=base.primary_planning_timeframe,
+            max_pullback_atr=base.max_pullback_atr,
+            min_stop_atr=base.min_stop_atr,
+            max_stop_atr=base.max_stop_atr,
+            entry_timeframes=base.entry_timeframes,
+            structure_timeframes=base.structure_timeframes,
+            stop_timeframes=base.stop_timeframes,
+            target_timeframes=base.target_timeframes,
+            min_target_move_pct=base.min_target_move_pct,
+            overrides=new_overrides,
+        )
+    
     if key not in MODES:
         raise ValueError(f"Unknown scanner mode: {name}")
     return MODES[key]

@@ -52,16 +52,16 @@ from backend.strategy.smc.order_blocks import detect_order_blocks
 from backend.strategy.smc.fvg import detect_fvgs
 from backend.strategy.smc.bos_choch import detect_structural_breaks
 from backend.strategy.smc.liquidity_sweeps import detect_liquidity_sweeps, detect_equal_highs_lows
-from backend.strategy.smc.swing_structure import detect_swing_structure, SwingStructure
 from backend.strategy.smc.cycle_detector import detect_cycle_context, should_boost_direction, CycleConfig
 from backend.strategy.smc.reversal_detector import detect_reversal_context, get_reversal_rationale_for_plan
 from backend.strategy.smc.volume_profile import calculate_volume_profile, VolumeProfile
-from backend.strategy.smc.mitigation_tracker import update_ob_mitigation, MitigationStatus
+from backend.strategy.smc.swing_structure import detect_swing_structure
+from backend.strategy.smc.mitigation_tracker import update_ob_mitigation, update_fvg_fill_status
 from backend.shared.config.smc_config import SMCConfig
 from backend.strategy.confluence.scorer import calculate_confluence_score
 from backend.analysis.htf_levels import HTFLevelDetector
-from backend.analysis.premium_discount import detect_premium_discount, PremiumDiscountZone, get_optimal_entry_zone
-from backend.analysis.key_levels import detect_key_levels, KeyLevels, get_nearest_level
+from backend.analysis.key_levels import detect_key_levels
+from backend.analysis.premium_discount import detect_premium_discount
 from backend.strategy.planner.planner_service import generate_trade_plan
 from backend.risk.risk_manager import RiskManager
 from backend.risk.position_sizer import PositionSizer
@@ -142,8 +142,14 @@ class Orchestrator:
             max_risk_pct=2.0
         )
 
-        # Smart Money Concepts configuration (extracted parameters)
-        self.smc_config = SMCConfig.defaults()
+        # Smart Money Concepts configuration - use preset from config
+        smc_preset = getattr(self.config, 'smc_preset', 'defaults')
+        if smc_preset == 'luxalgo_strict':
+            self.smc_config = SMCConfig.luxalgo_strict()
+        elif smc_preset == 'sensitive':
+            self.smc_config = SMCConfig.sensitive()
+        else:
+            self.smc_config = SMCConfig.defaults()
         
         # Load scanner mode for critical timeframe tracking
         self.scanner_mode = get_mode(self.config.profile)
@@ -929,10 +935,10 @@ class Orchestrator:
         all_liquidity_sweeps = []
         all_equal_highs = []
         all_equal_lows = []
-        swing_structure_by_tf = {}  # HTF swing structure (HH/HL/LH/LL)
-        premium_discount_by_tf = {}  # Premium/Discount zone analysis
+        swing_structure_by_tf = {}
+        premium_discount_by_tf = {}
         
-        # Get current price for premium/discount and key level detection
+        # Get current price for mitigation/fill tracking
         current_price = self._get_current_price(multi_tf_data)
         
         for _timeframe, df in multi_tf_data.timeframes.items():
@@ -942,11 +948,28 @@ class Orchestrator:
             try:
                 # Order blocks
                 obs = detect_order_blocks(df, self.smc_config)
-                all_order_blocks.extend(obs)
                 
                 # Fair value gaps
                 fvgs = detect_fvgs(df, self.smc_config)
-                all_fvgs.extend(fvgs)
+                
+                # Update mitigation/fill status and filter to fresh only
+                if obs:
+                    fresh_obs, ob_status = update_ob_mitigation(
+                        obs, df, 
+                        max_mitigation=self.smc_config.ob_max_mitigation
+                    )
+                    all_order_blocks.extend(fresh_obs)
+                    logger.debug("%s OBs: %d detected, %d fresh", 
+                                _timeframe, ob_status.original_count, ob_status.fresh_count)
+                
+                if fvgs:
+                    fresh_fvgs, fvg_status = update_fvg_fill_status(
+                        fvgs, df,
+                        max_fill=0.5  # Only keep FVGs less than 50% filled
+                    )
+                    all_fvgs.extend(fresh_fvgs)
+                    logger.debug("%s FVGs: %d detected, %d fresh",
+                                _timeframe, fvg_status.original_count, fvg_status.fresh_count)
                 
                 # Structure breaks
                 breaks = detect_structural_breaks(df, self.smc_config)
@@ -964,43 +987,55 @@ class Orchestrator:
                 except Exception:
                     pass  # Non-critical, continue without
                 
-                # Swing structure (HH/HL/LH/LL) - primarily for HTF bias
-                # Run on Weekly, Daily, 4H for directional bias detection
-                if _timeframe in ('1W', '1D', '4H'):
-                    try:
-                        swing_struct = detect_swing_structure(
-                            df, 
-                            lookback=getattr(self.smc_config, 'structure_swing_lookback', 15)
-                        )
-                        swing_structure_by_tf[_timeframe] = swing_struct.to_dict()
-                        logger.debug("📊 %s Swing structure: trend=%s, last_HH=%s, last_HL=%s",
-                                   _timeframe, swing_struct.trend,
-                                   f"{swing_struct.last_hh.price:.4f}" if swing_struct.last_hh else "N/A",
-                                   f"{swing_struct.last_hl.price:.4f}" if swing_struct.last_hl else "N/A")
-                    except Exception as e:
-                        logger.debug("Swing structure detection failed for %s: %s", _timeframe, e)
+                # Swing structure (HH/HL/LH/LL)
+                try:
+                    swing_struct = detect_swing_structure(
+                        df, 
+                        lookback=self.smc_config.structure_swing_lookback
+                    )
+                    swing_structure_by_tf[_timeframe] = swing_struct.to_dict()
+                except Exception as e:
+                    logger.debug("Swing structure detection failed for %s: %s", _timeframe, e)
                 
-                # Premium/Discount zone detection - run on all TFs for entry optimization
+                # Premium/Discount zones
                 try:
                     pd_zone = detect_premium_discount(df, lookback=50, current_price=current_price)
                     premium_discount_by_tf[_timeframe] = pd_zone.to_dict()
-                    logger.debug("📊 %s P/D Zone: %s (%.1f%%)", 
-                               _timeframe, pd_zone.current_zone, pd_zone.zone_percentage or 50)
                 except Exception as e:
                     logger.debug("Premium/Discount detection failed for %s: %s", _timeframe, e)
                 
                 # Log SMC detections per timeframe
+                fresh_ob_count = len([ob for ob in all_order_blocks if ob.timeframe == _timeframe])
+                fresh_fvg_count = len([f for f in all_fvgs if f.timeframe == _timeframe])
                 logger.info("🎯 %s SMC: OB=%d | FVG=%d | BOS/CHoCH=%d | Sweeps=%d",
                            _timeframe,
-                           len(obs),
-                           len(fvgs),
-                           len(breaks),
+                           fresh_ob_count,
+                           fresh_fvg_count,
+                           len([b for b in breaks]),
                            len(sweeps))
                 
             except Exception as e:
                 logger.warning("SMC detection failed for %s: %s", _timeframe, e)
                 self.diagnostics['smc_rejections'].append({'timeframe': _timeframe, 'error': str(e)})
                 continue
+        
+        # Detect key levels (PWH/PWL/PDH/PDL) from daily data
+        key_levels = None
+        if '1D' in multi_tf_data.timeframes and len(multi_tf_data.timeframes['1D']) >= 8:
+            try:
+                weekly_df = multi_tf_data.timeframes.get('1W')
+                key_levels = detect_key_levels(
+                    multi_tf_data.timeframes['1D'],
+                    df_weekly=weekly_df if weekly_df is not None and len(weekly_df) >= 2 else None,
+                    current_price=current_price
+                )
+                logger.info("📊 Key levels: PDH=%.4f PDL=%.4f PWH=%s PWL=%s",
+                           key_levels.pdh.price if key_levels.pdh else 0,
+                           key_levels.pdl.price if key_levels.pdl else 0,
+                           f"{key_levels.pwh.price:.4f}" if key_levels.pwh else "N/A",
+                           f"{key_levels.pwl.price:.4f}" if key_levels.pwl else "N/A")
+            except Exception as e:
+                logger.debug("Key levels detection failed: %s", e)
         
         # Deduplicate equal highs/lows (they may repeat across TFs)
         unique_equal_highs = list(set(all_equal_highs))
@@ -1010,43 +1045,6 @@ class Orchestrator:
             logger.info("💧 Liquidity pools: %d equal highs, %d equal lows",
                        len(unique_equal_highs), len(unique_equal_lows))
         
-        # Log HTF swing structure summary
-        if swing_structure_by_tf:
-            for tf, ss in swing_structure_by_tf.items():
-                logger.info("📈 %s Structure: %s trend", tf, ss.get('trend', 'unknown'))
-        
-        # --- Key Levels Detection (PWH/PWL/PDH/PDL) ---
-        key_levels_data = None
-        try:
-            df_daily = multi_tf_data.timeframes.get('1D')
-            df_weekly = multi_tf_data.timeframes.get('1W')
-            if df_daily is not None and len(df_daily) >= 2:
-                key_levels = detect_key_levels(df_daily, df_weekly, current_price)
-                key_levels_data = key_levels.to_dict()
-                logger.info("🔑 Key Levels: PDH=%.4f PDL=%.4f PWH=%s PWL=%s",
-                           key_levels.pdh.price if key_levels.pdh else 0,
-                           key_levels.pdl.price if key_levels.pdl else 0,
-                           f"{key_levels.pwh.price:.4f}" if key_levels.pwh else "N/A",
-                           f"{key_levels.pwl.price:.4f}" if key_levels.pwl else "N/A")
-        except Exception as e:
-            logger.debug("Key levels detection failed: %s", e)
-        
-        # --- Mitigation Tracking (update OB freshness) ---
-        # Use the most recent LTF data to check for mitigation
-        try:
-            ltf_df = multi_tf_data.timeframes.get('15m') or multi_tf_data.timeframes.get('1H')
-            if ltf_df is not None and len(ltf_df) > 0 and all_order_blocks:
-                all_order_blocks, mitigation_status = update_ob_mitigation(
-                    all_order_blocks, ltf_df, max_mitigation=0.5
-                )
-                if mitigation_status.fully_mitigated_count > 0:
-                    logger.info("🔄 OB Mitigation: %d fully mitigated, %d partial, %d fresh",
-                               mitigation_status.fully_mitigated_count,
-                               mitigation_status.partially_mitigated_count,
-                               mitigation_status.fresh_count)
-        except Exception as e:
-            logger.debug("Mitigation tracking failed: %s", e)
-        
         return SMCSnapshot(
             order_blocks=all_order_blocks,
             fvgs=all_fvgs,
@@ -1055,8 +1053,8 @@ class Orchestrator:
             equal_highs=unique_equal_highs,
             equal_lows=unique_equal_lows,
             swing_structure=swing_structure_by_tf,
-            premium_discount=premium_discount_by_tf,
-            key_levels=key_levels_data
+            key_levels=key_levels,
+            premium_discount=premium_discount_by_tf
         )
     
     def _compute_confluence_score(self, context: SniperContext) -> ConfluenceBreakdown:

@@ -13,7 +13,7 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 
-from backend.shared.models.smc import StructuralBreak, grade_pattern
+from backend.shared.models.smc import StructuralBreak
 from backend.shared.config.smc_config import SMCConfig, scale_lookback
 
 # Conditional import for type hints to avoid circular imports
@@ -128,20 +128,10 @@ def detect_structural_breaks(
         
         atr_value = atr.iloc[i] if pd.notna(atr.iloc[i]) else 0
         
-        # Calculate grading thresholds for structural breaks
-        grade_a_threshold = smc_cfg.grade_a_threshold * min_break_distance_atr
-        grade_b_threshold = smc_cfg.grade_b_threshold * min_break_distance_atr
-        
         # Check for breaks in uptrend
         if current_trend == "uptrend":
             # BOS: Break above previous swing high (continuation)
-            # Detect any break above swing high, then grade by distance
-            break_distance = current_close - last_swing_high
-            if break_distance > 0:  # Any break above
-                # Calculate break in ATR units for grading
-                break_atr = break_distance / atr_value if atr_value > 0 else 0.0
-                grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
-                
+            if current_close > last_swing_high + (min_break_distance_atr * atr_value):
                 # HTF alignment: BOS in uptrend aligns if HTF is also uptrend or unknown
                 htf_aligned = _check_bos_htf_alignment("uptrend", computed_htf_trend)
                 
@@ -150,8 +140,7 @@ def detect_structural_breaks(
                     break_type="BOS",
                     level=last_swing_high,
                     timestamp=current_idx.to_pydatetime(),
-                    htf_aligned=htf_aligned,
-                    grade=grade
+                    htf_aligned=htf_aligned
                 )
                 structural_breaks.append(structural_break)
                 
@@ -160,13 +149,7 @@ def detect_structural_breaks(
                 last_swing_high = current_high
             
             # CHoCH: Break below previous swing low (reversal)
-            # Detect any break below swing low, then grade by distance
-            break_distance = last_swing_low - current_close
-            if break_distance > 0:  # Any break below
-                # Calculate break in ATR units for grading
-                break_atr = break_distance / atr_value if atr_value > 0 else 0.0
-                grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
-                
+            elif current_close < last_swing_low - (min_break_distance_atr * atr_value):
                 # HTF alignment: CHoCH in uptrend aligns if HTF is downtrend
                 # Or bypassed if at cycle extreme (structure broken at cycle low/high)
                 htf_aligned = _check_choch_htf_alignment("uptrend", computed_htf_trend, cycle_context)
@@ -176,8 +159,7 @@ def detect_structural_breaks(
                     break_type="CHoCH",
                     level=last_swing_low,
                     timestamp=current_idx.to_pydatetime(),
-                    htf_aligned=htf_aligned,
-                    grade=grade
+                    htf_aligned=htf_aligned
                 )
                 structural_breaks.append(structural_break)
                 
@@ -190,13 +172,7 @@ def detect_structural_breaks(
         # Check for breaks in downtrend
         elif current_trend == "downtrend":
             # BOS: Break below previous swing low (continuation)
-            # Detect any break below swing low, then grade by distance
-            break_distance = last_swing_low - current_close
-            if break_distance > 0:  # Any break below
-                # Calculate break in ATR units for grading
-                break_atr = break_distance / atr_value if atr_value > 0 else 0.0
-                grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
-                
+            if current_close < last_swing_low - (min_break_distance_atr * atr_value):
                 # HTF alignment: BOS in downtrend aligns if HTF is also downtrend or unknown
                 htf_aligned = _check_bos_htf_alignment("downtrend", computed_htf_trend)
                 
@@ -205,8 +181,7 @@ def detect_structural_breaks(
                     break_type="BOS",
                     level=last_swing_low,
                     timestamp=current_idx.to_pydatetime(),
-                    htf_aligned=htf_aligned,
-                    grade=grade
+                    htf_aligned=htf_aligned
                 )
                 structural_breaks.append(structural_break)
                 
@@ -215,13 +190,7 @@ def detect_structural_breaks(
                 last_swing_low = current_low
             
             # CHoCH: Break above previous swing high (reversal)
-            # Detect any break above swing high, then grade by distance
-            break_distance = current_close - last_swing_high
-            if break_distance > 0:  # Any break above
-                # Calculate break in ATR units for grading
-                break_atr = break_distance / atr_value if atr_value > 0 else 0.0
-                grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
-                
+            elif current_close > last_swing_high + (min_break_distance_atr * atr_value):
                 # HTF alignment: CHoCH in downtrend aligns if HTF is uptrend
                 # Or bypassed if at cycle extreme (structure broken at cycle low/high)
                 htf_aligned = _check_choch_htf_alignment("downtrend", computed_htf_trend, cycle_context)
@@ -231,8 +200,7 @@ def detect_structural_breaks(
                     break_type="CHoCH",
                     level=last_swing_high,
                     timestamp=current_idx.to_pydatetime(),
-                    htf_aligned=htf_aligned,
-                    grade=grade
+                    htf_aligned=htf_aligned
                 )
                 structural_breaks.append(structural_break)
                 
