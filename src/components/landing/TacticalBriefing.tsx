@@ -254,14 +254,14 @@ function DimensionIndicator({
 // Dominance bar visualization
 function DominanceBar({ btcD, altD, stableD }: { btcD: number; altD: number; stableD: number }) {
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-muted-foreground">
-        <ChartPie size={14} />
-        <span>MARKET DOMINANCE</span>
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-muted-foreground pb-1">
+        <ChartPie size={14} className="flex-shrink-0" />
+        <span className="whitespace-nowrap">MARKET DOMINANCE</span>
       </div>
       
       {/* Stacked bar */}
-      <div className="h-4 rounded-full overflow-hidden flex bg-muted/20">
+      <div className="h-5 rounded-full overflow-hidden flex bg-muted/20">
         <div 
           className="bg-orange-500 transition-all duration-700 flex items-center justify-center"
           style={{ width: `${btcD}%` }}
