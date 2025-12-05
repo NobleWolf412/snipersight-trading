@@ -31,39 +31,51 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
   
   /**
    * Map our symbols to TradingView-compatible format.
-   * TradingView supports: BINANCE (spot), BYBIT (perps), OKX, etc.
-   * For perpetual futures, BYBIT has the best coverage on TradingView.
-   * Symbol formats:
-   * - BYBIT perpetuals: BYBIT:BTCUSDT.P or BYBIT:BTCUSDT
-   * - BINANCE spot: BINANCE:BTCUSDT
-   * - Auto-detect lets TradingView find the best match
+   * 
+   * TradingView symbol coverage priority:
+   * 1. BINANCE spot - best coverage for all pairs
+   * 2. BYBIT perpetuals - good for major perps
+   * 3. COINBASE - good fallback for majors
+   * 
+   * Common issues:
+   * - Phemex uses different symbol names (e.g., 1000PEPE vs PEPE)
+   * - Some altcoins only exist on certain exchanges
+   * - Perpetual suffixes vary (.P, PERP, -PERP)
    */
   const getTradingViewSymbol = (): string => {
-    // Remove any trailing .P or perp suffix that might be in our symbol
-    const cleanSymbol = baseSymbol.replace(/\.P$/i, '').replace(/PERP$/i, '');
+    // Clean up the symbol - remove perp suffixes and normalize
+    let cleanSymbol = baseSymbol
+      .replace(/\.P$/i, '')
+      .replace(/PERP$/i, '')
+      .replace(/-PERP$/i, '')
+      .toUpperCase();
     
-    // For perpetuals, BYBIT has better coverage on TradingView
-    // Try BYBIT perpetual format first (most of our signals are perps)
-    const exchange = result.metadata?.exchange?.toLowerCase() || 'phemex';
+    // Handle "1000" prefix symbols (Phemex uses these, TradingView doesn't for spot)
+    // e.g., 1000PEPEUSDT -> PEPEUSDT on Binance spot
+    const has1000Prefix = cleanSymbol.startsWith('1000');
+    const spotSymbol = has1000Prefix ? cleanSymbol.replace('1000', '') : cleanSymbol;
     
-    // Map exchanges to TradingView-compatible exchanges
-    const tvExchangeMap: Record<string, string> = {
-      'phemex': 'BYBIT',    // Phemex not on TradingView, use BYBIT perps
-      'bybit': 'BYBIT',
-      'okx': 'OKX',
-      'bitget': 'BITGET',
-      'binance': 'BINANCE',
-    };
+    // Major pairs that definitely exist on Binance
+    const majorPairs = [
+      'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT',
+      'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'DOTUSDT', 'MATICUSDT',
+      'LINKUSDT', 'LTCUSDT', 'ATOMUSDT', 'UNIUSDT', 'ETCUSDT',
+      'NEARUSDT', 'APTUSDT', 'ARBUSDT', 'OPUSDT', 'INJUSDT',
+      'SUIUSDT', 'SEIUSDT', 'TIAUSDT', 'JUPUSDT', 'WIFUSDT',
+      'PEPEUSDT', 'SHIBUSDT', 'FLOKIUSDT', 'BONKUSDT', 'ORDIUSDT',
+      'RUNEUSDT', 'FTMUSDT', 'AAVEUSDT', 'MKRUSDT', 'SNXUSDT',
+      'CRVUSDT', 'LDOUSDT', 'RNDRUSDT', 'GRTUSDT', 'IMXUSDT',
+    ];
     
-    const tvExchange = tvExchangeMap[exchange] || 'BYBIT';
-    
-    // For major pairs, both spot and perp charts are similar
-    // Use perpetual format for BYBIT (.P suffix for perps)
-    if (tvExchange === 'BYBIT') {
-      return `BYBIT:${cleanSymbol}.P`;
+    // Check if it's a known major pair (use Binance spot for reliability)
+    if (majorPairs.includes(spotSymbol)) {
+      return `BINANCE:${spotSymbol}`;
     }
     
-    return `${tvExchange}:${cleanSymbol}`;
+    // For other pairs, try Binance spot first (best coverage)
+    // TradingView will show an error if symbol doesn't exist,
+    // but Binance spot has the widest altcoin coverage
+    return `BINANCE:${spotSymbol}`;
   };
   
   const tradingViewSymbol = getTradingViewSymbol();
