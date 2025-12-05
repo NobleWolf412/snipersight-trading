@@ -223,24 +223,60 @@ Pluggable indicators, strategies, and hooks support future ML scoring and new fe
 ```
 Symbol Selection
       ↓
-Multi-TF Data Ingestion (1W → 5m)
+┌─────────────────────────────────────────────────────────────┐
+│  BULK DATA FETCH (Single-Pass, No Duplicates)               │
+│  • parallel_fetch() with 100ms stagger to avoid rate limits │
+│  • All symbols × all timeframes fetched once                │
+│  • BTC/USDT auto-included for macro context                 │
+└─────────────────────────────────────────────────────────────┘
       ↓
-Indicator Computation (per TF)
+Global Regime Detection (BTC-based)
       ↓
-SMC Detection (OB, FVG, BOS, CHoCH, Liquidity Sweeps)
+┌─────────────────────────────────────────────────────────────┐
+│  MACRO CONTEXT COMPUTATION (from pre-fetched data)          │
+│  • DominanceService: BTC.D, Alt.D, Stable.D (CryptoCompare) │
+│  • Velocity: 1h % change for BTC and alt basket             │
+│  • Breadth: % of alts with green 1h candles                 │
+│  • Volatility: ATR/price ratio for BTC                      │
+│  • State Classification: RISK_ON, ALT_SEASON, BTC_LED, etc  │
+└─────────────────────────────────────────────────────────────┘
       ↓
-Regime Detection (Trend/Range, BTC Impulse)
+Per-Symbol Processing (parallel, using pre-fetched data):
+  ├── Indicator Computation (per TF)
+  ├── SMC Detection (OB, FVG, BOS, CHoCH, Liquidity Sweeps)
+  ├── Symbol Regime Detection
+  ├── Confluence Scoring (Multi-factor + Synergy/Conflict)
+  ├── Quality Gates (HTF Alignment, Freshness, Displacement)
+  ├── Trade Plan Generation (Entry, Stops, Targets, RR)
+  └── Risk Validation (Position Size, Exposure, Compliance)
       ↓
-Confluence Scoring (Multi-factor + Synergy/Conflict)
-      ↓
-Quality Gates (HTF Alignment, Freshness, Displacement)
-      ↓
-Trade Plan Generation (Entry, Stops, Targets, RR)
-      ↓
-Risk Validation (Position Size, Exposure, Compliance)
-      ↓
-Notification / Execution (Telegram, Bot, Audit)
+Signal Aggregation & Notification
 ```
+
+### Macro Context System
+
+**DominanceService** (`backend/analysis/dominance_service.py`):
+- Fetches real-time market dominance from CryptoCompare API
+- 24-hour file-based cache to minimize API calls
+- Returns: `btc_dom` (~54%), `alt_dom` (~38%), `stable_dom` (~8%)
+
+**MacroContext** (`backend/analysis/macro_context.py`):
+- Combines dominance data with live velocity metrics
+- Computed from pre-fetched 1h OHLCV data (no additional API calls)
+- Fields:
+  - `btc_velocity_1h`: BTC price % change over last hour
+  - `alt_velocity_1h`: Average 1h % change across alts in scan
+  - `percent_alts_up`: Market breadth (% of alts with green 1h)
+  - `btc_volatility_1h`: ATR/price ratio
+  - `velocity_spread_1h`: BTC velocity minus alt velocity (who's leading)
+  - `macro_state`: Classification (RISK_ON, RISK_OFF, ALT_SEASON, BTC_LED_EXPANSION, etc.)
+  - `cluster_score`: -3 to +3 overall market health score
+
+**State Classification Logic**:
+- `BTC_LED_EXPANSION`: BTC.D high + BTC velocity positive
+- `ALT_SEASON`: Alt velocity outpacing BTC significantly
+- `RISK_OFF`: Stable.D rising + alts broadly down
+- `NEUTRAL`: Mixed signals, no clear direction
 
 ## Exchange Profiles & Security
 
@@ -1085,11 +1121,40 @@ class BotExecutor:
 **Purpose**: Pipeline orchestration, context management, and plugin coordination.
 
 **Key Modules**:
-- `pipeline.py`: DAG execution controller (data → indicators → SMC → confluence → planner → risk → notify)
+- `orchestrator.py`: Main pipeline coordinator
+  - `scan(symbols)`: Entry point - bulk fetches data, computes macro context, processes symbols in parallel
+  - `apply_mode(mode)`: Configures orchestrator from ScannerMode (timeframes, thresholds, critical TFs)
+  - `_compute_macro_context_from_data(data_map)`: Computes MacroContext from pre-fetched data (no API calls)
+  - `_process_symbol(symbol, ..., prefetched_data)`: Per-symbol pipeline using pre-fetched data
 - `context.py`: `SniperContext` object holding symbol, multi-TF data, indicators, SMC, confluence, plan, risk, metadata
-- `orchestrator.py`: High-level entry point for CLI, scripts, APIs
 - `hooks.py`: Lifecycle hooks for debugging, tracing, ML integration
 - `plugins/`: Base plugin interface and registry
+
+**Orchestrator Scan Flow** (optimized):
+```
+1. scan(symbols) called
+2. _detect_global_regime() - BTC regime detection
+3. BULK FETCH - parallel_fetch() for all symbols × all timeframes (single pass)
+4. _compute_macro_context_from_data() - uses pre-fetched 1h data + DominanceService
+5. For each symbol (parallel ThreadPoolExecutor):
+   a. _process_symbol() receives pre-fetched MultiTimeframeData
+   b. No additional API calls - all data already available
+   c. Indicators → SMC → Confluence → TradePlan → Risk validation
+6. Aggregate signals, return (signals, rejections)
+```
+
+### analysis/
+**Purpose**: Market analysis services and context computation.
+
+**Key Modules**:
+- `dominance_service.py`: CryptoCompare API integration for BTC.D/Alt.D/Stable.D
+  - 24h file-based cache in `backend/cache/dominance/`
+  - `get_dominance_for_macro()`: Returns (btc_dom, alt_dom, stable_dom) tuple
+- `macro_context.py`: MacroContext dataclass and state classification
+  - `classify_macro_state(ctx)`: Returns MacroState enum (RISK_ON, ALT_SEASON, etc.)
+  - `compute_cluster_score(ctx)`: Returns -3 to +3 market health score
+- `regime_detector.py`: Multi-dimensional regime detection (trend, volatility, liquidity)
+- `regime_policies.py`: Mode-specific regime adjustments (DEFENSIVE, BALANCED, AGGRESSIVE)
 
 ### ml/
 **Purpose**: Future ML integration hooks.

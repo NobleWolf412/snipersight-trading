@@ -221,39 +221,16 @@ class Orchestrator:
             profile=self.config.profile
         ))
         
-        # Detect global market regime from BTC
-        try:
-            self.current_regime = self._detect_global_regime()
-            if self.current_regime:
-                logger.info("🌍 Global regime: %s (score=%.1f)", 
-                           self.current_regime.composite, 
-                           self.current_regime.score)
-                self._progress("REGIME", {
-                    "composite": self.current_regime.composite,
-                    "score": float(self.current_regime.score),
-                    "min_required": float(getattr(self.regime_policy, 'min_regime_score', 0)),
-                    "gate_passed": bool(self.current_regime.score >= getattr(self.regime_policy, 'min_regime_score', 0))
-                })
-                
-                # Check regime gate for mode
-                if self.current_regime.score < self.regime_policy.min_regime_score:
-                    logger.warning("⚠️ Regime score %.1f below mode minimum %.1f - signals may be limited",
-                                 self.current_regime.score,
-                                 self.regime_policy.min_regime_score)
-        except Exception as e:
-            logger.warning("Regime detection failed: %s - continuing without regime context", e)
-            self.current_regime = None
-
         # ========== BULK DATA FETCH (single API call per symbol) ==========
         # Fetch all multi-timeframe data upfront to avoid duplicate API calls
-        # This data is reused for both macro context and per-symbol processing
+        # This data is reused for regime detection, macro context, and per-symbol processing
         logger.info("📥 Bulk fetching data for %d symbols...", len(symbols))
         self._progress("BULK_FETCH_START", {"symbols": symbols, "timeframes": list(self.config.timeframes)})
         
         prefetched_data: Dict[str, MultiTimeframeData] = {}
         fetch_failures: List[str] = []
         
-        # Ensure BTC is included for macro context even if not in scan list
+        # Ensure BTC is included for regime/macro context even if not in scan list
         symbols_to_fetch = list(symbols)
         if 'BTC/USDT' not in symbols_to_fetch:
             symbols_to_fetch.append('BTC/USDT')
@@ -278,6 +255,30 @@ class Orchestrator:
             "failed": len(fetch_failures),
             "failed_symbols": fetch_failures
         })
+
+        # Detect global market regime from pre-fetched BTC data (no duplicate API call)
+        try:
+            btc_data = prefetched_data.get('BTC/USDT')
+            self.current_regime = self._detect_global_regime(prefetched_btc_data=btc_data)
+            if self.current_regime:
+                logger.info("🌍 Global regime: %s (score=%.1f)", 
+                           self.current_regime.composite, 
+                           self.current_regime.score)
+                self._progress("REGIME", {
+                    "composite": self.current_regime.composite,
+                    "score": float(self.current_regime.score),
+                    "min_required": float(getattr(self.regime_policy, 'min_regime_score', 0)),
+                    "gate_passed": bool(self.current_regime.score >= getattr(self.regime_policy, 'min_regime_score', 0))
+                })
+                
+                # Check regime gate for mode
+                if self.current_regime.score < self.regime_policy.min_regime_score:
+                    logger.warning("⚠️ Regime score %.1f below mode minimum %.1f - signals may be limited",
+                                 self.current_regime.score,
+                                 self.regime_policy.min_regime_score)
+        except Exception as e:
+            logger.warning("Regime detection failed: %s - continuing without regime context", e)
+            self.current_regime = None
 
         # Compute macro context using pre-fetched data (no additional API calls)
         try:
@@ -1880,16 +1881,27 @@ class Orchestrator:
         missing = critical_tfs - available_tfs
         return sorted(missing)
     
-    def _detect_global_regime(self) -> Optional[MarketRegime]:
+    def _detect_global_regime(
+        self, 
+        prefetched_btc_data: Optional[MultiTimeframeData] = None
+    ) -> Optional[MarketRegime]:
         """
         Detect global market regime from BTC/USDT.
+        
+        Args:
+            prefetched_btc_data: Optional pre-fetched BTC data (avoids duplicate API call)
         
         Returns:
             MarketRegime or None if detection fails
         """
         try:
-            # Fetch BTC data
-            btc_data = self._ingest_data('BTC/USDT')
+            # Use pre-fetched data if available, otherwise fetch (fallback)
+            if prefetched_btc_data is not None:
+                btc_data = prefetched_btc_data
+                logger.debug("Using pre-fetched BTC data for regime detection")
+            else:
+                btc_data = self._ingest_data('BTC/USDT')
+                
             if not btc_data or not btc_data.timeframes:
                 logger.warning("Unable to fetch BTC data for regime detection")
                 return None

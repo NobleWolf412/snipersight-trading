@@ -12,12 +12,18 @@
 
 ### Backend Pipeline (Orchestrator)
 `backend/engine/orchestrator.py` coordinates the full analysis pipeline. Each scan processes symbols through:
-1. **MultiTimeframeData** ingestion (6 TFs: 1W/1D/4H/1H/15m/5m)
-2. **Indicator computation** (RSI, ATR, volume spikes, Bollinger Bands)
-3. **SMC detection** (order blocks in `strategy/smc/order_blocks.py`, FVGs, structural breaks)
-4. **Confluence scoring** weighted by HTF alignment, BTC impulse gate, market regime
-5. **Trade planning** with entry zones, structure-based stops, tiered targets
-6. **Risk validation** via `RiskManager` (exposure limits, correlation matrix)
+`backend/engine/orchestrator.py` coordinates the full analysis pipeline. Each scan processes symbols through:
+1. **Global Regime Detection** - BTC-based market regime classification
+2. **Bulk Data Fetch** - Single parallel_fetch() for all symbols × all timeframes (no duplicates)
+3. **MacroContext Computation** - Combines DominanceService (BTC.D/Alt.D/Stable.D from CryptoCompare) with 1h velocity metrics from pre-fetched data
+4. **Per-Symbol Processing** (parallel, using pre-fetched data):
+   - Indicator computation (RSI, ATR, volume spikes, Bollinger Bands)
+   - SMC detection (order blocks, FVGs, BOS/CHoCH, liquidity sweeps)
+   - Confluence scoring weighted by HTF alignment, BTC impulse gate, market regime
+   - Trade planning with entry zones, structure-based stops, tiered targets
+   - Risk validation via `RiskManager` (exposure limits, correlation matrix)
+
+**Key Optimization**: Data is fetched ONCE via bulk fetch, then passed to both MacroContext computation and per-symbol processing. No duplicate API calls.
 
 Never bypass quality gates—signals must pass all validation layers (data quality, SMC freshness, confluence thresholds, plan completeness).
 
@@ -169,6 +175,8 @@ Backend endpoint `/api/market/regime` implemented—returns regime detection fro
 
 **Backend Core**:
 - `backend/engine/orchestrator.py`: Main pipeline coordinator with `apply_mode()` method for mode switching
+- `backend/analysis/dominance_service.py`: CryptoCompare API for BTC.D/Alt.D/Stable.D with 24h file cache
+- `backend/analysis/macro_context.py`: MacroContext dataclass combining dominance + velocity metrics
 - `backend/strategy/smc/`: SMC detection modules (order_blocks, fvg, bos_choch, liquidity_sweeps)
 - `backend/strategy/confluence/scorer.py`: Multi-factor confluence calculation
 - `backend/strategy/planner/planner_service.py`: Trade plan generation with structure-based stops

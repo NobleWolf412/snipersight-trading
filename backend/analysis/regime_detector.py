@@ -233,16 +233,44 @@ class RegimeDetector:
         else:
             return "heavy", 65.0
     
-    def _detect_risk_appetite(self):
+    def _detect_risk_appetite(self) -> tuple[str, float]:
         """
-        Detect risk appetite regime.
+        Detect risk appetite regime using real dominance data.
         
-        Placeholder - would use BTC.D, USDT.D, ALT.D data.
+        Uses DominanceService to fetch BTC.D, Alt.D, Stable.D from CryptoCompare.
+        
+        Logic:
+        - High stable dominance (>8%) = risk_off (capital fleeing to safety)
+        - High alt dominance (>40%) = risk_on (capital rotating to alts)
+        - High BTC dominance (>55%) + rising = btc_flight (capital consolidating to BTC)
+        - Otherwise = rotation (normal market conditions)
         
         Returns: (risk_label, score)
         """
-        # Default to risk_on for now
-        return "risk_on", 60.0
+        try:
+            from backend.analysis.dominance_service import get_dominance_for_macro
+            btc_dom, alt_dom, stable_dom = get_dominance_for_macro()
+            
+            # High stable dominance indicates fear/risk-off
+            if stable_dom > 8.0:  # Above typical 6-7%
+                return "risk_off", 30.0
+            
+            # High alt dominance indicates greed/risk-on
+            elif alt_dom > 40.0:  # Alt season territory
+                return "risk_on", 80.0
+            
+            # High BTC dominance = capital consolidating to BTC
+            elif btc_dom > 55.0:
+                return "btc_flight", 55.0
+            
+            # Normal rotation conditions
+            else:
+                return "rotation", 60.0
+                
+        except Exception as e:
+            # Fallback if DominanceService unavailable
+            logger.debug(f"Risk appetite detection fallback: {e}")
+            return "neutral", 50.0
     
     def _generate_composite_label(self, dim: RegimeDimensions) -> str:
         """Generate composite regime label from dimensions."""
