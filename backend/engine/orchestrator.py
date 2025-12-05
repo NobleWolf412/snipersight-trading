@@ -244,9 +244,44 @@ class Orchestrator:
             logger.warning("Regime detection failed: %s - continuing without regime context", e)
             self.current_regime = None
 
-        # Optionally compute macro dominance context once (safe no-op if unavailable)
+        # ========== BULK DATA FETCH (single API call per symbol) ==========
+        # Fetch all multi-timeframe data upfront to avoid duplicate API calls
+        # This data is reused for both macro context and per-symbol processing
+        logger.info("📥 Bulk fetching data for %d symbols...", len(symbols))
+        self._progress("BULK_FETCH_START", {"symbols": symbols, "timeframes": list(self.config.timeframes)})
+        
+        prefetched_data: Dict[str, MultiTimeframeData] = {}
+        fetch_failures: List[str] = []
+        
+        # Ensure BTC is included for macro context even if not in scan list
+        symbols_to_fetch = list(symbols)
+        if 'BTC/USDT' not in symbols_to_fetch:
+            symbols_to_fetch.append('BTC/USDT')
+        
+        # Use parallel_fetch for efficiency (staggered to avoid rate limits)
         try:
-            self.macro_context = self._compute_macro_context(symbols)
+            prefetched_data = self.ingestion_pipeline.parallel_fetch(
+                symbols=symbols_to_fetch,
+                timeframes=list(self.config.timeframes),
+                limit=500,
+                max_workers=self.concurrency_workers
+            )
+            fetch_failures = [s for s in symbols_to_fetch if s not in prefetched_data]
+        except Exception as e:
+            logger.error("Bulk fetch failed: %s - falling back to per-symbol fetch", e)
+            # Fallback handled in _process_symbol
+        
+        logger.info("📥 Bulk fetch complete: %d succeeded, %d failed", 
+                   len(prefetched_data), len(fetch_failures))
+        self._progress("BULK_FETCH_COMPLETE", {
+            "succeeded": len(prefetched_data),
+            "failed": len(fetch_failures),
+            "failed_symbols": fetch_failures
+        })
+
+        # Compute macro context using pre-fetched data (no additional API calls)
+        try:
+            self.macro_context = self._compute_macro_context_from_data(prefetched_data)
         except Exception as _mc_err:
             logger.debug("Macro context computation skipped: %s", _mc_err)
             self.macro_context = None
@@ -272,10 +307,12 @@ class Orchestrator:
             "tie_breaks_neutral_default": 0
         }
         
-        # Parallel per-symbol processing
+        # Parallel per-symbol processing (using pre-fetched data)
         def _safe_process(sym: str) -> tuple[Optional[TradePlan], Optional[Dict[str, Any]]]:
             try:
-                return self._process_symbol(sym, run_id, timestamp)
+                # Pass pre-fetched data to avoid duplicate API calls
+                prefetched = prefetched_data.get(sym)
+                return self._process_symbol(sym, run_id, timestamp, prefetched_data=prefetched)
             except Exception as e:  # pyright: ignore - intentional broad catch for robustness
                 logger.error("❌ %s: Pipeline error - %s", sym, e)
                 self.telemetry.log_event(create_error_event(
@@ -370,7 +407,8 @@ class Orchestrator:
         self, 
         symbol: str, 
         run_id: str, 
-        timestamp: datetime
+        timestamp: datetime,
+        prefetched_data: Optional[MultiTimeframeData] = None
     ) -> tuple[Optional[TradePlan], Optional[Dict[str, Any]]]:
         """
         Process single symbol through complete pipeline.
@@ -379,6 +417,7 @@ class Orchestrator:
             symbol: Trading pair to process
             run_id: Unique scan run identifier  
             timestamp: Scan timestamp
+            prefetched_data: Optional pre-fetched multi-timeframe data (avoids duplicate API call)
             
         Returns:
             Tuple of (TradePlan if qualifying, rejection_info dict if rejected)
@@ -394,8 +433,12 @@ class Orchestrator:
             timestamp=timestamp
         )
         
-        # Stage 2: Data ingestion
-        context.multi_tf_data = self._ingest_data(symbol)
+        # Stage 2: Data ingestion (use pre-fetched data if available, else fetch)
+        if prefetched_data is not None:
+            context.multi_tf_data = prefetched_data
+            logger.debug("📊 %s: Using pre-fetched data", symbol)
+        else:
+            context.multi_tf_data = self._ingest_data(symbol)
         try:
             tf_list = list(context.multi_tf_data.timeframes.keys()) if context.multi_tf_data else []
             candle_counts = {tf: len(df) for tf, df in (context.multi_tf_data.timeframes.items() if context.multi_tf_data else [])}
@@ -1925,9 +1968,12 @@ class Orchestrator:
             'debug_mode': self.debug_mode
         }
 
-    def _compute_macro_context(self, symbols: List[str]) -> Optional[MacroContext]:
+    def _compute_macro_context_from_data(
+        self, 
+        data_map: Dict[str, MultiTimeframeData]
+    ) -> Optional[MacroContext]:
         """
-        Compute macro dominance/flow context.
+        Compute macro dominance/flow context from pre-fetched data.
 
         Uses basket-based proxies from available market data:
         - btc_velocity_1h: 1h percent change for BTC/USDT
@@ -1935,21 +1981,19 @@ class Orchestrator:
         - stable_velocity_1h: inferred from breadth (alts up/down %) as a proxy for stables flow
         - percent_alts_up: share of alts with last close > previous close on 1h
         - btc_volatility_1h: ATR(14) / price for BTC on 1h
+        
+        Args:
+            data_map: Pre-fetched multi-timeframe data keyed by symbol
+            
+        Returns:
+            MacroContext with computed metrics, or None if insufficient data
         """
+        from backend.analysis.dominance_service import get_dominance_for_macro
+        from backend.analysis.macro_context import MacroContext, _dir_from_pct, compute_cluster_score, classify_macro_state
+        from backend.indicators.volatility import compute_atr
+        
         try:
-            # Ensure BTC present for reference
             btc_symbol = 'BTC/USDT'
-            scan_symbols = list({s for s in symbols if isinstance(s, str) and s})
-            if btc_symbol not in scan_symbols:
-                scan_symbols.append(btc_symbol)
-
-            # Fetch 1h data for all symbols involved (limit small for percent change)
-            data_map = self.ingestion_pipeline.parallel_fetch(
-                symbols=scan_symbols,
-                timeframes=['1h'],
-                limit=60,
-                max_workers=max(2, self.concurrency_workers)
-            )
 
             def pct_change_last(df) -> Optional[float]:
                 try:
@@ -1966,13 +2010,13 @@ class Orchestrator:
             # BTC 1h velocity and volatility
             btc_data = data_map.get(btc_symbol)
             if not btc_data or '1h' not in btc_data.timeframes:
+                logger.debug("Macro context: No BTC 1h data available")
                 return None
             btc_df = btc_data.timeframes['1h']
             btc_vel = pct_change_last(btc_df) or 0.0
 
             # ATR% proxy for BTC on 1h
             try:
-                from backend.indicators.volatility import compute_atr
                 atr_series = compute_atr(btc_df)
                 atr_val = float(atr_series.iloc[-1]) if atr_series is not None and len(atr_series) else 0.0
                 price = float(btc_df['close'].iloc[-1]) if len(btc_df) else 0.0
@@ -1981,7 +2025,7 @@ class Orchestrator:
                 btc_vol_pct = 0.0
 
             # Alt basket = non-BTC symbols in provided list that we have data for
-            alt_syms = [s for s in scan_symbols if s != btc_symbol]
+            alt_syms = [s for s in data_map.keys() if s != btc_symbol]
             alt_velocities: List[float] = []
             alts_up = 0
             alts_total = 0
@@ -2010,12 +2054,10 @@ class Orchestrator:
             else:
                 stable_vel = 0.0
 
-            # Fetch real dominance data from DominanceService
-            from backend.analysis.dominance_service import get_dominance_for_macro
+            # Fetch real dominance data from DominanceService (cached, no API delay)
             btc_dom, alt_dom, stable_dom = get_dominance_for_macro()
             
-            # Build MacroContext directly
-            from backend.analysis.macro_context import MacroContext, _dir_from_pct, compute_cluster_score
+            # Build MacroContext
             ctx = MacroContext(
                 btc_dom=btc_dom,
                 alt_dom=alt_dom,
@@ -2030,12 +2072,14 @@ class Orchestrator:
             ctx.btc_dir = _dir_from_pct(btc_vel)
             ctx.alt_dir = _dir_from_pct(alt_vel)
             ctx.stable_dir = _dir_from_pct(stable_vel)
-
-            from backend.analysis.macro_context import classify_macro_state
             ctx.macro_state = classify_macro_state(ctx)
             ctx.cluster_score = compute_cluster_score(ctx)
+            
+            logger.info("📈 Macro context: BTC vel=%.2f%%, Alt vel=%.2f%%, Alts up=%.0f%%, State=%s",
+                       btc_vel, alt_vel, percent_alts_up, ctx.macro_state.name)
             return ctx
-        except Exception:
+        except Exception as e:
+            logger.debug("Macro context computation failed: %s", e)
             return None
     
     def export_debug_bundle(self, symbol: str, trace_id: str, **data) -> Optional[str]:

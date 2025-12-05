@@ -3,6 +3,7 @@ Data ingestion pipeline for multi-timeframe market data fetching.
 Handles parallel symbol fetching and data normalization.
 """
 
+import time
 from typing import Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
@@ -112,16 +113,20 @@ class IngestionPipeline:
         failed_symbols = []
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all fetch tasks
-            future_to_symbol = {
-                executor.submit(
+            # Submit tasks with small stagger delay to avoid exchange rate limits
+            # Phemex returns error 30000 when concurrent requests hit too fast
+            future_to_symbol = {}
+            for i, symbol in enumerate(symbols):
+                future = executor.submit(
                     self.fetch_multi_timeframe,
                     symbol,
                     timeframes,
                     limit
-                ): symbol
-                for symbol in symbols
-            }
+                )
+                future_to_symbol[future] = symbol
+                # Small stagger (100ms) between submissions to avoid concurrent burst
+                if i < len(symbols) - 1:
+                    time.sleep(0.1)
 
             # Collect results as they complete
             for future in as_completed(future_to_symbol):
