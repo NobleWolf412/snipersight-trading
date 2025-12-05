@@ -6,7 +6,7 @@ import { Crosshair, Target, ChartLine, Compass } from '@phosphor-icons/react';
 import { Link } from 'react-router-dom';
 import { PageContainer } from '@/components/layout/PageContainer';
 // Default logo path; update if your file name differs
-import sniperLogo from '@/assets/images/SniperLogo.jpg';
+import sniperLogo from '@/assets/images/1000016768.png';
 
 export function Landing() {
   const { system } = useTelemetry();
