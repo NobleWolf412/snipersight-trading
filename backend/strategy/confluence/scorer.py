@@ -27,12 +27,412 @@ from backend.shared.models.scoring import ConfluenceFactor, ConfluenceBreakdown
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.scanner_modes import MACDModeConfig, get_macd_config
 from backend.strategy.smc.volume_profile import VolumeProfile, calculate_volume_confluence_factor
+from backend.analysis.premium_discount import detect_premium_discount
 
 # Conditional imports for type hints
 if TYPE_CHECKING:
     from backend.shared.models.smc import CycleContext, ReversalContext
 
 logger = logging.getLogger(__name__)
+
+
+# ==============================================================================
+# HTF CRITICAL GATES - These filter out low-quality signals
+# ==============================================================================
+
+def evaluate_htf_structural_proximity(
+    smc: SMCSnapshot,
+    indicators: IndicatorSet,
+    entry_price: float,
+    direction: str,
+    mode_config: ScanConfig,
+    swing_structure: Optional[Dict] = None
+) -> Dict:
+    """
+    MANDATORY HTF Structural Proximity Gate.
+    
+    Validates that entry occurs at a meaningful HTF structural level:
+    - HTF Order Block (4H/1D)
+    - HTF FVG (4H/1D)
+    - HTF Key Level (support/resistance)
+    - HTF Swing Point (last HH/HL/LH/LL)
+    - Premium/Discount Zone boundary
+    
+    If entry is >2 ATR from ANY HTF structure, apply HEAVY penalty or reject.
+    """
+    # Get HTF timeframes from mode config
+    structure_tfs = getattr(mode_config, 'structure_timeframes', ('4h', '1d'))
+    
+    # Get ATR from primary planning timeframe
+    primary_tf = getattr(mode_config, 'primary_planning_timeframe', '1h')
+    primary_ind = indicators.by_timeframe.get(primary_tf)
+    
+    if not primary_ind or not primary_ind.atr:
+        return {
+            'valid': True,
+            'score_adjustment': 0.0,
+            'proximity_atr': None,
+            'nearest_structure': 'ATR unavailable for validation',
+            'structure_type': 'unknown'
+        }
+    
+    atr = primary_ind.atr
+    max_distance_atr = 5.0  # Allow entries up to 5 ATR from HTF structure without penalty
+    
+    min_distance = float('inf')
+    nearest_structure = None
+    structure_type = None
+    
+    # 1. Check HTF Order Blocks
+    for ob in smc.order_blocks:
+        if ob.timeframe not in structure_tfs:
+            continue
+        ob_grade = getattr(ob, 'grade', 'B')
+        if ob_grade not in ('A', 'B'):
+            continue
+        if ob.freshness_score < 0.5:
+            continue
+        
+        # OrderBlock uses 'high' and 'low', not 'top' and 'bottom'
+        ob_center = (ob.high + ob.low) / 2
+        distance = abs(entry_price - ob_center)
+        distance_atr = distance / atr
+        
+        if distance_atr < min_distance:
+            min_distance = distance_atr
+            nearest_structure = f"{ob.timeframe} {ob.direction} OB @ {ob_center:.5f}"
+            structure_type = "OrderBlock"
+    
+    # 2. Check HTF FVGs
+    for fvg in smc.fvgs:
+        if fvg.timeframe not in structure_tfs:
+            continue
+        if fvg.size < atr:
+            continue
+        if fvg.overlap_with_price > 0.5:
+            continue
+        
+        if fvg.bottom <= entry_price <= fvg.top:
+            min_distance = 0.0
+            nearest_structure = f"{fvg.timeframe} FVG {fvg.bottom:.5f}-{fvg.top:.5f}"
+            structure_type = "FVG"
+            break
+        
+        distance = min(abs(entry_price - fvg.top), abs(entry_price - fvg.bottom))
+        distance_atr = distance / atr
+        
+        if distance_atr < min_distance:
+            min_distance = distance_atr
+            nearest_structure = f"{fvg.timeframe} FVG boundary"
+            structure_type = "FVG"
+    
+    # 3. Check HTF Swing Points
+    if swing_structure:
+        for tf in structure_tfs:
+            if tf not in swing_structure:
+                continue
+            ss = swing_structure[tf]
+            for swing_type in ['last_hh', 'last_hl', 'last_lh', 'last_ll']:
+                swing_price = ss.get(swing_type)
+                if swing_price:
+                    distance = abs(entry_price - swing_price)
+                    distance_atr = distance / atr
+                    if distance_atr < min_distance:
+                        min_distance = distance_atr
+                        nearest_structure = f"{tf} {swing_type.upper()} @ {swing_price:.5f}"
+                        structure_type = "SwingPoint"
+    
+    # 4. Check Premium/Discount Zone Boundaries
+    htf = max(structure_tfs, key=lambda x: {'5m': 0, '15m': 1, '1h': 2, '4h': 3, '1d': 4, '1w': 5}.get(x, 0))
+    htf_ind = indicators.by_timeframe.get(htf)
+    
+    if htf_ind and hasattr(htf_ind, 'dataframe'):
+        try:
+            df = htf_ind.dataframe
+            pd_zone = detect_premium_discount(df, lookback=50, current_price=entry_price)
+            
+            eq_distance = abs(entry_price - pd_zone.equilibrium)
+            eq_distance_atr = eq_distance / atr
+            
+            if eq_distance_atr < min_distance:
+                min_distance = eq_distance_atr
+                nearest_structure = f"{htf} Equilibrium @ {pd_zone.equilibrium:.5f}"
+                structure_type = "PremiumDiscount"
+            
+            # Check if in optimal zone for direction
+            in_optimal_zone = (
+                (direction == 'bullish' and entry_price <= pd_zone.equilibrium) or
+                (direction == 'bearish' and entry_price >= pd_zone.equilibrium)
+            )
+            
+            if not in_optimal_zone and min_distance > 1.0:
+                return {
+                    'valid': False,
+                    'score_adjustment': -40.0,
+                    'proximity_atr': min_distance,
+                    'nearest_structure': f"Entry in {pd_zone.current_zone} zone (wrong for {direction})",
+                    'structure_type': "PremiumDiscount_VIOLATION"
+                }
+        except Exception:
+            pass
+    
+    # DECISION LOGIC
+    if min_distance <= max_distance_atr:
+        bonus = 0.0
+        if min_distance < 0.5:
+            bonus = 15.0
+        elif min_distance < 1.0:
+            bonus = 10.0
+        elif min_distance < 1.5:
+            bonus = 5.0
+        
+        return {
+            'valid': True,
+            'score_adjustment': bonus,
+            'proximity_atr': min_distance,
+            'nearest_structure': nearest_structure or "HTF structure present",
+            'structure_type': structure_type or "unknown"
+        }
+    else:
+        # Handle case where no HTF structure was found at all
+        if min_distance == float('inf'):
+            # No structure found - return neutral result, don't penalize harshly
+            # This can happen if OBs/FVGs only exist on LTF, not HTF
+            return {
+                'valid': True,  # Don't block, just don't give bonus
+                'score_adjustment': -5.0,  # Small penalty for lack of HTF structure
+                'proximity_atr': None,
+                'nearest_structure': "No HTF structure detected on structure timeframes",
+                'structure_type': "NONE_FOUND"
+            }
+        
+        # Structure exists but is too far away - apply graduated penalty
+        # -5 penalty per ATR beyond max_distance, capped at -20
+        penalty = max(-20.0, -5.0 * (min_distance - max_distance_atr))
+        return {
+            'valid': False,
+            'score_adjustment': penalty,
+            'proximity_atr': min_distance,
+            'nearest_structure': nearest_structure or "No HTF structure nearby",
+            'structure_type': "NONE_NEARBY"
+        }
+
+
+def evaluate_htf_momentum_gate(
+    indicators: IndicatorSet,
+    direction: str,
+    mode_config: ScanConfig,
+    swing_structure: Optional[Dict] = None
+) -> Dict:
+    """
+    HTF Momentum Gate - blocks counter-trend trades during strong HTF momentum.
+    
+    If HTF is in strong momentum AGAINST trade direction, apply veto or heavy penalty.
+    """
+    primary_tf = getattr(mode_config, 'primary_planning_timeframe', '1h')
+    structure_tfs = getattr(mode_config, 'structure_timeframes', ('4h', '1d'))
+    
+    htf = max(structure_tfs, key=lambda x: {'5m': 0, '15m': 1, '1h': 2, '4h': 3, '1d': 4, '1w': 5}.get(x, 0))
+    htf_ind = indicators.by_timeframe.get(htf)
+    
+    if not htf_ind:
+        return {
+            'allowed': True,
+            'score_adjustment': 0.0,
+            'htf_momentum': 'unknown',
+            'htf_trend': 'unknown',
+            'reason': f'No {htf} indicators available'
+        }
+    
+    # Detect HTF trend from swing structure
+    htf_trend = 'neutral'
+    if swing_structure and htf in swing_structure:
+        ss = swing_structure[htf]
+        htf_trend = ss.get('trend', 'neutral')
+    
+    # Detect momentum strength from ATR expansion
+    atr = htf_ind.atr
+    atr_series = getattr(htf_ind, 'atr_series', [])
+    
+    momentum_strength = 'normal'
+    if atr and len(atr_series) >= 10:
+        recent_atr = atr_series[-10:]
+        atr_expanding = sum(1 for i in range(1, len(recent_atr)) if recent_atr[i] > recent_atr[i-1])
+        
+        if atr_expanding >= 7:
+            momentum_strength = 'strong'
+        elif atr_expanding >= 5:
+            momentum_strength = 'building'
+        elif atr_expanding <= 3:
+            momentum_strength = 'calm'
+    
+    # Check volume confirmation
+    volume_strong = False
+    if hasattr(htf_ind, 'relative_volume'):
+        rel_vol = htf_ind.relative_volume
+        if rel_vol and rel_vol > 1.3:
+            volume_strong = True
+    
+    is_bullish_trade = direction.lower() in ('bullish', 'long')
+    htf_is_bullish = htf_trend == 'bullish'
+    htf_is_bearish = htf_trend == 'bearish'
+    
+    # Case 1: Strong momentum AGAINST trade direction
+    if momentum_strength in ('strong', 'building'):
+        if is_bullish_trade and htf_is_bearish:
+            penalty = -50.0 if volume_strong else -35.0
+            return {
+                'allowed': False,
+                'score_adjustment': penalty,
+                'htf_momentum': momentum_strength,
+                'htf_trend': htf_trend,
+                'reason': f"{htf} in strong bearish momentum (blocking LONG)"
+            }
+        elif not is_bullish_trade and htf_is_bullish:
+            penalty = -50.0 if volume_strong else -35.0
+            return {
+                'allowed': False,
+                'score_adjustment': penalty,
+                'htf_momentum': momentum_strength,
+                'htf_trend': htf_trend,
+                'reason': f"{htf} in strong bullish momentum (blocking SHORT)"
+            }
+    
+    # Case 2: Calm/ranging HTF - allow counter-trend
+    if momentum_strength == 'calm' or htf_trend == 'neutral':
+        return {
+            'allowed': True,
+            'score_adjustment': 0.0,
+            'htf_momentum': momentum_strength,
+            'htf_trend': htf_trend,
+            'reason': f"{htf} {htf_trend} with {momentum_strength} momentum"
+        }
+    
+    # Case 3: Momentum WITH trade direction - bonus
+    if (is_bullish_trade and htf_is_bullish) or (not is_bullish_trade and htf_is_bearish):
+        bonus = 10.0 if momentum_strength == 'strong' else 5.0
+        return {
+            'allowed': True,
+            'score_adjustment': bonus,
+            'htf_momentum': momentum_strength,
+            'htf_trend': htf_trend,
+            'reason': f"{htf} momentum supports {direction}"
+        }
+    
+    return {
+        'allowed': True,
+        'score_adjustment': 0.0,
+        'htf_momentum': momentum_strength,
+        'htf_trend': htf_trend,
+        'reason': f"{htf} {htf_trend} with {momentum_strength} momentum"
+    }
+
+
+def resolve_timeframe_conflicts(
+    indicators: IndicatorSet,
+    direction: str,
+    mode_config: ScanConfig,
+    swing_structure: Optional[Dict] = None,
+    htf_proximity: Optional[Dict] = None
+) -> Dict:
+    """
+    Resolve timeframe conflicts with explicit hierarchical rules.
+    """
+    profile = getattr(mode_config, 'profile', 'balanced')
+    is_scalp_mode = profile in ('intraday_aggressive', 'precision')
+    is_swing_mode = profile in ('macro_surveillance', 'stealth_balanced')
+    
+    conflicts = []
+    resolution_reason_parts = []
+    score_adjustment = 0.0
+    resolution = 'allowed'
+    
+    # Get all timeframe trends
+    timeframes = ['1w', '1d', '4h', '1h', '15m']
+    tf_trends = {}
+    
+    for tf in timeframes:
+        if swing_structure and tf in swing_structure:
+            ss = swing_structure[tf]
+            tf_trends[tf] = ss.get('trend', 'neutral')
+    
+    # Define primary bias TF based on mode
+    if is_scalp_mode:
+        primary_tf = '1h'
+        filter_tfs = ['4h']
+    elif is_swing_mode:
+        primary_tf = '4h'
+        filter_tfs = ['1d', '1w']
+    else:
+        primary_tf = '1h'
+        filter_tfs = ['4h', '1d']
+    
+    primary_trend = tf_trends.get(primary_tf, 'neutral')
+    is_bullish_trade = direction.lower() in ('bullish', 'long')
+    
+    primary_aligned = (
+        (is_bullish_trade and primary_trend == 'bullish') or
+        (not is_bullish_trade and primary_trend == 'bearish')
+    )
+    
+    if not primary_aligned:
+        conflicts.append(f"{primary_tf} {primary_trend} (primary)")
+        resolution_reason_parts.append(f"Primary TF ({primary_tf}) not aligned with {direction}")
+        score_adjustment -= 15.0
+        resolution = 'caution'
+    
+    # Check filter timeframes
+    for tf in filter_tfs:
+        if tf not in tf_trends:
+            continue
+        
+        htf_trend = tf_trends[tf]
+        htf_aligned = (
+            (is_bullish_trade and htf_trend == 'bullish') or
+            (not is_bullish_trade and htf_trend == 'bearish')
+        )
+        
+        if not htf_aligned and htf_trend != 'neutral':
+            conflicts.append(f"{tf} {htf_trend}")
+            
+            htf_ind = indicators.by_timeframe.get(tf)
+            is_strong_momentum = False
+            
+            if htf_ind and htf_ind.atr:
+                atr_series = getattr(htf_ind, 'atr_series', [])
+                if len(atr_series) >= 5:
+                    recent_atr = atr_series[-5:]
+                    expanding_bars = sum(1 for i in range(1, len(recent_atr)) if recent_atr[i] > recent_atr[i-1])
+                    is_strong_momentum = (expanding_bars >= 4)
+            
+            if is_strong_momentum:
+                resolution = 'blocked'
+                score_adjustment -= 40.0
+                resolution_reason_parts.append(f"{tf} in strong {htf_trend} momentum, blocking {direction}")
+                break
+            else:
+                resolution = 'caution'
+                score_adjustment -= 10.0
+                resolution_reason_parts.append(f"{tf} {htf_trend} but not strong momentum")
+    
+    # Exception: At major HTF structure, reduce penalty
+    proximity_atr = htf_proximity.get('proximity_atr') if htf_proximity else None
+    if htf_proximity and htf_proximity.get('valid') and proximity_atr is not None and proximity_atr < 1.0:
+        score_adjustment += 15.0
+        resolution_reason_parts.append("At major HTF structure (overrides conflict penalty)")
+        if resolution == 'blocked' and score_adjustment > -30.0:
+            resolution = 'caution'
+    
+    if not conflicts:
+        resolution = 'allowed'
+        resolution_reason_parts.append("All timeframes aligned or neutral")
+    
+    return {
+        'resolution': resolution,
+        'score_adjustment': score_adjustment,
+        'conflicts': conflicts,
+        'resolution_reason': '; '.join(resolution_reason_parts) if resolution_reason_parts else 'No conflicts'
+    }
 
 
 # --- Mode-Aware MACD Evaluation ---
@@ -157,14 +557,14 @@ def evaluate_macd_for_mode(
             score += 10.0 * macd_config.weight
             reasons.append(f"{timeframe} MACD supportive bearish (FILTER)")
         elif macd_config.allow_ltf_veto:
-            # Check for veto conditions
+            # Check for veto conditions - reduced penalty from -15 to -8 for less aggressive filtering
             if is_bullish and bearish_persistent:
-                score -= 15.0 * macd_config.weight
+                score -= 8.0 * macd_config.weight
                 veto_active = True
                 role = "VETO"
                 reasons.append(f"{timeframe} MACD bearish veto active against bullish setup")
             elif not is_bullish and bullish_persistent:
-                score -= 15.0 * macd_config.weight
+                score -= 8.0 * macd_config.weight
                 veto_active = True
                 role = "VETO"
                 reasons.append(f"{timeframe} MACD bullish veto active against bearish setup")
@@ -712,6 +1112,91 @@ def calculate_confluence_score(
                     rationale=f"[{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}"
                 ))
                 logger.debug("⚠️ HTF Structure PENALTY %.1f: %s", htf_structure_bonus, htf_structure_analysis['reason'])
+    
+    # ===========================================================================
+    # === CRITICAL HTF GATES (New: filters low-quality signals) ===
+    # ===========================================================================
+    
+    # Get current price for proximity calculations
+    entry_price = current_price
+    if not entry_price and primary_tf:
+        # Try to get from indicators
+        prim_ind = indicators.by_timeframe.get(primary_tf)
+        if prim_ind and hasattr(prim_ind, 'dataframe') and prim_ind.dataframe is not None:
+            entry_price = prim_ind.dataframe['close'].iloc[-1] if len(prim_ind.dataframe) > 0 else None
+    
+    # === Gate 1: HTF STRUCTURAL PROXIMITY GATE ===
+    # Entry must be at meaningful HTF structural level
+    htf_proximity_result = None
+    if getattr(config, 'enable_htf_structural_gate', True) and entry_price:
+        htf_proximity_result = evaluate_htf_structural_proximity(
+            smc=smc_snapshot,
+            indicators=indicators,
+            entry_price=entry_price,
+            direction=direction,
+            mode_config=config,
+            swing_structure=smc_snapshot.swing_structure
+        )
+        
+        if htf_proximity_result['score_adjustment'] != 0:
+            factor_score = max(0.0, min(100.0, 50.0 + htf_proximity_result['score_adjustment'] * 1.5))
+            factors.append(ConfluenceFactor(
+                name="HTF_Structural_Proximity",
+                score=factor_score,
+                weight=0.15,
+                rationale=f"{htf_proximity_result['nearest_structure']} ({htf_proximity_result.get('proximity_atr', 'N/A'):.1f} ATR)" if htf_proximity_result.get('proximity_atr') else htf_proximity_result['nearest_structure']
+            ))
+            
+            if not htf_proximity_result['valid']:
+                logger.warning("🚫 HTF Structural Gate FAILED: entry %.1f ATR from nearest structure", 
+                             htf_proximity_result.get('proximity_atr', 999))
+    
+    # === Gate 2: HTF MOMENTUM GATE ===
+    # Block counter-trend trades during strong HTF momentum
+    if getattr(config, 'enable_htf_momentum_gate', True):
+        momentum_gate = evaluate_htf_momentum_gate(
+            indicators=indicators,
+            direction=direction,
+            mode_config=config,
+            swing_structure=smc_snapshot.swing_structure
+        )
+        
+        if momentum_gate['score_adjustment'] != 0:
+            factor_score = max(0.0, min(100.0, 50.0 + momentum_gate['score_adjustment'] * 1.0))
+            factors.append(ConfluenceFactor(
+                name="HTF_Momentum_Gate",
+                score=factor_score,
+                weight=0.12,
+                rationale=momentum_gate['reason']
+            ))
+            
+            if not momentum_gate['allowed']:
+                logger.warning("🚫 HTF Momentum Gate BLOCKED: %s trend with %s momentum",
+                             momentum_gate['htf_trend'], momentum_gate['htf_momentum'])
+    
+    # === Gate 3: TIMEFRAME CONFLICT RESOLUTION ===
+    # Explicit rules for handling timeframe conflicts
+    if getattr(config, 'enable_conflict_resolution', True):
+        conflict_result = resolve_timeframe_conflicts(
+            indicators=indicators,
+            direction=direction,
+            mode_config=config,
+            swing_structure=smc_snapshot.swing_structure,
+            htf_proximity=htf_proximity_result
+        )
+        
+        if conflict_result['score_adjustment'] != 0:
+            factor_score = max(0.0, min(100.0, 50.0 + conflict_result['score_adjustment'] * 1.0))
+            factors.append(ConfluenceFactor(
+                name="Timeframe_Conflict_Resolution",
+                score=factor_score,
+                weight=0.10,
+                rationale=conflict_result['resolution_reason']
+            ))
+            
+            if conflict_result['resolution'] == 'blocked':
+                logger.warning("🚫 Timeframe Conflict BLOCKED: conflicts: %s",
+                             ', '.join(conflict_result['conflicts']))
     
     # --- Normalize Weights ---
     

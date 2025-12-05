@@ -315,14 +315,16 @@ class Orchestrator:
                 prefetched = prefetched_data.get(sym)
                 return self._process_symbol(sym, run_id, timestamp, prefetched_data=prefetched)
             except Exception as e:  # pyright: ignore - intentional broad catch for robustness
-                logger.error("❌ %s: Pipeline error - %s", sym, e)
+                import traceback
+                tb = traceback.format_exc()
+                logger.error("❌ %s: Pipeline error - %s\n%s", sym, e, tb)
                 self.telemetry.log_event(create_error_event(
                     error_message=str(e),
                     error_type=type(e).__name__,
                     symbol=sym,
                     run_id=run_id
                 ))
-                return None, {"symbol": sym, "error": str(e)}
+                return None, {"symbol": sym, "error": str(e), "reason_type": "errors", "reason": str(e)}
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.concurrency_workers) as executor:
             future_map = {executor.submit(_safe_process, s): s for s in symbols}

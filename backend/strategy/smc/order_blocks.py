@@ -123,7 +123,8 @@ def detect_order_blocks(
             
             # Normalize displacement to 0-100 scale
             # 1.5 ATR = 50 (minimum), 3.0 ATR = 100 (maximum)
-            normalized_displacement = min(100.0, (displacement_atr / 3.0) * 100.0)
+            # Clamp to 0-100 range (safeguard against data anomalies)
+            normalized_displacement = max(0.0, min(100.0, (displacement_atr / 3.0) * 100.0))
             
             ob = OrderBlock(
                 timeframe=_infer_timeframe(df),
@@ -151,7 +152,8 @@ def detect_order_blocks(
             volume_spike = candle['volume'] > (avg_volume.iloc[i] * volume_threshold) if pd.notna(avg_volume.iloc[i]) else False
             
             # Normalize displacement to 0-100 scale
-            normalized_displacement = min(100.0, (displacement_atr / 3.0) * 100.0)
+            # Clamp to 0-100 range (safeguard against data anomalies)
+            normalized_displacement = max(0.0, min(100.0, (displacement_atr / 3.0) * 100.0))
             
             ob = OrderBlock(
                 timeframe=_infer_timeframe(df),
