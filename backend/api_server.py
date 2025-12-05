@@ -28,6 +28,7 @@ from backend.bot.telemetry.events import EventType
 from backend.engine.orchestrator import Orchestrator
 from backend.data.ingestion_pipeline import IngestionPipeline
 from backend.analysis.pair_selection import select_symbols
+from backend.analysis.dominance_service import get_current_dominance, get_dominance_for_macro
 from backend.shared.config.smc_config import SMCConfig
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.scanner_modes import get_mode, list_modes
@@ -1539,6 +1540,13 @@ async def get_market_regime(symbol: Optional[str] = Query(None, description="Opt
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
         
+        # Get dominance data
+        try:
+            btc_dom, alt_dom, stable_dom = get_dominance_for_macro()
+        except Exception as dom_err:
+            logger.warning("Dominance fetch failed: %s", dom_err)
+            btc_dom, alt_dom, stable_dom = 50.0, 35.0, 15.0  # Fallback values
+        
         return {
             "composite": regime.composite,
             "score": regime.score,
@@ -1554,6 +1562,11 @@ async def get_market_regime(symbol: Optional[str] = Query(None, description="Opt
             "liquidity_score": regime.liquidity_score,
             "risk_score": regime.risk_score,
             "derivatives_score": regime.derivatives_score,
+            "dominance": {
+                "btc_d": round(btc_dom, 2),
+                "alt_d": round(alt_dom, 2),
+                "stable_d": round(stable_dom, 2)
+            },
             "timestamp": regime.timestamp.isoformat()
         }
         

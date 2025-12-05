@@ -509,6 +509,11 @@ class ApiClient {
       liquidity_score: number;
       risk_score: number;
       derivatives_score: number;
+      dominance?: {
+        btc_d: number;
+        alt_d: number;
+        stable_d: number;
+      };
       timestamp: string;
     }>('/market/regime', { silent: import.meta.env.MODE === 'production' });
   }
