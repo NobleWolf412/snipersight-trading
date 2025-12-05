@@ -161,24 +161,7 @@ MODES: Dict[str, ScannerMode] = {
         min_target_move_pct=1.5,  # Macro moves require >= 1.5% TP1
         overrides={"min_rr_ratio": 2.0, "atr_floor": 0.0025, "bias_gate": 0.7, "htf_swing_allowed": ("1d", "4h")},
     ),
-    "recon": ScannerMode(
-        name="recon",
-        description="Balanced recon: multi-timeframe scouting for momentum pivots; adaptable and mission-ready.",
-        timeframes=("1d", "4h", "1h", "15m", "5m"),  # Added 1D to match UI
-        min_confluence_score=65.0,
-        profile="balanced",
-        critical_timeframes=("4h", "1h"),  # 4H and 1H essential for swing context
-        primary_planning_timeframe="1h",
-        max_pullback_atr=3.0,
-        min_stop_atr=0.25,  # TUNED: was 0.3 - allow slightly tighter precision stops
-        max_stop_atr=5.0,   # TUNED: was 6.0 - cap via max_stop_atr validation
-        entry_timeframes=("1h", "15m", "5m"),  # TUNED: added 5m for flexible entries
-        structure_timeframes=("1d", "4h", "1h"),  # RESTORED: HTF structure for target clipping
-        stop_timeframes=("1h", "15m"),
-        target_timeframes=("4h", "1h"),
-        min_target_move_pct=0.8,  # Balanced swing requires >= 0.8% TP1
-        overrides={"min_rr_ratio": 1.8, "atr_floor": 0.0015, "bias_gate": 0.65, "htf_swing_allowed": ("4h", "1h")},
-    ),
+    # NOTE: "recon" removed from MODES - use get_mode('recon') which maps to 'stealth'
     "strike": ScannerMode(
         name="strike",
         description="Strike ops: intraday assault on momentum with local liquidity reads; fast entry, fast exfil.",

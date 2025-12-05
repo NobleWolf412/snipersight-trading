@@ -1,5 +1,6 @@
 import { LiveTicker } from '@/components/LiveTicker';
 import { SystemStatus } from '@/components/landing/SystemStatus';
+import { TacticalBriefing } from '@/components/landing/TacticalBriefing';
 import { useTelemetry } from '@/hooks/useTelemetry';
 import { Crosshair, Target, ChartLine, Compass } from '@phosphor-icons/react';
 import { Link } from 'react-router-dom';
@@ -45,6 +46,13 @@ export function Landing() {
         <section className="relative border-y border-border/40">
           <PageContainer className="py-2">
             <LiveTicker />
+          </PageContainer>
+        </section>
+
+        {/* Tactical Briefing - Macro Context at a Glance */}
+        <section className="relative py-8 md:py-12">
+          <PageContainer>
+            <TacticalBriefing />
           </PageContainer>
         </section>
 

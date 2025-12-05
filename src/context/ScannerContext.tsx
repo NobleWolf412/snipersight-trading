@@ -79,7 +79,7 @@ const defaultScanConfig: ScanConfig = {
   },
   timeframes: ['1D', '4H', '1H'],
   leverage: 1,
-  sniperMode: 'recon',
+  sniperMode: 'stealth',
   customTimeframes: [],
   macroOverlay: false,
 };
@@ -91,14 +91,15 @@ const defaultBotConfig: BotConfig = {
     swing: true,
     scalp: false,
   },
-  sniperMode: 'recon',
+  sniperMode: 'stealth',
   customTimeframes: [],
   maxTrades: 3,
   duration: 24,
 };
 
 // Static scanner modes (fallback if backend unavailable)
-// Synced with backend/shared/config/scanner_modes.py MODES dict as of 2025-12-01
+// Synced with backend/shared/config/scanner_modes.py MODES dict as of 2025-12-04
+// NOTE: recon+ghost merged into stealth mode
 const fallbackModes: ScannerMode[] = [
   {
     name: 'overwatch',
@@ -113,19 +114,7 @@ const fallbackModes: ScannerMode[] = [
     atr_multiplier: 4.0,
     min_rr_ratio: 2.0,
   },
-  {
-    name: 'recon',
-    description: 'Balanced recon: multi-timeframe scouting for momentum pivots; adaptable and mission-ready.',
-    timeframes: ['1d','4h','1h','15m','5m'],
-    min_confluence_score: 65,
-    profile: 'balanced',
-    critical_timeframes: ['4h', '1h'],
-    primary_planning_timeframe: '1h',
-    entry_timeframes: ['1h', '15m'],
-    structure_timeframes: ['1d', '4h', '1h'],
-    atr_multiplier: 3.0,
-    min_rr_ratio: 1.8,
-  },
+  // NOTE: 'recon' removed - merged into 'stealth' mode
   {
     name: 'strike',
     description: 'Strike ops: intraday assault on momentum with local liquidity reads; fast entry, fast exfil.',
@@ -245,8 +234,8 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
     console.log('[ScannerContext] Processed modes:', modes);
     setScannerModes(modes.length ? modes : fallbackModes);
     // Ensure selectedMode aligned with scanConfig
-    const desired = (scanConfig?.sniperMode as string) || 'recon';
-    const match = modes.find(m => m.name === desired) || modes.find(m => m.name === 'recon') || modes[0] || fallbackModes[0];
+    const desired = (scanConfig?.sniperMode as string) || 'stealth';
+    const match = modes.find(m => m.name === desired) || modes.find(m => m.name === 'stealth') || modes[0] || fallbackModes[0];
     setSelectedMode(match);
     console.log('[ScannerContext] Modes loaded. Total:', modes.length, 'Active:', match?.name);
   };

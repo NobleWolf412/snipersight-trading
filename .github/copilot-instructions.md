@@ -80,11 +80,11 @@ pytest backend/tests/integration/ -v
 
 ### Backend Configuration System
 Configuration lives in `backend/shared/config/`:
-- **Scanner modes** (`scanner_modes.py`): predefined profiles (overwatch, recon, strike, surgical, ghost) with timeframes, min confluence, risk-reward targets
+- **Scanner modes** (`scanner_modes.py`): predefined profiles (overwatch, strike, surgical, stealth) with timeframes, min confluence, risk-reward targets. Note: `recon` and `ghost` were merged into `stealth` mode.
 - **Defaults** (`defaults.py`): global thresholds (ATR multipliers, RSI levels, volume spike thresholds)
 - **SMC config** (`smc_config.py`): displacement requirements, freshness scoring, structural break detection params
 
-Always load mode via `get_mode('recon')` rather than hardcoding—modes are backend-driven. Frontend has STATIC mode definitions in `ScannerContext.tsx` (const `SCANNER_MODES`) for UI display only—these should mirror backend definitions but are not fetched from API.
+Always load mode via `get_mode('stealth')` rather than hardcoding—modes are backend-driven. Frontend has STATIC mode definitions in `ScannerContext.tsx` (const `SCANNER_MODES`) for UI display only—these should mirror backend definitions but are not fetched from API.
 
 ## Project-Specific Conventions
 
@@ -196,7 +196,7 @@ Backend endpoint `/api/market/regime` implemented—returns regime detection fro
 - `src/utils/api.ts`: Typed API client
 
 **Config & Contracts**:
-- `backend/shared/config/scanner_modes.py`: Predefined trading profiles (5 modes: overwatch, recon, strike, surgical, ghost)
+- `backend/shared/config/scanner_modes.py`: Predefined trading profiles (4 modes: overwatch, strike, surgical, stealth)
 - `backend/shared/models/`: Dataclass definitions (data, indicators, smc, scoring, planner)
 - `backend/contracts/`: API boundary contracts (prevent signature drift)
 
@@ -213,12 +213,11 @@ Backend endpoint `/api/market/regime` implemented—returns regime detection fro
 All adapters implement retry logic, rate limiting, and CCXT integration. Orchestrator takes `exchange_adapter` parameter—API server provides factory in `EXCHANGE_ADAPTERS` dict.
 
 ### Scanner Modes (Backend Truth)
-Backend `scanner_modes.py` defines 5 tactical modes with critical timeframe requirements:
+Backend `scanner_modes.py` defines 4 tactical modes with critical timeframe requirements:
 - **overwatch**: 6 TFs (1w→5m), 75% min score, macro surveillance
-- **recon**: 5 TFs (1d→5m), 65% min score, balanced multi-timeframe
 - **strike**: 4 TFs (4h→5m), 60% min score, intraday aggressive
 - **surgical**: 3 TFs (1h→5m), 70% min score, precision scalping
-- **ghost**: 5 TFs (1d→5m), 70% min score, stealth balanced
+- **stealth**: 5 TFs (1d→5m), 65% min score, balanced swing trading (merged from recon+ghost; use `stealth_strict=True` override for higher conviction)
 
 Each mode specifies `critical_timeframes` tuple—symbols missing these are rejected with telemetry event.
 
