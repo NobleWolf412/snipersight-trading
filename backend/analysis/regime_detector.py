@@ -130,81 +130,180 @@ class RegimeDetector:
     
     def _detect_trend(self, data: MultiTimeframeData):
         """
-        Detect trend regime from price action.
+        Detect trend using REAL swing structure, not bar-to-bar noise.
+        
+        Uses existing swing_structure detector for proper HH/HL/LH/LL analysis.
         
         Returns: (trend_label, score)
         """
+        from backend.strategy.smc.swing_structure import detect_swing_structure
+        
         # Use highest available TF for trend
         tfs = sorted(data.timeframes.keys(), reverse=True)
         if not tfs:
             return "sideways", 50.0
             
         df = data.timeframes[tfs[0]]
-        if len(df) < 20:
+        if len(df) < 50:  # Need more data for reliable swing detection
             return "sideways", 50.0
         
-        # Calculate 20-period MA slope
-        df_copy = df.copy()
-        df_copy['ma20'] = df_copy['close'].rolling(20).mean()
+        try:
+            # Use your EXISTING swing structure detector
+            swing_struct = detect_swing_structure(df, lookback=15)
+            
+            # It already gives you trend: 'bullish', 'bearish', or 'neutral'
+            trend = swing_struct.trend
+            
+            # Also check momentum strength (are recent swings strong?)
+            recent_swings = swing_struct.swing_points[-5:] if len(swing_struct.swing_points) >= 5 else []
+            strong_swings = [s for s in recent_swings if s.strength > 1.5]
+            has_strong_momentum = len(strong_swings) >= 3
+            
+            # Also check MA slope for confirmation
+            df_copy = df.copy()
+            df_copy['ma20'] = df_copy['close'].rolling(20).mean()
+            
+            if not df_copy['ma20'].iloc[-20:].isna().all():
+                # Calculate slope over full MA period (20 bars for 20MA)
+                slope = (df_copy['ma20'].iloc[-1] - df_copy['ma20'].iloc[-20]) / df_copy['ma20'].iloc[-20] * 100
+                
+                # Normalize by volatility
+                atr = df_copy['high'].rolling(14).max() - df_copy['low'].rolling(14).min()
+                current_price = df_copy['close'].iloc[-1]
+                atr_pct = (atr.iloc[-1] / current_price * 100) if current_price > 0 else 1.0
+                normalized_slope = slope / max(atr_pct, 0.5)
+            else:
+                normalized_slope = 0
+            
+            # Classify based on swing structure + momentum
+            if trend == 'bullish':
+                if has_strong_momentum and normalized_slope > 2.0:
+                    logger.debug("Trend: strong_up (swing structure + momentum)")
+                    return "strong_up", 85.0
+                else:
+                    logger.debug("Trend: up (swing structure, weak momentum)")
+                    return "up", 70.0
+            
+            elif trend == 'bearish':
+                if has_strong_momentum and normalized_slope < -2.0:
+                    logger.debug("Trend: strong_down (swing structure + momentum)")
+                    return "strong_down", 15.0
+                else:
+                    logger.debug("Trend: down (swing structure, weak momentum)")
+                    return "down", 30.0
+            
+            else:
+                logger.debug("Trend: sideways (no clear structure)")
+                return "sideways", 50.0
         
-        if df_copy['ma20'].iloc[-10:].isna().all():
-            return "sideways", 50.0
-        
-        slope = (df_copy['ma20'].iloc[-1] - df_copy['ma20'].iloc[-10]) / df_copy['ma20'].iloc[-10] * 100
-        
-        # Check for HH/HL pattern (bullish) or LH/LL (bearish)
-        highs = df_copy['high'].tail(10)
-        lows = df_copy['low'].tail(10)
-        
-        hh_count = sum(
-            1 for i in range(1, len(highs)) 
-            if highs.iloc[i] > highs.iloc[i-1]
-        )
-        hl_count = sum(
-            1 for i in range(1, len(lows)) 
-            if lows.iloc[i] > lows.iloc[i-1]
-        )
-        
-        # Classify trend
-        if slope > 5 and hh_count >= 6:
-            return "strong_up", 85.0
-        elif slope > 2 and hh_count >= 4:
-            return "up", 70.0
-        elif slope < -5 and hl_count <= 3:
-            return "strong_down", 20.0
-        elif slope < -2 and hl_count <= 5:
-            return "down", 35.0
-        else:
-            return "sideways", 50.0
+        except Exception as e:
+            logger.warning(f"Swing structure detection failed: {e}, using fallback")
+            # Fallback to simple MA slope if swing detection fails
+            df_copy = df.copy()
+            df_copy['ma20'] = df_copy['close'].rolling(20).mean()
+            
+            if df_copy['ma20'].iloc[-10:].isna().all():
+                return "sideways", 50.0
+            
+            slope = (df_copy['ma20'].iloc[-1] - df_copy['ma20'].iloc[-10]) / df_copy['ma20'].iloc[-10] * 100
+            
+            if slope > 3:
+                return "up", 70.0
+            elif slope < -3:
+                return "down", 35.0
+            else:
+                return "sideways", 50.0
     
     def _detect_volatility(self, indicators: IndicatorSet):
         """
-        Detect volatility regime from ATR.
+        Detect volatility regime from ATR as PERCENTAGE of price.
+        
+        CRITICAL FIX: ATR 1470 @ $97k BTC = 1.5% (normal)
+                      ATR 1470 @ $10k ETH = 14.7% (chaotic)
+        
+        Old code used absolute ATR which was completely broken.
         
         Returns: (vol_label, score)
         """
         if not indicators.by_timeframe:
-            return "normal", 50.0
+            return "normal", 75.0
         
         # Get highest timeframe indicator
         primary_tf = sorted(indicators.by_timeframe.keys(), reverse=True)[0]
         ind = indicators.by_timeframe[primary_tf]
         
         if ind.atr is None:
-            return "normal", 50.0
-        
-        # Classify based on ATR magnitude
-        # (This is simplified - ideal would compare to rolling ATR)
-        atr = ind.atr
-        
-        if atr < 100:
-            return "compressed", 60.0  # Low vol can be good (coiling)
-        elif atr < 300:
             return "normal", 75.0
-        elif atr < 600:
-            return "elevated", 55.0
+        
+        # CRITICAL: Get current price to calculate ATR%
+        current_price = None
+        
+        # Try to get price from indicator dataframe
+        if hasattr(ind, 'dataframe') and ind.dataframe is not None and 'close' in ind.dataframe.columns:
+            current_price = ind.dataframe['close'].iloc[-1]
+        
+        # Try to get price from bb_middle (it's close to current price)
+        if current_price is None and ind.bb_middle is not None:
+            current_price = ind.bb_middle
+        
+        if current_price is None or current_price <= 0:
+            logger.warning("Cannot determine current price for ATR%%, using raw ATR fallback")
+            # Fallback: assume reasonable normalized ATR
+            atr = ind.atr
+            if atr < 100:
+                return "compressed", 60.0
+            elif atr < 300:
+                return "normal", 75.0
+            else:
+                return "elevated", 55.0
+        
+        # Calculate ATR as PERCENTAGE of price (this is the critical fix)
+        atr_pct = (ind.atr / current_price) * 100
+        
+        # Also check ATR trend (expanding = building momentum)
+        atr_series = getattr(ind, 'atr_series', None)
+        atr_expanding = False
+        
+        if atr_series and len(atr_series) >= 10:
+            recent_atr = atr_series[-5:]
+            older_atr = atr_series[-10:-5]
+            recent_avg = sum(recent_atr) / len(recent_atr)
+            older_avg = sum(older_atr) / len(older_atr)
+            
+            if recent_avg > older_avg * 1.15:  # 15% increase
+                atr_expanding = True
+        
+        # Classify based on ATR% (proper volatility-adjusted thresholds)
+        # These thresholds are for crypto - adjust if needed for other assets
+        
+        if atr_pct < 0.8:
+            # Very compressed - coiling for a move
+            logger.info(f"Volatility: compressed (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)")
+            return "compressed", 60.0
+        
+        elif atr_pct < 1.5:
+            # Normal healthy volatility
+            logger.info(f"Volatility: normal (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)")
+            return "normal", 75.0
+        
+        elif atr_pct < 2.5:
+            # Elevated but manageable
+            if atr_expanding:
+                logger.info(f"Volatility: elevated_expanding (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)")
+                return "elevated", 55.0
+            else:
+                logger.info(f"Volatility: elevated (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)")
+                return "elevated", 60.0
+        
+        elif atr_pct < 4.0:
+            # High volatility - caution
+            logger.info(f"Volatility: volatile (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)")
+            return "volatile", 40.0
+        
         else:
-            return "chaotic", 30.0
+            # Chaotic/crash conditions (>4% ATR)
+            logger.warning(f"Volatility: chaotic (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)")
+            return "chaotic", 20.0
     
     def _detect_liquidity(self, data: MultiTimeframeData):
         """
@@ -235,15 +334,12 @@ class RegimeDetector:
     
     def _detect_risk_appetite(self) -> tuple[str, float]:
         """
-        Detect risk appetite regime using real dominance data.
+        Detect risk appetite using REAL dominance data with PROPER thresholds.
         
-        Uses DominanceService to fetch BTC.D, Alt.D, Stable.D from CryptoCompare.
-        
-        Logic:
-        - High stable dominance (>8%) = risk_off (capital fleeing to safety)
-        - High alt dominance (>40%) = risk_on (capital rotating to alts)
-        - High BTC dominance (>55%) + rising = btc_flight (capital consolidating to BTC)
-        - Otherwise = rotation (normal market conditions)
+        FIXED:
+        1. Uses proper thresholds (USDT.D > 9% for risk_off, not 8%)
+        2. Checks BTC.D absolute level AND trend direction
+        3. More granular classifications
         
         Returns: (risk_label, score)
         """
@@ -251,26 +347,64 @@ class RegimeDetector:
             from backend.analysis.dominance_service import get_dominance_for_macro
             btc_dom, alt_dom, stable_dom = get_dominance_for_macro()
             
-            # High stable dominance indicates fear/risk-off
-            if stable_dom > 8.0:  # Above typical 6-7%
+            logger.info(f"Risk Appetite: BTC.D={btc_dom:.1f}%, Alt.D={alt_dom:.1f}%, Stable.D={stable_dom:.1f}%")
+            
+            # 1. Check USDT.D (flight to stables = risk off)
+            # USDT.D normal range: 3-7%
+            # USDT.D risk-off: 8-12%
+            # USDT.D extreme risk-off: >12%
+            
+            if stable_dom > 12.0:
+                # Extreme risk-off: money fleeing to stables
+                logger.info("Risk: extreme_risk_off (high stable dominance)")
+                return "extreme_risk_off", 15.0
+            
+            elif stable_dom > 9.0:
+                # Risk-off: significant stable allocation
+                logger.info("Risk: risk_off (elevated stable dominance)")
                 return "risk_off", 30.0
             
-            # High alt dominance indicates greed/risk-on
-            elif alt_dom > 40.0:  # Alt season territory
-                return "risk_on", 80.0
+            elif stable_dom > 7.5:
+                # Cautious: moderate stable allocation
+                logger.info("Risk: cautious (moderate stable dominance)")
+                return "cautious", 45.0
             
-            # High BTC dominance = capital consolidating to BTC
+            # 2. Check BTC.D level for capital flow direction
+            if btc_dom > 60.0:
+                # BTC.D high = capital flight to BTC (alt weakness)
+                logger.info("Risk: btc_flight (BTC.D high)")
+                return "btc_flight", 40.0
+            
             elif btc_dom > 55.0:
-                return "btc_flight", 55.0
+                # BTC.D moderately high = BTC dominant
+                logger.info("Risk: btc_dominant (BTC.D moderately high)")
+                return "btc_dominant", 50.0
             
-            # Normal rotation conditions
+            elif btc_dom < 48.0:
+                # BTC.D low = alt season brewing
+                logger.info("Risk: alt_season (BTC.D low)")
+                return "alt_season", 85.0
+            
+            elif btc_dom < 52.0:
+                # BTC.D lowish = some alt strength
+                logger.info("Risk: risk_on (BTC.D low, alt strength)")
+                return "risk_on", 75.0
+            
             else:
-                return "rotation", 60.0
+                # BTC.D stable in normal range (52-55%)
+                if stable_dom < 5.0:
+                    # Low stable allocation = healthy risk-on
+                    logger.info("Risk: risk_on (low stable allocation)")
+                    return "risk_on", 80.0
+                else:
+                    # Moderate stable allocation = balanced
+                    logger.info("Risk: balanced (normal conditions)")
+                    return "balanced", 60.0
                 
         except Exception as e:
             # Fallback if DominanceService unavailable
             logger.debug(f"Risk appetite detection fallback: {e}")
-            return "neutral", 50.0
+            return "balanced", 50.0
     
     def _generate_composite_label(self, dim: RegimeDimensions) -> str:
         """Generate composite regime label from dimensions."""

@@ -231,9 +231,10 @@ def analyze_confluence_factors(rejection_stats: Dict[str, List[Dict[str, Any]]],
               f"Count: {factor['count']}")
 
 
-def print_mode_config(mode, mode_name: str) -> None:
+def print_mode_config(mode, mode_name: str, show_header: bool = True) -> None:
     """Print detailed mode configuration."""
-    print_section(f"MODE CONFIGURATION: {mode_name.upper()}")
+    if show_header:
+        print_section(f"MODE CONFIGURATION: {mode_name.upper()}")
     
     print(f"  {Colors.CYAN}Profile:{Colors.RESET} {mode.profile}")
     print(f"  {Colors.CYAN}Timeframes:{Colors.RESET} {', '.join(mode.timeframes)}")
@@ -245,16 +246,66 @@ def print_mode_config(mode, mode_name: str) -> None:
     print(f"  {Colors.CYAN}Min R:R:{Colors.RESET} {mode.overrides.get('min_rr_ratio', 'Not set') if mode.overrides else 'Not set'}")
 
 
+def print_all_modes_criteria() -> None:
+    """Print criteria comparison table for all modes."""
+    print_header("SCANNER MODES CRITERIA COMPARISON", "═")
+    
+    modes_info = [
+        ('overwatch', get_mode('overwatch')),
+        ('strike', get_mode('strike')),
+        ('surgical', get_mode('surgical')),
+        ('stealth', get_mode('stealth')),
+    ]
+    
+    # Header
+    print(f"\n{Colors.BOLD}{'Mode':<12} {'Min Score':>10} {'Min R:R':>8} {'Stop ATR':>12} {'Profile':<20}{Colors.RESET}")
+    print("-" * 70)
+    
+    for name, mode in modes_info:
+        min_rr = mode.overrides.get('min_rr_ratio', 'N/A') if mode.overrides else 'N/A'
+        stop_atr = f"{mode.min_stop_atr:.2f}-{mode.max_stop_atr:.1f}"
+        print(f"{name:<12} {mode.min_confluence_score:>9.0f}% {min_rr:>8} {stop_atr:>12} {mode.profile:<20}")
+    
+    print(f"\n{Colors.BOLD}{'Mode':<12} {'Critical TFs':<20} {'Entry TFs':<15} {'Structure TFs':<20}{Colors.RESET}")
+    print("-" * 75)
+    
+    for name, mode in modes_info:
+        critical = ', '.join(mode.critical_timeframes) if mode.critical_timeframes else 'None'
+        entry = ', '.join(mode.entry_timeframes) if mode.entry_timeframes else 'Any'
+        structure = ', '.join(mode.structure_timeframes) if mode.structure_timeframes else 'Any'
+        print(f"{name:<12} {critical:<20} {entry:<15} {structure:<20}")
+    
+    print(f"\n{Colors.DIM}Legend:{Colors.RESET}")
+    print(f"  {Colors.CYAN}Critical TFs:{Colors.RESET} Timeframes that MUST have data (symbol rejected if missing)")
+    print(f"  {Colors.CYAN}Entry TFs:{Colors.RESET} Timeframes used for entry zone calculation")
+    print(f"  {Colors.CYAN}Structure TFs:{Colors.RESET} Timeframes used for stop/target structure")
+    print(f"  {Colors.CYAN}Min Score:{Colors.RESET} Minimum confluence score to pass (higher = more selective)")
+    print(f"  {Colors.CYAN}Min R:R:{Colors.RESET} Minimum risk:reward ratio required")
+    print(f"  {Colors.CYAN}Stop ATR:{Colors.RESET} Allowed stop-loss range in ATR units (min-max)")
+
+
 def run_single_mode_scan(
     mode_name: str, 
     symbols: List[str], 
-    verbose: bool = False
+    verbose: bool = False,
+    show_mode_criteria: bool = True
 ) -> Tuple[List[Any], Dict[str, Any], float]:
     """Run a scan for a single mode and return results."""
     
     print_header(f"SCANNING WITH MODE: {mode_name.upper()}", "═")
     
     mode = get_mode(mode_name)
+    
+    # Show mode requirements BEFORE scanning
+    if show_mode_criteria:
+        print(f"\n{Colors.BOLD}📋 Mode Requirements:{Colors.RESET}")
+        print(f"  {Colors.CYAN}Min Confluence:{Colors.RESET} {mode.min_confluence_score:.0f}%")
+        print(f"  {Colors.CYAN}Min R:R:{Colors.RESET} {mode.overrides.get('min_rr_ratio', 'N/A') if mode.overrides else 'N/A'}")
+        print(f"  {Colors.CYAN}Critical TFs (REQUIRED):{Colors.RESET} {', '.join(mode.critical_timeframes) if mode.critical_timeframes else 'None'}")
+        print(f"  {Colors.CYAN}Entry TFs:{Colors.RESET} {', '.join(mode.entry_timeframes) if mode.entry_timeframes else 'Any'}")
+        print(f"  {Colors.CYAN}Stop ATR Range:{Colors.RESET} {mode.min_stop_atr:.2f} - {mode.max_stop_atr:.1f}")
+        print(f"  {Colors.CYAN}All TFs:{Colors.RESET} {', '.join(mode.timeframes)}")
+    
     config = ScanConfig(
         profile=mode_name,
         timeframes=mode.timeframes,
@@ -299,18 +350,23 @@ def print_signals_detail(signals: List[Any], verbose: bool = False) -> None:
         print(f"      Confidence: {Colors.CYAN}{signal.confidence_score:.1f}%{Colors.RESET}")
         
         if hasattr(signal, 'stop_loss') and signal.stop_loss:
-            # StopLoss object has .price attribute
-            stop_price = getattr(signal.stop_loss, 'price', None) or signal.stop_loss
-            if isinstance(stop_price, (int, float)):
-                print(f"      Stop Loss: {stop_price:.5f}")
+            # StopLoss object has .level attribute
+            stop_level = getattr(signal.stop_loss, 'level', None)
+            stop_atr = getattr(signal.stop_loss, 'distance_atr', None)
+            if stop_level is not None:
+                atr_str = f" ({stop_atr:.2f} ATR)" if stop_atr else ""
+                print(f"      Stop Loss: {float(stop_level):.5f}{atr_str}")
             else:
-                print(f"      Stop Loss: {stop_price}")
+                print(f"      Stop Loss: {signal.stop_loss}")
         
         if hasattr(signal, 'targets') and signal.targets:
-            # Targets might be Target objects or floats
+            # Targets are Target objects with .level and .percentage
             try:
-                targets_str = ", ".join([f"{getattr(t, 'price', t):.5f}" for t in signal.targets[:3]])
-                print(f"      Targets: {targets_str}")
+                for j, t in enumerate(signal.targets[:3], 1):
+                    level = getattr(t, 'level', t)
+                    pct = getattr(t, 'percentage', None)
+                    pct_str = f" ({pct:.0f}%)" if pct else ""
+                    print(f"      Target {j}: {float(level):.5f}{pct_str}")
             except Exception:
                 print(f"      Targets: {signal.targets[:3]}")
         
@@ -326,11 +382,16 @@ def run_all_modes_comparison(symbols: List[str], verbose: bool = False) -> None:
     print(f"{Colors.CYAN}Total Symbols:{Colors.RESET} {len(symbols)}")
     print(f"{Colors.CYAN}Timestamp:{Colors.RESET} {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
+    # Show all modes criteria FIRST
+    print_all_modes_criteria()
+    
     all_modes = ['overwatch', 'strike', 'surgical', 'stealth']
     results = {}
     
     for mode_name in all_modes:
-        signals, rejection_stats, elapsed, mode = run_single_mode_scan(mode_name, symbols, verbose)
+        signals, rejection_stats, elapsed, mode = run_single_mode_scan(
+            mode_name, symbols, verbose, show_mode_criteria=True
+        )
         
         # Quick summary for this mode
         total_rejected = sum(len(v) for v in rejection_stats['details'].values())

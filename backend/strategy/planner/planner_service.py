@@ -120,6 +120,18 @@ def _get_allowed_structure_tfs(config: ScanConfig) -> tuple:
     return getattr(config, 'structure_timeframes', ())
 
 
+def _get_allowed_stop_tfs(config: ScanConfig) -> tuple:
+    """Extract stop_timeframes from config, or return empty tuple if unrestricted.
+    
+    Falls back to structure_timeframes if stop_timeframes not specified.
+    """
+    stop_tfs = getattr(config, 'stop_timeframes', None)
+    if stop_tfs:
+        return stop_tfs
+    # Fallback to structure_timeframes for backward compatibility
+    return getattr(config, 'structure_timeframes', ())
+
+
 def _get_allowed_entry_tfs(config: ScanConfig) -> tuple:
     """Extract entry_timeframes from config, or return empty tuple if unrestricted."""
     return getattr(config, 'entry_timeframes', ())
@@ -354,7 +366,8 @@ def generate_trade_plan(
         config=config,
         planner_cfg=planner_cfg,
         multi_tf_data=multi_tf_data,
-        current_price=current_price  # Pass for regime-aware stop buffer
+        current_price=current_price,  # Pass for regime-aware stop buffer
+        indicators_by_tf=indicators.by_timeframe  # Pass for structure-TF ATR lookup
     )
     plan_composition['stop_from_structure'] = stop_used_structure
     
@@ -1123,19 +1136,21 @@ def _calculate_stop_loss(
     config: ScanConfig,
     planner_cfg: PlannerConfig,
     multi_tf_data: Optional[MultiTimeframeData] = None,
-    current_price: Optional[float] = None  # NEW: for regime-aware buffer
+    current_price: Optional[float] = None,  # NEW: for regime-aware buffer
+    indicators_by_tf: Optional[dict] = None  # NEW: for structure-TF ATR lookup
 ) -> tuple[StopLoss, bool]:
     """
     Calculate structure-based stop loss.
     
     Never arbitrary - always beyond invalidation point.
     NOW with dynamic regime-aware stop buffer (Issue #3 fix).
+    NOW with structure-TF ATR normalization (prevents ATR mismatch rejections).
     
     Returns:
         Tuple of (StopLoss, used_structure_flag)
     """
     # Direction provided via is_bullish
-    allowed_tfs = _get_allowed_structure_tfs(config)
+    allowed_tfs = _get_allowed_stop_tfs(config)  # CHANGED: Use stop_timeframes, not structure_timeframes
     structure_tf_used = None  # Track which TF provided stop
     
     # === DYNAMIC STOP BUFFER BASED ON ATR REGIME (Issue #3 fix) ===
@@ -1186,7 +1201,22 @@ def _calculate_stop_loss(
             stop_level -= (stop_buffer * atr)  # Dynamic regime-aware buffer beyond structure
             rationale = f"Stop below {structure_tf_used} entry structure invalidation point"
             logger.debug(f"Using structure-based stop: {stop_level} from {structure_tf_used} (before buffer: {max(valid_stops, key=lambda x: x[0])[0]})")
-            distance_atr = (entry_zone.far_entry - stop_level) / atr
+            
+            # === STRUCTURE-TF ATR NORMALIZATION ===
+            # Use the structure's TF ATR for distance calculation, not primary TF ATR
+            # This prevents "stop too wide" rejections when stop comes from HTF structure
+            structure_atr = atr  # Default to primary ATR
+            if indicators_by_tf and structure_tf_used:
+                # Look up structure TF's ATR (try exact match, then lowercase)
+                structure_tf_lower = structure_tf_used.lower()
+                if structure_tf_used in indicators_by_tf and indicators_by_tf[structure_tf_used].atr:
+                    structure_atr = indicators_by_tf[structure_tf_used].atr
+                    logger.debug(f"Using structure TF {structure_tf_used} ATR={structure_atr:.4f} for distance calc")
+                elif structure_tf_lower in indicators_by_tf and indicators_by_tf[structure_tf_lower].atr:
+                    structure_atr = indicators_by_tf[structure_tf_lower].atr
+                    logger.debug(f"Using structure TF {structure_tf_lower} ATR={structure_atr:.4f} for distance calc")
+            
+            distance_atr = (entry_zone.far_entry - stop_level) / structure_atr
             used_structure = True
         else:
             # Fallback: swing-based stop from primary timeframe, then HTF if needed
@@ -1285,7 +1315,20 @@ def _calculate_stop_loss(
             stop_level, structure_tf_used = min(valid_stops, key=lambda x: x[0])
             stop_level += (stop_buffer * atr)  # Dynamic regime-aware buffer beyond structure
             rationale = f"Stop above {structure_tf_used} entry structure invalidation point"
-            distance_atr = (stop_level - entry_zone.far_entry) / atr
+            
+            # === STRUCTURE-TF ATR NORMALIZATION ===
+            # Use the structure's TF ATR for distance calculation, not primary TF ATR
+            structure_atr = atr  # Default to primary ATR
+            if indicators_by_tf and structure_tf_used:
+                structure_tf_lower = structure_tf_used.lower()
+                if structure_tf_used in indicators_by_tf and indicators_by_tf[structure_tf_used].atr:
+                    structure_atr = indicators_by_tf[structure_tf_used].atr
+                    logger.debug(f"Using structure TF {structure_tf_used} ATR={structure_atr:.4f} for distance calc")
+                elif structure_tf_lower in indicators_by_tf and indicators_by_tf[structure_tf_lower].atr:
+                    structure_atr = indicators_by_tf[structure_tf_lower].atr
+                    logger.debug(f"Using structure TF {structure_tf_lower} ATR={structure_atr:.4f} for distance calc")
+            
+            distance_atr = (stop_level - entry_zone.far_entry) / structure_atr
             used_structure = True
         else:
             # Fallback: swing-based stop from primary timeframe, then HTF if needed
