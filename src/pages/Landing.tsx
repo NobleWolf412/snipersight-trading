@@ -1,12 +1,13 @@
 import { LiveTicker } from '@/components/LiveTicker';
 import { SystemStatus } from '@/components/landing/SystemStatus';
 import { TacticalBriefing } from '@/components/landing/TacticalBriefing';
+import { MarketCyclesBrief } from '@/components/landing/MarketCyclesBrief';
 import { useTelemetry } from '@/hooks/useTelemetry';
 import { Crosshair, Target, ChartLine, Compass } from '@phosphor-icons/react';
 import { Link } from 'react-router-dom';
 import { PageContainer } from '@/components/layout/PageContainer';
 // Default logo path; update if your file name differs
-import sniperLogo from '@/assets/images/ .png';
+import sniperLogo from '@/assets/images/1000016768.png';
 
 export function Landing() {
   const { system } = useTelemetry();
@@ -53,6 +54,13 @@ export function Landing() {
         <section className="relative py-8 md:py-12">
           <PageContainer>
             <TacticalBriefing />
+          </PageContainer>
+        </section>
+
+        {/* Market Cycles - DCL/WCL Timing and Translation */}
+        <section className="relative py-8 md:py-12">
+          <PageContainer>
+            <MarketCyclesBrief />
           </PageContainer>
         </section>
 

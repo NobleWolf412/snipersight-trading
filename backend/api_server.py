@@ -1575,6 +1575,219 @@ async def get_market_regime(symbol: Optional[str] = Query(None, description="Opt
         raise HTTPException(status_code=500, detail=f"Regime detection error: {str(e)}") from e
 
 
+@app.get("/api/market/cycles")
+async def get_market_cycles(symbol: str = Query("BTC/USDT", description="Symbol to analyze cycles for")):
+    """
+    Get cycle timing context for a symbol (DCL/WCL tracking).
+    
+    Analyzes daily/weekly candles to determine:
+    - Days since last Daily Cycle Low (DCL) 
+    - Days since last Weekly Cycle Low (WCL)
+    - Expected windows for next cycle lows
+    - Cycle phase (accumulation/markup/distribution/markdown)
+    - Cycle translation (LTR/MTR/RTR) - bearish/neutral/bullish bias
+    - Stochastic RSI zones for cycle confirmation
+    
+    Uses Camel Finance methodology:
+    - DCL: ~18-28 days typical for crypto
+    - WCL: ~35-50 days (nests 2-3 DCLs)
+    
+    Returns:
+        Cycle context with timing, phase, translation, and trade bias
+    """
+    from backend.strategy.smc.cycle_detector import detect_cycle_context, CycleConfig
+    from backend.indicators.compute import compute_indicators
+    
+    try:
+        # Fetch daily candles for cycle analysis (need at least 60 days)
+        adapter = PhemexAdapter()
+        daily_df = adapter.fetch_ohlcv(symbol, "1d", limit=100)
+        
+        if daily_df is None or len(daily_df) < 50:
+            return {
+                "symbol": symbol,
+                "error": "Insufficient data for cycle analysis",
+                "dcl": None,
+                "wcl": None,
+                "phase": "unknown",
+                "translation": "unknown",
+                "trade_bias": "NEUTRAL",
+                "confidence": 0
+            }
+        
+        # Detect cycle context
+        config = CycleConfig()
+        cycle_ctx = detect_cycle_context(daily_df, config)
+        
+        # Also compute stochastic RSI for weekly timeframe to add zone info
+        weekly_df = adapter.fetch_ohlcv(symbol, "1w", limit=52)
+        stoch_rsi_k = None
+        stoch_rsi_d = None
+        stoch_zone = "neutral"
+        
+        if weekly_df is not None and len(weekly_df) >= 14:
+            try:
+                weekly_indicators = compute_indicators(weekly_df, "1w")
+                stoch_rsi_k = weekly_indicators.stoch_rsi_k
+                stoch_rsi_d = weekly_indicators.stoch_rsi_d
+                
+                if stoch_rsi_k is not None and stoch_rsi_d is not None:
+                    # Both lines below 20 = oversold (bullish zone)
+                    if stoch_rsi_k < 20 and stoch_rsi_d < 20:
+                        stoch_zone = "oversold"
+                    # Both lines above 80 = overbought (bearish zone)
+                    elif stoch_rsi_k > 80 and stoch_rsi_d > 80:
+                        stoch_zone = "overbought"
+                    # One or both in middle
+                    else:
+                        stoch_zone = "neutral"
+            except Exception as stoch_err:
+                logger.warning("Failed to compute weekly stochRSI: %s", stoch_err)
+        
+        # Calculate expected windows
+        dcl_expected_min = max(0, config.dcl_min_days - (cycle_ctx.dcl_days_since or 0))
+        dcl_expected_max = max(0, config.dcl_max_days - (cycle_ctx.dcl_days_since or 0))
+        wcl_expected_min = max(0, config.wcl_min_days - (cycle_ctx.wcl_days_since or 0))
+        wcl_expected_max = max(0, config.wcl_max_days - (cycle_ctx.wcl_days_since or 0))
+        
+        # Map enums to strings for JSON
+        phase_map = {
+            "accumulation": "ACCUMULATION",
+            "markup": "MARKUP", 
+            "distribution": "DISTRIBUTION",
+            "markdown": "MARKDOWN",
+            "unknown": "UNKNOWN"
+        }
+        translation_map = {
+            "left_translated": "LEFT_TRANSLATED",
+            "mid_translated": "MID_TRANSLATED",
+            "right_translated": "RIGHT_TRANSLATED",
+            "unknown": "UNKNOWN"
+        }
+        
+        phase_str = phase_map.get(cycle_ctx.phase.value, "UNKNOWN") if cycle_ctx.phase else "UNKNOWN"
+        translation_str = translation_map.get(cycle_ctx.translation.value, "UNKNOWN") if cycle_ctx.translation else "UNKNOWN"
+        
+        return {
+            "symbol": symbol,
+            "dcl": {
+                "days_since": cycle_ctx.dcl_days_since,
+                "price": cycle_ctx.dcl_price,
+                "timestamp": cycle_ctx.dcl_timestamp.isoformat() if cycle_ctx.dcl_timestamp else None,
+                "confirmation": cycle_ctx.dcl_confirmation.value if cycle_ctx.dcl_confirmation else "unconfirmed",
+                "in_zone": cycle_ctx.in_dcl_zone,
+                "expected_window": {
+                    "min_days": dcl_expected_min,
+                    "max_days": dcl_expected_max
+                },
+                "typical_range": {
+                    "min": config.dcl_min_days,
+                    "max": config.dcl_max_days
+                }
+            },
+            "wcl": {
+                "days_since": cycle_ctx.wcl_days_since,
+                "price": cycle_ctx.wcl_price,
+                "timestamp": cycle_ctx.wcl_timestamp.isoformat() if cycle_ctx.wcl_timestamp else None,
+                "confirmation": cycle_ctx.wcl_confirmation.value if cycle_ctx.wcl_confirmation else "unconfirmed",
+                "in_zone": cycle_ctx.in_wcl_zone,
+                "expected_window": {
+                    "min_days": wcl_expected_min,
+                    "max_days": wcl_expected_max
+                },
+                "typical_range": {
+                    "min": config.wcl_min_days,
+                    "max": config.wcl_max_days
+                }
+            },
+            "cycle_high": {
+                "price": cycle_ctx.cycle_high_price,
+                "timestamp": cycle_ctx.cycle_high_timestamp.isoformat() if cycle_ctx.cycle_high_timestamp else None,
+                "midpoint_price": cycle_ctx.cycle_midpoint_price
+            },
+            "phase": phase_str,
+            "translation": translation_str,
+            "trade_bias": cycle_ctx.trade_bias,
+            "confidence": round(cycle_ctx.confidence, 1),
+            "stochastic_rsi": {
+                "k": round(stoch_rsi_k, 2) if stoch_rsi_k is not None else None,
+                "d": round(stoch_rsi_d, 2) if stoch_rsi_d is not None else None,
+                "zone": stoch_zone
+            },
+            "interpretation": _get_cycle_interpretation(cycle_ctx, stoch_zone),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error("Cycle detection failed for %s: %s", symbol, e)
+        raise HTTPException(status_code=500, detail=f"Cycle detection error: {str(e)}") from e
+
+
+def _get_cycle_interpretation(cycle_ctx, stoch_zone: str) -> dict:
+    """Generate human-readable interpretation of cycle context."""
+    messages = []
+    severity = "neutral"  # neutral, bullish, bearish, caution
+    
+    # DCL timing
+    if cycle_ctx.dcl_days_since is not None:
+        if cycle_ctx.in_dcl_zone:
+            messages.append(f"📍 In DCL timing window ({cycle_ctx.dcl_days_since} days into cycle)")
+            if cycle_ctx.dcl_confirmation and cycle_ctx.dcl_confirmation.value == "confirmed":
+                messages.append("✅ DCL confirmed - accumulation opportunity")
+                severity = "bullish"
+            else:
+                messages.append("⏳ Watching for DCL confirmation")
+        elif cycle_ctx.dcl_days_since < 15:
+            messages.append(f"🔄 Early in daily cycle ({cycle_ctx.dcl_days_since} days)")
+        elif cycle_ctx.dcl_days_since > 28:
+            messages.append(f"⚠️ Extended daily cycle ({cycle_ctx.dcl_days_since} days - overdue for DCL)")
+            severity = "caution"
+    
+    # WCL timing  
+    if cycle_ctx.wcl_days_since is not None:
+        if cycle_ctx.in_wcl_zone:
+            messages.append(f"📍 In WCL timing window ({cycle_ctx.wcl_days_since} days)")
+            severity = "bullish" if severity != "caution" else "caution"
+        elif cycle_ctx.wcl_days_since > 50:
+            messages.append(f"⚠️ Extended weekly cycle ({cycle_ctx.wcl_days_since} days)")
+    
+    # Translation
+    if cycle_ctx.translation:
+        trans_val = cycle_ctx.translation.value
+        if trans_val == "left_translated":
+            messages.append("🔴 Left-translated cycle (bearish bias)")
+            severity = "bearish"
+        elif trans_val == "right_translated":
+            messages.append("🟢 Right-translated cycle (bullish bias)")
+            severity = "bullish" if severity != "bearish" else "caution"
+        elif trans_val == "mid_translated":
+            messages.append("🟡 Mid-translated cycle (neutral)")
+    
+    # Stochastic zone
+    if stoch_zone == "oversold":
+        messages.append("📉 Weekly StochRSI oversold (both K & D < 20)")
+        if severity not in ["bearish", "caution"]:
+            severity = "bullish"
+    elif stoch_zone == "overbought":
+        messages.append("📈 Weekly StochRSI overbought (both K & D > 80)")
+        if severity != "bullish":
+            severity = "bearish"
+    
+    # Trade bias
+    bias_msg = {
+        "LONG": "🎯 Cycle favors LONG entries",
+        "SHORT": "🎯 Cycle favors SHORT entries", 
+        "NEUTRAL": "⚖️ No clear directional bias from cycles"
+    }
+    messages.append(bias_msg.get(cycle_ctx.trade_bias, ""))
+    
+    return {
+        "messages": [m for m in messages if m],
+        "severity": severity,
+        "summary": messages[0] if messages else "Insufficient cycle data"
+    }
+
+
 # ============================================================================
 # Telemetry Endpoints
 # ============================================================================

@@ -371,6 +371,13 @@ def generate_trade_plan(
     )
     plan_composition['stop_from_structure'] = stop_used_structure
     
+    # === STORE ORIGINAL DISTANCE_ATR FOR VALIDATION ===
+    # The distance_atr from _calculate_stop_loss uses structure TF ATR (correctly normalized)
+    # We'll also compute primary TF distance for validation since modes are calibrated for primary TF
+    original_structure_distance_atr = stop_loss.distance_atr
+    primary_tf_distance_atr = abs(entry_zone.far_entry - stop_loss.level) / atr
+    logger.debug(f"Stop distances: structure_atr={original_structure_distance_atr:.2f}, primary_tf_atr={primary_tf_distance_atr:.2f}")
+    
     # --- Leverage-Aware Stop Adjustment ---
     # For high leverage, ensure stop maintains safe distance from liquidation
     if leverage > 1:
@@ -384,11 +391,22 @@ def generate_trade_plan(
         if was_adjusted:
             # Update stop loss with tightened level
             old_stop = stop_loss.level
+            # FIXED: Preserve the structure-TF ATR scaling, just recalculate for new distance
+            new_distance_raw = abs(entry_zone.far_entry - adjusted_stop_level)
+            old_distance_raw = abs(entry_zone.far_entry - old_stop)
+            # Scale proportionally to preserve ATR normalization
+            if old_distance_raw > 0:
+                scale_factor = new_distance_raw / old_distance_raw
+                new_distance_atr = original_structure_distance_atr * scale_factor
+            else:
+                new_distance_atr = new_distance_raw / atr
             stop_loss = StopLoss(
                 level=adjusted_stop_level,
-                distance_atr=(abs(entry_zone.far_entry - adjusted_stop_level) / atr),
+                distance_atr=new_distance_atr,
                 rationale=f"{stop_loss.rationale} [Adjusted for {leverage}x leverage]"
             )
+            # Update primary TF distance for validation
+            primary_tf_distance_atr = new_distance_raw / atr
             logger.info(f"Leverage adjustment: stop moved from {old_stop:.6f} to {adjusted_stop_level:.6f} for {leverage}x leverage")
             leverage_adjustments['stop_adjusted'] = True
             leverage_adjustments['adjustment_meta'] = leverage_adj_meta
@@ -476,8 +494,18 @@ def generate_trade_plan(
     # Stop distance sanity using config bounds if present
     max_stop_atr = getattr(config, "max_stop_atr", 6.0)
     min_stop_atr = getattr(config, "min_stop_atr", 0.3)
+    
+    # Use structure-normalized distance_atr for validation (accounts for HTF structure)
+    # But also check primary TF distance doesn't exceed a hard ceiling (prevents crazy outliers)
+    hard_ceiling_atr = max_stop_atr * 2.0  # Allow 2x for HTF structure
+    
     if stop_loss.distance_atr > max_stop_atr:
-        raise ValueError("Stop too wide relative to ATR")
+        # Structure-based stop exceeded normal bounds - check if HTF structure allows it
+        if stop_used_structure and stop_loss.distance_atr <= hard_ceiling_atr:
+            # HTF structure stop - allow if within hard ceiling
+            logger.info(f"Allowing HTF structure stop: {stop_loss.distance_atr:.2f} ATR > {max_stop_atr} but <= hard ceiling {hard_ceiling_atr}")
+        else:
+            raise ValueError("Stop too wide relative to ATR")
     if stop_loss.distance_atr < min_stop_atr:
         raise ValueError("Stop too tight relative to ATR")
 
@@ -1403,6 +1431,19 @@ def _calculate_stop_loss(
     
     # CRITICAL DEBUG
     logger.critical(f"STOP CALC: is_bullish={is_bullish}, entry_near={entry_zone.near_entry}, entry_far={entry_zone.far_entry}, stop={stop_level}, atr={atr}")
+    
+    # === STOP DIRECTION VALIDATION ===
+    # Ensure stop is on the correct side of entry for the trade direction
+    if is_bullish:
+        # For LONG: stop must be BELOW entry
+        if stop_level >= entry_zone.far_entry:
+            logger.error(f"Invalid LONG stop: stop {stop_level} >= entry {entry_zone.far_entry}")
+            raise ValueError(f"LONG: Stop ({stop_level:.6f}) must be < entry ({entry_zone.far_entry:.6f})")
+    else:
+        # For SHORT: stop must be ABOVE entry
+        if stop_level <= entry_zone.far_entry:
+            logger.error(f"Invalid SHORT stop: stop {stop_level} <= entry {entry_zone.far_entry}")
+            raise ValueError(f"SHORT: Stop ({stop_level:.6f}) must be > entry ({entry_zone.far_entry:.6f})")
     
     stop_loss = StopLoss(
         level=stop_level,

@@ -518,6 +518,52 @@ class ApiClient {
     }>('/market/regime', { silent: import.meta.env.MODE === 'production' });
   }
 
+  // Market cycle context (DCL/WCL timing, translation, stochRSI zones)
+  async getMarketCycles(symbol: string = 'BTC/USDT') {
+    return this.request<{
+      symbol: string;
+      dcl: {
+        days_since: number | null;
+        price: number | null;
+        timestamp: string | null;
+        confirmation: string;
+        in_zone: boolean;
+        expected_window: { min_days: number; max_days: number };
+        typical_range: { min: number; max: number };
+      } | null;
+      wcl: {
+        days_since: number | null;
+        price: number | null;
+        timestamp: string | null;
+        confirmation: string;
+        in_zone: boolean;
+        expected_window: { min_days: number; max_days: number };
+        typical_range: { min: number; max: number };
+      } | null;
+      cycle_high: {
+        price: number | null;
+        timestamp: string | null;
+        midpoint_price: number | null;
+      };
+      phase: 'ACCUMULATION' | 'MARKUP' | 'DISTRIBUTION' | 'MARKDOWN' | 'UNKNOWN';
+      translation: 'LEFT_TRANSLATED' | 'MID_TRANSLATED' | 'RIGHT_TRANSLATED' | 'UNKNOWN';
+      trade_bias: 'LONG' | 'SHORT' | 'NEUTRAL';
+      confidence: number;
+      stochastic_rsi: {
+        k: number | null;
+        d: number | null;
+        zone: 'oversold' | 'overbought' | 'neutral';
+      };
+      interpretation: {
+        messages: string[];
+        severity: 'neutral' | 'bullish' | 'bearish' | 'caution';
+        summary: string;
+      };
+      timestamp: string;
+      error?: string;
+    }>(`/market/cycles?symbol=${encodeURIComponent(symbol)}`, { silent: import.meta.env.MODE === 'production' });
+  }
+
   // HTF tactical opportunities
   async getHTFOpportunities(params?: { min_confidence?: number; proximity_threshold?: number }) {
     const qp = new URLSearchParams();
