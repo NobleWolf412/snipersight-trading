@@ -154,6 +154,10 @@ class Orchestrator:
             from backend.shared.config.scanner_modes import get_mode_by_profile
             self.scanner_mode = get_mode_by_profile(self.config.profile)
         
+        # Apply mode settings to config (min_stop_atr, max_stop_atr, timeframe responsibility, etc.)
+        # This ensures planner uses mode-specific thresholds, not ScanConfig defaults
+        self.apply_mode(self.scanner_mode)
+        
         # Regime detection
         self.regime_detector = get_regime_detector()
         self.regime_policy = get_regime_policy(self.config.profile)

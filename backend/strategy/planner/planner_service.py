@@ -1482,17 +1482,26 @@ def _calculate_targets(
             if kl.get('pwh') and kl['pwh'].get('price', 0) > avg_entry:
                 resistances.append(kl['pwh']['price'])
         
+        # Target 1: Clip to resistance only if still meets minimum R:R threshold
         if resistances and min(resistances) < target1_rr:
-            target1_level = min(resistances)
-            target1_rationale = "Nearest bearish structure (resistance)"
+            nearest_resist = min(resistances)
+            clipped_rr = (nearest_resist - avg_entry) / risk_distance if risk_distance > 0 else 0
+            # Only clip to resistance if resulting R:R >= minimum threshold
+            if clipped_rr >= planner_cfg.target_min_rr_after_clip:
+                target1_level = nearest_resist
+                target1_rationale = f"Nearest bearish structure (resistance) clipped RR≈{clipped_rr:.2f}"
+            else:
+                # Resistance too close - use theoretical target instead
+                target1_level = target1_rr
+                target1_rationale = f"Conservative {rr_levels[0]:.1f}R target (resistance @ {nearest_resist:.2f} too close)"
         else:
             target1_level = target1_rr
-            target1_rationale = "1.5R target"
+            target1_rationale = f"Conservative {rr_levels[0]:.1f}R target"
         
         targets.append(Target(
             level=target1_level,
             percentage=50.0,
-            rationale=f"{target1_rationale} (RR≈{rr_levels[0]:.2f})"
+            rationale=f"{target1_rationale}"
         ))
         
         # Target 2: Moderate (with structure clipping if enabled)
@@ -1564,17 +1573,26 @@ def _calculate_targets(
             if kl.get('pwl') and kl['pwl'].get('price', 0) < avg_entry:
                 supports.append(kl['pwl']['price'])
         
+        # Target 1: Clip to support only if still meets minimum R:R threshold
         if supports and max(supports) > target1_rr:
-            target1_level = max(supports)
-            target1_rationale = "Nearest bullish structure (support)"
+            nearest_support = max(supports)
+            clipped_rr = (avg_entry - nearest_support) / risk_distance if risk_distance > 0 else 0
+            # Only clip to support if resulting R:R >= minimum threshold
+            if clipped_rr >= planner_cfg.target_min_rr_after_clip:
+                target1_level = nearest_support
+                target1_rationale = f"Nearest bullish structure (support) clipped RR≈{clipped_rr:.2f}"
+            else:
+                # Support too close - use theoretical target instead
+                target1_level = target1_rr
+                target1_rationale = f"Conservative {rr_levels[0]:.1f}R target (support @ {nearest_support:.2f} too close)"
         else:
             target1_level = target1_rr
-            target1_rationale = "1.5R target"
+            target1_rationale = f"Conservative {rr_levels[0]:.1f}R target"
         
         targets.append(Target(
             level=target1_level,
             percentage=50.0,
-            rationale=f"{target1_rationale} (RR≈{rr_levels[0]:.2f})"
+            rationale=f"{target1_rationale}"
         ))
         
         # Target 2: Moderate (with structure clipping if enabled)
