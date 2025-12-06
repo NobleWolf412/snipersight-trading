@@ -251,6 +251,30 @@ def list_modes() -> List[Dict[str, object]]:
     ]
 
 
+# Profile to mode mapping (reverse lookup)
+PROFILE_TO_MODE: Dict[str, str] = {
+    "macro_surveillance": "overwatch",
+    "intraday_aggressive": "strike", 
+    "precision": "surgical",
+    "stealth_balanced": "stealth",
+    "balanced": "stealth",  # Fallback
+}
+
+
+def get_mode_by_profile(profile: str) -> ScannerMode:
+    """
+    Lookup a scanner mode by profile name.
+    
+    Args:
+        profile: Profile name (e.g., 'intraday_aggressive', 'precision')
+        
+    Returns:
+        ScannerMode corresponding to the profile
+    """
+    mode_name = PROFILE_TO_MODE.get(profile.lower(), "stealth")
+    return get_mode(mode_name)
+
+
 def get_mode(name: str) -> ScannerMode:
     """
     Lookup a scanner mode by name (case-insensitive).

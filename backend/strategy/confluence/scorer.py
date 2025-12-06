@@ -845,6 +845,10 @@ def calculate_confluence_score(
     """
     factors = []
     
+    # Normalize direction at entry: LONG/SHORT -> bullish/bearish
+    # This ensures consistent format throughout all scoring functions
+    direction = _normalize_direction(direction)
+    
     # --- SMC Pattern Scoring ---
     
     # Order Blocks
@@ -1293,14 +1297,16 @@ def _score_htf_structure_bias(swing_structure: dict, direction: str) -> dict:
         return {'bonus': 0.0, 'reason': 'No HTF swing structure data', 'htf_bias': 'neutral'}
     
     # Prioritize timeframes: Weekly > Daily > 4H
-    htf_priority = ['1W', '1D', '4H']
+    # NOTE: Use lowercase to match scanner mode timeframe conventions
+    htf_priority = ['1w', '1d', '4h']
     
     bullish_tfs = []
     bearish_tfs = []
     
     for tf in htf_priority:
-        if tf in swing_structure:
-            ss = swing_structure[tf]
+        # Check both lowercase and uppercase for compatibility
+        ss = swing_structure.get(tf) or swing_structure.get(tf.upper())
+        if ss:
             trend = ss.get('trend', 'neutral')
             if trend == 'bullish':
                 bullish_tfs.append(tf)
@@ -1309,7 +1315,7 @@ def _score_htf_structure_bias(swing_structure: dict, direction: str) -> dict:
     
     # Calculate bias strength based on HTF alignment
     # Weekly trend = 2 points, Daily = 1.5 points, 4H = 1 point
-    tf_weights = {'1W': 2.0, '1D': 1.5, '4H': 1.0}
+    tf_weights = {'1w': 2.0, '1d': 1.5, '4h': 1.0}
     
     bullish_strength = sum(tf_weights.get(tf, 0) for tf in bullish_tfs)
     bearish_strength = sum(tf_weights.get(tf, 0) for tf in bearish_tfs)
@@ -1374,6 +1380,16 @@ def _get_grade_weight(grade: str) -> float:
     return GRADE_WEIGHTS.get(grade, 0.7)  # Default to B weight if unknown
 
 
+def _normalize_direction(direction: str) -> str:
+    """Normalize direction format: LONG/SHORT -> bullish/bearish."""
+    d = direction.lower()
+    if d in ('long', 'bullish'):
+        return 'bullish'
+    elif d in ('short', 'bearish'):
+        return 'bearish'
+    return d
+
+
 # --- SMC Scoring Functions ---
 
 def _score_order_blocks(order_blocks: List[OrderBlock], direction: str) -> float:
@@ -1381,8 +1397,10 @@ def _score_order_blocks(order_blocks: List[OrderBlock], direction: str) -> float
     if not order_blocks:
         return 0.0
     
+    # Normalize direction: LONG/SHORT -> bullish/bearish
+    normalized_dir = _normalize_direction(direction)
     # Filter for direction-aligned OBs
-    aligned_obs = [ob for ob in order_blocks if ob.direction == direction]
+    aligned_obs = [ob for ob in order_blocks if ob.direction == normalized_dir]
     
     if not aligned_obs:
         return 0.0
@@ -1414,7 +1432,9 @@ def _score_fvgs(fvgs: List[FVG], direction: str) -> float:
     if not fvgs:
         return 0.0
     
-    aligned_fvgs = [fvg for fvg in fvgs if fvg.direction == direction]
+    # Normalize direction: LONG/SHORT -> bullish/bearish
+    normalized_dir = _normalize_direction(direction)
+    aligned_fvgs = [fvg for fvg in fvgs if fvg.direction == normalized_dir]
     
     if not aligned_fvgs:
         return 0.0
@@ -1473,9 +1493,12 @@ def _score_liquidity_sweeps(sweeps: List[LiquiditySweep], direction: str) -> flo
     if not sweeps:
         return 0.0
     
+    # Normalize direction: LONG/SHORT -> bullish/bearish
+    normalized_dir = _normalize_direction(direction)
+    
     # Look for recent sweeps that align with direction
     # Bullish setup benefits from low sweeps, bearish from high sweeps
-    target_type = "low" if direction == "bullish" else "high"
+    target_type = "low" if normalized_dir == "bullish" else "high"
     
     aligned_sweeps = [s for s in sweeps if s.sweep_type == target_type]
     
@@ -1509,7 +1532,7 @@ def _score_momentum(
     
     Args:
         indicators: Current timeframe indicators
-        direction: Trade direction ("bullish" or "bearish")
+        direction: Trade direction ("bullish"/"bearish" or "LONG"/"SHORT")
         macd_config: Mode-specific MACD configuration (if None, uses legacy scoring)
         htf_indicators: HTF indicators for MACD bias check
         timeframe: Current timeframe string
@@ -1520,7 +1543,10 @@ def _score_momentum(
     score = 0.0
     macd_analysis = None
     
-    if direction == "bullish":
+    # Normalize direction: LONG/SHORT -> bullish/bearish
+    normalized_dir = _normalize_direction(direction)
+    
+    if normalized_dir == "bullish":
         # Bullish momentum: oversold RSI, low Stoch RSI, low MFI
         if indicators.rsi is not None and indicators.rsi < 40:
             score += 40 * ((40 - indicators.rsi) / 40)
@@ -1547,7 +1573,7 @@ def _score_momentum(
         # Use new mode-aware MACD scoring
         macd_analysis = evaluate_macd_for_mode(
             indicators=indicators,
-            direction=direction,
+            direction=normalized_dir,
             macd_config=macd_config,
             htf_indicators=htf_indicators,
             timeframe=timeframe
@@ -1558,7 +1584,7 @@ def _score_momentum(
         macd_line = getattr(indicators, 'macd_line', None)
         macd_signal = getattr(indicators, 'macd_signal', None)
         if macd_line is not None and macd_signal is not None:
-            if direction == "bullish":
+            if normalized_dir == "bullish":
                 if macd_line > macd_signal and macd_line > 0:
                     score += 20.0
                 elif macd_line > macd_signal:
@@ -1580,7 +1606,7 @@ def _score_momentum(
         separation = abs(k - d)
         # Require minimum separation to reduce whipsaws
         if separation >= 2.0:  # simple debounce threshold
-            if direction == "bullish" and k > d:
+            if normalized_dir == "bullish" and k > d:
                 # Region-sensitive weighting
                 if k < 20:
                     score += 25.0  # early oversold bullish cross
@@ -1590,7 +1616,7 @@ def _score_momentum(
                     score += 8.0
                 else:
                     score += 5.0  # late/exhaustive
-            elif direction == "bearish" and k < d:
+            elif normalized_dir == "bearish" and k < d:
                 if k > 80:
                     score += 25.0  # overbought bearish cross
                 elif k > 50:

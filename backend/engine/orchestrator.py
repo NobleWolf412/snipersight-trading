@@ -146,7 +146,13 @@ class Orchestrator:
         self.smc_config = SMCConfig.defaults()
         
         # Load scanner mode for critical timeframe tracking
-        self.scanner_mode = get_mode(self.config.profile)
+        # Try mode name first, then fall back to profile lookup
+        try:
+            self.scanner_mode = get_mode(self.config.profile)
+        except ValueError:
+            # Profile is not a mode name - use reverse lookup
+            from backend.shared.config.scanner_modes import get_mode_by_profile
+            self.scanner_mode = get_mode_by_profile(self.config.profile)
         
         # Regime detection
         self.regime_detector = get_regime_detector()
@@ -1012,7 +1018,8 @@ class Orchestrator:
                 
                 # Swing structure (HH/HL/LH/LL) - primarily for HTF bias
                 # Run on Weekly, Daily, 4H for directional bias detection
-                if _timeframe in ('1W', '1D', '4H'):
+                # NOTE: Use lowercase to match scanner mode timeframe conventions
+                if _timeframe.lower() in ('1w', '1d', '4h'):
                     try:
                         swing_struct = detect_swing_structure(
                             df, 
