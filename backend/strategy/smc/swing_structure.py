@@ -96,7 +96,7 @@ def detect_swing_structure(
     
     for idx, price in swing_highs.items():
         if pd.notna(price):
-            bar_idx = df.index.get_loc(idx)
+            bar_idx = int(df.index.get_loc(idx))  # type: ignore[arg-type]
             atr_val = atr.iloc[bar_idx] if bar_idx < len(atr) else avg_atr
             strength = abs(price - df['close'].iloc[bar_idx]) / atr_val if atr_val > 0 else 1.0
             raw_swings.append({
@@ -109,7 +109,7 @@ def detect_swing_structure(
     
     for idx, price in swing_lows.items():
         if pd.notna(price):
-            bar_idx = df.index.get_loc(idx)
+            bar_idx = int(df.index.get_loc(idx))  # type: ignore[arg-type]
             atr_val = atr.iloc[bar_idx] if bar_idx < len(atr) else avg_atr
             strength = abs(price - df['close'].iloc[bar_idx]) / atr_val if atr_val > 0 else 1.0
             raw_swings.append({

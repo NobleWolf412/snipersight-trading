@@ -268,8 +268,8 @@ def run_backtest(
                             symbol=signal.symbol,
                             direction=signal.direction,
                             entry_price=entry_price,
-                            stop_loss=signal.stop_loss.price,
-                            tp1_price=tp1.price,
+                            stop_loss=signal.stop_loss.level,
+                            tp1_price=tp1.level,
                             tp1_pct=tp1.percentage,
                             risk_reward=signal.risk_reward,
                             confidence=signal.confidence_score,
@@ -296,7 +296,7 @@ def run_backtest(
                             pnl = -stats.current_balance * (risk_per_trade_pct / 100)
                         else:  # TIMEOUT
                             stats.timeouts += 1
-                            pnl = stats.current_balance * (trade.pnl_pct / 100) * (risk_per_trade_pct / 100)
+                            pnl = stats.current_balance * ((trade.pnl_pct or 0) / 100) * (risk_per_trade_pct / 100)
                         
                         stats.current_balance += pnl
                         

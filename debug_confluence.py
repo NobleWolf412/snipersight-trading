@@ -293,12 +293,15 @@ def debug_smc_patterns(
             obs = detect_order_blocks(candles_df, smc_cfg)
             for ob in obs:
                 grade = getattr(ob, 'grade', 'B')
-                # Add timeframe manually since function doesn't set it
-                ob = ob._replace(timeframe=tf) if hasattr(ob, '_replace') else ob
-                if hasattr(ob, 'timeframe'):
-                    pass  # Already has it
-                else:
-                    ob.timeframe = tf
+                # Note: OrderBlock is a dataclass, timeframe should be set by detector
+                # If not set, we can't modify frozen dataclass, just use what we have
+                if not getattr(ob, 'timeframe', None):
+                    # Create a new OrderBlock with timeframe if needed
+                    from dataclasses import replace
+                    try:
+                        ob = replace(ob, timeframe=tf)
+                    except Exception:
+                        pass  # If replace fails, keep original
                 all_order_blocks.append(ob)
                 patterns.append(SMCPatternDebug(
                     pattern_type="order_block",
@@ -398,9 +401,8 @@ def debug_smc_patterns(
             sweeps = detect_liquidity_sweeps(candles_df, smc_cfg)
             for sweep in sweeps:
                 grade = getattr(sweep, 'grade', 'B')
-                # Add timeframe manually
-                if not hasattr(sweep, 'timeframe') or not sweep.timeframe:
-                    sweep.timeframe = tf
+                # Note: LiquiditySweep dataclass doesn't have timeframe field
+                # We track it separately via the loop's tf variable
                 all_sweeps.append(sweep)
                 # Use correct attribute: sweep_type (not direction), level (not sweep_level)
                 # Derive direction from sweep_type: "high" sweep = bearish (trapped longs), "low" sweep = bullish
@@ -653,12 +655,12 @@ async def debug_symbol(
         if ind_debug.success:
             from backend.shared.models.indicators import IndicatorSnapshot
             indicators_by_tf[tf] = IndicatorSnapshot(
-                rsi=ind_debug.rsi,
-                stoch_rsi=ind_debug.stoch_rsi,
-                atr=ind_debug.atr,
-                bb_upper=ind_debug.bb_upper,
-                bb_middle=ind_debug.bb_middle,
-                bb_lower=ind_debug.bb_lower,
+                rsi=ind_debug.rsi or 50.0,
+                stoch_rsi=ind_debug.stoch_rsi or 50.0,
+                atr=ind_debug.atr or 0.0,
+                bb_upper=ind_debug.bb_upper or 0.0,
+                bb_middle=ind_debug.bb_middle or 0.0,
+                bb_lower=ind_debug.bb_lower or 0.0,
                 volume_spike=ind_debug.volume_spike or False,
                 macd_line=ind_debug.macd_line,
                 macd_signal=ind_debug.macd_signal,
