@@ -187,6 +187,9 @@ export function CyclePhaseGraphic({
       
       {/* Label */}
       <div className={cn('text-center', compact ? 'mt-1' : 'mt-2')}>
+        {!compact && (
+          <div className="text-[9px] text-accent/70 font-mono tracking-wider mb-0.5">DAILY CYCLE</div>
+        )}
         <div className={cn('font-bold tracking-wider', config.color, compact ? 'text-sm' : 'text-base')}>
           {config.label}
         </div>
@@ -344,6 +347,7 @@ export function TranslationGraphic({
       
       {/* Label */}
       <div className={cn('text-center', compact ? 'mt-1' : 'mt-2')}>
+        <div className="text-[9px] text-muted-foreground/60 font-mono tracking-widest mb-0.5">DAILY CYCLE</div>
         <div className={cn('font-bold tracking-wider', config.color, compact ? 'text-sm' : 'text-base')}>
           {config.label}
         </div>
@@ -526,6 +530,7 @@ export function StochRSIGraphic({
       
       {/* Label and values */}
       <div className={cn('text-center', compact ? 'mt-1' : 'mt-2')}>
+        <div className="text-[9px] text-muted-foreground/60 font-mono tracking-widest mb-0.5">WEEKLY</div>
         <div className={cn('font-bold tracking-wider', config.color, compact ? 'text-sm' : 'text-base')}>
           {config.label}
         </div>

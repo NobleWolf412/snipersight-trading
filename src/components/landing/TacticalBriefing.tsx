@@ -122,29 +122,25 @@ function MiniGauge({
   );
 }
 
-// Clickable metric card that links to Market Intel
-function MetricLink({ 
+// Static metric display (no link - footer has the intel link)
+function MetricDisplay({ 
   icon: Icon, 
   label, 
   value, 
   subValue,
   color,
-  to = '/intel'
 }: { 
   icon: typeof Activity;
   label: string;
   value: string | number;
   subValue?: string;
   color: string;
-  to?: string;
 }) {
   return (
-    <Link 
-      to={to}
+    <div 
       className={cn(
-        'group relative p-3 rounded-xl bg-muted/10 border border-border/30',
-        'hover:bg-muted/20 hover:border-accent/40 transition-all duration-200',
-        'flex items-center gap-3 cursor-pointer'
+        'relative p-3 rounded-xl bg-muted/10 border border-border/30',
+        'flex items-center gap-3'
       )}
     >
       <div className={cn('p-2 rounded-lg bg-muted/30', color)}>
@@ -155,11 +151,7 @@ function MetricLink({
         <div className={cn('text-sm font-bold', color)}>{value}</div>
         {subValue && <div className="text-[10px] text-muted-foreground">{subValue}</div>}
       </div>
-      <CaretRight 
-        size={14} 
-        className="text-muted-foreground group-hover:text-accent group-hover:translate-x-0.5 transition-all" 
-      />
-    </Link>
+    </div>
   );
 }
 
@@ -190,8 +182,8 @@ function DominanceBar({ btcD, altD, stableD }: { btcD: number; altD: number; sta
             onMouseEnter={() => setHovered(seg.key)}
             onMouseLeave={() => setHovered(null)}
           >
-            {seg.value > 15 && (
-              <span className="text-[10px] font-bold text-white drop-shadow">{seg.label}</span>
+            {seg.value > 10 && (
+              <span className="text-[10px] font-bold text-black/80 drop-shadow-[0_1px_1px_rgba(255,255,255,0.5)]">{seg.label}</span>
             )}
           </div>
         ))}
@@ -373,7 +365,7 @@ export function TacticalBriefing() {
           </div>
 
           {/* Bias Indicator */}
-          <MetricLink
+          <MetricDisplay
             icon={regime?.dimensions?.trend === 'bullish' ? TrendUp : regime?.dimensions?.trend === 'bearish' ? TrendDown : Minus}
             label="TREND BIAS"
             value={regime?.dimensions?.trend?.toUpperCase() || 'N/A'}
@@ -381,7 +373,7 @@ export function TacticalBriefing() {
           />
 
           {/* Volatility */}
-          <MetricLink
+          <MetricDisplay
             icon={Lightning}
             label="VOLATILITY"
             value={regime?.dimensions?.volatility?.toUpperCase() || 'N/A'}
@@ -389,7 +381,7 @@ export function TacticalBriefing() {
           />
 
           {/* Risk Appetite */}
-          <MetricLink
+          <MetricDisplay
             icon={ShieldWarning}
             label="RISK APPETITE"
             value={regime?.dimensions?.risk_appetite?.toUpperCase() || 'N/A'}
