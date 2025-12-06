@@ -182,8 +182,11 @@ function DominanceBar({ btcD, altD, stableD }: { btcD: number; altD: number; sta
             onMouseEnter={() => setHovered(seg.key)}
             onMouseLeave={() => setHovered(null)}
           >
-            {seg.value > 10 && (
-              <span className="text-[10px] font-bold text-black/80 drop-shadow-[0_1px_1px_rgba(255,255,255,0.5)]">{seg.label}</span>
+            {seg.value > 5 && (
+              <span className={cn(
+                "text-[10px] font-bold drop-shadow-sm",
+                seg.key === 'stable' ? 'text-black/90' : 'text-white'
+              )}>{seg.label}</span>
             )}
           </div>
         ))}
