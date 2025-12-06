@@ -15,6 +15,7 @@ import logging
 import asyncio
 import time
 import threading
+import pandas as pd
 
 from backend.risk.position_sizer import PositionSizer
 from backend.risk.risk_manager import RiskManager
@@ -1614,6 +1615,10 @@ async def get_market_cycles(symbol: str = Query("BTC/USDT", description="Symbol 
                 "trade_bias": "NEUTRAL",
                 "confidence": 0
             }
+        
+        # Convert timestamp column to DatetimeIndex (required by cycle_detector)
+        if 'timestamp' in daily_df.columns and not isinstance(daily_df.index, pd.DatetimeIndex):
+            daily_df = daily_df.set_index('timestamp')
         
         # Detect cycle context
         config = CycleConfig()
