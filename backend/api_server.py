@@ -123,6 +123,10 @@ class ThreadSafeCache:
 PRICE_CACHE = ThreadSafeCache(max_size=1000, ttl=5)
 PRICE_CACHE_TTL = 5  # seconds (for backward compat references)
 
+# Cache for expensive landing page endpoints
+CYCLES_CACHE = ThreadSafeCache(max_size=50, ttl=300)  # 5 minute TTL for cycle data
+REGIME_CACHE = ThreadSafeCache(max_size=10, ttl=60)   # 1 minute TTL for regime data
+
 # Initialize FastAPI app
 app = FastAPI(
     title="SniperSight API",
@@ -1517,6 +1521,13 @@ async def get_market_regime(symbol: Optional[str] = Query(None, description="Opt
     Returns:
         MarketRegime with composite label, score, and dimension breakdown
     """
+    # Check cache first (1 minute TTL)
+    cache_key = f"regime:{symbol or 'global'}"
+    cached = REGIME_CACHE.get(cache_key)
+    if cached:
+        logger.debug("Returning cached regime data for %s", cache_key)
+        return cached
+    
     try:
         # Detect global regime via orchestrator
         regime = orchestrator._detect_global_regime()
@@ -1548,7 +1559,7 @@ async def get_market_regime(symbol: Optional[str] = Query(None, description="Opt
             logger.warning("Dominance fetch failed: %s", dom_err)
             btc_dom, alt_dom, stable_dom = 50.0, 35.0, 15.0  # Fallback values
         
-        return {
+        result = {
             "composite": regime.composite,
             "score": regime.score,
             "dimensions": {
@@ -1570,6 +1581,10 @@ async def get_market_regime(symbol: Optional[str] = Query(None, description="Opt
             },
             "timestamp": regime.timestamp.isoformat()
         }
+        
+        # Cache the result
+        REGIME_CACHE.set(cache_key, result)
+        return result
         
     except Exception as e:
         logger.error("Market regime detection failed: %s", e)
@@ -1596,8 +1611,15 @@ async def get_market_cycles(symbol: str = Query("BTC/USDT", description="Symbol 
     Returns:
         Cycle context with timing, phase, translation, and trade bias
     """
+    # Check cache first (5 minute TTL - cycles don't change rapidly)
+    cache_key = f"cycles:{symbol}"
+    cached = CYCLES_CACHE.get(cache_key)
+    if cached:
+        logger.debug("Returning cached cycles data for %s", symbol)
+        return cached
+    
     from backend.strategy.smc.cycle_detector import detect_cycle_context, CycleConfig
-    from backend.indicators.compute import compute_indicators
+    from backend.indicators.momentum import compute_stoch_rsi
     
     try:
         # Fetch daily candles for cycle analysis (need at least 60 days)
@@ -1625,16 +1647,18 @@ async def get_market_cycles(symbol: str = Query("BTC/USDT", description="Symbol 
         cycle_ctx = detect_cycle_context(daily_df, config)
         
         # Also compute stochastic RSI for weekly timeframe to add zone info
-        weekly_df = adapter.fetch_ohlcv(symbol, "1w", limit=52)
         stoch_rsi_k = None
         stoch_rsi_d = None
         stoch_zone = "neutral"
         
-        if weekly_df is not None and len(weekly_df) >= 14:
-            try:
-                weekly_indicators = compute_indicators(weekly_df, "1w")
-                stoch_rsi_k = weekly_indicators.stoch_rsi_k
-                stoch_rsi_d = weekly_indicators.stoch_rsi_d
+        try:
+            # Note: Phemex only supports certain limit values (10, 100, etc), use 100 for safety
+            weekly_df = adapter.fetch_ohlcv(symbol, "1w", limit=100)
+            if weekly_df is not None and len(weekly_df) >= 34:  # Need enough data for stoch RSI
+                k_series, d_series = compute_stoch_rsi(weekly_df)
+                # Get latest values
+                stoch_rsi_k = float(k_series.iloc[-1]) if not k_series.empty else None
+                stoch_rsi_d = float(d_series.iloc[-1]) if not d_series.empty else None
                 
                 if stoch_rsi_k is not None and stoch_rsi_d is not None:
                     # Both lines below 20 = oversold (bullish zone)
@@ -1646,8 +1670,8 @@ async def get_market_cycles(symbol: str = Query("BTC/USDT", description="Symbol 
                     # One or both in middle
                     else:
                         stoch_zone = "neutral"
-            except Exception as stoch_err:
-                logger.warning("Failed to compute weekly stochRSI: %s", stoch_err)
+        except Exception as stoch_err:
+            logger.warning("Failed to compute weekly stochRSI: %s", stoch_err)
         
         # Calculate expected windows
         dcl_expected_min = max(0, config.dcl_min_days - (cycle_ctx.dcl_days_since or 0))
@@ -1673,7 +1697,7 @@ async def get_market_cycles(symbol: str = Query("BTC/USDT", description="Symbol 
         phase_str = phase_map.get(cycle_ctx.phase.value, "UNKNOWN") if cycle_ctx.phase else "UNKNOWN"
         translation_str = translation_map.get(cycle_ctx.translation.value, "UNKNOWN") if cycle_ctx.translation else "UNKNOWN"
         
-        return {
+        result = {
             "symbol": symbol,
             "dcl": {
                 "days_since": cycle_ctx.dcl_days_since,
@@ -1722,6 +1746,10 @@ async def get_market_cycles(symbol: str = Query("BTC/USDT", description="Symbol 
             "interpretation": _get_cycle_interpretation(cycle_ctx, stoch_zone),
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+        
+        # Cache the result
+        CYCLES_CACHE.set(cache_key, result)
+        return result
         
     except Exception as e:
         logger.error("Cycle detection failed for %s: %s", symbol, e)
