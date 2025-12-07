@@ -130,6 +130,10 @@ class ScannerMode:
     stop_timeframes: Tuple[str, ...] = ()  # TFs allowed for stop-loss placement
     target_timeframes: Tuple[str, ...] = ()  # TFs allowed for target placement
     min_target_move_pct: float = 0.0  # Minimum TP1 move % threshold (0 = no minimum)
+    # SMC detection strictness preset (defaults, luxalgo_strict, sensitive)
+    smc_preset: str = "defaults"
+    # Expected trade type hint (swing, scalp, intraday) - guides stop/target calculation
+    expected_trade_type: str = "intraday"
     # Per-mode overrides (min_rr_ratio, atr_floor, gating thresholds, etc.)
     overrides: Optional[Dict[str, Any]] = None
     
@@ -159,12 +163,14 @@ MODES: Dict[str, ScannerMode] = {
         stop_timeframes=("4h", "1h"),
         target_timeframes=("1d", "4h"),
         min_target_move_pct=1.5,  # Macro moves require >= 1.5% TP1
+        smc_preset="luxalgo_strict",  # Institutional-grade strict detection for macro positions
+        expected_trade_type="swing",  # HTF macro positions
         overrides={"min_rr_ratio": 2.0, "atr_floor": 0.0025, "bias_gate": 0.7, "htf_swing_allowed": ("1d", "4h")},
     ),
     # NOTE: "recon" removed from MODES - use get_mode('recon') which maps to 'stealth'
     "strike": ScannerMode(
         name="strike",
-        description="Strike ops: intraday assault on momentum with local liquidity reads; fast entry, fast exfil.",
+        description="Strike ops: intraday assault on momentum with local liquidity reads; HTF structure with LTF entry precision.",
         timeframes=("4h", "1h", "15m", "5m"),  # Changed from 1m to 4h start
         min_confluence_score=60.0,
         profile="intraday_aggressive",
@@ -173,12 +179,14 @@ MODES: Dict[str, ScannerMode] = {
         max_pullback_atr=2.5,
         min_stop_atr=0.2,   # TUNED: was 0.25 - allow tighter scalp stops
         max_stop_atr=5.0,   # TUNED: was 3.5 - allow HTF structure stops
-        entry_timeframes=("15m", "5m"),  # Fast aggressive scalp entries (5m NOW ALLOWED)
+        entry_timeframes=("15m", "5m"),  # Fast aggressive entries with LTF precision
         structure_timeframes=("4h", "1h", "15m"),  # RESTORED: 4h structure for target clipping
         stop_timeframes=("1h", "15m", "5m"),  # TUNED: added 1h for HTF structure stops
         target_timeframes=("1h", "15m"),  # TUNED: added 15m for faster targets
         min_target_move_pct=0.4,  # TUNED: was 0.5 - allow tighter scalp targets
-        overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0010, "bias_gate": 0.6, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True},
+        smc_preset="defaults",  # Balanced detection for aggressive intraday
+        expected_trade_type="intraday",  # HTF structure produces intraday/swing setups
+        overrides={"min_rr_ratio": 1.2, "atr_floor": 0.0010, "bias_gate": 0.6, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True},
     ),
     "surgical": ScannerMode(
         name="surgical",
@@ -186,7 +194,7 @@ MODES: Dict[str, ScannerMode] = {
         timeframes=("1h", "15m", "5m"),  # Simplified for precision
         min_confluence_score=70.0,
         profile="precision",
-        critical_timeframes=("15m",),  # 15m essential for precision scalping
+        critical_timeframes=("15m",),  # 15m essential for precision entries
         primary_planning_timeframe="15m",
         max_pullback_atr=2.0,
         min_stop_atr=0.15,  # TUNED: was 0.25 - surgical needs tightest stops
@@ -196,6 +204,8 @@ MODES: Dict[str, ScannerMode] = {
         stop_timeframes=("1h", "15m", "5m"),  # TUNED: added 1h for HTF structure stops
         target_timeframes=("1h", "15m"),  # TUNED: added 15m for faster exits
         min_target_move_pct=0.4,  # TUNED: was 0.6 - allow tighter surgical precision
+        smc_preset="luxalgo_strict",  # Strict detection for precision - quality over quantity
+        expected_trade_type="intraday",  # 1h/15m structure produces intraday setups
         overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0008, "bias_gate": 0.7, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True},
     ),
     # STEALTH replaces both RECON and GHOST (merged per SMC_PIPELINE_REFACTOR.md)
@@ -216,6 +226,8 @@ MODES: Dict[str, ScannerMode] = {
         stop_timeframes=("4h", "1h", "15m"),  # TUNED: added 4h/1h for swing structure stops
         target_timeframes=("1h", "15m"),
         min_target_move_pct=0.5,
+        smc_preset="defaults",  # Balanced detection for swing trading
+        expected_trade_type="intraday",  # Balanced mid-range setups
         overrides={
             "min_rr_ratio": 1.8,
             "atr_floor": 0.0015,
@@ -245,6 +257,8 @@ def list_modes() -> List[Dict[str, object]]:
             "stop_timeframes": m.stop_timeframes,
             "target_timeframes": m.target_timeframes,
             "min_target_move_pct": m.min_target_move_pct,
+            "smc_preset": m.smc_preset,
+            "expected_trade_type": m.expected_trade_type,
             "overrides": m.overrides or {},
         }
         for m in MODES.values()
@@ -311,6 +325,8 @@ def get_mode(name: str) -> ScannerMode:
             stop_timeframes=base.stop_timeframes,
             target_timeframes=base.target_timeframes,
             min_target_move_pct=base.min_target_move_pct,
+            smc_preset=base.smc_preset,
+            expected_trade_type=base.expected_trade_type,
             overrides=new_overrides,
         )
     

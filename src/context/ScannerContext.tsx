@@ -117,7 +117,7 @@ const fallbackModes: ScannerMode[] = [
   // NOTE: 'recon' removed - merged into 'stealth' mode
   {
     name: 'strike',
-    description: 'Strike ops: intraday assault on momentum with local liquidity reads; fast entry, fast exfil.',
+    description: 'Strike ops: intraday assault on momentum with local liquidity reads; HTF structure with LTF entry precision.',
     timeframes: ['4h','1h','15m','5m'],
     min_confluence_score: 60,
     profile: 'intraday_aggressive',
@@ -126,7 +126,7 @@ const fallbackModes: ScannerMode[] = [
     entry_timeframes: ['15m', '5m'],
     structure_timeframes: ['4h', '1h', '15m'],
     atr_multiplier: 2.5,
-    min_rr_ratio: 1.6,
+    min_rr_ratio: 1.2,  // Aggressive mode - looser R:R for more opportunities
   },
   {
     name: 'surgical',
@@ -134,12 +134,12 @@ const fallbackModes: ScannerMode[] = [
     timeframes: ['1h','15m','5m'],
     min_confluence_score: 70,
     profile: 'precision',
-    critical_timeframes: ['15m', '5m'],
+    critical_timeframes: ['15m'],
     primary_planning_timeframe: '15m',
-    entry_timeframes: ['5m'],
+    entry_timeframes: ['15m', '5m'],
     structure_timeframes: ['1h', '15m'],
     atr_multiplier: 2.0,
-    min_rr_ratio: 2.0,
+    min_rr_ratio: 1.5,  // Precision mode - balanced R:R for quality setups
   },
   {
     name: 'stealth',

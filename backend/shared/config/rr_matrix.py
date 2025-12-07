@@ -151,13 +151,25 @@ def validate_rr(
     risk_reward: float,
     mode_profile: Optional[str] = None,
     expected_value: Optional[float] = None,
-    confluence_score: Optional[float] = None
+    confluence_score: Optional[float] = None,
+    trade_type: Optional[str] = None,
+    min_rr_override: Optional[float] = None
 ) -> tuple[bool, str]:
     """
     Validate R:R ratio against plan type threshold with EV-based override.
     
     Single source of truth for R:R validation - all other components should
     delegate to this function rather than implementing their own thresholds.
+    
+    Priority for min R:R (highest to lowest):
+    1. min_rr_override (explicit mode override from scanner_modes.py)
+    2. trade_type threshold (swing=2.0, scalp=1.2, intraday=1.5)
+    3. base plan type threshold
+    
+    Trade Type Minimum R:R (used if no override):
+    - swing: 2.0 (wider stops require higher reward)
+    - scalp: 1.2 (tight stops allow lower R:R)
+    - intraday: 1.5 (balanced)
     
     EV Override Logic:
     - If expected_value provided and > 0.02 (positive expected value)
@@ -170,28 +182,59 @@ def validate_rr(
         mode_profile: Scanner mode profile for threshold adjustments
         expected_value: Optional computed EV for override consideration
         confluence_score: Optional confluence score for override gating
+        trade_type: Optional trade type (swing/scalp/intraday) for threshold adjustment
+        min_rr_override: Optional explicit min R:R from scanner mode (takes priority)
         
     Returns:
         Tuple of (is_valid, reason_if_invalid)
     """
     threshold = get_rr_threshold(plan_type, mode_profile)
     
+    # Priority: min_rr_override > trade_type > base threshold
+    if min_rr_override is not None:
+        # Mode explicitly overrides min R:R (e.g., STRIKE wants 1.2 despite being intraday)
+        effective_min_rr = min_rr_override
+        threshold_source = "mode_override"
+    else:
+        # Trade-type-specific minimum R:R
+        # - swing: 2.0 (wider stops require higher reward)
+        # - scalp: 1.2 (tight stops allow lower R:R)
+        # - intraday: 1.5 (balanced)
+        trade_type_min_rr = {
+            "swing": 2.0,
+            "scalp": 1.2,
+            "intraday": 1.5
+        }
+        trade_type_lower = (trade_type or "").lower()
+        
+        if trade_type_lower in trade_type_min_rr:
+            # Trade type specified - use its threshold directly
+            effective_min_rr = trade_type_min_rr[trade_type_lower]
+            threshold_source = f"trade_type_{trade_type_lower}"
+        else:
+            # No trade type - use base plan type threshold
+            effective_min_rr = threshold.min_rr
+            threshold_source = "plan_type"
+    
     # Standard validation
-    if risk_reward >= threshold.min_rr:
+    if risk_reward >= effective_min_rr:
         return True, ""
     
     # EV-based override for borderline cases
+    # Allow slightly lower floor for scalps/aggressive modes since they have tighter stops
+    trade_type_lower = (trade_type or "").lower()
+    ev_floor = 0.65 if trade_type_lower == "scalp" or (min_rr_override and min_rr_override <= 1.2) else 0.75
     if (
         expected_value is not None and
         confluence_score is not None and
         expected_value > 0.02 and
         confluence_score >= 70.0 and
-        risk_reward >= 0.75  # Hard floor (75% of typical minimum)
+        risk_reward >= ev_floor  # Trade-type-aware floor
     ):
-        return True, f"EV override: R:R {risk_reward:.2f} < {threshold.min_rr:.2f} but EV={expected_value:.3f} with {confluence_score:.1f}% confluence"
+        return True, f"EV override: R:R {risk_reward:.2f} < {effective_min_rr:.2f} but EV={expected_value:.3f} with {confluence_score:.1f}% confluence"
     
     reason = (
-        f"R:R {risk_reward:.2f} below {plan_type} minimum {threshold.min_rr:.2f}. "
+        f"R:R {risk_reward:.2f} below {threshold_source} minimum {effective_min_rr:.2f}. "
         f"{threshold.description}."
     )
     return False, reason

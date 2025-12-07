@@ -137,6 +137,64 @@ def _get_allowed_entry_tfs(config: ScanConfig) -> tuple:
     return getattr(config, 'entry_timeframes', ())
 
 
+def _derive_trade_type(
+    target_move_pct: float,
+    stop_distance_atr: float,
+    structure_timeframes: tuple,
+    primary_tf: str
+) -> Literal['scalp', 'swing', 'intraday']:
+    """
+    Derive trade type from setup characteristics, not mode.
+    
+    Trade type is determined by:
+    1. Target move % (larger moves = swing)
+    2. Stop distance in ATR (wider stops = swing)
+    3. Structure timeframes used (HTF structure = swing)
+    
+    This allows any mode to find any trade type - the mode controls
+    which timeframes are scanned (affecting probability), but the 
+    actual trade type is derived from the setup itself.
+    
+    Args:
+        target_move_pct: TP1 move as percentage of price
+        stop_distance_atr: Stop distance in ATR units
+        structure_timeframes: Allowed structure TFs from mode config
+        primary_tf: Primary planning timeframe
+        
+    Returns:
+        'scalp', 'swing', or 'intraday'
+    """
+    HTF = ('1w', '1d', '4h')
+    LTF = ('15m', '5m', '1m')
+    
+    # Check if structure comes from HTF
+    htf_structure = any(tf in HTF for tf in structure_timeframes) if structure_timeframes else False
+    ltf_only = all(tf in LTF for tf in structure_timeframes) if structure_timeframes else False
+    
+    # Large target moves indicate swing trades
+    if target_move_pct >= 2.0:
+        return 'swing'
+    
+    # Wide stops from HTF structure indicate swing trades
+    if stop_distance_atr >= 3.0 and htf_structure:
+        return 'swing'
+    
+    # Moderate moves with some HTF context
+    if target_move_pct >= 1.0 and (htf_structure or primary_tf in ('4h', '1d')):
+        return 'swing'
+    
+    # Tight stops with LTF-only structure = scalp
+    if stop_distance_atr <= 1.5 and ltf_only:
+        return 'scalp'
+    
+    # Small moves with LTF context
+    if target_move_pct < 0.6 and primary_tf in LTF:
+        return 'scalp'
+    
+    # Default: intraday (middle ground)
+    return 'intraday'
+
+
 def _classify_atr_regime(atr: float, current_price: float, planner_cfg: PlannerConfig) -> str:
     """Classify current ATR regime based on ATR% of price.
     
@@ -246,7 +304,8 @@ def generate_trade_plan(
     config: ScanConfig,
     current_price: float,
     missing_critical_timeframes: Optional[List[str]] = None,
-    multi_tf_data: Optional['MultiTimeframeData'] = None
+    multi_tf_data: Optional['MultiTimeframeData'] = None,
+    expected_trade_type: Optional[str] = None
 ) -> TradePlan:
     """
     Generate a complete, actionable trade plan.
@@ -262,6 +321,8 @@ def generate_trade_plan(
         current_price: Current market price
         missing_critical_timeframes: List of critical TFs that failed to load
         multi_tf_data: Optional multi-timeframe candle data for swing-based stops
+        expected_trade_type: Optional trade type hint (swing, scalp, intraday) - guides
+            stop/target calculation. Derived type may differ from expected.
         
     Returns:
         TradePlan: Complete trade plan with entries, stops, targets
@@ -283,8 +344,18 @@ def generate_trade_plan(
         primary_tf = primary_tf_lower
     primary_indicators = indicators.by_timeframe[primary_tf]
     
-    # Get or create PlannerConfig from ScanConfig
-    planner_cfg = getattr(config, 'planner', None) or PlannerConfig.defaults_for_mode(config.profile)
+    # Get or create PlannerConfig based on expected trade type
+    # Trade type (swing/scalp/intraday) determines stop/target parameters
+    if getattr(config, 'planner', None):
+        # Explicit planner config takes precedence
+        planner_cfg = config.planner
+    elif expected_trade_type:
+        # Use expected trade type from mode
+        planner_cfg = PlannerConfig.defaults_for_mode(expected_trade_type)
+        logger.debug(f"Using PlannerConfig for expected_trade_type={expected_trade_type}")
+    else:
+        # Fallback to intraday defaults
+        planner_cfg = PlannerConfig.defaults_for_mode("intraday")
     
     telemetry = get_telemetry_logger()
     run_id = datetime.utcnow().strftime("run-%Y%m%d")  # coarse run grouping
@@ -495,6 +566,15 @@ def generate_trade_plan(
     max_stop_atr = getattr(config, "max_stop_atr", 6.0)
     min_stop_atr = getattr(config, "min_stop_atr", 0.3)
     
+    # Trade-type-aware soft ATR caps
+    # These are softer bounds that apply BEFORE mode bounds - trade type hints at expected range
+    trade_type_atr_caps = {
+        "swing": (0.5, 6.0),    # Swing: allow wide stops (0.5-6 ATR)
+        "scalp": (0.15, 2.5),   # Scalp: tight stops (0.15-2.5 ATR)
+        "intraday": (0.3, 4.0)  # Intraday: balanced (0.3-4 ATR)
+    }
+    soft_min, soft_max = trade_type_atr_caps.get(expected_trade_type or "intraday", (0.3, 6.0))
+    
     # Use structure-normalized distance_atr for validation (accounts for HTF structure)
     # But also check primary TF distance doesn't exceed a hard ceiling (prevents crazy outliers)
     hard_ceiling_atr = max_stop_atr * 2.0  # Allow 2x for HTF structure
@@ -508,15 +588,27 @@ def generate_trade_plan(
             raise ValueError("Stop too wide relative to ATR")
     if stop_loss.distance_atr < min_stop_atr:
         raise ValueError("Stop too tight relative to ATR")
+    
+    # Trade-type soft cap check (log warning but don't reject if within mode bounds)
+    if stop_loss.distance_atr > soft_max and stop_loss.distance_atr <= max_stop_atr:
+        logger.warning(f"Stop {stop_loss.distance_atr:.2f} ATR exceeds {expected_trade_type or 'intraday'} soft cap {soft_max:.2f} (within mode bounds)")
+    if stop_loss.distance_atr < soft_min and stop_loss.distance_atr >= min_stop_atr:
+        logger.warning(f"Stop {stop_loss.distance_atr:.2f} ATR below {expected_trade_type or 'intraday'} soft floor {soft_min:.2f} (within mode bounds)")
 
     # Apply R:R threshold appropriate for plan type (mode-aware)
     # Pass EV and confluence to enable intelligent override for borderline R:R
+    # Mode's min_rr_ratio override takes priority over trade type defaults
+    mode_overrides = getattr(config, 'overrides', None) or {}
+    min_rr_override = mode_overrides.get('min_rr_ratio')
+    
     is_valid_rr, rr_reason = validate_rr(
         plan_type, 
         risk_reward, 
         mode_profile=config.profile,
         expected_value=expected_value,
-        confluence_score=confluence_breakdown.total_score
+        confluence_score=confluence_breakdown.total_score,
+        trade_type=expected_trade_type,
+        min_rr_override=min_rr_override
     )
     if not is_valid_rr:
         raise ValueError(rr_reason)
@@ -573,7 +665,33 @@ def generate_trade_plan(
     # Normalize to expected TradePlan literal types
     _dir_lower = direction.lower()
     trade_direction = "LONG" if is_bullish else "SHORT"
-    trade_setup = setup_type if setup_type in ["scalp", "swing", "intraday"] else "intraday"
+    
+    # Derive trade type from setup characteristics (not mode)
+    # This allows any mode to find any trade type based on actual structure
+    structure_tfs = getattr(config, 'structure_timeframes', ())
+    trade_setup = _derive_trade_type(
+        target_move_pct=tp1_move_pct,
+        stop_distance_atr=stop_loss.distance_atr,
+        structure_timeframes=structure_tfs,
+        primary_tf=primary_tf
+    )
+    logger.debug(f"Derived trade_type={trade_setup} from target_move={tp1_move_pct:.2f}%, stop_atr={stop_loss.distance_atr:.2f}, structure_tfs={structure_tfs}")
+    
+    # Log telemetry when derived type differs from expected (helps tune mode definitions)
+    if expected_trade_type and trade_setup != expected_trade_type:
+        logger.info(f"Trade type mismatch: expected={expected_trade_type}, derived={trade_setup} for {symbol}")
+        telemetry.log_event({
+            "event_type": "trade_type_mismatch",
+            "timestamp": datetime.utcnow().isoformat(),
+            "symbol": symbol,
+            "expected_trade_type": expected_trade_type,
+            "derived_trade_type": trade_setup,
+            "target_move_pct": tp1_move_pct,
+            "stop_distance_atr": stop_loss.distance_atr,
+            "structure_timeframes": list(structure_tfs),
+            "primary_tf": primary_tf,
+            "mode_profile": config.profile
+        })
 
     # Extract ATR regime & alt stop metadata (flattened logic replaced by helpers)
     atr_pct = (atr / max(current_price, 1e-12)) * 100.0

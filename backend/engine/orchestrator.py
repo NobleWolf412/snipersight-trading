@@ -142,9 +142,6 @@ class Orchestrator:
             max_risk_pct=2.0
         )
 
-        # Smart Money Concepts configuration (extracted parameters)
-        self.smc_config = SMCConfig.defaults()
-        
         # Load scanner mode for critical timeframe tracking
         # Try mode name first, then fall back to profile lookup
         try:
@@ -153,6 +150,18 @@ class Orchestrator:
             # Profile is not a mode name - use reverse lookup
             from backend.shared.config.scanner_modes import get_mode_by_profile
             self.scanner_mode = get_mode_by_profile(self.config.profile)
+        
+        # Smart Money Concepts configuration (read preset from scanner mode)
+        smc_preset = getattr(self.scanner_mode, 'smc_preset', 'defaults')
+        if smc_preset == 'luxalgo_strict':
+            self.smc_config = SMCConfig.luxalgo_strict()
+            logger.info("🎯 SMC preset: LUXALGO_STRICT (institutional-grade detection)")
+        elif smc_preset == 'sensitive':
+            self.smc_config = SMCConfig.sensitive()
+            logger.info("🎯 SMC preset: SENSITIVE (research/backtesting mode)")
+        else:
+            self.smc_config = SMCConfig.defaults()
+            logger.info("🎯 SMC preset: DEFAULTS (balanced detection)")
         
         # Apply mode settings to config (min_stop_atr, max_stop_atr, timeframe responsibility, etc.)
         # This ensures planner uses mode-specific thresholds, not ScanConfig defaults
@@ -1466,7 +1475,8 @@ class Orchestrator:
                 config=self.config,
                 current_price=current_price,
                 missing_critical_timeframes=context.metadata.get('missing_critical_timeframes', []),
-                multi_tf_data=context.multi_tf_data
+                multi_tf_data=context.multi_tf_data,
+                expected_trade_type=self.scanner_mode.expected_trade_type
             )
             
             # Enrich plan metadata with SMC geometry for chart overlays
