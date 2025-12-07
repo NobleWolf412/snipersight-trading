@@ -94,6 +94,122 @@ def detect_volume_spike(
     return volume_spikes
 
 
+def detect_volume_acceleration(
+    df: pd.DataFrame,
+    lookback: int = 5,
+    min_consecutive: int = 3,
+    accel_threshold: float = 0.1
+) -> dict:
+    """
+    Detect volume acceleration over recent candles.
+    
+    Volume acceleration indicates institutional activity building up.
+    Used to confirm reversals (acceleration in reversal direction)
+    or detect exhaustion (declining acceleration after spike).
+    
+    Args:
+        df: DataFrame with 'volume' and 'close' columns
+        lookback: Number of candles to analyze (default 5)
+        min_consecutive: Minimum consecutive increases for "accelerating" flag (default 3)
+        accel_threshold: Normalized slope threshold for significant acceleration (default 0.1)
+        
+    Returns:
+        dict with keys:
+            - acceleration: float (-1 to +1, normalized slope of volume trend)
+            - consecutive_increases: int (count of bars with increasing volume)
+            - is_accelerating: bool (True if acceleration > threshold AND min consecutive)
+            - direction: str ('bullish', 'bearish', 'neutral') based on price+volume
+            - exhaustion: bool (True if acceleration declining from recent peak)
+            
+    Raises:
+        ValueError: If df is too short or missing required columns
+    """
+    required_cols = ['volume', 'close']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        raise ValueError(f"DataFrame missing required columns: {missing_cols}")
+    
+    if len(df) < lookback + 2:
+        raise ValueError(f"DataFrame too short for acceleration detection (need {lookback + 2} rows, got {len(df)})")
+    
+    # Get recent volume data
+    recent_volumes = df['volume'].tail(lookback).values
+    recent_closes = df['close'].tail(lookback).values
+    
+    # Calculate consecutive volume increases
+    volume_diffs = np.diff(recent_volumes)
+    consecutive_increases = 0
+    for diff in reversed(volume_diffs):
+        if diff > 0:
+            consecutive_increases += 1
+        else:
+            break
+    
+    # Calculate normalized slope using simple linear regression
+    x = np.arange(len(recent_volumes))
+    mean_x = x.mean()
+    mean_vol = recent_volumes.mean()
+    
+    if mean_vol > 0:
+        # Slope calculation: sum((x - mean_x) * (y - mean_y)) / sum((x - mean_x)^2)
+        numerator = np.sum((x - mean_x) * (recent_volumes - mean_vol))
+        denominator = np.sum((x - mean_x) ** 2)
+        slope = numerator / denominator if denominator > 0 else 0.0
+        
+        # Normalize by mean volume to get comparable values across assets
+        normalized_slope = slope / mean_vol
+    else:
+        normalized_slope = 0.0
+    
+    # Determine direction based on price movement + volume
+    price_change = recent_closes[-1] - recent_closes[0]
+    price_change_pct = price_change / recent_closes[0] if recent_closes[0] > 0 else 0
+    
+    # Volume increasing + price direction = direction of acceleration
+    if normalized_slope > accel_threshold:
+        if price_change_pct > 0.001:  # Price up with volume acceleration
+            direction = 'bullish'
+        elif price_change_pct < -0.001:  # Price down with volume acceleration
+            direction = 'bearish'
+        else:
+            direction = 'neutral'
+    else:
+        direction = 'neutral'
+    
+    # Detect exhaustion: volume was spiking but now declining
+    # Look at extended window if possible
+    exhaustion = False
+    if len(df) >= lookback * 2:
+        extended_volumes = df['volume'].tail(lookback * 2).values
+        mid_point = len(extended_volumes) // 2
+        
+        # Compare first half avg vs second half avg
+        first_half_avg = extended_volumes[:mid_point].mean()
+        second_half_avg = extended_volumes[mid_point:].mean()
+        
+        # Also check if recent volumes are declining from peak
+        peak_vol = extended_volumes.max()
+        current_vol = recent_volumes[-1]
+        
+        # Exhaustion: had high volume but now declining significantly
+        if first_half_avg > second_half_avg * 1.3 and current_vol < peak_vol * 0.7:
+            exhaustion = True
+    
+    # Determine if significantly accelerating
+    is_accelerating = (
+        normalized_slope > accel_threshold and 
+        consecutive_increases >= min_consecutive
+    )
+    
+    return {
+        'acceleration': float(np.clip(normalized_slope, -1.0, 1.0)),
+        'consecutive_increases': int(consecutive_increases),
+        'is_accelerating': bool(is_accelerating),
+        'direction': direction,
+        'exhaustion': bool(exhaustion)
+    }
+
+
 def detect_volume_spike_with_metadata(
     df: pd.DataFrame,
     threshold: float = 2.0,

@@ -1638,11 +1638,82 @@ def _score_momentum(
 
 
 def _score_volume(indicators: IndicatorSnapshot, direction: str) -> float:
-    """Score volume confirmation."""
+    """
+    Score volume confirmation with acceleration bonuses.
+    
+    Scoring logic:
+    - Base: 50 (neutral)
+    - Volume spike: +30 (base 80)
+    - Acceleration aligned with trade direction: +10-20
+    - High consecutive increases (3+): +10-15
+    - Volume exhaustion in opposite direction: +10 (reversal confirmation)
+    - Acceleration against trade direction: -10-15 (momentum opposition)
+    
+    Args:
+        indicators: Technical indicators including volume acceleration
+        direction: Trade direction ('LONG', 'SHORT', 'bullish', 'bearish')
+        
+    Returns:
+        Volume score 0-100
+    """
+    score = 50.0  # Base neutral score
+    
+    # Volume spike bonus
     if indicators.volume_spike:
-        return 100.0
-    else:
-        return 50.0  # Neutral if no spike
+        score += 30.0  # 50 -> 80
+    
+    # Volume acceleration bonuses
+    vol_accel = getattr(indicators, 'volume_acceleration', None)
+    vol_accel_dir = getattr(indicators, 'volume_accel_direction', None)
+    vol_is_accel = getattr(indicators, 'volume_is_accelerating', False)
+    vol_consec = getattr(indicators, 'volume_consecutive_increases', 0)
+    vol_exhaust = getattr(indicators, 'volume_exhaustion', False)
+    
+    # Normalize direction for comparison
+    is_bullish_trade = direction.lower() in ('long', 'bullish')
+    
+    if vol_accel is not None and vol_accel_dir is not None:
+        # Direction alignment check
+        accel_aligns_with_trade = (
+            (is_bullish_trade and vol_accel_dir == 'bullish') or
+            (not is_bullish_trade and vol_accel_dir == 'bearish')
+        )
+        accel_opposes_trade = (
+            (is_bullish_trade and vol_accel_dir == 'bearish') or
+            (not is_bullish_trade and vol_accel_dir == 'bullish')
+        )
+        
+        if vol_is_accel and accel_aligns_with_trade:
+            # Strong acceleration in trade direction - momentum confirmation
+            if vol_accel > 0.2:
+                score += 20.0  # Strong acceleration bonus
+            elif vol_accel > 0.1:
+                score += 10.0  # Moderate acceleration bonus
+        
+        elif accel_opposes_trade and vol_is_accel:
+            # Acceleration AGAINST our trade direction - momentum opposition
+            # This is a warning for continuation trades, but could be GOOD for reversal trades
+            # For now, penalize slightly - reversal_detector handles reversal bonuses separately
+            if vol_accel > 0.2:
+                score -= 15.0  # Strong opposing momentum
+            elif vol_accel > 0.1:
+                score -= 10.0  # Moderate opposing momentum
+    
+    # Consecutive increases bonus (volume building up)
+    if vol_consec is not None and vol_consec >= 3:
+        if vol_consec >= 4:
+            score += 15.0  # Strong sustained volume increase
+        else:
+            score += 10.0  # Moderate volume buildup
+    
+    # Volume exhaustion bonus (good for reversals)
+    # When volume was spiking but now declining - indicates move may be exhausting
+    if vol_exhaust:
+        # This is most valuable when paired with reversal detection
+        # Adds confidence that the prior move is losing steam
+        score += 10.0
+    
+    return max(0.0, min(100.0, score))
 
 
 def _score_volatility(indicators: IndicatorSnapshot) -> float:

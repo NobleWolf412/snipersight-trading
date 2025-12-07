@@ -47,7 +47,7 @@ from backend.bot.telemetry.events import (
 from backend.data.ingestion_pipeline import IngestionPipeline
 from backend.indicators.momentum import compute_rsi, compute_stoch_rsi, compute_mfi, compute_macd
 from backend.indicators.volatility import compute_atr, compute_bollinger_bands, compute_realized_volatility
-from backend.indicators.volume import detect_volume_spike, compute_obv, compute_vwap, compute_relative_volume
+from backend.indicators.volume import detect_volume_spike, compute_obv, compute_vwap, compute_relative_volume, detect_volume_acceleration
 from backend.strategy.smc.order_blocks import detect_order_blocks
 from backend.strategy.smc.fvg import detect_fvgs
 from backend.strategy.smc.bos_choch import detect_structural_breaks
@@ -904,6 +904,20 @@ class Orchestrator:
                 except Exception as e:
                     logger.debug("Volume ratio computation failed for %s: %s", timeframe, e)
                 
+                # Volume acceleration (mode-aware lookback)
+                vol_accel_data = None
+                try:
+                    accel_lookback = getattr(self.scanner_mode, 'volume_accel_lookback', 5)
+                    vol_accel_data = detect_volume_acceleration(df, lookback=accel_lookback)
+                    logger.debug("📈 %s vol_accel: slope=%.3f, consec=%d, dir=%s, accelerating=%s",
+                                timeframe,
+                                vol_accel_data['acceleration'],
+                                vol_accel_data['consecutive_increases'],
+                                vol_accel_data['direction'],
+                                vol_accel_data['is_accelerating'])
+                except Exception as e:
+                    logger.debug("Volume acceleration computation failed for %s: %s", timeframe, e)
+                
                 # Log detailed indicator values for visibility
                 current_price = df['close'].iloc[-1]
                 logger.info("📊 %s indicators: RSI=%.1f | MFI=%.1f | ATR=%.2f (%.2f%%) | BB(%.2f-%.2f-%.2f) | VolSpike=%s",
@@ -952,7 +966,13 @@ class Orchestrator:
                     realized_volatility=realized_vol.iloc[-1] if realized_vol is not None else None,
                     # Optional fields - Volume
                     obv=obv.iloc[-1],
-                    volume_ratio=volume_ratio.iloc[-1] if volume_ratio is not None else None
+                    volume_ratio=volume_ratio.iloc[-1] if volume_ratio is not None else None,
+                    # Optional fields - Volume acceleration
+                    volume_acceleration=vol_accel_data['acceleration'] if vol_accel_data else None,
+                    volume_consecutive_increases=vol_accel_data['consecutive_increases'] if vol_accel_data else None,
+                    volume_is_accelerating=vol_accel_data['is_accelerating'] if vol_accel_data else None,
+                    volume_accel_direction=vol_accel_data['direction'] if vol_accel_data else None,
+                    volume_exhaustion=vol_accel_data['exhaustion'] if vol_accel_data else None,
                 )
                 # Attach MACD values and series if available (for mode-aware persistence checks)
                 if macd_line is not None and macd_signal is not None:

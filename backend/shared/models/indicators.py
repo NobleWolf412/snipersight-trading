@@ -83,6 +83,13 @@ class IndicatorSnapshot:
     obv: Optional[float] = None
     obv_trend: Optional[str] = None  # 'rising', 'falling', 'flat' for scoring
     
+    # Volume acceleration (optional fields)
+    volume_acceleration: Optional[float] = None  # Normalized slope of volume trend (-1 to +1)
+    volume_consecutive_increases: Optional[int] = None  # Count of bars with increasing volume
+    volume_is_accelerating: Optional[bool] = None  # True if acceleration > threshold + min consecutive
+    volume_accel_direction: Optional[str] = None  # 'bullish', 'bearish', 'neutral' - direction of volume+price
+    volume_exhaustion: Optional[bool] = None  # True if volume declining from recent spike (reversal signal)
+    
     # VWAP context
     vwap: Optional[float] = None
     price_vs_vwap: Optional[float] = None  # Current price - VWAP (positive = above)

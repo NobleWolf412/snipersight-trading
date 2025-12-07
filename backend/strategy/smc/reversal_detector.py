@@ -163,6 +163,24 @@ def detect_long_reversal(
             if not component_flags['volume_displacement']:
                 component_flags['volume_displacement'] = True
     
+    # Volume acceleration check for LONG reversal
+    # For LONG: we want bullish acceleration (volume building as price recovers)
+    # OR exhaustion of bearish move (sellers losing steam)
+    vol_accel_dir = getattr(indicators, 'volume_accel_direction', None) if indicators else None
+    vol_is_accel = getattr(indicators, 'volume_is_accelerating', False) if indicators else False
+    vol_exhaust = getattr(indicators, 'volume_exhaustion', False) if indicators else False
+    vol_accel_val = getattr(indicators, 'volume_acceleration', None) if indicators else None
+    
+    if vol_is_accel and vol_accel_dir == 'bullish':
+        # Volume accelerating in bullish direction - confirming reversal
+        signals.append(f"📈 Bullish volume acceleration ({vol_accel_val:.2f})")
+        if not component_flags['volume_displacement']:
+            component_flags['volume_displacement'] = True
+    
+    if vol_exhaust:
+        # Volume exhaustion - prior bearish move losing steam
+        signals.append("🔋 Volume exhaustion (sellers tiring)")
+    
     # === 4. LIQUIDITY SWEEP ===
     # Look for sweep of lows (stop hunt) followed by reversal
     low_sweeps = [s for s in smc_snapshot.liquidity_sweeps 
@@ -178,6 +196,17 @@ def detect_long_reversal(
     
     # Base confidence from components
     confidence = 25.0 * component_count  # 25 per component, max 100
+    
+    # Volume acceleration bonus for reversal confidence
+    if vol_is_accel and vol_accel_dir == 'bullish' and vol_accel_val:
+        if vol_accel_val > 0.2:
+            confidence += 10.0  # Strong bullish acceleration into reversal
+        elif vol_accel_val > 0.1:
+            confidence += 5.0  # Moderate bullish acceleration
+    
+    # Volume exhaustion bonus (confirms prior move exhausting)
+    if vol_exhaust:
+        confidence += 8.0
     
     # Bonus for cycle context quality
     if cycle_context.phase == CyclePhase.ACCUMULATION:
@@ -295,6 +324,24 @@ def detect_short_reversal(
             if not component_flags['volume_displacement']:
                 component_flags['volume_displacement'] = True
     
+    # Volume acceleration check for SHORT reversal
+    # For SHORT: we want bearish acceleration (volume building as price drops)
+    # OR exhaustion of bullish move (buyers losing steam)
+    vol_accel_dir = getattr(indicators, 'volume_accel_direction', None) if indicators else None
+    vol_is_accel = getattr(indicators, 'volume_is_accelerating', False) if indicators else False
+    vol_exhaust = getattr(indicators, 'volume_exhaustion', False) if indicators else False
+    vol_accel_val = getattr(indicators, 'volume_acceleration', None) if indicators else None
+    
+    if vol_is_accel and vol_accel_dir == 'bearish':
+        # Volume accelerating in bearish direction - confirming reversal
+        signals.append(f"📉 Bearish volume acceleration ({vol_accel_val:.2f})")
+        if not component_flags['volume_displacement']:
+            component_flags['volume_displacement'] = True
+    
+    if vol_exhaust:
+        # Volume exhaustion - prior bullish move losing steam (FOMO buyers exhausted)
+        signals.append("🔋 Volume exhaustion (buyers tiring)")
+    
     # === 4. LIQUIDITY SWEEP ===
     # Look for sweep of highs (stop hunt) followed by reversal
     high_sweeps = [s for s in smc_snapshot.liquidity_sweeps 
@@ -308,6 +355,17 @@ def detect_short_reversal(
     # === CALCULATE CONFIDENCE ===
     component_count = sum(component_flags.values())
     confidence = 25.0 * component_count
+    
+    # Volume acceleration bonus for SHORT reversal confidence
+    if vol_is_accel and vol_accel_dir == 'bearish' and vol_accel_val:
+        if vol_accel_val > 0.2:
+            confidence += 10.0  # Strong bearish acceleration into reversal
+        elif vol_accel_val > 0.1:
+            confidence += 5.0  # Moderate bearish acceleration
+    
+    # Volume exhaustion bonus (confirms prior bullish move exhausting)
+    if vol_exhaust:
+        confidence += 8.0
     
     # Bonus for strong LTR + distribution combo
     if (cycle_context.translation == CycleTranslation.LTR and 

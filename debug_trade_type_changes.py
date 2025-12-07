@@ -215,12 +215,21 @@ def test_derive_trade_type():
     
     test_cases = [
         # (target_move_pct, stop_atr, structure_tfs, primary_tf, expected, desc)
-        (2.5, 3.0, ("1d", "4h"), "4h", "swing", "Large move + HTF = swing"),
+        # Swing cases - require HTF structure or very large moves
+        (2.5, 3.0, ("1d", "4h"), "4h", "swing", "Large move (2.5%) + HTF = swing"),
+        (3.5, 2.0, ("1h", "15m"), "15m", "swing", "Very large move (3.5%) = swing regardless"),
+        (1.5, 4.0, ("4h", "1h"), "4h", "swing", "HTF primary (4h) + 1.5% = swing"),
+        (3.0, 5.0, ("1w", "1d", "4h"), "4h", "swing", "Very large move (3.0%) + HTF = swing"),
+        
+        # Scalp cases - LTF only with tight parameters
         (0.5, 1.0, ("15m", "5m"), "5m", "scalp", "Small move + LTF = scalp"),
-        (1.2, 2.0, ("1h", "15m"), "15m", "intraday", "Mid move + mixed TF = intraday"),
-        (1.5, 4.0, ("4h", "1h"), "1h", "swing", "Wide stop (4 ATR) + HTF = swing"),
         (0.4, 1.2, ("15m", "5m"), "5m", "scalp", "Tight stop + LTF only = scalp"),
-        (3.0, 5.0, ("1w", "1d", "4h"), "4h", "swing", "Very large move = swing"),
+        
+        # Intraday cases - MTF (1h) or mixed MTF/LTF, moderate moves
+        (1.2, 2.0, ("1h", "15m"), "15m", "intraday", "SURGICAL: 1h/15m structure = intraday"),
+        (1.8, 2.5, ("1h", "15m"), "15m", "intraday", "SURGICAL: 1.8% move + 1h/15m = intraday"),
+        (2.0, 3.0, ("1h", "15m"), "1h", "intraday", "SURGICAL: 2.0% move + MTF primary = intraday"),
+        (1.0, 2.0, ("1h",), "1h", "intraday", "MTF only (1h) = intraday"),
     ]
     
     for target, stop, structure, primary, expected, desc in test_cases:

@@ -165,22 +165,29 @@ def _derive_trade_type(
         'scalp', 'swing', or 'intraday'
     """
     HTF = ('1w', '1d', '4h')
+    MTF = ('1h',)  # Mid-timeframe - intraday territory
     LTF = ('15m', '5m', '1m')
     
-    # Check if structure comes from HTF
+    # Check structure timeframe categories
     htf_structure = any(tf in HTF for tf in structure_timeframes) if structure_timeframes else False
+    mtf_structure = any(tf in MTF for tf in structure_timeframes) if structure_timeframes else False
     ltf_only = all(tf in LTF for tf in structure_timeframes) if structure_timeframes else False
+    mtf_or_ltf_only = all(tf in MTF + LTF for tf in structure_timeframes) if structure_timeframes else False
     
-    # Large target moves indicate swing trades
-    if target_move_pct >= 2.0:
+    # Very large target moves are swing regardless of structure
+    if target_move_pct >= 3.5:
+        return 'swing'
+    
+    # Large target moves with HTF structure = swing
+    if target_move_pct >= 2.5 and htf_structure:
         return 'swing'
     
     # Wide stops from HTF structure indicate swing trades
-    if stop_distance_atr >= 3.0 and htf_structure:
+    if stop_distance_atr >= 3.5 and htf_structure:
         return 'swing'
     
-    # Moderate moves with some HTF context
-    if target_move_pct >= 1.0 and (htf_structure or primary_tf in ('4h', '1d')):
+    # HTF primary timeframe with moderate targets = swing
+    if target_move_pct >= 1.5 and primary_tf in ('4h', '1d'):
         return 'swing'
     
     # Tight stops with LTF-only structure = scalp
@@ -190,6 +197,10 @@ def _derive_trade_type(
     # Small moves with LTF context
     if target_move_pct < 0.6 and primary_tf in LTF:
         return 'scalp'
+    
+    # MTF or LTF structure with moderate moves = intraday (SURGICAL, STRIKE)
+    if mtf_or_ltf_only and target_move_pct < 2.5:
+        return 'intraday'
     
     # Default: intraday (middle ground)
     return 'intraday'
