@@ -715,8 +715,10 @@ async def get_signals(
         # Transform TradePlans for response
         signals = []
         for plan in trade_plans:
+            # Clean symbol: remove '/' and ':USDT' suffix (exchange swap notation)
+            clean_symbol = plan.symbol.replace('/', '').replace(':USDT', '')
             signal = {
-                "symbol": plan.symbol.replace('/', ''),
+                "symbol": clean_symbol,
                 "direction": plan.direction,
                 "score": plan.confidence_score,
                 "entry_near": plan.entry_zone.near_entry,
@@ -1151,7 +1153,8 @@ async def create_scan_run(
     }
     
     job = ScanJob(run_id, params)
-    scan_jobs[run_id] = job
+    with scan_jobs_lock:
+        scan_jobs[run_id] = job
     
     # Start background task
     job.task = asyncio.create_task(_execute_scan_job(job))
@@ -1166,10 +1169,10 @@ async def create_scan_run(
 @app.get("/api/scanner/runs/{run_id}")
 async def get_scan_run(run_id: str):
     """Get status and results of a scan job."""
-    if run_id not in scan_jobs:
-        raise HTTPException(status_code=404, detail="Scan job not found")
-    
-    job = scan_jobs[run_id]
+    with scan_jobs_lock:
+        if run_id not in scan_jobs:
+            raise HTTPException(status_code=404, detail="Scan job not found")
+        job = scan_jobs[run_id]
     
     response = {
         "run_id": job.run_id,
@@ -1196,10 +1199,10 @@ async def get_scan_run(run_id: str):
 @app.delete("/api/scanner/runs/{run_id}")
 async def cancel_scan_run(run_id: str):
     """Cancel a running scan job."""
-    if run_id not in scan_jobs:
-        raise HTTPException(status_code=404, detail="Scan job not found")
-    
-    job = scan_jobs[run_id]
+    with scan_jobs_lock:
+        if run_id not in scan_jobs:
+            raise HTTPException(status_code=404, detail="Scan job not found")
+        job = scan_jobs[run_id]
     
     if job.status in ["completed", "failed", "cancelled"]:
         return {"message": f"Job already {job.status}"}
@@ -1268,8 +1271,10 @@ async def _execute_scan_job(job: ScanJob):
         # Transform results
         signals = []
         for plan in trade_plans:
+            # Clean symbol: remove '/' and ':USDT' suffix (exchange swap notation)
+            clean_symbol = plan.symbol.replace('/', '').replace(':USDT', '')
             signal = {
-                "symbol": plan.symbol.replace('/', ''),
+                "symbol": clean_symbol,
                 "direction": plan.direction,
                 "score": plan.confidence_score,
                 "entry_near": plan.entry_zone.near_entry,

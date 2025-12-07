@@ -26,8 +26,8 @@ export function TradingViewChart({ result }: TradingViewChartProps) {
   });
   const [showOverlay, setShowOverlay] = useState(false);
 
-  // Convert pair format (e.g., "BTC/USDT" -> "BTCUSDT")
-  const baseSymbol = result.pair.replace('/', '');
+  // Convert pair format (e.g., "BTC/USDT" -> "BTCUSDT", also strip ":USDT" suffix)
+  const baseSymbol = result.pair.replace('/', '').replace(':USDT', '');
   
   /**
    * Map our symbols to TradingView-compatible format.

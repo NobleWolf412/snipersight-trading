@@ -149,7 +149,7 @@ class ScannerMode:
 MODES: Dict[str, ScannerMode] = {
     "overwatch": ScannerMode(
         name="overwatch",
-        description="High-altitude overwatch: macro recon and regime alignment; fewer shots, higher conviction.",
+        description="SWING TRADES (Days-Weeks) • High-conviction setups only • Weekly/Daily structure alignment • Best for: Patient traders wanting A+ quality with 2:1+ R:R minimum",
         timeframes=("1w", "1d", "4h", "1h", "15m", "5m"),  # Extended to match UI
         min_confluence_score=75.0,
         profile="macro_surveillance",
@@ -170,7 +170,7 @@ MODES: Dict[str, ScannerMode] = {
     # NOTE: "recon" removed from MODES - use get_mode('recon') which maps to 'stealth'
     "strike": ScannerMode(
         name="strike",
-        description="Strike ops: intraday assault on momentum with local liquidity reads; HTF structure with LTF entry precision.",
+        description="INTRADAY TRADES (Hours) • Aggressive momentum plays • More signals, faster entries • Best for: Active traders comfortable with quick decision-making and 1.2:1+ R:R",
         timeframes=("4h", "1h", "15m", "5m"),  # Changed from 1m to 4h start
         min_confluence_score=60.0,
         profile="intraday_aggressive",
@@ -190,7 +190,7 @@ MODES: Dict[str, ScannerMode] = {
     ),
     "surgical": ScannerMode(
         name="surgical",
-        description="Surgical precision: tight, high-quality entries only; minimal exposure, maximum control.",
+        description="SCALP/INTRADAY (Minutes-Hours) • Precision entries with tight stops • Fewer but cleaner setups • Best for: Experienced traders wanting controlled risk with 1.5:1+ R:R",
         timeframes=("1h", "15m", "5m"),  # Simplified for precision
         min_confluence_score=70.0,
         profile="precision",
@@ -212,7 +212,7 @@ MODES: Dict[str, ScannerMode] = {
     # Use stealth_strict=False for balanced (was RECON), stealth_strict=True for higher conviction (was GHOST)
     "stealth": ScannerMode(
         name="stealth",
-        description="Stealth mode: balanced swing trading with multi-TF confluence; adaptable and mission-ready.",
+        description="BALANCED (Hours-Days) • Mix of swing and intraday setups • Good signal volume with solid quality • Best for: All-around trading with 1.8:1+ R:R minimum",
         timeframes=("1d", "4h", "1h", "15m", "5m"),
         min_confluence_score=65.0,  # Base threshold (use 70.0 with stealth_strict=True)
         profile="stealth_balanced",

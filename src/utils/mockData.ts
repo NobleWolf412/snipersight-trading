@@ -112,7 +112,8 @@ export function convertSignalToScanResult(signal: any): ScanResult {
 
   return {
     id: `signal-${signal.symbol}-${Date.now()}`,
-    pair: signal.symbol.replace('USDT', '/USDT'),
+    // Clean symbol: strip any :USDT suffix (exchange swap notation), then format as pair
+    pair: signal.symbol.replace(':USDT', '').replace('USDT', '/USDT'),
     sniper_mode: signal.sniper_mode || signal.mode || undefined,
     trendBias,
     confidenceScore: confidence,

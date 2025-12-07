@@ -103,7 +103,7 @@ const defaultBotConfig: BotConfig = {
 const fallbackModes: ScannerMode[] = [
   {
     name: 'overwatch',
-    description: 'High-altitude overwatch: macro recon and regime alignment; fewer shots, higher conviction.',
+    description: 'SWING TRADES (Days-Weeks) • High-conviction setups only • Weekly/Daily structure alignment • Best for: Patient traders wanting A+ quality with 2:1+ R:R minimum',
     timeframes: ['1w','1d','4h','1h','15m','5m'],
     min_confluence_score: 75,
     profile: 'macro_surveillance',
@@ -117,7 +117,7 @@ const fallbackModes: ScannerMode[] = [
   // NOTE: 'recon' removed - merged into 'stealth' mode
   {
     name: 'strike',
-    description: 'Strike ops: intraday assault on momentum with local liquidity reads; HTF structure with LTF entry precision.',
+    description: 'INTRADAY TRADES (Hours) • Aggressive momentum plays • More signals, faster entries • Best for: Active traders comfortable with quick decision-making and 1.2:1+ R:R',
     timeframes: ['4h','1h','15m','5m'],
     min_confluence_score: 60,
     profile: 'intraday_aggressive',
@@ -130,7 +130,7 @@ const fallbackModes: ScannerMode[] = [
   },
   {
     name: 'surgical',
-    description: 'Surgical precision: tight, high-quality entries only; minimal exposure, maximum control.',
+    description: 'SCALP/INTRADAY (Minutes-Hours) • Precision entries with tight stops • Fewer but cleaner setups • Best for: Experienced traders wanting controlled risk with 1.5:1+ R:R',
     timeframes: ['1h','15m','5m'],
     min_confluence_score: 70,
     profile: 'precision',
@@ -143,7 +143,7 @@ const fallbackModes: ScannerMode[] = [
   },
   {
     name: 'stealth',
-    description: 'Stealth mode: balanced swing trading with multi-TF confluence; adaptable and mission-ready.',
+    description: 'BALANCED (Hours-Days) • Mix of swing and intraday setups • Good signal volume with solid quality • Best for: All-around trading with 1.8:1+ R:R minimum',
     timeframes: ['1d','4h','1h','15m','5m'],
     min_confluence_score: 65,
     profile: 'stealth_balanced',
