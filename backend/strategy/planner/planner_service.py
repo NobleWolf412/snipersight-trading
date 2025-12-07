@@ -1437,24 +1437,27 @@ def _calculate_stop_loss(
     
     else:  # bearish
         # Stop above the entry structure
+        # For SHORT: stop must be ABOVE near_entry (the higher edge where we enter the short)
         potential_stops = []
         
         for ob in smc_snapshot.order_blocks:
             # Filter to allowed structure timeframes if specified
             if allowed_tfs and ob.timeframe not in allowed_tfs:
                 continue
-            if ob.direction == "bearish" and ob.high > entry_zone.far_entry:
+            # Look for bearish OBs (supply zones) ABOVE our entry zone
+            # These represent invalidation levels - if price breaks above, our short is wrong
+            if ob.direction == "bearish" and ob.high > entry_zone.near_entry:
                 potential_stops.append((ob.high, ob.timeframe))
         
         for fvg in smc_snapshot.fvgs:
             # Filter to allowed structure timeframes if specified
             if allowed_tfs and fvg.timeframe not in allowed_tfs:
                 continue
-            if fvg.direction == "bearish" and fvg.top > entry_zone.far_entry:
+            if fvg.direction == "bearish" and fvg.top > entry_zone.near_entry:
                 potential_stops.append((fvg.top, fvg.timeframe))
         
-        # Filter stops that are actually above entry
-        valid_stops = [(level, tf) for level, tf in potential_stops if level > entry_zone.far_entry]
+        # Filter stops that are actually above entry (must be above near_entry for shorts)
+        valid_stops = [(level, tf) for level, tf in potential_stops if level > entry_zone.near_entry]
         
         if valid_stops:
             # Use closest structure above entry (lowest of the valid stops)
@@ -1474,7 +1477,7 @@ def _calculate_stop_loss(
                     structure_atr = indicators_by_tf[structure_tf_lower].atr
                     logger.debug(f"Using structure TF {structure_tf_lower} ATR={structure_atr:.4f} for distance calc")
             
-            distance_atr = (stop_level - entry_zone.far_entry) / structure_atr
+            distance_atr = (stop_level - entry_zone.near_entry) / structure_atr
             used_structure = True
         else:
             # Fallback: swing-based stop from primary timeframe, then HTF if needed
@@ -1486,7 +1489,7 @@ def _calculate_stop_loss(
                 candles_df = multi_tf_data.timeframes[primary_tf]
                 swing_level = _find_swing_level(
                     is_bullish=False,
-                    reference_price=entry_zone.far_entry,
+                    reference_price=entry_zone.near_entry,  # For shorts, find swing above near_entry
                     candles_df=candles_df,
                     lookback=planner_cfg.stop_lookback_bars,
                     timeframe=primary_tf
@@ -1513,7 +1516,7 @@ def _calculate_stop_loss(
                         candles_df = multi_tf_data.timeframes[htf]
                         swing_level = _find_swing_level(
                             is_bullish=False,
-                            reference_price=entry_zone.far_entry,
+                            reference_price=entry_zone.near_entry,  # For shorts, find swing above near_entry
                             candles_df=candles_df,
                             lookback=planner_cfg.stop_lookback_bars,  # Same base, scaled by timeframe
                             timeframe=htf
@@ -1525,7 +1528,7 @@ def _calculate_stop_loss(
             if swing_level:
                 stop_level = swing_level + (stop_buffer * atr)  # Dynamic regime-aware buffer above swing
                 rationale = f"Stop above swing high (no SMC structure)"
-                distance_atr = (stop_level - entry_zone.far_entry) / atr
+                distance_atr = (stop_level - entry_zone.near_entry) / atr  # Use near_entry for shorts
                 used_structure = False  # Swing level, not SMC structure
                 logger.info(f"Using swing-based stop: {stop_level}")
             else:
@@ -1537,7 +1540,7 @@ def _calculate_stop_loss(
                 if emergency_atr_fallback:
                     # Use ATR-based stop for scalp modes when no structure/swing found
                     fallback_atr_mult = 1.5  # Conservative fallback
-                    stop_level = entry_zone.far_entry + (fallback_atr_mult * atr)
+                    stop_level = entry_zone.near_entry + (fallback_atr_mult * atr)  # Use near_entry for shorts
                     rationale = f"Emergency ATR fallback ({fallback_atr_mult}x ATR) - no swing structure found"
                     distance_atr = fallback_atr_mult
                     used_structure = False
