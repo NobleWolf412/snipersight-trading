@@ -7,6 +7,11 @@ Liquidity sweeps occur when:
 - Price briefly exceeds a key level (high/low) to trigger stop losses
 - Price quickly reverses, showing the move was a "trap"
 - Often precedes strong moves in opposite direction
+
+Also includes Equal Highs/Lows (Liquidity Pool) detection:
+- Clustered swing points at similar price levels
+- Represent stop-loss liquidity accumulation
+- High-probability sweep targets
 """
 
 from typing import List, Optional
@@ -14,8 +19,13 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 
-from backend.shared.models.smc import LiquiditySweep, grade_pattern
-from backend.shared.config.smc_config import SMCConfig, scale_lookback
+from backend.shared.models.smc import LiquiditySweep, LiquidityPool, grade_pattern
+from backend.shared.config.smc_config import (
+    SMCConfig, 
+    scale_lookback,
+    scale_eqhl_tolerance,
+    get_eqhl_min_touches
+)
 
 
 def detect_liquidity_sweeps(
@@ -286,37 +296,252 @@ def _check_upside_reversal(
 
 def detect_equal_highs_lows(
     df: pd.DataFrame,
-    tolerance_pct: float = 0.002
+    tolerance_pct: float = 0.002,
+    config: SMCConfig | dict | None = None,
+    timeframe: Optional[str] = None
 ) -> dict:
     """
     Detect equal highs and equal lows (liquidity pools).
     
     Equal highs/lows represent clustered liquidity that often gets swept.
     
+    ENHANCED: Now supports timeframe-aware adaptive parameters via SMCConfig.
+    
     Args:
         df: DataFrame with OHLC data
         tolerance_pct: Price tolerance for "equal" determination (default 0.2%)
+                       DEPRECATED: Use config.eqhl_base_tolerance_pct instead
+        config: SMCConfig for adaptive parameters (recommended)
+        timeframe: Timeframe string for scaling (auto-detected if None)
         
     Returns:
-        dict: {'equal_highs': List[float], 'equal_lows': List[float]}
+        dict: {
+            'equal_highs': List[float],  # DEPRECATED - use 'pools' instead
+            'equal_lows': List[float],   # DEPRECATED - use 'pools' instead
+            'pools': List[LiquidityPool],  # NEW: structured pool objects
+            'metadata': {
+                'timeframe': str,
+                'tolerance_used': float,
+                'min_touches': int,
+                'highs_detected': int,
+                'lows_detected': int
+            }
+        }
     """
-    from backend.strategy.smc.bos_choch import _detect_swing_highs, _detect_swing_lows
+    from backend.strategy.smc.bos_choch import _detect_swing_highs, _detect_swing_lows, _infer_timeframe
+    from backend.shared.models.smc import LiquidityPool
     
-    swing_highs = _detect_swing_highs(df, lookback=5)
-    swing_lows = _detect_swing_lows(df, lookback=5)
+    # Determine timeframe
+    if timeframe is None:
+        timeframe = _infer_timeframe(df)
     
-    equal_highs = _find_equal_levels(swing_highs.values, tolerance_pct)
-    equal_lows = _find_equal_levels(swing_lows.values, tolerance_pct)
+    # Get configuration
+    if config is None:
+        smc_cfg = SMCConfig.defaults()
+    elif isinstance(config, dict):
+        smc_cfg = SMCConfig.from_dict(config)
+    else:
+        smc_cfg = config
+    
+    # Calculate ATR for ATR-based tolerance (if enabled)
+    atr_value = None
+    if smc_cfg.eqhl_use_atr_tolerance:
+        from backend.indicators.volatility import compute_atr
+        atr = compute_atr(df, period=14)
+        if len(atr) > 0 and pd.notna(atr.iloc[-1]):
+            atr_value = atr.iloc[-1]
+    
+    # Scale parameters based on timeframe
+    scaled_lookback = scale_lookback(smc_cfg.eqhl_swing_lookback, timeframe)
+    scaled_tolerance = scale_eqhl_tolerance(smc_cfg.eqhl_base_tolerance_pct, timeframe)
+    min_touches = get_eqhl_min_touches(timeframe)
+    
+    # Use ATR-based tolerance if enabled and ATR available
+    if smc_cfg.eqhl_use_atr_tolerance and atr_value and atr_value > 0:
+        # Use ATR tolerance: cluster_within_atr * ATR
+        current_price = df['close'].iloc[-1] if len(df) > 0 else 1.0
+        atr_tolerance = (smc_cfg.eqhl_cluster_within_atr * atr_value) / current_price
+        # Use the tighter of ATR-based or percentage tolerance
+        effective_tolerance = min(atr_tolerance, scaled_tolerance)
+    else:
+        effective_tolerance = scaled_tolerance
+    
+    # Detect swing points with scaled lookback
+    swing_highs = _detect_swing_highs(df, scaled_lookback)
+    swing_lows = _detect_swing_lows(df, scaled_lookback)
+    
+    # Find clustered equal levels with metadata
+    high_clusters = _find_equal_levels_enhanced(
+        swing_highs, effective_tolerance, min_touches, df
+    )
+    low_clusters = _find_equal_levels_enhanced(
+        swing_lows, effective_tolerance, min_touches, df
+    )
+    
+    # Create LiquidityPool objects
+    pools = []
+    
+    for cluster in high_clusters:
+        grade = _grade_pool_by_touches(cluster['touches'], smc_cfg.eqhl_grade_by_touches)
+        pool = LiquidityPool(
+            level=cluster['level'],
+            pool_type="equal_highs",
+            touches=cluster['touches'],
+            timeframe=timeframe,
+            grade=grade,
+            first_touch=cluster.get('first_touch'),
+            last_touch=cluster.get('last_touch'),
+            tolerance_used=effective_tolerance,
+            spread=cluster.get('spread', 0.0)
+        )
+        pools.append(pool)
+    
+    for cluster in low_clusters:
+        grade = _grade_pool_by_touches(cluster['touches'], smc_cfg.eqhl_grade_by_touches)
+        pool = LiquidityPool(
+            level=cluster['level'],
+            pool_type="equal_lows",
+            touches=cluster['touches'],
+            timeframe=timeframe,
+            grade=grade,
+            first_touch=cluster.get('first_touch'),
+            last_touch=cluster.get('last_touch'),
+            tolerance_used=effective_tolerance,
+            spread=cluster.get('spread', 0.0)
+        )
+        pools.append(pool)
+    
+    # Sort pools by touch count (strongest first)
+    pools.sort(key=lambda p: p.touches, reverse=True)
+    
+    # Extract simple lists for backward compatibility
+    equal_highs = [c['level'] for c in high_clusters]
+    equal_lows = [c['level'] for c in low_clusters]
     
     return {
         'equal_highs': equal_highs,
-        'equal_lows': equal_lows
+        'equal_lows': equal_lows,
+        'pools': pools,
+        'metadata': {
+            'timeframe': timeframe,
+            'tolerance_used': effective_tolerance,
+            'min_touches': min_touches,
+            'highs_detected': len(equal_highs),
+            'lows_detected': len(equal_lows),
+            'atr_tolerance_active': smc_cfg.eqhl_use_atr_tolerance and atr_value is not None
+        }
     }
+
+
+def _find_equal_levels_enhanced(
+    swing_series: pd.Series,
+    tolerance_pct: float,
+    min_touches: int,
+    df: pd.DataFrame
+) -> List[dict]:
+    """
+    Find levels that are approximately equal (within tolerance) with metadata.
+    
+    Enhanced version that returns structured cluster info including:
+    - Average level price
+    - Touch count
+    - First/last touch timestamps
+    - Price spread within cluster
+    
+    Args:
+        swing_series: Series of swing prices (index=timestamp, value=price)
+        tolerance_pct: Tolerance as percentage (e.g., 0.002 = 0.2%)
+        min_touches: Minimum number of touches required
+        df: Original DataFrame for timestamp lookups
+        
+    Returns:
+        List[dict]: Clusters with level, touches, timestamps, spread
+    """
+    if len(swing_series) < min_touches:
+        return []
+    
+    levels = swing_series.values
+    timestamps = swing_series.index
+    
+    # Build clusters using union-find style grouping
+    used = set()
+    clusters = []
+    
+    for i in range(len(levels)):
+        if i in used:
+            continue
+        
+        level = levels[i]
+        tolerance = level * tolerance_pct
+        
+        # Find all levels within tolerance of this one
+        cluster_indices = [i]
+        cluster_prices = [level]
+        cluster_timestamps = [timestamps[i]]
+        
+        for j in range(len(levels)):
+            if j != i and j not in used:
+                if abs(levels[j] - level) <= tolerance:
+                    cluster_indices.append(j)
+                    cluster_prices.append(levels[j])
+                    cluster_timestamps.append(timestamps[j])
+        
+        # Only keep clusters meeting minimum touch requirement
+        if len(cluster_indices) >= min_touches:
+            # Mark all indices as used
+            for idx in cluster_indices:
+                used.add(idx)
+            
+            # Calculate cluster stats
+            avg_level = np.mean(cluster_prices)
+            spread = max(cluster_prices) - min(cluster_prices)
+            
+            # Convert timestamps
+            ts_list = [ts.to_pydatetime() if hasattr(ts, 'to_pydatetime') else ts 
+                      for ts in cluster_timestamps]
+            first_touch = min(ts_list)
+            last_touch = max(ts_list)
+            
+            clusters.append({
+                'level': avg_level,
+                'touches': len(cluster_indices),
+                'prices': cluster_prices,
+                'first_touch': first_touch,
+                'last_touch': last_touch,
+                'spread': spread
+            })
+    
+    return clusters
+
+
+def _grade_pool_by_touches(touches: int, grade_by_touches: bool = True) -> str:
+    """
+    Grade a liquidity pool by touch count.
+    
+    Args:
+        touches: Number of touches in the pool
+        grade_by_touches: Whether to grade by touches (if False, returns 'B')
+        
+    Returns:
+        Grade string ('A', 'B', or 'C')
+    """
+    if not grade_by_touches:
+        return 'B'
+    
+    if touches >= 4:
+        return 'A'  # Strong liquidity pool
+    elif touches >= 3:
+        return 'B'  # Moderate pool
+    else:
+        return 'C'  # Weak pool (minimum 2 touches)
 
 
 def _find_equal_levels(levels: np.ndarray, tolerance_pct: float) -> List[float]:
     """
     Find levels that are approximately equal (within tolerance).
+    
+    DEPRECATED: Use detect_equal_highs_lows() with config parameter instead.
+    This function is kept for backward compatibility only.
     
     Args:
         levels: Array of price levels

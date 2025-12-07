@@ -68,6 +68,56 @@ LOOKBACK_MULTIPLIERS: Dict[str, float] = {
 }
 
 
+# ============================================================================
+# EQUAL HIGHS/LOWS TIMEFRAME SCALING
+# ============================================================================
+#
+# Lower timeframes have more noise, so we need:
+#   - TIGHTER tolerance (to avoid false clusters from noise)
+#   - MORE touches required (to filter retail chop)
+#
+# Higher timeframes have cleaner structure, so we can use:
+#   - LOOSER tolerance (swings are more spread out in price terms)
+#   - FEWER touches required (each HTF swing is significant)
+
+# Tolerance scaling: LTF = tighter (0.5x), HTF = looser (1.5x)
+EQHL_TOLERANCE_SCALING: Dict[str, float] = {
+    '1m': 0.4,   # Very tight: 0.08% if base is 0.2%
+    '3m': 0.5,
+    '5m': 0.5,   # Tight: 0.1%
+    '15m': 0.75, # Moderate: 0.15%
+    '30m': 0.9,
+    '1h': 1.0, '1H': 1.0,   # Base: 0.2%
+    '2h': 1.1, '2H': 1.1,
+    '4h': 1.25, '4H': 1.25, # Looser: 0.25%
+    '6h': 1.3, '6H': 1.3,
+    '8h': 1.4, '8H': 1.4,
+    '12h': 1.5, '12H': 1.5,
+    '1d': 1.5, '1D': 1.5,   # Looser: 0.3%
+    '3d': 1.75, '3D': 1.75,
+    '1w': 2.0, '1W': 2.0,   # Loosest: 0.4%
+}
+
+# Minimum touch requirements by timeframe
+# LTF needs MORE touches to filter noise, HTF needs FEWER (each is significant)
+EQHL_MIN_TOUCHES: Dict[str, int] = {
+    '1m': 5,   # Very noisy - need 5 touches minimum
+    '3m': 4,
+    '5m': 4,   # Need 4 touches to be meaningful
+    '15m': 3,  # 3 touches
+    '30m': 3,
+    '1h': 3, '1H': 3,
+    '2h': 2, '2H': 2,
+    '4h': 2, '4H': 2,   # Base: 2 touches
+    '6h': 2, '6H': 2,
+    '8h': 2, '8H': 2,
+    '12h': 2, '12H': 2,
+    '1d': 2, '1D': 2,   # Daily: 2 touches (each is significant)
+    '3d': 2, '3D': 2,
+    '1w': 2, '1W': 2,   # Weekly: 2 touches
+}
+
+
 def get_timeframe_minutes(timeframe: str) -> int:
     """Get minutes for a timeframe string."""
     return TIMEFRAME_MINUTES.get(timeframe, 240)  # Default to 4H
@@ -108,6 +158,58 @@ def scale_lookback(base_lookback: int, timeframe: str, min_lookback: int = 3, ma
     return max(min_lookback, min(max_lookback, scaled))
 
 
+def get_eqhl_tolerance_scaling(timeframe: str) -> float:
+    """
+    Get tolerance scaling factor for equal highs/lows detection.
+    
+    LTF uses tighter tolerance (fewer false clusters from noise).
+    HTF uses looser tolerance (swings more spread out).
+    
+    Args:
+        timeframe: Timeframe string
+        
+    Returns:
+        Scaling factor (0.5 = half of base, 2.0 = double base)
+    """
+    return EQHL_TOLERANCE_SCALING.get(timeframe, 1.0)
+
+
+def get_eqhl_min_touches(timeframe: str) -> int:
+    """
+    Get minimum touch requirement for equal highs/lows detection.
+    
+    LTF needs more touches to filter noise.
+    HTF can use fewer touches (each is significant).
+    
+    Args:
+        timeframe: Timeframe string
+        
+    Returns:
+        Minimum number of touches required
+    """
+    return EQHL_MIN_TOUCHES.get(timeframe, 2)
+
+
+def scale_eqhl_tolerance(base_tolerance_pct: float, timeframe: str) -> float:
+    """
+    Scale equal highs/lows tolerance for a specific timeframe.
+    
+    Args:
+        base_tolerance_pct: Base tolerance (e.g., 0.002 = 0.2%)
+        timeframe: Timeframe string
+        
+    Returns:
+        Scaled tolerance percentage
+        
+    Example:
+        scale_eqhl_tolerance(0.002, '5m')  -> 0.001  (tighter)
+        scale_eqhl_tolerance(0.002, '4H')  -> 0.0025 (base * 1.25)
+        scale_eqhl_tolerance(0.002, '1D')  -> 0.003  (looser)
+    """
+    scaling = get_eqhl_tolerance_scaling(timeframe)
+    return base_tolerance_pct * scaling
+
+
 @dataclass
 class SMCConfig:
     # Order Block parameters
@@ -131,6 +233,15 @@ class SMCConfig:
     sweep_max_sweep_candles: int = 4  # Increased from 3 - more flexible sweep detection
     sweep_min_reversal_atr: float = 0.8  # Lowered from 1.0 - detect smaller reversals
     sweep_require_volume_spike: bool = False
+
+    # Equal Highs/Lows (Liquidity Pool) parameters
+    # These identify clustered swing points that represent stop-loss liquidity
+    eqhl_base_tolerance_pct: float = 0.002  # Base tolerance (0.2%) - scaled by timeframe
+    eqhl_swing_lookback: int = 5  # Base swing detection lookback - scaled by timeframe
+    eqhl_min_touches: int = 2  # Base minimum touches - scaled by timeframe
+    eqhl_cluster_within_atr: float = 0.3  # Alternative: cluster within 0.3 ATR (more adaptive)
+    eqhl_use_atr_tolerance: bool = True  # Use ATR-based tolerance instead of percentage
+    eqhl_grade_by_touches: bool = True  # Grade pools by touch count (A=4+, B=3, C=2)
 
     # Grade thresholds for pattern quality scoring (new grading system)
     # Patterns are graded A/B/C instead of rejected
@@ -178,6 +289,14 @@ class SMCConfig:
             sweep_min_reversal_atr=1.5,    # Strong reversal required
             sweep_require_volume_spike=True,  # Must have volume confirmation
             
+            # Equal Highs/Lows: Strict - only strong liquidity pools
+            eqhl_base_tolerance_pct=0.0015,  # Tighter base tolerance (0.15%)
+            eqhl_swing_lookback=7,           # Wider swing detection
+            eqhl_min_touches=3,              # Need 3+ touches (more significant)
+            eqhl_cluster_within_atr=0.25,    # Tighter ATR clustering
+            eqhl_use_atr_tolerance=True,
+            eqhl_grade_by_touches=True,
+            
             # Grade thresholds: Stricter for high-quality only
             grade_a_threshold=1.5,         # 1.5x ATR for Grade A
             grade_b_threshold=1.0,         # 1.0x ATR for Grade B
@@ -208,6 +327,14 @@ class SMCConfig:
             sweep_min_reversal_atr=0.7,
             sweep_require_volume_spike=False,
             
+            # Equal Highs/Lows: Sensitive - detect more pools for research
+            eqhl_base_tolerance_pct=0.003,   # Looser base tolerance (0.3%)
+            eqhl_swing_lookback=4,           # Shorter swing detection
+            eqhl_min_touches=2,              # 2 touches minimum
+            eqhl_cluster_within_atr=0.4,     # Looser ATR clustering
+            eqhl_use_atr_tolerance=True,
+            eqhl_grade_by_touches=True,
+            
             # Grade thresholds: Lenient for research
             grade_a_threshold=0.5,         # 0.5x ATR for Grade A
             grade_b_threshold=0.3,         # 0.3x ATR for Grade B
@@ -229,6 +356,10 @@ class SMCConfig:
             ("sweep_swing_lookback", self.sweep_swing_lookback, 1),
             ("sweep_max_sweep_candles", self.sweep_max_sweep_candles, 1),
             ("sweep_min_reversal_atr", self.sweep_min_reversal_atr, 0),
+            ("eqhl_base_tolerance_pct", self.eqhl_base_tolerance_pct, 0),
+            ("eqhl_swing_lookback", self.eqhl_swing_lookback, 1),
+            ("eqhl_min_touches", self.eqhl_min_touches, 2),
+            ("eqhl_cluster_within_atr", self.eqhl_cluster_within_atr, 0),
         ]
         for name, value, minimum in numeric_fields:
             if value < minimum:
@@ -237,6 +368,8 @@ class SMCConfig:
             raise ValueError(f"ob_max_mitigation must be between 0 and 1, got {self.ob_max_mitigation}")
         if not 0 <= self.fvg_max_overlap <= 1:
             raise ValueError(f"fvg_max_overlap must be between 0 and 1, got {self.fvg_max_overlap}")
+        if not 0 < self.eqhl_base_tolerance_pct < 0.1:
+            raise ValueError(f"eqhl_base_tolerance_pct must be between 0 and 0.1 (10%), got {self.eqhl_base_tolerance_pct}")
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a dict representation suitable for serialization."""

@@ -994,6 +994,7 @@ class Orchestrator:
         all_liquidity_sweeps = []
         all_equal_highs = []
         all_equal_lows = []
+        all_liquidity_pools: List = []  # NEW: structured LiquidityPool objects
         swing_structure_by_tf = {}  # HTF swing structure (HH/HL/LH/LL)
         premium_discount_by_tf = {}  # Premium/Discount zone analysis
         
@@ -1021,11 +1022,24 @@ class Orchestrator:
                 sweeps = detect_liquidity_sweeps(df, self.smc_config)
                 all_liquidity_sweeps.extend(sweeps)
                 
-                # Equal highs/lows (liquidity pools)
+                # Equal highs/lows (liquidity pools) - ENHANCED with timeframe-aware detection
                 try:
-                    ehl = detect_equal_highs_lows(df)
+                    ehl = detect_equal_highs_lows(
+                        df, 
+                        config=self.smc_config,
+                        timeframe=_timeframe
+                    )
                     all_equal_highs.extend(ehl.get('equal_highs', []))
                     all_equal_lows.extend(ehl.get('equal_lows', []))
+                    # Collect structured LiquidityPool objects
+                    pools = ehl.get('pools', [])
+                    all_liquidity_pools.extend(pools)
+                    if pools:
+                        logger.debug("💧 %s: %d liquidity pools (tol=%.4f%%, min_touches=%d)",
+                                   _timeframe,
+                                   len(pools),
+                                   ehl.get('metadata', {}).get('tolerance_used', 0) * 100,
+                                   ehl.get('metadata', {}).get('min_touches', 2))
                 except Exception:
                     pass  # Non-critical, continue without
                 
@@ -1076,6 +1090,14 @@ class Orchestrator:
             logger.info("💧 Liquidity pools: %d equal highs, %d equal lows",
                        len(unique_equal_highs), len(unique_equal_lows))
         
+        # Log structured liquidity pools summary
+        if all_liquidity_pools:
+            grade_a = sum(1 for p in all_liquidity_pools if p.grade == 'A')
+            grade_b = sum(1 for p in all_liquidity_pools if p.grade == 'B')
+            grade_c = sum(1 for p in all_liquidity_pools if p.grade == 'C')
+            logger.info("🎯 Liquidity pools graded: A=%d B=%d C=%d (total=%d)",
+                       grade_a, grade_b, grade_c, len(all_liquidity_pools))
+        
         # Log HTF swing structure summary
         if swing_structure_by_tf:
             for tf, ss in swing_structure_by_tf.items():
@@ -1120,6 +1142,7 @@ class Orchestrator:
             liquidity_sweeps=all_liquidity_sweeps,
             equal_highs=unique_equal_highs,
             equal_lows=unique_equal_lows,
+            liquidity_pools=all_liquidity_pools,  # NEW: structured LiquidityPool objects
             swing_structure=swing_structure_by_tf,
             premium_discount=premium_discount_by_tf,
             key_levels=key_levels_data

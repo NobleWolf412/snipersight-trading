@@ -232,6 +232,54 @@ class LiquiditySweep:
 
 
 @dataclass
+class LiquidityPool:
+    """
+    Liquidity Pool - Equal highs or equal lows cluster.
+    
+    Represents clustered swing points at similar price levels where
+    stop-loss liquidity accumulates. These are high-probability sweep targets.
+    
+    Attributes:
+        level: Average price level of the cluster
+        pool_type: 'equal_highs' or 'equal_lows'
+        touches: Number of swing points in the cluster
+        timeframe: Timeframe where detected
+        grade: Quality grade based on touch count (A=4+, B=3, C=2)
+        first_touch: Timestamp of first swing point in cluster
+        last_touch: Timestamp of most recent swing point
+        tolerance_used: Price tolerance that defined this cluster
+        spread: Price spread within the cluster (high - low of touches)
+    """
+    level: float
+    pool_type: Literal["equal_highs", "equal_lows"]
+    touches: int
+    timeframe: str
+    grade: PatternGrade = 'B'
+    first_touch: Optional[datetime] = None
+    last_touch: Optional[datetime] = None
+    tolerance_used: float = 0.002  # Tolerance % used for clustering
+    spread: float = 0.0  # Price spread within cluster
+    
+    @property
+    def is_strong(self) -> bool:
+        """Check if this is a strong liquidity pool (3+ touches or Grade A/B)."""
+        return self.touches >= 3 or self.grade in ('A', 'B')
+    
+    @property
+    def is_fresh(self) -> bool:
+        """Check if pool was touched recently (last 7 days)."""
+        if not self.last_touch:
+            return True
+        age = datetime.now() - self.last_touch
+        return age.days <= 7
+    
+    def contains_price(self, price: float) -> bool:
+        """Check if price is within the liquidity pool zone."""
+        tolerance = self.level * self.tolerance_used
+        return abs(price - self.level) <= tolerance
+
+
+@dataclass
 class SMCSnapshot:
     """
     Complete SMC analysis snapshot for a symbol.
@@ -245,15 +293,17 @@ class SMCSnapshot:
         fvgs: List of all detected fair value gaps
         structural_breaks: List of all detected BOS/CHoCH patterns
         liquidity_sweeps: List of all detected liquidity sweeps
-        equal_highs: Price levels with clustered equal highs (liquidity pools)
-        equal_lows: Price levels with clustered equal lows (liquidity pools)
+        equal_highs: Price levels with clustered equal highs (DEPRECATED - use liquidity_pools)
+        equal_lows: Price levels with clustered equal lows (DEPRECATED - use liquidity_pools)
+        liquidity_pools: List of structured LiquidityPool objects (NEW)
     """
     order_blocks: List[OrderBlock]
     fvgs: List[FVG]
     structural_breaks: List[StructuralBreak]
     liquidity_sweeps: List[LiquiditySweep]
-    equal_highs: List[float] = field(default_factory=list)
-    equal_lows: List[float] = field(default_factory=list)
+    equal_highs: List[float] = field(default_factory=list)  # DEPRECATED but kept for backward compat
+    equal_lows: List[float] = field(default_factory=list)   # DEPRECATED but kept for backward compat
+    liquidity_pools: List[LiquidityPool] = field(default_factory=list)  # NEW: structured pools
     swing_structure: dict = field(default_factory=dict)  # {timeframe: SwingStructure.to_dict()}
     premium_discount: dict = field(default_factory=dict)  # {timeframe: PremiumDiscountZone.to_dict()}
     key_levels: Optional[dict] = None  # KeyLevels.to_dict()
@@ -272,6 +322,8 @@ class SMCSnapshot:
             self.equal_highs = []
         if self.equal_lows is None:
             self.equal_lows = []
+        if self.liquidity_pools is None:
+            self.liquidity_pools = []
         if self.swing_structure is None:
             self.swing_structure = {}
         if self.premium_discount is None:
@@ -293,10 +345,43 @@ class SMCSnapshot:
         """Get confirmed liquidity sweeps."""
         return [sweep for sweep in self.liquidity_sweeps if sweep.is_confirmed]
     
+    def get_strong_liquidity_pools(self) -> List[LiquidityPool]:
+        """Get strong liquidity pools (3+ touches or Grade A/B)."""
+        return [pool for pool in self.liquidity_pools if pool.is_strong]
+    
+    def get_equal_highs_pools(self) -> List[LiquidityPool]:
+        """Get liquidity pools of equal highs type."""
+        return [pool for pool in self.liquidity_pools if pool.pool_type == "equal_highs"]
+    
+    def get_equal_lows_pools(self) -> List[LiquidityPool]:
+        """Get liquidity pools of equal lows type."""
+        return [pool for pool in self.liquidity_pools if pool.pool_type == "equal_lows"]
+    
+    def get_nearest_pool(self, price: float, pool_type: Optional[str] = None) -> Optional[LiquidityPool]:
+        """
+        Get the nearest liquidity pool to a given price.
+        
+        Args:
+            price: Reference price
+            pool_type: Optional filter ('equal_highs' or 'equal_lows')
+            
+        Returns:
+            Nearest LiquidityPool or None
+        """
+        pools = self.liquidity_pools
+        if pool_type:
+            pools = [p for p in pools if p.pool_type == pool_type]
+        
+        if not pools:
+            return None
+        
+        return min(pools, key=lambda p: abs(p.level - price))
+    
     def has_smc_data(self) -> bool:
         """Check if any SMC patterns were detected."""
         return bool(self.order_blocks or self.fvgs or 
-                   self.structural_breaks or self.liquidity_sweeps)
+                   self.structural_breaks or self.liquidity_sweeps or
+                   self.liquidity_pools)
 
 
 @dataclass
