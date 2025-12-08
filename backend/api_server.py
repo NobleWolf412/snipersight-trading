@@ -20,6 +20,11 @@ import pandas as pd
 from backend.risk.position_sizer import PositionSizer
 from backend.risk.risk_manager import RiskManager
 from backend.bot.executor.paper_executor import PaperExecutor
+from backend.bot.paper_trading_service import (
+    get_paper_trading_service,
+    PaperTradingConfig,
+    PaperBotStatus,
+)
 from backend.data.adapters.phemex import PhemexAdapter
 from backend.data.adapters.bybit import BybitAdapter
 from backend.data.adapters.okx import OKXAdapter
@@ -1076,6 +1081,178 @@ async def get_trade_history(
     return {"fills": fill_list, "total": len(fill_list)}
 
 
+# ---------------------------------------------------------------------------
+# Paper Trading Endpoints (Training Ground)
+# ---------------------------------------------------------------------------
+
+class PaperTradingConfigRequest(BaseModel):
+    """Request model for paper trading configuration."""
+    exchange: str = "phemex"
+    sniper_mode: str = "stealth"
+    initial_balance: float = Field(default=10000.0, ge=100, le=1000000)
+    risk_per_trade: float = Field(default=2.0, ge=0.1, le=10)
+    max_positions: int = Field(default=3, ge=1, le=10)
+    leverage: int = Field(default=1, ge=1, le=100)
+    duration_hours: int = Field(default=24, ge=0, le=168)  # 0 = manual, max 1 week
+    scan_interval_minutes: int = Field(default=5, ge=1, le=60)
+    trailing_stop: bool = True
+    trailing_activation: float = Field(default=1.5, ge=1.0, le=5.0)
+    breakeven_after_target: int = Field(default=1, ge=1, le=3)
+    min_confluence: Optional[float] = Field(default=None, ge=0, le=100)
+    symbols: List[str] = []
+    exclude_symbols: List[str] = []
+    slippage_bps: float = Field(default=5.0, ge=0, le=50)
+    fee_rate: float = Field(default=0.001, ge=0, le=0.01)
+
+
+@app.post("/api/paper-trading/start")
+async def start_paper_trading(config: PaperTradingConfigRequest):
+    """
+    Start a paper trading session.
+    
+    This starts the autonomous paper trading bot which:
+    - Runs the scanner at specified intervals
+    - Automatically executes trades based on signals
+    - Manages positions with SL/TP/trailing stops
+    - Tracks P&L and statistics
+    """
+    try:
+        service = get_paper_trading_service()
+        
+        paper_config = PaperTradingConfig(
+            exchange=config.exchange,
+            sniper_mode=config.sniper_mode,
+            initial_balance=config.initial_balance,
+            risk_per_trade=config.risk_per_trade,
+            max_positions=config.max_positions,
+            leverage=config.leverage,
+            duration_hours=config.duration_hours,
+            scan_interval_minutes=config.scan_interval_minutes,
+            trailing_stop=config.trailing_stop,
+            trailing_activation=config.trailing_activation,
+            breakeven_after_target=config.breakeven_after_target,
+            min_confluence=config.min_confluence,
+            symbols=config.symbols,
+            exclude_symbols=config.exclude_symbols,
+            slippage_bps=config.slippage_bps,
+            fee_rate=config.fee_rate
+        )
+        
+        result = await service.start(paper_config)
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to start paper trading: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/paper-trading/stop")
+async def stop_paper_trading():
+    """
+    Stop the paper trading session.
+    
+    Closes all open positions and returns final statistics.
+    """
+    try:
+        service = get_paper_trading_service()
+        result = await service.stop()
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to stop paper trading: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/paper-trading/status")
+async def get_paper_trading_status():
+    """
+    Get current paper trading status.
+    
+    Returns comprehensive status including:
+    - Bot status (running/stopped/idle)
+    - Current balance and equity
+    - Active positions with P&L
+    - Session statistics
+    - Recent activity log
+    """
+    try:
+        service = get_paper_trading_service()
+        return service.get_status()
+        
+    except Exception as e:
+        logger.error(f"Failed to get paper trading status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/paper-trading/positions")
+async def get_paper_trading_positions():
+    """Get active paper trading positions."""
+    try:
+        service = get_paper_trading_service()
+        positions = service.get_positions()
+        return {"positions": positions, "total": len(positions)}
+        
+    except Exception as e:
+        logger.error(f"Failed to get paper trading positions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/paper-trading/history")
+async def get_paper_trading_history(limit: int = Query(default=50, ge=1, le=200)):
+    """
+    Get paper trading trade history.
+    
+    Returns completed trades with entry/exit details, P&L, and more.
+    """
+    try:
+        service = get_paper_trading_service()
+        trades = service.get_trade_history(limit=limit)
+        return {"trades": trades, "total": len(trades)}
+        
+    except Exception as e:
+        logger.error(f"Failed to get paper trading history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/paper-trading/activity")
+async def get_paper_trading_activity(limit: int = Query(default=100, ge=1, le=500)):
+    """
+    Get paper trading activity log.
+    
+    Returns all events: scans, trades opened/closed, errors, etc.
+    """
+    try:
+        service = get_paper_trading_service()
+        activity = service.get_activity_log(limit=limit)
+        return {"activity": activity, "total": len(activity)}
+        
+    except Exception as e:
+        logger.error(f"Failed to get paper trading activity: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/paper-trading/reset")
+async def reset_paper_trading():
+    """
+    Reset paper trading to fresh state.
+    
+    Clears all data including trades, positions, and statistics.
+    Must be stopped first.
+    """
+    try:
+        service = get_paper_trading_service()
+        result = service.reset()
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to reset paper trading: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/risk/summary")
 async def get_risk_summary():
     """Get risk management summary."""
@@ -2000,6 +2177,106 @@ async def get_telemetry_analytics(
     except Exception as e:
         logger.error("Error calculating analytics: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ============================================================
+# OHLCV Cache Management Endpoints
+# ============================================================
+
+@app.get("/api/cache/stats")
+async def get_cache_stats():
+    """
+    Get OHLCV cache statistics.
+    
+    Returns cache hit rate, entry count, and memory usage estimates.
+    Useful for monitoring cache effectiveness.
+    """
+    from backend.data.ohlcv_cache import get_ohlcv_cache
+    
+    cache = get_ohlcv_cache()
+    stats = cache.get_stats()
+    
+    return {
+        "status": "ok",
+        "cache": stats,
+        "description": (
+            f"Cache has {stats['entries']} entries with {stats['hit_rate_pct']}% hit rate. "
+            f"Caching {stats['total_candles_cached']} candles across "
+            f"{stats['symbols_cached']} symbols and {stats['timeframes_cached']} timeframes."
+        )
+    }
+
+
+@app.get("/api/cache/entries")
+async def get_cache_entries():
+    """
+    Get detailed info about each cached entry and when it expires.
+    
+    Returns list of cached symbol/timeframe pairs with expiration times.
+    """
+    from backend.data.ohlcv_cache import get_ohlcv_cache
+    
+    cache = get_ohlcv_cache()
+    entries = cache.get_expiration_info()
+    
+    return {
+        "status": "ok",
+        "count": len(entries),
+        "entries": entries
+    }
+
+
+@app.delete("/api/cache/clear")
+async def clear_cache():
+    """
+    Clear all OHLCV cached data.
+    
+    Use this to force fresh data fetches on next scan.
+    """
+    from backend.data.ohlcv_cache import get_ohlcv_cache
+    
+    cache = get_ohlcv_cache()
+    stats_before = cache.get_stats()
+    cache.clear()
+    
+    return {
+        "status": "ok",
+        "message": f"Cache cleared. Removed {stats_before['entries']} entries."
+    }
+
+
+@app.delete("/api/cache/invalidate/{symbol}")
+async def invalidate_symbol_cache(
+    symbol: str,
+    timeframe: Optional[str] = Query(default=None)
+):
+    """
+    Invalidate cache for a specific symbol.
+    
+    Args:
+        symbol: Symbol to invalidate (e.g., "BTC/USDT")
+        timeframe: Optional specific timeframe to invalidate
+        
+    Use this after a significant price event to ensure fresh data.
+    """
+    from backend.data.ohlcv_cache import get_ohlcv_cache
+    
+    # URL decode symbol (/ becomes %2F)
+    symbol = symbol.replace("%2F", "/")
+    
+    cache = get_ohlcv_cache()
+    invalidated = cache.invalidate(symbol, timeframe)
+    
+    if timeframe:
+        msg = f"Invalidated {invalidated} cache entry for {symbol} {timeframe}"
+    else:
+        msg = f"Invalidated {invalidated} cache entries for {symbol}"
+    
+    return {
+        "status": "ok",
+        "message": msg,
+        "invalidated_count": invalidated
+    }
 
 
 # Serve built frontend at root (only if dist exists - for production)

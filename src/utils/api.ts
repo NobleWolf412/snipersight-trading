@@ -644,6 +644,177 @@ class ApiClient {
   async cancelScanRun(runId: string) {
     return this.request(`/scanner/runs/${runId}`, { method: 'DELETE' });
   }
+
+  // ---------------------------------------------------------------------------
+  // Paper Trading (Training Ground)
+  // ---------------------------------------------------------------------------
+
+  async startPaperTrading(config: PaperTradingConfigRequest) {
+    return this.request<PaperTradingStartResponse>('/paper-trading/start', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  }
+
+  async stopPaperTrading() {
+    return this.request<PaperTradingStatusResponse>('/paper-trading/stop', {
+      method: 'POST',
+    });
+  }
+
+  async getPaperTradingStatus() {
+    return this.request<PaperTradingStatusResponse>('/paper-trading/status', {
+      timeout: 60000,  // 60s timeout - paper trading can be slow during active scans
+    });
+  }
+
+  async getPaperTradingPositions() {
+    return this.request<{
+      positions: PaperTradingPosition[];
+      total: number;
+    }>('/paper-trading/positions');
+  }
+
+  async getPaperTradingHistory(limit = 50) {
+    return this.request<{
+      trades: CompletedPaperTrade[];
+      total: number;
+    }>(`/paper-trading/history?limit=${limit}`, {
+      timeout: 60000,  // 60s timeout - paper trading can be slow during active scans
+    });
+  }
+
+  async getPaperTradingActivity(limit = 100) {
+    return this.request<{
+      activity: PaperTradingActivity[];
+      total: number;
+    }>(`/paper-trading/activity?limit=${limit}`);
+  }
+
+  async resetPaperTrading() {
+    return this.request<{ status: string; message: string }>('/paper-trading/reset', {
+      method: 'POST',
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Paper Trading Types
+// ---------------------------------------------------------------------------
+
+export interface PaperTradingConfigRequest {
+  exchange?: string;
+  sniper_mode?: string;
+  initial_balance?: number;
+  risk_per_trade?: number;
+  max_positions?: number;
+  leverage?: number;
+  duration_hours?: number;
+  scan_interval_minutes?: number;
+  trailing_stop?: boolean;
+  trailing_activation?: number;
+  breakeven_after_target?: number;
+  min_confluence?: number | null;
+  symbols?: string[];
+  exclude_symbols?: string[];
+  slippage_bps?: number;
+  fee_rate?: number;
+}
+
+export interface PaperTradingPosition {
+  position_id: string;
+  symbol: string;
+  direction: 'LONG' | 'SHORT';
+  entry_price: number;
+  current_price: number;
+  quantity: number;
+  remaining_quantity: number;
+  stop_loss: number;
+  targets_remaining: number;
+  targets_hit: number;
+  unrealized_pnl: number;
+  unrealized_pnl_pct: number;
+  breakeven_active: boolean;
+  trailing_active: boolean;
+  opened_at: string;
+}
+
+export interface CompletedPaperTrade {
+  trade_id: string;
+  symbol: string;
+  direction: 'LONG' | 'SHORT';
+  entry_price: number;
+  exit_price: number;
+  quantity: number;
+  entry_time: string;
+  exit_time: string | null;
+  pnl: number;
+  pnl_pct: number;
+  exit_reason: 'target' | 'stop_loss' | 'emergency' | 'session_stopped' | string;
+  targets_hit: number[];
+  max_favorable: number;
+  max_adverse: number;
+}
+
+export interface PaperTradingStats {
+  total_trades: number;
+  winning_trades: number;
+  losing_trades: number;
+  win_rate: number;
+  total_pnl: number;
+  total_pnl_pct: number;
+  avg_win: number;
+  avg_loss: number;
+  avg_rr: number;
+  best_trade: number;
+  worst_trade: number;
+  max_drawdown: number;
+  current_streak: number;
+  scans_completed: number;
+  signals_generated: number;
+  signals_taken: number;
+}
+
+export interface PaperTradingActivity {
+  timestamp: string;
+  event_type: 'session_started' | 'session_stopped' | 'scan_started' | 'scan_completed' | 
+              'scan_error' | 'trade_opened' | 'trade_closed' | 'trade_error' | string;
+  data: Record<string, any>;
+}
+
+export interface PaperTradingBalance {
+  initial: number;
+  current: number;
+  equity: number;
+  pnl: number;
+  pnl_pct: number;
+}
+
+export interface PaperTradingStatusResponse {
+  status: 'idle' | 'running' | 'paused' | 'stopped' | 'error';
+  session_id: string | null;
+  started_at: string | null;
+  stopped_at: string | null;
+  uptime_seconds: number;
+  config: PaperTradingConfigRequest | null;
+  balance: PaperTradingBalance | null;
+  positions: PaperTradingPosition[];
+  statistics: PaperTradingStats;
+  recent_activity: PaperTradingActivity[];
+  last_scan_at: string | null;
+  next_scan_in_seconds: number | null;
+  cache_stats?: {
+    hit_rate_pct: number;
+    entries: number;
+    candles_cached: number;
+  } | null;
+}
+
+export interface PaperTradingStartResponse {
+  session_id: string;
+  status: string;
+  started_at: string;
+  config: PaperTradingConfigRequest;
 }
 
 export const api = new ApiClient();

@@ -1,6 +1,7 @@
 """
 Data ingestion pipeline for multi-timeframe market data fetching.
 Handles parallel symbol fetching and data normalization.
+Includes smart OHLCV caching to reduce API calls.
 """
 
 import time
@@ -10,23 +11,30 @@ import pandas as pd
 from loguru import logger
 
 from backend.shared.models.data import MultiTimeframeData
+from backend.data.ohlcv_cache import get_ohlcv_cache, OHLCVCache
 
 
 class IngestionPipeline:
     """
     Pipeline for fetching and normalizing multi-timeframe market data.
     Supports parallel fetching across symbols and timeframes.
+    Uses smart OHLCV caching to minimize API calls.
     """
 
-    def __init__(self, adapter):
+    def __init__(self, adapter, use_cache: bool = True):
         """
         Initialize ingestion pipeline with exchange adapter.
 
         Args:
             adapter: Exchange adapter instance (e.g., BinanceAdapter)
+            use_cache: Whether to use OHLCV caching (default: True)
         """
         self.adapter = adapter
-        logger.info(f"Ingestion pipeline initialized with {adapter.__class__.__name__}")
+        self.use_cache = use_cache
+        self._cache: OHLCVCache = get_ohlcv_cache() if use_cache else None
+        
+        cache_status = "enabled" if use_cache else "disabled"
+        logger.info(f"Ingestion pipeline initialized with {adapter.__class__.__name__} (cache: {cache_status})")
 
     def fetch_multi_timeframe(
         self,
@@ -36,6 +44,7 @@ class IngestionPipeline:
     ) -> MultiTimeframeData:
         """
         Fetch OHLCV data across multiple timeframes for a single symbol.
+        Uses caching to avoid redundant API calls.
 
         Args:
             symbol: Trading pair symbol (e.g., 'BTC/USDT')
@@ -48,13 +57,28 @@ class IngestionPipeline:
         Raises:
             ValueError: If any timeframe data is missing or invalid
         """
-        logger.info(f"Fetching multi-timeframe data for {symbol}: {timeframes}")
+        logger.debug(f"Fetching multi-timeframe data for {symbol}: {timeframes}")
         
         tf_data = {}
         missing_timeframes = []
+        cache_hits = 0
+        cache_misses = 0
 
         for tf in timeframes:
             try:
+                df = None
+                
+                # Try cache first
+                if self.use_cache and self._cache:
+                    df = self._cache.get(symbol, tf)
+                    if df is not None:
+                        cache_hits += 1
+                        logger.debug(f"✓ Cache HIT for {symbol} {tf} ({len(df)} candles)")
+                        tf_data[tf] = df
+                        continue
+                
+                # Cache miss - fetch from exchange
+                cache_misses += 1
                 df = self.adapter.fetch_ohlcv(symbol, tf, limit=limit)
                 
                 if df.empty:
@@ -65,12 +89,22 @@ class IngestionPipeline:
                 # Validate data
                 validated_df = self.normalize_and_validate(df, symbol, tf)
                 tf_data[tf] = validated_df
+                
+                # Cache the validated data
+                if self.use_cache and self._cache:
+                    self._cache.set(symbol, tf, validated_df)
 
                 logger.debug(f"✓ Fetched {len(validated_df)} candles for {symbol} {tf}")
 
             except Exception as e:
                 logger.error(f"Failed to fetch {symbol} {tf}: {e}")
                 missing_timeframes.append(tf)
+
+        # Log cache efficiency
+        total_requests = cache_hits + cache_misses
+        if total_requests > 0:
+            hit_rate = cache_hits / total_requests * 100
+            logger.debug(f"{symbol}: cache {cache_hits}/{total_requests} ({hit_rate:.0f}% hit rate)")
 
         # Check if we have complete data
         if missing_timeframes:
@@ -93,6 +127,7 @@ class IngestionPipeline:
     ) -> Dict[str, MultiTimeframeData]:
         """
         Fetch multi-timeframe data for multiple symbols in parallel.
+        Uses caching to dramatically reduce API calls on subsequent scans.
 
         Args:
             symbols: List of trading pair symbols
@@ -104,6 +139,14 @@ class IngestionPipeline:
             Dictionary mapping symbol to MultiTimeframeData
 
         """
+        # Log cache stats before fetch
+        if self.use_cache and self._cache:
+            stats_before = self._cache.get_stats()
+            logger.info(
+                f"Cache stats before fetch: {stats_before['entries']} entries, "
+                f"{stats_before['hit_rate_pct']}% hit rate"
+            )
+        
         logger.info(
             f"Starting parallel fetch for {len(symbols)} symbols "
             f"across {len(timeframes)} timeframes with {max_workers} workers"
@@ -134,10 +177,19 @@ class IngestionPipeline:
                 try:
                     data = future.result()
                     results[symbol] = data
-                    logger.info(f"✓ Completed fetch for {symbol}")
+                    logger.debug(f"✓ Completed fetch for {symbol}")
                 except Exception as e:
                     logger.error(f"✗ Failed to fetch {symbol}: {e}")
                     failed_symbols.append(symbol)
+
+        # Log cache stats after fetch
+        if self.use_cache and self._cache:
+            stats_after = self._cache.get_stats()
+            logger.info(
+                f"Cache stats after fetch: {stats_after['entries']} entries, "
+                f"{stats_after['hit_rate_pct']}% hit rate, "
+                f"{stats_after['total_candles_cached']} candles cached"
+            )
 
         logger.info(
             f"Parallel fetch complete: {len(results)} succeeded, "
@@ -264,3 +316,33 @@ class IngestionPipeline:
                 'ADA/USDT', 'AVAX/USDT', 'DOT/USDT', 'MATIC/USDT', 'LINK/USDT'
             ]
             return default_symbols[:n]
+
+    def get_cache_stats(self) -> Dict:
+        """Get OHLCV cache statistics."""
+        if not self.use_cache or not self._cache:
+            return {"enabled": False}
+        
+        stats = self._cache.get_stats()
+        stats["enabled"] = True
+        return stats
+    
+    def clear_cache(self) -> None:
+        """Clear all cached OHLCV data."""
+        if self.use_cache and self._cache:
+            self._cache.clear()
+            logger.info("OHLCV cache cleared")
+    
+    def invalidate_symbol_cache(self, symbol: str, timeframe: Optional[str] = None) -> int:
+        """
+        Invalidate cache for a specific symbol.
+        
+        Args:
+            symbol: Trading pair to invalidate
+            timeframe: Specific timeframe (None = all timeframes)
+            
+        Returns:
+            Number of cache entries invalidated
+        """
+        if not self.use_cache or not self._cache:
+            return 0
+        return self._cache.invalidate(symbol, timeframe)
