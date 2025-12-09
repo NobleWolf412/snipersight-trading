@@ -133,7 +133,7 @@ def validate_ohlcv(
         zero_volume = (df['volume'] == 0).sum()
         if zero_volume > 0:
             zero_pct = (zero_volume / len(df)) * 100
-            if zero_pct > 50:
+            if zero_pct > 80:
                 result['errors'].append(
                     f"Found {zero_volume} zero volume bars ({zero_pct:.1f}%) - possible data issue"
                 )

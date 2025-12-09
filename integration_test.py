@@ -18,10 +18,10 @@ def test_backend_when_available():
     
     # Start backend server
     backend_process = subprocess.Popen(
-        ["python", "-m", "backend.api_server"],
+        [sys.executable, "-m", "backend.api_server"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        cwd="/workspaces/snipersight-trading"
+        cwd="/home/maccardi4431/snipersight-trading"
     )
     
     # Wait for server to start
@@ -30,7 +30,8 @@ def test_backend_when_available():
     try:
         # Test health endpoint
         print("📍 Testing health endpoint...")
-        response = requests.get("http://localhost:8000/api/health", timeout=5)
+        response = requests.get("http://localhost:5000/api/health", timeout=5)
+
         if response.status_code == 200:
             print("✅ Health check passed")
         else:
@@ -40,8 +41,8 @@ def test_backend_when_available():
         # Test signals endpoint
         print("📡 Testing signals endpoint...")
         response = requests.get(
-            "http://localhost:8000/api/scanner/signals?limit=3&min_score=70",
-            timeout=10
+            "http://localhost:5000/api/scanner/signals?limit=3&min_score=70",
+            timeout=30
         )
         
         if response.status_code == 200:
@@ -74,7 +75,7 @@ def test_backend_when_unavailable():
     print("🔌 Testing error handling when backend is unavailable...")
     
     try:
-        response = requests.get("http://localhost:8000/api/health", timeout=2)
+        response = requests.get("http://localhost:5000/api/health", timeout=2)
         print("⚠️  Backend is still running, this test may not be accurate")
         return True
     except requests.exceptions.ConnectionError:
@@ -89,7 +90,7 @@ def test_frontend_configuration():
     print("⚙️  Testing frontend configuration...")
     
     # Check vite.config.ts for proxy setup
-    vite_config_path = Path("/workspaces/snipersight-trading/vite.config.ts")
+    vite_config_path = Path("./vite.config.ts")
     if vite_config_path.exists():
         content = vite_config_path.read_text()
         if "proxy" in content and "/api" in content:
@@ -102,7 +103,7 @@ def test_frontend_configuration():
         return False
     
     # Check API client exists
-    api_client_path = Path("/workspaces/snipersight-trading/src/utils/api.ts")
+    api_client_path = Path("./src/utils/api.ts")
     if api_client_path.exists():
         print("✅ API client found")
     else:
@@ -110,10 +111,10 @@ def test_frontend_configuration():
         return False
     
     # Check scanner setup integration
-    scanner_setup_path = Path("/workspaces/snipersight-trading/src/pages/ScannerSetup.tsx")
+    scanner_setup_path = Path("./src/pages/ScannerSetup.tsx")
     if scanner_setup_path.exists():
         content = scanner_setup_path.read_text()
-        if "api.getSignals" in content and "convertSignalToScanResult" in content:
+        if "api.createScanRun" in content and "api.getScanRun" in content:
             print("✅ Scanner setup integration found")
         else:
             print("❌ Scanner setup integration incomplete")

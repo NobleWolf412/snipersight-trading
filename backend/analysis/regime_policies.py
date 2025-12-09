@@ -37,7 +37,7 @@ REGIME_POLICIES: Dict[str, RegimePolicy] = {
     
     "recon": RegimePolicy(
         mode_name="recon",
-        min_regime_score=50.0,  # Moderate - balanced approach
+        min_regime_score=45.0,  # Adjusted to 45 (was 50) to capture 'normal' 47.0 regimes
         allow_in_risk_off=True,  # Can trade both directions
         position_size_adjustment={
             "strong_up": 1.1,

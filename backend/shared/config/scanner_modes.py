@@ -136,6 +136,8 @@ class ScannerMode:
     expected_trade_type: str = "intraday"
     # Volume acceleration lookback (candles) - mode-aware for sensitivity
     volume_accel_lookback: int = 5  # Default: 5 candles (SURGICAL=3, OVERWATCH=8)
+    # Allowed trade types for validation (enforces mode purpose)
+    allowed_trade_types: Tuple[str, ...] = ("swing", "intraday", "scalp")  # Default all allowed
     # Per-mode overrides (min_rr_ratio, atr_floor, gating thresholds, etc.)
     overrides: Optional[Dict[str, Any]] = None
     
@@ -167,6 +169,7 @@ MODES: Dict[str, ScannerMode] = {
         min_target_move_pct=1.5,  # Macro moves require >= 1.5% TP1
         smc_preset="luxalgo_strict",  # Institutional-grade strict detection for macro positions
         expected_trade_type="swing",  # HTF macro positions
+        allowed_trade_types=("swing",),  # STRICT: Only swing trades allowed
         volume_accel_lookback=8,  # Longer lookback for swing - filters noise, catches institutional accumulation
         overrides={"min_rr_ratio": 2.0, "atr_floor": 0.0025, "bias_gate": 0.7, "htf_swing_allowed": ("1d", "4h")},
     ),
@@ -189,6 +192,7 @@ MODES: Dict[str, ScannerMode] = {
         min_target_move_pct=0.4,  # TUNED: was 0.5 - allow tighter scalp targets
         smc_preset="defaults",  # Balanced detection for aggressive intraday
         expected_trade_type="intraday",  # HTF structure produces intraday/swing setups
+        allowed_trade_types=("intraday", "scalp"),  # Allow fast movers
         volume_accel_lookback=4,  # Balanced - faster detection for intraday but not as reactive as scalp
         overrides={"min_rr_ratio": 1.2, "atr_floor": 0.0010, "bias_gate": 0.6, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True},
     ),
@@ -210,6 +214,7 @@ MODES: Dict[str, ScannerMode] = {
         min_target_move_pct=0.4,  # TUNED: was 0.6 - allow tighter surgical precision
         smc_preset="luxalgo_strict",  # Strict detection for precision - quality over quantity
         expected_trade_type="intraday",  # 1h/15m structure produces intraday setups
+        allowed_trade_types=("intraday", "scalp"),  # Precision focus
         volume_accel_lookback=3,  # Shortest lookback - scalp/surgical needs fastest reaction to volume changes
         overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0008, "bias_gate": 0.7, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True},
     ),
@@ -233,6 +238,7 @@ MODES: Dict[str, ScannerMode] = {
         min_target_move_pct=0.5,
         smc_preset="defaults",  # Balanced detection for swing trading
         expected_trade_type="intraday",  # Balanced mid-range setups
+        allowed_trade_types=("swing", "intraday"),  # Balanced mix
         volume_accel_lookback=5,  # Default balanced - good for mixed swing/intraday
         overrides={
             "min_rr_ratio": 1.8,

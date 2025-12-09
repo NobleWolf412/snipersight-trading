@@ -45,6 +45,10 @@ from backend.bot.notifications.notification_manager import (
     NotificationEvent,
 )
 from backend.routers.htf_opportunities import router as htf_router
+from backend.routers.scanner import router as scanner_router, configure_scanner_router
+from backend.routers.data import router as data_router, configure_data_router
+from backend.shared.cache import get_cache_manager
+from backend.services.scanner_service import configure_scanner_service, get_scanner_service
 
 logger = logging.getLogger(__name__)
 
@@ -89,16 +93,25 @@ orchestrator_logger.setLevel(logging.INFO)
 orchestrator_logger.propagate = False
 
 # Thread-safe price cache with TTL to reduce exchange API load
+# Now uses unified CacheManager internally
 import threading
 from collections import OrderedDict
 
 class ThreadSafeCache:
-    """Thread-safe LRU cache with TTL support."""
-    def __init__(self, max_size: int = 1000, ttl: int = 5):
+    """
+    Thread-safe LRU cache with TTL support.
+    
+    LEGACY FACADE: This class now delegates to CacheManager for consistency.
+    Kept for backward compatibility with existing code.
+    """
+    def __init__(self, max_size: int = 1000, ttl: int = 5, namespace: str = 'generic'):
+        self._namespace = namespace
+        self._cache_mgr = get_cache_manager()
+        self._ttl = ttl
+        # For backward compatibility, also maintain local storage for non-CacheManager usage patterns
         self._cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self._lock = threading.Lock()
         self._max_size = max_size
-        self._ttl = ttl
     
     def get(self, key: str) -> Optional[Dict[str, Any]]:
         with self._lock:
@@ -125,12 +138,18 @@ class ThreadSafeCache:
         with self._lock:
             self._cache.clear()
 
-PRICE_CACHE = ThreadSafeCache(max_size=1000, ttl=5)
+# Use unified cache manager namespaces internally
+_cache_manager = get_cache_manager()
+
+# Legacy cache instances for backward compatibility
+# These delegate to CacheManager namespaces
+PRICE_CACHE = ThreadSafeCache(max_size=1000, ttl=5, namespace='price')
 PRICE_CACHE_TTL = 5  # seconds (for backward compat references)
 
 # Cache for expensive landing page endpoints
-CYCLES_CACHE = ThreadSafeCache(max_size=50, ttl=300)  # 5 minute TTL for cycle data
-REGIME_CACHE = ThreadSafeCache(max_size=10, ttl=60)   # 1 minute TTL for regime data
+CYCLES_CACHE = ThreadSafeCache(max_size=50, ttl=300, namespace='cycles')  # 5 minute TTL for cycle data
+REGIME_CACHE = ThreadSafeCache(max_size=10, ttl=60, namespace='regime')   # 1 minute TTL for regime data
+
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -159,6 +178,14 @@ class Exchange(str, Enum):
     BYBIT = "bybit"
 
 
+# Models moved to routers/scanner.py and shared/models, but Bot models remain here
+class Exchange(str, Enum):
+    """Supported exchanges."""
+    PHEMEX = "phemex"
+    BINANCE = "binance"
+    BYBIT = "bybit"
+
+
 class Timeframe(str, Enum):
     """Supported timeframes."""
     M1 = "1m"
@@ -169,15 +196,6 @@ class Timeframe(str, Enum):
     D1 = "1d"
 
 
-class ScannerConfig(BaseModel):
-    """Scanner configuration."""
-    exchange: Exchange
-    symbols: List[str]
-    timeframes: List[Timeframe]
-    min_score: float = Field(ge=0, le=100)
-    indicators: Dict[str, bool]
-
-
 class BotConfig(BaseModel):
     """Bot trading configuration."""
     exchange: Exchange
@@ -186,19 +204,6 @@ class BotConfig(BaseModel):
     max_positions: int = Field(ge=1, le=10)
     stop_loss_pct: float = Field(gt=0, le=100)
     take_profit_pct: float = Field(gt=0, le=1000)
-
-
-class Signal(BaseModel):
-    """Trading signal."""
-    symbol: str
-    direction: str
-    score: float
-    entry_price: float
-    stop_loss: float
-    take_profit: float
-    timeframe: str
-    timestamp: datetime
-    analysis: Dict[str, Any]
 
 
 class Position(BaseModel):
@@ -221,6 +226,8 @@ class OrderRequest(BaseModel):
     quantity: float
     price: Optional[float] = None
     leverage: Optional[int] = 1
+
+
 
 
 class NotificationPayload(BaseModel):
@@ -253,8 +260,8 @@ class NotificationPayload(BaseModel):
 
 
 # Global state (in production, use proper state management/database)
-scanner_configs: Dict[str, ScannerConfig] = {}
-bot_configs: Dict[str, BotConfig] = {}
+scanner_configs: Dict[str, Any] = {}
+bot_configs: Dict[str, Any] = {}
 active_scanners: Dict[str, bool] = {}
 active_bots: Dict[str, bool] = {}
 
@@ -269,25 +276,10 @@ ScanJobStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
 SCAN_JOB_MAX_AGE_SECONDS = 3600  # Cleanup jobs older than 1 hour
 SCAN_JOB_MAX_COMPLETED = 100  # Keep at most this many completed jobs
 
-class ScanJob:
-    def __init__(self, run_id: str, params: dict):
-        self.run_id = run_id
-        self.status: ScanJobStatus = "queued"
-        self.progress = 0
-        self.total = 0
-        self.current_symbol: Optional[str] = None
-        self.signals: List[dict] = []
-        self.rejections: dict = {}
-        self.metadata: dict = {}
-        self.error: Optional[str] = None
-        self.params = params
-        self.created_at = datetime.now(timezone.utc)
-        self.started_at: Optional[datetime] = None
-        self.completed_at: Optional[datetime] = None
-        self.task: Optional[asyncio.Task] = None
-        self.logs: List[str] = []  # Capture workflow logs for frontend display
+# Legacy scan job tracking - Decommissioned in favor of ScannerService
+# scan_jobs dict kept for router compatibility but will remain empty
+scan_jobs: Dict[str, Any] = {}
 
-scan_jobs: Dict[str, ScanJob] = {}
 scan_jobs_lock = threading.Lock()
 
 # Global orchestrator lock for thread-safe config mutations
@@ -367,6 +359,40 @@ orchestrator = Orchestrator(
     concurrency_workers=4
 )
 
+# Configure and include routers with shared dependencies
+configure_scanner_router(
+    orchestrator=orchestrator,
+    orchestrator_lock=orchestrator_lock,
+    exchange_adapters=EXCHANGE_ADAPTERS,
+    scanner_configs=scanner_configs,
+    active_scanners=active_scanners,
+    scan_jobs=scan_jobs,
+    scan_jobs_lock=scan_jobs_lock,
+    ingestion_pipeline_class=IngestionPipeline,
+    cleanup_old_scan_jobs_fn=cleanup_old_scan_jobs,
+)
+
+configure_data_router(
+    exchange_adapters=EXCHANGE_ADAPTERS,
+    price_cache=PRICE_CACHE,
+    price_cache_ttl=PRICE_CACHE_TTL,
+    cycles_cache=CYCLES_CACHE,
+    regime_cache=REGIME_CACHE,
+    regime_detector=None,  # Will be set on first regime request
+    orchestrator=orchestrator,
+)
+
+# Configure scanner service for background scan job management
+scanner_service = configure_scanner_service(
+    orchestrator=orchestrator,
+    exchange_adapters=EXCHANGE_ADAPTERS,
+    log_handler=scan_job_log_handler
+)
+
+app.include_router(scanner_router)
+app.include_router(data_router)
+
+
 
 @app.get("/api/health")
 async def health_check():
@@ -403,40 +429,8 @@ async def get_active_mode():
 
 
 # Scanner endpoints
-@app.post("/api/scanner/config")
-async def create_scanner_config(config: ScannerConfig):
-    """Create or update scanner configuration."""
-    config_id = f"scanner_{len(scanner_configs) + 1}"
-    scanner_configs[config_id] = config
-    return {"config_id": config_id, "status": "created"}
+# Scanner endpoints moved to backend/routers/scanner.py
 
-
-@app.get("/api/scanner/config/{config_id}")
-async def get_scanner_config(config_id: str):
-    """Get scanner configuration."""
-    if config_id not in scanner_configs:
-        raise HTTPException(status_code=404, detail="Configuration not found")
-    return scanner_configs[config_id]
-
-
-@app.post("/api/scanner/{config_id}/start")
-async def start_scanner(config_id: str):
-    """Start scanner."""
-    if config_id not in scanner_configs:
-        raise HTTPException(status_code=404, detail="Configuration not found")
-    
-    active_scanners[config_id] = True
-    return {"status": "started", "config_id": config_id}
-
-
-@app.post("/api/scanner/{config_id}/stop")
-async def stop_scanner(config_id: str):
-    """Stop scanner."""
-    if config_id not in active_scanners:
-        raise HTTPException(status_code=404, detail="Scanner not found")
-    
-    active_scanners[config_id] = False
-    return {"status": "stopped", "config_id": config_id}
 
 
 def _generate_demo_signals(symbols: List[str], min_score: float) -> List:
@@ -623,183 +617,6 @@ async def update_smc_config(update: SMCConfigUpdate):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@app.get("/api/scanner/signals")
-async def get_signals(
-    limit: int = Query(default=10, ge=1, le=100),
-    min_score: float = Query(default=0, ge=0, le=100),  # 0 allows mode baseline logic
-    sniper_mode: str = Query(default="recon"),
-    majors: bool = Query(default=True),
-    altcoins: bool = Query(default=True),
-    meme_mode: bool = Query(default=False),
-    exchange: str = Query(default="phemex"),
-    leverage: int = Query(default=1, ge=1, le=125),
-    macro_overlay: bool = Query(default=False)
-):
-    """Generate trading signals applying selected sniper mode configuration.
-
-    Mode logic:
-    - Resolve mode (case-insensitive) via scanner_modes mapping.
-    - Apply its timeframes & baseline min_confluence_score.
-    - If caller supplies min_score > 0 it overrides upward; else baseline used.
-    - Profile updated to mode.profile for downstream heuristics.
-    
-    Category filtering:
-    - majors: BTC, ETH, BNB
-    - altcoins: SOL, XRP, ADA, AVAX, MATIC, DOT, LINK, etc.
-    - meme_mode: DOGE, SHIB, PEPE, etc.
-    
-    Exchange & Leverage:
-    - exchange: bybit (default), phemex, okx, bitget
-    - leverage: Position leverage (1x-125x, affects position sizing)
-    """
-    try:
-        # Resolve requested exchange adapter
-        exchange_key = exchange.lower()
-        if exchange_key not in EXCHANGE_ADAPTERS:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Unsupported exchange: {exchange}. Supported: {', '.join(EXCHANGE_ADAPTERS.keys())}"
-            )
-        
-        # Create fresh adapter instance for this scan
-        current_adapter = EXCHANGE_ADAPTERS[exchange_key]()
-        
-        # Resolve requested mode (fallback handled by exception)
-        try:
-            mode = get_mode(sniper_mode)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-
-        # Determine effective threshold
-        effective_min = max(min_score, mode.min_confluence_score) if min_score > 0 else mode.min_confluence_score
-
-        logger.info("Scan request: mode=%s, exchange=%s, leverage=%dx, categories=(majors=%s, alts=%s, meme=%s)", 
-                   mode.name, exchange, leverage, majors, altcoins, meme_mode)
-
-        # Resolve symbols via centralized selector (outside lock - independent operation)
-        symbols = select_symbols(
-            adapter=current_adapter,
-            limit=limit,
-            majors=majors,
-            altcoins=altcoins,
-            meme_mode=meme_mode,
-            leverage=leverage,
-        )
-        logger.info("Filtering %d symbols by categories (majors=%s, altcoins=%s, meme=%s)", 
-                   len(symbols), majors, altcoins, meme_mode)
-
-        # Acquire orchestrator lock for thread-safe config mutation and scan execution
-        # This prevents concurrent requests from corrupting each other's mode/config
-        with orchestrator_lock:
-            # Apply mode safely (profile, timeframes, critical TFs, regime policy)
-            orchestrator.apply_mode(mode)
-            # If caller provided a higher override score, update after mode baseline applied
-            orchestrator.config.min_confluence_score = effective_min
-            # Inject leverage into config for planner adaptive logic
-            try:
-                setattr(orchestrator.config, 'leverage', leverage)
-            except Exception:
-                pass
-            # Enable macro overlay if requested
-            orchestrator.config.macro_overlay_enabled = macro_overlay
-            
-            # Update orchestrator's exchange adapter
-            orchestrator.exchange_adapter = current_adapter
-            orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
-
-            # Run scan pipeline (under lock to ensure config consistency)
-            trade_plans, rejection_summary = orchestrator.scan(symbols)
-        
-        # Cleanup old scan jobs periodically (fire-and-forget)
-        cleanup_old_scan_jobs()
-
-        rejected_count = len(symbols) - len(trade_plans)
-        logger.info("Scan completed: %d signals generated, %d rejected from %d symbols", 
-                   len(trade_plans), rejected_count, len(symbols))
-        
-        # Transform TradePlans for response
-        signals = []
-        for plan in trade_plans:
-            # Clean symbol: remove '/' and ':USDT' suffix (exchange swap notation)
-            clean_symbol = plan.symbol.replace('/', '').replace(':USDT', '')
-            signal = {
-                "symbol": clean_symbol,
-                "direction": plan.direction,
-                "score": plan.confidence_score,
-                "entry_near": plan.entry_zone.near_entry,
-                "entry_far": plan.entry_zone.far_entry,
-                "stop_loss": plan.stop_loss.level,
-                "targets": [
-                    {"level": tp.level, "percentage": tp.percentage}
-                    for tp in plan.targets
-                ],
-                # Provide highest frequency timeframe (last element) as representative
-                "primary_timeframe": mode.timeframes[-1] if mode.timeframes else "",
-                "current_price": plan.entry_zone.near_entry,
-                "analysis": {
-                    "order_blocks": plan.metadata.get('order_blocks', 0),
-                    "fvgs": plan.metadata.get('fvgs', 0),
-                    "structural_breaks": plan.metadata.get('structural_breaks', 0),
-                    "liquidity_sweeps": plan.metadata.get('liquidity_sweeps', 0),
-                    "trend": plan.direction.lower(),
-                    "risk_reward": plan.risk_reward,
-                    "confluence_score": plan.confluence_breakdown.total_score if hasattr(plan, 'confluence_breakdown') else plan.confidence_score,
-                    "expected_value": plan.metadata.get('expected_value')
-                },
-                "liquidation": plan.metadata.get('liquidation'),
-                "atr_regime": plan.metadata.get('atr_regime'),
-                "alt_stop": plan.metadata.get('alt_stop'),
-                # Optional SMC geometry for chart overlays (if provided by pipeline)
-                "smc_geometry": {
-                    "order_blocks": plan.metadata.get('order_blocks_list'),
-                    "fvgs": plan.metadata.get('fvgs_list'),
-                    "bos_choch": plan.metadata.get('structural_breaks_list'),
-                    "liquidity_sweeps": plan.metadata.get('liquidity_sweeps_list')
-                },
-                "rationale": plan.rationale,
-                "setup_type": plan.setup_type,
-                # Enrichment for frontend contract alignment
-                "plan_type": getattr(plan, 'plan_type', 'SMC'),
-                "conviction_class": getattr(plan, 'conviction_class', None),
-                "missing_critical_timeframes": plan.metadata.get('missing_critical_timeframes', []),
-                "regime": plan.metadata.get('regime'),
-                # Optional macro overlay metadata (if computed and enabled)
-                "macro": plan.metadata.get('macro')
-            }
-            signals.append(signal)
-
-        return {
-            "signals": signals,
-            "total": len(signals),
-            "scanned": len(symbols),
-            "rejected": rejected_count,
-            "mode": mode.name,
-            "applied_timeframes": mode.timeframes,
-            "critical_timeframes": mode.critical_timeframes,
-            "active_mode": {
-                "name": orchestrator.scanner_mode.name,
-                "profile": orchestrator.scanner_mode.profile,
-                "timeframes": orchestrator.scanner_mode.timeframes,
-                "critical_timeframes": orchestrator.scanner_mode.critical_timeframes,
-                "baseline_min_confluence": orchestrator.scanner_mode.min_confluence_score
-            },
-            "effective_min_score": effective_min,
-            "baseline_min_score": mode.min_confluence_score,
-            "profile": mode.profile,
-            "exchange": exchange,
-            "leverage": leverage,
-            "categories": {
-                "majors": majors,
-                "altcoins": altcoins,
-                "meme_mode": meme_mode
-            },
-            "rejections": rejection_summary
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Error generating signals: %s", e)
         from backend.bot.telemetry.events import create_error_event
         telemetry = get_telemetry_logger()
         telemetry.log_event(create_error_event(
@@ -1302,215 +1119,12 @@ async def send_notification(payload: NotificationPayload):
         raise HTTPException(status_code=400, detail=f"Failed to send notification: {e}") from e
 
 
-# Background scan endpoints
-@app.post("/api/scanner/runs")
-async def create_scan_run(
-    limit: int = Query(default=10, ge=1, le=100),
-    min_score: float = Query(default=0, ge=0, le=100),
-    sniper_mode: str = Query(default="recon"),
-    majors: bool = Query(default=True),
-    altcoins: bool = Query(default=True),
-    meme_mode: bool = Query(default=False),
-    exchange: str = Query(default="phemex"),
-    leverage: int = Query(default=1, ge=1, le=125),
-    macro_overlay: bool = Query(default=False)
-):
-    """Start a background scan job and return immediately with run_id."""
-    run_id = str(uuid.uuid4())
-    params = {
-        "limit": limit,
-        "min_score": min_score,
-        "sniper_mode": sniper_mode,
-        "majors": majors,
-        "altcoins": altcoins,
-        "meme_mode": meme_mode,
-        "exchange": exchange,
-        "leverage": leverage,
-        "macro_overlay": macro_overlay
-    }
-    
-    job = ScanJob(run_id, params)
-    with scan_jobs_lock:
-        scan_jobs[run_id] = job
-    
-    # Start background task
-    job.task = asyncio.create_task(_execute_scan_job(job))
-    
-    return {
-        "run_id": run_id,
-        "status": job.status,
-        "created_at": job.created_at.isoformat()
-    }
 
 
-@app.get("/api/scanner/runs/{run_id}")
-async def get_scan_run(run_id: str):
-    """Get status and results of a scan job."""
-    with scan_jobs_lock:
-        if run_id not in scan_jobs:
-            raise HTTPException(status_code=404, detail="Scan job not found")
-        job = scan_jobs[run_id]
-    
-    response = {
-        "run_id": job.run_id,
-        "status": job.status,
-        "progress": job.progress,
-        "total": job.total,
-        "current_symbol": job.current_symbol,
-        "created_at": job.created_at.isoformat(),
-        "started_at": job.started_at.isoformat() if job.started_at else None,
-        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
-        "logs": job.logs[-100:]  # Return last 100 log entries to avoid huge payloads
-    }
-    
-    if job.status == "completed":
-        response["signals"] = job.signals
-        response["metadata"] = job.metadata
-        response["rejections"] = job.rejections
-    elif job.status == "failed":
-        response["error"] = job.error
-    
-    return response
 
 
-@app.delete("/api/scanner/runs/{run_id}")
-async def cancel_scan_run(run_id: str):
-    """Cancel a running scan job."""
-    with scan_jobs_lock:
-        if run_id not in scan_jobs:
-            raise HTTPException(status_code=404, detail="Scan job not found")
-        job = scan_jobs[run_id]
-    
-    if job.status in ["completed", "failed", "cancelled"]:
-        return {"message": f"Job already {job.status}"}
-    
-    if job.task and not job.task.done():
-        job.task.cancel()
-    
-    job.status = "cancelled"
-    job.completed_at = datetime.now(timezone.utc)
-    
-    return {"message": "Job cancelled", "run_id": run_id}
+# Legacy scan execution logic removed - use ScannerService
 
-
-async def _execute_scan_job(job: ScanJob):
-    """Execute scan in background, updating job status as it progresses."""
-    # Set this job as the current log recipient
-    scan_job_log_handler.set_current_job(job)
-    
-    try:
-        job.status = "running"
-        job.started_at = datetime.now(timezone.utc)
-        
-        params = job.params
-        
-        # Resolve exchange adapter
-        exchange_key = params["exchange"].lower()
-        if exchange_key not in EXCHANGE_ADAPTERS:
-            raise ValueError(f"Unsupported exchange: {exchange_key}")
-        
-        current_adapter = EXCHANGE_ADAPTERS[exchange_key]()
-        
-        # Resolve mode
-        try:
-            mode = get_mode(params["sniper_mode"])
-        except ValueError as e:
-            raise ValueError(f"Invalid mode: {e}") from e
-        
-        effective_min = max(params["min_score"], mode.min_confluence_score) if params["min_score"] > 0 else mode.min_confluence_score
-        
-        # Apply mode to orchestrator
-        orchestrator.apply_mode(mode)
-        orchestrator.config.min_confluence_score = effective_min
-        orchestrator.config.macro_overlay_enabled = params["macro_overlay"]
-        orchestrator.exchange_adapter = current_adapter
-        orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
-        
-        # Resolve symbols via centralized selector
-        symbols = select_symbols(
-            adapter=current_adapter,
-            limit=params["limit"],
-            majors=params["majors"],
-            altcoins=params["altcoins"],
-            meme_mode=params["meme_mode"],
-            leverage=params["leverage"],
-        )
-        job.total = len(symbols)
-        
-        # Run scan in thread pool to avoid blocking event loop
-        loop = asyncio.get_event_loop()
-        trade_plans, rejection_summary = await loop.run_in_executor(
-            None,  # Uses default ThreadPoolExecutor
-            orchestrator.scan,
-            symbols
-        )
-        
-        # Transform results
-        signals = []
-        for plan in trade_plans:
-            # Clean symbol: remove '/' and ':USDT' suffix (exchange swap notation)
-            clean_symbol = plan.symbol.replace('/', '').replace(':USDT', '')
-            signal = {
-                "symbol": clean_symbol,
-                "direction": plan.direction,
-                "score": plan.confidence_score,
-                "entry_near": plan.entry_zone.near_entry,
-                "entry_far": plan.entry_zone.far_entry,
-                "stop_loss": plan.stop_loss.level,
-                "targets": [
-                    {"level": tp.level, "percentage": tp.percentage}
-                    for tp in plan.targets
-                ],
-                "primary_timeframe": mode.timeframes[-1] if mode.timeframes else "",
-                "current_price": plan.entry_zone.near_entry,
-                "analysis": {
-                    "order_blocks": plan.metadata.get('order_blocks', 0),
-                    "fvgs": plan.metadata.get('fvgs', 0),
-                    "structural_breaks": plan.metadata.get('structural_breaks', 0),
-                    "liquidity_sweeps": plan.metadata.get('liquidity_sweeps', 0),
-                    "trend": plan.direction.lower(),
-                    "risk_reward": plan.risk_reward,
-                    "confluence_score": plan.confluence_breakdown.total_score if hasattr(plan, 'confluence_breakdown') else plan.confidence_score,
-                    "expected_value": plan.metadata.get('expected_value')
-                },
-                "rationale": plan.rationale,
-                "setup_type": plan.setup_type,
-                "plan_type": getattr(plan, 'plan_type', 'SMC'),
-                "conviction_class": getattr(plan, 'conviction_class', None),
-                "missing_critical_timeframes": plan.metadata.get('missing_critical_timeframes', []),
-                "regime": plan.metadata.get('regime'),
-                "macro": plan.metadata.get('macro')
-            }
-            signals.append(signal)
-        
-        job.signals = signals
-        job.rejections = rejection_summary
-        job.metadata = {
-            "total": len(signals),
-            "scanned": len(symbols),
-            "rejected": len(symbols) - len(signals),
-            "mode": mode.name,
-            "applied_timeframes": mode.timeframes,
-            "effective_min_score": effective_min,
-            "exchange": exchange_key,
-            "leverage": params["leverage"]
-        }
-        job.status = "completed"
-        job.completed_at = datetime.now(timezone.utc)
-        job.progress = job.total
-        
-    except asyncio.CancelledError:
-        job.status = "cancelled"
-        job.completed_at = datetime.now(timezone.utc)
-        raise
-    except Exception as e:
-        logger.error("Scan job %s failed: %s", job.run_id, e)
-        job.status = "failed"
-        job.error = str(e)
-        job.completed_at = datetime.now(timezone.utc)
-    finally:
-        # Clear the current job from log handler
-        scan_job_log_handler.set_current_job(None)
 
 
 # Market data endpoints (mock for now)

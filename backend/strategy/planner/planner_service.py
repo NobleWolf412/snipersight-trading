@@ -115,6 +115,86 @@ def _adjust_stop_for_leverage(
     return stop_level, False, {}
 
 
+def _adjust_targets_for_leverage(
+    targets: List['Target'],
+    leverage: int,
+    entry_price: float,
+    is_bullish: bool
+) -> tuple[List['Target'], dict]:
+    """
+    Adjust target levels based on leverage tier.
+    
+    High leverage traders need faster profit capture to avoid liquidation risk.
+    Low leverage traders can push for extended targets.
+    
+    Leverage Tiers:
+    - 1x-5x: Extended targets (1.2x multiplier) - can hold for bigger moves
+    - 5x-10x: Standard targets (1.0x) - balanced approach
+    - 10x-25x: Tighter targets (0.75x) - faster profit capture
+    - 25x+: Very tight targets (0.5x) - scalp mentality
+    
+    Args:
+        targets: List of Target objects
+        leverage: Position leverage
+        entry_price: Entry price for distance calculation
+        is_bullish: True for long, False for short
+        
+    Returns:
+        Tuple of (adjusted_targets, adjustment_meta)
+    """
+    from backend.shared.models.planner import Target
+    
+    if leverage <= 1 or not targets:
+        return targets, {}
+    
+    # Determine scaling factor based on leverage tier
+    if leverage <= 5:
+        scale_factor = 1.2  # Extended - can hold for bigger moves
+        tier = "extended"
+    elif leverage <= 10:
+        scale_factor = 1.0  # Standard - no adjustment
+        tier = "standard"
+    elif leverage <= 25:
+        scale_factor = 0.75  # Tighter - faster capture
+        tier = "tight"
+    else:
+        scale_factor = 0.5  # Very tight - scalp mode
+        tier = "very_tight"
+    
+    if scale_factor == 1.0:
+        return targets, {"tier": tier, "scale_factor": scale_factor}
+    
+    adjusted_targets = []
+    for target in targets:
+        original_distance = abs(target.level - entry_price)
+        adjusted_distance = original_distance * scale_factor
+        
+        if is_bullish:
+            new_level = entry_price + adjusted_distance
+        else:
+            new_level = entry_price - adjusted_distance
+        
+        # Create new Target with adjusted level
+        adjusted_target = Target(
+            level=new_level,
+            label=target.label,
+            rr_ratio=target.rr_ratio * scale_factor if target.rr_ratio else None,
+            weight=target.weight,
+            rationale=f"{target.rationale} [Adjusted {scale_factor:.0%} for {leverage}x leverage]"
+        )
+        adjusted_targets.append(adjusted_target)
+    
+    adjustment_meta = {
+        "tier": tier,
+        "scale_factor": scale_factor,
+        "leverage": leverage,
+        "original_targets": [t.level for t in targets],
+        "adjusted_targets": [t.level for t in adjusted_targets]
+    }
+    
+    return adjusted_targets, adjustment_meta
+
+
 def _get_allowed_structure_tfs(config: ScanConfig) -> tuple:
     """Extract structure_timeframes from config, or return empty tuple if unrestricted."""
     return getattr(config, 'structure_timeframes', ())
@@ -353,6 +433,15 @@ def generate_trade_plan(
     primary_tf_lower = primary_tf.lower()
     if primary_tf not in indicators.by_timeframe and primary_tf_lower in indicators.by_timeframe:
         primary_tf = primary_tf_lower
+    
+    # Defensive fallback: if configured primary_tf not in indicators, use first available
+    if primary_tf not in indicators.by_timeframe:
+        available_tfs = list(indicators.by_timeframe.keys())
+        if not available_tfs:
+            raise ValueError(f"No indicators available - primary_tf '{primary_tf}' not found and no fallback")
+        primary_tf = available_tfs[0]
+        logger.warning(f"Primary planning TF not in indicators, falling back to {primary_tf}")
+    
     primary_indicators = indicators.by_timeframe[primary_tf]
     
     # Get or create PlannerConfig based on expected trade type
@@ -532,6 +621,22 @@ def generate_trade_plan(
         confluence_breakdown=confluence_breakdown
     )
     
+    # --- Apply Leverage-Based Target Adjustment ---
+    # High leverage = tighter targets (faster capture)
+    # Low leverage = extended targets (hold for bigger moves)
+    if leverage > 1:
+        avg_entry_for_targets = (entry_zone.near_entry + entry_zone.far_entry) / 2
+        targets, target_adj_meta = _adjust_targets_for_leverage(
+            targets=targets,
+            leverage=leverage,
+            entry_price=avg_entry_for_targets,
+            is_bullish=is_bullish
+        )
+        if target_adj_meta:
+            leverage_adjustments['targets_adjusted'] = True
+            leverage_adjustments['target_adjustment'] = target_adj_meta
+            logger.info(f"Targets adjusted for {leverage}x leverage: tier={target_adj_meta.get('tier')}, scale={target_adj_meta.get('scale_factor')}")
+    
     # --- Calculate Risk:Reward ---
     
     avg_entry = (entry_zone.near_entry + entry_zone.far_entry) / 2
@@ -609,16 +714,64 @@ def generate_trade_plan(
     # Apply R:R threshold appropriate for plan type (mode-aware)
     # Pass EV and confluence to enable intelligent override for borderline R:R
     # Mode's min_rr_ratio override takes priority over trade type defaults
+    # 2b. Validate Trade Type Compatibility (Structural Integrity)
+    # Ensure the derived trade type matches the mode's intended purpose (e.g., No Scalps in Overwatch)
+    # Normalize to expected TradePlan literal types
+    _dir_lower = direction.lower()
+    trade_direction = "LONG" if is_bullish else "SHORT"
+    
+    # Derive trade type INITIAL (before full target calc, estimated from TP1)
+    # We need this early for mode enforcement validation
+    # Use TP1 as proxy for target move if targets not fully validated yet
+    # Or better, move target calculation logic UP, or use temporary estimate
+    
+    # --- Minimum Target Move % Check (needed for derivation) ---
+    min_target_move_pct = getattr(config, 'min_target_move_pct', 0.0)
+    tp1_move_pct = abs(targets[0].level - current_price) / max(current_price, 1e-12) * 100.0
+    
+    # Derive trade type from setup characteristics
+    structure_tfs = getattr(config, 'structure_timeframes', ())
+    trade_setup = _derive_trade_type(
+        target_move_pct=tp1_move_pct,
+        stop_distance_atr=stop_loss.distance_atr,
+        structure_timeframes=structure_tfs,
+        primary_tf=primary_tf
+    )
+    logger.debug(f"Derived trade_type={trade_setup} from target_move={tp1_move_pct:.2f}%, stop_atr={stop_loss.distance_atr:.2f}, structure_tfs={structure_tfs}")
+
+    allowed_types = getattr(config, 'allowed_trade_types', None)
+    if allowed_types and trade_setup not in allowed_types:
+        logger.info("❌ %s: Plan rejected - Type '%s' not allowed in %s mode (allowed: %s)", 
+                   symbol, trade_setup, config.profile, allowed_types)
+        return TradePlan(
+            symbol=symbol,
+            direction=direction,
+            timeframe=plan_timeframe,
+            entry_zone=entry_zone,
+            stop_loss=stop_loss,
+            targets=targets,
+            risk_reward_ratio=risk_reward,
+            status="REJECTED",
+            confidence_score=confluence_breakdown.total_score,
+            metadata={
+                "rejection_reason": f"Type '{trade_setup}' mismatch for mode (allowed: {allowed_types})",
+                "derived_trade_type": trade_setup,
+                "allowed_types": allowed_types
+            }
+        )
+
     mode_overrides = getattr(config, 'overrides', None) or {}
     min_rr_override = mode_overrides.get('min_rr_ratio')
     
+    # Use derived 'trade_setup' for validation so we validate the PLAN as it actually is,
+    # rather than as we hoped it would be. This prevents rejecting valid Swing setups in Intraday mode.
     is_valid_rr, rr_reason = validate_rr(
         plan_type, 
         risk_reward, 
         mode_profile=config.profile,
         expected_value=expected_value,
         confluence_score=confluence_breakdown.total_score,
-        trade_type=expected_trade_type,
+        trade_type=trade_setup,  # CHANGED: Use derived type
         min_rr_override=min_rr_override
     )
     if not is_valid_rr:
@@ -674,19 +827,9 @@ def generate_trade_plan(
     # --- Build Trade Plan ---
     
     # Normalize to expected TradePlan literal types
-    _dir_lower = direction.lower()
-    trade_direction = "LONG" if is_bullish else "SHORT"
-    
-    # Derive trade type from setup characteristics (not mode)
-    # This allows any mode to find any trade type based on actual structure
-    structure_tfs = getattr(config, 'structure_timeframes', ())
-    trade_setup = _derive_trade_type(
-        target_move_pct=tp1_move_pct,
-        stop_distance_atr=stop_loss.distance_atr,
-        structure_timeframes=structure_tfs,
-        primary_tf=primary_tf
-    )
-    logger.debug(f"Derived trade_type={trade_setup} from target_move={tp1_move_pct:.2f}%, stop_atr={stop_loss.distance_atr:.2f}, structure_tfs={structure_tfs}")
+    # Derive trade type already done above for validation
+    # structure_tfs = getattr(config, 'structure_timeframes', ())
+    # trade_setup = _derive_trade_type(...)
     
     # Log telemetry when derived type differs from expected (helps tune mode definitions)
     if expected_trade_type and trade_setup != expected_trade_type:

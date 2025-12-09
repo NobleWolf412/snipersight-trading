@@ -327,18 +327,27 @@ class CSVDataAdapter:
         since: Optional[int] = None
     ) -> pd.DataFrame:
         """Fetch OHLCV data up to current simulation timestamp."""
-        symbol_key = symbol.replace('/', '')
+        # Try direct match first (e.g. BTC/USDT)
+        if symbol in self.all_data:
+            symbol_key = symbol
+        else:
+            # Try stripped (e.g. BTCUSDT)
+            symbol_key = symbol.replace('/', '')
+            
+            if symbol_key not in self.all_data:
+                # Fuzzy match back to what's in keys
+                found = False
+                for key in self.all_data.keys():
+                    if key.replace('/', '') == symbol_key:
+                        symbol_key = key
+                        found = True
+                        break
+                
+                if not found:
+                    logger.debug(f"Symbol {symbol} not found in data ({list(self.all_data.keys())[:3]}...)")
+                    return pd.DataFrame()
+        
         tf_key = timeframe.lower()
-        
-        if symbol_key not in self.all_data:
-            for key in self.all_data.keys():
-                if symbol_key in key or key in symbol_key:
-                    symbol_key = key
-                    break
-            else:
-                logger.debug(f"Symbol {symbol} not found")
-                return pd.DataFrame()
-        
         if tf_key not in self.all_data[symbol_key]:
             logger.debug(f"Timeframe {timeframe} not found for {symbol_key}")
             return pd.DataFrame()
@@ -346,6 +355,11 @@ class CSVDataAdapter:
         df = self.all_data[symbol_key][tf_key].copy()
         df = df[df.index <= self.current_ts]
         df = df.tail(limit).reset_index()
+        # Ensure timestamp is both a column (for validation) AND the index (for SMC/indicators)
+        if 'timestamp' in df.columns:
+            df.set_index('timestamp', drop=False, inplace=True)
+            df.index.name = None  # Remove name to avoid ambiguity with column
+
         
         self._request_log.append({
             'symbol': symbol,
@@ -736,7 +750,7 @@ def run_backtest(
     if symbols is None:
         symbols = []
         for s in all_data.keys():
-            if 'USDT' in s:
+            if 'USDT' in s and '/' not in s:
                 formatted = s.replace('USDT', '/USDT')
             else:
                 formatted = s
@@ -1041,10 +1055,16 @@ def main():
     parser.add_argument('--compare-configs', action='store_true', help='Compare preset configs')
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     
+    parser.add_argument('--csv', type=str, help='Path to custom CSV data file')
+    
     args = parser.parse_args()
     
     project_root = Path(__file__).parent.parent
-    csv_path = project_root / "backend" / "tests" / "backtest" / "backtest_multitimeframe_5000bars.csv"
+    
+    if args.csv:
+        csv_path = Path(args.csv)
+    else:
+        csv_path = project_root / "backend" / "tests" / "backtest" / "backtest_multitimeframe_5000bars.csv"
     
     if not csv_path.exists():
         print(f"❌ CSV not found: {csv_path}")

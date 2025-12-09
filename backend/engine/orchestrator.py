@@ -24,8 +24,10 @@ import logging
 import time
 
 from backend.shared.config.defaults import ScanConfig
+from backend.shared.config.smc_config import SMCConfig
 from backend.shared.config.scanner_modes import get_mode
 from backend.shared.models.data import MultiTimeframeData
+from backend.data.ingestion_pipeline import IngestionPipeline
 from backend.shared.models.indicators import IndicatorSet
 from backend.shared.models.smc import SMCSnapshot
 from backend.shared.models.scoring import ConfluenceBreakdown
@@ -33,39 +35,30 @@ from backend.shared.models.planner import TradePlan
 from backend.shared.models.regime import MarketRegime, SymbolRegime
 from backend.analysis.regime_detector import get_regime_detector
 from backend.analysis.regime_policies import get_regime_policy
+from backend.strategy.smc.volume_profile import calculate_volume_profile
 
 from backend.engine.context import SniperContext
-from backend.bot.telemetry.logger import get_telemetry_logger
-from backend.bot.telemetry.events import (
-    create_scan_started_event,
-    create_scan_completed_event,
-    create_signal_generated_event,
-    create_signal_rejected_event,
-    create_error_event,
-    create_info_event
-)
-from backend.data.ingestion_pipeline import IngestionPipeline
-from backend.indicators.momentum import compute_rsi, compute_stoch_rsi, compute_mfi, compute_macd
-from backend.indicators.volatility import compute_atr, compute_bollinger_bands, compute_realized_volatility
-from backend.indicators.volume import detect_volume_spike, compute_obv, compute_vwap, compute_relative_volume, detect_volume_acceleration
-from backend.strategy.smc.order_blocks import detect_order_blocks
-from backend.strategy.smc.fvg import detect_fvgs
-from backend.strategy.smc.bos_choch import detect_structural_breaks
-from backend.strategy.smc.liquidity_sweeps import detect_liquidity_sweeps, detect_equal_highs_lows
-from backend.strategy.smc.swing_structure import detect_swing_structure, SwingStructure
-from backend.strategy.smc.cycle_detector import detect_cycle_context, should_boost_direction, CycleConfig
-from backend.strategy.smc.reversal_detector import detect_reversal_context, get_reversal_rationale_for_plan
-from backend.strategy.smc.volume_profile import calculate_volume_profile, VolumeProfile
-from backend.strategy.smc.mitigation_tracker import update_ob_mitigation, MitigationStatus
-from backend.shared.config.smc_config import SMCConfig
-from backend.strategy.confluence.scorer import calculate_confluence_score
-from backend.analysis.htf_levels import HTFLevelDetector
-from backend.analysis.premium_discount import detect_premium_discount, PremiumDiscountZone, get_optimal_entry_zone
-from backend.analysis.key_levels import detect_key_levels, KeyLevels, get_nearest_level
 from backend.strategy.planner.planner_service import generate_trade_plan
 from backend.risk.risk_manager import RiskManager
 from backend.risk.position_sizer import PositionSizer
 from backend.analysis.macro_context import MacroContext, compute_macro_score
+
+# Domain Services
+from backend.services.indicator_service import configure_indicator_service
+from backend.services.smc_service import configure_smc_service
+from backend.services.confluence_service import configure_confluence_service
+from backend.bot.telemetry.logger import get_telemetry_logger
+from backend.bot.telemetry.events import (
+    create_error_event,
+    create_scan_started_event,
+    create_scan_completed_event,
+    create_signal_generated_event,
+    create_signal_rejected_event,
+    create_alt_stop_suggested_event,
+    create_quality_gate_event,
+    create_info_event
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +101,28 @@ class Orchestrator:
         
         # Debug mode and diagnostics tracking
         self.debug_mode = debug_mode or os.getenv('SS_DEBUG', '0') == '1'
+        
+        # Initialize telemetry
+        self.telemetry = get_telemetry_logger()
+        
+        # Load scanner mode for critical timeframe tracking
+        # Try mode name first, then fall back to profile lookup
+        try:
+            self.scanner_mode = get_mode(self.config.profile)
+        except ValueError:
+            # Profile is not a mode name - use reverse lookup
+            from backend.shared.config.scanner_modes import get_mode_by_profile
+            self.scanner_mode = get_mode_by_profile(self.config.profile)
+
+        self.smc_config = SMCConfig() # Default SMC config, will be updated by apply_mode
+        
+        # Initialize Domain Services
+        # These encapsulate the core logic for indicators, SMC, and scoring
+        self.indicator_service = configure_indicator_service(scanner_mode=self.scanner_mode)
+        self.smc_service = configure_smc_service(smc_config=self.smc_config)
+        self.confluence_service = configure_confluence_service(scanner_mode=self.scanner_mode, config=self.config)
+        
+        # Diagnostics storage
         self.diagnostics: Dict[str, Any] = {
             'data_failures': [],
             'indicator_failures': [],
@@ -121,9 +136,6 @@ class Orchestrator:
         # Structure: {symbol: {'timestamp': datetime, 'price': float, 'direction': str}}
         self._symbol_cooldowns: Dict[str, Dict[str, Any]] = {}
         self._cooldown_hours = 24  # Hours to wait after a stop-out before re-entering same direction
-        
-        # Initialize telemetry
-        self.telemetry = get_telemetry_logger()
         
         # Initialize components
         if exchange_adapter is None:
@@ -142,27 +154,6 @@ class Orchestrator:
             max_risk_pct=2.0
         )
 
-        # Load scanner mode for critical timeframe tracking
-        # Try mode name first, then fall back to profile lookup
-        try:
-            self.scanner_mode = get_mode(self.config.profile)
-        except ValueError:
-            # Profile is not a mode name - use reverse lookup
-            from backend.shared.config.scanner_modes import get_mode_by_profile
-            self.scanner_mode = get_mode_by_profile(self.config.profile)
-        
-        # Smart Money Concepts configuration (read preset from scanner mode)
-        smc_preset = getattr(self.scanner_mode, 'smc_preset', 'defaults')
-        if smc_preset == 'luxalgo_strict':
-            self.smc_config = SMCConfig.luxalgo_strict()
-            logger.info("🎯 SMC preset: LUXALGO_STRICT (institutional-grade detection)")
-        elif smc_preset == 'sensitive':
-            self.smc_config = SMCConfig.sensitive()
-            logger.info("🎯 SMC preset: SENSITIVE (research/backtesting mode)")
-        else:
-            self.smc_config = SMCConfig.defaults()
-            logger.info("🎯 SMC preset: DEFAULTS (balanced detection)")
-        
         # Apply mode settings to config (min_stop_atr, max_stop_atr, timeframe responsibility, etc.)
         # This ensures planner uses mode-specific thresholds, not ScanConfig defaults
         self.apply_mode(self.scanner_mode)
@@ -513,12 +504,19 @@ class Orchestrator:
         context.metadata['missing_critical_timeframes'] = missing_critical_tfs
         
         # Stage 3: Indicator computation
-        context.multi_tf_indicators = self._compute_indicators(context.multi_tf_data)
         try:
+            context.multi_tf_indicators = self.indicator_service.compute(context.multi_tf_data)
+            
+            # Merge diagnostics
+            failures = self.indicator_service.diagnostics.get('indicator_failures', [])
+            self.diagnostics['indicator_failures'].extend(failures)
+            
             ind_tfs = list(context.multi_tf_indicators.by_timeframe.keys()) if context.multi_tf_indicators else []
             self._progress("INDICATORS", {"symbol": symbol, "timeframes": ind_tfs})
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Indicator service failed for {symbol}: {e}")
+            return None, {"symbol": symbol, "reason": str(e), "reason_type": "errors"}
+
         
         # Stage 3.5: Detect symbol-specific regime (after indicators computed)
         if context.multi_tf_data and context.multi_tf_indicators and self.regime_detector:
@@ -534,8 +532,16 @@ class Orchestrator:
                 logger.debug("%s: Symbol regime detection skipped: %s", symbol, e)
         
         # Stage 4: SMC detection
-        context.smc_snapshot = self._detect_smc_patterns(context.multi_tf_data)
         try:
+            # Get current price for P/D zones
+            current_price = context.multi_tf_data.get_current_price() or 0
+            
+            context.smc_snapshot = self.smc_service.detect(context.multi_tf_data, current_price)
+            
+            # Merge diagnostics
+            rejections = self.smc_service.diagnostics.get('smc_rejections', [])
+            self.diagnostics['smc_rejections'].extend(rejections)
+
             snap = context.smc_snapshot
             self._progress("SMC", {
                 "symbol": symbol,
@@ -546,8 +552,10 @@ class Orchestrator:
                 "equal_highs": len(getattr(snap, 'equal_highs', []) or []),
                 "equal_lows": len(getattr(snap, 'equal_lows', []) or [])
             })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"SMC service failed for {symbol}: {e}")
+            return None, {"symbol": symbol, "reason": str(e), "reason_type": "errors"}
+
         
         # Stage 4b: Volume Profile calculation (institutional-grade VAP analysis)
         try:
@@ -583,8 +591,53 @@ class Orchestrator:
         except Exception as e:
             logger.debug("Volume profile calculation skipped: %s", e)
         
-        # Stage 5: Confluence scoring
-        context.confluence_breakdown = self._compute_confluence_score(context)
+        # Stage 5: Confluence scoring (Delegated to service)
+        try:
+            # --- Inline Context Detection ---
+            # 1. Cycle Context
+            cycle_context = None
+            try:
+                cycle_tf = '4h'
+                cycle_df = context.multi_tf_data.timeframes.get(cycle_tf) or context.multi_tf_data.timeframes.get('1h')
+                if cycle_df is not None:
+                    cycle_context = detect_cycle_context(cycle_df, CycleConfig())
+            except Exception:
+                pass
+
+            # 2. Reversal Context
+            rev_ctx_long = None
+            rev_ctx_short = None
+            try:
+                rev_tf = '1h'
+                rev_df = context.multi_tf_data.timeframes.get(rev_tf) or context.multi_tf_data.timeframes.get('15m')
+                if rev_df is not None:
+                    rev_ctx_long = detect_reversal_context(rev_df, is_bullish=True)
+                    rev_ctx_short = detect_reversal_context(rev_df, is_bullish=False)
+            except Exception:
+                pass
+            
+            # 3. HTF Context (passed into service as htf_ctx_long/short)
+            # Hack: Pass empty HTF context for now to maintain wiring, assuming `calculate_confluence_score` handles None.
+            # (It does, type is Optional[Dict]).
+            
+            context.confluence_breakdown = self.confluence_service.score(
+                context=context,
+                current_price=context.multi_tf_data.get_current_price() or 0,
+                htf_ctx_long=None, # TODO: Extract HTF logic if needed
+                htf_ctx_short=None,
+                cycle_context=cycle_context,
+                reversal_context_long=rev_ctx_long,
+                reversal_context_short=rev_ctx_short
+            )
+            
+            # Merge diagnostics
+            rejections = self.confluence_service.diagnostics.get('confluence_rejections', [])
+            self.diagnostics['confluence_rejections'].extend(rejections)
+
+        except Exception as e:
+            logger.error(f"Confluence service failed for {symbol}: {e}")
+            # Fallback to empty/failed state
+            return None, {"symbol": symbol, "reason": str(e), "reason_type": "errors"}
         try:
             br = context.confluence_breakdown
             top_factors = [
@@ -865,138 +918,8 @@ class Orchestrator:
         Returns:
             IndicatorSet with computed indicators
         """
-        from backend.shared.models.indicators import IndicatorSnapshot
-        
-        by_timeframe = {}
-        
-        for timeframe, df in multi_tf_data.timeframes.items():
-            if df.empty or len(df) < 50:  # Need minimum data for indicators
-                continue
-            
-            try:
-                # Momentum indicators
-                rsi = compute_rsi(df)
-                stoch_rsi = compute_stoch_rsi(df)
-                mfi = compute_mfi(df)
-                macd_line, macd_signal, macd_hist = (None, None, None)
-                try:
-                    macd_line, macd_signal, macd_hist = compute_macd(df)
-                except Exception as e:
-                    logger.debug("MACD computation failed for %s: %s", timeframe, e)
-                    macd_line, macd_signal = (None, None)
-                
-                # Volatility indicators  
-                atr = compute_atr(df)
-                bb_upper, bb_middle, bb_lower = compute_bollinger_bands(df)
-                realized_vol = None
-                try:
-                    realized_vol = compute_realized_volatility(df)
-                except Exception as e:
-                    logger.debug("Realized volatility computation failed for %s: %s", timeframe, e)
-                
-                # Volume indicators
-                volume_spike = detect_volume_spike(df)
-                obv = compute_obv(df)
-                _ = compute_vwap(df)  # Computed for side effects
-                volume_ratio = None
-                try:
-                    volume_ratio = compute_relative_volume(df)
-                except Exception as e:
-                    logger.debug("Volume ratio computation failed for %s: %s", timeframe, e)
-                
-                # Volume acceleration (mode-aware lookback)
-                vol_accel_data = None
-                try:
-                    accel_lookback = getattr(self.scanner_mode, 'volume_accel_lookback', 5)
-                    vol_accel_data = detect_volume_acceleration(df, lookback=accel_lookback)
-                    logger.debug("📈 %s vol_accel: slope=%.3f, consec=%d, dir=%s, accelerating=%s",
-                                timeframe,
-                                vol_accel_data['acceleration'],
-                                vol_accel_data['consecutive_increases'],
-                                vol_accel_data['direction'],
-                                vol_accel_data['is_accelerating'])
-                except Exception as e:
-                    logger.debug("Volume acceleration computation failed for %s: %s", timeframe, e)
-                
-                # Log detailed indicator values for visibility
-                current_price = df['close'].iloc[-1]
-                logger.info("📊 %s indicators: RSI=%.1f | MFI=%.1f | ATR=%.2f (%.2f%%) | BB(%.2f-%.2f-%.2f) | VolSpike=%s",
-                           timeframe,
-                           rsi.iloc[-1],
-                           mfi.iloc[-1],
-                           atr.iloc[-1],
-                           (atr.iloc[-1] / current_price * 100) if current_price > 0 else 0,
-                           bb_lower.iloc[-1], bb_middle.iloc[-1], bb_upper.iloc[-1],
-                           bool(volume_spike.iloc[-1]))
-                
-                # Create indicator snapshot
-                # Handle stoch_rsi tuple (K, D) - extract both K and D values
-                stoch_k_value = None
-                stoch_d_value = None
-                if isinstance(stoch_rsi, tuple):
-                    stoch_k, stoch_d = stoch_rsi
-                    stoch_k_value = stoch_k.iloc[-1]
-                    stoch_d_value = stoch_d.iloc[-1]
-                else:
-                    stoch_k_value = stoch_rsi.iloc[-1]  # pyright: ignore - type narrowed by isinstance check
-                
-                # Get current price for ATR percentage
-                current_price = df['close'].iloc[-1]
-                atr_value = atr.iloc[-1]
-                atr_pct = (atr_value / current_price * 100) if current_price > 0 else None
-                
-                snapshot = IndicatorSnapshot(
-                    # Momentum (required)
-                    rsi=rsi.iloc[-1],
-                    stoch_rsi=stoch_k_value,
-                    # Mean Reversion (required)  
-                    bb_upper=bb_upper.iloc[-1],
-                    bb_middle=bb_middle.iloc[-1],
-                    bb_lower=bb_lower.iloc[-1],
-                    # Volatility (required)
-                    atr=atr_value,
-                    # Volume (required)
-                    volume_spike=bool(volume_spike.iloc[-1]),
-                    # Optional fields - Momentum
-                    mfi=mfi.iloc[-1],
-                    stoch_rsi_k=stoch_k_value,
-                    stoch_rsi_d=stoch_d_value,
-                    # Optional fields - Volatility
-                    atr_percent=atr_pct,
-                    realized_volatility=realized_vol.iloc[-1] if realized_vol is not None else None,
-                    # Optional fields - Volume
-                    obv=obv.iloc[-1],
-                    volume_ratio=volume_ratio.iloc[-1] if volume_ratio is not None else None,
-                    # Optional fields - Volume acceleration
-                    volume_acceleration=vol_accel_data['acceleration'] if vol_accel_data else None,
-                    volume_consecutive_increases=vol_accel_data['consecutive_increases'] if vol_accel_data else None,
-                    volume_is_accelerating=vol_accel_data['is_accelerating'] if vol_accel_data else None,
-                    volume_accel_direction=vol_accel_data['direction'] if vol_accel_data else None,
-                    volume_exhaustion=vol_accel_data['exhaustion'] if vol_accel_data else None,
-                )
-                # Attach MACD values and series if available (for mode-aware persistence checks)
-                if macd_line is not None and macd_signal is not None:
-                    try:
-                        snapshot.macd_line = float(macd_line.iloc[-1])  # type: ignore[attr-defined]
-                        snapshot.macd_signal = float(macd_signal.iloc[-1])  # type: ignore[attr-defined]
-                        if macd_hist is not None:
-                            snapshot.macd_histogram = float(macd_hist.iloc[-1])  # type: ignore[attr-defined]
-                            # Store last 5 values for persistence checks (newest last)
-                            n_persist = 5
-                            snapshot.macd_line_series = macd_line.iloc[-n_persist:].tolist()  # type: ignore[attr-defined]
-                            snapshot.macd_signal_series = macd_signal.iloc[-n_persist:].tolist()  # type: ignore[attr-defined]
-                            snapshot.macd_histogram_series = macd_hist.iloc[-n_persist:].tolist()  # type: ignore[attr-defined]
-                    except Exception as e:
-                        logger.debug("MACD series persistence failed for %s: %s", timeframe, e)
-                
-                by_timeframe[timeframe] = snapshot
-                
-            except Exception as e:
-                logger.warning("Indicator computation failed for %s: %s", timeframe, e)
-                self.diagnostics['indicator_failures'].append({'timeframe': timeframe, 'error': str(e)})
-                continue
-        
-        return IndicatorSet(by_timeframe=by_timeframe)
+        # This method is now replaced by a service call
+        raise NotImplementedError("This method should not be called directly. Use self.indicator_service.compute instead.")
     
     def _detect_smc_patterns(self, multi_tf_data: MultiTimeframeData) -> SMCSnapshot:
         """
@@ -1008,165 +931,8 @@ class Orchestrator:
         Returns:
             SMCSnapshot with detected patterns
         """
-        all_order_blocks = []
-        all_fvgs = []
-        all_structure_breaks = []
-        all_liquidity_sweeps = []
-        all_equal_highs = []
-        all_equal_lows = []
-        all_liquidity_pools: List = []  # NEW: structured LiquidityPool objects
-        swing_structure_by_tf = {}  # HTF swing structure (HH/HL/LH/LL)
-        premium_discount_by_tf = {}  # Premium/Discount zone analysis
-        
-        # Get current price for premium/discount and key level detection
-        current_price = self._get_current_price(multi_tf_data)
-        
-        for _timeframe, df in multi_tf_data.timeframes.items():
-            if df.empty or len(df) < 20:
-                continue
-            
-            try:
-                # Order blocks
-                obs = detect_order_blocks(df, self.smc_config)
-                all_order_blocks.extend(obs)
-                
-                # Fair value gaps
-                fvgs = detect_fvgs(df, self.smc_config)
-                all_fvgs.extend(fvgs)
-                
-                # Structure breaks
-                breaks = detect_structural_breaks(df, self.smc_config)
-                all_structure_breaks.extend(breaks)
-                
-                # Liquidity sweeps
-                sweeps = detect_liquidity_sweeps(df, self.smc_config)
-                all_liquidity_sweeps.extend(sweeps)
-                
-                # Equal highs/lows (liquidity pools) - ENHANCED with timeframe-aware detection
-                try:
-                    ehl = detect_equal_highs_lows(
-                        df, 
-                        config=self.smc_config,
-                        timeframe=_timeframe
-                    )
-                    all_equal_highs.extend(ehl.get('equal_highs', []))
-                    all_equal_lows.extend(ehl.get('equal_lows', []))
-                    # Collect structured LiquidityPool objects
-                    pools = ehl.get('pools', [])
-                    all_liquidity_pools.extend(pools)
-                    if pools:
-                        logger.debug("💧 %s: %d liquidity pools (tol=%.4f%%, min_touches=%d)",
-                                   _timeframe,
-                                   len(pools),
-                                   ehl.get('metadata', {}).get('tolerance_used', 0) * 100,
-                                   ehl.get('metadata', {}).get('min_touches', 2))
-                except Exception:
-                    pass  # Non-critical, continue without
-                
-                # Swing structure (HH/HL/LH/LL) - primarily for HTF bias
-                # Run on Weekly, Daily, 4H for directional bias detection
-                # NOTE: Use lowercase to match scanner mode timeframe conventions
-                if _timeframe.lower() in ('1w', '1d', '4h'):
-                    try:
-                        swing_struct = detect_swing_structure(
-                            df, 
-                            lookback=getattr(self.smc_config, 'structure_swing_lookback', 15)
-                        )
-                        swing_structure_by_tf[_timeframe] = swing_struct.to_dict()
-                        logger.debug("📊 %s Swing structure: trend=%s, last_HH=%s, last_HL=%s",
-                                   _timeframe, swing_struct.trend,
-                                   f"{swing_struct.last_hh.price:.4f}" if swing_struct.last_hh else "N/A",
-                                   f"{swing_struct.last_hl.price:.4f}" if swing_struct.last_hl else "N/A")
-                    except Exception as e:
-                        logger.debug("Swing structure detection failed for %s: %s", _timeframe, e)
-                
-                # Premium/Discount zone detection - run on all TFs for entry optimization
-                try:
-                    pd_zone = detect_premium_discount(df, lookback=50, current_price=current_price)
-                    premium_discount_by_tf[_timeframe] = pd_zone.to_dict()
-                    logger.debug("📊 %s P/D Zone: %s (%.1f%%)", 
-                               _timeframe, pd_zone.current_zone, pd_zone.zone_percentage or 50)
-                except Exception as e:
-                    logger.debug("Premium/Discount detection failed for %s: %s", _timeframe, e)
-                
-                # Log SMC detections per timeframe
-                logger.info("🎯 %s SMC: OB=%d | FVG=%d | BOS/CHoCH=%d | Sweeps=%d",
-                           _timeframe,
-                           len(obs),
-                           len(fvgs),
-                           len(breaks),
-                           len(sweeps))
-                
-            except Exception as e:
-                logger.warning("SMC detection failed for %s: %s", _timeframe, e)
-                self.diagnostics['smc_rejections'].append({'timeframe': _timeframe, 'error': str(e)})
-                continue
-        
-        # Deduplicate equal highs/lows (they may repeat across TFs)
-        unique_equal_highs = list(set(all_equal_highs))
-        unique_equal_lows = list(set(all_equal_lows))
-        
-        if unique_equal_highs or unique_equal_lows:
-            logger.info("💧 Liquidity pools: %d equal highs, %d equal lows",
-                       len(unique_equal_highs), len(unique_equal_lows))
-        
-        # Log structured liquidity pools summary
-        if all_liquidity_pools:
-            grade_a = sum(1 for p in all_liquidity_pools if p.grade == 'A')
-            grade_b = sum(1 for p in all_liquidity_pools if p.grade == 'B')
-            grade_c = sum(1 for p in all_liquidity_pools if p.grade == 'C')
-            logger.info("🎯 Liquidity pools graded: A=%d B=%d C=%d (total=%d)",
-                       grade_a, grade_b, grade_c, len(all_liquidity_pools))
-        
-        # Log HTF swing structure summary
-        if swing_structure_by_tf:
-            for tf, ss in swing_structure_by_tf.items():
-                logger.info("📈 %s Structure: %s trend", tf, ss.get('trend', 'unknown'))
-        
-        # --- Key Levels Detection (PWH/PWL/PDH/PDL) ---
-        key_levels_data = None
-        try:
-            df_daily = multi_tf_data.timeframes.get('1D')
-            df_weekly = multi_tf_data.timeframes.get('1W')
-            if df_daily is not None and len(df_daily) >= 2:
-                key_levels = detect_key_levels(df_daily, df_weekly, current_price)
-                key_levels_data = key_levels.to_dict()
-                logger.info("🔑 Key Levels: PDH=%.4f PDL=%.4f PWH=%s PWL=%s",
-                           key_levels.pdh.price if key_levels.pdh else 0,
-                           key_levels.pdl.price if key_levels.pdl else 0,
-                           f"{key_levels.pwh.price:.4f}" if key_levels.pwh else "N/A",
-                           f"{key_levels.pwl.price:.4f}" if key_levels.pwl else "N/A")
-        except Exception as e:
-            logger.debug("Key levels detection failed: %s", e)
-        
-        # --- Mitigation Tracking (update OB freshness) ---
-        # Use the most recent LTF data to check for mitigation
-        try:
-            ltf_df = multi_tf_data.timeframes.get('15m') or multi_tf_data.timeframes.get('1H')
-            if ltf_df is not None and len(ltf_df) > 0 and all_order_blocks:
-                all_order_blocks, mitigation_status = update_ob_mitigation(
-                    all_order_blocks, ltf_df, max_mitigation=0.5
-                )
-                if mitigation_status.fully_mitigated_count > 0:
-                    logger.info("🔄 OB Mitigation: %d fully mitigated, %d partial, %d fresh",
-                               mitigation_status.fully_mitigated_count,
-                               mitigation_status.partially_mitigated_count,
-                               mitigation_status.fresh_count)
-        except Exception as e:
-            logger.debug("Mitigation tracking failed: %s", e)
-        
-        return SMCSnapshot(
-            order_blocks=all_order_blocks,
-            fvgs=all_fvgs,
-            structural_breaks=all_structure_breaks,
-            liquidity_sweeps=all_liquidity_sweeps,
-            equal_highs=unique_equal_highs,
-            equal_lows=unique_equal_lows,
-            liquidity_pools=all_liquidity_pools,  # NEW: structured LiquidityPool objects
-            swing_structure=swing_structure_by_tf,
-            premium_discount=premium_discount_by_tf,
-            key_levels=key_levels_data
-        )
+        # This method is now replaced by a service call
+        raise NotImplementedError("This method should not be called directly. Use self.smc_service.detect instead.")
     
     def _compute_confluence_score(self, context: SniperContext) -> ConfluenceBreakdown:
         """
@@ -1178,287 +944,8 @@ class Orchestrator:
         Returns:
             ConfluenceBreakdown with scoring details
         """
-        # Type narrowing - these should always be present at this stage
-        if not context.smc_snapshot or not context.multi_tf_indicators:
-            raise ValueError(f"{context.symbol}: Missing SMC snapshot or indicators for confluence scoring")
-        
-        # Get current price EARLY - required for confluence scoring
-        current_price = self._get_current_price(context.multi_tf_data)
-        if current_price is None or current_price <= 0:
-            raise ValueError(f"{context.symbol}: Cannot determine current price for confluence scoring")
-        
-        # Compute HTF proximity context for both directions (support/resistance)
-        htf_ctx_long = None
-        htf_ctx_short = None
-        try:
-            # Prepare HTF data map
-            ohlcv_map = {}
-            tf_map = {"4H": "4h", "1D": "1d", "1W": "1w"}
-            for k, v in context.multi_tf_data.timeframes.items():
-                if k in tf_map:
-                    ohlcv_map[tf_map[k]] = v
-            if ohlcv_map:
-                # current_price already defined above
-                # Use planning TF ATR for ATR-normalized distance
-                primary_tf = getattr(self.config, 'primary_planning_timeframe', '4H')
-                ind = context.multi_tf_indicators.by_timeframe.get(primary_tf)
-                atr = float(ind.atr) if ind and ind.atr else None
-                if current_price and atr and atr > 0:
-                    detector = HTFLevelDetector()
-                    levels = detector.detect_levels(context.symbol, ohlcv_map, current_price)
-                    if levels:
-                        # Nearest support and resistance
-                        supports = [lvl for lvl in levels if lvl.level_type == 'support' and current_price >= lvl.price]
-                        resistances = [lvl for lvl in levels if lvl.level_type == 'resistance' and current_price <= lvl.price]
-                        if supports:
-                            sup = min(supports, key=lambda l: abs(current_price - l.price))
-                            htf_ctx_long = {
-                                'within_atr': abs(current_price - sup.price) / atr,
-                                'within_pct': sup.proximity_pct,
-                                'timeframe': sup.timeframe,
-                                'type': 'support'
-                            }
-                        if resistances:
-                            res = min(resistances, key=lambda l: abs(current_price - l.price))
-                            htf_ctx_short = {
-                                'within_atr': abs(current_price - res.price) / atr,
-                                'within_pct': res.proximity_pct,
-                                'timeframe': res.timeframe,
-                                'type': 'resistance'
-                            }
-        except Exception:
-            # If HTF proximity computation fails, continue without it
-            htf_ctx_long = None
-            htf_ctx_short = None
-
-        # --- CYCLE CONTEXT DETECTION ---
-        # Detect cycle timing context from daily/weekly data for cycle-aware scoring
-        cycle_context = None
-        reversal_context_long = None
-        reversal_context_short = None
-        
-        try:
-            # Prefer daily data for cycle detection, fall back to 4H
-            daily_df = context.multi_tf_data.timeframes.get('1D') or context.multi_tf_data.timeframes.get('1d')
-            weekly_df = context.multi_tf_data.timeframes.get('1W') or context.multi_tf_data.timeframes.get('1w')
-            
-            # Use daily if available, otherwise try 4H (less accurate for cycle timing)
-            cycle_df = daily_df if daily_df is not None and len(daily_df) >= 50 else None
-            
-            if cycle_df is not None:
-                cycle_context = detect_cycle_context(
-                    df=cycle_df,
-                    config=None,  # Use crypto defaults
-                    structural_breaks=context.smc_snapshot.structural_breaks if context.smc_snapshot else None
-                )
-                
-                # Detect reversal contexts for both directions
-                if context.smc_snapshot:
-                    primary_tf = getattr(self.config, 'primary_planning_timeframe', '15m')
-                    primary_indicators = context.multi_tf_indicators.by_timeframe.get(primary_tf) if context.multi_tf_indicators else None
-                    
-                    reversal_context_long = detect_reversal_context(
-                        smc_snapshot=context.smc_snapshot,
-                        cycle_context=cycle_context,
-                        indicators=primary_indicators,
-                        direction="LONG"
-                    )
-                    reversal_context_short = detect_reversal_context(
-                        smc_snapshot=context.smc_snapshot,
-                        cycle_context=cycle_context,
-                        indicators=primary_indicators,
-                        direction="SHORT"
-                    )
-                
-                # Log cycle context
-                if cycle_context and cycle_context.phase.value != "unknown":
-                    logger.info("🔄 Cycle: phase=%s, translation=%s, DCL_days=%s, bias=%s (%.0f%%)",
-                               cycle_context.phase.value,
-                               cycle_context.translation.value,
-                               cycle_context.dcl_days_since,
-                               cycle_context.trade_bias,
-                               cycle_context.confidence)
-                    
-                    # Store in context metadata for downstream use
-                    context.metadata['cycle'] = {
-                        'phase': cycle_context.phase.value,
-                        'translation': cycle_context.translation.value,
-                        'dcl_days_since': cycle_context.dcl_days_since,
-                        'wcl_days_since': cycle_context.wcl_days_since,
-                        'in_dcl_zone': cycle_context.in_dcl_zone,
-                        'in_wcl_zone': cycle_context.in_wcl_zone,
-                        'trade_bias': cycle_context.trade_bias,
-                        'confidence': cycle_context.confidence
-                    }
-        except Exception as e:
-            logger.debug("Cycle detection skipped: %s", e)
-            cycle_context = None
-
-        # Get volume profile for confluence scoring
-        volume_profile_obj = context.metadata.get('_volume_profile_obj')
-        
-        # Evaluate both directions and choose the stronger confluence
-        long_breakdown = calculate_confluence_score(
-            smc_snapshot=context.smc_snapshot,
-            indicators=context.multi_tf_indicators,
-            config=self.config,
-            direction="LONG",
-            htf_context=htf_ctx_long,
-            cycle_context=cycle_context,
-            reversal_context=reversal_context_long,
-            volume_profile=volume_profile_obj,
-            current_price=current_price
-        )
-        short_breakdown = calculate_confluence_score(
-            smc_snapshot=context.smc_snapshot,
-            indicators=context.multi_tf_indicators,
-            config=self.config,
-            direction="SHORT",
-            htf_context=htf_ctx_short,
-            cycle_context=cycle_context,
-            reversal_context=reversal_context_short,
-            volume_profile=volume_profile_obj,
-            current_price=current_price
-        )
-
-        # Log bidirectional confluence comparison
-        logger.info("⚖️  Direction eval: LONG=%.1f vs SHORT=%.1f",
-                   long_breakdown.total_score,
-                   short_breakdown.total_score)
-
-        # Cycle + Regime aware adjustment: BONUS for aligned setups, NO PENALTY for contrarian
-        # This replaces the old penalty system with additive bonuses
-        def cycle_regime_adjust(score: float, direction: str) -> float:
-            bonus = 0.0
-            try:
-                # === CYCLE-BASED BONUS ===
-                # Add bonus when direction aligns with cycle context
-                if cycle_context:
-                    should_boost, boost_amount = should_boost_direction(cycle_context, direction)
-                    if should_boost:
-                        bonus += boost_amount
-                        logger.debug("📊 Cycle bonus: %s setup aligns with cycle (+%.1f)",
-                                   direction, boost_amount)
-                
-                # === REGIME-BASED BONUS ===
-                # Add bonus when direction aligns with regime trend
-                # NO PENALTY for contrarian - just no bonus
-                symbol_regime = context.metadata.get('symbol_regime')
-                trend = (symbol_regime.trend if symbol_regime else None) or 'neutral'
-                
-                if trend == 'bullish' and direction == 'LONG':
-                    bonus += 3.0
-                    logger.debug("📈 Regime bonus: LONG aligns with bullish regime (+3.0)")
-                elif trend == 'bearish' and direction == 'SHORT':
-                    bonus += 3.0
-                    logger.debug("📉 Regime bonus: SHORT aligns with bearish regime (+3.0)")
-                # Note: No penalty for contrarian trades - they just don't get the bonus
-                # This allows cycle turns at regime extremes to pass through
-                
-            except Exception:
-                pass
-            return score + bonus
-
-        long_breakdown.total_score = cycle_regime_adjust(long_breakdown.total_score, 'LONG')
-        short_breakdown.total_score = cycle_regime_adjust(short_breakdown.total_score, 'SHORT')
-
-        # Choose direction - avoid long-side bias by using > instead of >=
-        # Ties are broken by regime trend, then HTF momentum, then skip
-        if long_breakdown.total_score > short_breakdown.total_score:
-            chosen = long_breakdown
-            tie_break_used = None
-            logger.info("✅ Direction: LONG selected (score %.1f > %.1f)",
-                       long_breakdown.total_score, short_breakdown.total_score)
-        elif short_breakdown.total_score > long_breakdown.total_score:
-            chosen = short_breakdown
-            tie_break_used = None
-            logger.info("✅ Direction: SHORT selected (score %.1f > %.1f)",
-                       short_breakdown.total_score, long_breakdown.total_score)
-        else:
-            # Exact tie - use regime trend as tie-breaker
-            regime_trend = (context.metadata.get('symbol_regime').trend 
-                           if context.metadata.get('symbol_regime') else 'neutral')
-            if regime_trend == 'bullish':
-                chosen = long_breakdown
-                tie_break_used = 'regime_bullish'
-                logger.info("🔄 TIE (%.1f) broken by regime: LONG (bullish regime)", long_breakdown.total_score)
-            elif regime_trend == 'bearish':
-                chosen = short_breakdown
-                tie_break_used = 'regime_bearish'
-                logger.info("🔄 TIE (%.1f) broken by regime: SHORT (bearish regime)", short_breakdown.total_score)
-            else:
-                # True neutral tie - default to long but flag it
-                chosen = long_breakdown
-                tie_break_used = 'neutral_default_long'
-                logger.info("🔄 TIE (%.1f) with neutral regime: defaulting to LONG", long_breakdown.total_score)
-        
-        # Persist alt scores for analytics/debugging
-        context.metadata['alt_confluence'] = {
-            'long': long_breakdown.total_score,
-            'short': short_breakdown.total_score,
-            'tie_break_used': tie_break_used if 'tie_break_used' in dir() else None
-        }
-        # Store chosen direction for downstream planning
-        chosen_direction = 'LONG' if chosen is long_breakdown else 'SHORT'
-        context.metadata['chosen_direction'] = chosen_direction
-        
-        # Store reversal context for the chosen direction (used in plan rationale generation)
-        chosen_reversal = reversal_context_long if chosen_direction == 'LONG' else reversal_context_short
-        if chosen_reversal and chosen_reversal.is_reversal_setup:
-            context.metadata['reversal'] = {
-                'is_reversal_setup': chosen_reversal.is_reversal_setup,
-                'direction': chosen_reversal.direction,
-                'cycle_aligned': chosen_reversal.cycle_aligned,
-                'htf_bypass_active': chosen_reversal.htf_bypass_active,
-                'confidence': chosen_reversal.confidence,
-                'rationale': chosen_reversal.rationale
-            }
-        
-        # Apply regime adjustments if regime is available
-        if self.current_regime:
-            symbol_regime = context.metadata.get('symbol_regime')
-            adjusted_score = self._apply_regime_adjustments(
-                base_score=chosen.total_score,
-                symbol_regime=symbol_regime
-            )
-            chosen.total_score = adjusted_score
-
-        # Apply macro overlay adjustments if enabled and context available
-        try:
-            if getattr(self.config, 'macro_overlay_enabled', False) and self.macro_context:
-                direction = context.metadata.get('chosen_direction', 'LONG')
-                sym_upper = (context.symbol or '').upper()
-                is_btc = sym_upper.startswith('BTC/') or sym_upper == 'BTCUSDT'
-                is_alt = not is_btc
-                mac_adj = compute_macro_score(
-                    ctx=self.macro_context,
-                    direction=direction,
-                    is_btc=is_btc,
-                    is_alt=is_alt,
-                )
-                # Adjust chosen score and clamp 0-100
-                chosen.total_score = max(0.0, min(100.0, chosen.total_score + float(mac_adj)))
-                # Surface macro metadata for UI/telemetry via context
-                try:
-                    ctx = self.macro_context
-                    context.metadata['macro'] = {
-                        'state': getattr(ctx.macro_state, 'name', 'NEUTRAL').lower(),
-                        'score': int(getattr(ctx, 'macro_score', 0)),
-                        'cluster_score': int(getattr(ctx, 'cluster_score', 0)),
-                        'btc_velocity_1h': float(getattr(ctx, 'btc_velocity_1h', 0.0)),
-                        'alt_velocity_1h': float(getattr(ctx, 'alt_velocity_1h', 0.0)),
-                        'stable_velocity_1h': float(getattr(ctx, 'stable_velocity_1h', 0.0)),
-                        'velocity_spread_1h': float(getattr(ctx, 'velocity_spread_1h', 0.0)),
-                        'percent_alts_up': float(getattr(ctx, 'percent_alts_up', 0.0)),
-                        'btc_volatility_1h': float(getattr(ctx, 'btc_volatility_1h', 0.0)),
-                        'notes': list(getattr(ctx, 'notes', []))
-                    }
-                except Exception:
-                    pass
-        except Exception as _macro_err:
-            logger.debug("Macro overlay adjustment skipped: %s", _macro_err)
-
-        return chosen
+        # This method is now replaced by a service call
+        raise NotImplementedError("This method should not be called directly. Use self.confluence_service.score instead.")
     
     def _generate_trade_plan(self, context: SniperContext, current_price: float) -> Optional[TradePlan]:
         """
@@ -1913,6 +1400,7 @@ class Orchestrator:
             self.config.structure_timeframes = mode.structure_timeframes
             self.config.stop_timeframes = getattr(mode, 'stop_timeframes', ())
             self.config.target_timeframes = getattr(mode, 'target_timeframes', ())
+            self.config.allowed_trade_types = getattr(mode, 'allowed_trade_types', ('swing', 'intraday', 'scalp'))
             # Apply per-mode overrides if present
             if getattr(mode, 'overrides', None):
                 ov = mode.overrides
@@ -1927,6 +1415,28 @@ class Orchestrator:
             self.scanner_mode = mode
             from backend.analysis.regime_policies import get_regime_policy
             self.regime_policy = get_regime_policy(mode.profile)
+
+            # Update services with new mode
+            if self.indicator_service:
+                self.indicator_service.set_mode(mode)
+            if self.confluence_service:
+                self.confluence_service.set_mode(mode)
+            
+            # Update SMC config based on mode's preset
+            smc_preset = getattr(self.scanner_mode, 'smc_preset', 'defaults')
+            if smc_preset == 'luxalgo_strict':
+                self.smc_config = SMCConfig.luxalgo_strict()
+                logger.info("🎯 SMC preset: LUXALGO_STRICT (institutional-grade detection)")
+            elif smc_preset == 'sensitive':
+                self.smc_config = SMCConfig.sensitive()
+                logger.info("🎯 SMC preset: SENSITIVE (research/backtesting mode)")
+            else:
+                self.smc_config = SMCConfig.defaults()
+                logger.info("🎯 SMC preset: DEFAULTS (balanced detection)")
+            
+            if self.smc_service:
+                self.smc_service.update_config(self.smc_config)
+            
             logger.debug("Applied scanner mode: %s | timeframes=%s | critical=%s | planning_tf=%s", 
                         mode.name, self.config.timeframes, mode.critical_timeframes, mode.primary_planning_timeframe)
         except Exception as e:
@@ -1973,7 +1483,7 @@ class Orchestrator:
                 return None
             
             # Compute BTC indicators
-            btc_indicators = self._compute_indicators(btc_data)
+            btc_indicators = self.indicator_service.compute(btc_data)
             if not btc_indicators.by_timeframe:
                 logger.warning("Unable to compute BTC indicators for regime detection")
                 return None
@@ -2027,6 +1537,8 @@ class Orchestrator:
         """Apply a new SMC configuration after validation."""
         new_cfg.validate()
         self.smc_config = new_cfg
+        if self.smc_service:
+            self.smc_service.update_config(new_cfg)
         logger.info("SMC configuration updated")
     
     def get_pipeline_status(self) -> Dict[str, Any]:

@@ -85,3 +85,29 @@ class MultiTimeframeData:
     def get_timeframe_count(self) -> int:
         """Get the number of timeframes available."""
         return len(self.timeframes)
+
+    def get_current_price(self) -> float:
+        """
+        Get the current market price from the most granular timeframe available.
+        
+        Returns:
+            float: The latest close price from the smallest timeframe found.
+            Returns 0.0 if no data is available.
+        """
+        # Preference order for current price (most granular first)
+        preferred_timeframes = ['1m', '5m', '15m', '1h', '4h', '1d', '1w']
+        
+        # Try to find the most granular timeframe present
+        for tf in preferred_timeframes:
+            # Check both lowercase and uppercase keys
+            if tf in self.timeframes:
+                return self.get_latest_close(tf)
+            if tf.upper() in self.timeframes:
+                return self.get_latest_close(tf.upper())
+                
+        # Fallback: take any available timeframe if none of the preferred ones match
+        if self.timeframes:
+            first_tf = next(iter(self.timeframes))
+            return self.get_latest_close(first_tf)
+            
+        return 0.0

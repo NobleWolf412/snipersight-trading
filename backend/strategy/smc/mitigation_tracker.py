@@ -98,7 +98,7 @@ def _calculate_ob_mitigation(ob: OrderBlock, df: pd.DataFrame) -> float:
     # Filter to candles after OB formed
     try:
         after_formation = df[df.index > ob_time]
-    except:
+    except (TypeError, ValueError):
         # If timestamp comparison fails, use all data
         after_formation = df
     
@@ -196,7 +196,7 @@ def _calculate_fvg_fill(fvg: FVG, df: pd.DataFrame) -> float:
     # Get candles after FVG formation
     try:
         after_formation = df[df.index > fvg.timestamp]
-    except:
+    except (TypeError, ValueError):
         after_formation = df
     
     if after_formation.empty:

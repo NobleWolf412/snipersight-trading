@@ -39,6 +39,7 @@ class ScanConfig:
     max_pullback_atr: float = 3.0
     min_stop_atr: float = 1.0
     max_stop_atr: float = 6.0
+    allowed_trade_types: Tuple[str, ...] = ("swing", "intraday", "scalp")
 
     # HTF proximity integration knobs
     htf_proximity_enabled: bool = True

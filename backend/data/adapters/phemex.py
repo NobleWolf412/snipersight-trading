@@ -86,6 +86,42 @@ class PhemexAdapter:
 
             # Convert timestamp to datetime
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df.set_index('timestamp', inplace=True)
+            
+            # --- Gap Filling Logic ---
+            # Generate complete index to fill gaps (CCXT omits candles with no trades)
+            if not df.empty:
+                # Map timeframe to pandas frequency
+                tf_map = {
+                    '1m': '1min', '3m': '3min', '5m': '5min', '15m': '15min', '30m': '30min',
+                    '1h': '1h', '2h': '2h', '4h': '4h', '6h': '6h', '8h': '8h', '12h': '12h',
+                    '1d': '1d', '3d': '3d', '1w': '1W', '1M': '1ME'
+                }
+                freq = tf_map.get(timeframe)
+                
+                if freq:
+                    # Create continuous range from start to end
+                    full_idx = pd.date_range(start=df.index.min(), end=df.index.max(), freq=freq)
+                    
+                    # Reindex handles missing rows
+                    if len(df) < len(full_idx):
+                        logger.debug(f"Gap detected in {symbol} {timeframe}: {len(full_idx)} expected, {len(df)} received. Filling gaps.")
+                        df = df.reindex(full_idx)
+                        
+                        # Forward fill Close price (last known price persists)
+                        df['close'] = df['close'].ffill()
+                        
+                        # Fill Open/High/Low with the Close (since price didn't move)
+                        df['open'] = df['open'].fillna(df['close'])
+                        df['high'] = df['high'].fillna(df['close'])
+                        df['low'] = df['low'].fillna(df['close'])
+                        
+                        # Fill Volume with 0
+                        df['volume'] = df['volume'].fillna(0)
+            
+            # Reset index to make timestamp a column again (standard format for pipeline)
+            df.reset_index(inplace=True)
+            df.rename(columns={'index': 'timestamp'}, inplace=True)
             
             logger.debug(f"Fetched {len(df)} candles for {symbol} {timeframe}")
             return df
