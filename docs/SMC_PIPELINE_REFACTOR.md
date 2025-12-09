@@ -1,8 +1,8 @@
 # SMC Pipeline Refactor - Implementation Game Plan
 
-**Version**: 1.0  
-**Date**: December 3, 2025  
-**Status**: In Progress
+**Version**: 1.1  
+**Date**: December 2025  
+**Status**: Mostly Complete (Grading implemented, mode consolidation done)
 
 ---
 

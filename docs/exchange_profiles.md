@@ -22,9 +22,12 @@ Used for Scanner Mode where no execution capability is needed.
 
 | Profile Name    | Exchange | Mode | Data | Paper | Live | Requires Keys |
 |-----------------|----------|------|------|-------|------|---------------|
-| `Binance_Data`  | Binance  | data | ✓    | ✗     | ✗    | ✗             |
+| `Phemex_Data`   | Phemex   | data | ✓    | ✗     | ✗    | ✗             |
 | `Bybit_Data`    | Bybit    | data | ✓    | ✗     | ✗    | ✗             |
 | `OKX_Data`      | OKX      | data | ✓    | ✗     | ✗    | ✗             |
+| `Bitget_Data`   | Bitget   | data | ✓    | ✗     | ✗    | ✗             |
+
+**Note**: Phemex is the default exchange adapter (no geo-blocking for US users).
 
 **Use Cases**:
 - Scanner Mode market data fetching

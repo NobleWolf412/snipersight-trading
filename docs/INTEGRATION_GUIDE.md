@@ -350,17 +350,17 @@ curl -X POST http://localhost:8000/api/position/calculate \
 - Risk manager integration
 - Paper executor integration
 - Activity logging system
+- **Real market data fetching** (`/api/scan` via Phemex, Bybit, OKX, Bitget)
+- **SMC analysis integration** (OB, FVG, BOS/CHoCH detection)
+- **Confluence scoring** (multi-factor weighted scoring)
+- **Trade plan generation** (entries, stops, targets, R:R)
+- **Telemetry system** (real-time event logging)
 
-⏳ **TODO (Returns Mock Data):**
-- Real market data fetching (`/api/scan`)
-- SMC analysis integration
-- Exchange API connections
-- Live trading executor
-- WebSocket real-time updates
+⏳ **TODO:**
+- Live trading executor (paper trading works)
+- WebSocket real-time updates (polling implemented)
 
 🎯 **Next Steps:**
-1. Update frontend to call backend API
-2. Test integration with mock responses
-3. Implement real market data pipeline
-4. Add exchange API keys management
-5. Implement WebSocket for live updates
+1. Add WebSocket for live activity feed
+2. Implement live trading executor with exchange APIs
+3. Add exchange API keys management UI
