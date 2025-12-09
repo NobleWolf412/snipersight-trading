@@ -384,6 +384,24 @@ class ScannerService:
                         if hasattr(plan, 'confluence_breakdown') 
                         else plan.confidence_score
                     ),
+                    "confluence_breakdown": {
+                        "total_score": plan.confluence_breakdown.total_score,
+                        "synergy_bonus": plan.confluence_breakdown.synergy_bonus,
+                        "conflict_penalty": plan.confluence_breakdown.conflict_penalty,
+                        "regime": plan.confluence_breakdown.regime,
+                        "htf_aligned": plan.confluence_breakdown.htf_aligned,
+                        "btc_impulse_gate": plan.confluence_breakdown.btc_impulse_gate,
+                        "factors": [
+                            {
+                                "name": f.name,
+                                "score": f.score,
+                                "weight": f.weight,
+                                "rationale": f.rationale,
+                                "weighted_score": f.weighted_score,
+                            }
+                            for f in plan.confluence_breakdown.factors
+                        ],
+                    } if hasattr(plan, 'confluence_breakdown') and plan.confluence_breakdown else None,
                     "expected_value": plan.metadata.get('expected_value')
                 },
                 "rationale": plan.rationale,

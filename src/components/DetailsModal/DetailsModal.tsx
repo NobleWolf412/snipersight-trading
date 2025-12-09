@@ -7,6 +7,7 @@ import { RegimeIndicator } from '@/components/RegimeIndicator';
 import { ConvictionBadge } from '@/components/ConvictionBadge';
 import { CycleIndicator } from '@/components/CycleIndicator';
 import { TrendUp, TrendDown, Activity, Shield, Warning, Recycle } from '@phosphor-icons/react';
+import { TargetIntelScorecard } from '@/components/TargetIntelScorecard/TargetIntelScorecard';
 
 function formatAtrLabel(label: string, atrPct?: number) {
   const raw = (label || '').toString();
@@ -83,7 +84,7 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
                     const R = reward / risk;
                     ev = pWin * R - (1 - pWin) * 1.0;
                   }
-                } catch {}
+                } catch { }
               }
               if (ev === undefined) return null;
               const positive = ev >= 0;
@@ -98,81 +99,78 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
 
         <ScrollArea className="h-[600px] pr-4">
           <div className="space-y-6">
-            {/* Signal Quality Section */}
+            {/* Target Intel Scorecard (New) or Legacy Signal Quality */}
             <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Signal Quality</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground">Conviction Class</div>
-                  {result.conviction_class && result.plan_type ? (
-                    <ConvictionBadge conviction={result.conviction_class} planType={result.plan_type} size="md" />
-                  ) : (
-                    <span className="text-sm text-muted-foreground">Not classified</span>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground">Confidence Score</div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-32 bg-muted rounded-full h-3">
-                      <div
-                        className="bg-accent h-3 rounded-full transition-all duration-500"
-                        style={{ width: `${typeof result.confidenceScore === 'number' ? result.confidenceScore : 0}%` }}
-                      />
+              {result.confluence_breakdown ? (
+                <TargetIntelScorecard breakdown={result.confluence_breakdown} />
+              ) : (
+                <>
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Signal Quality</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="text-xs text-muted-foreground">Conviction Class</div>
+                      {result.conviction_class && result.plan_type ? (
+                        <ConvictionBadge conviction={result.conviction_class} planType={result.plan_type} size="md" />
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Not classified</span>
+                      )}
                     </div>
-                    <span className="text-lg font-bold font-mono text-accent">{formatNum(result.confidenceScore, 0)}%</span>
-                  </div>
-                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                    <div className="bg-muted/40 rounded p-2">
-                      <div className="text-muted-foreground">Confluence</div>
-                      <div className="font-mono text-sm">
-                        {(() => {
-                          const fromAnalysis = (result as any)?.analysis?.confluence_score as number | undefined;
-                          const score = typeof fromAnalysis === 'number' ? fromAnalysis : result.confidenceScore;
-                          return formatNum(score, 0);
-                        })()}%
+                    <div className="space-y-2">
+                      <div className="text-xs text-muted-foreground">Confluence Score</div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-32 bg-muted rounded-full h-3">
+                          <div
+                            className="bg-accent h-3 rounded-full transition-all duration-500"
+                            style={{ width: `${typeof result.confidenceScore === 'number' ? result.confidenceScore : 0}%` }}
+                          />
+                        </div>
+                        <span className="text-lg font-bold font-mono text-accent">{formatNum(result.confidenceScore, 0)}%</span>
                       </div>
-                    </div>
-                    <div className="bg-muted/40 rounded p-2">
-                      <div className="text-muted-foreground">R:R</div>
-                      <div className="font-mono text-sm">
-                        {(() => {
-                          const rr = (result as any)?.analysis?.risk_reward as number | undefined;
-                          if (typeof rr === 'number' && rr > 0) return `${formatNum(rr, 2)}:1`;
-                          // Fallback to local computation
-                          const avgEntry = (result.entryZone.high + result.entryZone.low) / 2;
-                          const risk = Math.abs(avgEntry - result.stopLoss);
-                          const firstTarget = result.takeProfits && result.takeProfits.length > 0 ? result.takeProfits[0] : undefined;
-                          if (!firstTarget || risk <= 0) return '-';
-                          const reward = Math.abs(firstTarget - avgEntry);
-                          return `${formatNum(reward / risk, 2)}:1`;
-                        })()}
-                      </div>
-                    </div>
-                    <div className="bg-muted/40 rounded p-2">
-                      <div className="text-muted-foreground">EV</div>
-                      <div className="font-mono text-sm">
-                        {(() => {
-                          const ev = (result as any)?.analysis?.expected_value as number | undefined;
-                          if (typeof ev === 'number') return formatNum(ev, 2);
-                          // Fallback approximation (existing logic)
-                          try {
-                            const score = typeof result.confidenceScore === 'number' ? result.confidenceScore : 0;
-                            const pWin = Math.max(0.35, Math.min(0.70, 0.35 + (score / 100.0) * (0.70 - 0.35)));
-                            const avgEntry = (result.entryZone.high + result.entryZone.low) / 2;
-                            const risk = Math.abs(avgEntry - result.stopLoss);
-                            const firstTarget = result.takeProfits && result.takeProfits.length > 0 ? result.takeProfits[0] : undefined;
-                            if (!firstTarget || risk <= 0) return '-';
-                            const reward = Math.abs(firstTarget - avgEntry);
-                            const R = reward / risk;
-                            const evCalc = pWin * R - (1 - pWin) * 1.0;
-                            return `${evCalc.toFixed(2)}`;
-                          } catch { return '-'; }
-                        })()}
+                      <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+
+                        <div className="bg-muted/40 rounded p-2">
+                          <div className="text-muted-foreground">R:R</div>
+                          <div className="font-mono text-sm">
+                            {(() => {
+                              const rr = (result as any)?.analysis?.risk_reward as number | undefined;
+                              if (typeof rr === 'number' && rr > 0) return `${formatNum(rr, 2)}:1`;
+                              // Fallback to local computation
+                              const avgEntry = (result.entryZone.high + result.entryZone.low) / 2;
+                              const risk = Math.abs(avgEntry - result.stopLoss);
+                              const firstTarget = result.takeProfits && result.takeProfits.length > 0 ? result.takeProfits[0] : undefined;
+                              if (!firstTarget || risk <= 0) return '-';
+                              const reward = Math.abs(firstTarget - avgEntry);
+                              return `${formatNum(reward / risk, 2)}:1`;
+                            })()}
+                          </div>
+                        </div>
+                        <div className="bg-muted/40 rounded p-2">
+                          <div className="text-muted-foreground">EV</div>
+                          <div className="font-mono text-sm">
+                            {(() => {
+                              const ev = (result as any)?.analysis?.expected_value as number | undefined;
+                              if (typeof ev === 'number') return formatNum(ev, 2);
+                              // Fallback approximation (existing logic)
+                              try {
+                                const score = typeof result.confidenceScore === 'number' ? result.confidenceScore : 0;
+                                const pWin = Math.max(0.35, Math.min(0.70, 0.35 + (score / 100.0) * (0.70 - 0.35)));
+                                const avgEntry = (result.entryZone.high + result.entryZone.low) / 2;
+                                const risk = Math.abs(avgEntry - result.stopLoss);
+                                const firstTarget = result.takeProfits && result.takeProfits.length > 0 ? result.takeProfits[0] : undefined;
+                                if (!firstTarget || risk <= 0) return '-';
+                                const reward = Math.abs(firstTarget - avgEntry);
+                                const R = reward / risk;
+                                const evCalc = pWin * R - (1 - pWin) * 1.0;
+                                return `${evCalc.toFixed(2)}`;
+                              } catch { return '-'; }
+                            })()}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
+                </>
+              )}
             </div>
 
             <Separator />
@@ -317,8 +315,8 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
                               (result.liqRiskBand === 'high'
                                 ? 'bg-red-500/15 text-red-400 border-red-500/40'
                                 : result.liqRiskBand === 'moderate'
-                                ? 'bg-amber-500/15 text-amber-400 border-amber-500/40'
-                                : 'bg-green-500/15 text-green-400 border-green-500/40')
+                                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/40'
+                                  : 'bg-green-500/15 text-green-400 border-green-500/40')
                             }
                             title="(Stop − Liq) / (Entry − Liq) for longs; inverse for shorts"
                           >
@@ -362,8 +360,8 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
                       const firstTarget = result.takeProfits && result.takeProfits.length > 0 ? result.takeProfits[0] : undefined;
                       if (!firstTarget || risk <= 0) return '-';
                       const reward = Math.abs(firstTarget - avgEntry);
-                        const rr = reward / risk;
-                        return `${formatNum(rr, 2)}:1`;
+                      const rr = reward / risk;
+                      return `${formatNum(rr, 2)}:1`;
                     })()}
                   </div>
                 </div>

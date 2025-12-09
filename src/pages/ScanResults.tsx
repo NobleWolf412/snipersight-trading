@@ -39,7 +39,7 @@ export function ScanResults() {
       const resultsStr = localStorage.getItem('scan-results');
       const metadataStr = localStorage.getItem('scan-metadata');
       const rejectionsStr = localStorage.getItem('scan-rejections');
-      
+
       if (resultsStr) {
         try {
           const parsed = JSON.parse(resultsStr);
@@ -54,7 +54,7 @@ export function ScanResults() {
         console.log('[ScanResults] No results in localStorage, setting empty array');
         setScanResults([]);
       }
-      
+
       if (metadataStr) {
         try {
           setScanMetadata(JSON.parse(metadataStr));
@@ -63,7 +63,7 @@ export function ScanResults() {
           setScanMetadata(null);
         }
       }
-      
+
       if (rejectionsStr) {
         try {
           const parsed = JSON.parse(rejectionsStr);
@@ -126,7 +126,7 @@ export function ScanResults() {
   }, [scanResults]);
 
   const results = scanResults || [];
-  
+
   // Compute EV from metadata if available, else approximate from confidence and a nominal R:R
   const getEV = (r: ScanResult) => {
     const metaEV = (r as any)?.metadata?.ev?.expected_value;
@@ -136,7 +136,7 @@ export function ScanResults() {
     const p = Math.max(0.2, Math.min(0.85, pRaw));
     return p * rr - (1 - p) * 1.0;
   };
-  
+
   const sortedResults = [...results].sort((a, b) => getEV(b) - getEV(a));
 
   if (isLoading) {
@@ -185,7 +185,7 @@ export function ScanResults() {
           <div className="flex justify-start">
             <HomeButton />
           </div>
-          
+
           {/* Header - always show */}
           <div className="text-center space-y-4 py-8">
             <div className="relative inline-block">
@@ -196,7 +196,7 @@ export function ScanResults() {
             </div>
             <h2 className="text-3xl font-bold text-foreground heading-hud">No Targets Acquired</h2>
             <p className="text-lg text-muted-foreground">
-              {rejectionStats && rejectionStats.total_rejected > 0 
+              {rejectionStats && rejectionStats.total_rejected > 0
                 ? `All ${rejectionStats.total_rejected} symbols filtered by quality gates`
                 : 'Run a scan to identify trading opportunities'
               }
@@ -205,17 +205,17 @@ export function ScanResults() {
 
           {/* Rejection breakdown - show if available */}
           {rejectionStats && rejectionStats.total_rejected > 0 && (
-            <RejectionSummary 
-              rejections={rejectionStats} 
-              totalScanned={scanMetadata?.scanned || rejectionStats.total_rejected} 
+            <RejectionSummary
+              rejections={rejectionStats}
+              totalScanned={scanMetadata?.scanned || rejectionStats.total_rejected}
             />
           )}
 
           {/* Action buttons - always show */}
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center pt-4">
-            <Button 
-              onClick={() => navigate('/scan')} 
-              className="bg-accent hover:bg-accent/90 text-accent-foreground h-14 text-lg px-8 btn-tactical-scanner" 
+            <Button
+              onClick={() => navigate('/scan')}
+              className="bg-accent hover:bg-accent/90 text-accent-foreground h-14 text-lg px-8 btn-tactical-scanner"
               size="lg"
             >
               <TrendUp size={24} weight="bold" />
@@ -225,7 +225,7 @@ export function ScanResults() {
 
           {/* Helper text */}
           <p className="text-xs text-muted-foreground text-center mt-4">
-            {rejectionStats 
+            {rejectionStats
               ? 'Review rejection reasons above, then adjust scanner settings to capture more signals'
               : 'Preview button shows Phase 6 enhancements: Conviction badges, Regime indicators, Enhanced details'
             }
@@ -246,10 +246,10 @@ export function ScanResults() {
           description={`${results.length} high-probability setup${results.length !== 1 ? 's' : ''} identified`}
           icon={<TrendUp size={40} weight="bold" className="text-accent" />}
           actions={
-            <Button 
-              onClick={() => navigate('/scan')} 
-              variant="outline" 
-              className="h-12 hover:border-accent/50 transition-all" 
+            <Button
+              onClick={() => navigate('/scan')}
+              variant="outline"
+              className="h-12 hover:border-accent/50 transition-all"
               size="lg"
             >
               <TrendUp size={20} weight="bold" />
@@ -264,7 +264,7 @@ export function ScanResults() {
 
         {scanMetadata && (
           <Card className="bg-accent/5 border-accent/30 card-3d overflow-hidden">
-            <CardHeader 
+            <CardHeader
               className="cursor-pointer select-none hover:bg-accent/10 transition-colors"
               onClick={() => setShowMetadata(!showMetadata)}
             >
@@ -275,8 +275,8 @@ export function ScanResults() {
                     SCAN CONFIGURATION
                   </CardTitle>
                 </div>
-                {showMetadata ? 
-                  <CaretUp size={20} weight="bold" className="text-accent" /> : 
+                {showMetadata ?
+                  <CaretUp size={20} weight="bold" className="text-accent" /> :
                   <CaretDown size={20} weight="bold" className="text-muted-foreground" />
                 }
               </div>
@@ -321,14 +321,14 @@ export function ScanResults() {
         )}
 
         {rejectionStats && rejectionStats.total_rejected > 0 && (
-          <RejectionSummary 
-            rejections={rejectionStats} 
-            totalScanned={scanMetadata?.scanned || rejectionStats.total_rejected} 
+          <RejectionSummary
+            rejections={rejectionStats}
+            totalScanned={scanMetadata?.scanned || rejectionStats.total_rejected}
           />
         )}
 
         <Card className="bg-card/50 border-accent/30 card-3d overflow-hidden">
-          <CardHeader 
+          <CardHeader
             className="cursor-pointer select-none hover:bg-accent/5 transition-colors"
             onClick={() => setShowResults(!showResults)}
           >
@@ -339,8 +339,8 @@ export function ScanResults() {
                   SCAN RESULTS
                 </CardTitle>
               </div>
-              {showResults ? 
-                <CaretUp size={24} weight="bold" className="text-primary" /> : 
+              {showResults ?
+                <CaretUp size={24} weight="bold" className="text-primary" /> :
                 <CaretDown size={24} weight="bold" className="text-muted-foreground" />
               }
             </div>
@@ -357,7 +357,7 @@ export function ScanResults() {
                       <TableHead className="heading-hud text-xs">BIAS</TableHead>
                       <TableHead className="heading-hud text-xs">CONVICTION</TableHead>
                       <TableHead className="heading-hud text-xs">REGIME</TableHead>
-                      <TableHead className="heading-hud text-xs">CONFIDENCE</TableHead>
+                      <TableHead className="heading-hud text-xs">CONFLUENCE</TableHead>
                       <TableHead className="heading-hud text-xs">RISK</TableHead>
                       <TableHead className="heading-hud text-xs">TYPE</TableHead>
                       <TableHead className="heading-hud text-xs">ACTIONS</TableHead>
@@ -365,8 +365,8 @@ export function ScanResults() {
                   </TableHeader>
                   <TableBody>
                     {sortedResults.map((result, index) => (
-                      <TableRow 
-                        key={result.id} 
+                      <TableRow
+                        key={result.id}
                         className="border-border/40 hover:bg-accent/5 transition-colors"
                         style={{ animationDelay: `${index * 50}ms` }}
                       >
@@ -374,22 +374,22 @@ export function ScanResults() {
                         <TableCell>
                           <PriceDisplay symbol={result.pair} size="sm" />
                         </TableCell>
-                                                <TableCell>
-                                                  {(() => {
-                                                    const ev = getEV(result);
-                                                    const positive = ev >= 0;
-                                                    const cls = positive ? 'bg-success/20 text-success border-success/50' : 'bg-destructive/20 text-destructive border-destructive/50';
-                                                    return (
-                                                      <Badge
-                                                        variant="outline"
-                                                        className={`font-mono font-bold ${cls}`}
-                                                        title={`EV = ${ev.toFixed(2)} (p*R - (1-p)*1); p≈clamped confidence, R=first target/stop`}
-                                                      >
-                                                        {ev.toFixed(2)}
-                                                      </Badge>
-                                                    );
-                                                  })()}
-                                                </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const ev = getEV(result);
+                            const positive = ev >= 0;
+                            const cls = positive ? 'bg-success/20 text-success border-success/50' : 'bg-destructive/20 text-destructive border-destructive/50';
+                            return (
+                              <Badge
+                                variant="outline"
+                                className={`font-mono font-bold ${cls}`}
+                                title={`EV = ${ev.toFixed(2)} (p*R - (1-p)*1); p≈clamped confidence, R=first target/stop`}
+                              >
+                                {ev.toFixed(2)}
+                              </Badge>
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={getTrendColor(result.trendBias)}>
                             <span className="flex items-center gap-1">
@@ -400,8 +400,8 @@ export function ScanResults() {
                         </TableCell>
                         <TableCell>
                           {result.conviction_class && result.plan_type ? (
-                            <ConvictionBadge 
-                              conviction={result.conviction_class} 
+                            <ConvictionBadge
+                              conviction={result.conviction_class}
                               planType={result.plan_type}
                               size="sm"
                             />
@@ -427,7 +427,7 @@ export function ScanResults() {
                           <Badge variant="outline" className="font-mono font-bold">{result.riskScore.toFixed(1)}/10</Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge 
+                          <Badge
                             variant={result.classification === 'SWING' ? 'default' : 'secondary'}
                             className="font-bold"
                           >

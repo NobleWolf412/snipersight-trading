@@ -1,5 +1,6 @@
 import type { PlanType, ConvictionClass, RegimeMetadata } from '@/types/regime';
 import type { CycleContext, ReversalContext } from '@/types/cycle';
+import type { ConfluenceBreakdown } from '@/types/confluence';
 
 export interface ScanResult {
   id: string;
@@ -24,7 +25,7 @@ export interface ScanResult {
   usedStopBufferAtr?: number;
   altStopLevel?: number;
   altStopRationale?: string;
-  
+
   // Phase 1-5 enhancements
   plan_type?: PlanType;
   conviction_class?: ConvictionClass;
@@ -32,6 +33,7 @@ export interface ScanResult {
   regime?: RegimeMetadata;
   // Trade rationale and metadata from backend
   rationale?: string;
+  confluence_breakdown?: ConfluenceBreakdown;
   metadata?: {
     exchange?: string;
     leverage?: number;
@@ -50,7 +52,7 @@ export interface ScanResult {
     bos_choch?: any[];
     liquidity_sweeps?: any[];
   };
-  
+
   // Cycle Theory context (Phase 7 - Camel Finance methodology)
   cycle_context?: CycleContext;
   reversal_context?: ReversalContext;
@@ -88,18 +90,18 @@ export function generateMockBotActivity(): BotActivity[] {
  * Convert backend Signal to frontend ScanResult format
  */
 export function convertSignalToScanResult(signal: any): ScanResult {
-  const trendBias: ScanResult['trendBias'] = 
-    signal.direction === 'LONG' ? 'BULLISH' : 
-    signal.direction === 'SHORT' ? 'BEARISH' : 'NEUTRAL';
+  const trendBias: ScanResult['trendBias'] =
+    signal.direction === 'LONG' ? 'BULLISH' :
+      signal.direction === 'SHORT' ? 'BEARISH' : 'NEUTRAL';
 
   // Determine classification based on setup_type or timeframe
-  const classification: ScanResult['classification'] = 
-    signal.setup_type === 'intraday' || ['5m', '15m', '30m'].includes(signal.timeframe) 
-      ? 'SCALP' 
+  const classification: ScanResult['classification'] =
+    signal.setup_type === 'intraday' || ['5m', '15m', '30m'].includes(signal.timeframe)
+      ? 'SCALP'
       : 'SWING';
 
   // Calculate risk score from analysis (inverse of risk:reward, scaled 1-10)
-  const riskScore = signal.analysis?.risk_reward 
+  const riskScore = signal.analysis?.risk_reward
     ? Math.max(1, Math.min(10, 10 / signal.analysis.risk_reward))
     : 5;
 
@@ -122,19 +124,19 @@ export function convertSignalToScanResult(signal: any): ScanResult {
     entryZone: { low: signal.entry_far, high: signal.entry_near },
     stopLoss: signal.stop_loss,
     takeProfits: signal.targets.map((t: any) => t.level),
-    orderBlocks: signal.analysis?.order_blocks 
+    orderBlocks: signal.analysis?.order_blocks
       ? Array(signal.analysis.order_blocks).fill(null).map((_, i) => ({
-          type: trendBias === 'BULLISH' ? 'bullish' as const : 'bearish' as const,
-          price: signal.entry_near * (trendBias === 'BULLISH' ? 0.98 - i * 0.01 : 1.02 + i * 0.01),
-          timeframe: signal.timeframe,
-        }))
+        type: trendBias === 'BULLISH' ? 'bullish' as const : 'bearish' as const,
+        price: signal.entry_near * (trendBias === 'BULLISH' ? 0.98 - i * 0.01 : 1.02 + i * 0.01),
+        timeframe: signal.timeframe,
+      }))
       : [],
     fairValueGaps: signal.analysis?.fvgs
       ? Array(signal.analysis.fvgs).fill(null).map((_, i) => ({
-          low: signal.entry_near * (0.96 - i * 0.01),
-          high: signal.entry_near * (0.98 - i * 0.01),
-          type: 'bullish' as const,
-        }))
+        low: signal.entry_near * (0.96 - i * 0.01),
+        high: signal.entry_near * (0.98 - i * 0.01),
+        type: 'bullish' as const,
+      }))
       : [],
     timestamp: new Date().toISOString(),
     liqPrice: signal.liquidation?.approx_liq_price,
@@ -146,6 +148,7 @@ export function convertSignalToScanResult(signal: any): ScanResult {
     usedStopBufferAtr: signal.atr_regime?.used_stop_buffer_atr,
     altStopLevel: signal.alt_stop?.level,
     altStopRationale: signal.alt_stop?.rationale,
+    confluence_breakdown: signal.confluence_breakdown,
 
     // Phase enhancements
     plan_type: (signal.plan_type as PlanType) || 'SMC',

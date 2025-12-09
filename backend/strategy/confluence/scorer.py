@@ -378,7 +378,7 @@ def resolve_timeframe_conflicts(
     if not primary_aligned:
         conflicts.append(f"{primary_tf} {primary_trend} (primary)")
         resolution_reason_parts.append(f"Primary TF ({primary_tf}) not aligned with {direction}")
-        score_adjustment -= 15.0
+        score_adjustment -= 10.0  # Reduced from 15 to keep score >= 40 (Weak vs Missing)
         resolution = 'caution'
     
     # Check filter timeframes
@@ -462,7 +462,7 @@ def evaluate_macd_for_mode(
     Returns:
         Dict with score, reasons, role, and veto_active flag
     """
-    score = 0.0
+    score = 50.0  # Start at Neutral (50) instead of 0
     reasons = []
     veto_active = False
     role = "PRIMARY" if macd_config.treat_as_primary else "FILTER"
@@ -592,7 +592,10 @@ def evaluate_macd_for_mode(
                 reasons.append(f"{timeframe} histogram contracting against bearish")
     
     # Clamp score
-    score = max(-30.0, min(50.0, score))
+    # Clamp score
+    # Scale: -30..50 was raw. Now 50 + adj.
+    # Max theoretical with defaults: 50 + 25 + 10 = 85.
+    score = max(0.0, min(100.0, score))
     
     return {
         "score": score,
@@ -1023,11 +1026,11 @@ def calculate_confluence_score(
     if config.btc_impulse_gate_enabled and btc_impulse:
         if btc_impulse != direction and btc_impulse != "neutral":
             btc_impulse_gate = False
-            # Add negative factor
+            # Add negative factor (softened penalty)
             factors.append(ConfluenceFactor(
                 name="BTC Impulse Gate",
-                score=0.0,
-                weight=0.15,
+                score=40.0,
+                weight=0.10,
                 rationale=f"BTC trend ({btc_impulse}) conflicts with setup direction ({direction})"
             ))
         else:
@@ -1206,12 +1209,16 @@ def calculate_confluence_score(
     
     # If no factors present, return minimal breakdown
     if not factors:
+        # Detect regime even if no factors (defaults to 'range' if no data)
+        regime = _detect_regime(smc_snapshot, indicators)
+        logger.warning("⚠️ No confluence factors generated! Possible data starvation or strict mode. Defaulting regime to %s.", regime)
+        
         return ConfluenceBreakdown(
             total_score=0.0,
             factors=[],
             synergy_bonus=0.0,
             conflict_penalty=0.0,
-            regime="unknown",
+            regime=regime,
             htf_aligned=False,
             btc_impulse_gate=True,
             weekly_stoch_rsi_gate=True
@@ -1540,7 +1547,7 @@ def _score_momentum(
     Returns:
         Tuple of (score, macd_analysis_dict or None)
     """
-    score = 0.0
+    score = 40.0  # Base neutral score (was 0.0)
     macd_analysis = None
     
     # Normalize direction: LONG/SHORT -> bullish/bearish
@@ -1728,7 +1735,8 @@ def _score_volatility(indicators: IndicatorSnapshot) -> float:
     """
     atr_pct = getattr(indicators, 'atr_percent', None)
     if atr_pct is None:
-        return 0.0
+        # Default to neutral/weak score if data unavailable (prevent "Missing")
+        return 40.0
 
     # Ensure positive
     if atr_pct <= 0:
@@ -1738,10 +1746,10 @@ def _score_volatility(indicators: IndicatorSnapshot) -> float:
     val = atr_pct
 
     if val < 0.25:
-        return 30.0
+        return 40.0  # Weak (Caution) instead of Missing/Fail
     if val < 0.75:
-        # Map 0.25 -> 30 up to 0.75 -> 100
-        return 30.0 + (val - 0.25) / (0.75 - 0.25) * (100.0 - 30.0)
+        # Map 0.25 -> 40 up to 0.75 -> 100
+        return 40.0 + (val - 0.25) / (0.75 - 0.25) * (100.0 - 40.0)
     if val < 1.5:
         # 0.75 -> 95 down to 1.5 -> 70
         return 95.0 - (val - 0.75) / (1.5 - 0.75) * (95.0 - 70.0)

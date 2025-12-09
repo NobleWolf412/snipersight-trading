@@ -746,7 +746,7 @@ def generate_trade_plan(
         return TradePlan(
             symbol=symbol,
             direction=direction,
-            timeframe=plan_timeframe,
+            timeframe=primary_tf,
             entry_zone=entry_zone,
             stop_loss=stop_loss,
             targets=targets,

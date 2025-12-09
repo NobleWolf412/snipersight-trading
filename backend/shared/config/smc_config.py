@@ -267,39 +267,39 @@ class SMCConfig:
         Higher grade thresholds mean only the strongest patterns get Grade A.
         """
         return SMCConfig(
-            # Order Blocks: Only strong rejections with clear displacement
-            min_wick_ratio=2.5,           # 2.5x body minimum (strong rejection)
-            min_displacement_atr=2.0,      # 2 ATR displacement required
-            ob_lookback_candles=15,        # Wider window for displacement verification
-            ob_volume_threshold=1.8,       # Require significant volume spike
-            ob_max_mitigation=0.5,         # Only 50% mitigated max (very fresh)
-            ob_min_freshness=0.2,          # Must be recent
+            # Order Blocks: Strong rejections, but allow for standard impulse moves
+            min_wick_ratio=2.0,           # 2.0x body (was 2.5)
+            min_displacement_atr=1.5,      # 1.5 ATR displacement (was 2.0)
+            ob_lookback_candles=10,        # Slightly tighter validation (was 15)
+            ob_volume_threshold=1.5,       # 1.5x volume (was 1.8)
+            ob_max_mitigation=0.75,        # Allow 75% mitigation (was 0.5 - too strict)
+            ob_min_freshness=0.1,          # (was 0.2)
             
-            # FVGs: Only large, significant imbalances
-            fvg_min_gap_atr=1.0,           # Full ATR gap minimum (rare)
-            fvg_max_overlap=0.05,          # Almost no overlap allowed
+            # FVGs: Significant gaps, but catch actionable ones
+            fvg_min_gap_atr=0.4,           # 0.4 ATR (was 1.0 - filtered everything)
+            fvg_max_overlap=0.10,          # Allow small overlap (was 0.05)
             
-            # Structure: Only major swing breaks
-            structure_swing_lookback=25,   # Look for significant swings
-            structure_min_break_distance_atr=1.5,  # 1.5 ATR break required
+            # Structure: Major swings
+            structure_swing_lookback=20,   # (was 25)
+            structure_min_break_distance_atr=1.0,  # 1.0 ATR break (was 1.5)
             
-            # Sweeps: Clear liquidity grabs only
-            sweep_swing_lookback=30,
-            sweep_max_sweep_candles=2,     # Tight window
-            sweep_min_reversal_atr=1.5,    # Strong reversal required
-            sweep_require_volume_spike=True,  # Must have volume confirmation
+            # Sweeps: Clear liquidity grabs
+            sweep_swing_lookback=25,       # (was 30)
+            sweep_max_sweep_candles=3,     # (was 2)
+            sweep_min_reversal_atr=1.2,    # (was 1.5)
+            sweep_require_volume_spike=True,
             
-            # Equal Highs/Lows: Strict - only strong liquidity pools
-            eqhl_base_tolerance_pct=0.0015,  # Tighter base tolerance (0.15%)
-            eqhl_swing_lookback=7,           # Wider swing detection
-            eqhl_min_touches=3,              # Need 3+ touches (more significant)
-            eqhl_cluster_within_atr=0.25,    # Tighter ATR clustering
+            # Equal Highs/Lows: Strong pools
+            eqhl_base_tolerance_pct=0.0015,
+            eqhl_swing_lookback=6,           # (was 7)
+            eqhl_min_touches=2,              # 2+ touches (was 3 - too rare)
+            eqhl_cluster_within_atr=0.25,
             eqhl_use_atr_tolerance=True,
             eqhl_grade_by_touches=True,
             
-            # Grade thresholds: Stricter for high-quality only
-            grade_a_threshold=1.5,         # 1.5x ATR for Grade A
-            grade_b_threshold=1.0,         # 1.0x ATR for Grade B
+            # Grade thresholds: High quality
+            grade_a_threshold=1.2,         # (was 1.5)
+            grade_b_threshold=0.8,         # (was 1.0)
         )
     
     @staticmethod
