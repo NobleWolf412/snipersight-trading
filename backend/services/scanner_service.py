@@ -391,7 +391,10 @@ class ScannerService:
                 "plan_type": getattr(plan, 'plan_type', 'SMC'),
                 "conviction_class": getattr(plan, 'conviction_class', None),
                 "missing_critical_timeframes": plan.metadata.get('missing_critical_timeframes', []),
-                "regime": plan.metadata.get('regime'),
+                "regime": {
+                    "global_regime": plan.metadata.get('global_regime'),
+                    "symbol_regime": plan.metadata.get('symbol_regime'),
+                },
                 "macro": plan.metadata.get('macro')
             }
             signals.append(signal)
