@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useState } from 'react';
 import { TargetIntelScorecard } from '@/components/TargetIntelScorecard/TargetIntelScorecard';
 import { ConfluenceBreakdown, ConfluenceFactor } from '@/types/confluence';
@@ -198,8 +199,8 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                         <Info className="w-3 h-3 mr-1" /> View All
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="w-full max-w-3xl max-h-[80vh] overflow-y-auto overflow-x-hidden">
-                      <DialogHeader>
+                    <DialogContent className="w-full max-w-[90vw] h-[80vh] flex flex-col p-0 gap-0">
+                      <DialogHeader className="p-6 border-b border-border/50">
                         <div className="flex items-center justify-between">
                           <DialogTitle className="flex items-center gap-2">
                             <Icon className={`w-5 h-5 ${config.color}`} />
@@ -214,41 +215,43 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                             Close
                           </Button>
                         </div>
-                        <DialogDescription className="text-sm text-muted-foreground">
+                        <DialogDescription className="text-sm text-muted-foreground mt-1">
                           Detailed breakdown of all {reasonDetails.length} symbols rejected for {config.label.toLowerCase()}
                         </DialogDescription>
                       </DialogHeader>
-                      <div className="space-y-4">
-                        {reasonDetails.map((detail, idx) => (
-                          <Card key={idx} className="p-3 bg-background/40 border border-border/50">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="font-mono text-primary font-medium">{detail.symbol}</div>
-                              {detail.score !== undefined && detail.threshold !== undefined && (
-                                <Badge variant="secondary" className="font-mono text-xs">
-                                  {detail.score.toFixed(1)} / {detail.threshold.toFixed(1)}
-                                </Badge>
+                      <ScrollArea className="flex-1 p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                          {reasonDetails.map((detail, idx) => (
+                            <Card key={idx} className="p-3 bg-background/40 border border-border/50 flex flex-col h-full">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="font-mono text-primary font-medium text-lg">{detail.symbol}</div>
+                                {detail.score !== undefined && detail.threshold !== undefined && (
+                                  <Badge variant="secondary" className="font-mono text-xs">
+                                    {detail.score.toFixed(1)} / {detail.threshold.toFixed(1)}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground mb-3 flex-1">{detail.reason}</div>
+                              {/* Reuse TargetIntelScorecard for consistent visualization */}
+                              {detail.all_factors && detail.all_factors.length > 0 ? (
+                                <div className="mt-auto pt-2 border-t border-border/30">
+                                  <TargetIntelScorecard breakdown={transformToBreakdown(detail)} compact={true} />
+                                </div>
+                              ) : (
+                                /* Fallback for non-score reasons (like No Data or Errors) */
+                                <div className="text-xs text-muted-foreground italic pl-2 border-l-2 border-border mt-auto pt-2">
+                                  Analysis unavailable
+                                </div>
                               )}
-                            </div>
-                            <div className="text-xs text-muted-foreground mb-2">{detail.reason}</div>
-                            {/* Reuse TargetIntelScorecard for consistent visualization */}
-                            {detail.all_factors && detail.all_factors.length > 0 ? (
-                              <div className="mt-2 text-xs">
-                                <TargetIntelScorecard breakdown={transformToBreakdown(detail)} />
-                              </div>
-                            ) : (
-                              /* Fallback for non-score reasons (like No Data or Errors) */
-                              <div className="text-xs text-muted-foreground italic pl-2 border-l-2 border-border">
-                                Detailed scoring analysis not available for this rejection type.
-                              </div>
-                            )}
-                          </Card>
-                        ))}
+                            </Card>
+                          ))}
+                        </div>
                         {reasonDetails.length > 12 && (
-                          <div className="text-xs text-muted-foreground text-center">
+                          <div className="text-xs text-muted-foreground text-center mt-6">
                             Showing {reasonDetails.length} rejections
                           </div>
                         )}
-                      </div>
+                      </ScrollArea>
                     </DialogContent>
                   </Dialog>
                 )}

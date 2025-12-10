@@ -353,12 +353,12 @@ export function ScanResults() {
                     <TableRow className="border-border/40 hover:bg-accent/5">
                       <TableHead className="heading-hud text-xs">PAIR</TableHead>
                       <TableHead className="heading-hud text-xs">LIVE PRICE</TableHead>
-                      <TableHead className="heading-hud text-xs">EV</TableHead>
+                      <TableHead className="heading-hud text-xs" title="Expected Value in R-multiples: EV = p(win) × R − (1 − p(win))">EV</TableHead>
                       <TableHead className="heading-hud text-xs">BIAS</TableHead>
-                      <TableHead className="heading-hud text-xs">CONVICTION</TableHead>
+                      <TableHead className="heading-hud text-xs">ENTRY</TableHead>
                       <TableHead className="heading-hud text-xs">REGIME</TableHead>
                       <TableHead className="heading-hud text-xs">CONFLUENCE</TableHead>
-                      <TableHead className="heading-hud text-xs">RISK</TableHead>
+                      <TableHead className="heading-hud text-xs">R:R</TableHead>
                       <TableHead className="heading-hud text-xs">TYPE</TableHead>
                       <TableHead className="heading-hud text-xs">ACTIONS</TableHead>
                     </TableRow>
@@ -399,18 +399,34 @@ export function ScanResults() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {result.conviction_class && result.plan_type ? (
-                            <ConvictionBadge
-                              conviction={result.conviction_class}
-                              planType={result.plan_type}
-                              size="sm"
-                            />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
+                          {(() => {
+                            const planType = result.plan_type;
+                            if (!planType) return <span className="text-xs text-muted-foreground">-</span>;
+
+                            // Map plan_type to friendly labels and colors
+                            const config = {
+                              'SMC': { label: 'SMC', color: 'bg-success/20 text-success border-success/50', title: 'Smart Money Concepts structure used for entry' },
+                              'HYBRID': { label: 'Hybrid', color: 'bg-primary/20 text-primary border-primary/50', title: 'Mix of SMC structure and ATR-based levels' },
+                              'ATR_FALLBACK': { label: 'ATR', color: 'bg-muted text-muted-foreground border-border', title: 'ATR-based entry (no SMC structure found)' },
+                            }[planType] || { label: planType, color: 'bg-muted text-muted-foreground border-border', title: '' };
+
+                            return (
+                              <span
+                                className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold border ${config.color}`}
+                                title={config.title}
+                              >
+                                {config.label}
+                              </span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
-                          <RegimeIndicator regime={symbolRegimes[result.pair] || result.regime || globalRegime} size="sm" compact />
+                          <RegimeIndicator
+                            regime={symbolRegimes[result.pair] || result.regime || globalRegime}
+                            size="sm"
+                            compact
+                            timeframe={scanMetadata?.appliedTimeframes?.[0]}
+                          />
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -424,7 +440,18 @@ export function ScanResults() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="font-mono font-bold">{result.riskScore.toFixed(1)}/10</Badge>
+                          {(() => {
+                            const rr = result.riskReward;
+                            if (typeof rr === 'number' && rr > 0) {
+                              const color = rr >= 3 ? 'text-success' : rr >= 2 ? 'text-primary' : rr >= 1.5 ? 'text-warning' : 'text-muted-foreground';
+                              return (
+                                <Badge variant="outline" className={`font-mono font-bold ${color}`}>
+                                  {rr.toFixed(1)}:1
+                                </Badge>
+                              );
+                            }
+                            return <span className="text-muted-foreground">-</span>;
+                          })()}
                         </TableCell>
                         <TableCell>
                           <Badge

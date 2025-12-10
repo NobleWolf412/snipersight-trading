@@ -21,10 +21,11 @@ from fastapi import APIRouter, HTTPException, Query, Depends, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Literal
 from enum import Enum
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
 import asyncio
 import threading
+from dataclasses import asdict
 
 from backend.services.scanner_service import get_scanner_service
 from backend.shared.config.scanner_modes import get_mode, list_modes
@@ -579,8 +580,12 @@ async def get_signals(
             # Attempt to enrich if attributes exist
             if hasattr(plan, 'confluence_breakdown'):
                 signal['analysis']['confluence_score'] = plan.confluence_breakdown.total_score
-            
-            signals.append(signal)
+                # Expose full breakdown for UI scorecard - explicitly convert dataclass to dict
+                try:
+                    signal['confluence_breakdown'] = asdict(plan.confluence_breakdown)
+                except Exception:
+                    # Fallback if asdict fails (e.g. if it's not a dataclass for some reason)
+                    signal['confluence_breakdown'] = plan.confluence_breakdown.to_dict() if hasattr(plan.confluence_breakdown, 'to_dict') else plan.confluence_breakdown
 
         return {
             "signals": signals,

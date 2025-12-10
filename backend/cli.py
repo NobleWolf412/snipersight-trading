@@ -103,12 +103,42 @@ def backtest(
     typer.echo(f"Profile: {profile} | Symbols: {symbols}")
     typer.echo()
     
-    # TODO: Implement backtest engine
-    # from backend.tests.backtest.engine import BacktestEngine
-    # engine = BacktestEngine(profile)
-    # results = engine.run(start_date, end_date, symbols)
-    
-    typer.echo("⚠️  Backtest engine not yet implemented")
+    try:
+        from backend.engine.backtest_engine import BacktestEngine
+        
+        # Initialize engine
+        typer.echo(f"🔧 Initializing backtest engine...")
+        engine = BacktestEngine(profile=profile)
+        
+        # Run backtest
+        typer.echo(f"📡 Running backtest on {symbols}...")
+        results = engine.run(start, end, symbols)
+        
+        # Display results
+        if results:
+            typer.echo(f"\n✅ {len(results)} signals generated during backtest period:")
+            typer.echo("=" * 60)
+            
+            for i, plan in enumerate(results, 1):
+                typer.echo(f"\n{i}. {plan.symbol} - {plan.direction} ({plan.setup_type})")
+                typer.echo(f"   Confidence: {plan.confidence_score:.1f}%")
+                typer.echo(f"   Entry: ${plan.entry_zone.near_entry:.2f} - ${plan.entry_zone.far_entry:.2f}")
+                typer.echo(f"   Stop: ${plan.stop_loss.level:.2f}")
+                typer.echo(f"   Risk:Reward: {plan.risk_reward:.2f}:1")
+                
+            if output:
+                import json
+                with open(output, 'w') as f:
+                    data = [plan.__dict__ for plan in results]
+                    json.dump(data, f, default=str, indent=2)
+                typer.echo(f"\n💾 Results saved to {output}")
+        else:
+            typer.echo("📭 No signals generated in backtest data")
+            
+    except Exception as e:
+        typer.echo(f"❌ Backtest failed: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 @app.command()

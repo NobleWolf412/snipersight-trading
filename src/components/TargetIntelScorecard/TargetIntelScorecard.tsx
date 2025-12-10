@@ -12,9 +12,10 @@ import {
 
 interface TargetIntelScorecardProps {
     breakdown: ConfluenceBreakdown;
+    compact?: boolean;
 }
 
-export function TargetIntelScorecard({ breakdown }: TargetIntelScorecardProps) {
+export function TargetIntelScorecard({ breakdown, compact = false }: TargetIntelScorecardProps) {
     // Sort factors: red flags (<40) separate from others
     const sortedFactors = [...breakdown.factors].sort((a, b) => b.score - a.score);
     const redFlags = sortedFactors.filter(f => f.score < 40);
@@ -32,6 +33,43 @@ export function TargetIntelScorecard({ breakdown }: TargetIntelScorecardProps) {
         if (score >= 40) return 'bg-yellow-500';
         return 'bg-destructive';
     };
+
+    if (compact) {
+        return (
+            <div className="space-y-3 font-sans">
+                {/* Red Flags Compact */}
+                {redFlags.length > 0 && (
+                    <div className="space-y-1">
+                        {redFlags.map(factor => (
+                            <div key={factor.name} className="flex items-center justify-between text-xs text-destructive">
+                                <span className="font-semibold flex items-center gap-1">
+                                    <AlertTriangle size={10} /> {factor.name}
+                                </span>
+                                <span className="font-mono">{factor.score.toFixed(0)}%</span>
+                            </div>
+                        ))}
+                        <Separator className="my-2" />
+                    </div>
+                )}
+
+                {/* Top Factors Compact (Limit to top 3 if compact to save space, or show all in scroll) */}
+                <div className="space-y-2">
+                    {regularFactors.slice(0, 5).map(factor => (
+                        <div key={factor.name} className="flex items-center justify-between gap-2">
+                            <span className="text-xs text-muted-foreground truncate w-24" title={factor.name}>{factor.name}</span>
+                            <Progress value={factor.score} className="h-1 flex-1" indicatorClassName={getProgressColor(factor.score)} />
+                            <span className="text-[10px] font-mono text-muted-foreground w-6 text-right">{factor.score.toFixed(0)}</span>
+                        </div>
+                    ))}
+                    {regularFactors.length > 5 && (
+                        <div className="text-[10px] text-muted-foreground text-center pt-1">
+                            +{regularFactors.length - 5} more factors
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6 font-sans">

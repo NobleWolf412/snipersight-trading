@@ -11,16 +11,17 @@ interface RegimeIndicatorProps {
   regime?: RegimeMetadata;
   size?: 'sm' | 'md' | 'lg';
   compact?: boolean; // If true, show only the regime label as a badge (for table cells)
+  timeframe?: string; // Optional timeframe to display (e.g., '4h')
 }
 
-export function RegimeIndicator({ regime, size = 'md', compact = false }: RegimeIndicatorProps) {
+export function RegimeIndicator({ regime, size = 'md', compact = false, timeframe }: RegimeIndicatorProps) {
   if (!regime?.global_regime && !regime?.symbol_regime) {
     return null;
   }
 
   const global = regime.global_regime;
   const symbol = regime.symbol_regime;
-  
+
   // UI-friendly regime labels per sniper_ui_theme.md: Trend/Range/Risk-On/Risk-Off
   const labelMap: Record<string, { label: string }> = {
     // Backend sends lowercase with underscores (e.g., 'sideways_elevated')
@@ -63,19 +64,71 @@ export function RegimeIndicator({ regime, size = 'md', compact = false }: Regime
   const friendlyGlobalLabel = labelMap[globalComposite]?.label || globalComposite.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   const guidance = guidanceMap[globalComposite] || '';
 
-  // Compact mode: just show the regime label as a simple badge
-  if (compact && global) {
-    const colorClass = 
-      friendlyGlobalLabel === 'Risk On' ? 'bg-success/20 text-success border-success/50' :
-      friendlyGlobalLabel === 'Risk Off' ? 'bg-destructive/20 text-destructive border-destructive/50' :
-      friendlyGlobalLabel === 'Trend' ? 'bg-primary/20 text-primary border-primary/50' :
-      'bg-warning/20 text-warning border-warning/50'; // Range
-    
-    return (
-      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold border ${colorClass}`}>
-        {friendlyGlobalLabel}
-      </span>
-    );
+  // Compact mode: show a simple, informative badge
+  if (compact) {
+    // If we have global_regime, show the friendly composite label
+    if (global) {
+      const colorClass =
+        friendlyGlobalLabel === 'Risk On' ? 'bg-success/20 text-success border-success/50' :
+          friendlyGlobalLabel === 'Risk Off' ? 'bg-destructive/20 text-destructive border-destructive/50' :
+            friendlyGlobalLabel === 'Trend' ? 'bg-primary/20 text-primary border-primary/50' :
+              'bg-warning/20 text-warning border-warning/50'; // Range
+
+      return (
+        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold border ${colorClass}`}>
+          {friendlyGlobalLabel}
+        </span>
+      );
+    }
+
+    // If only symbol_regime is available, show friendly market state
+    if (symbol) {
+      // Normalize trend - handle both lowercase and capitalized values
+      const trendRaw = (symbol.trend || 'sideways').toLowerCase().replace(/[\s_]+/g, '_');
+      const volRaw = (symbol.volatility || 'normal').toLowerCase().replace(/[\s_]+/g, '_');
+
+      // Derive market state from trend + volatility
+      let marketState: string;
+      let colorClass: string;
+
+      if (trendRaw === 'sideways' || trendRaw === 'neutral' || trendRaw === 'ranging') {
+        // Sideways - check volatility for ranging vs choppy
+        if (volRaw === 'compressed' || volRaw === 'normal' || volRaw === 'low') {
+          marketState = 'Ranging';
+          colorClass = 'bg-muted text-muted-foreground border-border';
+        } else {
+          marketState = 'Choppy';
+          colorClass = 'bg-warning/20 text-warning border-warning/50';
+        }
+      } else if (trendRaw === 'up' || trendRaw === 'strong_up' || trendRaw === 'bullish' || trendRaw === 'uptrend') {
+        marketState = volRaw === 'elevated' || volRaw === 'chaotic' || volRaw === 'high' ? 'Trending ↑↑' : 'Trending ↑';
+        colorClass = 'bg-success/20 text-success border-success/50';
+      } else if (trendRaw === 'down' || trendRaw === 'strong_down' || trendRaw === 'bearish' || trendRaw === 'downtrend') {
+        marketState = volRaw === 'elevated' || volRaw === 'chaotic' || volRaw === 'high' ? 'Trending ↓↓' : 'Trending ↓';
+        colorClass = 'bg-destructive/20 text-destructive border-destructive/50';
+      } else {
+        // Unknown trend format - show original values
+        const trendLabel = (symbol.trend || 'sideways')
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, l => l.toUpperCase());
+        const volLabel = (symbol.volatility || 'normal')
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, l => l.toUpperCase());
+        marketState = `${trendLabel} ${volLabel}`;
+        colorClass = 'bg-muted text-muted-foreground border-border';
+      }
+
+      // Add timeframe if provided
+      const displayText = timeframe ? `${marketState} (${timeframe})` : marketState;
+
+      return (
+        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold border ${colorClass}`}>
+          {displayText}
+        </span>
+      );
+    }
+
+    return null;
   }
 
   return (
@@ -94,7 +147,7 @@ export function RegimeIndicator({ regime, size = 'md', compact = false }: Regime
           )}
         </div>
       )}
-      
+
       {symbol && (
         <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-accent/10 border border-accent/30" title="Symbol-specific regime: local trend and volatility context">
           <TrendIcon trend={symbol.trend} size={size} />
@@ -108,7 +161,7 @@ export function RegimeIndicator({ regime, size = 'md', compact = false }: Regime
 
 function TrendIcon({ trend, size }: { trend: TrendRegime; size: string }) {
   const iconSize = size === 'sm' ? 12 : size === 'lg' ? 18 : 14;
-  
+
   if (trend === 'strong_up' || trend === 'up') {
     return <TrendingUp size={iconSize} className="text-green-500" />;
   }
@@ -120,7 +173,7 @@ function TrendIcon({ trend, size }: { trend: TrendRegime; size: string }) {
 
 function VolatilityIcon({ volatility, size }: { volatility: VolatilityRegime; size: string }) {
   const iconSize = size === 'sm' ? 12 : size === 'lg' ? 18 : 14;
-  
+
   if (volatility === 'chaotic') {
     return <Activity size={iconSize} className="text-red-400 animate-pulse" />;
   }
@@ -136,7 +189,7 @@ function VolatilityIcon({ volatility, size }: { volatility: VolatilityRegime; si
 function RegimeScore({ score, size, accent }: { score: number; size: string; accent?: boolean }) {
   const color = score >= 70 ? 'text-green-500' : score >= 50 ? 'text-yellow-500' : 'text-red-500';
   const accentColor = accent ? 'text-accent' : color;
-  
+
   return (
     <span className={`font-mono font-semibold ${size === 'sm' ? 'text-xs' : 'text-sm'} ${accentColor}`}>
       {score.toFixed(0)}

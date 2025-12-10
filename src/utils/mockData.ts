@@ -9,6 +9,7 @@ export interface ScanResult {
   trendBias: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
   confidenceScore: number;
   riskScore: number;
+  riskReward?: number; // Actual R:R ratio from trade plan
   classification: 'SWING' | 'SCALP';
   entryZone: { low: number; high: number };
   stopLoss: number;
@@ -120,6 +121,7 @@ export function convertSignalToScanResult(signal: any): ScanResult {
     trendBias,
     confidenceScore: confidence,
     riskScore,
+    riskReward: signal.analysis?.risk_reward,
     classification,
     entryZone: { low: signal.entry_far, high: signal.entry_near },
     stopLoss: signal.stop_loss,
