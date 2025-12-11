@@ -192,7 +192,7 @@ MODES: Dict[str, ScannerMode] = {
         min_target_move_pct=0.4,  # TUNED: was 0.5 - allow tighter scalp targets
         smc_preset="defaults",  # Balanced detection for aggressive intraday
         expected_trade_type="intraday",  # HTF structure produces intraday/swing setups
-        allowed_trade_types=("intraday", "scalp"),  # Allow fast movers
+        allowed_trade_types=("swing", "intraday", "scalp"),  # Allow swing since 4h structure produces swing-sized targets
         volume_accel_lookback=4,  # Balanced - faster detection for intraday but not as reactive as scalp
         overrides={"min_rr_ratio": 1.2, "atr_floor": 0.0010, "bias_gate": 0.6, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True},
     ),

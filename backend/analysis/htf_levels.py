@@ -3,25 +3,47 @@ HTF Level Detection Service
 
 Identifies major support/resistance levels on higher timeframes (4H/1D/1W)
 and detects when price approaches these levels for swing trade opportunities.
+Also calculates Fibonacci retracement levels from significant swing ranges.
 """
 
 from dataclasses import dataclass
 from typing import List, Optional, Literal
 from datetime import datetime, timedelta
 import numpy as np
+import logging
+
+from backend.analysis.fibonacci import (
+    FibLevel, calculate_fib_levels, get_fib_proximity_pct, FIB_RATIOS
+)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class HTFLevel:
-    """Represents a significant support/resistance level."""
+    """Represents a significant support/resistance or Fibonacci level."""
     price: float
-    level_type: Literal['support', 'resistance']
+    level_type: Literal['support', 'resistance', 'fib_236', 'fib_382', 'fib_500', 'fib_618', 'fib_786']
     timeframe: str
     strength: float  # 0-100 score based on touches, age, volume
     touches: int
     first_seen: datetime
     last_touch: datetime
     proximity_pct: float  # Distance from current price (%)
+    fib_ratio: Optional[float] = None  # Fib ratio (0.382, 0.618, etc.) if this is a Fib level
+    trend_direction: Optional[Literal['bullish', 'bearish']] = None  # For Fib levels
+    
+    @property
+    def is_fib_level(self) -> bool:
+        """Check if this is a Fibonacci level."""
+        return self.level_type.startswith('fib_')
+    
+    @property
+    def display_level_type(self) -> str:
+        """Human-readable level type."""
+        if self.is_fib_level and self.fib_ratio:
+            return f"Fib {self.fib_ratio * 100:.1f}%"
+        return self.level_type.capitalize()
 
 
 @dataclass
@@ -135,6 +157,135 @@ class HTFLevelDetector:
         levels.sort(key=lambda x: x.strength, reverse=True)
         return levels
     
+    def detect_fib_levels(
+        self,
+        symbol: str,
+        ohlcv_data: dict,  # {timeframe: DataFrame}
+        current_price: float
+    ) -> List[HTFLevel]:
+        """
+        Calculate Fibonacci retracement levels from HTF swing ranges.
+        
+        Args:
+            symbol: Trading pair
+            ohlcv_data: Dict of timeframe -> OHLCV DataFrame
+            current_price: Current market price
+            
+        Returns:
+            List of Fib levels as HTFLevel objects
+        """
+        fib_levels = []
+        
+        # Analyze 4H, 1D, 1W timeframes for swing ranges
+        for tf in ['4h', '1d', '1w']:
+            if tf not in ohlcv_data:
+                continue
+            
+            df = ohlcv_data[tf]
+            if df.empty or len(df) < 20:
+                continue
+            
+            try:
+                # Find major swing range (last significant high/low)
+                swing_info = self._find_major_swing_range(df, lookback=50)
+                if not swing_info:
+                    continue
+                
+                swing_high = swing_info['high']
+                swing_low = swing_info['low']
+                trend_direction = swing_info['trend']
+                swing_timestamp = swing_info['timestamp']
+                
+                logger.debug(f"{symbol} {tf}: Swing range {swing_low:.4f} - {swing_high:.4f} ({trend_direction})")
+                
+                # Calculate Fib retracement levels
+                fib_results = calculate_fib_levels(
+                    swing_high=swing_high,
+                    swing_low=swing_low,
+                    trend_direction=trend_direction,
+                    timeframe=tf
+                )
+                
+                # Convert to HTFLevel format
+                for fib in fib_results:
+                    proximity = get_fib_proximity_pct(current_price, fib)
+                    
+                    # Score Fib level - golden ratios get higher strength
+                    base_strength = 60.0  # Base score for Fib levels
+                    if fib.is_golden:
+                        base_strength += 20.0  # Golden ratios are more significant
+                    if tf == '1w':
+                        base_strength += 10.0
+                    elif tf == '1d':
+                        base_strength += 5.0
+                    
+                    fib_levels.append(HTFLevel(
+                        price=fib.price,
+                        level_type=fib.ratio_name,  # 'fib_382', 'fib_618', etc.
+                        timeframe=tf,
+                        strength=base_strength,
+                        touches=0,  # Fib levels don't have touches
+                        first_seen=swing_timestamp,
+                        last_touch=datetime.now(),
+                        proximity_pct=proximity,
+                        fib_ratio=fib.ratio,
+                        trend_direction=trend_direction
+                    ))
+                    
+            except Exception as e:
+                logger.warning(f"Fib detection failed for {symbol} {tf}: {e}")
+                continue
+        
+        # Sort by proximity (closest first)
+        fib_levels.sort(key=lambda x: x.proximity_pct)
+        return fib_levels
+    
+    def _find_major_swing_range(self, df, lookback: int = 50) -> Optional[dict]:
+        """
+        Find the most significant swing range in the lookback period.
+        
+        Returns:
+            dict with 'high', 'low', 'trend', 'timestamp' or None
+        """
+        if len(df) < lookback:
+            lookback = len(df)
+        
+        recent = df.tail(lookback)
+        
+        # Find highest high and lowest low in the period
+        high_idx = recent['high'].idxmax()
+        low_idx = recent['low'].idxmin()
+        
+        swing_high = recent.loc[high_idx, 'high']
+        swing_low = recent.loc[low_idx, 'low']
+        
+        # Get timestamp for the swing
+        try:
+            swing_timestamp = recent.loc[high_idx, 'timestamp']
+        except:
+            swing_timestamp = datetime.now()
+        
+        # Determine trend direction based on sequence
+        # If high came after low, price moved UP (bullish swing)
+        # If low came after high, price moved DOWN (bearish swing)
+        if high_idx > low_idx:
+            trend = 'bullish'  # Price moved up
+        else:
+            trend = 'bearish'  # Price moved down
+        
+        # Validate swing range is significant (at least 3% move)
+        range_pct = (swing_high - swing_low) / swing_low * 100
+        if range_pct < 3.0:
+            return None
+        
+        return {
+            'high': swing_high,
+            'low': swing_low,
+            'trend': trend,
+            'timestamp': swing_timestamp,
+            'range_pct': range_pct
+        }
+    
     def find_opportunities(
         self,
         symbol: str,
@@ -168,7 +319,34 @@ class HTFLevelDetector:
             expected_move = 0.0
             
             # 1. Level type + price position
-            if level.level_type == 'support' and current_price > level.price:
+            # Handle Fib levels differently
+            if level.is_fib_level:
+                # Fib levels: check if price is in retracement zone
+                fib_pct = level.fib_ratio * 100 if level.fib_ratio else 50
+                
+                if level.trend_direction == 'bullish':
+                    # Bullish trend = price retracing DOWN toward Fib = potential BUY
+                    if current_price > level.price:
+                        confluence.append(f"Price above {level.timeframe} Fib {fib_pct:.1f}% at ${level.price:.5f}")
+                        expected_move = 2.5 if level.fib_ratio in [0.618, 0.786] else 2.0
+                    elif current_price <= level.price:
+                        confluence.append(f"Price AT {level.timeframe} Fib {fib_pct:.1f}% support at ${level.price:.5f}")
+                        expected_move = 3.0 if level.fib_ratio in [0.618, 0.786] else 2.5
+                else:
+                    # Bearish trend = price retracing UP toward Fib = potential SELL
+                    if current_price < level.price:
+                        confluence.append(f"Price below {level.timeframe} Fib {fib_pct:.1f}% at ${level.price:.5f}")
+                        expected_move = 2.5 if level.fib_ratio in [0.618, 0.786] else 2.0
+                    elif current_price >= level.price:
+                        confluence.append(f"Price AT {level.timeframe} Fib {fib_pct:.1f}% resistance at ${level.price:.5f}")
+                        expected_move = 3.0 if level.fib_ratio in [0.618, 0.786] else 2.5
+                
+                # Boost for golden ratios
+                if level.fib_ratio in [0.382, 0.618]:
+                    confluence.append(f"Golden ratio ({fib_pct:.1f}%) - high probability zone")
+                    expected_move += 0.5
+                    
+            elif level.level_type == 'support' and current_price > level.price:
                 confluence.append(f"Price approaching {level.timeframe} support at ${level.price:.5f}")
                 expected_move = 2.0  # Base 2% bounce expectation
             elif level.level_type == 'resistance' and current_price < level.price:

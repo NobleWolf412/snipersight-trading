@@ -222,24 +222,24 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                       <ScrollArea className="flex-1 p-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                           {reasonDetails.map((detail, idx) => (
-                            <Card key={idx} className="p-3 bg-background/40 border border-border/50 flex flex-col h-full">
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="font-mono text-primary font-medium text-lg">{detail.symbol}</div>
+                            <Card key={idx} className="p-4 bg-background/40 border border-border/50 flex flex-col h-full min-w-0">
+                              <div className="flex items-center justify-between mb-3 gap-2">
+                                <div className="font-mono text-primary font-semibold text-base truncate">{detail.symbol}</div>
                                 {detail.score !== undefined && detail.threshold !== undefined && (
-                                  <Badge variant="secondary" className="font-mono text-xs">
+                                  <Badge variant="secondary" className="font-mono text-xs shrink-0">
                                     {detail.score.toFixed(1)} / {detail.threshold.toFixed(1)}
                                   </Badge>
                                 )}
                               </div>
-                              <div className="text-xs text-muted-foreground mb-3 flex-1">{detail.reason}</div>
+                              <p className="text-sm text-muted-foreground mb-4 leading-relaxed break-words">{detail.reason}</p>
                               {/* Reuse TargetIntelScorecard for consistent visualization */}
                               {detail.all_factors && detail.all_factors.length > 0 ? (
-                                <div className="mt-auto pt-2 border-t border-border/30">
+                                <div className="mt-auto pt-3 border-t border-border/30">
                                   <TargetIntelScorecard breakdown={transformToBreakdown(detail)} compact={true} />
                                 </div>
                               ) : (
                                 /* Fallback for non-score reasons (like No Data or Errors) */
-                                <div className="text-xs text-muted-foreground italic pl-2 border-l-2 border-border mt-auto pt-2">
+                                <div className="text-sm text-muted-foreground/60 italic pl-3 border-l-2 border-border/50 mt-auto pt-3">
                                   Analysis unavailable
                                 </div>
                               )}
@@ -292,34 +292,34 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                           )}
                         </div>
                       </DialogTrigger>
-                      <DialogContent className="w-full max-w-3xl max-h-[80vh] overflow-y-auto overflow-x-hidden">
-                        <DialogHeader>
-                          <DialogTitle className="flex items-center gap-2">
-                            <TrendDown className="w-5 h-5 text-yellow-400" />
+                      <DialogContent className="w-full max-w-5xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
+                        <DialogHeader className="pb-4 border-b border-border/30">
+                          <DialogTitle className="flex items-center gap-3 text-xl">
+                            <TrendDown className="w-6 h-6 text-yellow-400" />
                             Rejection Analysis: {detail.symbol}
                           </DialogTitle>
-                          <DialogDescription className="text-sm text-muted-foreground">
+                          <DialogDescription className="text-sm text-muted-foreground mt-1">
                             Detailed confluence factor breakdown and rejection rationale for {detail.symbol}
                           </DialogDescription>
                         </DialogHeader>
 
-                        <div className="space-y-6 pt-2">
+                        <div className="space-y-6 pt-6">
                           {/* Summary Card */}
-                          <Card className="p-4 bg-card/50">
-                            <div className="grid grid-cols-2 gap-4">
+                          <Card className="p-5 bg-card/50 border border-border/50">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <div>
-                                <div className="text-xs text-muted-foreground mb-1">Rejection Reason</div>
-                                <div className="text-sm font-medium">{detail.reason}</div>
+                                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Rejection Reason</div>
+                                <p className="text-sm font-medium leading-relaxed break-words">{detail.reason}</p>
                               </div>
                               {detail.score !== undefined && detail.threshold !== undefined && (
                                 <div>
-                                  <div className="text-xs text-muted-foreground mb-1">Confluence Score</div>
-                                  <div className="text-lg font-mono">
+                                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Confluence Score</div>
+                                  <div className="text-2xl font-mono font-semibold">
                                     <span className="text-yellow-400">{detail.score.toFixed(1)}%</span>
                                     <span className="text-muted-foreground mx-2">/</span>
                                     <span className="text-foreground">{detail.threshold.toFixed(1)}%</span>
-                                    <span className="text-xs ml-2 text-red-400">
-                                      ({(detail.score - detail.threshold).toFixed(1)}%)
+                                    <span className="text-sm ml-3 text-red-400 font-normal">
+                                      ({(detail.score - detail.threshold).toFixed(1)}% below threshold)
                                     </span>
                                   </div>
                                 </div>

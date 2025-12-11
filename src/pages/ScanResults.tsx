@@ -18,7 +18,7 @@ import { RejectionSummary } from '@/components/RejectionSummary';
 import { RegimeIndicator } from '@/components/RegimeIndicator';
 import { ConvictionBadge } from '@/components/ConvictionBadge';
 import { api } from '@/utils/api';
-import type { RegimeMetadata } from '@/types/regime';
+import type { RegimeMetadata, TrendRegime, VolatilityRegime, LiquidityRegime } from '@/types/regime';
 
 export function ScanResults() {
   const navigate = useNavigate();
@@ -91,9 +91,9 @@ export function ScanResults() {
         global_regime: {
           composite: data.composite,
           score: data.score,
-          trend: data.dimensions.trend as RegimeMetadata['global_regime']['trend'],
-          volatility: data.dimensions.volatility as RegimeMetadata['global_regime']['volatility'],
-          liquidity: data.dimensions.liquidity as RegimeMetadata['global_regime']['liquidity'],
+          trend: data.dimensions?.trend as TrendRegime,
+          volatility: data.dimensions?.volatility as VolatilityRegime,
+          liquidity: data.dimensions?.liquidity as LiquidityRegime,
         }
       };
       setGlobalRegime(meta);
@@ -114,9 +114,9 @@ export function ScanResults() {
         if (!data) return;
         updates[pair] = {
           symbol_regime: {
-            trend: data.trend as RegimeMetadata['symbol_regime']['trend'],
-            volatility: data.volatility as RegimeMetadata['symbol_regime']['volatility'],
-            score: data.score,
+            trend: data?.trend as TrendRegime,
+            volatility: data?.volatility as VolatilityRegime,
+            score: data?.score ?? 0,
           }
         };
       }));
@@ -471,15 +471,6 @@ export function ScanResults() {
                             >
                               <Eye size={16} weight="bold" />
                               CHART
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleViewDetails(result)}
-                              className="hover:bg-primary/20 hover:border-primary transition-all"
-                            >
-                              <FileText size={16} weight="bold" />
-                              DETAILS
                             </Button>
                           </div>
                         </TableCell>

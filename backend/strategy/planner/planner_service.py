@@ -743,22 +743,7 @@ def generate_trade_plan(
     if allowed_types and trade_setup not in allowed_types:
         logger.info("❌ %s: Plan rejected - Type '%s' not allowed in %s mode (allowed: %s)", 
                    symbol, trade_setup, config.profile, allowed_types)
-        return TradePlan(
-            symbol=symbol,
-            direction=direction,
-            timeframe=primary_tf,
-            entry_zone=entry_zone,
-            stop_loss=stop_loss,
-            targets=targets,
-            risk_reward_ratio=risk_reward,
-            status="REJECTED",
-            confidence_score=confluence_breakdown.total_score,
-            metadata={
-                "rejection_reason": f"Type '{trade_setup}' mismatch for mode (allowed: {allowed_types})",
-                "derived_trade_type": trade_setup,
-                "allowed_types": allowed_types
-            }
-        )
+        raise ValueError(f"Trade type '{trade_setup}' not allowed in {config.profile} mode (allowed: {allowed_types})")
 
     mode_overrides = getattr(config, 'overrides', None) or {}
     min_rr_override = mode_overrides.get('min_rr_ratio')

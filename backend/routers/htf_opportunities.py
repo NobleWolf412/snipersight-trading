@@ -40,6 +40,8 @@ class HTFLevelResponse(BaseModel):
     strength: float
     touches: int
     proximity_pct: float
+    fib_ratio: Optional[float] = None
+    trend_direction: Optional[str] = None
 
 
 class OpportunityResponse(BaseModel):
@@ -106,16 +108,26 @@ async def get_htf_opportunities(
                     logger.warning(f"No price available for {symbol}, skipping")
                     continue
                 
-                # Detect levels
-                levels = detector.detect_levels(symbol, ohlcv_data, current_price)
-                if not levels:
+                # Detect levels (support/resistance)
+                sr_levels = detector.detect_levels(symbol, ohlcv_data, current_price)
+                
+                # Detect Fibonacci retracement levels
+                fib_levels = detector.detect_fib_levels(symbol, ohlcv_data, current_price)
+                
+                # Merge all levels for opportunity detection
+                all_levels = sr_levels + fib_levels
+                
+                if not all_levels:
+                    logger.debug(f"{symbol}: No levels detected (S/R: {len(sr_levels)}, Fib: {len(fib_levels)})")
                     continue
+                
+                logger.info(f"{symbol}: Detected {len(sr_levels)} S/R levels + {len(fib_levels)} Fib levels")
                 
                 # Find opportunities (using empty SMC context for now - could integrate with orchestrator)
                 smc_context = {'order_blocks': [], 'fvgs': [], 'bos_choch': None}
                 opportunities = detector.find_opportunities(
                     symbol=symbol,
-                    levels=levels,
+                    levels=all_levels,
                     current_price=current_price,
                     smc_context=smc_context,
                     regime=None
@@ -133,6 +145,8 @@ async def get_htf_opportunities(
                                 strength=opp.level.strength,
                                 touches=opp.level.touches,
                                 proximity_pct=opp.level.proximity_pct,
+                                fib_ratio=getattr(opp.level, 'fib_ratio', None),
+                                trend_direction=getattr(opp.level, 'trend_direction', None),
                             ),
                             current_price=opp.current_price,
                             recommended_mode=opp.recommended_mode,
