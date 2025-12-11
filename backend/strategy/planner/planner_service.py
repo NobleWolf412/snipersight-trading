@@ -48,6 +48,77 @@ from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.bot.telemetry.events import create_signal_rejected_event, create_alt_stop_suggested_event
 from backend.strategy.smc.reversal_detector import get_reversal_rationale_for_plan
 
+# Fib alignment for confluence boost (HTF only)
+from backend.analysis.fibonacci import calculate_fib_levels, FibLevel
+
+
+def _check_htf_fib_alignment(
+    entry_price: float,
+    ohlcv_data: dict,
+    tolerance_pct: float = 1.0
+) -> tuple[bool, Optional[str], float]:
+    """
+    Check if entry price aligns with HTF Fibonacci levels.
+    
+    Only checks 4H and 1D timeframes (LTF Fib is noise).
+    Only checks 50% and 61.8% levels (statistically meaningful).
+    
+    Args:
+        entry_price: The calculated entry price from SMC structure
+        ohlcv_data: Dict of {timeframe: DataFrame} with candle data
+        tolerance_pct: How close entry must be to Fib (default 1%)
+        
+    Returns:
+        Tuple of (is_aligned, alignment_note, boost_value)
+    """
+    if not ohlcv_data:
+        return False, None, 0.0
+    
+    htf_timeframes = ['4h', '1d']
+    
+    for tf in htf_timeframes:
+        df = ohlcv_data.get(tf)
+        if df is None or len(df) < 30:
+            continue
+            
+        try:
+            # Find major swing range in last 50 candles
+            recent = df.tail(50)
+            swing_high = recent['high'].max()
+            swing_low = recent['low'].min()
+            
+            if swing_high <= swing_low:
+                continue
+            
+            # Determine trend direction based on price position
+            current_price = df.iloc[-1]['close']
+            mid_range = (swing_high + swing_low) / 2
+            trend_direction = 'bullish' if current_price > mid_range else 'bearish'
+            
+            # Calculate Fib levels
+            fib_levels = calculate_fib_levels(
+                swing_high=swing_high,
+                swing_low=swing_low,
+                trend_direction=trend_direction,
+                timeframe=tf
+            )
+            
+            # Check if entry aligns with any Fib level
+            for fib in fib_levels:
+                distance_pct = abs(entry_price - fib.price) / fib.price * 100
+                
+                if distance_pct <= tolerance_pct:
+                    # Entry aligns with Fib!
+                    boost = 7.0 if fib.ratio == 0.618 else 5.0  # 61.8% gets higher boost
+                    note = f"Entry aligns with {tf.upper()} Fib {fib.display_ratio} (monitored level)"
+                    return True, note, boost
+                    
+        except Exception as e:
+            logger.debug(f"Fib alignment check failed for {tf}: {e}")
+            continue
+    
+    return False, None, 0.0
+
 
 def _adjust_stop_for_leverage(
     stop_level: float,
@@ -511,6 +582,24 @@ def generate_trade_plan(
     )
     plan_composition['entry_from_structure'] = entry_used_structure
     
+    # --- HTF Fib Alignment Check ---
+    # If entry aligns with 4H/1D Fib levels (50% or 61.8%), add confluence boost
+    # This is a confirmation signal, not a primary edge
+    htf_fib_boost = 0.0
+    htf_fib_note = None
+    if multi_tf_data and hasattr(multi_tf_data, 'ohlcv_by_timeframe'):
+        ohlcv_data = multi_tf_data.ohlcv_by_timeframe
+        avg_entry = (entry_zone.near_entry + entry_zone.far_entry) / 2
+        fib_aligned, fib_note, fib_boost = _check_htf_fib_alignment(
+            entry_price=avg_entry,
+            ohlcv_data=ohlcv_data,
+            tolerance_pct=1.0  # 1% tolerance
+        )
+        if fib_aligned:
+            htf_fib_boost = fib_boost
+            htf_fib_note = fib_note
+            logger.info(f"Fib alignment detected for {symbol}: {fib_note} (+{fib_boost} confluence)")
+    
     # --- Price Alignment Sanity Check ---
     # Fail fast if structure and current price are massively mismatched
     mid_entry = (entry_zone.near_entry + entry_zone.far_entry) / 2
@@ -922,6 +1011,9 @@ def generate_trade_plan(
         ))
         raise ValueError("Price drift invalidates entry zone")
 
+    # Apply HTF Fib alignment boost to confidence (capped at 100)
+    final_confidence = min(100.0, confluence_breakdown.total_score + htf_fib_boost)
+    
     trade_plan = TradePlan(
         symbol=symbol,
         direction=trade_direction,
@@ -930,7 +1022,7 @@ def generate_trade_plan(
         stop_loss=stop_loss,
         targets=targets,
         risk_reward=risk_reward,
-        confidence_score=confluence_breakdown.total_score,
+        confidence_score=final_confidence,
         confluence_breakdown=confluence_breakdown,
         rationale=rationale,
         plan_type=plan_type,
@@ -962,6 +1054,11 @@ def generate_trade_plan(
                 "used_stop_buffer_atr": used_stop_buffer_atr
             },
             "alt_stop": alt_stop_meta,
+            "htf_fib_alignment": {
+                "aligned": htf_fib_boost > 0,
+                "note": htf_fib_note,
+                "boost": htf_fib_boost
+            } if htf_fib_boost > 0 else None,
             "tf_responsibility": {
                 "bias_tfs": list(getattr(config, 'bias_timeframes', config.timeframes)),  # Use bias_timeframes or fallback
                 "entry_tfs_allowed": list(getattr(config, 'entry_timeframes', [])),  # Entry TFs for precise triggers

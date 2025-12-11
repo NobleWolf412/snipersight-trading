@@ -210,14 +210,14 @@ class HTFLevelDetector:
                 for fib in fib_results:
                     proximity = get_fib_proximity_pct(current_price, fib)
                     
-                    # Score Fib level - golden ratios get higher strength
-                    base_strength = 60.0  # Base score for Fib levels
-                    if fib.is_golden:
-                        base_strength += 20.0  # Golden ratios are more significant
+                    # Lower strength than S/R - Fib is crowd psychology, not predictive
+                    base_strength = 50.0  # Lower than S/R (60-75)
+                    if fib.is_monitored:
+                        base_strength += 5.0  # 61.8% is most watched
                     if tf == '1w':
-                        base_strength += 10.0
-                    elif tf == '1d':
                         base_strength += 5.0
+                    elif tf == '1d':
+                        base_strength += 3.0
                     
                     fib_levels.append(HTFLevel(
                         price=fib.price,
@@ -405,6 +405,10 @@ class HTFLevelDetector:
             elif len(confluence) >= 2:
                 recommended_mode = 'recon'  # Moderate setup
                 rationale = f"{level.timeframe.upper()} level - balanced approach recommended"
+            elif level.is_fib_level and len(confluence) >= 1:
+                # Fib levels are lower priority - generate opportunity but with lower confidence
+                recommended_mode = 'recon'
+                rationale = f"{level.timeframe.upper()} Fib level - monitored zone (crowd psychology)"
             else:
                 continue  # Not enough confluence
             

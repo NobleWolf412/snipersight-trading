@@ -46,7 +46,7 @@ def test_fib_calculation():
     print("\nFibonacci Retracement Levels (Bullish - Buy Zones):")
     print("-" * 50)
     for fib in fibs:
-        golden = "⭐ GOLDEN" if fib.is_golden else ""
+        golden = "👁 MONITORED" if fib.is_monitored else ""
         print(f"  {fib.display_ratio:>7} = ${fib.price:,.2f}  {golden}")
     
     # Expected values:
@@ -107,7 +107,7 @@ def test_bearish_fib():
     print("\nFibonacci Retracement Levels (Bearish - Sell Zones):")
     print("-" * 50)
     for fib in fibs:
-        golden = "⭐ GOLDEN" if fib.is_golden else ""
+        golden = "👁 MONITORED" if fib.is_monitored else ""
         print(f"  {fib.display_ratio:>7} = ${fib.price:,.2f}  {golden}")
     
     # Expected values (retracement UP from low):

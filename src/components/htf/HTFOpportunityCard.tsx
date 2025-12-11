@@ -23,9 +23,9 @@ interface Props {
   onViewChart?: (symbol: string) => void;
 }
 
-// Fib level detection and display helpers
-const FIB_LEVEL_TYPES = ['fib_236', 'fib_382', 'fib_500', 'fib_618', 'fib_786'] as const;
-const GOLDEN_RATIOS = ['fib_382', 'fib_618'];
+// Fib level detection - only statistically meaningful levels
+const FIB_LEVEL_TYPES = ['fib_500', 'fib_618'] as const;
+const MONITORED_RATIOS = ['fib_618']; // Most watched = most self-fulfilling
 
 function isFibLevel(levelType: string): boolean {
   return levelType.startsWith('fib_');
@@ -33,22 +33,19 @@ function isFibLevel(levelType: string): boolean {
 
 function getFibDisplayName(levelType: string): string {
   const mapping: Record<string, string> = {
-    'fib_236': '23.6%',
-    'fib_382': '38.2%',
-    'fib_500': '50.0%',
+    'fib_500': '50%',
     'fib_618': '61.8%',
-    'fib_786': '78.6%',
   };
   return mapping[levelType] || levelType.toUpperCase();
 }
 
-function isGoldenRatio(levelType: string): boolean {
-  return GOLDEN_RATIOS.includes(levelType);
+function isMonitoredLevel(levelType: string): boolean {
+  return MONITORED_RATIOS.includes(levelType);
 }
 
 export function HTFOpportunityCard({ opp, onSwitchMode, onViewChart }: Props) {
   const isFib = isFibLevel(opp.level.level_type);
-  const isGolden = isGoldenRatio(opp.level.level_type);
+  const isMonitored = isMonitoredLevel(opp.level.level_type);
 
   const severityCls = opp.confidence >= 85
     ? 'border-red-500/60 bg-red-500/10'
@@ -65,11 +62,11 @@ export function HTFOpportunityCard({ opp, onSwitchMode, onViewChart }: Props) {
           </Badge>
           {isFib ? (
             <Badge
-              variant={isGolden ? "default" : "secondary"}
-              className={`text-xs font-mono ${isGolden ? 'bg-amber-500/80 hover:bg-amber-500 text-black' : 'bg-purple-500/30 text-purple-300'}`}
-              title={isGolden ? 'Golden Ratio - High probability zone' : 'Fibonacci retracement level'}
+              variant={isMonitored ? "default" : "secondary"}
+              className={`text-xs font-mono ${isMonitored ? 'bg-blue-500/80 hover:bg-blue-500 text-white' : 'bg-purple-500/30 text-purple-300'}`}
+              title={isMonitored ? 'Most-watched level - algos & traders monitor this zone' : 'Monitored retracement level'}
             >
-              {isGolden && '⭐ '}{opp.level.timeframe.toUpperCase()} FIB {getFibDisplayName(opp.level.level_type)}
+              👁 {opp.level.timeframe.toUpperCase()} FIB {getFibDisplayName(opp.level.level_type)}
             </Badge>
           ) : (
             <span className="text-xs text-muted-foreground">

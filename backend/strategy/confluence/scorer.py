@@ -28,6 +28,7 @@ from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.scanner_modes import MACDModeConfig, get_macd_config
 from backend.strategy.smc.volume_profile import VolumeProfile, calculate_volume_confluence_factor
 from backend.analysis.premium_discount import detect_premium_discount
+from backend.analysis.pullback_detector import detect_pullback_setup, PullbackSetup
 
 # Conditional imports for type hints
 if TYPE_CHECKING:
@@ -1110,15 +1111,55 @@ def calculate_confluence_score(
                 ))
                 logger.debug("📊 HTF Structure BONUS +%.1f: %s", htf_structure_bonus, htf_structure_analysis['reason'])
             else:
-                # Counter-trend → penalty (but not blocking)
-                factor_score = max(0.0, 50.0 + htf_structure_bonus * 5.0)
-                factors.append(ConfluenceFactor(
-                    name="HTF Structure Bias",
-                    score=factor_score,
-                    weight=0.08,
-                    rationale=f"[{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}"
-                ))
-                logger.debug("⚠️ HTF Structure PENALTY %.1f: %s", htf_structure_bonus, htf_structure_analysis['reason'])
+                # Counter-trend → check if pullback conditions override the penalty
+                pullback_override = False
+                pullback_bonus = 0.0
+                pullback_rationale = ""
+                
+                # Try to detect pullback setup using 4H data
+                try:
+                    # Get 4H dataframe from indicators
+                    ind_4h = indicators.by_timeframe.get('4h')
+                    df_4h = getattr(ind_4h, 'dataframe', None) if ind_4h else None
+                    
+                    if df_4h is not None and len(df_4h) > 30:
+                        # Detect pullback setup
+                        pullback_dir = "SHORT" if direction.upper() == "BEARISH" or direction.upper() == "SHORT" else "LONG"
+                        pullback_result = detect_pullback_setup(
+                            df_4h=df_4h,
+                            smc_snapshot=smc_snapshot,
+                            requested_direction=pullback_dir,
+                            extension_threshold=3.0  # 3% from EMA
+                        )
+                        
+                        if pullback_result.override_counter_trend:
+                            pullback_override = True
+                            pullback_bonus = 8.0  # Convert penalty to +8 bonus
+                            pullback_rationale = f"PULLBACK OVERRIDE: {pullback_result.rationale}"
+                            logger.info(f"🔄 Pullback detected, overriding counter-trend penalty: {pullback_rationale}")
+                except Exception as e:
+                    logger.debug(f"Pullback detection failed: {e}")
+                
+                if pullback_override:
+                    # Pullback conditions met → give bonus instead of penalty!
+                    factor_score = min(100.0, 50.0 + pullback_bonus * 3.33)
+                    factors.append(ConfluenceFactor(
+                        name="HTF Pullback Setup",
+                        score=factor_score,
+                        weight=0.12,  # Same weight as aligned HTF
+                        rationale=f"[+{pullback_bonus:.1f}] {pullback_rationale}"
+                    ))
+                    logger.debug("🔄 HTF Pullback BONUS +%.1f: %s", pullback_bonus, pullback_rationale)
+                else:
+                    # No pullback override → apply counter-trend penalty as usual
+                    factor_score = max(0.0, 50.0 + htf_structure_bonus * 5.0)
+                    factors.append(ConfluenceFactor(
+                        name="HTF Structure Bias",
+                        score=factor_score,
+                        weight=0.08,
+                        rationale=f"[{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}"
+                    ))
+                    logger.debug("⚠️ HTF Structure PENALTY %.1f: %s", htf_structure_bonus, htf_structure_analysis['reason'])
     
     # ===========================================================================
     # === CRITICAL HTF GATES (New: filters low-quality signals) ===
