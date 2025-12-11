@@ -101,6 +101,16 @@ class SMCDetectionService:
                 continue
             
             try:
+                # Debug: Check if DataFrame has DatetimeIndex (required for OB detection)
+                if not isinstance(df.index, pd.DatetimeIndex):
+                    logger.warning("⚠️ SMC %s: DataFrame has %s, not DatetimeIndex! Fixing...", 
+                                 timeframe, type(df.index).__name__)
+                    # Auto-fix: Set timestamp column as index if available
+                    if 'timestamp' in df.columns:
+                        df = df.set_index('timestamp')
+                        if not isinstance(df.index, pd.DatetimeIndex):
+                            df.index = pd.to_datetime(df.index)
+                
                 # Detect core SMC patterns
                 patterns = self._detect_timeframe_patterns(timeframe, df, current_price)
                 
