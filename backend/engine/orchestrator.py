@@ -43,6 +43,8 @@ from backend.risk.risk_manager import RiskManager
 from backend.risk.position_sizer import PositionSizer
 from backend.analysis.macro_context import MacroContext, compute_macro_score
 
+from backend.engine.cooldown_manager import CooldownManager
+
 # Domain Services
 from backend.services.indicator_service import configure_indicator_service
 from backend.services.smc_service import configure_smc_service
@@ -132,9 +134,8 @@ class Orchestrator:
             'risk_rejections': []
         }
         
-        # Entry cooldown tracking - prevents re-entry after recent stop-outs
-        # Structure: {symbol: {'timestamp': datetime, 'price': float, 'direction': str}}
-        self._symbol_cooldowns: Dict[str, Dict[str, Any]] = {}
+        # Entry cooldown tracking - persistent manager
+        self.cooldown_manager = CooldownManager()
         self._cooldown_hours = 24  # Hours to wait after a stop-out before re-entering same direction
         
         # Initialize components
@@ -240,10 +241,12 @@ class Orchestrator:
         prefetched_data: Dict[str, MultiTimeframeData] = {}
         fetch_failures: List[str] = []
         
-        # Ensure BTC is included for regime/macro context even if not in scan list
+        # Ensure Regime Assets (BTC, ETH, SOL) are included for macro context
+        regime_assets = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']
         symbols_to_fetch = list(symbols)
-        if 'BTC/USDT' not in symbols_to_fetch:
-            symbols_to_fetch.append('BTC/USDT')
+        for asset in regime_assets:
+            if asset not in symbols_to_fetch:
+                symbols_to_fetch.append(asset)
         
         # Use parallel_fetch for efficiency (staggered to avoid rate limits)
         try:
@@ -414,8 +417,184 @@ class Orchestrator:
             "rejected": rejected_count,
             "duration_sec": round(duration, 2)
         })
+        
+        # Sort by Confidence (descending) then EV (descending)
+        # Prioritize high-confidence, high-value setups
+        signals.sort(key=lambda s: (
+            s.confidence_score, 
+            (s.metadata.get('ev') or 0.0)
+        ), reverse=True)
+        
+        # Assign rank metadata
+        for i, s in enumerate(signals):
+            s.metadata['scan_rank'] = i + 1
+            
         return signals, rejection_summary
     
+    def _extract_htf_context(
+        self,
+        multi_tf_data: MultiTimeframeData,
+        smc_snapshot: SMCSnapshot,
+        current_price: float,
+        indicators: Optional[IndicatorSet] = None
+    ) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        """
+        Extract HTF context for bullish and bearish directions.
+        
+        Calculates proximity to relevant HTF structures (Order Blocks, FVGs, Swing Points)
+        to populate the HTF context required by the confluence scorer.
+        
+        Args:
+            multi_tf_data: Multi-timeframe price data
+            smc_snapshot: Detected SMC patterns
+            current_price: Current market price
+            indicators: Technical indicators (for ATR)
+            
+        Returns:
+            Tuple of (htf_ctx_long, htf_ctx_short)
+            Each context dict contains:
+            - within_atr: Distance in ATR units
+            - within_pct: Distance in percentage
+            - timeframe: Timeframe of nearest structure
+            - type: Type of nearest structure (OrderBlock, FVG, SwingPoint)
+        """
+        if not smc_snapshot:
+            return None, None
+            
+        # Get ATR for normalization (default to 1% of price if missing)
+        atr = current_price * 0.01
+        if indicators:
+            primary_tf = self.config.primary_planning_timeframe
+            if primary_tf in indicators.by_timeframe:
+                 ind_atr = indicators.by_timeframe[primary_tf].atr
+                 if ind_atr:
+                     atr = ind_atr
+        
+        # Define HTF timeframes to check
+        htf_tfs = self.config.structure_timeframes or ('4h', '1d')
+        
+        def find_nearest_structure(target_type: str) -> Optional[Dict[str, Any]]:
+            """
+            Find nearest structure of target type.
+            target_type: 'support' (for LONG) or 'resistance' (for SHORT)
+            """
+            min_dist = float('inf')
+            nearest = None
+            
+            # 1. Order Blocks
+            for ob in smc_snapshot.order_blocks:
+                if ob.timeframe not in htf_tfs:
+                    continue
+                
+                # For LONG (support), we want Bullish OBs below price
+                # For SHORT (resistance), we want Bearish OBs above price
+                # BUT Scorer logic generally checks proximity to *any* relevant structure
+                # Let's match Scorer's evaluate_htf_structural_proximity logic which is directional?
+                # Actually Scorer checks specific OB direction usually.
+                # Here we filter by direction to match intent.
+                                
+                is_support = (ob.direction == 'bullish')
+                is_resistance = (ob.direction == 'bearish')
+                
+                if target_type == 'support' and not is_support:
+                    continue
+                if target_type == 'resistance' and not is_resistance:
+                    continue
+                
+                # Calculate distance
+                ob_center = (ob.high + ob.low) / 2
+                dist = abs(current_price - ob_center)
+                
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest = {
+                        'type': 'OrderBlock',
+                        'timeframe': ob.timeframe,
+                        'price': ob_center,
+                        'distance': dist
+                    }
+                    
+            # 2. FVGs
+            for fvg in smc_snapshot.fvgs:
+                if fvg.timeframe not in htf_tfs:
+                    continue
+                
+                # FVG logic:
+                # Longs want to enter at FVG support (price above FVG or inside)
+                # Shorts want to enter at FVG resistance (price below FVG or inside)
+                
+                # Simple proximity: distance to nearest boundary
+                dist = min(abs(current_price - fvg.top), abs(current_price - fvg.bottom))
+                
+                # If inside FVG, distance is 0
+                if fvg.bottom <= current_price <= fvg.top:
+                    dist = 0.0
+                
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest = {
+                        'type': 'FVG',
+                        'timeframe': fvg.timeframe,
+                        'price': current_price if dist == 0 else (fvg.top if current_price > fvg.top else fvg.bottom),
+                        'distance': dist
+                    }
+
+            # 3. Swing Points (if available)
+            if smc_snapshot.swing_structure:
+                for tf in htf_tfs:
+                    ss = smc_snapshot.swing_structure.get(tf)
+                    if not ss:
+                        continue
+                        
+                    # For Support: Higher Low (HL) or Low Low (LL) acting as support?
+                    # Usually previous HH acts as support too (S/R flip)
+                    # For simplicity, check all swing points
+                    points = [
+                        ss.get('last_hh'), ss.get('last_hl'),
+                        ss.get('last_lh'), ss.get('last_ll')
+                    ]
+                    for p in points:
+                        if p:
+                            dist = abs(current_price - p)
+                            if dist < min_dist:
+                                min_dist = dist
+                                nearest = {
+                                    'type': 'SwingPoint',
+                                    'timeframe': tf,
+                                    'price': p,
+                                    'distance': dist
+                                }
+
+            return nearest
+
+        # Build context for Longs (needs Support)
+        support_struct = find_nearest_structure('support')
+        htf_ctx_long = None
+        if support_struct:
+            dist = support_struct['distance']
+            htf_ctx_long = {
+                'within_atr': dist / atr if atr > 0 else 999.0,
+                'within_pct': (dist / current_price) * 100.0,
+                'timeframe': support_struct['timeframe'],
+                'type': support_struct['type'],
+                'nearest_price': support_struct['price']
+            }
+            
+        # Build context for Shorts (needs Resistance)
+        resistance_struct = find_nearest_structure('resistance')
+        htf_ctx_short = None
+        if resistance_struct:
+            dist = resistance_struct['distance']
+            htf_ctx_short = {
+                'within_atr': dist / atr if atr > 0 else 999.0,
+                'within_pct': (dist / current_price) * 100.0,
+                'timeframe': resistance_struct['timeframe'],
+                'type': resistance_struct['type'],
+                'nearest_price': resistance_struct['price']
+            }
+            
+        return htf_ctx_long, htf_ctx_short
+
     def _process_symbol(
         self, 
         symbol: str, 
@@ -617,14 +796,19 @@ class Orchestrator:
                 pass
             
             # 3. HTF Context (passed into service as htf_ctx_long/short)
-            # Hack: Pass empty HTF context for now to maintain wiring, assuming `calculate_confluence_score` handles None.
-            # (It does, type is Optional[Dict]).
+            current_price_val = context.multi_tf_data.get_current_price() or 0.0
+            htf_ctx_long, htf_ctx_short = self._extract_htf_context(
+                multi_tf_data=context.multi_tf_data,
+                smc_snapshot=context.smc_snapshot,
+                current_price=current_price_val,
+                indicators=context.multi_tf_indicators
+            )
             
             context.confluence_breakdown = self.confluence_service.score(
                 context=context,
-                current_price=context.multi_tf_data.get_current_price() or 0,
-                htf_ctx_long=None, # TODO: Extract HTF logic if needed
-                htf_ctx_short=None,
+                current_price=current_price_val,
+                htf_ctx_long=htf_ctx_long,
+                htf_ctx_short=htf_ctx_short,
                 cycle_context=cycle_context,
                 reversal_context_long=rev_ctx_long,
                 reversal_context_short=rev_ctx_short
@@ -1772,14 +1956,14 @@ class Orchestrator:
             timestamp: When the stop-out occurred (defaults to now)
         """
         ts = timestamp or datetime.now(timezone.utc)
-        key = f"{symbol}_{direction}"  # Direction-specific cooldown
         
-        self._symbol_cooldowns[key] = {
-            'timestamp': ts,
-            'price': price,
-            'direction': direction,
-            'symbol': symbol
-        }
+        self.cooldown_manager.add_cooldown(
+            symbol=symbol,
+            direction=direction,
+            price=price,
+            reason='stop_out',
+            duration_hours=self._cooldown_hours
+        )
         
         logger.info("🚫 %s: Registered stop-out (dir=%s, price=%.4f) - cooldown for %d hours",
                    symbol, direction, price, self._cooldown_hours)
@@ -1814,24 +1998,15 @@ class Orchestrator:
         Returns:
             None if no cooldown active, or rejection dict with reason
         """
-        key = f"{symbol}_{proposed_direction}"
-        
-        if key not in self._symbol_cooldowns:
+        if not (cooldown_info := self.cooldown_manager.is_active(symbol, proposed_direction)):
             return None
-        
-        cooldown_info = self._symbol_cooldowns[key]
-        cooldown_ts = cooldown_info['timestamp']
+            
+        expires_at = cooldown_info['expires_at']
         now = datetime.now(timezone.utc)
         
-        # Calculate time since stop-out
-        hours_elapsed = (now - cooldown_ts).total_seconds() / 3600
-        
-        # Check if cooldown has expired
-        if hours_elapsed >= self._cooldown_hours:
-            # Cooldown expired - remove entry and allow trading
-            del self._symbol_cooldowns[key]
-            logger.debug("%s: Cooldown expired (%.1f hours elapsed)", symbol, hours_elapsed)
-            return None
+        # Calculate time remaining
+        hours_remaining = (expires_at - now).total_seconds() / 3600
+        hours_elapsed = self._cooldown_hours - hours_remaining
         
         # Still in cooldown - check if price has moved significantly
         stop_price = cooldown_info['price']
@@ -1841,11 +2016,10 @@ class Orchestrator:
         if price_move_pct > 5.0:
             logger.info("%s: Cooldown bypassed - price moved %.1f%% from stop-out level",
                        symbol, price_move_pct)
-            del self._symbol_cooldowns[key]
+            self.cooldown_manager.clear_cooldown(symbol, proposed_direction)
             return None
         
         # Still in cooldown - reject
-        hours_remaining = self._cooldown_hours - hours_elapsed
         logger.info("%s: 🚫 COOLDOWN ACTIVE | %.1f hours remaining | Stop-out price=%.4f | Current=%.4f",
                    symbol, hours_remaining, stop_price, current_price)
         
@@ -1869,17 +2043,9 @@ class Orchestrator:
             direction: Specific direction to clear, or None to clear both
         """
         if direction:
-            key = f"{symbol}_{direction}"
-            if key in self._symbol_cooldowns:
-                del self._symbol_cooldowns[key]
-                logger.info("%s: Cooldown cleared for %s", symbol, direction)
+            self.cooldown_manager.clear_cooldown(symbol, direction)
         else:
-            # Clear both directions
-            for dir in ['LONG', 'SHORT']:
-                key = f"{symbol}_{dir}"
-                if key in self._symbol_cooldowns:
-                    del self._symbol_cooldowns[key]
-            logger.info("%s: All cooldowns cleared", symbol)
+            self.cooldown_manager.clear_cooldown(symbol)
 
     def _progress(self, stage: str, payload: Dict[str, Any]) -> None:
         """Emit a standardized progress snapshot for user-facing consoles and telemetry.
