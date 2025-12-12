@@ -86,6 +86,7 @@ def detect_liquidity_sweeps(
     swing_lookback = scale_lookback(smc_cfg.sweep_swing_lookback, inferred_tf)
     max_sweep_candles = smc_cfg.sweep_max_sweep_candles
     min_reversal_atr = smc_cfg.sweep_min_reversal_atr
+    min_penetration_atr = getattr(smc_cfg, 'sweep_min_penetration_atr', 0.3)  # NEW: Min penetration depth
     require_volume_spike = smc_cfg.sweep_require_volume_spike
     
     if len(df) < swing_lookback * 2 + 20:
@@ -121,8 +122,12 @@ def detect_liquidity_sweeps(
         if len(recent_swing_highs) > 0:
             target_high = recent_swing_highs.iloc[-1]
             
-            # Check if candle wicked above the high
-            if current_candle['high'] > target_high and current_candle['close'] < target_high:
+            # Check if candle wicked above the high with sufficient penetration
+            penetration = current_candle['high'] - target_high
+            min_penetration = atr_value * min_penetration_atr if atr_value > 0 else 0
+            
+            # TIGHTENED: Must penetrate by min_penetration AND close below
+            if penetration > min_penetration and current_candle['close'] < target_high:
                 # Check for reversal and get distance for grading
                 reversal_distance = _get_downside_reversal_distance(
                     df, i, max_sweep_candles, target_high
@@ -152,8 +157,12 @@ def detect_liquidity_sweeps(
         if len(recent_swing_lows) > 0:
             target_low = recent_swing_lows.iloc[-1]
             
-            # Check if candle wicked below the low
-            if current_candle['low'] < target_low and current_candle['close'] > target_low:
+            # Check if candle wicked below the low with sufficient penetration
+            penetration = target_low - current_candle['low']
+            min_penetration = atr_value * min_penetration_atr if atr_value > 0 else 0
+            
+            # TIGHTENED: Must penetrate by min_penetration AND close above
+            if penetration > min_penetration and current_candle['close'] > target_low:
                 # Check for reversal and get distance for grading
                 reversal_distance = _get_upside_reversal_distance(
                     df, i, max_sweep_candles, target_low

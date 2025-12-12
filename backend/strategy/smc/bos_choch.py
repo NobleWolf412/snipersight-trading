@@ -280,6 +280,9 @@ def detect_structural_breaks(
         
         atr_value = atr.iloc[i] if pd.notna(atr.iloc[i]) else 0
         
+        # Calculate minimum break threshold (must break by at least this much)
+        min_break = atr_value * min_break_distance_atr if atr_value > 0 else 0
+        
         # Calculate grading thresholds for structural breaks
         grade_a_threshold = smc_cfg.grade_a_threshold * min_break_distance_atr
         grade_b_threshold = smc_cfg.grade_b_threshold * min_break_distance_atr
@@ -287,9 +290,9 @@ def detect_structural_breaks(
         # Check for breaks in uptrend
         if current_trend == "uptrend":
             # BOS: Break above previous swing high (continuation)
-            # Detect any break above swing high, then grade by distance
+            # Require minimum break distance to filter noise
             break_distance = current_close - last_swing_high
-            if break_distance > 0:  # Any break above
+            if break_distance > min_break:  # FIXED: Enforce minimum break distance
                 # Calculate break in ATR units for grading
                 break_atr = break_distance / atr_value if atr_value > 0 else 0.0
                 grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
@@ -312,9 +315,9 @@ def detect_structural_breaks(
                 last_swing_high = current_high
             
             # CHoCH: Break below previous swing low (reversal)
-            # Detect any break below swing low, then grade by distance
+            # Require minimum break distance to filter noise
             break_distance = last_swing_low - current_close
-            if break_distance > 0:  # Any break below
+            if break_distance > min_break:  # FIXED: Enforce minimum break distance
                 # Calculate break in ATR units for grading
                 break_atr = break_distance / atr_value if atr_value > 0 else 0.0
                 grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
@@ -342,9 +345,9 @@ def detect_structural_breaks(
         # Check for breaks in downtrend
         elif current_trend == "downtrend":
             # BOS: Break below previous swing low (continuation)
-            # Detect any break below swing low, then grade by distance
+            # Require minimum break distance to filter noise
             break_distance = last_swing_low - current_close
-            if break_distance > 0:  # Any break below
+            if break_distance > min_break:  # FIXED: Enforce minimum break distance
                 # Calculate break in ATR units for grading
                 break_atr = break_distance / atr_value if atr_value > 0 else 0.0
                 grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
@@ -367,9 +370,9 @@ def detect_structural_breaks(
                 last_swing_low = current_low
             
             # CHoCH: Break above previous swing high (reversal)
-            # Detect any break above swing high, then grade by distance
+            # Require minimum break distance to filter noise
             break_distance = current_close - last_swing_high
-            if break_distance > 0:  # Any break above
+            if break_distance > min_break:  # FIXED: Enforce minimum break distance
                 # Calculate break in ATR units for grading
                 break_atr = break_distance / atr_value if atr_value > 0 else 0.0
                 grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)

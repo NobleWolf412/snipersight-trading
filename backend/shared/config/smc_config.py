@@ -213,25 +213,26 @@ def scale_eqhl_tolerance(base_tolerance_pct: float, timeframe: str) -> float:
 @dataclass
 class SMCConfig:
     # Order Block parameters
-    min_wick_ratio: float = 1.5  # Lowered from 2.0 - still requires significant wick
-    min_displacement_atr: float = 1.0  # Lowered from 1.5 - more OBs detected
-    ob_lookback_candles: int = 7  # Increased from 5 - more time to verify displacement
-    ob_volume_threshold: float = 1.3  # Lowered from 1.5 - easier volume confirmation
-    ob_max_mitigation: float = 0.85  # Increased from 0.8 - keep slightly more mitigated OBs
-    ob_min_freshness: float = 0.05  # Lowered from 0.1 - keep older OBs longer
+    min_wick_ratio: float = 2.5  # TIGHTENED: Was 1.5 - require significant wick rejection
+    min_displacement_atr: float = 1.5  # TIGHTENED: Was 1.0 - require strong displacement
+    ob_lookback_candles: int = 7  # Time to verify displacement
+    ob_volume_threshold: float = 1.3  # Volume confirmation threshold
+    ob_max_mitigation: float = 0.85  # Max mitigation level to keep OB
+    ob_min_freshness: float = 0.05  # Keep older OBs longer
 
     # Fair Value Gap parameters
-    fvg_min_gap_atr: float = 0.2  # Lowered from 0.3 - detect smaller FVGs
-    fvg_max_overlap: float = 0.15  # Increased from 0.1 - allow slightly more overlap
+    fvg_min_gap_atr: float = 0.2  # Min gap size in ATR
+    fvg_max_overlap: float = 0.15  # Max overlap allowed
 
     # Structural Break parameters
-    structure_swing_lookback: int = 7  # Increased from 5 - wider search
-    structure_min_break_distance_atr: float = 0.4  # Lowered from 0.5 - detect smaller breaks
+    structure_swing_lookback: int = 7  # Swing detection lookback
+    structure_min_break_distance_atr: float = 0.4  # Min break distance in ATR
 
     # Liquidity Sweep parameters
-    sweep_swing_lookback: int = 12  # Increased from 10 - wider search
-    sweep_max_sweep_candles: int = 4  # Increased from 3 - more flexible sweep detection
-    sweep_min_reversal_atr: float = 0.8  # Lowered from 1.0 - detect smaller reversals
+    sweep_swing_lookback: int = 12  # Swing detection lookback
+    sweep_max_sweep_candles: int = 4  # Candles to confirm reversal
+    sweep_min_reversal_atr: float = 1.2  # TIGHTENED: Was 0.8 - require stronger reversal
+    sweep_min_penetration_atr: float = 0.3  # NEW: Min penetration depth to count as sweep
     sweep_require_volume_spike: bool = False
 
     # Equal Highs/Lows (Liquidity Pool) parameters
