@@ -231,8 +231,11 @@ class SMCConfig:
     # Liquidity Sweep parameters
     sweep_swing_lookback: int = 12  # Swing detection lookback
     sweep_max_sweep_candles: int = 4  # Candles to confirm reversal
-    sweep_min_reversal_atr: float = 1.2  # TIGHTENED: Was 0.8 - require stronger reversal
-    sweep_min_penetration_atr: float = 0.3  # NEW: Min penetration depth to count as sweep
+    sweep_min_reversal_atr: float = 1.2  # Require strong reversal
+    sweep_min_penetration_atr: float = 0.3  # Min penetration depth
+    sweep_min_wick_atr: float = 0.15  # NEW: Min wick size (must have real wick)
+    sweep_min_level_age_bars: int = 10  # NEW: Level must be at least 10 bars old
+    sweep_range_position_threshold: float = 0.35  # NEW: Only sweep in outer 35% of range
     sweep_require_volume_spike: bool = False
 
     # Equal Highs/Lows (Liquidity Pool) parameters

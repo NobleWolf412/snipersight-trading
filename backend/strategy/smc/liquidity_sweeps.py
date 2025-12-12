@@ -86,7 +86,10 @@ def detect_liquidity_sweeps(
     swing_lookback = scale_lookback(smc_cfg.sweep_swing_lookback, inferred_tf)
     max_sweep_candles = smc_cfg.sweep_max_sweep_candles
     min_reversal_atr = smc_cfg.sweep_min_reversal_atr
-    min_penetration_atr = getattr(smc_cfg, 'sweep_min_penetration_atr', 0.3)  # NEW: Min penetration depth
+    min_penetration_atr = getattr(smc_cfg, 'sweep_min_penetration_atr', 0.3)
+    min_wick_atr = getattr(smc_cfg, 'sweep_min_wick_atr', 0.15)  # NEW: Min wick size
+    min_level_age_bars = getattr(smc_cfg, 'sweep_min_level_age_bars', 10)  # NEW: Level age
+    range_position_threshold = getattr(smc_cfg, 'sweep_range_position_threshold', 0.35)  # NEW: Range filter
     require_volume_spike = smc_cfg.sweep_require_volume_spike
     
     if len(df) < swing_lookback * 2 + 20:
@@ -99,6 +102,10 @@ def detect_liquidity_sweeps(
     # Calculate average volume for spike detection
     avg_volume = df['volume'].rolling(window=20).mean()
     
+    # Calculate range for position filter (rolling 50 bar range)
+    rolling_high = df['high'].rolling(window=50, min_periods=20).max()
+    rolling_low = df['low'].rolling(window=50, min_periods=20).min()
+    
     # Detect recent swing highs and lows
     from backend.strategy.smc.bos_choch import _detect_swing_highs, _detect_swing_lows
     swing_highs = _detect_swing_highs(df, swing_lookback)
@@ -108,85 +115,115 @@ def detect_liquidity_sweeps(
     
     # Scan for sweeps
     for i in range(swing_lookback * 2, len(df) - max_sweep_candles):
-        # Look for recent swing points before this candle
-        recent_swing_highs = swing_highs[swing_highs.index < df.index[i]].tail(3)
-        recent_swing_lows = swing_lows[swing_lows.index < df.index[i]].tail(3)
-        
-        if len(recent_swing_highs) == 0 and len(recent_swing_lows) == 0:
-            continue
-        
+        current_idx = df.index[i]
         current_candle = df.iloc[i]
         atr_value = atr.iloc[i] if pd.notna(atr.iloc[i]) else 0
         
-        # Check for high sweep (price spikes above recent high then reverses)
-        if len(recent_swing_highs) > 0:
-            target_high = recent_swing_highs.iloc[-1]
-            
-            # Check if candle wicked above the high with sufficient penetration
-            penetration = current_candle['high'] - target_high
-            min_penetration = atr_value * min_penetration_atr if atr_value > 0 else 0
-            
-            # TIGHTENED: Must penetrate by min_penetration AND close below
-            if penetration > min_penetration and current_candle['close'] < target_high:
-                # Check for reversal and get distance for grading
-                reversal_distance = _get_downside_reversal_distance(
-                    df, i, max_sweep_candles, target_high
-                )
-                
-                if reversal_distance > 0:  # Any reversal detected
-                    # Check volume if required
-                    volume_spike = current_candle['volume'] > (avg_volume.iloc[i] * 1.5) if pd.notna(avg_volume.iloc[i]) else False
-                    
-                    if not require_volume_spike or volume_spike:
-                        # Grade the sweep based on reversal strength
-                        reversal_atr = reversal_distance / atr_value if atr_value > 0 else 0.0
-                        grade_a_threshold = smc_cfg.grade_a_threshold * min_reversal_atr
-                        grade_b_threshold = smc_cfg.grade_b_threshold * min_reversal_atr
-                        grade = grade_pattern(reversal_atr, grade_a_threshold, grade_b_threshold)
-                        
-                        sweep = LiquiditySweep(
-                            level=target_high,
-                            sweep_type="high",
-                            confirmation=volume_spike,
-                            timestamp=current_candle.name.to_pydatetime(),
-                            grade=grade
-                        )
-                        liquidity_sweeps.append(sweep)
+        # Get range bounds for position filter
+        range_high = rolling_high.iloc[i] if pd.notna(rolling_high.iloc[i]) else current_candle['high']
+        range_low = rolling_low.iloc[i] if pd.notna(rolling_low.iloc[i]) else current_candle['low']
+        range_size = range_high - range_low if range_high > range_low else 1e-10
         
-        # Check for low sweep (price spikes below recent low then reverses)
-        if len(recent_swing_lows) > 0:
-            target_low = recent_swing_lows.iloc[-1]
+        # Look for swing points that are OLD ENOUGH to have real liquidity
+        valid_swing_highs = swing_highs[
+            (swing_highs.index < current_idx) & 
+            (swing_highs.index <= df.index[max(0, i - min_level_age_bars)])
+        ].tail(3)
+        valid_swing_lows = swing_lows[
+            (swing_lows.index < current_idx) &
+            (swing_lows.index <= df.index[max(0, i - min_level_age_bars)])
+        ].tail(3)
+        
+        if len(valid_swing_highs) == 0 and len(valid_swing_lows) == 0:
+            continue
+        
+        # Check for high sweep (bearish: price spikes above recent high then reverses)
+        if len(valid_swing_highs) > 0:
+            target_high = valid_swing_highs.iloc[-1]
             
-            # Check if candle wicked below the low with sufficient penetration
-            penetration = target_low - current_candle['low']
-            min_penetration = atr_value * min_penetration_atr if atr_value > 0 else 0
-            
-            # TIGHTENED: Must penetrate by min_penetration AND close above
-            if penetration > min_penetration and current_candle['close'] > target_low:
-                # Check for reversal and get distance for grading
-                reversal_distance = _get_upside_reversal_distance(
-                    df, i, max_sweep_candles, target_low
-                )
+            # FILTER 1: Range position - only sweep levels in top 35% of range
+            level_position = (target_high - range_low) / range_size
+            if level_position < (1 - range_position_threshold):  # Not in top 35%
+                pass  # Skip this level, not at range extreme
+            else:
+                # Check penetration depth
+                penetration = current_candle['high'] - target_high
+                min_penetration = atr_value * min_penetration_atr if atr_value > 0 else 0
                 
-                if reversal_distance > 0:  # Any reversal detected
-                    # Check volume if required
-                    volume_spike = current_candle['volume'] > (avg_volume.iloc[i] * 1.5) if pd.notna(avg_volume.iloc[i]) else False
+                # FILTER 2: Check wick size (must have real wick, not just body poke)
+                upper_wick = current_candle['high'] - max(current_candle['open'], current_candle['close'])
+                min_wick = atr_value * min_wick_atr if atr_value > 0 else 0
+                
+                # Must penetrate AND have real wick AND close below level
+                if penetration > min_penetration and upper_wick >= min_wick and current_candle['close'] < target_high:
+                    # Check for reversal and get distance for grading
+                    reversal_distance = _get_downside_reversal_distance(
+                        df, i, max_sweep_candles, target_high
+                    )
                     
-                    if not require_volume_spike or volume_spike:
-                        # Grade the sweep based on reversal strength
-                        reversal_atr = reversal_distance / atr_value if atr_value > 0 else 0.0
-                        grade_a_threshold = smc_cfg.grade_a_threshold * min_reversal_atr
-                        grade_b_threshold = smc_cfg.grade_b_threshold * min_reversal_atr
-                        grade = grade_pattern(reversal_atr, grade_a_threshold, grade_b_threshold)
+                    if reversal_distance > 0:  # Any reversal detected
+                        # Check volume if required
+                        volume_spike = current_candle['volume'] > (avg_volume.iloc[i] * 1.5) if pd.notna(avg_volume.iloc[i]) else False
                         
-                        sweep = LiquiditySweep(
-                            level=target_low,
-                            sweep_type="low",
-                            confirmation=volume_spike,
-                            timestamp=current_candle.name.to_pydatetime(),
-                            grade=grade
-                        )
-                        liquidity_sweeps.append(sweep)
+                        if not require_volume_spike or volume_spike:
+                            # Grade the sweep based on reversal strength
+                            reversal_atr = reversal_distance / atr_value if atr_value > 0 else 0.0
+                            grade_a_threshold = smc_cfg.grade_a_threshold * min_reversal_atr
+                            grade_b_threshold = smc_cfg.grade_b_threshold * min_reversal_atr
+                            grade = grade_pattern(reversal_atr, grade_a_threshold, grade_b_threshold)
+                            
+                            sweep = LiquiditySweep(
+                                level=target_high,
+                                sweep_type="high",
+                                confirmation=volume_spike,
+                                timestamp=current_candle.name.to_pydatetime(),
+                                grade=grade
+                            )
+                            liquidity_sweeps.append(sweep)
+        
+        # Check for low sweep (bullish: price spikes below recent low then reverses)
+        if len(valid_swing_lows) > 0:
+            target_low = valid_swing_lows.iloc[-1]
+            
+            # FILTER 1: Range position - only sweep levels in bottom 35% of range
+            level_position = (target_low - range_low) / range_size
+            if level_position > range_position_threshold:  # Not in bottom 35%
+                pass  # Skip this level, not at range extreme
+            else:
+                # Check penetration depth
+                penetration = target_low - current_candle['low']
+                min_penetration = atr_value * min_penetration_atr if atr_value > 0 else 0
+                
+                # FILTER 2: Check wick size (must have real wick, not just body poke)
+                lower_wick = min(current_candle['open'], current_candle['close']) - current_candle['low']
+                min_wick = atr_value * min_wick_atr if atr_value > 0 else 0
+                
+                # Must penetrate AND have real wick AND close above level
+                if penetration > min_penetration and lower_wick >= min_wick and current_candle['close'] > target_low:
+                    # Check for reversal and get distance for grading
+                    reversal_distance = _get_upside_reversal_distance(
+                        df, i, max_sweep_candles, target_low
+                    )
+                    
+                    if reversal_distance > 0:  # Any reversal detected
+                        # Check volume if required
+                        volume_spike = current_candle['volume'] > (avg_volume.iloc[i] * 1.5) if pd.notna(avg_volume.iloc[i]) else False
+                        
+                        if not require_volume_spike or volume_spike:
+                            # Grade the sweep based on reversal strength
+                            reversal_atr = reversal_distance / atr_value if atr_value > 0 else 0.0
+                            grade_a_threshold = smc_cfg.grade_a_threshold * min_reversal_atr
+                            grade_b_threshold = smc_cfg.grade_b_threshold * min_reversal_atr
+                            grade = grade_pattern(reversal_atr, grade_a_threshold, grade_b_threshold)
+                            
+                            sweep = LiquiditySweep(
+                                level=target_low,
+                                sweep_type="low",
+                                confirmation=volume_spike,
+                                timestamp=current_candle.name.to_pydatetime(),
+                                grade=grade
+                            )
+                            liquidity_sweeps.append(sweep)
     
     return liquidity_sweeps
 
