@@ -344,6 +344,102 @@ async def get_scanner_diagnostics():
     }
 
 
+@router.get("/api/debug/smc")
+async def debug_smc_patterns(
+    symbol: str = Query(default="BTC/USDT"),
+    exchange: str = Query(default="phemex"),
+):
+    """
+    Debug endpoint: Show raw SMC pattern detection counts for a single symbol.
+    
+    Helps diagnose why OB/FVG/BOS aren't appearing in confluence scoring.
+    """
+    orchestrator = get_orchestrator()
+    exchange_adapters = get_exchange_adapters()
+    
+    if not orchestrator:
+        raise HTTPException(status_code=500, detail="Orchestrator not initialized")
+    
+    try:
+        exchange_key = exchange.lower()
+        if exchange_key not in exchange_adapters:
+            raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange}")
+        
+        adapter = exchange_adapters[exchange_key]()
+        IngestionPipeline = _shared_state.get('IngestionPipeline')
+        
+        if not IngestionPipeline:
+            raise HTTPException(status_code=500, detail="Ingestion pipeline not initialized")
+        
+        pipeline = IngestionPipeline(adapter)
+        
+        # Fetch data
+        timeframes = ['15m', '1h', '4h', '1d']
+        multi_tf_data = await asyncio.to_thread(pipeline.get_multi_timeframe_data, symbol, timeframes)
+        
+        if not multi_tf_data or not multi_tf_data.timeframes:
+            raise HTTPException(status_code=400, detail=f"No data for {symbol}")
+        
+        # Get current price
+        current_price = 0.0
+        for tf in ['15m', '1h', '4h']:
+            df = multi_tf_data.timeframes.get(tf)
+            if df is not None and len(df) > 0:
+                current_price = float(df['close'].iloc[-1])
+                break
+        
+        # Run SMC detection
+        from backend.services.smc_service import SMCDetectionService
+        smc_service = SMCDetectionService(orchestrator.smc_config)
+        smc_snapshot = smc_service.detect(multi_tf_data, current_price)
+        
+        # Summarize patterns
+        ob_by_dir = {'bullish': 0, 'bearish': 0}
+        fvg_by_dir = {'bullish': 0, 'bearish': 0}
+        bos_by_type = {'BOS': 0, 'CHoCH': 0}
+        
+        for ob in smc_snapshot.order_blocks:
+            ob_by_dir[ob.direction] = ob_by_dir.get(ob.direction, 0) + 1
+        
+        for fvg in smc_snapshot.fvgs:
+            fvg_by_dir[fvg.direction] = fvg_by_dir.get(fvg.direction, 0) + 1
+        
+        for sb in smc_snapshot.structural_breaks:
+            bos_by_type[sb.break_type] = bos_by_type.get(sb.break_type, 0) + 1
+        
+        return {
+            "symbol": symbol,
+            "current_price": current_price,
+            "smc_counts": {
+                "order_blocks": {
+                    "total": len(smc_snapshot.order_blocks),
+                    "bullish": ob_by_dir.get('bullish', 0),
+                    "bearish": ob_by_dir.get('bearish', 0),
+                },
+                "fvgs": {
+                    "total": len(smc_snapshot.fvgs),
+                    "bullish": fvg_by_dir.get('bullish', 0),
+                    "bearish": fvg_by_dir.get('bearish', 0),
+                },
+                "structural_breaks": {
+                    "total": len(smc_snapshot.structural_breaks),
+                    "BOS": bos_by_type.get('BOS', 0),
+                    "CHoCH": bos_by_type.get('CHoCH', 0),
+                },
+                "liquidity_sweeps": len(smc_snapshot.liquidity_sweeps),
+                "liquidity_pools": len(smc_snapshot.liquidity_pools),
+            },
+            "swing_structure": smc_snapshot.swing_structure,
+            "key_levels": smc_snapshot.key_levels,
+            "diagnostics": smc_service.diagnostics,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("SMC debug failed for %s: %s", symbol, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 # =============================================================================
 # Configuration Endpoints (Moved from api_server.py)
 # =============================================================================

@@ -1466,6 +1466,7 @@ def _normalize_direction(direction: str) -> str:
 def _score_order_blocks(order_blocks: List[OrderBlock], direction: str) -> float:
     """Score order blocks based on quality, alignment, and grade."""
     if not order_blocks:
+        logger.debug("📦 OB Score: No order blocks detected")
         return 0.0
     
     # Normalize direction: LONG/SHORT -> bullish/bearish
@@ -1473,8 +1474,16 @@ def _score_order_blocks(order_blocks: List[OrderBlock], direction: str) -> float
     # Filter for direction-aligned OBs
     aligned_obs = [ob for ob in order_blocks if ob.direction == normalized_dir]
     
+    # Debug: Show why OBs don't score
     if not aligned_obs:
+        opposite_dir = 'bearish' if normalized_dir == 'bullish' else 'bullish'
+        opposite_count = len([ob for ob in order_blocks if ob.direction == opposite_dir])
+        logger.info("📦 OB Score: 0 aligned (looking for %s) | %d total | %d %s OBs exist",
+                   normalized_dir, len(order_blocks), opposite_count, opposite_dir)
         return 0.0
+    
+    logger.debug("📦 OB Score: %d aligned %s OBs out of %d total", 
+                len(aligned_obs), normalized_dir, len(order_blocks))
     
     # Find best OB (highest freshness and displacement, lowest mitigation, best grade)
     best_ob = max(aligned_obs, key=lambda ob: (
@@ -1501,6 +1510,7 @@ def _score_order_blocks(order_blocks: List[OrderBlock], direction: str) -> float
 def _score_fvgs(fvgs: List[FVG], direction: str) -> float:
     """Score FVGs based on size, unfilled status, and grade."""
     if not fvgs:
+        logger.debug("🔲 FVG Score: No FVGs detected")
         return 0.0
     
     # Normalize direction: LONG/SHORT -> bullish/bearish
@@ -1508,7 +1518,14 @@ def _score_fvgs(fvgs: List[FVG], direction: str) -> float:
     aligned_fvgs = [fvg for fvg in fvgs if fvg.direction == normalized_dir]
     
     if not aligned_fvgs:
+        opposite_dir = 'bearish' if normalized_dir == 'bullish' else 'bullish'
+        opposite_count = len([fvg for fvg in fvgs if fvg.direction == opposite_dir])
+        logger.info("🔲 FVG Score: 0 aligned (looking for %s) | %d total | %d %s FVGs exist",
+                   normalized_dir, len(fvgs), opposite_count, opposite_dir)
         return 0.0
+    
+    logger.debug("🔲 FVG Score: %d aligned %s FVGs out of %d total",
+                len(aligned_fvgs), normalized_dir, len(fvgs))
     
     # Prefer unfilled FVGs with larger size
     unfilled = [fvg for fvg in aligned_fvgs if fvg.overlap_with_price < 0.5]

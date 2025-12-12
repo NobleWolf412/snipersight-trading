@@ -106,15 +106,20 @@ class SMCDetectionService:
                 continue
             
             try:
-                # Debug: Check if DataFrame has DatetimeIndex (required for OB detection)
+                # CRITICAL: Ensure DataFrame has DatetimeIndex (required for OB detection)
                 if not isinstance(df.index, pd.DatetimeIndex):
-                    logger.warning("⚠️ SMC %s: DataFrame has %s, not DatetimeIndex! Fixing...", 
-                                 timeframe, type(df.index).__name__)
                     # Auto-fix: Set timestamp column as index if available
                     if 'timestamp' in df.columns:
+                        # Convert timestamp column to datetime and set as index
+                        df = df.copy()  # Avoid modifying original
+                        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', errors='coerce')
                         df = df.set_index('timestamp')
-                        if not isinstance(df.index, pd.DatetimeIndex):
-                            df.index = pd.to_datetime(df.index)
+                        logger.info("🔧 SMC %s: Converted timestamp column to DatetimeIndex", timeframe)
+                    else:
+                        # Try to infer datetime from numeric index
+                        logger.warning("⚠️ SMC %s: No timestamp column, skipping (index type: %s)", 
+                                     timeframe, type(df.index).__name__)
+                        continue
                 
                 # Detect core SMC patterns
                 patterns = self._detect_timeframe_patterns(timeframe, df, current_price)
@@ -213,12 +218,19 @@ class SMCDetectionService:
         swing_lows = _detect_swing_lows(df, swing_lookback)
         
         # Order blocks (traditional + structural)
-        result['order_blocks'] = detect_order_blocks(df, self._smc_config)
+        try:
+            result['order_blocks'] = detect_order_blocks(df, self._smc_config)
+            logger.debug("📦 %s: Traditional OB detected %d", timeframe, len(result['order_blocks']))
+        except Exception as e:
+            logger.warning("📦 %s: Traditional OB detection FAILED: %s", timeframe, e)
+            result['order_blocks'] = []
+        
         try:
             structural_obs = detect_order_blocks_structural(df, swing_highs, swing_lows, self._smc_config)
             result['order_blocks'].extend(structural_obs)
+            logger.debug("📦 %s: Structural OB detected %d", timeframe, len(structural_obs))
         except Exception as e:
-            logger.debug("Structural OB detection failed: %s", e)
+            logger.warning("📦 %s: Structural OB detection FAILED: %s", timeframe, e)
         
         # Fair value gaps (with merge)
         fvgs = detect_fvgs(df, self._smc_config)
