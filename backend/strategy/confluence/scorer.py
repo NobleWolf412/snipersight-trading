@@ -372,16 +372,20 @@ def resolve_timeframe_conflicts(
     primary_trend = tf_trends.get(primary_tf, 'neutral')
     is_bullish_trade = direction.lower() in ('bullish', 'long')
     
-    primary_aligned = (
-        (is_bullish_trade and primary_trend == 'bullish') or
-        (not is_bullish_trade and primary_trend == 'bearish')
-    )
-    
-    if not primary_aligned:
-        conflicts.append(f"{primary_tf} {primary_trend} (primary)")
-        resolution_reason_parts.append(f"Primary TF ({primary_tf}) not aligned with {direction}")
-        score_adjustment -= 10.0  # Reduced from 15 to keep score >= 40 (Weak vs Missing)
+    # Check alignment with tiered scoring
+    if primary_trend == 'neutral':
+        # Ranging/no data - slight caution, not full conflict
+        score_adjustment -= 5.0
+        resolution_reason_parts.append(f"Primary TF ({primary_tf}) neutral/ranging")
         resolution = 'caution'
+    elif (is_bullish_trade and primary_trend == 'bearish') or \
+         (not is_bullish_trade and primary_trend == 'bullish'):
+        # Actual conflict - larger penalty
+        conflicts.append(f"{primary_tf} {primary_trend} (primary)")
+        resolution_reason_parts.append(f"Primary TF ({primary_tf}) {primary_trend} conflicts with {direction}")
+        score_adjustment -= 10.0
+        resolution = 'caution'
+    # else: aligned - no penalty
     
     # Check filter timeframes
     for tf in filter_tfs:
