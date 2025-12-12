@@ -413,3 +413,82 @@ def _infer_timeframe(df: pd.DataFrame) -> str:
         return f"{int(total_seconds / 86400)}D"
     else:
         return f"{int(total_seconds / 604800)}W"
+
+
+def merge_consecutive_fvgs(
+    fvgs: List[FVG],
+    max_gap_atr: float = 0.5,
+    atr_value: float = 1.0
+) -> List[FVG]:
+    """
+    Merge overlapping or adjacent consecutive FVGs of the same direction.
+    
+    When multiple FVGs form in close succession, they create one larger
+    imbalance zone. Merging them provides cleaner S/R levels.
+    
+    STOLEN from smartmoneyconcepts library.
+    
+    Args:
+        fvgs: List of FVG objects (should be sorted by timestamp)
+        max_gap_atr: Maximum gap between FVGs to merge (in ATR units)
+        atr_value: ATR value for proximity calculation
+        
+    Returns:
+        List[FVG]: Merged FVGs (fewer, larger zones)
+    """
+    if len(fvgs) < 2:
+        return fvgs
+    
+    # Sort by timestamp
+    sorted_fvgs = sorted(fvgs, key=lambda f: f.timestamp)
+    
+    merged = []
+    current = sorted_fvgs[0]
+    
+    for next_fvg in sorted_fvgs[1:]:
+        # Check if same direction
+        if next_fvg.direction != current.direction:
+            merged.append(current)
+            current = next_fvg
+            continue
+        
+        # Calculate gap between FVGs
+        if current.direction == "bullish":
+            # Bullish: check if next_fvg.bottom overlaps or is close to current.top
+            gap = next_fvg.bottom - current.top
+        else:
+            # Bearish: check if current.bottom overlaps or is close to next_fvg.top
+            gap = current.bottom - next_fvg.top
+        
+        # Merge if overlapping or close enough
+        max_gap = max_gap_atr * atr_value if atr_value > 0 else 0.001
+        
+        if gap <= max_gap:
+            # Merge: extend current to include next
+            from dataclasses import replace
+            
+            new_top = max(current.top, next_fvg.top)
+            new_bottom = min(current.bottom, next_fvg.bottom)
+            new_size = new_top - new_bottom
+            
+            # Take best grade between merged FVGs
+            best_grade = 'A' if ('A' in [current.grade, next_fvg.grade]) else \
+                         ('B' if 'B' in [current.grade, next_fvg.grade] else 'C')
+            
+            current = replace(
+                current,
+                top=new_top,
+                bottom=new_bottom,
+                size=new_size,
+                grade=best_grade
+            )
+        else:
+            # Too far apart - keep separate
+            merged.append(current)
+            current = next_fvg
+    
+    # Don't forget the last one
+    merged.append(current)
+    
+    return merged
+

@@ -869,3 +869,81 @@ def detect_order_blocks_structural(
             order_blocks.append(ob)
     
     return order_blocks
+
+
+def update_ob_lifecycle(
+    df: pd.DataFrame,
+    order_blocks: List[OrderBlock],
+    preset: str = "defaults"
+) -> List[OrderBlock]:
+    """
+    Update Order Block lifecycle states based on price action.
+    
+    Lifecycle: Fresh → Mitigated → Breaker → Invalidated
+    
+    - Fresh: OB just detected, not yet revisited
+    - Mitigated: Price has revisited the zone but not broken through
+    - Breaker: Price closed through the zone (flips to opposite S/R)
+    - Invalidated: Breaker failed (price broke back through)
+    
+    STOLEN from smartmoneyconcepts library lifecycle tracking.
+    
+    Args:
+        df: OHLCV DataFrame with DatetimeIndex
+        order_blocks: List of OrderBlock objects
+        preset: SMC preset for behavior tuning
+        
+    Returns:
+        List[OrderBlock]: Updated order blocks (invalidated ones filtered out)
+    """
+    from backend.shared.config.smc_config import get_enhanced_mitigation_config
+    config = get_enhanced_mitigation_config(preset)
+    
+    updated_blocks = []
+    
+    for ob in order_blocks:
+        # Skip already invalidated
+        if ob.invalidated:
+            continue
+        
+        # Get future candles after OB formation
+        future_candles = df[df.index > ob.timestamp]
+        
+        if len(future_candles) == 0:
+            updated_blocks.append(ob)
+            continue
+        
+        is_breaker = ob.breaker
+        is_invalidated = ob.invalidated
+        
+        # Track through each candle
+        for ts, candle in future_candles.iterrows():
+            if is_invalidated:
+                break
+            
+            if ob.direction == "bullish":
+                # Bullish OB broken = price closed below OB low
+                if not is_breaker and candle['close'] < ob.low:
+                    is_breaker = True
+                # Breaker invalidated = price closed back above OB high
+                elif is_breaker and candle['close'] > ob.high:
+                    is_invalidated = True
+            else:  # bearish
+                # Bearish OB broken = price closed above OB high
+                if not is_breaker and candle['close'] > ob.high:
+                    is_breaker = True
+                # Breaker invalidated = price closed back below OB low
+                elif is_breaker and candle['close'] < ob.low:
+                    is_invalidated = True
+        
+        # Create updated OB with new lifecycle state
+        from dataclasses import replace
+        updated_ob = replace(ob, breaker=is_breaker, invalidated=is_invalidated)
+        
+        # Filter based on config
+        if config.get('invalidate_on_deep_tap', True) and updated_ob.invalidated:
+            continue  # Skip invalidated OBs
+        
+        updated_blocks.append(updated_ob)
+    
+    return updated_blocks

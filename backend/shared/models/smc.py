@@ -94,6 +94,9 @@ class OrderBlock:
     freshness_score: float
     grade: PatternGrade = 'B'  # Quality grade: A (excellent), B (good), C (marginal)
     displacement_atr: float = 0.0  # ATR-normalized displacement for reference
+    # NEW: Breaker lifecycle fields (Phase 2.1)
+    breaker: bool = False  # OB was broken through, now acts as opposite S/R
+    invalidated: bool = False  # Breaker failed (price broke back through)
     
     def __post_init__(self):
         """Validate order block data."""
@@ -108,8 +111,18 @@ class OrderBlock:
     
     @property
     def is_fresh(self) -> bool:
-        """Check if OB is fresh (freshness > 70 and mitigation < 0.3)."""
-        return self.freshness_score > 70 and self.mitigation_level < 0.3
+        """Check if OB is fresh (freshness > 70, mitigation < 0.3, not breaker/invalid)."""
+        return self.freshness_score > 70 and self.mitigation_level < 0.3 and not self.breaker and not self.invalidated
+    
+    @property
+    def is_breaker(self) -> bool:
+        """Check if this OB has become a breaker (broken through, now opposite S/R)."""
+        return self.breaker and not self.invalidated
+    
+    @property
+    def is_valid(self) -> bool:
+        """Check if OB is still valid for trading (not invalidated)."""
+        return not self.invalidated
     
     @property
     def midpoint(self) -> float:
@@ -259,6 +272,10 @@ class LiquidityPool:
     last_touch: Optional[datetime] = None
     tolerance_used: float = 0.002  # Tolerance % used for clustering
     spread: float = 0.0  # Price spread within cluster
+    # NEW: Sweep tracking fields (Phase 2.3)
+    swept: bool = False  # Pool has been swept (price broke through)
+    swept_index: Optional[int] = None  # Bar index when swept
+    swept_timestamp: Optional[datetime] = None  # Timestamp when swept
     
     @property
     def is_strong(self) -> bool:
@@ -267,11 +284,18 @@ class LiquidityPool:
     
     @property
     def is_fresh(self) -> bool:
-        """Check if pool was touched recently (last 7 days)."""
+        """Check if pool was touched recently (last 7 days) and not swept."""
+        if self.swept:
+            return False
         if not self.last_touch:
             return True
         age = datetime.now() - self.last_touch
         return age.days <= 7
+    
+    @property
+    def is_swept(self) -> bool:
+        """Check if this pool has been swept."""
+        return self.swept
     
     def contains_price(self, price: float) -> bool:
         """Check if price is within the liquidity pool zone."""

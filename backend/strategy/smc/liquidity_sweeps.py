@@ -660,3 +660,73 @@ def validate_sweep_with_structure(
     # If break happened within reasonable time, consider it related
     # This is a simplified check - in practice would be more sophisticated
     return time_diff.total_seconds() < 3600 * 24  # Within 24 hours
+
+
+def track_pool_sweeps(
+    df: pd.DataFrame,
+    pools: List[LiquidityPool]
+) -> List[LiquidityPool]:
+    """
+    Update LiquidityPool objects with sweep tracking information.
+    
+    When price breaks through a pool level, marks the pool as swept
+    with the bar index and timestamp of the sweep.
+    
+    STOLEN from smartmoneyconcepts library.
+    
+    Args:
+        df: OHLCV DataFrame with DatetimeIndex
+        pools: List of LiquidityPool objects
+        
+    Returns:
+        List[LiquidityPool]: Updated pools with sweep tracking
+    """
+    from dataclasses import replace
+    
+    if not pools or len(df) == 0:
+        return pools
+    
+    updated_pools = []
+    
+    for pool in pools:
+        if pool.swept:
+            # Already swept, keep as-is
+            updated_pools.append(pool)
+            continue
+        
+        swept = False
+        swept_idx = None
+        swept_ts = None
+        
+        # Check each candle for sweep
+        for i in range(len(df)):
+            candle = df.iloc[i]
+            
+            if pool.pool_type == "equal_highs":
+                # Pool swept when price closes above the level
+                if candle['close'] > pool.level:
+                    swept = True
+                    swept_idx = i
+                    swept_ts = df.index[i].to_pydatetime()
+                    break
+            else:  # equal_lows
+                # Pool swept when price closes below the level
+                if candle['close'] < pool.level:
+                    swept = True
+                    swept_idx = i
+                    swept_ts = df.index[i].to_pydatetime()
+                    break
+        
+        if swept:
+            updated_pool = replace(
+                pool,
+                swept=True,
+                swept_index=swept_idx,
+                swept_timestamp=swept_ts
+            )
+            updated_pools.append(updated_pool)
+        else:
+            updated_pools.append(pool)
+    
+    return updated_pools
+
