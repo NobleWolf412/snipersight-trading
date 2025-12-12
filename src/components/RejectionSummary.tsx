@@ -199,58 +199,97 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                         <Info className="w-3 h-3 mr-1" /> View All
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="w-full max-w-[90vw] h-[80vh] flex flex-col p-0 gap-0">
-                      <DialogHeader className="p-6 border-b border-border/50">
-                        <div className="flex items-center justify-between">
-                          <DialogTitle className="flex items-center gap-2">
-                            <Icon className={`w-5 h-5 ${config.color}`} />
-                            {config.label} – {reasonDetails.length} Rejections
+                    <DialogContent className="w-full max-w-[95vw] lg:max-w-[85vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+                      <DialogHeader className="p-4 sm:p-6 border-b border-border/50 shrink-0">
+                        <div className="flex items-center justify-between gap-4">
+                          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+                            <Icon className={`w-5 h-5 ${config.color} shrink-0`} />
+                            <span className="truncate">{config.label}</span>
+                            <Badge variant="secondary" className="font-mono text-xs shrink-0">
+                              {reasonDetails.length}
+                            </Badge>
                           </DialogTitle>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => setReasonDialog(null)}
-                            className="text-xs"
+                            className="text-xs shrink-0"
                           >
                             Close
                           </Button>
                         </div>
-                        <DialogDescription className="text-sm text-muted-foreground mt-1">
+                        <DialogDescription className="text-xs sm:text-sm text-muted-foreground mt-1">
                           Detailed breakdown of all {reasonDetails.length} symbols rejected for {config.label.toLowerCase()}
                         </DialogDescription>
                       </DialogHeader>
-                      <ScrollArea className="flex-1 p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                          {reasonDetails.map((detail, idx) => (
-                            <Card key={idx} className="p-4 bg-background/40 border border-border/50 flex flex-col h-full min-w-0">
-                              <div className="flex items-center justify-between mb-3 gap-2">
-                                <div className="font-mono text-primary font-semibold text-base truncate">{detail.symbol}</div>
+                      <ScrollArea className="flex-1 overflow-auto">
+                        <div className="p-4 sm:p-6">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
+                            {reasonDetails.map((detail, idx) => (
+                              <Card
+                                key={idx}
+                                className="p-3 sm:p-4 bg-background/60 border border-border/50 hover:border-primary/30 transition-colors flex flex-col"
+                              >
+                                {/* Header: Symbol + Score */}
+                                <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-border/30">
+                                  <span className="font-mono text-primary font-semibold text-sm truncate">
+                                    {detail.symbol.replace(':USDT', '')}
+                                  </span>
+                                  {detail.score !== undefined && detail.threshold !== undefined && (
+                                    <Badge
+                                      variant={detail.score >= detail.threshold * 0.9 ? "default" : "secondary"}
+                                      className="font-mono text-xs shrink-0"
+                                    >
+                                      {detail.score.toFixed(1)}%
+                                    </Badge>
+                                  )}
+                                </div>
+
+                                {/* Progress Bar */}
                                 {detail.score !== undefined && detail.threshold !== undefined && (
-                                  <Badge variant="secondary" className="font-mono text-xs shrink-0">
-                                    {detail.score.toFixed(1)} / {detail.threshold.toFixed(1)}
-                                  </Badge>
+                                  <div className="mb-3">
+                                    <div className="flex items-center justify-between text-[10px] mb-1 text-muted-foreground">
+                                      <span>Score</span>
+                                      <span>{detail.score.toFixed(1)} / {detail.threshold.toFixed(1)}</span>
+                                    </div>
+                                    <Progress
+                                      value={(detail.score / detail.threshold) * 100}
+                                      className="h-1.5"
+                                    />
+                                  </div>
                                 )}
-                              </div>
-                              <p className="text-sm text-muted-foreground mb-4 leading-relaxed break-words">{detail.reason}</p>
-                              {/* Reuse TargetIntelScorecard for consistent visualization */}
-                              {detail.all_factors && detail.all_factors.length > 0 ? (
-                                <div className="mt-auto pt-3 border-t border-border/30">
-                                  <TargetIntelScorecard breakdown={transformToBreakdown(detail)} compact={true} />
-                                </div>
-                              ) : (
-                                /* Fallback for non-score reasons (like No Data or Errors) */
-                                <div className="text-sm text-muted-foreground/60 italic pl-3 border-l-2 border-border/50 mt-auto pt-3">
-                                  Analysis unavailable
-                                </div>
-                              )}
-                            </Card>
-                          ))}
-                        </div>
-                        {reasonDetails.length > 12 && (
-                          <div className="text-xs text-muted-foreground text-center mt-6">
-                            Showing {reasonDetails.length} rejections
+
+                                {/* All Factors - Scrollable List */}
+                                {detail.all_factors && detail.all_factors.length > 0 && (
+                                  <div className="flex-1 overflow-hidden">
+                                    <div className="max-h-48 overflow-y-auto pr-1 space-y-2">
+                                      {detail.all_factors.map((factor, fidx) => (
+                                        <div key={fidx} className="flex items-center justify-between gap-3">
+                                          <span className="text-muted-foreground text-sm leading-tight flex-1">
+                                            {factor.name.replace(/_/g, ' ')}
+                                          </span>
+                                          <span className={`font-mono text-sm font-medium shrink-0 ${factor.score >= 70 ? 'text-green-400' :
+                                            factor.score >= 50 ? 'text-yellow-400' :
+                                              'text-red-400'
+                                            }`}>
+                                            {factor.score.toFixed(0)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Fallback for non-score rejections */}
+                                {(!detail.all_factors || detail.all_factors.length === 0) && (
+                                  <p className="text-xs text-muted-foreground/70 italic flex-1">
+                                    {detail.reason}
+                                  </p>
+                                )}
+                              </Card>
+                            ))}
                           </div>
-                        )}
+                        </div>
                       </ScrollArea>
                     </DialogContent>
                   </Dialog>
