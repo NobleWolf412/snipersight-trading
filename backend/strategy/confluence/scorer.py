@@ -29,6 +29,7 @@ from backend.shared.config.scanner_modes import MACDModeConfig, get_macd_config
 from backend.strategy.smc.volume_profile import VolumeProfile, calculate_volume_confluence_factor
 from backend.analysis.premium_discount import detect_premium_discount
 from backend.analysis.pullback_detector import detect_pullback_setup, PullbackSetup
+from backend.strategy.smc.sessions import is_kill_zone_active, get_current_kill_zone
 
 # Conditional imports for type hints
 if TYPE_CHECKING:
@@ -894,6 +895,24 @@ def calculate_confluence_score(
             weight=0.15,
             rationale=_get_sweep_rationale(smc_snapshot.liquidity_sweeps, direction)
         ))
+    
+    # Kill Zone Timing (high-probability institutional windows)
+    try:
+        from datetime import datetime
+        now = datetime.now()
+        kill_zone = get_current_kill_zone(now)
+        if kill_zone:
+            # Normalize kill zone name for display
+            kz_display = kill_zone.value.replace('_', ' ').title()
+            factors.append(ConfluenceFactor(
+                name="Kill Zone Timing",
+                score=60.0,  # Moderate score (not make-or-break)
+                weight=0.05,  # Low weight - timing bonus, not primary factor
+                rationale=f"In {kz_display} kill zone - high institutional activity"
+            ))
+            logger.debug("⏰ Kill zone active: %s", kz_display)
+    except Exception as e:
+        logger.debug("Kill zone check failed: %s", e)
     
     # --- Indicator Scoring ---
     

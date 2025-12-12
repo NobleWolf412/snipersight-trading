@@ -560,3 +560,5 @@ class HTFLevelDetector:
             if abs((fvg_mid - level.price) / level.price) * 100 <= 1.5:
                 return True
         return False
+
+

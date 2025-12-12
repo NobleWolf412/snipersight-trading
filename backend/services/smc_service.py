@@ -23,12 +23,17 @@ from backend.shared.models.smc import SMCSnapshot
 from backend.shared.config.smc_config import SMCConfig
 
 # SMC Detection functions
-from backend.strategy.smc.order_blocks import detect_order_blocks
-from backend.strategy.smc.fvg import detect_fvgs
-from backend.strategy.smc.bos_choch import detect_structural_breaks
-from backend.strategy.smc.liquidity_sweeps import detect_liquidity_sweeps, detect_equal_highs_lows
+from backend.strategy.smc.order_blocks import (
+    detect_order_blocks, 
+    detect_order_blocks_structural,
+    update_ob_lifecycle
+)
+from backend.strategy.smc.fvg import detect_fvgs, merge_consecutive_fvgs
+from backend.strategy.smc.bos_choch import detect_structural_breaks, _detect_swing_highs, _detect_swing_lows
+from backend.strategy.smc.liquidity_sweeps import detect_liquidity_sweeps, detect_equal_highs_lows, track_pool_sweeps
 from backend.strategy.smc.swing_structure import detect_swing_structure
 from backend.strategy.smc.mitigation_tracker import update_ob_mitigation
+from backend.indicators.volatility import compute_atr
 
 # Analysis functions
 from backend.analysis.premium_discount import detect_premium_discount
@@ -195,11 +200,31 @@ class SMCDetectionService:
             'premium_discount': None,
         }
         
-        # Order blocks
-        result['order_blocks'] = detect_order_blocks(df, self._smc_config)
+        # Calculate ATR for FVG merge
+        try:
+            atr = compute_atr(df, period=14)
+            atr_val = atr.iloc[-1] if len(atr) > 0 and pd.notna(atr.iloc[-1]) else 0
+        except:
+            atr_val = 0
         
-        # Fair value gaps
-        result['fvgs'] = detect_fvgs(df, self._smc_config)
+        # Swing detection for structural OBs
+        swing_lookback = getattr(self._smc_config, 'structure_swing_lookback', 10)
+        swing_highs = _detect_swing_highs(df, swing_lookback)
+        swing_lows = _detect_swing_lows(df, swing_lookback)
+        
+        # Order blocks (traditional + structural)
+        result['order_blocks'] = detect_order_blocks(df, self._smc_config)
+        try:
+            structural_obs = detect_order_blocks_structural(df, swing_highs, swing_lows, self._smc_config)
+            result['order_blocks'].extend(structural_obs)
+        except Exception as e:
+            logger.debug("Structural OB detection failed: %s", e)
+        
+        # Fair value gaps (with merge)
+        fvgs = detect_fvgs(df, self._smc_config)
+        if atr_val > 0:
+            fvgs = merge_consecutive_fvgs(fvgs, max_gap_atr=0.5, atr_value=atr_val)
+        result['fvgs'] = fvgs
         
         # Structure breaks
         result['structure_breaks'] = detect_structural_breaks(df, self._smc_config)
@@ -230,6 +255,8 @@ class SMCDetectionService:
             result['equal_highs'] = ehl.get('equal_highs', [])
             result['equal_lows'] = ehl.get('equal_lows', [])
             pools = ehl.get('pools', [])
+            # Track pool sweeps (Phase 2.3)
+            pools = track_pool_sweeps(df, pools)
             result['liquidity_pools'] = pools
             
             if pools:
@@ -296,6 +323,8 @@ class SMCDetectionService:
                 order_blocks, mitigation_status = update_ob_mitigation(
                     order_blocks, ltf_df, max_mitigation=0.5
                 )
+                # Phase 2.1: Update OB lifecycle (breaker/invalidated)
+                order_blocks = update_ob_lifecycle(ltf_df, order_blocks, preset="defaults")
                 if mitigation_status.fully_mitigated_count > 0:
                     logger.info("🔄 OB Mitigation: %d fully mitigated, %d partial, %d fresh",
                                mitigation_status.fully_mitigated_count,
