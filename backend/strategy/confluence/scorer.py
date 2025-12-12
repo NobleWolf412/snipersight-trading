@@ -815,46 +815,22 @@ def evaluate_weekly_stoch_rsi_gate(
     }
 
 
-def calculate_confluence_score(
+def _score_all_smc_patterns(
     smc_snapshot: SMCSnapshot,
-    indicators: IndicatorSet,
-    config: ScanConfig,
-    direction: str,
-    htf_trend: Optional[str] = None,
-    btc_impulse: Optional[str] = None,
-    htf_context: Optional[dict] = None,
-    cycle_context: Optional["CycleContext"] = None,
-    reversal_context: Optional["ReversalContext"] = None,
-    volume_profile: Optional[VolumeProfile] = None,
-    current_price: Optional[float] = None
-) -> ConfluenceBreakdown:
+    direction: str
+) -> List[ConfluenceFactor]:
     """
-    Calculate comprehensive confluence score for a trade setup.
-    
+    Score all SMC patterns (Order Blocks, FVGs, Structural Breaks, Liquidity Sweeps).
+
     Args:
         smc_snapshot: SMC patterns detected across timeframes
-        indicators: Technical indicators across timeframes
-        config: Scan configuration with weights and thresholds
-        direction: Trade direction ("bullish" or "bearish")
-        htf_trend: Higher timeframe trend ("bullish", "bearish", "neutral")
-        btc_impulse: BTC trend for altcoin gate ("bullish", "bearish", "neutral")
-        htf_context: HTF level proximity context
-        cycle_context: Optional cycle timing context for cycle-aware bonuses
-        reversal_context: Optional reversal detection context for synergy bonuses
-        volume_profile: Optional volume profile for institutional-grade VAP analysis
-        current_price: Optional current price for volume profile entry analysis
-        
+        direction: Trade direction (normalized to "bullish" or "bearish")
+
     Returns:
-        ConfluenceBreakdown: Complete scoring breakdown with factors
+        List of ConfluenceFactor for SMC patterns
     """
     factors = []
-    
-    # Normalize direction at entry: LONG/SHORT -> bullish/bearish
-    # This ensures consistent format throughout all scoring functions
-    direction = _normalize_direction(direction)
-    
-    # --- SMC Pattern Scoring ---
-    
+
     # Order Blocks
     ob_score = _score_order_blocks(smc_snapshot.order_blocks, direction)
     if ob_score > 0:
@@ -864,7 +840,7 @@ def calculate_confluence_score(
             weight=0.20,
             rationale=_get_ob_rationale(smc_snapshot.order_blocks, direction)
         ))
-    
+
     # Fair Value Gaps
     fvg_score = _score_fvgs(smc_snapshot.fvgs, direction)
     if fvg_score > 0:
@@ -874,7 +850,7 @@ def calculate_confluence_score(
             weight=0.15,
             rationale=_get_fvg_rationale(smc_snapshot.fvgs, direction)
         ))
-    
+
     # Structural Breaks
     structure_score = _score_structural_breaks(smc_snapshot.structural_breaks, direction)
     if structure_score > 0:
@@ -884,7 +860,7 @@ def calculate_confluence_score(
             weight=0.25,
             rationale=_get_structure_rationale(smc_snapshot.structural_breaks, direction)
         ))
-    
+
     # Liquidity Sweeps
     sweep_score = _score_liquidity_sweeps(smc_snapshot.liquidity_sweeps, direction)
     if sweep_score > 0:
@@ -894,68 +870,90 @@ def calculate_confluence_score(
             weight=0.15,
             rationale=_get_sweep_rationale(smc_snapshot.liquidity_sweeps, direction)
         ))
-    
-    # --- Indicator Scoring ---
-    
-    # Get primary timeframe indicators (assume first in dict or specified)
+
+    return factors
+
+
+def _score_all_indicators(
+    indicators: IndicatorSet,
+    config: ScanConfig,
+    direction: str,
+    volume_profile: Optional[VolumeProfile] = None,
+    current_price: Optional[float] = None
+) -> Tuple[List[ConfluenceFactor], Optional[dict]]:
+    """
+    Score all technical indicators (Momentum, Volume, Volatility, Volume Profile).
+
+    Args:
+        indicators: Technical indicators across timeframes
+        config: Scan configuration
+        direction: Trade direction (normalized)
+        volume_profile: Optional volume profile for VAP analysis
+        current_price: Optional current price for volume profile entry analysis
+
+    Returns:
+        Tuple of (list of ConfluenceFactor, MACD analysis dict or None)
+    """
+    factors = []
+    macd_analysis = None
+
+    # Get primary timeframe indicators
     primary_tf = list(indicators.by_timeframe.keys())[0] if indicators.by_timeframe else None
-    
+    if not primary_tf:
+        return factors, macd_analysis
+
+    primary_indicators = indicators.by_timeframe[primary_tf]
+
     # Get MACD mode config based on profile
     profile = getattr(config, 'profile', 'balanced')
     macd_config = get_macd_config(profile)
-    
+
     # Get HTF indicators for MACD bias (if available)
     htf_tf = macd_config.htf_timeframe
     htf_indicators = indicators.by_timeframe.get(htf_tf) if indicators.by_timeframe else None
-    
-    macd_analysis = None
-    
-    if primary_tf:
-        primary_indicators = indicators.by_timeframe[primary_tf]
-        
-        # Momentum indicators (with mode-aware MACD)
-        momentum_score, macd_analysis = _score_momentum(
-            primary_indicators, 
-            direction,
-            macd_config=macd_config,
-            htf_indicators=htf_indicators,
-            timeframe=primary_tf
-        )
-        if momentum_score > 0:
-            # Build momentum rationale including MACD analysis
-            momentum_rationale = _get_momentum_rationale(primary_indicators, direction)
-            if macd_analysis and macd_analysis.get("reasons"):
-                momentum_rationale += f" | MACD [{macd_analysis['role']}]: {'; '.join(macd_analysis['reasons'][:2])}"
-            
-            factors.append(ConfluenceFactor(
-                name="Momentum",
-                score=momentum_score,
-                weight=0.10,
-                rationale=momentum_rationale
-            ))
-        
-        # Volume confirmation
-        volume_score = _score_volume(primary_indicators, direction)
-        if volume_score > 0:
-            factors.append(ConfluenceFactor(
-                name="Volume",
-                score=volume_score,
-                weight=0.10,
-                rationale=_get_volume_rationale(primary_indicators)
-            ))
 
-        # Volatility normalization (ATR%) - prefer moderate volatility
-        volatility_score = _score_volatility(primary_indicators)
-        if volatility_score > 0:
-            factors.append(ConfluenceFactor(
-                name="Volatility",
-                score=volatility_score,
-                weight=0.08,
-                rationale=_get_volatility_rationale(primary_indicators)
-            ))
-    
-    # --- Volume Profile (Institutional VAP Analysis) ---
-    # Only if volume profile and current price are available
+    # Momentum indicators (with mode-aware MACD)
+    momentum_score, macd_analysis = _score_momentum(
+        primary_indicators,
+        direction,
+        macd_config=macd_config,
+        htf_indicators=htf_indicators,
+        timeframe=primary_tf
+    )
+    if momentum_score > 0:
+        # Build momentum rationale including MACD analysis
+        momentum_rationale = _get_momentum_rationale(primary_indicators, direction)
+        if macd_analysis and macd_analysis.get("reasons"):
+            momentum_rationale += f" | MACD [{macd_analysis['role']}]: {'; '.join(macd_analysis['reasons'][:2])}"
+
+        factors.append(ConfluenceFactor(
+            name="Momentum",
+            score=momentum_score,
+            weight=0.10,
+            rationale=momentum_rationale
+        ))
+
+    # Volume confirmation
+    volume_score = _score_volume(primary_indicators, direction)
+    if volume_score > 0:
+        factors.append(ConfluenceFactor(
+            name="Volume",
+            score=volume_score,
+            weight=0.10,
+            rationale=_get_volume_rationale(primary_indicators)
+        ))
+
+    # Volatility normalization (ATR%) - prefer moderate volatility
+    volatility_score = _score_volatility(primary_indicators)
+    if volatility_score > 0:
+        factors.append(ConfluenceFactor(
+            name="Volatility",
+            score=volatility_score,
+            weight=0.08,
+            rationale=_get_volatility_rationale(primary_indicators)
+        ))
+
+    # Volume Profile (Institutional VAP Analysis)
     if volume_profile and current_price:
         try:
             vp_factor = calculate_volume_confluence_factor(
@@ -974,9 +972,8 @@ def calculate_confluence_score(
                             vp_factor['score'], vp_factor['weight'])
         except Exception as e:
             logger.debug("Volume profile scoring skipped: %s", e)
-    
-    # --- MACD Veto Check (for scalp/surgical modes) ---
-    # If MACD veto is active, add a conflict factor
+
+    # MACD Veto Check (for scalp/surgical modes)
     if macd_analysis and macd_analysis.get("veto_active"):
         factors.append(ConfluenceFactor(
             name="MACD Veto",
@@ -984,10 +981,41 @@ def calculate_confluence_score(
             weight=0.05,
             rationale=f"MACD opposing direction with veto active: {'; '.join(macd_analysis.get('reasons', []))}"
         ))
-    
-    # --- HTF Alignment ---
-    
+
+    return factors, macd_analysis
+
+
+def _evaluate_htf_factors(
+    smc_snapshot: SMCSnapshot,
+    indicators: IndicatorSet,
+    config: ScanConfig,
+    direction: str,
+    htf_trend: Optional[str],
+    btc_impulse: Optional[str],
+    htf_context: Optional[dict],
+    current_price: Optional[float]
+) -> Tuple[List[ConfluenceFactor], bool, bool]:
+    """
+    Evaluate all HTF-related factors including alignment, gates, and bonuses.
+
+    Args:
+        smc_snapshot: SMC patterns
+        indicators: Technical indicators
+        config: Scan configuration
+        direction: Trade direction (normalized)
+        htf_trend: Higher timeframe trend
+        btc_impulse: BTC trend for altcoin gate
+        htf_context: HTF level proximity context
+        current_price: Current price for proximity calculations
+
+    Returns:
+        Tuple of (list of ConfluenceFactor, htf_aligned bool, btc_impulse_gate bool)
+    """
+    factors = []
     htf_aligned = False
+    btc_impulse_gate = True
+
+    # HTF Alignment
     if htf_trend:
         htf_score = _score_htf_alignment(htf_trend, direction)
         if htf_score > 0:
@@ -998,8 +1026,8 @@ def calculate_confluence_score(
                 weight=0.20,
                 rationale=f"Higher timeframe trend is {htf_trend}, aligns with {direction} setup"
             ))
-    
-    # --- HTF Level Proximity ---
+
+    # HTF Level Proximity
     if getattr(config, 'htf_proximity_enabled', False) and htf_context:
         try:
             within_atr = float(htf_context.get('within_atr', 1e9))
@@ -1021,13 +1049,10 @@ def calculate_confluence_score(
         except Exception:
             pass
 
-    # --- BTC Impulse Gate ---
-    
-    btc_impulse_gate = True
+    # BTC Impulse Gate
     if config.btc_impulse_gate_enabled and btc_impulse:
         if btc_impulse != direction and btc_impulse != "neutral":
             btc_impulse_gate = False
-            # Add negative factor (softened penalty)
             factors.append(ConfluenceFactor(
                 name="BTC Impulse Gate",
                 score=40.0,
@@ -1042,28 +1067,19 @@ def calculate_confluence_score(
                 weight=0.10,
                 rationale=f"BTC trend ({btc_impulse}) supports {direction} setup"
             ))
-    
-    # --- Weekly StochRSI Bonus ---
-    # Directional bonus/penalty system based on weekly momentum
-    # Replaces the old hard gate - no longer blocks, just influences score
-    weekly_stoch_rsi_bonus = 0.0
-    weekly_stoch_rsi_analysis = None
-    
-    if getattr(config, 'weekly_stoch_rsi_gate_enabled', True):  # Config key kept for backward compat
+
+    # Weekly StochRSI Bonus
+    if getattr(config, 'weekly_stoch_rsi_gate_enabled', True):
         weekly_stoch_rsi_analysis = evaluate_weekly_stoch_rsi_bonus(
             indicators=indicators,
             direction=direction,
             oversold_threshold=getattr(config, 'weekly_stoch_rsi_oversold', 20.0),
             overbought_threshold=getattr(config, 'weekly_stoch_rsi_overbought', 80.0)
         )
-        
+
         weekly_stoch_rsi_bonus = weekly_stoch_rsi_analysis["bonus"]
-        is_aligned = weekly_stoch_rsi_analysis.get("aligned", True)
-        
-        # Add as a factor that influences but doesn't block
+
         if weekly_stoch_rsi_bonus > 0:
-            # Positive bonus - momentum aligned with direction
-            # Convert bonus to 0-100 scale for factor (bonus max is ~15, so scale by 6.67)
             factor_score = min(100.0, 50.0 + weekly_stoch_rsi_bonus * 3.33)
             factors.append(ConfluenceFactor(
                 name="Weekly StochRSI Bonus",
@@ -1073,109 +1089,69 @@ def calculate_confluence_score(
             ))
             logger.debug("📈 Weekly StochRSI BONUS +%.1f: %s", weekly_stoch_rsi_bonus, weekly_stoch_rsi_analysis["reason"])
         elif weekly_stoch_rsi_bonus < 0:
-            # Negative bonus (penalty) - momentum opposes direction
-            # Penalty reduces score but doesn't block (penalty max is -10)
-            factor_score = max(0.0, 50.0 + weekly_stoch_rsi_bonus * 5.0)  # -10 penalty = 0 score
+            factor_score = max(0.0, 50.0 + weekly_stoch_rsi_bonus * 5.0)
             factors.append(ConfluenceFactor(
                 name="Weekly StochRSI Bonus",
                 score=factor_score,
-                weight=0.08,  # Lower weight for penalties
+                weight=0.08,
                 rationale=f"[{weekly_stoch_rsi_bonus:.1f}] {weekly_stoch_rsi_analysis['reason']}"
             ))
             logger.debug("📉 Weekly StochRSI PENALTY %.1f: %s", weekly_stoch_rsi_bonus, weekly_stoch_rsi_analysis["reason"])
-        # For zero bonus (neutral), no factor added - doesn't help or hurt
-    
-    # --- HTF Structure Bias (HH/HL/LH/LL) ---
-    # Score based on swing structure alignment with trade direction
-    # This is KEY for pullback trading - HTF trend defines preferred direction
-    htf_structure_bonus = 0.0
-    htf_structure_analysis = None
-    
+
+    # HTF Structure Bias (with pullback detection)
     if smc_snapshot.swing_structure:
         htf_structure_analysis = _score_htf_structure_bias(
             swing_structure=smc_snapshot.swing_structure,
             direction=direction
         )
         htf_structure_bonus = htf_structure_analysis['bonus']
-        
-        if htf_structure_bonus != 0:
-            # Add as weighted factor
-            if htf_structure_bonus > 0:
-                # Aligned with HTF structure → bonus
-                factor_score = min(100.0, 50.0 + htf_structure_bonus * 3.33)
+
+        if htf_structure_bonus > 0:
+            # Aligned with HTF structure
+            factor_score = min(100.0, 50.0 + htf_structure_bonus * 3.33)
+            factors.append(ConfluenceFactor(
+                name="HTF Structure Bias",
+                score=factor_score,
+                weight=0.12,
+                rationale=f"[+{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}"
+            ))
+            logger.debug("📊 HTF Structure BONUS +%.1f: %s", htf_structure_bonus, htf_structure_analysis['reason'])
+        elif htf_structure_bonus < 0:
+            # Counter-trend - check for pullback override
+            pullback_override, pullback_bonus, pullback_rationale = _check_pullback_override(
+                indicators, smc_snapshot, direction
+            )
+
+            if pullback_override:
+                factor_score = min(100.0, 50.0 + pullback_bonus * 3.33)
+                factors.append(ConfluenceFactor(
+                    name="HTF Pullback Setup",
+                    score=factor_score,
+                    weight=0.12,
+                    rationale=f"[+{pullback_bonus:.1f}] {pullback_rationale}"
+                ))
+                logger.debug("🔄 HTF Pullback BONUS +%.1f: %s", pullback_bonus, pullback_rationale)
+            else:
+                factor_score = max(0.0, 50.0 + htf_structure_bonus * 5.0)
                 factors.append(ConfluenceFactor(
                     name="HTF Structure Bias",
                     score=factor_score,
-                    weight=0.12,  # Significant weight for HTF alignment
-                    rationale=f"[+{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}"
+                    weight=0.08,
+                    rationale=f"[{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}"
                 ))
-                logger.debug("📊 HTF Structure BONUS +%.1f: %s", htf_structure_bonus, htf_structure_analysis['reason'])
-            else:
-                # Counter-trend → check if pullback conditions override the penalty
-                pullback_override = False
-                pullback_bonus = 0.0
-                pullback_rationale = ""
-                
-                # Try to detect pullback setup using 4H data
-                try:
-                    # Get 4H dataframe from indicators
-                    ind_4h = indicators.by_timeframe.get('4h')
-                    df_4h = getattr(ind_4h, 'dataframe', None) if ind_4h else None
-                    
-                    if df_4h is not None and len(df_4h) > 30:
-                        # Detect pullback setup
-                        pullback_dir = "SHORT" if direction.upper() == "BEARISH" or direction.upper() == "SHORT" else "LONG"
-                        pullback_result = detect_pullback_setup(
-                            df_4h=df_4h,
-                            smc_snapshot=smc_snapshot,
-                            requested_direction=pullback_dir,
-                            extension_threshold=3.0  # 3% from EMA
-                        )
-                        
-                        if pullback_result.override_counter_trend:
-                            pullback_override = True
-                            pullback_bonus = 8.0  # Convert penalty to +8 bonus
-                            pullback_rationale = f"PULLBACK OVERRIDE: {pullback_result.rationale}"
-                            logger.info(f"🔄 Pullback detected, overriding counter-trend penalty: {pullback_rationale}")
-                except Exception as e:
-                    logger.debug(f"Pullback detection failed: {e}")
-                
-                if pullback_override:
-                    # Pullback conditions met → give bonus instead of penalty!
-                    factor_score = min(100.0, 50.0 + pullback_bonus * 3.33)
-                    factors.append(ConfluenceFactor(
-                        name="HTF Pullback Setup",
-                        score=factor_score,
-                        weight=0.12,  # Same weight as aligned HTF
-                        rationale=f"[+{pullback_bonus:.1f}] {pullback_rationale}"
-                    ))
-                    logger.debug("🔄 HTF Pullback BONUS +%.1f: %s", pullback_bonus, pullback_rationale)
-                else:
-                    # No pullback override → apply counter-trend penalty as usual
-                    factor_score = max(0.0, 50.0 + htf_structure_bonus * 5.0)
-                    factors.append(ConfluenceFactor(
-                        name="HTF Structure Bias",
-                        score=factor_score,
-                        weight=0.08,
-                        rationale=f"[{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}"
-                    ))
-                    logger.debug("⚠️ HTF Structure PENALTY %.1f: %s", htf_structure_bonus, htf_structure_analysis['reason'])
-    
-    # ===========================================================================
-    # === CRITICAL HTF GATES (New: filters low-quality signals) ===
-    # ===========================================================================
-    
-    # Get current price for proximity calculations
+                logger.debug("⚠️ HTF Structure PENALTY %.1f: %s", htf_structure_bonus, htf_structure_analysis['reason'])
+
+    # HTF Critical Gates
     entry_price = current_price
-    if not entry_price and primary_tf:
+    if not entry_price:
         # Try to get from indicators
-        prim_ind = indicators.by_timeframe.get(primary_tf)
-        if prim_ind and hasattr(prim_ind, 'dataframe') and prim_ind.dataframe is not None:
-            entry_price = prim_ind.dataframe['close'].iloc[-1] if len(prim_ind.dataframe) > 0 else None
-    
-    # === Gate 1: HTF STRUCTURAL PROXIMITY GATE ===
-    # Entry must be at meaningful HTF structural level
-    htf_proximity_result = None
+        primary_tf = list(indicators.by_timeframe.keys())[0] if indicators.by_timeframe else None
+        if primary_tf:
+            prim_ind = indicators.by_timeframe.get(primary_tf)
+            if prim_ind and hasattr(prim_ind, 'dataframe') and prim_ind.dataframe is not None:
+                entry_price = prim_ind.dataframe['close'].iloc[-1] if len(prim_ind.dataframe) > 0 else None
+
+    # Gate 1: HTF Structural Proximity Gate
     if getattr(config, 'enable_htf_structural_gate', True) and entry_price:
         htf_proximity_result = evaluate_htf_structural_proximity(
             smc=smc_snapshot,
@@ -1185,7 +1161,7 @@ def calculate_confluence_score(
             mode_config=config,
             swing_structure=smc_snapshot.swing_structure
         )
-        
+
         if htf_proximity_result['score_adjustment'] != 0:
             factor_score = max(0.0, min(100.0, 50.0 + htf_proximity_result['score_adjustment'] * 1.5))
             factors.append(ConfluenceFactor(
@@ -1194,13 +1170,14 @@ def calculate_confluence_score(
                 weight=0.15,
                 rationale=f"{htf_proximity_result['nearest_structure']} ({htf_proximity_result.get('proximity_atr', 'N/A'):.1f} ATR)" if htf_proximity_result.get('proximity_atr') else htf_proximity_result['nearest_structure']
             ))
-            
+
             if not htf_proximity_result['valid']:
-                logger.warning("🚫 HTF Structural Gate FAILED: entry %.1f ATR from nearest structure", 
+                logger.warning("🚫 HTF Structural Gate FAILED: entry %.1f ATR from nearest structure",
                              htf_proximity_result.get('proximity_atr', 999))
-    
-    # === Gate 2: HTF MOMENTUM GATE ===
-    # Block counter-trend trades during strong HTF momentum
+    else:
+        htf_proximity_result = None
+
+    # Gate 2: HTF Momentum Gate
     if getattr(config, 'enable_htf_momentum_gate', True):
         momentum_gate = evaluate_htf_momentum_gate(
             indicators=indicators,
@@ -1208,7 +1185,7 @@ def calculate_confluence_score(
             mode_config=config,
             swing_structure=smc_snapshot.swing_structure
         )
-        
+
         if momentum_gate['score_adjustment'] != 0:
             factor_score = max(0.0, min(100.0, 50.0 + momentum_gate['score_adjustment'] * 1.0))
             factors.append(ConfluenceFactor(
@@ -1217,13 +1194,12 @@ def calculate_confluence_score(
                 weight=0.12,
                 rationale=momentum_gate['reason']
             ))
-            
+
             if not momentum_gate['allowed']:
                 logger.warning("🚫 HTF Momentum Gate BLOCKED: %s trend with %s momentum",
                              momentum_gate['htf_trend'], momentum_gate['htf_momentum'])
-    
-    # === Gate 3: TIMEFRAME CONFLICT RESOLUTION ===
-    # Explicit rules for handling timeframe conflicts
+
+    # Gate 3: Timeframe Conflict Resolution
     if getattr(config, 'enable_conflict_resolution', True):
         conflict_result = resolve_timeframe_conflicts(
             indicators=indicators,
@@ -1232,7 +1208,7 @@ def calculate_confluence_score(
             swing_structure=smc_snapshot.swing_structure,
             htf_proximity=htf_proximity_result
         )
-        
+
         if conflict_result['score_adjustment'] != 0:
             factor_score = max(0.0, min(100.0, 50.0 + conflict_result['score_adjustment'] * 1.0))
             factors.append(ConfluenceFactor(
@@ -1241,19 +1217,79 @@ def calculate_confluence_score(
                 weight=0.10,
                 rationale=conflict_result['resolution_reason']
             ))
-            
+
             if conflict_result['resolution'] == 'blocked':
                 logger.warning("🚫 Timeframe Conflict BLOCKED: conflicts: %s",
                              ', '.join(conflict_result['conflicts']))
-    
-    # --- Normalize Weights ---
-    
+
+    return factors, htf_aligned, btc_impulse_gate
+
+
+def _check_pullback_override(
+    indicators: IndicatorSet,
+    smc_snapshot: SMCSnapshot,
+    direction: str
+) -> Tuple[bool, float, str]:
+    """
+    Check if pullback conditions override counter-trend penalty.
+
+    Returns:
+        Tuple of (override_active, bonus_value, rationale)
+    """
+    try:
+        ind_4h = indicators.by_timeframe.get('4h')
+        df_4h = getattr(ind_4h, 'dataframe', None) if ind_4h else None
+
+        if df_4h is not None and len(df_4h) > 30:
+            pullback_dir = "SHORT" if direction.upper() == "BEARISH" or direction.upper() == "SHORT" else "LONG"
+            pullback_result = detect_pullback_setup(
+                df_4h=df_4h,
+                smc_snapshot=smc_snapshot,
+                requested_direction=pullback_dir,
+                extension_threshold=3.0  # 3% from EMA
+            )
+
+            if pullback_result.override_counter_trend:
+                return True, 8.0, f"PULLBACK OVERRIDE: {pullback_result.rationale}"
+    except Exception as e:
+        logger.debug(f"Pullback detection failed: {e}")
+
+    return False, 0.0, ""
+
+
+def _finalize_confluence_score(
+    factors: List[ConfluenceFactor],
+    smc_snapshot: SMCSnapshot,
+    indicators: IndicatorSet,
+    direction: str,
+    htf_aligned: bool,
+    btc_impulse_gate: bool,
+    htf_context: Optional[dict],
+    cycle_context: Optional["CycleContext"],
+    reversal_context: Optional["ReversalContext"]
+) -> ConfluenceBreakdown:
+    """
+    Finalize the confluence score with normalization, bonuses, penalties, and regime detection.
+
+    Args:
+        factors: List of all confluence factors
+        smc_snapshot: SMC patterns
+        indicators: Technical indicators
+        direction: Trade direction
+        htf_aligned: Whether HTF is aligned
+        btc_impulse_gate: Whether BTC impulse gate passed
+        htf_context: HTF proximity context
+        cycle_context: Optional cycle context
+        reversal_context: Optional reversal context
+
+    Returns:
+        ConfluenceBreakdown with final score
+    """
     # If no factors present, return minimal breakdown
     if not factors:
-        # Detect regime even if no factors (defaults to 'range' if no data)
         regime = _detect_regime(smc_snapshot, indicators)
         logger.warning("⚠️ No confluence factors generated! Possible data starvation or strict mode. Defaulting regime to %s.", regime)
-        
+
         return ConfluenceBreakdown(
             total_score=0.0,
             factors=[],
@@ -1264,47 +1300,55 @@ def calculate_confluence_score(
             btc_impulse_gate=True,
             weekly_stoch_rsi_gate=True
         )
-    
-    # If not all factors present, weights won't sum to 1.0 - normalize them
+
+    # Normalize weights to sum to 1.0
     total_weight = sum(f.weight for f in factors)
     if total_weight > 0 and abs(total_weight - 1.0) > 0.01:
-        # Normalize weights to sum to 1.0
-        for i, factor in enumerate(factors):
-            factors[i] = ConfluenceFactor(
+        factors = [
+            ConfluenceFactor(
                 name=factor.name,
                 score=factor.score,
                 weight=factor.weight / total_weight,
                 rationale=factor.rationale
             )
-    
-    # --- Calculate Weighted Score ---
-    
+            for factor in factors
+        ]
+
+    # Calculate weighted score
     weighted_score = sum(f.score * f.weight for f in factors)
-    
-    # --- Synergy Bonuses ---
-    
+
+    # Calculate synergy bonuses
     synergy_bonus = _calculate_synergy_bonus(
-        factors, 
+        factors,
         smc_snapshot,
         cycle_context=cycle_context,
         reversal_context=reversal_context,
         direction=direction
     )
-    
-    # --- Conflict Penalties ---
-    
+
+    # Calculate conflict penalties
     conflict_penalty = _calculate_conflict_penalty(factors, direction)
-    
-    # --- Regime Detection ---
-    
+
+    # Detect market regime
     regime = _detect_regime(smc_snapshot, indicators)
-    
-    # --- Final Score ---
-    
+
+    # Calculate final score
     final_score = weighted_score + synergy_bonus - conflict_penalty
     final_score = max(0.0, min(100.0, final_score))  # Clamp to 0-100
-    
-    breakdown = ConfluenceBreakdown(
+
+    # Extract weekly StochRSI bonus if present
+    weekly_stoch_rsi_bonus = 0.0
+    for factor in factors:
+        if factor.name == "Weekly StochRSI Bonus":
+            # Extract bonus from rationale (format: "[+8.0] reason" or "[-5.0] reason")
+            try:
+                bonus_str = factor.rationale.split(']')[0].replace('[', '')
+                weekly_stoch_rsi_bonus = float(bonus_str)
+            except:
+                pass
+            break
+
+    return ConfluenceBreakdown(
         total_score=final_score,
         factors=factors,
         synergy_bonus=synergy_bonus,
@@ -1312,15 +1356,79 @@ def calculate_confluence_score(
         regime=regime,
         htf_aligned=htf_aligned,
         btc_impulse_gate=btc_impulse_gate,
-        weekly_stoch_rsi_gate=True,  # DEPRECATED - always True (no longer a hard gate)
-        weekly_stoch_rsi_bonus=weekly_stoch_rsi_bonus,  # NEW bonus system
+        weekly_stoch_rsi_gate=True,  # DEPRECATED - always True
+        weekly_stoch_rsi_bonus=weekly_stoch_rsi_bonus,
         htf_proximity_atr=(htf_context or {}).get('within_atr'),
         htf_proximity_pct=(htf_context or {}).get('within_pct'),
         nearest_htf_level_timeframe=(htf_context or {}).get('timeframe'),
         nearest_htf_level_type=(htf_context or {}).get('type')
     )
-    
-    return breakdown
+
+
+def calculate_confluence_score(
+    smc_snapshot: SMCSnapshot,
+    indicators: IndicatorSet,
+    config: ScanConfig,
+    direction: str,
+    htf_trend: Optional[str] = None,
+    btc_impulse: Optional[str] = None,
+    htf_context: Optional[dict] = None,
+    cycle_context: Optional["CycleContext"] = None,
+    reversal_context: Optional["ReversalContext"] = None,
+    volume_profile: Optional[VolumeProfile] = None,
+    current_price: Optional[float] = None
+) -> ConfluenceBreakdown:
+    """
+    Calculate comprehensive confluence score for a trade setup.
+
+    This is the main orchestrator that coordinates scoring across multiple dimensions:
+    - SMC patterns (order blocks, FVGs, structural breaks, liquidity sweeps)
+    - Technical indicators (momentum, volume, volatility)
+    - HTF alignment and quality gates
+    - Synergy bonuses and conflict penalties
+
+    Args:
+        smc_snapshot: SMC patterns detected across timeframes
+        indicators: Technical indicators across timeframes
+        config: Scan configuration with weights and thresholds
+        direction: Trade direction ("bullish" or "bearish")
+        htf_trend: Higher timeframe trend ("bullish", "bearish", "neutral")
+        btc_impulse: BTC trend for altcoin gate ("bullish", "bearish", "neutral")
+        htf_context: HTF level proximity context
+        cycle_context: Optional cycle timing context for cycle-aware bonuses
+        reversal_context: Optional reversal detection context for synergy bonuses
+        volume_profile: Optional volume profile for institutional-grade VAP analysis
+        current_price: Optional current price for volume profile entry analysis
+
+    Returns:
+        ConfluenceBreakdown: Complete scoring breakdown with factors
+    """
+    # Normalize direction at entry: LONG/SHORT -> bullish/bearish
+    direction = _normalize_direction(direction)
+
+    # Score SMC patterns
+    smc_factors = _score_all_smc_patterns(smc_snapshot, direction)
+
+    # Score indicators
+    indicator_factors, _ = _score_all_indicators(
+        indicators, config, direction, volume_profile, current_price
+    )
+
+    # Evaluate HTF factors (alignment, gates, bonuses)
+    htf_factors, htf_aligned, btc_impulse_gate = _evaluate_htf_factors(
+        smc_snapshot, indicators, config, direction,
+        htf_trend, btc_impulse, htf_context, current_price
+    )
+
+    # Combine all factors
+    all_factors = smc_factors + indicator_factors + htf_factors
+
+    # Finalize score with normalization, bonuses, and penalties
+    return _finalize_confluence_score(
+        all_factors, smc_snapshot, indicators, direction,
+        htf_aligned, btc_impulse_gate, htf_context,
+        cycle_context, reversal_context
+    )
 
 
 # --- HTF Structure Bias Scoring ---
