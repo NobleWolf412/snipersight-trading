@@ -16,6 +16,7 @@ orchestrator._detect_smc_patterns()
 """
 
 import logging
+import pandas as pd
 from typing import Dict, List, Any, Optional
 
 from backend.shared.models.data import MultiTimeframeData
