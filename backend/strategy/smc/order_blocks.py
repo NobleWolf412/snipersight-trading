@@ -20,6 +20,94 @@ from backend.shared.models.smc import OrderBlock
 from backend.shared.config.smc_config import SMCConfig, scale_lookback
 
 
+# --- Helper Functions for Enhanced OB Detection ---
+
+def _has_structure_context(
+    df: pd.DataFrame,
+    candle_idx: int,
+    direction: str,
+    atr_value: float,
+    swing_lookback: int = 20
+) -> tuple:
+    """
+    Check if rejection candle is at a meaningful structural level.
+    
+    Args:
+        df: OHLCV DataFrame
+        candle_idx: Index of the rejection candle
+        direction: 'bullish' or 'bearish'
+        atr_value: Current ATR for distance normalization
+        swing_lookback: Candles to look back for swing detection
+        
+    Returns:
+        tuple: (has_context: bool, context_type: str)
+    """
+    if candle_idx < swing_lookback:
+        return True, "insufficient_data"
+    
+    candle = df.iloc[candle_idx]
+    lookback_df = df.iloc[candle_idx - swing_lookback:candle_idx]
+    
+    if len(lookback_df) < 10:
+        return True, "insufficient_data"
+    
+    if direction == "bullish":
+        # Check if near recent swing low
+        recent_lows = lookback_df['low'].nsmallest(3)
+        for low_price in recent_lows:
+            distance = abs(candle['low'] - low_price)
+            if distance < atr_value * 1.5:
+                return True, "near_swing_low"
+    else:  # bearish
+        # Check if near recent swing high
+        recent_highs = lookback_df['high'].nlargest(3)
+        for high_price in recent_highs:
+            distance = abs(candle['high'] - high_price)
+            if distance < atr_value * 1.5:
+                return True, "near_swing_high"
+    
+    return False, "no_structure"
+
+
+def _has_bos_confirmation(
+    df: pd.DataFrame,
+    candle_idx: int,
+    direction: str,
+    lookback: int
+) -> bool:
+    """
+    Verify that displacement culminated in break of structure.
+    
+    Args:
+        df: OHLCV DataFrame
+        candle_idx: Index of the OB candle
+        direction: 'bullish' or 'bearish'
+        lookback: Candles to check before/after
+        
+    Returns:
+        bool: True if structure was broken
+    """
+    prior_start = max(0, candle_idx - lookback)
+    future_end = min(len(df), candle_idx + 1 + lookback)
+    
+    prior_df = df.iloc[prior_start:candle_idx]
+    future_df = df.iloc[candle_idx + 1:future_end]
+    
+    if len(prior_df) < 3 or len(future_df) < 2:
+        return False
+    
+    if direction == "bullish":
+        # Get prior swing high
+        prior_swing_high = prior_df['high'].max()
+        # Check if future candles broke it
+        return any(future_df['high'] > prior_swing_high)
+    else:
+        # Get prior swing low
+        prior_swing_low = prior_df['low'].min()
+        # Check if future candles broke it
+        return any(future_df['low'] < prior_swing_low)
+
+
 def detect_order_blocks(
     df: pd.DataFrame,
     config: SMCConfig | dict | None = None
@@ -104,8 +192,10 @@ def detect_order_blocks(
         upper_wick = candle['high'] - max(candle['open'], candle['close'])
         lower_wick = min(candle['open'], candle['close']) - candle['low']
         
-        # Avoid division by zero
-        if body < 1e-10:
+        # Avoid division by zero and filter doji/micro-body candles
+        # Use ATR-based threshold: 5% of ATR as minimum body size
+        min_body = atr.iloc[i] * 0.05 if i < len(atr) and atr.iloc[i] > 0 else 1e-10
+        if body < min_body:
             continue
         
         # Check for bullish order block (strong rejection from support)
@@ -114,16 +204,28 @@ def detect_order_blocks(
             displacement = _calculate_displacement_bullish(df, i, lookback_candles)
             displacement_atr = displacement / atr.iloc[i] if atr.iloc[i] > 0 else 0
             
-            # NEW GRADING MODEL: Always detect, assign grade based on ATR ratio
-            # Grade A = strong, Grade B = moderate, Grade C = weak but detected
+            # Calculate base grade from displacement
             grade = smc_cfg.calculate_grade(displacement_atr)
+            
+            # NEW: Structure context check
+            # Grade C OBs must be at meaningful structure to qualify
+            has_context, context_type = _has_structure_context(df, i, "bullish", atr.iloc[i])
+            if not has_context and grade == 'C':
+                continue  # Skip weak OBs without structure context
+            
+            # NEW: BOS confirmation bonus
+            # If displacement broke structure, upgrade grade
+            if displacement_atr >= 0.6:
+                has_bos = _has_bos_confirmation(df, i, "bullish", lookback_candles)
+                if has_bos and grade == 'B':
+                    grade = 'A'  # Upgrade B to A with BOS
+                elif not has_bos and grade == 'A':
+                    grade = 'B'  # Downgrade A without BOS
             
             # Volume confirmation (optional)
             volume_spike = candle['volume'] > (avg_volume.iloc[i] * volume_threshold) if pd.notna(avg_volume.iloc[i]) else False
             
             # Normalize displacement to 0-100 scale
-            # 1.5 ATR = 50 (minimum), 3.0 ATR = 100 (maximum)
-            # Clamp to 0-100 range (safeguard against data anomalies)
             normalized_displacement = max(0.0, min(100.0, (displacement_atr / 3.0) * 100.0))
             
             ob = OrderBlock(
@@ -133,8 +235,8 @@ def detect_order_blocks(
                 low=candle['low'],
                 timestamp=candle.name.to_pydatetime(),
                 displacement_strength=normalized_displacement,
-                mitigation_level=0.0,  # Not yet mitigated
-                freshness_score=1.0,  # Will be updated later
+                mitigation_level=0.0,
+                freshness_score=1.0,
                 grade=grade,
                 displacement_atr=displacement_atr,
             )
@@ -146,13 +248,25 @@ def detect_order_blocks(
             displacement = _calculate_displacement_bearish(df, i, lookback_candles)
             displacement_atr = displacement / atr.iloc[i] if atr.iloc[i] > 0 else 0
             
-            # NEW GRADING MODEL: Always detect, assign grade based on ATR ratio
+            # Calculate base grade from displacement
             grade = smc_cfg.calculate_grade(displacement_atr)
+            
+            # NEW: Structure context check
+            has_context, context_type = _has_structure_context(df, i, "bearish", atr.iloc[i])
+            if not has_context and grade == 'C':
+                continue  # Skip weak OBs without structure context
+            
+            # NEW: BOS confirmation bonus
+            if displacement_atr >= 0.6:
+                has_bos = _has_bos_confirmation(df, i, "bearish", lookback_candles)
+                if has_bos and grade == 'B':
+                    grade = 'A'
+                elif not has_bos and grade == 'A':
+                    grade = 'B'
             
             volume_spike = candle['volume'] > (avg_volume.iloc[i] * volume_threshold) if pd.notna(avg_volume.iloc[i]) else False
             
             # Normalize displacement to 0-100 scale
-            # Clamp to 0-100 range (safeguard against data anomalies)
             normalized_displacement = max(0.0, min(100.0, (displacement_atr / 3.0) * 100.0))
             
             ob = OrderBlock(
@@ -343,6 +457,103 @@ def check_mitigation(df: pd.DataFrame, ob: OrderBlock) -> float:
             # Partial mitigation
             penetration = highest_revisit - ob.low
             return penetration / ob_range
+
+
+def check_mitigation_enhanced(df: pd.DataFrame, ob: OrderBlock) -> dict:
+    """
+    Enhanced mitigation tracking with quality grading.
+    
+    Returns detailed mitigation info including:
+    - Tap count: How many times zone was revisited
+    - Tap depth: How deep the deepest penetration was
+    - Reaction quality: How strongly price bounced after tap
+    - Grade: fresh/tapped/partial/heavy/invalidated
+    
+    Args:
+        df: DataFrame with OHLC data
+        ob: OrderBlock to check
+        
+    Returns:
+        dict with level, grade, taps, deepest_penetration, best_reaction
+    """
+    future_candles = df[df.index > ob.timestamp]
+    
+    if len(future_candles) == 0:
+        return {
+            "level": 0.0, 
+            "grade": "fresh", 
+            "taps": 0,
+            "deepest_penetration": 0.0,
+            "best_reaction": 0.0
+        }
+    
+    ob_range = ob.high - ob.low
+    if ob_range < 1e-10:
+        return {
+            "level": 0.0, 
+            "grade": "fresh", 
+            "taps": 0,
+            "deepest_penetration": 0.0,
+            "best_reaction": 0.0
+        }
+    
+    taps = 0
+    deepest_penetration = 0.0
+    best_reaction = 0.0
+    
+    for i in range(len(future_candles)):
+        candle = future_candles.iloc[i]
+        
+        if ob.direction == "bullish":
+            # Check if candle tapped the OB zone (wick or body entered)
+            if candle['low'] <= ob.high:
+                taps += 1
+                penetration = (ob.high - candle['low']) / ob_range
+                deepest_penetration = max(deepest_penetration, penetration)
+                
+                # Measure reaction quality (how far did it bounce after tap?)
+                # Look at next 3 candles
+                if i + 3 < len(future_candles):
+                    reaction_high = future_candles.iloc[i+1:i+4]['high'].max()
+                    reaction = reaction_high - candle['low']
+                    best_reaction = max(best_reaction, reaction)
+        else:  # bearish
+            # Check if candle tapped the OB zone
+            if candle['high'] >= ob.low:
+                taps += 1
+                penetration = (candle['high'] - ob.low) / ob_range
+                deepest_penetration = max(deepest_penetration, penetration)
+                
+                # Measure reaction quality
+                if i + 3 < len(future_candles):
+                    reaction_low = future_candles.iloc[i+1:i+4]['low'].min()
+                    reaction = candle['high'] - reaction_low
+                    best_reaction = max(best_reaction, reaction)
+    
+    # Determine mitigation grade based on tap depth and count
+    if deepest_penetration >= 1.0:
+        grade = "invalidated"
+        level = 1.0
+    elif deepest_penetration > 0.7:
+        grade = "heavy"
+        level = deepest_penetration
+    elif deepest_penetration > 0.3:
+        grade = "partial"
+        level = deepest_penetration
+    elif taps > 0:
+        grade = "tapped"
+        level = deepest_penetration
+    else:
+        grade = "fresh"
+        level = 0.0
+    
+    return {
+        "level": level,
+        "grade": grade,
+        "taps": taps,
+        "deepest_penetration": deepest_penetration,
+        "best_reaction": best_reaction
+    }
 
 
 def calculate_freshness(ob: OrderBlock, current_time: datetime) -> float:
