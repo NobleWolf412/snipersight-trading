@@ -684,3 +684,188 @@ def filter_overlapping_order_blocks(order_blocks: List[OrderBlock], max_overlap:
             filtered.append(ob)
     
     return filtered
+
+
+def detect_order_blocks_structural(
+    df: pd.DataFrame,
+    swing_highs: pd.Series,
+    swing_lows: pd.Series,
+    config: SMCConfig | dict | None = None
+) -> List[OrderBlock]:
+    """
+    Detect order blocks using "last candle before BOS" structural method.
+    
+    STOLEN from smartmoneyconcepts library - finds the institutional footprint
+    candle that formed just before a structural break.
+    
+    This method complements rejection-wick detection. Use both and score
+    higher when they agree on the same zone.
+    
+    Args:
+        df: OHLCV DataFrame with DatetimeIndex
+        swing_highs: Series of swing high prices indexed by timestamp
+        swing_lows: Series of swing low prices indexed by timestamp
+        config: SMC configuration
+        
+    Returns:
+        List[OrderBlock]: Detected order blocks from structural method
+    """
+    if config is None:
+        smc_cfg = SMCConfig.defaults()
+    elif isinstance(config, dict):
+        smc_cfg = SMCConfig.from_dict(config)
+    else:
+        smc_cfg = config
+    
+    n = len(df)
+    if n < 30:
+        return []
+    
+    _high = df['high'].values
+    _low = df['low'].values
+    _close = df['close'].values
+    _volume = df['volume'].values if 'volume' in df.columns else np.ones(n)
+    
+    # Track which swing highs/lows have been crossed
+    crossed_highs = set()
+    crossed_lows = set()
+    
+    order_blocks = []
+    
+    # Calculate ATR
+    from backend.indicators.volatility import compute_atr
+    atr = compute_atr(df, period=14)
+    
+    # Get swing high/low indices
+    swing_high_times = set(swing_highs.index)
+    swing_low_times = set(swing_lows.index)
+    
+    # === BULLISH OBs: Close above swing high ===
+    for close_idx in range(1, n):
+        # Find the last swing high before this candle
+        prior_swing_highs = swing_highs[swing_highs.index < df.index[close_idx]]
+        
+        if len(prior_swing_highs) == 0:
+            continue
+            
+        last_swing_high_ts = prior_swing_highs.index[-1]
+        last_swing_high_val = prior_swing_highs.iloc[-1]
+        
+        # Check if we broke this swing high
+        if _close[close_idx] > last_swing_high_val and last_swing_high_ts not in crossed_highs:
+            crossed_highs.add(last_swing_high_ts)
+            
+            # Find the lowest candle between swing high and break (this is the OB)
+            swing_idx = df.index.get_loc(last_swing_high_ts)
+            
+            if close_idx - swing_idx > 1:
+                segment_low = _low[swing_idx + 1:close_idx]
+                if len(segment_low) > 0:
+                    min_val = segment_low.min()
+                    candidates = np.where(segment_low == min_val)[0]
+                    ob_idx = swing_idx + 1 + candidates[-1]
+                else:
+                    ob_idx = close_idx - 1
+            else:
+                ob_idx = close_idx - 1
+            
+            # Calculate volume imbalance (lower = more imbalanced = stronger)
+            vol_cur = _volume[close_idx]
+            vol_prev1 = _volume[close_idx - 1] if close_idx >= 1 else 0
+            vol_prev2 = _volume[close_idx - 2] if close_idx >= 2 else 0
+            high_vol = vol_cur + vol_prev1
+            low_vol = vol_prev2 if vol_prev2 > 0 else 1
+            max_vol = max(high_vol, low_vol)
+            volume_imbalance = (min(high_vol, low_vol) / max_vol * 100) if max_vol > 0 else 100
+            
+            # Grade based on ATR displacement
+            displacement = _high[close_idx] - _low[ob_idx]
+            atr_val = atr.iloc[close_idx] if close_idx < len(atr) and pd.notna(atr.iloc[close_idx]) else 1
+            disp_atr = displacement / atr_val if atr_val > 0 else 0
+            grade = smc_cfg.calculate_grade(disp_atr)
+            
+            # Boost grade if strong volume imbalance (<30% = very imbalanced)
+            if volume_imbalance < 30 and grade == 'B':
+                grade = 'A'
+            
+            normalized_disp = max(0.0, min(100.0, (disp_atr / 3.0) * 100.0))
+            
+            ob = OrderBlock(
+                timeframe=_infer_timeframe(df),
+                direction="bullish",
+                high=_high[ob_idx],
+                low=_low[ob_idx],
+                timestamp=df.index[ob_idx].to_pydatetime(),
+                displacement_strength=normalized_disp,
+                mitigation_level=0.0,
+                freshness_score=100.0,
+                grade=grade,
+                displacement_atr=disp_atr,
+            )
+            order_blocks.append(ob)
+    
+    # === BEARISH OBs: Close below swing low ===
+    for close_idx in range(1, n):
+        # Find the last swing low before this candle
+        prior_swing_lows = swing_lows[swing_lows.index < df.index[close_idx]]
+        
+        if len(prior_swing_lows) == 0:
+            continue
+            
+        last_swing_low_ts = prior_swing_lows.index[-1]
+        last_swing_low_val = prior_swing_lows.iloc[-1]
+        
+        # Check if we broke this swing low
+        if _close[close_idx] < last_swing_low_val and last_swing_low_ts not in crossed_lows:
+            crossed_lows.add(last_swing_low_ts)
+            
+            # Find the highest candle between swing low and break (this is the OB)
+            swing_idx = df.index.get_loc(last_swing_low_ts)
+            
+            if close_idx - swing_idx > 1:
+                segment_high = _high[swing_idx + 1:close_idx]
+                if len(segment_high) > 0:
+                    max_val = segment_high.max()
+                    candidates = np.where(segment_high == max_val)[0]
+                    ob_idx = swing_idx + 1 + candidates[-1]
+                else:
+                    ob_idx = close_idx - 1
+            else:
+                ob_idx = close_idx - 1
+            
+            # Calculate volume imbalance
+            vol_cur = _volume[close_idx]
+            vol_prev1 = _volume[close_idx - 1] if close_idx >= 1 else 0
+            vol_prev2 = _volume[close_idx - 2] if close_idx >= 2 else 0
+            high_vol = vol_cur + vol_prev1
+            low_vol = vol_prev2 if vol_prev2 > 0 else 1
+            max_vol = max(high_vol, low_vol)
+            volume_imbalance = (min(high_vol, low_vol) / max_vol * 100) if max_vol > 0 else 100
+            
+            # Grade based on ATR displacement
+            displacement = _high[ob_idx] - _low[close_idx]
+            atr_val = atr.iloc[close_idx] if close_idx < len(atr) and pd.notna(atr.iloc[close_idx]) else 1
+            disp_atr = displacement / atr_val if atr_val > 0 else 0
+            grade = smc_cfg.calculate_grade(disp_atr)
+            
+            # Boost grade if strong volume imbalance
+            if volume_imbalance < 30 and grade == 'B':
+                grade = 'A'
+            
+            normalized_disp = max(0.0, min(100.0, (disp_atr / 3.0) * 100.0))
+            
+            ob = OrderBlock(
+                timeframe=_infer_timeframe(df),
+                direction="bearish",
+                high=_high[ob_idx],
+                low=_low[ob_idx],
+                timestamp=df.index[ob_idx].to_pydatetime(),
+                displacement_strength=normalized_disp,
+                mitigation_level=0.0,
+                freshness_score=100.0,
+                grade=grade,
+                displacement_atr=disp_atr,
+            )
+            order_blocks.append(ob)
+    
+    return order_blocks

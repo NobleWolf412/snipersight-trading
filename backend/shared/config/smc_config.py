@@ -436,3 +436,145 @@ def get_preset(preset_name: str) -> SMCConfig:
     }
     factory = presets.get(preset_name, SMCConfig.defaults)
     return factory()
+
+
+# ============================================================================
+# PRESET-BASED FEATURE CONTROL FOR NEW SMC IMPROVEMENTS
+# ============================================================================
+# These functions map smc_preset to behavior of Phase 1 refactored features.
+
+def get_swing_dedup_config(preset: str) -> dict:
+    """
+    Get swing deduplication configuration for a preset.
+    
+    Args:
+        preset: 'luxalgo_strict', 'defaults', or 'sensitive'
+        
+    Returns:
+        dict with:
+            - enabled: Whether to use deduplication
+            - strict: If True, only keep the most extreme swing
+            - lookback_scaling: Multiplier for swing lookback
+    """
+    configs = {
+        'luxalgo_strict': {
+            'enabled': True,
+            'strict': True,  # Only keep extreme swings
+            'lookback_scaling': 1.2,  # Wider lookback for HTF-style patterns
+        },
+        'defaults': {
+            'enabled': True,
+            'strict': True,
+            'lookback_scaling': 1.0,
+        },
+        'sensitive': {
+            'enabled': True,
+            'strict': False,  # Keep more swings for research
+            'lookback_scaling': 0.8,  # Shorter lookback
+        },
+    }
+    return configs.get(preset, configs['defaults'])
+
+
+def get_4swing_pattern_config(preset: str) -> dict:
+    """
+    Get 4-swing BOS/CHoCH pattern configuration for a preset.
+    
+    Args:
+        preset: 'luxalgo_strict', 'defaults', or 'sensitive'
+        
+    Returns:
+        dict with:
+            - require_pattern: If True, BOS/CHoCH MUST have valid 4-swing pattern
+            - allow_partial: If True, incomplete patterns can still generate signals
+    """
+    configs = {
+        'luxalgo_strict': {
+            'require_pattern': True,    # Must have proper 4-swing pattern
+            'allow_partial': False,     # No partial patterns
+        },
+        'defaults': {
+            'require_pattern': True,    # Use pattern validation
+            'allow_partial': True,      # Allow partial patterns as lower-grade
+        },
+        'sensitive': {
+            'require_pattern': False,   # Legacy detection (more signals)
+            'allow_partial': True,
+        },
+    }
+    return configs.get(preset, configs['defaults'])
+
+
+def get_structural_ob_config(preset: str) -> dict:
+    """
+    Get structural OB detection configuration for a preset.
+    
+    Controls whether to use the "last candle before BOS" method.
+    
+    Args:
+        preset: 'luxalgo_strict', 'defaults', or 'sensitive'
+        
+    Returns:
+        dict with:
+            - use_structural: Use structural method
+            - use_rejection: Use rejection-wick method
+            - prefer_structural: When both detect same zone, use structural grade
+            - volume_imbalance_threshold: % threshold for grade boost (lower = stricter)
+    """
+    configs = {
+        'luxalgo_strict': {
+            'use_structural': True,
+            'use_rejection': True,
+            'prefer_structural': True,       # Structural is primary
+            'volume_imbalance_threshold': 25.0,  # Stricter threshold
+        },
+        'defaults': {
+            'use_structural': True,
+            'use_rejection': True,
+            'prefer_structural': False,      # Both weighted equally
+            'volume_imbalance_threshold': 35.0,
+        },
+        'sensitive': {
+            'use_structural': True,
+            'use_rejection': True,
+            'prefer_structural': False,
+            'volume_imbalance_threshold': 45.0,  # More lenient
+        },
+    }
+    return configs.get(preset, configs['defaults'])
+
+
+def get_enhanced_mitigation_config(preset: str) -> dict:
+    """
+    Get enhanced mitigation tracking configuration for a preset.
+    
+    Controls how mitigation grading affects OB validity.
+    
+    Args:
+        preset: 'luxalgo_strict', 'defaults', or 'sensitive'
+        
+    Returns:
+        dict with:
+            - use_enhanced: Use new check_mitigation_enhanced() function
+            - invalidate_on_deep_tap: Invalidate OB on deep (>70%) penetration
+            - max_taps_before_invalidate: Max taps before OB considered weak
+    """
+    configs = {
+        'luxalgo_strict': {
+            'use_enhanced': True,
+            'invalidate_on_deep_tap': True,
+            'max_taps_before_invalidate': 2,  # Strict: 2 taps max
+        },
+        'defaults': {
+            'use_enhanced': True,
+            'invalidate_on_deep_tap': True,
+            'max_taps_before_invalidate': 3,
+        },
+        'sensitive': {
+            'use_enhanced': True,
+            'invalidate_on_deep_tap': False,  # Keep more OBs for research
+            'max_taps_before_invalidate': 5,
+        },
+    }
+    return configs.get(preset, configs['defaults'])
+

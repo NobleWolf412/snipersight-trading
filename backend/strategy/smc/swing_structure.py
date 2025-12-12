@@ -21,6 +21,10 @@ from loguru import logger
 SwingType = Literal['HH', 'HL', 'LH', 'LL']
 TrendState = Literal['bullish', 'bearish', 'neutral']
 
+# Flag to toggle deduplication (for testing/comparison)
+USE_SWING_DEDUPLICATION = True
+
+
 
 @dataclass
 class SwingPoint:
@@ -122,6 +126,11 @@ def detect_swing_structure(
     
     # Sort by timestamp
     raw_swings.sort(key=lambda x: x['timestamp'])
+    
+    # NEW: Deduplicate consecutive same-type swings
+    # This ensures alternating High-Low-High-Low pattern for proper BOS/CHoCH detection
+    if USE_SWING_DEDUPLICATION:
+        raw_swings = _deduplicate_swings(raw_swings)
     
     # Label swings with HH/HL/LH/LL
     labeled_swings = _label_swings(raw_swings, min_swing_atr, avg_atr)
@@ -285,3 +294,132 @@ def _infer_timeframe(df: pd.DataFrame) -> str:
         return "1D"
     else:
         return "1W"
+
+
+def _deduplicate_swings(raw_swings: List[dict]) -> List[dict]:
+    """
+    Remove consecutive same-type swings, keeping only the most extreme.
+    
+    Ensures alternating High-Low-High-Low pattern which is required for
+    proper 4-swing BOS/CHoCH pattern detection.
+    
+    STOLEN from smartmoneyconcepts library - vectorized deduplication.
+    
+    Args:
+        raw_swings: List of swing dicts with 'is_high', 'price', 'timestamp', etc.
+        
+    Returns:
+        List with consecutive same-type swings removed (keeps extreme)
+    """
+    if len(raw_swings) < 2:
+        return raw_swings
+    
+    # Iterate and remove duplicates
+    cleaned = []
+    
+    for swing in raw_swings:
+        if not cleaned:
+            cleaned.append(swing)
+            continue
+        
+        last = cleaned[-1]
+        
+        # Check if same type (both highs or both lows)
+        if swing['is_high'] == last['is_high']:
+            # Same type - keep the more extreme one
+            if swing['is_high']:  # Both are highs - keep higher
+                if swing['price'] > last['price']:
+                    cleaned[-1] = swing  # Replace with higher high
+            else:  # Both are lows - keep lower
+                if swing['price'] < last['price']:
+                    cleaned[-1] = swing  # Replace with lower low
+        else:
+            # Different type - keep both (alternating pattern)
+            cleaned.append(swing)
+    
+    logger.debug(f"Swing deduplication: {len(raw_swings)} -> {len(cleaned)} swings")
+    return cleaned
+
+
+def detect_swings_vectorized(
+    df: pd.DataFrame,
+    swing_length: int = 10
+) -> pd.DataFrame:
+    """
+    Vectorized swing detection with deduplication.
+    
+    STOLEN from smartmoneyconcepts library - faster than loop-based detection.
+    Returns DataFrame compatible with BOS/CHoCH pattern matching.
+    
+    Args:
+        df: OHLC DataFrame with DatetimeIndex
+        swing_length: Lookback/forward for swing detection (each side)
+        
+    Returns:
+        DataFrame with columns: HighLow (1=high, -1=low), Level (price)
+    """
+    n = len(df)
+    swing_length_total = swing_length * 2
+    
+    if n < swing_length_total + 1:
+        return pd.DataFrame({'HighLow': [], 'Level': []}, index=df.index[:0])
+    
+    # Initial detection using rolling window (vectorized)
+    high_roll_max = df['high'].shift(-swing_length).rolling(swing_length_total, min_periods=1).max()
+    low_roll_min = df['low'].shift(-swing_length).rolling(swing_length_total, min_periods=1).min()
+    
+    swing_highs_lows = np.where(
+        df['high'] == high_roll_max,
+        1,
+        np.where(
+            df['low'] == low_roll_min,
+            -1,
+            np.nan
+        )
+    ).astype(float)
+    
+    # DEDUPLICATION LOOP - Remove consecutive same-type swings
+    while True:
+        positions = np.where(~np.isnan(swing_highs_lows))[0]
+        
+        if len(positions) < 2:
+            break
+        
+        current = swing_highs_lows[positions[:-1]]
+        next_swing = swing_highs_lows[positions[1:]]
+        
+        highs = df['high'].iloc[positions[:-1]].values
+        lows = df['low'].iloc[positions[:-1]].values
+        
+        next_highs = df['high'].iloc[positions[1:]].values
+        next_lows = df['low'].iloc[positions[1:]].values
+        
+        index_to_remove = np.zeros(len(positions), dtype=bool)
+        
+        # Consecutive highs - keep the higher one
+        consecutive_highs = (current == 1) & (next_swing == 1)
+        index_to_remove[:-1] |= consecutive_highs & (highs < next_highs)
+        index_to_remove[1:] |= consecutive_highs & (highs >= next_highs)
+        
+        # Consecutive lows - keep the lower one
+        consecutive_lows = (current == -1) & (next_swing == -1)
+        index_to_remove[:-1] |= consecutive_lows & (lows > next_lows)
+        index_to_remove[1:] |= consecutive_lows & (lows <= next_lows)
+        
+        if not index_to_remove.any():
+            break
+        
+        swing_highs_lows[positions[index_to_remove]] = np.nan
+    
+    # Build level array
+    level = np.where(
+        ~np.isnan(swing_highs_lows),
+        np.where(swing_highs_lows == 1, df['high'], df['low']),
+        np.nan
+    )
+    
+    return pd.DataFrame({
+        'HighLow': swing_highs_lows,
+        'Level': level
+    }, index=df.index)
+

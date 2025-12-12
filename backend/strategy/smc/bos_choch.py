@@ -21,6 +21,152 @@ if TYPE_CHECKING:
     from backend.shared.models.smc import CycleContext
 
 
+# Flag to enable 4-swing pattern validation (set False to use legacy simple breaks)
+USE_4SWING_PATTERN = True
+
+
+def _build_swing_sequence(
+    swing_highs: pd.Series, 
+    swing_lows: pd.Series
+) -> Tuple[List[int], List[float], List[datetime]]:
+    """
+    Build alternating swing sequence for 4-swing pattern matching.
+    
+    Combines swing highs and lows into a single sequence, deduplicates
+    consecutive same-type swings (keeping more extreme), and returns
+    structured data for pattern detection.
+    
+    STOLEN from smartmoneyconcepts library.
+    
+    Args:
+        swing_highs: Series of swing high prices indexed by timestamp
+        swing_lows: Series of swing low prices indexed by timestamp
+        
+    Returns:
+        tuple: (highs_lows_order, level_order, index_order)
+               - highs_lows_order: List of 1 (high) or -1 (low)
+               - level_order: List of price levels
+               - index_order: List of timestamps
+    """
+    all_swings = []
+    
+    for ts, level in swing_highs.items():
+        if pd.notna(level):
+            all_swings.append((ts, 1, level))  # 1 = swing high
+    
+    for ts, level in swing_lows.items():
+        if pd.notna(level):
+            all_swings.append((ts, -1, level))  # -1 = swing low
+    
+    # Sort by timestamp
+    all_swings.sort(key=lambda x: x[0])
+    
+    # Deduplicate consecutive same-type swings (keep more extreme)
+    cleaned = []
+    for swing in all_swings:
+        if not cleaned:
+            cleaned.append(swing)
+            continue
+        
+        ts, swing_type, level = swing
+        last_ts, last_type, last_level = cleaned[-1]
+        
+        if swing_type == last_type:
+            # Same type - keep more extreme
+            if swing_type == 1:  # High - keep higher
+                if level > last_level:
+                    cleaned[-1] = swing
+            else:  # Low - keep lower
+                if level < last_level:
+                    cleaned[-1] = swing
+        else:
+            cleaned.append(swing)
+    
+    # Unpack into separate lists
+    if not cleaned:
+        return [], [], []
+    
+    index_order = [s[0] for s in cleaned]
+    highs_lows_order = [s[1] for s in cleaned]
+    level_order = [s[2] for s in cleaned]
+    
+    return highs_lows_order, level_order, index_order
+
+
+def _detect_bos_choch_pattern(
+    highs_lows_order: List[int],
+    level_order: List[float],
+    index_order: List[datetime],
+    current_close: float,
+    current_high: float,
+    current_low: float
+) -> Tuple[Optional[str], Optional[str], float, Optional[datetime]]:
+    """
+    Detect BOS/CHoCH using 4-swing pattern validation.
+    
+    Validates proper swing sequence before confirming structure break:
+    - Bullish BOS: [-1, 1, -1, 1] pattern (Low-High-Low-High) + close > last high
+    - Bearish BOS: [1, -1, 1, -1] pattern (High-Low-High-Low) + close < last low
+    - CHoCH: Pattern exists but price breaks counter-trend
+    
+    STOLEN from smartmoneyconcepts library.
+    
+    Args:
+        highs_lows_order: List of 1 (high) or -1 (low)
+        level_order: List of price levels
+        index_order: List of timestamps
+        current_close: Current candle close price
+        current_high: Current candle high price
+        current_low: Current candle low price
+        
+    Returns:
+        tuple: (break_type, direction, broken_level, broken_timestamp)
+               - break_type: 'BOS', 'CHoCH', or None
+               - direction: 'bullish' or 'bearish'
+               - broken_level: price level that was broken
+               - broken_timestamp: timestamp of the swing that was broken
+    """
+    if len(highs_lows_order) < 4:
+        return None, None, 0.0, None
+    
+    # Get last 4 swings
+    last_4_types = highs_lows_order[-4:]
+    last_4_levels = level_order[-4:]
+    last_4_indices = index_order[-4:]
+    
+    # === BULLISH PATTERNS ===
+    # Bullish swing sequence: Low-High-Low-High = [-1, 1, -1, 1]
+    if last_4_types == [-1, 1, -1, 1]:
+        ll, lh, hl, hh = last_4_levels
+        
+        # Bullish BOS: Close above last high, structure ascending (LL < HL < LH < HH)
+        if current_close > hh:
+            if ll < hl < lh < hh:
+                return 'BOS', 'bullish', hh, last_4_indices[-1]
+        
+        # Bullish CHoCH: Close above prior LH (reversal from prior bearish structure)
+        # Pattern: HH > LH > LL > HL means prior bearish, now breaking higher
+        if current_close > lh and hh > lh > ll > hl:
+            return 'CHoCH', 'bullish', lh, last_4_indices[-3]
+    
+    # === BEARISH PATTERNS ===
+    # Bearish swing sequence: High-Low-High-Low = [1, -1, 1, -1]
+    if last_4_types == [1, -1, 1, -1]:
+        hh, hl, lh, ll = last_4_levels
+        
+        # Bearish BOS: Close below last low, structure descending (HH > LH > HL > LL)
+        if current_close < ll:
+            if hh > lh > hl > ll:
+                return 'BOS', 'bearish', ll, last_4_indices[-1]
+        
+        # Bearish CHoCH: Close below prior HL (reversal from prior bullish structure)
+        # Pattern: LL < HL < LH < HH means prior bullish, now breaking lower
+        if current_close < hl and ll < hl < lh < hh:
+            return 'CHoCH', 'bearish', hl, last_4_indices[-3]
+    
+    return None, None, 0.0, None
+
+
 def detect_structural_breaks(
     df: pd.DataFrame,
     config: SMCConfig | dict | None = None,
@@ -99,6 +245,10 @@ def detect_structural_breaks(
     swing_highs = _detect_swing_highs(df, swing_lookback)
     swing_lows = _detect_swing_lows(df, swing_lookback)
     
+    # NEW: Build swing sequence for 4-swing pattern detection
+    if USE_4SWING_PATTERN:
+        highs_lows_order, level_order, index_order = _build_swing_sequence(swing_highs, swing_lows)
+    
     # Track market structure and detect breaks
     structural_breaks = []
     
@@ -108,7 +258,9 @@ def detect_structural_breaks(
     last_swing_high = None
     last_swing_low = None
     
-    # Iterate through price data
+    # Track which swings have been used to avoid duplicate detections
+    breaks_detected_at = set()
+    
     for i in range(swing_lookback * 2, len(df)):
         current_idx = df.index[i]
         current_high = df['high'].iloc[i]
