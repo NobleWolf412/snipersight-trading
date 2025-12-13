@@ -1318,6 +1318,23 @@ def calculate_confluence_score(
     
     conflict_penalty = _calculate_conflict_penalty(factors, direction)
     
+    # --- LTF-Only Penalty ---
+    # Penalize setups that have NO HTF pattern backing (all patterns are 15m/5m)
+    htf_timeframes = {'1w', '1W', '1d', '1D', '4h', '4H', '1h', '1H'}
+    htf_pattern_count = 0
+    htf_pattern_count += sum(1 for ob in smc_snapshot.order_blocks 
+                              if getattr(ob, 'timeframe', '1h') in htf_timeframes)
+    htf_pattern_count += sum(1 for fvg in smc_snapshot.fvgs 
+                              if getattr(fvg, 'timeframe', '1h') in htf_timeframes)
+    htf_pattern_count += sum(1 for brk in smc_snapshot.structural_breaks 
+                              if getattr(brk, 'timeframe', '1h') in htf_timeframes)
+    
+    if htf_pattern_count == 0:
+        # LTF-only setup - apply penalty
+        ltf_penalty = 15.0
+        conflict_penalty += ltf_penalty
+        logger.debug("⚠️ LTF-only setup penalty: +%.1f (no HTF pattern backing)", ltf_penalty)
+    
     # --- Regime Detection ---
     
     regime = _detect_regime(smc_snapshot, indicators)
@@ -1325,6 +1342,7 @@ def calculate_confluence_score(
     # --- Final Score ---
     
     final_score = weighted_score + synergy_bonus - conflict_penalty
+
     final_score = max(0.0, min(100.0, final_score))  # Clamp to 0-100
     
     breakdown = ConfluenceBreakdown(
@@ -1451,6 +1469,29 @@ def _get_grade_weight(grade: str) -> float:
     return GRADE_WEIGHTS.get(grade, 0.7)  # Default to B weight if unknown
 
 
+# --- Timeframe Weighting Constants ---
+# HTF patterns (institutional) should score higher than LTF patterns (noise)
+# 4H is the reference baseline (1.0), weekly patterns most significant
+TIMEFRAME_WEIGHTS = {
+    '1w': 1.5,   # Weekly patterns are most significant
+    '1W': 1.5,
+    '1d': 1.3,   # Daily
+    '1D': 1.3,
+    '4h': 1.0,   # Base reference
+    '4H': 1.0,
+    '1h': 0.85,  # Intraday
+    '1H': 0.85,
+    '15m': 0.6,  # LTF patterns worth less
+    '5m': 0.3,   # Minimal weight - mostly noise
+}
+
+def _get_timeframe_weight(timeframe: str) -> float:
+    """Get weight multiplier for pattern timeframe."""
+    if not timeframe:
+        return 0.7  # Default if unknown
+    return TIMEFRAME_WEIGHTS.get(timeframe, 0.7)
+
+
 def _normalize_direction(direction: str) -> str:
     """Normalize direction format: LONG/SHORT -> bullish/bearish."""
     d = direction.lower()
@@ -1485,12 +1526,13 @@ def _score_order_blocks(order_blocks: List[OrderBlock], direction: str) -> float
     logger.debug("📦 OB Score: %d aligned %s OBs out of %d total", 
                 len(aligned_obs), normalized_dir, len(order_blocks))
     
-    # Find best OB (highest freshness and displacement, lowest mitigation, best grade)
+    # Find best OB (highest freshness and displacement, lowest mitigation, best grade, best TF)
     best_ob = max(aligned_obs, key=lambda ob: (
-        ob.freshness_score * 0.3 +
-        min(ob.displacement_strength / 3.0, 1.0) * 0.3 +
+        ob.freshness_score * 0.25 +
+        min(ob.displacement_strength / 3.0, 1.0) * 0.25 +
         (1.0 - ob.mitigation_level) * 0.2 +
-        _get_grade_weight(getattr(ob, 'grade', 'B')) * 0.2  # Grade factor
+        _get_grade_weight(getattr(ob, 'grade', 'B')) * 0.15 +
+        _get_timeframe_weight(getattr(ob, 'timeframe', '1h')) * 0.15  # Prefer HTF OBs
     ))
     
     # Score based on OB quality
@@ -1500,11 +1542,17 @@ def _score_order_blocks(order_blocks: List[OrderBlock], direction: str) -> float
         (1.0 - best_ob.mitigation_level) * 20
     )
     
-    # Apply grade weighting to final score
+    # Apply grade weighting and timeframe weighting to final score
     grade_weight = _get_grade_weight(getattr(best_ob, 'grade', 'B'))
-    score = base_score * grade_weight
+    tf_weight = _get_timeframe_weight(getattr(best_ob, 'timeframe', '1h'))
+    score = base_score * grade_weight * tf_weight
+    
+    logger.debug("📦 OB Score: %.1f (base=%.1f, grade=%s[%.1f], tf=%s[%.1f])",
+                score, base_score, getattr(best_ob, 'grade', 'B'), grade_weight,
+                getattr(best_ob, 'timeframe', '?'), tf_weight)
     
     return min(100.0, score)
+
 
 
 def _score_fvgs(fvgs: List[FVG], direction: str) -> float:
@@ -1539,45 +1587,60 @@ def _score_fvgs(fvgs: List[FVG], direction: str) -> float:
     # Score based on size, unfilled status, and grade
     best_fvg = max(unfilled, key=lambda fvg: (
         fvg.size * (1.0 - fvg.overlap_with_price) * 
-        _get_grade_weight(getattr(fvg, 'grade', 'B'))
+        _get_grade_weight(getattr(fvg, 'grade', 'B')) *
+        _get_timeframe_weight(getattr(fvg, 'timeframe', '1h'))  # Prefer HTF FVGs
     ))
     
     base_score = 70 + (1.0 - best_fvg.overlap_with_price) * 30
     
-    # Apply grade weighting
+    # Apply grade weighting and timeframe weighting
     grade_weight = _get_grade_weight(getattr(best_fvg, 'grade', 'B'))
-    score = base_score * grade_weight
+    tf_weight = _get_timeframe_weight(getattr(best_fvg, 'timeframe', '1h'))
+    score = base_score * grade_weight * tf_weight
     
     return min(100.0, score)
 
 
 def _score_structural_breaks(breaks: List[StructuralBreak], direction: str) -> float:
-    """Score structural breaks (BOS/CHoCH) with grade weighting."""
+    """Score structural breaks (BOS/CHoCH) with grade and TF weighting.
+    
+    Note: Filters to meaningful HTF breaks first (1H+). LTF breaks are
+    heavily penalized to prevent 5m BOS from driving the structure score.
+    """
     if not breaks:
         return 0.0
     
-    # Get most recent break
-    latest_break = max(breaks, key=lambda b: b.timestamp)
+    # Filter to meaningful timeframes (1H+) - LTF breaks are noise
+    meaningful_tfs = {'1w', '1W', '1d', '1D', '4h', '4H', '1h', '1H'}
+    meaningful_breaks = [b for b in breaks if getattr(b, 'timeframe', '1h') in meaningful_tfs]
     
-    # BOS in trend direction is strongest
-    if latest_break.break_type == "BOS":
-        base_score = 80.0
-    else:  # CHoCH
-        base_score = 60.0
+    if not meaningful_breaks:
+        # Fallback to any break but heavily penalized (LTF-only)
+        latest_break = max(breaks, key=lambda b: b.timestamp)
+        base_score = 30.0  # Much lower base for LTF-only
+        tf_weight = 0.3  # Additional penalty
+    else:
+        # Use most recent meaningful break
+        latest_break = max(meaningful_breaks, key=lambda b: b.timestamp)
+        # BOS in trend direction is strongest
+        if latest_break.break_type == "BOS":
+            base_score = 80.0
+        else:  # CHoCH
+            base_score = 60.0
+        # Bonus for HTF alignment
+        if latest_break.htf_aligned:
+            base_score += 20.0
+        tf_weight = _get_timeframe_weight(getattr(latest_break, 'timeframe', '1h'))
     
-    # Bonus for HTF alignment
-    if latest_break.htf_aligned:
-        base_score += 20.0
-    
-    # Apply grade weighting
+    # Apply grade weighting and timeframe weighting
     grade_weight = _get_grade_weight(getattr(latest_break, 'grade', 'B'))
-    score = base_score * grade_weight
+    score = base_score * grade_weight * tf_weight
     
     return min(100.0, score)
 
 
 def _score_liquidity_sweeps(sweeps: List[LiquiditySweep], direction: str) -> float:
-    """Score liquidity sweeps with grade weighting."""
+    """Score liquidity sweeps with grade and TF weighting."""
     if not sweeps:
         return 0.0
     
@@ -1593,17 +1656,23 @@ def _score_liquidity_sweeps(sweeps: List[LiquiditySweep], direction: str) -> flo
     if not aligned_sweeps:
         return 0.0
     
-    # Get most recent
-    latest_sweep = max(aligned_sweeps, key=lambda s: s.timestamp)
+    # Prefer HTF sweeps (they're institutional)
+    # Sort by TF weight descending, then by timestamp
+    best_sweep = max(aligned_sweeps, key=lambda s: (
+        _get_timeframe_weight(getattr(s, 'timeframe', '1h')),
+        s.timestamp
+    ))
     
     # Score based on confirmation
-    base_score = 70.0 if latest_sweep.confirmation else 50.0
+    base_score = 70.0 if best_sweep.confirmation else 50.0
     
-    # Apply grade weighting
-    grade_weight = _get_grade_weight(getattr(latest_sweep, 'grade', 'B'))
-    score = base_score * grade_weight
+    # Apply grade weighting and timeframe weighting
+    grade_weight = _get_grade_weight(getattr(best_sweep, 'grade', 'B'))
+    tf_weight = _get_timeframe_weight(getattr(best_sweep, 'timeframe', '1h'))
+    score = base_score * grade_weight * tf_weight
     
     return score
+
 
 
 # --- Indicator Scoring Functions ---
