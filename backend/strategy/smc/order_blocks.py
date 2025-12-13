@@ -228,10 +228,14 @@ def detect_order_blocks(
             # Normalize displacement to 0-100 scale
             normalized_displacement = max(0.0, min(100.0, (displacement_atr / 3.0) * 100.0))
             
+            # LuxAlgo-style median-based range: bullish OBs use low → median
+            # This gives tighter zones where institutional buying actually occurred
+            median_price = (candle['high'] + candle['low']) / 2
+            
             ob = OrderBlock(
                 timeframe=_infer_timeframe(df),
                 direction="bullish",
-                high=candle['high'],
+                high=median_price,  # Tighter: median instead of full high
                 low=candle['low'],
                 timestamp=candle.name.to_pydatetime(),
                 displacement_strength=normalized_displacement,
@@ -269,11 +273,15 @@ def detect_order_blocks(
             # Normalize displacement to 0-100 scale
             normalized_displacement = max(0.0, min(100.0, (displacement_atr / 3.0) * 100.0))
             
+            # LuxAlgo-style median-based range: bearish OBs use median → high
+            # This gives tighter zones where institutional selling actually occurred
+            median_price = (candle['high'] + candle['low']) / 2
+            
             ob = OrderBlock(
                 timeframe=_infer_timeframe(df),
                 direction="bearish",
                 high=candle['high'],
-                low=candle['low'],
+                low=median_price,  # Tighter: median instead of full low
                 timestamp=candle.name.to_pydatetime(),
                 displacement_strength=normalized_displacement,
                 mitigation_level=0.0,
@@ -790,10 +798,13 @@ def detect_order_blocks_structural(
             
             normalized_disp = max(0.0, min(100.0, (disp_atr / 3.0) * 100.0))
             
+            # LuxAlgo-style median-based range: bullish OBs use low → median
+            median_price = (_high[ob_idx] + _low[ob_idx]) / 2
+            
             ob = OrderBlock(
                 timeframe=_infer_timeframe(df),
                 direction="bullish",
-                high=_high[ob_idx],
+                high=median_price,  # Tighter: median instead of full high
                 low=_low[ob_idx],
                 timestamp=df.index[ob_idx].to_pydatetime(),
                 displacement_strength=normalized_disp,
@@ -854,11 +865,14 @@ def detect_order_blocks_structural(
             
             normalized_disp = max(0.0, min(100.0, (disp_atr / 3.0) * 100.0))
             
+            # LuxAlgo-style median-based range: bearish OBs use median → high
+            median_price = (_high[ob_idx] + _low[ob_idx]) / 2
+            
             ob = OrderBlock(
                 timeframe=_infer_timeframe(df),
                 direction="bearish",
                 high=_high[ob_idx],
-                low=_low[ob_idx],
+                low=median_price,  # Tighter: median instead of full low
                 timestamp=df.index[ob_idx].to_pydatetime(),
                 displacement_strength=normalized_disp,
                 mitigation_level=0.0,
