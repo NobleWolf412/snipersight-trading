@@ -1602,14 +1602,14 @@ def _calculate_stop_loss(
             used_structure = True
         else:
             # === NEW TIER: Entry OB Edge-Based Stop ===
-            # If no separate OBs below entry, use the ENTRY OB's low as invalidation
-            # This is how SMC traders typically place stops - just below the OB they're trading
+            # If no separate OBs below entry, use an entry OB's low as invalidation
+            # CRITICAL: OB low must be BELOW entry, otherwise stop would be above entry!
             entry_obs = [ob for ob in smc_snapshot.order_blocks 
-                        if ob.direction == "bullish"]
+                        if ob.direction == "bullish" and ob.low < entry_zone.far_entry]
             
             if entry_obs:
-                # Use the strongest OB (same one likely used for entry)
-                best_entry_ob = max(entry_obs, key=lambda ob: getattr(ob, 'displacement_strength', 0))
+                # Use the OB with highest low (closest to entry but still below)
+                best_entry_ob = max(entry_obs, key=lambda ob: ob.low)
                 
                 # Stop below the OB's low edge (invalidation point)
                 stop_level = best_entry_ob.low - (stop_buffer * atr)
@@ -1617,7 +1617,8 @@ def _calculate_stop_loss(
                 rationale = f"Stop below {structure_tf_used} entry OB low (invalidation edge)"
                 distance_atr = (entry_zone.far_entry - stop_level) / atr
                 used_structure = True
-                logger.info(f"Using entry OB edge stop: OB low={best_entry_ob.low}, stop={stop_level}")
+                logger.info(f"Using entry OB edge stop: OB low={best_entry_ob.low}, stop={stop_level}, entry_far={entry_zone.far_entry}")
+
             else:
                 # Fallback: swing-based stop from primary timeframe, then HTF if needed
                 logger.info(f"No SMC structure for stop - attempting swing-based fallback")
@@ -1735,13 +1736,14 @@ def _calculate_stop_loss(
             used_structure = True
         else:
             # === NEW TIER: Entry OB Edge-Based Stop ===
-            # If no separate OBs above entry, use the ENTRY OB's high as invalidation
+            # If no separate OBs above entry, use an entry OB's high as invalidation
+            # CRITICAL: OB high must be ABOVE entry, otherwise stop would be below entry!
             entry_obs = [ob for ob in smc_snapshot.order_blocks 
-                        if ob.direction == "bearish"]
+                        if ob.direction == "bearish" and ob.high > entry_zone.near_entry]
             
             if entry_obs:
-                # Use the strongest OB (same one likely used for entry)
-                best_entry_ob = max(entry_obs, key=lambda ob: getattr(ob, 'displacement_strength', 0))
+                # Use the OB with lowest high (closest to entry but still above)
+                best_entry_ob = min(entry_obs, key=lambda ob: ob.high)
                 
                 # Stop above the OB's high edge (invalidation point)
                 stop_level = best_entry_ob.high + (stop_buffer * atr)
@@ -1749,7 +1751,8 @@ def _calculate_stop_loss(
                 rationale = f"Stop above {structure_tf_used} entry OB high (invalidation edge)"
                 distance_atr = (stop_level - entry_zone.near_entry) / atr
                 used_structure = True
-                logger.info(f"Using entry OB edge stop: OB high={best_entry_ob.high}, stop={stop_level}")
+                logger.info(f"Using entry OB edge stop: OB high={best_entry_ob.high}, stop={stop_level}, entry_near={entry_zone.near_entry}")
+
             else:
                 # Fallback: swing-based stop from primary timeframe, then HTF if needed
                 logger.info(f"No SMC structure for stop - attempting swing-based fallback")
