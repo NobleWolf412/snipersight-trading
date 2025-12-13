@@ -359,6 +359,13 @@ class ScannerService:
         for plan in trade_plans:
             # Clean symbol: remove '/' and ':USDT' suffix (exchange swap notation)
             clean_symbol = plan.symbol.replace('/', '').replace(':USDT', '')
+            
+            # Extract SMC geometry lists from plan.metadata
+            ob_list = plan.metadata.get('order_blocks_list', [])
+            fvg_list = plan.metadata.get('fvgs_list', [])
+            bos_list = plan.metadata.get('structural_breaks_list', [])
+            sweep_list = plan.metadata.get('liquidity_sweeps_list', [])
+            
             signal = {
                 "symbol": clean_symbol,
                 "direction": plan.direction,
@@ -373,10 +380,10 @@ class ScannerService:
                 "primary_timeframe": mode.timeframes[-1] if mode.timeframes else "",
                 "current_price": plan.entry_zone.near_entry,
                 "analysis": {
-                    "order_blocks": plan.metadata.get('order_blocks', 0),
-                    "fvgs": plan.metadata.get('fvgs', 0),
-                    "structural_breaks": plan.metadata.get('structural_breaks', 0),
-                    "liquidity_sweeps": plan.metadata.get('liquidity_sweeps', 0),
+                    "order_blocks": len(ob_list),
+                    "fvgs": len(fvg_list),
+                    "structural_breaks": len(bos_list),
+                    "liquidity_sweeps": len(sweep_list),
                     "trend": plan.direction.lower(),
                     "risk_reward": plan.risk_reward,
                     "confluence_score": (
@@ -413,10 +420,18 @@ class ScannerService:
                     "global_regime": plan.metadata.get('global_regime'),
                     "symbol_regime": plan.metadata.get('symbol_regime'),
                 },
-                "macro": plan.metadata.get('macro')
+                "macro": plan.metadata.get('macro'),
+                # SMC geometry for chart overlays - actual OB/FVG price ranges
+                "smc_geometry": {
+                    "order_blocks": ob_list[:10],  # Limit for payload size
+                    "fvgs": fvg_list[:10],
+                    "bos_choch": bos_list[:10],
+                    "liquidity_sweeps": sweep_list[:10],
+                }
             }
             signals.append(signal)
         return signals
+
 
 
 # Singleton instance
