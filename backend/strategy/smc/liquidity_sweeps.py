@@ -93,7 +93,12 @@ def detect_liquidity_sweeps(
     require_volume_spike = smc_cfg.sweep_require_volume_spike
     
     if len(df) < swing_lookback * 2 + 20:
-        raise ValueError(f"DataFrame too short for liquidity sweep detection (need {swing_lookback * 2 + 20} rows, got {len(df)})")
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning("💧 Sweep detection skipped: DataFrame too short (need %d rows, got %d)", 
+                      swing_lookback * 2 + 20, len(df))
+        return []  # Graceful fallback instead of crashing HTF detection
+
     
     # Calculate ATR for filtering
     from backend.indicators.volatility import compute_atr

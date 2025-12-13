@@ -300,7 +300,11 @@ class SMCDetectionService:
         
         # Liquidity sweeps (use TF-specific config for sweep thresholds)
         if tf_config.get('detect_sweep', True):
-            result['liquidity_sweeps'] = detect_liquidity_sweeps(df, tf_smc_config)
+            try:
+                result['liquidity_sweeps'] = detect_liquidity_sweeps(df, tf_smc_config)
+            except Exception as e:
+                logger.warning("💧 %s: Sweep detection FAILED: %s", timeframe, e)
+                result['liquidity_sweeps'] = []
         else:
             logger.debug("💧 %s: Sweep detection SKIPPED (TF filter)", timeframe)
         
