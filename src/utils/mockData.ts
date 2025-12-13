@@ -91,11 +91,12 @@ export function generateMockBotActivity(): BotActivity[] {
  * Convert backend Signal to frontend ScanResult format
  */
 export function convertSignalToScanResult(signal: any): ScanResult {
-  // Debug: Log smc_geometry to verify backend is sending it
-  console.log(`[SMC Geometry] ${signal.symbol}:`, {
+  // Debug: Log smc_geometry and _debug_metadata to verify backend data
+  console.log(`[SMC Debug] ${signal.symbol}:`, {
     hasGeometry: !!signal.smc_geometry,
     orderBlocks: signal.smc_geometry?.order_blocks?.length ?? 0,
     fvgs: signal.smc_geometry?.fvgs?.length ?? 0,
+    _debug: signal._debug_metadata,
   });
 
   const trendBias: ScanResult['trendBias'] =

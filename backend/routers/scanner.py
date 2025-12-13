@@ -684,11 +684,21 @@ async def get_signals(
                     signal['confluence_breakdown'] = plan.confluence_breakdown.to_dict() if hasattr(plan.confluence_breakdown, 'to_dict') else plan.confluence_breakdown
 
             # Expose SMC geometry for chart overlays (OB/FVG price ranges)
+            # Add debug info to signal for frontend visibility
+            signal['_debug_metadata'] = {
+                'has_metadata': hasattr(plan, 'metadata') and plan.metadata is not None,
+                'metadata_keys': list(plan.metadata.keys()) if plan.metadata else [],
+                'has_order_blocks_list': 'order_blocks_list' in (plan.metadata or {}),
+            }
+            
             if hasattr(plan, 'metadata') and plan.metadata:
                 ob_list = plan.metadata.get('order_blocks_list', [])
                 fvg_list = plan.metadata.get('fvgs_list', [])
                 bos_list = plan.metadata.get('structural_breaks_list', [])
                 sweep_list = plan.metadata.get('liquidity_sweeps_list', [])
+                
+                signal['_debug_metadata']['ob_count'] = len(ob_list)
+                signal['_debug_metadata']['fvg_count'] = len(fvg_list)
                 
                 signal['smc_geometry'] = {
                     'order_blocks': ob_list[:10],  # Limit to top 10 for payload size
@@ -696,8 +706,9 @@ async def get_signals(
                     'bos_choch': bos_list[:10],
                     'liquidity_sweeps': sweep_list[:10],
                 }
-            
+
             signals.append(signal)
+
 
 
         return {
