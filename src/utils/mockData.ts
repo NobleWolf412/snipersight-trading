@@ -95,14 +95,19 @@ export function convertSignalToScanResult(signal: any): ScanResult {
     signal.direction === 'LONG' ? 'BULLISH' :
       signal.direction === 'SHORT' ? 'BEARISH' : 'NEUTRAL';
 
-  // Determine classification based on setup_type or timeframe
-  // setup_type can be: 'scalp', 'intraday', 'swing'
-  const classification: ScanResult['classification'] =
-    signal.setup_type === 'scalp' ||
-      signal.setup_type === 'intraday' ||
-      ['5m', '15m', '30m'].includes(signal.timeframe)
-      ? 'SCALP'
-      : 'SWING';
+  // Determine classification based on setup_type (from backend)
+  // setup_type values: 'scalp', 'intraday', 'swing'
+  // Only fall back to timeframe heuristic if setup_type is missing
+  let classification: ScanResult['classification'];
+  if (signal.setup_type === 'swing') {
+    classification = 'SWING';
+  } else if (signal.setup_type === 'scalp' || signal.setup_type === 'intraday') {
+    classification = 'SCALP';
+  } else {
+    // Fallback: infer from timeframe if no setup_type provided
+    classification = ['5m', '15m', '30m'].includes(signal.timeframe) ? 'SCALP' : 'SWING';
+  }
+
 
 
   // Calculate risk score from analysis (inverse of risk:reward, scaled 1-10)
