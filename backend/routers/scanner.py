@@ -683,6 +683,23 @@ async def get_signals(
                     # Fallback if asdict fails (e.g. if it's not a dataclass for some reason)
                     signal['confluence_breakdown'] = plan.confluence_breakdown.to_dict() if hasattr(plan.confluence_breakdown, 'to_dict') else plan.confluence_breakdown
 
+            # Expose SMC geometry for chart overlays (OB/FVG price ranges)
+            if hasattr(plan, 'metadata') and plan.metadata:
+                ob_list = plan.metadata.get('order_blocks_list', [])
+                fvg_list = plan.metadata.get('fvgs_list', [])
+                bos_list = plan.metadata.get('structural_breaks_list', [])
+                sweep_list = plan.metadata.get('liquidity_sweeps_list', [])
+                
+                signal['smc_geometry'] = {
+                    'order_blocks': ob_list[:10],  # Limit to top 10 for payload size
+                    'fvgs': fvg_list[:10],
+                    'bos_choch': bos_list[:10],
+                    'liquidity_sweeps': sweep_list[:10],
+                }
+            
+            signals.append(signal)
+
+
         return {
             "signals": signals,
             "total": len(signals),

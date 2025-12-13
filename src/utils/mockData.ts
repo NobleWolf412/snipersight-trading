@@ -135,21 +135,25 @@ export function convertSignalToScanResult(signal: any): ScanResult {
     entryZone: { low: signal.entry_far, high: signal.entry_near },
     stopLoss: signal.stop_loss,
     takeProfits: signal.targets.map((t: any) => t.level),
-    orderBlocks: signal.analysis?.order_blocks
-      ? Array(signal.analysis.order_blocks).fill(null).map((_, i) => ({
-        type: trendBias === 'BULLISH' ? 'bullish' as const : 'bearish' as const,
-        price: signal.entry_near * (trendBias === 'BULLISH' ? 0.98 - i * 0.01 : 1.02 + i * 0.01),
-        timeframe: signal.timeframe,
+    orderBlocks: signal.smc_geometry?.order_blocks
+      ? signal.smc_geometry.order_blocks.map((ob: any) => ({
+        type: ob.type as 'bullish' | 'bearish',
+        price: ob.price || (ob.high + ob.low) / 2,
+        high: ob.high,
+        low: ob.low,
+        timeframe: ob.timeframe,
       }))
       : [],
-    fairValueGaps: signal.analysis?.fvgs
-      ? Array(signal.analysis.fvgs).fill(null).map((_, i) => ({
-        low: signal.entry_near * (0.96 - i * 0.01),
-        high: signal.entry_near * (0.98 - i * 0.01),
-        type: 'bullish' as const,
+    fairValueGaps: signal.smc_geometry?.fvgs
+      ? signal.smc_geometry.fvgs.map((fvg: any) => ({
+        low: fvg.low,
+        high: fvg.high,
+        type: fvg.type as 'bullish' | 'bearish',
+        timeframe: fvg.timeframe,
       }))
       : [],
     timestamp: new Date().toISOString(),
+
     liqPrice: signal.liquidation?.approx_liq_price,
     liqCushionPct: signal.liquidation?.cushion_pct,
     liqRiskBand: signal.liquidation?.risk_band,
