@@ -1601,75 +1601,93 @@ def _calculate_stop_loss(
             distance_atr = (entry_zone.far_entry - stop_level) / structure_atr
             used_structure = True
         else:
-            # Fallback: swing-based stop from primary timeframe, then HTF if needed
-            logger.info(f"No SMC structure for stop - attempting swing-based fallback")
-            swing_level = None
+            # === NEW TIER: Entry OB Edge-Based Stop ===
+            # If no separate OBs below entry, use the ENTRY OB's low as invalidation
+            # This is how SMC traders typically place stops - just below the OB they're trading
+            entry_obs = [ob for ob in smc_snapshot.order_blocks 
+                        if ob.direction == "bullish"]
             
-            # Try primary timeframe first
-            if multi_tf_data and primary_tf in multi_tf_data.timeframes:
-                candles_df = multi_tf_data.timeframes[primary_tf]
-                swing_level = _find_swing_level(
-                    is_bullish=True,
-                    reference_price=entry_zone.far_entry,
-                    candles_df=candles_df,
-                    lookback=planner_cfg.stop_lookback_bars,
-                    timeframe=primary_tf
-                )
-            
-            # Try HTF if enabled and primary failed (MODE-AWARE HTF FILTERING)
-            if swing_level is None and planner_cfg.stop_use_htf_swings and multi_tf_data:
-                # Get mode-specific HTF allowlist from config overrides or planner_cfg
-                mode_profile = getattr(config, 'profile', 'balanced')
-                htf_allowed = planner_cfg.htf_swing_allowed.get(mode_profile, ('4h', '1h', '1d'))
-                # Also check config.overrides for htf_swing_allowed
-                overrides = getattr(config, 'overrides', None) or {}
-                if 'htf_swing_allowed' in overrides:
-                    htf_allowed = overrides['htf_swing_allowed']
+            if entry_obs:
+                # Use the strongest OB (same one likely used for entry)
+                best_entry_ob = max(entry_obs, key=lambda ob: getattr(ob, 'displacement_strength', 0))
                 
-                htf_candidates = ['4h', '4H', '1d', '1D', '1w', '1W']
-                for htf in htf_candidates:
-                    # Skip HTFs not in allowlist for this mode
-                    htf_lower = htf.lower()
-                    if htf_lower not in [h.lower() for h in htf_allowed]:
-                        logger.debug(f"Skipping HTF {htf} - not in allowlist {htf_allowed} for {mode_profile}")
-                        continue
-                    if htf in multi_tf_data.timeframes:
-                        candles_df = multi_tf_data.timeframes[htf]
-                        swing_level = _find_swing_level(
-                            is_bullish=True,
-                            reference_price=entry_zone.far_entry,
-                            candles_df=candles_df,
-                            lookback=planner_cfg.stop_lookback_bars,  # Same base, scaled by timeframe
-                            timeframe=htf
-                        )
-                        if swing_level:
-                            logger.info(f"Found HTF swing on {htf}")
-                            break
-            
-            if swing_level:
-                stop_level = swing_level - (stop_buffer * atr)  # Dynamic regime-aware buffer below swing
-                rationale = f"Stop below swing low (no SMC structure)"
+                # Stop below the OB's low edge (invalidation point)
+                stop_level = best_entry_ob.low - (stop_buffer * atr)
+                structure_tf_used = best_entry_ob.timeframe
+                rationale = f"Stop below {structure_tf_used} entry OB low (invalidation edge)"
                 distance_atr = (entry_zone.far_entry - stop_level) / atr
-                used_structure = False  # Swing level, not SMC structure
-                logger.info(f"Using swing-based stop: {stop_level}")
+                used_structure = True
+                logger.info(f"Using entry OB edge stop: OB low={best_entry_ob.low}, stop={stop_level}")
             else:
-                # Emergency ATR fallback for scalp modes (precision/intraday_aggressive)
-                mode_profile = getattr(config, 'profile', 'balanced')
-                overrides = getattr(config, 'overrides', None) or {}
-                emergency_atr_fallback = overrides.get('emergency_atr_fallback', False)
+                # Fallback: swing-based stop from primary timeframe, then HTF if needed
+                logger.info(f"No SMC structure for stop - attempting swing-based fallback")
+                swing_level = None
                 
-                if emergency_atr_fallback:
-                    # Use ATR-based stop for scalp modes when no structure/swing found
-                    fallback_atr_mult = 1.5  # Conservative fallback
-                    stop_level = entry_zone.far_entry - (fallback_atr_mult * atr)
-                    rationale = f"Emergency ATR fallback ({fallback_atr_mult}x ATR) - no swing structure found"
-                    distance_atr = fallback_atr_mult
-                    used_structure = False
-                    logger.warning(f"Using emergency ATR fallback stop: {stop_level} for {mode_profile} mode")
+                # Try primary timeframe first
+                if multi_tf_data and primary_tf in multi_tf_data.timeframes:
+                    candles_df = multi_tf_data.timeframes[primary_tf]
+                    swing_level = _find_swing_level(
+                        is_bullish=True,
+                        reference_price=entry_zone.far_entry,
+                        candles_df=candles_df,
+                        lookback=planner_cfg.stop_lookback_bars,
+                        timeframe=primary_tf
+                    )
+                
+                # Try HTF if enabled and primary failed (MODE-AWARE HTF FILTERING)
+                if swing_level is None and planner_cfg.stop_use_htf_swings and multi_tf_data:
+                    # Get mode-specific HTF allowlist from config overrides or planner_cfg
+                    mode_profile = getattr(config, 'profile', 'balanced')
+                    htf_allowed = planner_cfg.htf_swing_allowed.get(mode_profile, ('4h', '1h', '1d'))
+                    # Also check config.overrides for htf_swing_allowed
+                    overrides = getattr(config, 'overrides', None) or {}
+                    if 'htf_swing_allowed' in overrides:
+                        htf_allowed = overrides['htf_swing_allowed']
+                    
+                    htf_candidates = ['4h', '4H', '1d', '1D', '1w', '1W']
+                    for htf in htf_candidates:
+                        # Skip HTFs not in allowlist for this mode
+                        htf_lower = htf.lower()
+                        if htf_lower not in [h.lower() for h in htf_allowed]:
+                            logger.debug(f"Skipping HTF {htf} - not in allowlist {htf_allowed} for {mode_profile}")
+                            continue
+                        if htf in multi_tf_data.timeframes:
+                            candles_df = multi_tf_data.timeframes[htf]
+                            swing_level = _find_swing_level(
+                                is_bullish=True,
+                                reference_price=entry_zone.far_entry,
+                                candles_df=candles_df,
+                                lookback=planner_cfg.stop_lookback_bars,  # Same base, scaled by timeframe
+                                timeframe=htf
+                            )
+                            if swing_level:
+                                logger.info(f"Found HTF swing on {htf}")
+                                break
+                
+                if swing_level:
+                    stop_level = swing_level - (stop_buffer * atr)  # Dynamic regime-aware buffer below swing
+                    rationale = f"Stop below swing low (no SMC structure)"
+                    distance_atr = (entry_zone.far_entry - stop_level) / atr
+                    used_structure = False  # Swing level, not SMC structure
+                    logger.info(f"Using swing-based stop: {stop_level}")
                 else:
-                    # Last resort: reject trade
-                    logger.warning(f"No swing level found - rejecting trade")
-                    raise ValueError("Cannot generate trade plan: no clear structure or swing level for stop loss placement")
+                    # Emergency ATR fallback for scalp modes (precision/intraday_aggressive)
+                    mode_profile = getattr(config, 'profile', 'balanced')
+                    overrides = getattr(config, 'overrides', None) or {}
+                    emergency_atr_fallback = overrides.get('emergency_atr_fallback', False)
+                    
+                    if emergency_atr_fallback:
+                        # Use ATR-based stop for scalp modes when no structure/swing found
+                        fallback_atr_mult = 1.5  # Conservative fallback
+                        stop_level = entry_zone.far_entry - (fallback_atr_mult * atr)
+                        rationale = f"Emergency ATR fallback ({fallback_atr_mult}x ATR) - no swing structure found"
+                        distance_atr = fallback_atr_mult
+                        used_structure = False
+                        logger.warning(f"Using emergency ATR fallback stop: {stop_level} for {mode_profile} mode")
+                    else:
+                        # Last resort: reject trade
+                        logger.warning(f"No swing level found - rejecting trade")
+                        raise ValueError("Cannot generate trade plan: no clear structure or swing level for stop loss placement")
     
     else:  # bearish
         # Stop above the entry structure
@@ -1716,75 +1734,92 @@ def _calculate_stop_loss(
             distance_atr = (stop_level - entry_zone.near_entry) / structure_atr
             used_structure = True
         else:
-            # Fallback: swing-based stop from primary timeframe, then HTF if needed
-            logger.info(f"No SMC structure for stop - attempting swing-based fallback")
-            swing_level = None
+            # === NEW TIER: Entry OB Edge-Based Stop ===
+            # If no separate OBs above entry, use the ENTRY OB's high as invalidation
+            entry_obs = [ob for ob in smc_snapshot.order_blocks 
+                        if ob.direction == "bearish"]
             
-            # Try primary timeframe first
-            if multi_tf_data and primary_tf in multi_tf_data.timeframes:
-                candles_df = multi_tf_data.timeframes[primary_tf]
-                swing_level = _find_swing_level(
-                    is_bullish=False,
-                    reference_price=entry_zone.near_entry,  # For shorts, find swing above near_entry
-                    candles_df=candles_df,
-                    lookback=planner_cfg.stop_lookback_bars,
-                    timeframe=primary_tf
-                )
-            
-            # Try HTF if enabled and primary failed (MODE-AWARE HTF FILTERING)
-            if swing_level is None and planner_cfg.stop_use_htf_swings and multi_tf_data:
-                # Get mode-specific HTF allowlist from config overrides or planner_cfg
-                mode_profile = getattr(config, 'profile', 'balanced')
-                htf_allowed = planner_cfg.htf_swing_allowed.get(mode_profile, ('4h', '1h', '1d'))
-                # Also check config.overrides for htf_swing_allowed
-                overrides = getattr(config, 'overrides', None) or {}
-                if 'htf_swing_allowed' in overrides:
-                    htf_allowed = overrides['htf_swing_allowed']
+            if entry_obs:
+                # Use the strongest OB (same one likely used for entry)
+                best_entry_ob = max(entry_obs, key=lambda ob: getattr(ob, 'displacement_strength', 0))
                 
-                htf_candidates = ['4h', '4H', '1d', '1D', '1w', '1W']
-                for htf in htf_candidates:
-                    # Skip HTFs not in allowlist for this mode
-                    htf_lower = htf.lower()
-                    if htf_lower not in [h.lower() for h in htf_allowed]:
-                        logger.debug(f"Skipping HTF {htf} - not in allowlist {htf_allowed} for {mode_profile}")
-                        continue
-                    if htf in multi_tf_data.timeframes:
-                        candles_df = multi_tf_data.timeframes[htf]
-                        swing_level = _find_swing_level(
-                            is_bullish=False,
-                            reference_price=entry_zone.near_entry,  # For shorts, find swing above near_entry
-                            candles_df=candles_df,
-                            lookback=planner_cfg.stop_lookback_bars,  # Same base, scaled by timeframe
-                            timeframe=htf
-                        )
-                        if swing_level:
-                            logger.info(f"Found HTF swing on {htf}")
-                            break
-            
-            if swing_level:
-                stop_level = swing_level + (stop_buffer * atr)  # Dynamic regime-aware buffer above swing
-                rationale = f"Stop above swing high (no SMC structure)"
-                distance_atr = (stop_level - entry_zone.near_entry) / atr  # Use near_entry for shorts
-                used_structure = False  # Swing level, not SMC structure
-                logger.info(f"Using swing-based stop: {stop_level}")
+                # Stop above the OB's high edge (invalidation point)
+                stop_level = best_entry_ob.high + (stop_buffer * atr)
+                structure_tf_used = best_entry_ob.timeframe
+                rationale = f"Stop above {structure_tf_used} entry OB high (invalidation edge)"
+                distance_atr = (stop_level - entry_zone.near_entry) / atr
+                used_structure = True
+                logger.info(f"Using entry OB edge stop: OB high={best_entry_ob.high}, stop={stop_level}")
             else:
-                # Emergency ATR fallback for scalp modes (precision/intraday_aggressive)
-                mode_profile = getattr(config, 'profile', 'balanced')
-                overrides = getattr(config, 'overrides', None) or {}
-                emergency_atr_fallback = overrides.get('emergency_atr_fallback', False)
+                # Fallback: swing-based stop from primary timeframe, then HTF if needed
+                logger.info(f"No SMC structure for stop - attempting swing-based fallback")
+                swing_level = None
                 
-                if emergency_atr_fallback:
-                    # Use ATR-based stop for scalp modes when no structure/swing found
-                    fallback_atr_mult = 1.5  # Conservative fallback
-                    stop_level = entry_zone.near_entry + (fallback_atr_mult * atr)  # Use near_entry for shorts
-                    rationale = f"Emergency ATR fallback ({fallback_atr_mult}x ATR) - no swing structure found"
-                    distance_atr = fallback_atr_mult
-                    used_structure = False
-                    logger.warning(f"Using emergency ATR fallback stop: {stop_level} for {mode_profile} mode")
+                # Try primary timeframe first
+                if multi_tf_data and primary_tf in multi_tf_data.timeframes:
+                    candles_df = multi_tf_data.timeframes[primary_tf]
+                    swing_level = _find_swing_level(
+                        is_bullish=False,
+                        reference_price=entry_zone.near_entry,  # For shorts, find swing above near_entry
+                        candles_df=candles_df,
+                        lookback=planner_cfg.stop_lookback_bars,
+                        timeframe=primary_tf
+                    )
+                
+                # Try HTF if enabled and primary failed (MODE-AWARE HTF FILTERING)
+                if swing_level is None and planner_cfg.stop_use_htf_swings and multi_tf_data:
+                    # Get mode-specific HTF allowlist from config overrides or planner_cfg
+                    mode_profile = getattr(config, 'profile', 'balanced')
+                    htf_allowed = planner_cfg.htf_swing_allowed.get(mode_profile, ('4h', '1h', '1d'))
+                    # Also check config.overrides for htf_swing_allowed
+                    overrides = getattr(config, 'overrides', None) or {}
+                    if 'htf_swing_allowed' in overrides:
+                        htf_allowed = overrides['htf_swing_allowed']
+                    
+                    htf_candidates = ['4h', '4H', '1d', '1D', '1w', '1W']
+                    for htf in htf_candidates:
+                        # Skip HTFs not in allowlist for this mode
+                        htf_lower = htf.lower()
+                        if htf_lower not in [h.lower() for h in htf_allowed]:
+                            logger.debug(f"Skipping HTF {htf} - not in allowlist {htf_allowed} for {mode_profile}")
+                            continue
+                        if htf in multi_tf_data.timeframes:
+                            candles_df = multi_tf_data.timeframes[htf]
+                            swing_level = _find_swing_level(
+                                is_bullish=False,
+                                reference_price=entry_zone.near_entry,  # For shorts, find swing above near_entry
+                                candles_df=candles_df,
+                                lookback=planner_cfg.stop_lookback_bars,  # Same base, scaled by timeframe
+                                timeframe=htf
+                            )
+                            if swing_level:
+                                logger.info(f"Found HTF swing on {htf}")
+                                break
+                
+                if swing_level:
+                    stop_level = swing_level + (stop_buffer * atr)  # Dynamic regime-aware buffer above swing
+                    rationale = f"Stop above swing high (no SMC structure)"
+                    distance_atr = (stop_level - entry_zone.near_entry) / atr  # Use near_entry for shorts
+                    used_structure = False  # Swing level, not SMC structure
+                    logger.info(f"Using swing-based stop: {stop_level}")
                 else:
-                    # Last resort: reject trade
-                    logger.warning(f"No swing level found - rejecting trade")
-                    raise ValueError("Cannot generate trade plan: no clear structure or swing level for stop loss placement")
+                    # Emergency ATR fallback for scalp modes (precision/intraday_aggressive)
+                    mode_profile = getattr(config, 'profile', 'balanced')
+                    overrides = getattr(config, 'overrides', None) or {}
+                    emergency_atr_fallback = overrides.get('emergency_atr_fallback', False)
+                    
+                    if emergency_atr_fallback:
+                        # Use ATR-based stop for scalp modes when no structure/swing found
+                        fallback_atr_mult = 1.5  # Conservative fallback
+                        stop_level = entry_zone.near_entry + (fallback_atr_mult * atr)  # Use near_entry for shorts
+                        rationale = f"Emergency ATR fallback ({fallback_atr_mult}x ATR) - no swing structure found"
+                        distance_atr = fallback_atr_mult
+                        used_structure = False
+                        logger.warning(f"Using emergency ATR fallback stop: {stop_level} for {mode_profile} mode")
+                    else:
+                        # Last resort: reject trade
+                        logger.warning(f"No swing level found - rejecting trade")
+                        raise ValueError("Cannot generate trade plan: no clear structure or swing level for stop loss placement")
     
     # CRITICAL DEBUG
     logger.critical(f"STOP CALC: is_bullish={is_bullish}, entry_near={entry_zone.near_entry}, entry_far={entry_zone.far_entry}, stop={stop_level}, atr={atr}")
