@@ -390,8 +390,8 @@ def get_smc_service() -> Optional[SMCDetectionService]:
     return _smc_service
 
 
-def configure_smc_service(smc_config: Optional[SMCConfig] = None) -> SMCDetectionService:
+def configure_smc_service(smc_config: Optional[SMCConfig] = None, mode: str = 'strike') -> SMCDetectionService:
     """Configure and return the singleton SMCDetectionService."""
     global _smc_service
-    _smc_service = SMCDetectionService(smc_config=smc_config)
+    _smc_service = SMCDetectionService(smc_config=smc_config, mode=mode)
     return _smc_service

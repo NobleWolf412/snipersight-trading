@@ -121,7 +121,7 @@ class Orchestrator:
         # Initialize Domain Services
         # These encapsulate the core logic for indicators, SMC, and scoring
         self.indicator_service = configure_indicator_service(scanner_mode=self.scanner_mode)
-        self.smc_service = configure_smc_service(smc_config=self.smc_config)
+        self.smc_service = configure_smc_service(smc_config=self.smc_config, mode=self.scanner_mode.name)
         self.confluence_service = configure_confluence_service(scanner_mode=self.scanner_mode, config=self.config)
         
         # Diagnostics storage
