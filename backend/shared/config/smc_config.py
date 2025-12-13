@@ -210,6 +210,129 @@ def scale_eqhl_tolerance(base_tolerance_pct: float, timeframe: str) -> float:
     return base_tolerance_pct * scaling
 
 
+# ============================================================================
+# TIMEFRAME-AWARE SMC DETECTION CONFIG
+# ============================================================================
+# Each timeframe has different detection rules and thresholds.
+# LTF patterns are often noise; HTF patterns are institutional.
+
+TIMEFRAME_SMC_CONFIGS = {
+    # HTF: Strict detection, institutional-grade
+    '1w': {
+        'detect_ob': True,
+        'detect_fvg': True,
+        'detect_bos': True,
+        'detect_sweep': True,
+        'ob_min_wick_ratio': 2.5,
+        'ob_min_displacement_atr': 2.0,
+        'fvg_min_gap_atr': 0.5,
+        'structure_min_break_distance_atr': 1.5,
+        'structure_swing_lookback': 15,
+        'sweep_require_volume': True,
+    },
+    '1d': {
+        'detect_ob': True,
+        'detect_fvg': True,
+        'detect_bos': True,
+        'detect_sweep': True,
+        'ob_min_wick_ratio': 2.0,
+        'ob_min_displacement_atr': 1.5,
+        'fvg_min_gap_atr': 0.4,
+        'structure_min_break_distance_atr': 1.2,
+        'structure_swing_lookback': 12,
+        'sweep_require_volume': True,
+    },
+    '4h': {
+        'detect_ob': True,
+        'detect_fvg': True,
+        'detect_bos': True,
+        'detect_sweep': True,
+        # Use base config defaults
+    },
+    '1h': {
+        'detect_ob': True,
+        'detect_fvg': True,
+        'detect_bos': True,
+        'detect_sweep': True,
+        'structure_min_break_distance_atr': 0.8,
+        'structure_swing_lookback': 8,
+    },
+    '15m': {
+        'detect_ob': False,  # Only refinement, handled separately
+        'detect_fvg': True,
+        'detect_bos': True,  # Entry trigger only
+        'detect_sweep': False,
+        'fvg_min_gap_atr': 0.3,
+        'structure_min_break_distance_atr': 0.6,
+        'structure_swing_lookback': 6,
+    },
+    '5m': {
+        'detect_ob': False,
+        'detect_fvg': True,  # Execution precision
+        'detect_bos': False,  # Too noisy
+        'detect_sweep': False,
+        'fvg_min_gap_atr': 0.25,
+    },
+}
+
+# Mode overrides - which patterns matter per mode
+MODE_SMC_OVERRIDES = {
+    'overwatch': {
+        # Swing mode: Heavy HTF, skip LTF noise
+        '15m': {'detect_bos': False, 'detect_fvg': True},
+        '5m': {'detect_fvg': False},  # Skip entirely for swing
+    },
+    'strike': {
+        # Intraday: Allow 15m structure, skip 5m
+        '15m': {'detect_ob': True, 'detect_bos': True},
+        '5m': {'detect_fvg': True},
+    },
+    'surgical': {
+        # Precision: 15m and 5m important, tighter thresholds
+        '15m': {'detect_ob': True, 'detect_bos': True, 'ob_min_wick_ratio': 2.5},
+        '5m': {'detect_fvg': True, 'detect_bos': True},
+    },
+    'stealth': {
+        # Balanced: Similar to strike
+        '15m': {'detect_bos': True},
+        '5m': {'detect_fvg': True},
+    },
+}
+
+
+def get_tf_smc_config(timeframe: str, mode: str = 'strike') -> dict:
+    """
+    Get merged SMC config for a specific timeframe and mode.
+    
+    Starts with base TIMEFRAME_SMC_CONFIGS, then applies MODE_SMC_OVERRIDES.
+    
+    Args:
+        timeframe: Timeframe string (e.g., '15m', '4h')
+        mode: Scanner mode (e.g., 'strike', 'surgical')
+    
+    Returns:
+        Dict with detect_* flags and threshold overrides
+    """
+    tf_lower = timeframe.lower()
+    
+    # Start with base config for this TF
+    base_config = TIMEFRAME_SMC_CONFIGS.get(tf_lower, {
+        'detect_ob': True,
+        'detect_fvg': True,
+        'detect_bos': True,
+        'detect_sweep': True,
+    })
+    
+    # Merge with mode overrides if present
+    mode_lower = mode.lower()
+    mode_overrides = MODE_SMC_OVERRIDES.get(mode_lower, {})
+    tf_overrides = mode_overrides.get(tf_lower, {})
+    
+    # Apply overrides
+    merged = {**base_config, **tf_overrides}
+    return merged
+
+
 @dataclass
 class SMCConfig:
     # Order Block parameters

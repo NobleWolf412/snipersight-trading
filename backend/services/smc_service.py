@@ -21,7 +21,7 @@ from typing import Dict, List, Any, Optional
 
 from backend.shared.models.data import MultiTimeframeData
 from backend.shared.models.smc import SMCSnapshot
-from backend.shared.config.smc_config import SMCConfig
+from backend.shared.config.smc_config import SMCConfig, get_tf_smc_config
 
 # SMC Detection functions
 from backend.strategy.smc.order_blocks import (
@@ -55,14 +55,16 @@ class SMCDetectionService:
         snapshot = service.detect(multi_tf_data, current_price)
     """
     
-    def __init__(self, smc_config: Optional[SMCConfig] = None):
+    def __init__(self, smc_config: Optional[SMCConfig] = None, mode: str = 'strike'):
         """
         Initialize SMC detection service.
         
         Args:
             smc_config: SMC configuration for detection parameters
+            mode: Scanner mode for TF-aware thresholds (strike/surgical/overwatch/stealth)
         """
         self._smc_config = smc_config or SMCConfig()
+        self._mode = mode.lower()
         self._diagnostics: Dict[str, list] = {'smc_rejections': []}
     
     @property
@@ -70,9 +72,11 @@ class SMCDetectionService:
         """Get diagnostic information from last detection."""
         return self._diagnostics
     
-    def update_config(self, config: SMCConfig):
+    def update_config(self, config: SMCConfig, mode: Optional[str] = None):
         """Update SMC configuration dynamically."""
         self._smc_config = config
+        if mode:
+            self._mode = mode.lower()
     
     def detect(
         self, 
@@ -206,6 +210,9 @@ class SMCDetectionService:
             'premium_discount': None,
         }
         
+        # Get TF-aware config with mode overrides
+        tf_config = get_tf_smc_config(timeframe, self._mode)
+        
         # Calculate ATR for FVG merge
         try:
             atr = compute_atr(df, period=14)
@@ -214,36 +221,46 @@ class SMCDetectionService:
             atr_val = 0
         
         # Swing detection for structural OBs
-        swing_lookback = getattr(self._smc_config, 'structure_swing_lookback', 10)
+        swing_lookback = tf_config.get('structure_swing_lookback', getattr(self._smc_config, 'structure_swing_lookback', 10))
         swing_highs = _detect_swing_highs(df, swing_lookback)
         swing_lows = _detect_swing_lows(df, swing_lookback)
         
-        # Order blocks (traditional + structural)
-        try:
-            result['order_blocks'] = detect_order_blocks(df, self._smc_config)
-            logger.debug("📦 %s: Traditional OB detected %d", timeframe, len(result['order_blocks']))
-        except Exception as e:
-            logger.warning("📦 %s: Traditional OB detection FAILED: %s", timeframe, e)
-            result['order_blocks'] = []
+        # Order blocks (skip if detect_ob=False for this TF)
+        if tf_config.get('detect_ob', True):
+            try:
+                result['order_blocks'] = detect_order_blocks(df, self._smc_config)
+                logger.debug("📦 %s: Traditional OB detected %d", timeframe, len(result['order_blocks']))
+            except Exception as e:
+                logger.warning("📦 %s: Traditional OB detection FAILED: %s", timeframe, e)
+                result['order_blocks'] = []
+            
+            try:
+                structural_obs = detect_order_blocks_structural(df, swing_highs, swing_lows, self._smc_config)
+                result['order_blocks'].extend(structural_obs)
+                logger.debug("📦 %s: Structural OB detected %d", timeframe, len(structural_obs))
+            except Exception as e:
+                logger.warning("📦 %s: Structural OB detection FAILED: %s", timeframe, e)
+        else:
+            logger.debug("📦 %s: OB detection SKIPPED (TF filter)", timeframe)
         
-        try:
-            structural_obs = detect_order_blocks_structural(df, swing_highs, swing_lows, self._smc_config)
-            result['order_blocks'].extend(structural_obs)
-            logger.debug("📦 %s: Structural OB detected %d", timeframe, len(structural_obs))
-        except Exception as e:
-            logger.warning("📦 %s: Structural OB detection FAILED: %s", timeframe, e)
+        # Fair value gaps (always detect, useful on all TFs)
+        if tf_config.get('detect_fvg', True):
+            fvgs = detect_fvgs(df, self._smc_config)
+            if atr_val > 0:
+                fvgs = merge_consecutive_fvgs(fvgs, max_gap_atr=0.5, atr_value=atr_val)
+            result['fvgs'] = fvgs
         
-        # Fair value gaps (with merge)
-        fvgs = detect_fvgs(df, self._smc_config)
-        if atr_val > 0:
-            fvgs = merge_consecutive_fvgs(fvgs, max_gap_atr=0.5, atr_value=atr_val)
-        result['fvgs'] = fvgs
+        # Structure breaks (skip if detect_bos=False for this TF)
+        if tf_config.get('detect_bos', True):
+            result['structure_breaks'] = detect_structural_breaks(df, self._smc_config)
+        else:
+            logger.debug("📐 %s: BOS detection SKIPPED (TF filter)", timeframe)
         
-        # Structure breaks
-        result['structure_breaks'] = detect_structural_breaks(df, self._smc_config)
-        
-        # Liquidity sweeps
-        result['liquidity_sweeps'] = detect_liquidity_sweeps(df, self._smc_config)
+        # Liquidity sweeps (skip if detect_sweep=False for this TF)
+        if tf_config.get('detect_sweep', True):
+            result['liquidity_sweeps'] = detect_liquidity_sweeps(df, self._smc_config)
+        else:
+            logger.debug("💧 %s: Sweep detection SKIPPED (TF filter)", timeframe)
         
         # Equal highs/lows (liquidity pools)
         self._detect_equal_highs_lows(timeframe, df, result)
