@@ -27,7 +27,8 @@ from backend.shared.config.smc_config import SMCConfig, get_tf_smc_config
 from backend.strategy.smc.order_blocks import (
     detect_order_blocks, 
     detect_order_blocks_structural,
-    update_ob_lifecycle
+    update_ob_lifecycle,
+    filter_to_active_obs
 )
 from backend.strategy.smc.fvg import detect_fvgs, merge_consecutive_fvgs
 from backend.strategy.smc.bos_choch import detect_structural_breaks, _detect_swing_highs, _detect_swing_lows
@@ -261,6 +262,25 @@ class SMCDetectionService:
             result['liquidity_sweeps'] = detect_liquidity_sweeps(df, self._smc_config)
         else:
             logger.debug("💧 %s: Sweep detection SKIPPED (TF filter)", timeframe)
+        
+        # --- LuxAlgo-style OB filtering ---
+        # Keep raw OBs for liquidity analysis, filter to active for trading signals
+        if result['order_blocks']:
+            raw_count = len(result['order_blocks'])
+            result['raw_order_blocks'] = result['order_blocks'].copy()
+            
+            # Filter to structure-confirmed + fresh OBs
+            result['order_blocks'] = filter_to_active_obs(
+                result['order_blocks'],
+                df,
+                structure_breaks=result['structure_breaks'],
+                max_mitigation=0.5,
+                require_structure_confirmation=True,
+                confirmation_window_candles=10
+            )
+            
+            logger.debug("🎯 %s: OB filtered %d → %d (active)", 
+                        timeframe, raw_count, len(result['order_blocks']))
         
         # Equal highs/lows (liquidity pools)
         self._detect_equal_highs_lows(timeframe, df, result)

@@ -947,3 +947,146 @@ def update_ob_lifecycle(
         updated_blocks.append(updated_ob)
     
     return updated_blocks
+
+
+def filter_to_active_obs(
+    order_blocks: List[OrderBlock],
+    df: pd.DataFrame,
+    structure_breaks: List = None,
+    max_mitigation: float = 0.5,
+    require_structure_confirmation: bool = True,
+    confirmation_window_candles: int = 10
+) -> List[OrderBlock]:
+    """
+    Filter order blocks to only 'active' ones matching LuxAlgo behavior.
+    
+    LuxAlgo shows fewer, higher-quality OBs by:
+    1. Structure-confirmed: OB must precede a BOS/CHoCH
+    2. Fresh: Not fully mitigated (price hasn't swept through)
+    3. Not invalidated: Zone still valid for trading
+    
+    This reduces noise while keeping liquidity awareness under the hood
+    (raw OBs can be preserved separately for analysis).
+    
+    Args:
+        order_blocks: Raw detected OBs
+        df: Price data for mitigation checking
+        structure_breaks: Detected BOS/CHoCH for confirmation
+        max_mitigation: Maximum mitigation level to keep (0.5 = 50%)
+        require_structure_confirmation: If True, only keep OBs that precede a break
+        confirmation_window_candles: How many candles after OB to look for break
+        
+    Returns:
+        List of active, tradeable order blocks
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    if not order_blocks:
+        return []
+    
+    structure_breaks = structure_breaks or []
+    active_obs = []
+    
+    for ob in order_blocks:
+        # --- Filter 1: Skip invalidated OBs ---
+        if getattr(ob, 'invalidated', False):
+            continue
+        
+        # --- Filter 2: Skip heavily mitigated OBs ---
+        if ob.mitigation_level > max_mitigation:
+            logger.debug("🚫 OB filtered (mitigation %.1f%% > %.1f%%): %s @ %s", 
+                        ob.mitigation_level * 100, max_mitigation * 100,
+                        ob.direction, ob.timestamp)
+            continue
+        
+        # --- Filter 3: Structure confirmation check ---
+        if require_structure_confirmation and structure_breaks:
+            confirmed = _check_structure_confirmation(
+                ob, structure_breaks, df, confirmation_window_candles
+            )
+            if not confirmed:
+                logger.debug("🚫 OB filtered (no structure confirmation): %s @ %s",
+                            ob.direction, ob.timestamp)
+                continue
+        
+        # OB passes all filters
+        active_obs.append(ob)
+    
+    logger.info("🎯 OB Filter: %d/%d OBs are active (structure-confirmed + fresh)",
+                len(active_obs), len(order_blocks))
+    
+    return active_obs
+
+
+def _check_structure_confirmation(
+    ob: OrderBlock,
+    structure_breaks: List,
+    df: pd.DataFrame,
+    window_candles: int = 10
+) -> bool:
+    """
+    Check if an order block is confirmed by a subsequent structure break.
+    
+    An OB is 'structure-confirmed' if a BOS or CHoCH occurred within N candles
+    AFTER the OB formed, in the same direction.
+    
+    This matches LuxAlgo's approach: only show OBs that actually caused
+    a structural shift in the market.
+    
+    Args:
+        ob: OrderBlock to check
+        structure_breaks: List of StructuralBreak objects
+        df: Price DataFrame for index lookups
+        window_candles: How many candles after OB to look for break
+        
+    Returns:
+        bool: True if OB is structure-confirmed
+    """
+    if not structure_breaks:
+        return False
+    
+    # Get OB index in dataframe
+    try:
+        ob_idx = df.index.get_loc(ob.timestamp)
+    except (KeyError, TypeError):
+        # Try finding closest timestamp
+        try:
+            closest_idx = df.index.get_indexer([ob.timestamp], method='nearest')[0]
+            ob_idx = closest_idx
+        except:
+            return False
+    
+    # Define confirmation window
+    window_start_idx = ob_idx + 1
+    window_end_idx = min(ob_idx + 1 + window_candles, len(df))
+    
+    if window_start_idx >= len(df):
+        # OB is too recent - no data to confirm yet, keep it
+        return True
+    
+    window_start_time = df.index[window_start_idx]
+    window_end_time = df.index[min(window_end_idx, len(df) - 1)]
+    
+    # Check each structure break
+    for brk in structure_breaks:
+        brk_time = getattr(brk, 'timestamp', None)
+        if brk_time is None:
+            continue
+        
+        # Convert to comparable format if needed
+        if hasattr(brk_time, 'to_pydatetime'):
+            brk_time = brk_time.to_pydatetime()
+        
+        # Check if break is in confirmation window
+        try:
+            if window_start_time <= brk_time <= window_end_time:
+                # Check direction alignment
+                brk_direction = getattr(brk, 'direction', None)
+                if brk_direction == ob.direction:
+                    return True
+        except TypeError:
+            # Timestamp comparison failed, skip
+            continue
+    
+    return False
