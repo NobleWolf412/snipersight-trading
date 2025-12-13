@@ -1198,8 +1198,15 @@ def calculate_confluence_score(
     
     # === Gate 1: HTF STRUCTURAL PROXIMITY GATE ===
     # Entry must be at meaningful HTF structural level
+    # SKIP for LTF-only modes (surgical, precision) that don't scan HTF timeframes
     htf_proximity_result = None
-    if getattr(config, 'enable_htf_structural_gate', True) and entry_price:
+    profile = getattr(config, 'profile', 'balanced')
+    is_ltf_only_mode = profile in ('precision', 'surgical') or (
+        hasattr(config, 'timeframes') and 
+        not any(tf.lower() in ('4h', '1d', '1w') for tf in getattr(config, 'timeframes', ()))
+    )
+    
+    if getattr(config, 'enable_htf_structural_gate', True) and entry_price and not is_ltf_only_mode:
         htf_proximity_result = evaluate_htf_structural_proximity(
             smc=smc_snapshot,
             indicators=indicators,
@@ -1221,10 +1228,15 @@ def calculate_confluence_score(
             if not htf_proximity_result['valid']:
                 logger.warning("🚫 HTF Structural Gate FAILED: entry %.1f ATR from nearest structure", 
                              htf_proximity_result.get('proximity_atr', 999))
+    elif is_ltf_only_mode:
+        # For LTF modes, give neutral score - don't penalize missing HTF
+        logger.debug("⏭️ HTF Structural Gate SKIPPED for %s mode (LTF-only)", profile)
+
     
     # === Gate 2: HTF MOMENTUM GATE ===
     # Block counter-trend trades during strong HTF momentum
-    if getattr(config, 'enable_htf_momentum_gate', True):
+    # SKIP for LTF-only modes (surgical, precision) that don't scan HTF timeframes
+    if getattr(config, 'enable_htf_momentum_gate', True) and not is_ltf_only_mode:
         momentum_gate = evaluate_htf_momentum_gate(
             indicators=indicators,
             direction=direction,
@@ -1244,6 +1256,9 @@ def calculate_confluence_score(
             if not momentum_gate['allowed']:
                 logger.warning("🚫 HTF Momentum Gate BLOCKED: %s trend with %s momentum",
                              momentum_gate['htf_trend'], momentum_gate['htf_momentum'])
+    elif is_ltf_only_mode:
+        logger.debug("⏭️ HTF Momentum Gate SKIPPED for %s mode (LTF-only)", profile)
+
     
     # === Gate 3: TIMEFRAME CONFLICT RESOLUTION ===
     # Explicit rules for handling timeframe conflicts
