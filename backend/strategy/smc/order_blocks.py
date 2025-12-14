@@ -198,8 +198,10 @@ def detect_order_blocks(
         if body < min_body:
             continue
         
-        # Check for bullish order block (strong rejection from support)
-        if lower_wick / body >= min_wick_ratio:
+        # Check for bullish order block (strong rejection from support OR strong engulfing)
+        is_engulfing = body > (atr.iloc[i] * 1.2)
+        
+        if (lower_wick / body >= min_wick_ratio) or (is_engulfing and body > min_body):
             # Verify displacement: price should move up strongly after this candle
             displacement = _calculate_displacement_bullish(df, i, lookback_candles)
             displacement_atr = displacement / atr.iloc[i] if atr.iloc[i] > 0 else 0
@@ -213,17 +215,25 @@ def detect_order_blocks(
             if not has_context and grade == 'C':
                 continue  # Skip weak OBs without structure context
             
-            # NEW: BOS confirmation bonus
-            # If displacement broke structure, upgrade grade
+            # Volume confirmation
+            volume_spike = candle['volume'] > (avg_volume.iloc[i] * volume_threshold) if pd.notna(avg_volume.iloc[i]) else False
+            
+            # NEW: BOS confirmation bonus and Volume Bonus
+            # Use extended lookback for BOS
+            bos_lookback = int(lookback_candles * 1.5)
+            
             if displacement_atr >= 0.6:
-                has_bos = _has_bos_confirmation(df, i, "bullish", lookback_candles)
+                has_bos = _has_bos_confirmation(df, i, "bullish", bos_lookback)
                 if has_bos and grade == 'B':
                     grade = 'A'  # Upgrade B to A with BOS
                 elif not has_bos and grade == 'A':
                     grade = 'B'  # Downgrade A without BOS
             
-            # Volume confirmation (optional)
-            volume_spike = candle['volume'] > (avg_volume.iloc[i] * volume_threshold) if pd.notna(avg_volume.iloc[i]) else False
+            # Volume Boost: Significant volume upgrades grade
+            if volume_spike and grade == 'B':
+                grade = 'A'
+            elif volume_spike and grade == 'C':
+                grade = 'B'
             
             # Normalize displacement to 0-100 scale
             normalized_displacement = max(0.0, min(100.0, (displacement_atr / 3.0) * 100.0))
@@ -246,8 +256,11 @@ def detect_order_blocks(
             )
             order_blocks.append(ob)
         
-        # Check for bearish order block (strong rejection from resistance)
-        if upper_wick / body >= min_wick_ratio:
+        # Check for bearish order block (strong rejection from resistance OR strong engulfing)
+        # Engulfing check: Large body relative to ATR
+        is_engulfing = body > (atr.iloc[i] * 1.2)
+        
+        if (upper_wick / body >= min_wick_ratio) or (is_engulfing and body > min_body):
             # Verify displacement: price should move down strongly after this candle
             displacement = _calculate_displacement_bearish(df, i, lookback_candles)
             displacement_atr = displacement / atr.iloc[i] if atr.iloc[i] > 0 else 0
@@ -260,15 +273,25 @@ def detect_order_blocks(
             if not has_context and grade == 'C':
                 continue  # Skip weak OBs without structure context
             
+            # Volume confirmation
+            volume_spike = candle['volume'] > (avg_volume.iloc[i] * volume_threshold) if pd.notna(avg_volume.iloc[i]) else False
+            
             # NEW: BOS confirmation bonus
+            # Use extended lookback for BOS (structure takes longer to break than initial impulse)
+            bos_lookback = int(lookback_candles * 1.5)
+            
             if displacement_atr >= 0.6:
-                has_bos = _has_bos_confirmation(df, i, "bearish", lookback_candles)
+                has_bos = _has_bos_confirmation(df, i, "bearish", bos_lookback)
                 if has_bos and grade == 'B':
                     grade = 'A'
                 elif not has_bos and grade == 'A':
                     grade = 'B'
-            
-            volume_spike = candle['volume'] > (avg_volume.iloc[i] * volume_threshold) if pd.notna(avg_volume.iloc[i]) else False
+
+            # Volume Boost
+            if volume_spike and grade == 'B':
+                grade = 'A'
+            elif volume_spike and grade == 'C':
+                grade = 'B'
             
             # Normalize displacement to 0-100 scale
             normalized_displacement = max(0.0, min(100.0, (displacement_atr / 3.0) * 100.0))

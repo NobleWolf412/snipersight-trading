@@ -1136,13 +1136,54 @@ def _calculate_entry_zone(
         # Validate OB integrity (not broken / not currently tapped)
         if multi_tf_data and primary_tf in getattr(multi_tf_data, 'timeframes', {}):
             df_primary = multi_tf_data.timeframes[primary_tf]
-            validated = []
-            for ob in obs:
-                if _is_order_block_valid(ob, df_primary, current_price):
-                    validated.append(ob)
                 else:
                     logger.debug(f"Filtered invalid bullish OB (broken or tapped): low={ob.low} high={ob.high} ts={ob.timestamp}")
             obs = validated
+        
+        # NEW: Surgical Mode Gate (Grade A/B only)
+        # Precision modes reject weak (Grade C) signals
+        if config.profile in ('precision', 'surgical'):
+            obs = [ob for ob in obs if getattr(ob, 'grade', 'B') in ('A', 'B')]
+            logger.debug(f"Surgical Gate: Filtered to {len(obs)} Grade A/B bullish OBs")
+
+        # NEW: Validate LTF OBs have HTF backing (Top-Down Confirmation)
+        
+        # NEW: Validate LTF OBs have HTF backing (Top-Down Confirmation)
+        # Prevent taking 5m/15m entries in empty space
+        validated_backing = []
+        ltf_tfs = ('1m', '5m', '15m')
+        htf_tfs = ('1h', '4h', '1d', '1w')
+        
+        for ob in obs:
+            if ob.timeframe in ltf_tfs:
+                # Check for overlapping HTF structure (OB or FVG)
+                has_backing = False
+                
+                # Check OBs
+                for htf_ob in smc_snapshot.order_blocks:
+                    if htf_ob.timeframe in htf_tfs and htf_ob.direction == "bullish":
+                        # Check overlap: LTF OB inside or touching HTF OB
+                        if (htf_ob.low <= ob.high and htf_ob.high >= ob.low):
+                            has_backing = True
+                            break
+                            
+                # Check FVGs if no OB backing
+                if not has_backing:
+                    for htf_fvg in smc_snapshot.fvgs:
+                         if htf_fvg.timeframe in htf_tfs and htf_fvg.direction == "bullish":
+                            if (htf_fvg.bottom <= ob.high and htf_fvg.top >= ob.low): # FVG bottom/top are low/high
+                                has_backing = True
+                                break
+                
+                if has_backing:
+                    validated_backing.append(ob)
+                else:
+                    logger.debug(f"Filtered isolated LTF OB (no HTF backing): {ob.timeframe} at {ob.low}")
+            else:
+                # MTF/HTF OBs are self-validating or handled by structure scoring
+                validated_backing.append(ob)
+        obs = validated_backing
+        
         # Prefer higher timeframe / freshness / displacement / low mitigation
         tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
         def _ob_score(ob: OrderBlock) -> float:
@@ -1237,6 +1278,12 @@ def _calculate_entry_zone(
             return entry_zone, used_structure
         
         else:
+            # NEW: Overwatch Gate (Strict HTF Requirement)
+            # Swing modes do NOT take random ATR pullbacks - must have structure
+            if config.profile in ('overwatch', 'macro_surveillance'):
+                logger.info("⛔ Overwatch Gate: No valid Bullish OB/FVG structure found. Rejecting trade.")
+                raise ValueError("Overwatch mode requires valid HTF structure for entry (no ATR fallback)")
+
             # Fallback: use ATR-based zone below current price
             logger.critical(f"ENTRY ZONE FALLBACK: current_price={current_price}, atr={atr}")
             regime = _classify_atr_regime(atr, current_price, planner_cfg)
@@ -1267,13 +1314,44 @@ def _calculate_entry_zone(
         obs = [ob for ob in obs if ob.mitigation_level <= planner_cfg.ob_mitigation_max]
         if multi_tf_data and primary_tf in getattr(multi_tf_data, 'timeframes', {}):
             df_primary = multi_tf_data.timeframes[primary_tf]
-            validated_b = []
-            for ob in obs:
-                if _is_order_block_valid(ob, df_primary, current_price):
-                    validated_b.append(ob)
                 else:
                     logger.debug(f"Filtered invalid bearish OB (broken or tapped): low={ob.low} high={ob.high} ts={ob.timestamp}")
             obs = validated_b
+            
+        # NEW: Surgical Mode Gate (Grade A/B only)
+        if config.profile in ('precision', 'surgical'):
+            obs = [ob for ob in obs if getattr(ob, 'grade', 'B') in ('A', 'B')]
+            logger.debug(f"Surgical Gate: Filtered to {len(obs)} Grade A/B bearish OBs")
+
+        # NEW: Validate LTF OBs have HTF backing (Top-Down Confirmation)
+        validated_backing = []
+        ltf_tfs = ('1m', '5m', '15m')
+        htf_tfs = ('1h', '4h', '1d', '1w')
+        
+        for ob in obs:
+            if ob.timeframe in ltf_tfs:
+                has_backing = False
+                # Check OBs
+                for htf_ob in smc_snapshot.order_blocks:
+                    if htf_ob.timeframe in htf_tfs and htf_ob.direction == "bearish":
+                        if (htf_ob.low <= ob.high and htf_ob.high >= ob.low):
+                            has_backing = True
+                            break
+                # Check FVGs
+                if not has_backing:
+                    for htf_fvg in smc_snapshot.fvgs:
+                         if htf_fvg.timeframe in htf_tfs and htf_fvg.direction == "bearish":
+                            if (htf_fvg.bottom <= ob.high and htf_fvg.top >= ob.low):
+                                has_backing = True
+                                break
+                
+                if has_backing:
+                    validated_backing.append(ob)
+                else:
+                    logger.debug(f"Filtered isolated LTF Bearish OB: {ob.timeframe} at {ob.high}")
+            else:
+                validated_backing.append(ob)
+        obs = validated_backing
         tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
         def _ob_score_b(ob: OrderBlock) -> float:
             base_score = ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
@@ -1362,6 +1440,11 @@ def _calculate_entry_zone(
             return entry_zone, used_structure
         
         else:
+            # NEW: Overwatch Gate (Strict HTF Requirement)
+            if config.profile in ('overwatch', 'macro_surveillance'):
+                logger.info("⛔ Overwatch Gate: No valid Bearish OB/FVG structure found. Rejecting trade.")
+                raise ValueError("Overwatch mode requires valid HTF structure for entry (no ATR fallback)")
+
             # Fallback: use ATR-based zone above current price
             # For shorts: near_entry > far_entry (near is farther from price, higher value)
             # SWAP near/far offsets compared to longs to maintain semantic ordering

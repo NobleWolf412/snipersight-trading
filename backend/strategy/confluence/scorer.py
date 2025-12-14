@@ -863,10 +863,22 @@ def calculate_confluence_score(
     # Order Blocks
     ob_score = _score_order_blocks(smc_snapshot.order_blocks, direction)
     if ob_score > 0:
+        # Dynamic Mode-Aware Weight (Fix #1)
+        # Overwatch: Higher weight (HTF OBs are primary)
+        # Strike/Surgical: Lower weight (Momentum/Structure is primary)
+        ob_weight_map = {
+            'macro_surveillance': 0.25, 'overwatch': 0.25,  # HTF-focused
+            'intraday_aggressive': 0.18, 'strike': 0.18,    # Momentum-focused
+            'precision': 0.15, 'surgical': 0.15,            # Refining only
+            'stealth_balanced': 0.20, 'stealth': 0.20       # Balanced
+        }
+        current_profile = getattr(config, 'profile', 'balanced').lower()
+        ob_weight = ob_weight_map.get(current_profile, 0.20)
+        
         factors.append(ConfluenceFactor(
             name="Order Block",
             score=ob_score,
-            weight=0.20,
+            weight=ob_weight,
             rationale=_get_ob_rationale(smc_snapshot.order_blocks, direction)
         ))
     
