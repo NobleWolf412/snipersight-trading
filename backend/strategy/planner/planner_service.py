@@ -1136,6 +1136,11 @@ def _calculate_entry_zone(
         # Validate OB integrity (not broken / not currently tapped)
         if multi_tf_data and primary_tf in getattr(multi_tf_data, 'timeframes', {}):
             df_primary = multi_tf_data.timeframes[primary_tf]
+            validated = []
+            for ob in obs:
+                # Ensure price hasn't broken the OB
+                if current_price >= ob.low:
+                    validated.append(ob)
                 else:
                     logger.debug(f"Filtered invalid bullish OB (broken or tapped): low={ob.low} high={ob.high} ts={ob.timestamp}")
             obs = validated
@@ -1314,6 +1319,11 @@ def _calculate_entry_zone(
         obs = [ob for ob in obs if ob.mitigation_level <= planner_cfg.ob_mitigation_max]
         if multi_tf_data and primary_tf in getattr(multi_tf_data, 'timeframes', {}):
             df_primary = multi_tf_data.timeframes[primary_tf]
+            validated_b = []
+            for ob in obs:
+                # Ensure price hasn't broken the OB
+                if current_price <= ob.high:
+                    validated_b.append(ob)
                 else:
                     logger.debug(f"Filtered invalid bearish OB (broken or tapped): low={ob.low} high={ob.high} ts={ob.timestamp}")
             obs = validated_b
