@@ -17,6 +17,7 @@ import { HomeButton } from '@/components/layout/HomeButton';
 import { RejectionSummary } from '@/components/RejectionSummary';
 import { RegimeIndicator } from '@/components/RegimeIndicator';
 import { ConvictionBadge } from '@/components/ConvictionBadge';
+import { ReversalBadge } from '@/components/ReversalBadge';
 import { api } from '@/utils/api';
 import type { RegimeMetadata, TrendRegime, VolatilityRegime, LiquidityRegime } from '@/types/regime';
 
@@ -391,12 +392,18 @@ export function ScanResults() {
                           })()}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={getTrendColor(result.trendBias)}>
-                            <span className="flex items-center gap-1">
-                              {getTrendIcon(result.trendBias)}
-                              {result.trendBias}
-                            </span>
-                          </Badge>
+                          <div className="flex flex-col gap-1.5">
+                            <Badge variant="outline" className={getTrendColor(result.trendBias)}>
+                              <span className="flex items-center gap-1">
+                                {getTrendIcon(result.trendBias)}
+                                {result.trendBias}
+                              </span>
+                            </Badge>
+                            <ReversalBadge
+                              reversalContext={result.reversal_context}
+                              size="sm"
+                            />
+                          </div>
                         </TableCell>
                         <TableCell>
                           {(() => {

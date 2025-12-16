@@ -31,10 +31,15 @@ export function ChartAnalysis({ result }: ChartAnalysisProps) {
     const maxGain = ((result.takeProfits[2] - result.entryZone.high) / result.entryZone.high * 100);
     const maxRisk = ((result.entryZone.high - result.stopLoss) / result.entryZone.high * 100);
     
-    const trendAnalysis = result.trendBias === 'BULLISH' 
-      ? '📈 **Bullish Setup**: Price action shows upward momentum with higher timeframe alignment supporting long positions.'
+    // Check for reversal setup
+    const reversalInfo = result.reversal_context?.is_reversal_setup
+      ? `\n\n🔄 **TREND REVERSAL DETECTED** (${result.reversal_context.confidence.toFixed(0)}% confidence)\n${result.reversal_context.rationale}\n${result.reversal_context.htf_bypass_active ? '⚡ *Strong reversal - HTF alignment bypassed*' : ''}\n${result.reversal_context.cycle_aligned ? '📊 *Aligned with cycle extreme (DCL/WCL zone)*' : ''}`
+      : '';
+
+    const trendAnalysis = result.trendBias === 'BULLISH'
+      ? '📈 **Bullish Setup**: Price action shows upward momentum with higher timeframe alignment supporting long positions.' + reversalInfo
       : result.trendBias === 'BEARISH'
-      ? '📉 **Bearish Setup**: Downward pressure evident with HTF structure favoring short positions.'
+      ? '📉 **Bearish Setup**: Downward pressure evident with HTF structure favoring short positions.' + reversalInfo
       : '↔️ **Neutral Setup**: Mixed signals suggest caution; wait for clearer directional bias.';
     
     const confidenceAnalysis = result.confidenceScore >= 80

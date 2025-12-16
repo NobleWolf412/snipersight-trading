@@ -690,22 +690,34 @@ async def get_signals(
                 'metadata_keys': list(plan.metadata.keys()) if plan.metadata else [],
                 'has_order_blocks_list': 'order_blocks_list' in (plan.metadata or {}),
             }
-            
+
             if hasattr(plan, 'metadata') and plan.metadata:
                 ob_list = plan.metadata.get('order_blocks_list', [])
                 fvg_list = plan.metadata.get('fvgs_list', [])
                 bos_list = plan.metadata.get('structural_breaks_list', [])
                 sweep_list = plan.metadata.get('liquidity_sweeps_list', [])
-                
+
                 signal['_debug_metadata']['ob_count'] = len(ob_list)
                 signal['_debug_metadata']['fvg_count'] = len(fvg_list)
-                
+
                 signal['smc_geometry'] = {
                     'order_blocks': ob_list[:10],  # Limit to top 10 for payload size
                     'fvgs': fvg_list[:10],
                     'bos_choch': bos_list[:10],
                     'liquidity_sweeps': sweep_list[:10],
                 }
+
+                # Expose reversal context for UI notification
+                reversal_data = plan.metadata.get('reversal')
+                if reversal_data and reversal_data.get('is_reversal_setup'):
+                    signal['reversal_context'] = {
+                        'is_reversal_setup': reversal_data.get('is_reversal_setup', False),
+                        'direction': reversal_data.get('direction', ''),
+                        'cycle_aligned': reversal_data.get('cycle_aligned', False),
+                        'htf_bypass_active': reversal_data.get('htf_bypass_active', False),
+                        'confidence': reversal_data.get('confidence', 0.0),
+                        'rationale': reversal_data.get('rationale', '')
+                    }
 
             signals.append(signal)
 
