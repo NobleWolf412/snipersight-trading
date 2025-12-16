@@ -30,6 +30,7 @@ from backend.indicators.momentum import (
 from backend.indicators.volatility import (
     compute_atr,
     compute_bollinger_bands,
+    compute_keltner_channels,
     compute_realized_volatility,
 )
 
@@ -148,6 +149,33 @@ class IndicatorService:
             bool(volume_spike.iloc[-1])
         )
         
+        # TTM Squeeze Calculation
+        # Standard Settings: BB(20, 2.0) vs KC(20, 1.5)
+        # Squeeze ON = BB inside KC (low volatility)
+        # Squeeze FIRE = BB expands outside KC (high volatility)
+        kc_upper, kc_mid, kc_lower = compute_keltner_channels(df, ema_period=20, atr_multiplier=1.5)
+        
+        # Determine Squeeze State
+        bb_up_val = bb_upper.iloc[-1]
+        bb_lo_val = bb_lower.iloc[-1]
+        kc_up_val = kc_upper.iloc[-1]
+        kc_lo_val = kc_lower.iloc[-1]
+        
+        ttm_squeeze_on = (bb_up_val < kc_up_val) and (bb_lo_val > kc_lo_val)
+        
+        # Check if squeeze JUST fired (was on yesterday, off today)
+        ttm_squeeze_firing = False
+        if len(df) > 1:
+            prev_bb_up = bb_upper.iloc[-2]
+            prev_bb_lo = bb_lower.iloc[-2]
+            prev_kc_up = kc_upper.iloc[-2]
+            prev_kc_lo = kc_lower.iloc[-2]
+            prev_squeeze_on = (prev_bb_up < prev_kc_up) and (prev_bb_lo > prev_kc_lo)
+            
+            if prev_squeeze_on and not ttm_squeeze_on:
+                ttm_squeeze_firing = True
+
+        
         # Extract stoch_rsi values (handles both tuple and series)
         stoch_k_value, stoch_d_value = self._extract_stoch_values(stoch_rsi)
         
@@ -164,6 +192,11 @@ class IndicatorService:
             bb_upper=bb_upper.iloc[-1],
             bb_middle=bb_middle.iloc[-1],
             bb_lower=bb_lower.iloc[-1],
+            # TTM Squeeze
+            ttm_squeeze_on=ttm_squeeze_on,
+            ttm_squeeze_firing=ttm_squeeze_firing,
+            kc_upper=kc_up_val,
+            kc_lower=kc_lo_val,
             # Volatility (required)
             atr=atr_value,
             # Volume (required)

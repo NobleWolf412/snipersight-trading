@@ -73,6 +73,11 @@ class IndicatorSnapshot:
     
     # Mean Reversion (optional fields)
     bb_width: Optional[float] = None
+    # TTM Squeeze (Big Move Detector)
+    kc_upper: Optional[float] = None
+    kc_lower: Optional[float] = None
+    ttm_squeeze_on: bool = False # True if BB inside KC (Compression)
+    ttm_squeeze_firing: bool = False # True if Squeeze JUST turned off (Expansion)
     
     # Volatility (optional fields)
     atr_percent: Optional[float] = None

@@ -1373,6 +1373,29 @@ class Orchestrator:
                     plan.metadata['volume_profile'] = context.metadata.get('volume_profile')
                 except Exception:
                     pass
+                    
+            # NEW: Attach TTM Squeeze (Big Move Detector)
+            # Scans HTF and Entry TFs for 'Squeeze Firing' signal to warn user of pending expansion
+            if plan and context.multi_tf_indicators:
+                try:
+                    squeezes = []
+                    # Check key timeframes for squeeze action
+                    for tf in ['1d', '4h', '1h', '15m']:
+                        if context.multi_tf_indicators.has_timeframe(tf):
+                            inds = context.multi_tf_indicators.get_indicator(tf)
+                            if inds.ttm_squeeze_firing:
+                                squeezes.append(f"{tf.upper()} FIRING")
+                            elif inds.ttm_squeeze_on:
+                                squeezes.append(f"{tf.upper()} BUILDING")
+                    
+                    if squeezes:
+                        plan.metadata['ttm_squeeze'] = {
+                            'status': 'active',
+                            'signals': squeezes,
+                            'description': f"Big Move Alert: Volatility expansion detected ({', '.join(squeezes)})"
+                        }
+                except Exception:
+                    pass
             
             # Attach liquidity pools (equal highs/lows) for UI display
             if plan and context.smc_snapshot:
