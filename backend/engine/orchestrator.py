@@ -808,7 +808,7 @@ class Orchestrator:
                     current_price=current_price_val,
                     direction="SHORT"
                 )
-                )
+
             except Exception as e:
                 logger.warning(f"Reversal detection failed: {e}")
 

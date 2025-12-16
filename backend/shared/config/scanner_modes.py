@@ -162,7 +162,7 @@ MODES: Dict[str, ScannerMode] = {
         max_pullback_atr=4.0,
         min_stop_atr=0.4,
         max_stop_atr=6.5,  # TUNED: was 8.0 - cap via max_stop_atr validation
-        entry_timeframes=("4h", "1h"),  # Swing position entries, not scalping
+        entry_timeframes=("4h", "1h", "15m"),  # Swing position entries allowing LTF refinement
         structure_timeframes=("1w", "1d", "4h"),  # RESTORED: HTF structure for target clipping
         stop_timeframes=("4h", "1h"),
         target_timeframes=("1d", "4h"),
@@ -190,16 +190,16 @@ MODES: Dict[str, ScannerMode] = {
         stop_timeframes=("1h", "15m", "5m"),  # TUNED: added 1h for HTF structure stops
         target_timeframes=("1h", "15m"),  # TUNED: added 15m for faster targets
         min_target_move_pct=0.4,  # TUNED: was 0.5 - allow tighter scalp targets
-        smc_preset="defaults",  # Balanced detection for aggressive intraday
-        expected_trade_type="intraday",  # HTF structure produces intraday/swing setups
+        smc_preset="luxalgo_aggressive",  # Loose detection for max signals
+        expected_trade_type="intraday",  # 4h structure with 15m/5m entry = intraday/scalp
         allowed_trade_types=("swing", "intraday", "scalp"),  # Allow swing since 4h structure produces swing-sized targets
         volume_accel_lookback=4,  # Balanced - faster detection for intraday but not as reactive as scalp
-        overrides={"min_rr_ratio": 1.2, "atr_floor": 0.0010, "bias_gate": 0.6, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True},
+        overrides={"min_rr_ratio": 1.2, "atr_floor": 0.0010, "bias_gate": 0.6, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True, "entry_zone_offset_atr": -0.05},
     ),
     "surgical": ScannerMode(
         name="surgical",
         description="SCALP/INTRADAY (Minutes-Hours) • Precision entries with tight stops • Fewer but cleaner setups • Best for: Experienced traders wanting controlled risk with 1.5:1+ R:R",
-        timeframes=("1h", "15m", "5m"),  # Simplified for precision
+        timeframes=("4h", "1h", "15m", "5m"),  # Simplified for precision
         min_confluence_score=70.0,
         profile="precision",
         critical_timeframes=("15m",),  # 15m essential for precision entries
@@ -208,15 +208,15 @@ MODES: Dict[str, ScannerMode] = {
         min_stop_atr=0.15,  # TUNED: was 0.25 - surgical needs tightest stops
         max_stop_atr=5.0,   # TUNED: was 4.0 - allow HTF structure stops normalized to LTF ATR
         entry_timeframes=("15m", "5m"),  # TUNED: added 15m - 5m-only was too restrictive
-        structure_timeframes=("1h", "15m"),  # Precision structure from 1h/15m ONLY (no 5m)
-        stop_timeframes=("1h", "15m", "5m"),  # TUNED: added 1h for HTF structure stops
-        target_timeframes=("1h", "15m"),  # TUNED: added 15m for faster exits
+        structure_timeframes=("4h", "1h", "15m"),  # Precision structure from 4h/1h/15m (added 4h for HTF awareness)
+        stop_timeframes=("4h", "1h", "15m", "5m"),  # TUNED: added 4h for HTF structure stops
+        target_timeframes=("4h", "1h", "15m"),  # TUNED: added 4h for major targets
         min_target_move_pct=0.4,  # TUNED: was 0.6 - allow tighter surgical precision
         smc_preset="luxalgo_strict",  # Strict detection for precision - quality over quantity
         expected_trade_type="intraday",  # 1h/15m structure produces intraday setups
         allowed_trade_types=("intraday", "scalp"),  # Precision focus
         volume_accel_lookback=3,  # Shortest lookback - scalp/surgical needs fastest reaction to volume changes
-        overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0008, "bias_gate": 0.7, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True},
+        overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0008, "bias_gate": 0.7, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True, "entry_zone_offset_atr": 0.05},
     ),
     # STEALTH replaces both RECON and GHOST (merged per SMC_PIPELINE_REFACTOR.md)
     # Use stealth_strict=False for balanced (was RECON), stealth_strict=True for higher conviction (was GHOST)
@@ -232,7 +232,7 @@ MODES: Dict[str, ScannerMode] = {
         min_stop_atr=0.2,
         max_stop_atr=4.5,
         entry_timeframes=("1h", "15m", "5m"),
-        structure_timeframes=("1d", "4h", "1h"),  # HTF structure for target clipping
+        structure_timeframes=("1d", "4h", "1h", "15m"),  # Added 15m to support 5m entries
         stop_timeframes=("4h", "1h", "15m"),  # TUNED: added 4h/1h for swing structure stops
         target_timeframes=("1h", "15m"),
         min_target_move_pct=0.5,

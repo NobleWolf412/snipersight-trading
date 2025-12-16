@@ -528,6 +528,16 @@ def generate_trade_plan(
         # Fallback to intraday defaults
         planner_cfg = PlannerConfig.defaults_for_mode("intraday")
     
+    # NEW: Apply mode-specific overrides from ScanConfig
+    # This allows tuning specific planner parameters (like entry offset) without changing global defaults
+    overrides = getattr(config, 'overrides', None) or {}
+    if overrides:
+        for key, value in overrides.items():
+            if hasattr(planner_cfg, key):
+                original = getattr(planner_cfg, key)
+                setattr(planner_cfg, key, value)
+                logger.debug(f"Applied mode override: {key} = {value} (was {original})")
+    
     telemetry = get_telemetry_logger()
     run_id = datetime.utcnow().strftime("run-%Y%m%d")  # coarse run grouping
 
