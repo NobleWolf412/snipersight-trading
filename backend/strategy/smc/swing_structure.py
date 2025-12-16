@@ -251,27 +251,73 @@ def _label_swings(raw_swings: List[dict], min_swing_atr: float, avg_atr: float) 
 
 
 def _determine_trend(swings: List[SwingPoint]) -> TrendState:
-    """Determine trend from recent swing structure."""
+    """
+    Determine trend from recent swing structure with strict analyst-grade logic.
+
+    ENHANCED: Uses more swings, directional price analysis, and stricter thresholds
+    to match what an analyst would identify visually on charts.
+    """
     if len(swings) < 4:
         return 'neutral'
-    
-    # Look at last 6 swings
-    recent = swings[-6:]
-    
+
+    # Use last 10-12 swings for better trend context (was 6)
+    # An analyst looks at more than just 3 swing pairs
+    lookback_count = min(12, len(swings))
+    recent = swings[-lookback_count:]
+
+    # Count swing types
     hh_count = sum(1 for s in recent if s.swing_type == 'HH')
     hl_count = sum(1 for s in recent if s.swing_type == 'HL')
     lh_count = sum(1 for s in recent if s.swing_type == 'LH')
     ll_count = sum(1 for s in recent if s.swing_type == 'LL')
-    
+
     bullish_score = hh_count + hl_count
     bearish_score = lh_count + ll_count
-    
-    if bullish_score > bearish_score + 1:
-        return 'bullish'
-    elif bearish_score > bullish_score + 1:
-        return 'bearish'
+
+    # ENHANCED: Check directional price movement
+    # A true uptrend should have higher prices over time, not just HH/HL labels
+    if len(recent) >= 4:
+        first_half_highs = [s.price for s in recent[:len(recent)//2] if s.is_high]
+        second_half_highs = [s.price for s in recent[len(recent)//2:] if s.is_high]
+        first_half_lows = [s.price for s in recent[:len(recent)//2] if not s.is_high]
+        second_half_lows = [s.price for s in recent[len(recent)//2:] if not s.is_high]
+
+        # Calculate average price levels for each half
+        avg_first_high = sum(first_half_highs) / len(first_half_highs) if first_half_highs else 0
+        avg_second_high = sum(second_half_highs) / len(second_half_highs) if second_half_highs else 0
+        avg_first_low = sum(first_half_lows) / len(first_half_lows) if first_half_lows else 0
+        avg_second_low = sum(second_half_lows) / len(second_half_lows) if second_half_lows else 0
+
+        # Directional bias: Are both highs AND lows rising/falling?
+        highs_rising = avg_second_high > avg_first_high * 1.001  # 0.1% threshold to avoid noise
+        lows_rising = avg_second_low > avg_first_low * 1.001
+        highs_falling = avg_second_high < avg_first_high * 0.999
+        lows_falling = avg_second_low < avg_first_low * 0.999
+
+        # Strong uptrend: both highs and lows rising + HH/HL dominance
+        if (highs_rising and lows_rising) or (bullish_score >= bearish_score + 2):
+            return 'bullish'
+        # Strong downtrend: both highs and lows falling + LH/LL dominance
+        elif (highs_falling and lows_falling) or (bearish_score >= bullish_score + 2):
+            return 'bearish'
+        # Mixed signals: consolidation or transition
+        else:
+            # STRICTER: Require clear dominance (was +1, now +2 OR equal with directional bias)
+            if bullish_score > bearish_score and (highs_rising or lows_rising):
+                return 'bullish'
+            elif bearish_score > bullish_score and (highs_falling or lows_falling):
+                return 'bearish'
+            else:
+                return 'neutral'
     else:
-        return 'neutral'
+        # Fallback to simple logic for limited data
+        # STRICTER: Now require +2 advantage instead of +1
+        if bullish_score >= bearish_score + 2:
+            return 'bullish'
+        elif bearish_score >= bullish_score + 2:
+            return 'bearish'
+        else:
+            return 'neutral'
 
 
 def _infer_timeframe(df: pd.DataFrame) -> str:

@@ -354,101 +354,151 @@ def resolve_timeframe_conflicts(
     htf_proximity: Optional[Dict] = None
 ) -> Dict:
     """
-    Resolve timeframe conflicts with explicit hierarchical rules.
+    Resolve timeframe conflicts with STRICT analyst-grade hierarchical rules.
+
+    ENHANCED: Stricter penalties for counter-trend trades to match what an analyst would reject.
+    An analyst NEVER takes a LONG in a clear 1D/4H downtrend, regardless of LTF patterns.
     """
     profile = getattr(mode_config, 'profile', 'balanced')
     is_scalp_mode = profile in ('intraday_aggressive', 'precision')
     is_swing_mode = profile in ('macro_surveillance', 'stealth_balanced')
-    
+
     conflicts = []
     resolution_reason_parts = []
     score_adjustment = 0.0
     resolution = 'allowed'
-    
+
     # Get all timeframe trends
     timeframes = ['1w', '1d', '4h', '1h', '15m']
     tf_trends = {}
-    
+
     for tf in timeframes:
         if swing_structure and tf in swing_structure:
             ss = swing_structure[tf]
             tf_trends[tf] = ss.get('trend', 'neutral')
-    
-    # Define primary bias TF based on mode
+
+    # Define critical HTF timeframes based on mode (ANALYST PERSPECTIVE)
+    # An analyst always checks 1D and 4H, regardless of mode
     if is_scalp_mode:
         primary_tf = '1h'
-        filter_tfs = ['4h']
+        critical_htf_tfs = ['4h']  # Scalpers still check 4H
+        advisory_htf_tfs = ['1d']   # 1D is advisory for scalps
     elif is_swing_mode:
         primary_tf = '4h'
-        filter_tfs = ['1d', '1w']
+        critical_htf_tfs = ['1d', '1w']  # Swing traders must align with daily/weekly
+        advisory_htf_tfs = []
     else:
         primary_tf = '1h'
-        filter_tfs = ['4h', '1d']
-    
+        critical_htf_tfs = ['4h', '1d']  # Intraday must align with 4H and 1D
+        advisory_htf_tfs = []
+
     primary_trend = tf_trends.get(primary_tf, 'neutral')
     is_bullish_trade = direction.lower() in ('bullish', 'long')
-    
-    # Check alignment with tiered scoring
+
+    # === CRITICAL CHECK: Primary Timeframe Alignment ===
     if primary_trend == 'neutral':
-        # Ranging/no data - slight caution, not full conflict
+        # Ranging/no data - slight caution
         score_adjustment -= 5.0
         resolution_reason_parts.append(f"Primary TF ({primary_tf}) neutral/ranging")
         resolution = 'caution'
     elif (is_bullish_trade and primary_trend == 'bearish') or \
          (not is_bullish_trade and primary_trend == 'bullish'):
-        # Actual conflict - larger penalty
+        # STRICTER: Counter-primary-trend trades get HEAVY penalty (was -10, now -25)
         conflicts.append(f"{primary_tf} {primary_trend} (primary)")
         resolution_reason_parts.append(f"Primary TF ({primary_tf}) {primary_trend} conflicts with {direction}")
-        score_adjustment -= 10.0
+        score_adjustment -= 25.0
         resolution = 'caution'
-    # else: aligned - no penalty
-    
-    # Check filter timeframes
-    for tf in filter_tfs:
+    # else: aligned - bonus for alignment
+    elif primary_trend != 'neutral':
+        score_adjustment += 5.0
+        resolution_reason_parts.append(f"Primary TF ({primary_tf}) aligned {primary_trend}")
+
+    # === CRITICAL CHECK: HTF Trend Alignment (1D, 4H) ===
+    # This is where an analyst would HARD REJECT counter-trend trades
+    for tf in critical_htf_tfs:
         if tf not in tf_trends:
             continue
-        
+
         htf_trend = tf_trends[tf]
         htf_aligned = (
             (is_bullish_trade and htf_trend == 'bullish') or
             (not is_bullish_trade and htf_trend == 'bearish')
         )
-        
+
         if not htf_aligned and htf_trend != 'neutral':
-            conflicts.append(f"{tf} {htf_trend}")
-            
+            conflicts.append(f"{tf} {htf_trend} (critical HTF)")
+
+            # ANALYST RULE: Counter-HTF trades require exceptional circumstances
+            # Default: HEAVY penalty or BLOCK
             htf_ind = indicators.by_timeframe.get(tf)
             is_strong_momentum = False
-            
+
             if htf_ind and htf_ind.atr:
                 atr_series = getattr(htf_ind, 'atr_series', [])
                 if len(atr_series) >= 5:
                     recent_atr = atr_series[-5:]
                     expanding_bars = sum(1 for i in range(1, len(recent_atr)) if recent_atr[i] > recent_atr[i-1])
                     is_strong_momentum = (expanding_bars >= 4)
-            
+
+            # STRICTER: Check if at major HTF structure for exception
+            at_major_structure = False
+            proximity_atr = htf_proximity.get('proximity_atr') if htf_proximity else None
+            if htf_proximity and htf_proximity.get('valid') and proximity_atr is not None and proximity_atr < 0.5:
+                # Only within 0.5 ATR of major structure allows exception (was 1.0)
+                at_major_structure = True
+
             if is_strong_momentum:
-                resolution = 'blocked'
-                score_adjustment -= 40.0
-                resolution_reason_parts.append(f"{tf} in strong {htf_trend} momentum, blocking {direction}")
-                break
+                # Strong counter-trend momentum: BLOCK HARD (was -40, now -60)
+                if at_major_structure:
+                    # Exception: At major structure, reduce to heavy penalty instead of block
+                    resolution = 'caution'
+                    score_adjustment -= 45.0
+                    resolution_reason_parts.append(f"{tf} in strong {htf_trend} momentum vs {direction}, HEAVY PENALTY (exception: major structure)")
+                else:
+                    # No exception: BLOCK
+                    resolution = 'blocked'
+                    score_adjustment -= 60.0
+                    resolution_reason_parts.append(f"{tf} in strong {htf_trend} momentum, BLOCKING {direction}")
+                    break
             else:
-                resolution = 'caution'
-                score_adjustment -= 10.0
-                resolution_reason_parts.append(f"{tf} {htf_trend} but not strong momentum")
-    
-    # Exception: At major HTF structure, reduce penalty
-    proximity_atr = htf_proximity.get('proximity_atr') if htf_proximity else None
-    if htf_proximity and htf_proximity.get('valid') and proximity_atr is not None and proximity_atr < 1.0:
-        score_adjustment += 15.0
-        resolution_reason_parts.append("At major HTF structure (overrides conflict penalty)")
-        if resolution == 'blocked' and score_adjustment > -30.0:
-            resolution = 'caution'
-    
+                # HTF counter-trend but not strong momentum
+                # STRICTER: Heavy penalty (was -10, now -30)
+                if at_major_structure:
+                    # At major structure: reduce penalty
+                    score_adjustment -= 15.0
+                    resolution_reason_parts.append(f"{tf} {htf_trend} but at major structure (partial override)")
+                else:
+                    score_adjustment -= 30.0
+                    resolution_reason_parts.append(f"{tf} {htf_trend} conflicts with {direction} (HTF misalignment)")
+                    resolution = 'caution'
+        elif htf_aligned and htf_trend != 'neutral':
+            # BONUS: HTF aligned trades get bonus
+            score_adjustment += 8.0
+            resolution_reason_parts.append(f"{tf} aligned {htf_trend} (HTF support)")
+
+    # === ADVISORY CHECK: Additional HTF Timeframes (less strict) ===
+    for tf in advisory_htf_tfs:
+        if tf not in tf_trends:
+            continue
+
+        htf_trend = tf_trends[tf]
+        htf_aligned = (
+            (is_bullish_trade and htf_trend == 'bullish') or
+            (not is_bullish_trade and htf_trend == 'bearish')
+        )
+
+        if not htf_aligned and htf_trend != 'neutral':
+            # Advisory conflict: small penalty
+            score_adjustment -= 8.0
+            resolution_reason_parts.append(f"{tf} {htf_trend} (advisory conflict)")
+        elif htf_aligned and htf_trend != 'neutral':
+            # Advisory alignment: small bonus
+            score_adjustment += 3.0
+
     if not conflicts:
         resolution = 'allowed'
         resolution_reason_parts.append("All timeframes aligned or neutral")
-    
+
     return {
         'resolution': resolution,
         'score_adjustment': score_adjustment,
@@ -1300,18 +1350,20 @@ def calculate_confluence_score(
             htf_proximity=htf_proximity_result
         )
         
-        if conflict_result['score_adjustment'] != 0:
+        if conflict_result['score_adjustment'] != 0 or conflict_result['conflicts']:
+            # CRITICAL: HTF trend alignment is now a PRIMARY factor (weight increased from 0.10 to 0.20)
+            # This ensures counter-trend trades get properly penalized in the final score
             factor_score = max(0.0, min(100.0, 50.0 + conflict_result['score_adjustment'] * 1.0))
             factors.append(ConfluenceFactor(
-                name="Timeframe_Conflict_Resolution",
+                name="HTF_Trend_Alignment",  # Renamed to emphasize importance
                 score=factor_score,
-                weight=0.10,
+                weight=0.20,  # INCREASED: Was 0.10, now 0.20 (20% of total score)
                 rationale=conflict_result['resolution_reason']
             ))
-            
+
             if conflict_result['resolution'] == 'blocked':
-                logger.warning("🚫 Timeframe Conflict BLOCKED: conflicts: %s",
-                             ', '.join(conflict_result['conflicts']))
+                logger.warning("🚫 HTF TREND ALIGNMENT BLOCKED: %s trade conflicts with %s",
+                             direction, ', '.join(conflict_result['conflicts']))
     
     # --- Normalize Weights ---
     
