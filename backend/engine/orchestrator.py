@@ -50,6 +50,11 @@ from backend.services.indicator_service import configure_indicator_service
 from backend.services.smc_service import configure_smc_service
 from backend.services.confluence_service import configure_confluence_service
 from backend.bot.telemetry.logger import get_telemetry_logger
+from backend.strategy.smc.reversal_detector import (
+    detect_reversal_context,
+    combine_reversal_with_cycle_bonus,
+    validate_reversal_profile
+)
 from backend.bot.telemetry.events import (
     create_error_event,
     create_scan_started_event,
@@ -803,8 +808,18 @@ class Orchestrator:
                     current_price=current_price_val,
                     direction="SHORT"
                 )
+                )
             except Exception as e:
                 logger.warning(f"Reversal detection failed: {e}")
+
+            # Apply Mode-Specific Reversal Gates
+            try:
+                if rev_ctx_long:
+                    rev_ctx_long = validate_reversal_profile(rev_ctx_long, self.config.profile)
+                if rev_ctx_short:
+                    rev_ctx_short = validate_reversal_profile(rev_ctx_short, self.config.profile)
+            except Exception as e:
+                logger.warning(f"Reversal validation failed: {e}")
 
             # 3. HTF Context (passed into service as htf_ctx_long/short)
             htf_ctx_long, htf_ctx_short = self._extract_htf_context(
