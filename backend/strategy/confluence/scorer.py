@@ -224,12 +224,14 @@ def evaluate_htf_momentum_gate(
     indicators: IndicatorSet,
     direction: str,
     mode_config: ScanConfig,
-    swing_structure: Optional[Dict] = None
+    swing_structure: Optional[Dict] = None,
+    reversal_context: Optional[dict] = None
 ) -> Dict:
     """
     HTF Momentum Gate - blocks counter-trend trades during strong HTF momentum.
     
     If HTF is in strong momentum AGAINST trade direction, apply veto or heavy penalty.
+    EXCEPTION: If a valid Reversal Setup is detected, allow the trade (fade the momentum).
     """
     primary_tf = getattr(mode_config, 'primary_planning_timeframe', '1h')
     structure_tfs = getattr(mode_config, 'structure_timeframes', ('4h', '1d'))
@@ -281,23 +283,37 @@ def evaluate_htf_momentum_gate(
     
     # Case 1: Strong momentum AGAINST trade direction
     if momentum_strength in ('strong', 'building'):
-        if is_bullish_trade and htf_is_bearish:
+        # Normalize comparison
+        is_counter_trend = (is_bullish_trade and htf_is_bearish) or (not is_bullish_trade and htf_is_bullish)
+        
+        if is_counter_trend:
+            # CHECK EXCEPTION: Is this a Reversal Setup?
+            # Reversal setups rely on fading strong momentum at key levels
+            if reversal_context and getattr(reversal_context, 'is_reversal_setup', False):
+                # Ensure reversal matches our trade direction
+                rev_dir = getattr(reversal_context, 'direction', '').lower()
+                trade_dir = direction.lower()
+                if (trade_dir in ('long', 'bullish') and rev_dir in ('long', 'bullish')) or \
+                   (trade_dir in ('short', 'bearish') and rev_dir in ('short', 'bearish')):
+                    
+                    return {
+                        'allowed': True,
+                        'score_adjustment': 0.0, # Neutralize penalty
+                        'htf_momentum': momentum_strength,
+                        'htf_trend': htf_trend,
+                        'reason': f"Momentum Gate overridden by Reversal Setup (Fading {htf_trend} momentum)"
+                    }
+
+            # Standard Logic: Block counter-trend
             penalty = -50.0 if volume_strong else -35.0
+            block_reason = f"{htf} in strong {'bearish' if htf_is_bearish else 'bullish'} momentum (blocking {direction})"
+            
             return {
                 'allowed': False,
                 'score_adjustment': penalty,
                 'htf_momentum': momentum_strength,
                 'htf_trend': htf_trend,
-                'reason': f"{htf} in strong bearish momentum (blocking LONG)"
-            }
-        elif not is_bullish_trade and htf_is_bullish:
-            penalty = -50.0 if volume_strong else -35.0
-            return {
-                'allowed': False,
-                'score_adjustment': penalty,
-                'htf_momentum': momentum_strength,
-                'htf_trend': htf_trend,
-                'reason': f"{htf} in strong bullish momentum (blocking SHORT)"
+                'reason': block_reason
             }
     
     # Case 2: Calm/ranging HTF - allow counter-trend
@@ -1253,7 +1269,8 @@ def calculate_confluence_score(
             indicators=indicators,
             direction=direction,
             mode_config=config,
-            swing_structure=smc_snapshot.swing_structure
+            swing_structure=smc_snapshot.swing_structure,
+            reversal_context=reversal_context
         )
         
         if momentum_gate['score_adjustment'] != 0:

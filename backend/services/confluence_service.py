@@ -79,6 +79,10 @@ class ConfluenceService:
             
         Returns:
             ConfluenceBreakdown with scoring details for the best direction
+            
+        Side Effects:
+            Sets context.metadata['chosen_direction'] to 'LONG' or 'SHORT'
+            Sets context.metadata['alt_confluence'] with both direction scores
         """
         self._diagnostics = {'confluence_rejections': []}
         
@@ -108,15 +112,76 @@ class ConfluenceService:
                 current_price=current_price,
             )
             
-            # Return the higher scoring direction
-            if bullish_breakdown.total_score >= bearish_breakdown.total_score:
-                logger.debug("📊 %s: Bullish wins (%.1f vs %.1f)", 
+            # Log comparison for debugging
+            logger.info("⚖️  %s Direction eval: LONG=%.1f vs SHORT=%.1f",
+                       context.symbol,
+                       bullish_breakdown.total_score,
+                       bearish_breakdown.total_score)
+            
+            # Determine winner - use STRICT greater-than to avoid long bias on ties
+            # Ties are broken by regime trend
+            tie_break_used = None
+            
+            if bullish_breakdown.total_score > bearish_breakdown.total_score:
+                chosen = bullish_breakdown
+                chosen_direction = 'LONG'
+                logger.info("✅ %s Direction: LONG selected (score %.1f > %.1f)",
                            context.symbol, bullish_breakdown.total_score, bearish_breakdown.total_score)
-                return bullish_breakdown
-            else:
-                logger.debug("📊 %s: Bearish wins (%.1f vs %.1f)", 
+                           
+            elif bearish_breakdown.total_score > bullish_breakdown.total_score:
+                chosen = bearish_breakdown
+                chosen_direction = 'SHORT'
+                logger.info("✅ %s Direction: SHORT selected (score %.1f > %.1f)",
                            context.symbol, bearish_breakdown.total_score, bullish_breakdown.total_score)
-                return bearish_breakdown
+                           
+            else:
+                # Exact tie - use regime trend as tie-breaker
+                symbol_regime = context.metadata.get('symbol_regime')
+                regime_trend = getattr(symbol_regime, 'trend', 'neutral') if symbol_regime else 'neutral'
+                
+                if regime_trend == 'bearish':
+                    chosen = bearish_breakdown
+                    chosen_direction = 'SHORT'
+                    tie_break_used = 'regime_bearish'
+                    logger.info("🔄 %s TIE (%.1f) broken by regime: SHORT (bearish regime)",
+                               context.symbol, bearish_breakdown.total_score)
+                elif regime_trend == 'bullish':
+                    chosen = bullish_breakdown
+                    chosen_direction = 'LONG'
+                    tie_break_used = 'regime_bullish'
+                    logger.info("🔄 %s TIE (%.1f) broken by regime: LONG (bullish regime)",
+                               context.symbol, bullish_breakdown.total_score)
+                else:
+                    # True neutral - default to long but flag it
+                    chosen = bullish_breakdown
+                    chosen_direction = 'LONG'
+                    tie_break_used = 'neutral_default_long'
+                    logger.info("🔄 %s TIE (%.1f) with neutral regime: defaulting to LONG",
+                               context.symbol, bullish_breakdown.total_score)
+            
+            # CRITICAL: Store chosen direction in context for downstream use
+            context.metadata['chosen_direction'] = chosen_direction
+            
+            # Store alt scores for analytics/debugging
+            context.metadata['alt_confluence'] = {
+                'long': bullish_breakdown.total_score,
+                'short': bearish_breakdown.total_score,
+                'tie_break_used': tie_break_used
+            }
+            
+            # Store reversal context for chosen direction
+            chosen_reversal = reversal_context_long if chosen_direction == 'LONG' else reversal_context_short
+            if chosen_reversal and getattr(chosen_reversal, 'is_reversal_setup', False):
+                context.metadata['reversal'] = {
+                    'is_reversal_setup': chosen_reversal.is_reversal_setup,
+                    'direction': getattr(chosen_reversal, 'direction', chosen_direction),
+                    'cycle_aligned': getattr(chosen_reversal, 'cycle_aligned', False),
+                    'htf_bypass_active': getattr(chosen_reversal, 'htf_bypass_active', False),
+                    'confidence': getattr(chosen_reversal, 'confidence', 0.0),
+                    'rationale': getattr(chosen_reversal, 'rationale', '')
+                }
+            
+            return chosen
             
         except Exception as e:
             logger.error("Confluence scoring failed for %s: %s", context.symbol, e)
