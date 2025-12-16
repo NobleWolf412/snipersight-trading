@@ -55,17 +55,17 @@ export interface CycleContext {
  * Reversal context combining cycle + SMC signals
  */
 export interface ReversalContext {
-  // Structure confirmation
-  structure_broken: boolean;         // CHoCH detected
-  volume_displacement: boolean;      // Strong volume spike on break
-  
-  // Cycle alignment  
-  at_cycle_extreme: boolean;         // At DCL/WCL zone
-  cycle_supports_direction: boolean; // Cycle translation supports reversal
-  
-  // Combined score
-  reversal_score: number;            // 0-100 combined reversal confidence
-  reversal_rationale?: string;       // Human-readable explanation
+  // Reversal setup flag
+  is_reversal_setup: boolean;        // True if this is a confirmed reversal setup
+  direction: 'LONG' | 'SHORT' | '';  // Direction of the reversal
+
+  // Component signals
+  cycle_aligned: boolean;            // Cycle context supports reversal (at DCL/WCL)
+  htf_bypass_active: boolean;        // Reversal is strong enough to bypass HTF alignment
+
+  // Confidence and explanation
+  confidence: number;                // 0-100 combined reversal confidence
+  rationale: string;                 // Human-readable explanation
 }
 
 /**

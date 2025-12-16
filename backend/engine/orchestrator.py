@@ -786,17 +786,27 @@ class Orchestrator:
             # 2. Reversal Context
             rev_ctx_long = None
             rev_ctx_short = None
-            try:
-                rev_tf = '1h'
-                rev_df = context.multi_tf_data.timeframes.get(rev_tf) or context.multi_tf_data.timeframes.get('15m')
-                if rev_df is not None:
-                    rev_ctx_long = detect_reversal_context(rev_df, is_bullish=True)
-                    rev_ctx_short = detect_reversal_context(rev_df, is_bullish=False)
-            except Exception:
-                pass
-            
-            # 3. HTF Context (passed into service as htf_ctx_long/short)
             current_price_val = context.multi_tf_data.get_current_price() or 0.0
+            try:
+                # Use smc_snapshot, cycle_context, and indicators for reversal detection
+                rev_ctx_long = detect_reversal_context(
+                    smc_snapshot=context.smc_snapshot,
+                    cycle_context=cycle_context,
+                    indicators=context.multi_tf_indicators,
+                    current_price=current_price_val,
+                    direction="LONG"
+                )
+                rev_ctx_short = detect_reversal_context(
+                    smc_snapshot=context.smc_snapshot,
+                    cycle_context=cycle_context,
+                    indicators=context.multi_tf_indicators,
+                    current_price=current_price_val,
+                    direction="SHORT"
+                )
+            except Exception as e:
+                logger.warning(f"Reversal detection failed: {e}")
+
+            # 3. HTF Context (passed into service as htf_ctx_long/short)
             htf_ctx_long, htf_ctx_short = self._extract_htf_context(
                 multi_tf_data=context.multi_tf_data,
                 smc_snapshot=context.smc_snapshot,

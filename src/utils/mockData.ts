@@ -181,6 +181,10 @@ export function convertSignalToScanResult(signal: any): ScanResult {
     regime,
     // Pass through raw geometry if provided for future chart overlays
     smc_geometry: signal.smc_geometry,
+    // Reversal context if present
+    reversal_context: signal.reversal_context,
+    // Cycle context if present
+    cycle_context: signal.cycle_context,
   };
 }
 
