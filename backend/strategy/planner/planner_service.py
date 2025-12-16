@@ -1122,15 +1122,17 @@ def _calculate_entry_zone(
     allowed_tfs = _get_allowed_entry_tfs(config)  # CHANGED: Use entry TFs, not structure TFs
     
     if is_bullish:
-        # Look for bullish OB or FVG below current price
-        obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bullish" and ob.high < current_price]
+        # Look for bullish OB or FVG below current price (OR we are inside it)
+        # Fix: Allowed if we haven't broken the low. Being inside (high >= price >= low) is GOOD.
+        obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bullish" and ob.low < current_price]
         # Filter to allowed ENTRY timeframes if specified
         if allowed_tfs:
             obs = [ob for ob in obs if ob.timeframe in allowed_tfs]
             logger.debug(f"Filtered bullish OBs to entry_timeframes {allowed_tfs}: {len(obs)} remain")
         # Filter out OBs too far (distance constraint)
         max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
-        obs = [ob for ob in obs if (current_price - ob.high) / atr <= max_pullback_atr]
+        # Fix: If inside OB (price <= high), distance is 0.
+        obs = [ob for ob in obs if (max(0.0, current_price - ob.high) / atr) <= max_pullback_atr]
         # Filter out heavily mitigated OBs
         obs = [ob for ob in obs if ob.mitigation_level <= planner_cfg.ob_mitigation_max]
         # Validate OB integrity (not broken / not currently tapped)
@@ -1307,14 +1309,16 @@ def _calculate_entry_zone(
             return entry_zone, used_structure
     
     else:  # bearish
-        # Look for bearish OB or FVG above current price
-        obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bearish" and ob.low > current_price]
+        # Look for bearish OB or FVG above current price (OR we are inside it)
+        # Fix: Allowed if we haven't broken the high. Being inside (low <= price <= high) is GOOD.
+        obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bearish" and ob.high > current_price]
         # Filter to allowed ENTRY timeframes if specified
         if allowed_tfs:
             obs = [ob for ob in obs if ob.timeframe in allowed_tfs]
             logger.debug(f"Filtered bearish OBs to entry_timeframes {allowed_tfs}: {len(obs)} remain")
         max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
-        obs = [ob for ob in obs if (ob.low - current_price) / atr <= max_pullback_atr]
+        # Fix: If inside OB (price >= low), distance is 0.
+        obs = [ob for ob in obs if (max(0.0, ob.low - current_price) / atr) <= max_pullback_atr]
         # Filter out heavily mitigated OBs
         obs = [ob for ob in obs if ob.mitigation_level <= planner_cfg.ob_mitigation_max]
         if multi_tf_data and primary_tf in getattr(multi_tf_data, 'timeframes', {}):
