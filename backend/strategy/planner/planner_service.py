@@ -1127,6 +1127,9 @@ def _calculate_entry_zone(
         Tuple of (EntryZone, used_structure_flag)
     """
     logger.critical(f"_calculate_entry_zone CALLED: is_bullish={is_bullish}, current_price={current_price}, atr={atr}, num_obs={len(smc_snapshot.order_blocks)}, num_fvgs={len(smc_snapshot.fvgs)}")
+    # DEBUG: Log all OB details before filtering
+    for ob in smc_snapshot.order_blocks:
+        logger.critical(f"  OB: dir={ob.direction} tf={ob.timeframe} low={ob.low:.2f} high={ob.high:.2f}")
     
     # Find relevant order block or FVG
     allowed_tfs = _get_allowed_entry_tfs(config)  # CHANGED: Use entry TFs, not structure TFs
@@ -1137,7 +1140,8 @@ def _calculate_entry_zone(
         obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bullish" and ob.low < current_price]
         # Filter to allowed ENTRY timeframes if specified
         if allowed_tfs:
-            obs = [ob for ob in obs if ob.timeframe in allowed_tfs]
+            # Normalize timeframe case (OBs may have '1H', config has '1h')
+            obs = [ob for ob in obs if ob.timeframe.lower() in allowed_tfs]
             logger.debug(f"Filtered bullish OBs to entry_timeframes {allowed_tfs}: {len(obs)} remain")
         # Filter out OBs too far (distance constraint)
         max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
@@ -1324,7 +1328,8 @@ def _calculate_entry_zone(
         obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bearish" and ob.high > current_price]
         # Filter to allowed ENTRY timeframes if specified
         if allowed_tfs:
-            obs = [ob for ob in obs if ob.timeframe in allowed_tfs]
+            # Normalize timeframe case (OBs may have '1H', config has '1h')
+            obs = [ob for ob in obs if ob.timeframe.lower() in allowed_tfs]
             logger.debug(f"Filtered bearish OBs to entry_timeframes {allowed_tfs}: {len(obs)} remain")
         max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
         # Fix: If inside OB (price >= low), distance is 0.

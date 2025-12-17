@@ -152,12 +152,21 @@ class ConfluenceService:
                     logger.info("🔄 %s TIE (%.1f) broken by regime: LONG (bullish regime)",
                                context.symbol, bullish_breakdown.total_score)
                 else:
-                    # True neutral - default to long but flag it
-                    chosen = bullish_breakdown
-                    chosen_direction = 'LONG'
-                    tie_break_used = 'neutral_default_long'
-                    logger.info("🔄 %s TIE (%.1f) with neutral regime: defaulting to LONG",
+                    # True neutral with tied scores - NO EDGE, skip this symbol
+                    # FIXED: Don't default to LONG, let the system skip if there's no clear direction
+                    logger.info("🔄 %s TIE (%.1f) with neutral regime: skipping (no directional edge)",
                                context.symbol, bullish_breakdown.total_score)
+                    
+                    # Store the tie info for transparency
+                    context.metadata['chosen_direction'] = None
+                    context.metadata['alt_confluence'] = {
+                        'long': bullish_breakdown.total_score,
+                        'short': bearish_breakdown.total_score,
+                        'tie_break_used': 'skipped_no_edge'
+                    }
+                    
+                    # Return None to indicate no valid setup - orchestrator will handle this
+                    raise ValueError(f"Confluence tie ({bullish_breakdown.total_score:.1f}) with neutral regime - no directional edge")
             
             # CRITICAL: Store chosen direction in context for downstream use
             context.metadata['chosen_direction'] = chosen_direction

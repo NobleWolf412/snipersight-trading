@@ -79,7 +79,8 @@ def evaluate_htf_structural_proximity(
         }
     
     atr = primary_ind.atr
-    max_distance_atr = 5.0  # Allow entries up to 5 ATR from HTF structure without penalty
+    # FIXED: Allow per-mode configuration instead of hardcoded 5 ATR
+    max_distance_atr = getattr(mode_config, 'htf_proximity_atr', 5.0)
     
     min_distance = float('inf')
     nearest_structure = None
@@ -1130,7 +1131,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="Weekly StochRSI Bonus",
                 score=factor_score,
-                weight=0.08,  # Lower weight for penalties
+                weight=0.10,  # FIXED: Same weight as bonus (was 0.08, caused long bias)
                 rationale=f"[{weekly_stoch_rsi_bonus:.1f}] {weekly_stoch_rsi_analysis['reason']}"
             ))
             logger.debug("📉 Weekly StochRSI PENALTY %.1f: %s", weekly_stoch_rsi_bonus, weekly_stoch_rsi_analysis["reason"])
@@ -1207,7 +1208,7 @@ def calculate_confluence_score(
                     factors.append(ConfluenceFactor(
                         name="HTF Structure Bias",
                         score=factor_score,
-                        weight=0.08,
+                        weight=0.12,  # FIXED: Same weight as bonus (was 0.08, caused long bias)
                         rationale=f"[{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}"
                     ))
                     logger.debug("⚠️ HTF Structure PENALTY %.1f: %s", htf_structure_bonus, htf_structure_analysis['reason'])
@@ -1741,7 +1742,7 @@ def _score_momentum(
     Returns:
         Tuple of (score, macd_analysis_dict or None)
     """
-    score = 40.0  # Base neutral score (was 0.0)
+    score = 0.0  # FIXED: Was 40.0 which inflated momentum even with no signals
     macd_analysis = None
     
     # Normalize direction: LONG/SHORT -> bullish/bearish
@@ -2095,19 +2096,24 @@ def _calculate_conflict_penalty(factors: List[ConfluenceFactor], direction: str)
         if momentum_factor.score < 30 and structure_factor.score > 70:
             penalty += 10.0  # Structure says go, momentum says no
     
-    # === HTF ALIGNMENT PENALTY (NEW) ===
-    # If HTF is NOT aligned, apply significant penalty (was just a bonus before)
+    # === HTF ALIGNMENT PENALTY ===
+    # FIXED: Only penalize if HTF Alignment wasn't already scored as a factor
+    # (otherwise we double-penalize: score 0 AND conflict penalty)
     htf_factor = next((f for f in factors if f.name == "HTF Alignment"), None)
-    if htf_factor and htf_factor.score == 0.0:
-        # HTF opposing direction - major penalty
-        penalty += 15.0
-        logger.debug("HTF opposition penalty applied: +15")
-    elif htf_factor and htf_factor.score == 50.0:
-        # HTF neutral (ranging) - moderate penalty for counter-trend risk
-        penalty += 8.0
-        logger.debug("HTF neutral penalty applied: +8")
+    htf_already_scored_negative = htf_factor and htf_factor.score < 30  # Already penalized via low score
     
-    return penalty
+    if htf_factor and not htf_already_scored_negative:
+        if htf_factor.score == 0.0:
+            # HTF opposing direction - major penalty (only if not already scored low)
+            penalty += 15.0
+            logger.debug("HTF opposition penalty applied: +15")
+        elif htf_factor.score == 50.0:
+            # HTF neutral (ranging) - moderate penalty for counter-trend risk
+            penalty += 8.0
+            logger.debug("HTF neutral penalty applied: +8")
+    
+    # Cap penalty to maintain symmetry with synergy bonus cap
+    return min(penalty, 25.0)
 
 
 def _detect_regime(smc: SMCSnapshot, indicators: IndicatorSet) -> str:

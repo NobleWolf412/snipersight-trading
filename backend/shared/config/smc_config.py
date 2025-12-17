@@ -486,6 +486,51 @@ class SMCConfig:
             grade_b_threshold=0.3,         # 0.3x ATR for Grade B
         )
 
+    @staticmethod
+    def luxalgo_aggressive() -> "SMCConfig":
+        """
+        Aggressive detection for maximum signals (used by STRIKE mode).
+        
+        Designed for intraday/scalp trading where more signals are preferred.
+        Uses relaxed thresholds to catch more patterns while still
+        maintaining SMC structure requirements.
+        """
+        return SMCConfig(
+            # Order Blocks: Relaxed for more OB detection
+            min_wick_ratio=1.5,             # Lower bar for rejection wicks
+            min_displacement_atr=1.0,       # Lower displacement requirement
+            ob_lookback_candles=7,          # Standard validation window
+            ob_volume_threshold=1.2,        # Slightly above average volume
+            ob_max_mitigation=0.90,         # Keep high-mitigation OBs
+            ob_min_freshness=0.03,          # Keep older OBs longer
+            
+            # FVGs: Catch smaller gaps
+            fvg_min_gap_atr=0.15,           # Smaller gaps are valid
+            fvg_max_overlap=0.30,           # Allow more overlap
+            
+            # Structure: Quicker break detection
+            structure_swing_lookback=8,     # Shorter swing lookback
+            structure_min_break_distance_atr=0.4,  # Smaller breaks count
+            
+            # Sweeps: More sweeps detected
+            sweep_swing_lookback=12,
+            sweep_max_sweep_candles=5,      # More time for reversal
+            sweep_min_reversal_atr=0.8,     # Lower reversal bar
+            sweep_require_volume_spike=False,
+            
+            # Equal Highs/Lows: Aggressive
+            eqhl_base_tolerance_pct=0.003,
+            eqhl_swing_lookback=4,
+            eqhl_min_touches=2,
+            eqhl_cluster_within_atr=0.4,
+            eqhl_use_atr_tolerance=True,
+            eqhl_grade_by_touches=True,
+            
+            # Grade thresholds: Lenient
+            grade_a_threshold=0.4,
+            grade_b_threshold=0.2,
+        )
+
     def validate(self) -> None:
         """Validate configuration values, raising ValueError on invalid entries."""
         numeric_fields = [
@@ -570,7 +615,7 @@ def get_preset(preset_name: str) -> SMCConfig:
     Get an SMC configuration preset by name.
     
     Args:
-        preset_name: One of 'defaults', 'luxalgo_strict', 'sensitive'
+        preset_name: One of 'defaults', 'luxalgo_strict', 'luxalgo_aggressive', 'sensitive'
         
     Returns:
         SMCConfig instance
@@ -578,6 +623,7 @@ def get_preset(preset_name: str) -> SMCConfig:
     presets = {
         'defaults': SMCConfig.defaults,
         'luxalgo_strict': SMCConfig.luxalgo_strict,
+        'luxalgo_aggressive': SMCConfig.luxalgo_aggressive,
         'sensitive': SMCConfig.sensitive,
     }
     factory = presets.get(preset_name, SMCConfig.defaults)

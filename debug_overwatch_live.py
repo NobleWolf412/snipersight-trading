@@ -31,7 +31,7 @@ async def debug_overwatch_gate():
     # Front-Running: Entry should be < 95000 (e.g. 94997.5).
 
     htf_ob = OrderBlock(
-        timeframe="4h",
+        timeframe="1d", # TEST: 1D structure should be allowed now
         high=96000.0,
         low=95000.0, # Resistance Level
         direction="bearish",
@@ -61,15 +61,19 @@ async def debug_overwatch_gate():
     context.multi_tf_indicators = MagicMock()
     
     # Real Config
+    # Real Config (Simulating Patched Overwatch)
     scan_config = ScanConfig(
-        profile="strike",
-        timeframes=["4h", "1h", "15m", "5m"],
-        primary_planning_timeframe="15m"
+        profile="overwatch",
+        timeframes=["1w", "1d", "4h", "1h", "15m"],
+        primary_planning_timeframe="4h",
+        max_pullback_atr=4.0
     )
+    scan_config.entry_timeframes = ["1w", "1d", "4h", "1h", "15m"] # Manual injection for mock
     # Ensure planner config is set (will be updated by defaults_for_mode + override injection)
-    scan_config.planner = None # Force re-creation inside generate_trade_plan
-    # Strike overrides allow front-running (-0.05 ATR), so entry should be > OB High
-    scan_config.overrides = {"entry_zone_offset_atr": -0.05} # Explicitly forcing it for test if not loaded from file
+    scan_config.planner = None 
+    # Overwatch defaults, no special override needed for this test
+    # scan_config.overrides = {} 
+
     
     # ...
     # Set Price inside 4H OB (95k-94k) AND near 15m OB (94.9k).

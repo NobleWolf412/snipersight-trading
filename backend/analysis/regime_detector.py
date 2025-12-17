@@ -137,19 +137,25 @@ class RegimeDetector:
         Returns: (trend_label, score)
         """
         from backend.strategy.smc.swing_structure import detect_swing_structure
+        from backend.shared.config.smc_config import scale_lookback
         
         # Use highest available TF for trend
         tfs = sorted(data.timeframes.keys(), reverse=True)
         if not tfs:
             return "sideways", 50.0
             
-        df = data.timeframes[tfs[0]]
+        htf = tfs[0]
+        df = data.timeframes[htf]
         if len(df) < 50:  # Need more data for reliable swing detection
             return "sideways", 50.0
         
         try:
-            # Use your EXISTING swing structure detector
-            swing_struct = detect_swing_structure(df, lookback=15)
+            # FIXED: Scale lookback by timeframe - HTF uses fewer candles (each significant)
+            # Base lookback of 15 is for 4H, scale up for LTF, down for HTF
+            scaled_lookback = scale_lookback(15, htf, min_lookback=7, max_lookback=30)
+            
+            # Use your EXISTING swing structure detector with scaled lookback
+            swing_struct = detect_swing_structure(df, lookback=scaled_lookback)
             
             # It already gives you trend: 'bullish', 'bearish', or 'neutral'
             trend = swing_struct.trend

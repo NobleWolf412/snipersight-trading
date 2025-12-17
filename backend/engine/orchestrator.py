@@ -743,8 +743,8 @@ class Orchestrator:
         
         # Stage 4b: Volume Profile calculation (institutional-grade VAP analysis)
         try:
-            # Use 4H timeframe for volume profile (balance of detail and significance)
-            vp_tf = '4h'
+            # FIXED: Use mode's primary TF instead of hardcoded 4H
+            vp_tf = getattr(self.config, 'primary_planning_timeframe', '4h')
             vp_df = context.multi_tf_data.timeframes.get(vp_tf)
             if vp_df is None or len(vp_df) < 50:
                 # Fallback to 1H if 4H not available
@@ -781,7 +781,8 @@ class Orchestrator:
             # 1. Cycle Context
             cycle_context = None
             try:
-                cycle_tf = '4h'
+                # FIXED: Use mode's primary TF instead of hardcoded 4H
+                cycle_tf = getattr(self.config, 'primary_planning_timeframe', '4h')
                 cycle_df = context.multi_tf_data.timeframes.get(cycle_tf) or context.multi_tf_data.timeframes.get('1h')
                 if cycle_df is not None:
                     cycle_context = detect_cycle_context(cycle_df, CycleConfig())
@@ -1196,6 +1197,11 @@ class Orchestrator:
                 except Exception:
                     return ''
 
+            # --- DEBUG LOGGING FOR OVERWATCH REJECTION ---
+            raw_obs = context.smc_snapshot.order_blocks
+            logger.critical(f"🔍 DEBUG SMC OBs (RAW): {len(raw_obs)} total | TFs: {[ob.timeframe for ob in raw_obs]}")
+            logger.critical(f"🔍 DEBUG Allowed TFs for Entry/Structure: {allowed_entry | allowed_structure}")
+            
             # Build filtered snapshot respecting responsibilities
             filtered_snapshot = SMCSnapshot(
                 order_blocks=[ob for ob in context.smc_snapshot.order_blocks if _tf(ob) in (allowed_entry | allowed_structure)],
@@ -1203,6 +1209,7 @@ class Orchestrator:
                 structural_breaks=[brk for brk in context.smc_snapshot.structural_breaks if _tf(brk) in allowed_structure],
                 liquidity_sweeps=context.smc_snapshot.liquidity_sweeps  # sweeps used for context; keep as-is
             )
+            logger.critical(f"🔍 DEBUG SMC OBs (FILTERED): {len(filtered_snapshot.order_blocks)} remain")
 
             plan = generate_trade_plan(
                 symbol=context.symbol,
