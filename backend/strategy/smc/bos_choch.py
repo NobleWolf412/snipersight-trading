@@ -303,6 +303,7 @@ def detect_structural_breaks(
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),
                     break_type="BOS",
+                    direction="bullish",  # BOS in uptrend = bullish continuation
                     level=last_swing_high,
                     timestamp=current_idx.to_pydatetime(),
                     htf_aligned=htf_aligned,
@@ -329,6 +330,7 @@ def detect_structural_breaks(
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),
                     break_type="CHoCH",
+                    direction="bearish",  # CHoCH in uptrend = turning bearish
                     level=last_swing_low,
                     timestamp=current_idx.to_pydatetime(),
                     htf_aligned=htf_aligned,
@@ -358,6 +360,7 @@ def detect_structural_breaks(
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),
                     break_type="BOS",
+                    direction="bearish",  # BOS in downtrend = bearish continuation
                     level=last_swing_low,
                     timestamp=current_idx.to_pydatetime(),
                     htf_aligned=htf_aligned,
@@ -384,6 +387,7 @@ def detect_structural_breaks(
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),
                     break_type="CHoCH",
+                    direction="bullish",  # CHoCH in downtrend = turning bullish
                     level=last_swing_high,
                     timestamp=current_idx.to_pydatetime(),
                     htf_aligned=htf_aligned,

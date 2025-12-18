@@ -141,6 +141,13 @@ class ScannerMode:
     # Per-mode overrides (min_rr_ratio, atr_floor, gating thresholds, etc.)
     overrides: Optional[Dict[str, Any]] = None
     
+    # NEW: Top-down nested entry timeframe hierarchy
+    # bias_timeframes: For direction bias (HH/HL/LH/LL analysis)
+    # zone_timeframes: For entry zone OBs (where we want to trade from)
+    # entry_trigger_timeframes: For refined entry OBs inside zones
+    zone_timeframes: Tuple[str, ...] = ()  # TFs for entry zone (4H, 1H)
+    entry_trigger_timeframes: Tuple[str, ...] = ()  # TFs for refined entry (15m, 5m)
+    
     @property
     def bias_timeframes(self) -> Tuple[str, ...]:
         """Alias for timeframes (bias + indicator TFs). For clarity in code."""
@@ -173,6 +180,9 @@ MODES: Dict[str, ScannerMode] = {
         allowed_trade_types=("swing",),  # STRICT: Only swing trades allowed
         volume_accel_lookback=8,  # Longer lookback for swing - filters noise, catches institutional accumulation
         overrides={"min_rr_ratio": 2.0, "atr_floor": 0.0025, "bias_gate": 0.7, "htf_swing_allowed": ("1d", "4h")},
+        # NEW: Nested OB entry hierarchy
+        zone_timeframes=("4h", "1h"),  # Entry zone OBs
+        entry_trigger_timeframes=("15m", "5m"),  # Refined entry OBs inside zone
     ),
     # NOTE: "recon" removed from MODES - use get_mode('recon') which maps to 'stealth'
     "strike": ScannerMode(
@@ -196,6 +206,9 @@ MODES: Dict[str, ScannerMode] = {
         allowed_trade_types=("swing", "intraday", "scalp"),  # Allow swing since 4h structure produces swing-sized targets
         volume_accel_lookback=4,  # Balanced - faster detection for intraday but not as reactive as scalp
         overrides={"min_rr_ratio": 1.2, "atr_floor": 0.0010, "bias_gate": 0.6, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True, "entry_zone_offset_atr": -0.05},
+        # NEW: Nested OB entry hierarchy
+        zone_timeframes=("15m", "5m"),  # Entry zone OBs (faster for intraday)
+        entry_trigger_timeframes=("5m", "1m"),  # Refined entry OBs
     ),
     "surgical": ScannerMode(
         name="surgical",
@@ -218,6 +231,9 @@ MODES: Dict[str, ScannerMode] = {
         allowed_trade_types=("intraday", "scalp"),  # Precision focus
         volume_accel_lookback=3,  # Shortest lookback - scalp/surgical needs fastest reaction to volume changes
         overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0008, "bias_gate": 0.7, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True, "entry_zone_offset_atr": 0.05},
+        # NEW: Nested OB entry hierarchy
+        zone_timeframes=("5m",),  # Entry zone OBs (scalp precision)
+        entry_trigger_timeframes=("1m",),  # Refined entry OBs
     ),
     # STEALTH replaces both RECON and GHOST (merged per SMC_PIPELINE_REFACTOR.md)
     # Use stealth_strict=False for balanced (was RECON), stealth_strict=True for higher conviction (was GHOST)
@@ -248,6 +264,9 @@ MODES: Dict[str, ScannerMode] = {
             "htf_swing_allowed": ("4h", "1h"),
             "stealth_strict": False,  # Set True for higher conviction mode
         },
+        # NEW: Nested OB entry hierarchy
+        zone_timeframes=("1h", "15m"),  # Entry zone OBs (balanced)
+        entry_trigger_timeframes=("5m",),  # Refined entry OBs
     ),
 }
 

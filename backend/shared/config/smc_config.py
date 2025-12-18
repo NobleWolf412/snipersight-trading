@@ -425,9 +425,10 @@ class SMCConfig:
             fvg_min_gap_atr=0.4,           # 0.4 ATR (was 1.0 - filtered everything)
             fvg_max_overlap=0.10,          # Allow small overlap (was 0.05)
             
-            # Structure: Major swings
-            structure_swing_lookback=20,   # (was 25)
-            structure_min_break_distance_atr=1.0,  # 1.0 ATR break (was 1.5)
+            # Structure: More granular swings to catch intermediate breaks
+            # UPDATED: Lower lookback to detect swings like Dec 11 $3145 on 4H
+            structure_swing_lookback=5,    # 5 candles (was 20 - missed intermediate swings)
+            structure_min_break_distance_atr=0.5,  # 0.5 ATR break (was 1.0 - filtered small breaks)
             
             # Sweeps: Clear liquidity grabs
             sweep_swing_lookback=25,       # (was 30)

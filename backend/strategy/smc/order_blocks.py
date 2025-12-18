@@ -717,6 +717,141 @@ def filter_overlapping_order_blocks(order_blocks: List[OrderBlock], max_overlap:
     return filtered
 
 
+def detect_obs_from_bos(
+    df: pd.DataFrame,
+    structural_breaks: List,
+    config: SMCConfig | dict | None = None,
+    lookback: int = 7
+) -> List[OrderBlock]:
+    """
+    Detect Order Blocks using LuxAlgo method: last opposite-color candle before BOS.
+    
+    THIS IS THE CORRECT SMC METHOD:
+    - Bearish OB = Last GREEN candle before bearish BOS (sellers absorbed buyers)
+    - Bullish OB = Last RED candle before bullish BOS (buyers absorbed sellers)
+    
+    OBs detected this way get Grade A (structure-confirmed).
+    
+    Args:
+        df: OHLCV DataFrame with DatetimeIndex
+        structural_breaks: List of StructuralBreak objects
+        config: SMC configuration
+        lookback: Max candles to look back from BOS for OB candle (scales with TF)
+        
+    Returns:
+        List[OrderBlock]: Grade A order blocks linked to structure breaks
+    """
+    from backend.shared.models.smc import StructuralBreak
+    from backend.indicators.volatility import compute_atr
+    
+    if config is None:
+        smc_cfg = SMCConfig.defaults()
+    elif isinstance(config, dict):
+        smc_cfg = SMCConfig.from_dict(config)
+    else:
+        smc_cfg = config
+    
+    if len(df) < 30 or not structural_breaks:
+        return []
+    
+    atr = compute_atr(df, period=14)
+    order_blocks = []
+    used_bos = set()  # Avoid duplicate OBs from same BOS
+    
+    for bos in structural_breaks:
+        bos_ts = getattr(bos, 'timestamp', None)
+        bos_dir = getattr(bos, 'direction', None)
+        bos_type = getattr(bos, 'break_type', None)
+        
+        if not bos_ts or not bos_dir:
+            continue
+        
+        # Avoid duplicates
+        bos_key = (bos_ts, bos_dir)
+        if bos_key in used_bos:
+            continue
+        used_bos.add(bos_key)
+        
+        try:
+            bos_idx = df.index.get_loc(bos_ts)
+        except KeyError:
+            # BOS timestamp not in this dataframe (different TF)
+            continue
+        
+        # Scale lookback based on timeframe
+        tf = _infer_timeframe(df)
+        scaled_lookback = scale_lookback(lookback, tf)
+        
+        # Find last opposite-color candle before BOS
+        ob_idx = None
+        
+        for i in range(bos_idx - 1, max(0, bos_idx - scaled_lookback), -1):
+            candle = df.iloc[i]
+            is_green = candle['close'] > candle['open']
+            is_red = candle['close'] < candle['open']
+            
+            if bos_dir == 'bearish' and is_green:
+                # Last green candle before bearish BOS = bearish OB (supply zone)
+                ob_idx = i
+                ob_direction = 'bearish'
+                break
+            elif bos_dir == 'bullish' and is_red:
+                # Last red candle before bullish BOS = bullish OB (demand zone)
+                ob_idx = i
+                ob_direction = 'bullish'
+                break
+        
+        if ob_idx is None:
+            continue
+        
+        ob_candle = df.iloc[ob_idx]
+        atr_val = atr.iloc[ob_idx] if ob_idx < len(atr) and pd.notna(atr.iloc[ob_idx]) else 1
+        
+        # Calculate displacement (from OB to BOS)
+        if ob_direction == 'bullish':
+            displacement = df.iloc[bos_idx]['high'] - ob_candle['low']
+        else:
+            displacement = ob_candle['high'] - df.iloc[bos_idx]['low']
+        
+        disp_atr = displacement / atr_val if atr_val > 0 else 0
+        
+        # Structure-confirmed OBs get Grade A (unless displacement is very weak)
+        if disp_atr >= 1.0:
+            grade = 'A'  # Strong structure-confirmed
+        elif disp_atr >= 0.5:
+            grade = 'A'  # Still gets A because it caused a BOS
+        else:
+            grade = 'B'  # Weak displacement but still structure-linked
+        
+        # LuxAlgo-style range: use median for tighter zones
+        median_price = (ob_candle['high'] + ob_candle['low']) / 2
+        
+        if ob_direction == 'bullish':
+            ob_high = median_price
+            ob_low = ob_candle['low']
+        else:
+            ob_high = ob_candle['high']
+            ob_low = median_price
+        
+        normalized_disp = max(0.0, min(100.0, (disp_atr / 3.0) * 100.0))
+        
+        ob = OrderBlock(
+            timeframe=tf,
+            direction=ob_direction,
+            high=ob_high,
+            low=ob_low,
+            timestamp=df.index[ob_idx].to_pydatetime(),
+            displacement_strength=normalized_disp,
+            mitigation_level=0.0,
+            freshness_score=100.0,  # Will be recalculated later
+            grade=grade,
+            displacement_atr=disp_atr,
+        )
+        order_blocks.append(ob)
+    
+    return order_blocks
+
+
 def detect_order_blocks_structural(
     df: pd.DataFrame,
     swing_highs: pd.Series,

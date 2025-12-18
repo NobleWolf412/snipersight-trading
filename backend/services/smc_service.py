@@ -27,6 +27,7 @@ from backend.shared.config.smc_config import SMCConfig, get_tf_smc_config
 from backend.strategy.smc.order_blocks import (
     detect_order_blocks, 
     detect_order_blocks_structural,
+    detect_obs_from_bos,
     update_ob_lifecycle,
     filter_to_active_obs,
     filter_overlapping_order_blocks
@@ -343,6 +344,14 @@ class SMCDetectionService:
                 logger.debug("📦 %s: Structural OB detected %d", timeframe, len(structural_obs))
             except Exception as e:
                 logger.warning("📦 %s: Structural OB detection FAILED: %s", timeframe, e)
+            
+            # NEW: Detect OBs from BOS events (Grade A - structure-confirmed)
+            try:
+                bos_obs = detect_obs_from_bos(df, result['structure_breaks'], tf_smc_config)
+                result['order_blocks'].extend(bos_obs)
+                logger.debug("📦 %s: BOS-linked OB detected %d", timeframe, len(bos_obs))
+            except Exception as e:
+                logger.warning("📦 %s: BOS-linked OB detection FAILED: %s", timeframe, e)
 
             # Deduplicate overlapping OBs (prefer stronger ones)
             if result['order_blocks']:
@@ -383,43 +392,35 @@ class SMCDetectionService:
             result['raw_order_blocks'] = result['order_blocks'].copy()
             
             # MODE-AWARE filtering rules:
-            # - HTF (4H+): Require structure confirmation (institutional zones)
-            # - MTF (1H): Require structure confirmation in swing modes, optional in scalp
-            # - LTF (15m, 5m): NO structure confirmation (entry refinement zones)
+            # OBs persist until MITIGATED (price closes beyond range)
+            # Structure confirmation is used for SCORING (confluence), not visibility
+            # This ensures bearish OBs are visible for resistance detection
             tf_lower = timeframe.lower()
             is_htf = tf_lower in ('1w', '1d', '4h')
             is_ltf = tf_lower in ('15m', '5m')
             
-            # Determine structure confirmation requirement
+            # Mitigation thresholds - HTF OBs are more sacred
             if is_htf:
-                # HTF OBs must be structure-confirmed (institutional)
-                require_confirmation = True
-                max_mit = 0.5
+                max_mit = 0.7  # HTF OBs can take more damage before invalidation
             elif is_ltf:
-                # LTF OBs are for entry refinement - don't require structure confirmation
-                # They should be inside HTF zones (validated at scoring level)
-                require_confirmation = False
-                max_mit = 0.6  # Slightly more lenient for entry zones
+                max_mit = 0.8  # LTF OBs are quicker to invalidate
             else:
-                # MTF (1H): Mode-dependent
-                # SURGICAL/STRIKE: Less strict (need OBs for entries)
-                # OVERWATCH/STEALTH: More strict (quality over quantity)
-                require_confirmation = self._mode in ('overwatch', 'stealth')
-                max_mit = 0.5
+                max_mit = 0.75  # MTF (1H)
             
-            # Apply filter
+            # Apply filter - NO structure confirmation required for visibility
+            # OBs live until mitigated, structure confirmation affects scoring only
             result['order_blocks'] = filter_to_active_obs(
                 result['order_blocks'],
                 df,
                 structure_breaks=result['structure_breaks'],
                 max_mitigation=max_mit,
-                require_structure_confirmation=require_confirmation,
+                require_structure_confirmation=False,  # FIXED: OBs persist until mitigated
                 confirmation_window_candles=10
             )
             
-            logger.debug("🎯 %s: OB filtered %d → %d (active, struct_confirm=%s, mode=%s)", 
+            logger.debug("🎯 %s: OB filtered %d → %d (active, mitig_threshold=%.2f, mode=%s)", 
                         timeframe, raw_count, len(result['order_blocks']), 
-                        require_confirmation, self._mode)
+                        max_mit, self._mode)
         
         # Equal highs/lows (liquidity pools)
         self._detect_equal_highs_lows(timeframe, df, result)
@@ -460,13 +461,30 @@ class SMCDetectionService:
     def _detect_swing_structure(self, timeframe: str, df, result: Dict):
         """Detect swing structure (HH/HL/LH/LL) for HTF bias."""
         try:
+            from backend.shared.config.smc_config import scale_lookback
+            
+            # Scale lookback by timeframe - HTF candles are more significant
+            base_lookback = getattr(self._smc_config, 'structure_swing_lookback', 15)
+            
+            # For HTF (1W, 1D), use higher min_lookback to catch true macro trend
+            # Weekly needs at least 12-15 candles to see HH/HL pattern
+            tf_lower = timeframe.lower()
+            if tf_lower in ('1w',):
+                min_lb = 12  # 12 weeks = ~3 months of structure
+            elif tf_lower in ('1d',):
+                min_lb = 10  # 10 days = 2 weeks of structure
+            else:
+                min_lb = 5
+            
+            scaled_lookback = scale_lookback(base_lookback, timeframe, min_lookback=min_lb, max_lookback=30)
+            
             swing_struct = detect_swing_structure(
                 df, 
-                lookback=getattr(self._smc_config, 'structure_swing_lookback', 15)
+                lookback=scaled_lookback
             )
             result['swing_structure'] = swing_struct.to_dict()
-            logger.debug("📊 %s Swing structure: trend=%s, last_HH=%s, last_HL=%s",
-                       timeframe, swing_struct.trend,
+            logger.debug("📊 %s Swing structure: trend=%s (lookback=%d), last_HH=%s, last_HL=%s",
+                       timeframe, swing_struct.trend, scaled_lookback,
                        f"{swing_struct.last_hh.price:.4f}" if swing_struct.last_hh else "N/A",
                        f"{swing_struct.last_hl.price:.4f}" if swing_struct.last_hl else "N/A")
         except Exception as e:
@@ -500,7 +518,7 @@ class SMCDetectionService:
         return None
     
     def _update_mitigation(self, multi_tf_data: MultiTimeframeData, order_blocks: List) -> List:
-        """Update order block mitigation status."""
+        """Update order block mitigation status AND freshness scores."""
         if not order_blocks:
             return order_blocks
         
@@ -521,6 +539,32 @@ class SMCDetectionService:
                                mitigation_status.fresh_count)
         except Exception as e:
             logger.debug("Mitigation tracking failed: %s", e)
+        
+        # FIXED: Recalculate freshness for ALL OBs after aggregation
+        # This ensures structural OBs don't retain stale 100% freshness
+        try:
+            from datetime import datetime
+            from dataclasses import replace
+            from backend.strategy.smc.order_blocks import calculate_freshness
+            
+            current_time = datetime.now()
+            updated_obs = []
+            for ob in order_blocks:
+                new_freshness = calculate_freshness(ob, current_time)
+                updated_ob = replace(ob, freshness_score=new_freshness)
+                updated_obs.append(updated_ob)
+            
+            # Filter out stale OBs (freshness below min threshold)
+            min_freshness = self._smc_config.ob_min_freshness
+            before_count = len(updated_obs)
+            order_blocks = [ob for ob in updated_obs if ob.freshness_score >= min_freshness]
+            filtered_count = before_count - len(order_blocks)
+            
+            if filtered_count > 0:
+                logger.debug("🔄 Filtered %d stale OBs (freshness < %.1f%%)", filtered_count, min_freshness)
+            logger.debug("🔄 Recalculated freshness for %d OBs, kept %d", before_count, len(order_blocks))
+        except Exception as e:
+            logger.debug("Freshness recalc failed: %s", e)
         
         return order_blocks
     

@@ -1014,8 +1014,15 @@ def generate_trade_plan(
     drift_abs = abs(current_price - avg_entry_live)
     drift_pct = drift_abs / max(avg_entry_live, 1e-12)
     drift_atr = drift_abs / max(atr, 1e-12)
+    
+    # DEBUG: Log entry zone validation details
+    logger.info("🔍 ENTRY ZONE VALIDATION: price=%.2f, near=%.2f, far=%.2f, is_bullish=%s",
+                current_price, entry_zone.near_entry, entry_zone.far_entry, is_bullish)
+    
     # Allow equality (touch) as valid; only reject if strictly above for bullish
     if is_bullish and entry_zone.near_entry > current_price:
+        logger.warning("❌ REJECTED: Bullish near_entry (%.2f) > current_price (%.2f) - entry zone is ABOVE price!",
+                       entry_zone.near_entry, current_price)
         telemetry.log_event(create_signal_rejected_event(
             run_id=run_id,
             symbol=symbol,
@@ -1247,8 +1254,21 @@ def _calculate_entry_zone(
             offset = base_offset * htf_factor * atr
             near_entry = best_ob.high - offset
             far_entry = best_ob.low + offset
-            logger.critical(f"ENTRY ZONE: Calculated near={near_entry}, far={far_entry}")
+            
+            # FIX: When price is INSIDE the OB (already pulled back), cap near_entry at current price
+            # This allows immediate entry instead of rejecting as "entry above price"
+            price_inside_ob = current_price <= best_ob.high and current_price >= best_ob.low
+            if near_entry > current_price:
+                logger.info("📦 ENTRY ZONE FIX: near_entry (%.2f) > price (%.2f), capping at price (inside OB: %s)",
+                            near_entry, current_price, price_inside_ob)
+                near_entry = current_price  # Allow entry at current price
+                
+            logger.info("📦 ENTRY ZONE CALC: OB=[%.2f-%.2f] | offset=%.2f (base=%.2f * htf=%.2f * atr=%.2f) | near=%.2f, far=%.2f | price=%.2f",
+                        best_ob.low, best_ob.high, offset, base_offset, htf_factor, atr, near_entry, far_entry, current_price)
+            
             rationale = f"Entry zone based on {best_ob.timeframe} bullish order block"
+            if price_inside_ob:
+                rationale += " (price inside OB - immediate entry)"
             used_structure = True
             entry_zone = EntryZone(
                 near_entry=near_entry,
@@ -1288,6 +1308,13 @@ def _calculate_entry_zone(
             offset = base_offset * htf_factor * atr
             near_entry = best_fvg.top - offset
             far_entry = best_fvg.bottom + offset
+            
+            # FIX: Cap near_entry at current price if calculated above
+            if near_entry > current_price:
+                logger.info("📦 FVG ENTRY FIX: near_entry (%.2f) > price (%.2f), capping at price",
+                            near_entry, current_price)
+                near_entry = current_price
+                
             rationale = f"Entry zone based on {best_fvg.timeframe} bullish FVG"
             used_structure = True
             entry_zone = EntryZone(
@@ -1419,7 +1446,18 @@ def _calculate_entry_zone(
             offset = base_offset * htf_factor * atr
             near_entry = best_ob.low + offset
             far_entry = best_ob.high - offset
+            
+            # FIX: For shorts, cap near_entry at current price if calculated below
+            # (price is inside OB, allow immediate short entry)
+            price_inside_ob = current_price >= best_ob.low and current_price <= best_ob.high
+            if near_entry < current_price:
+                logger.info("📦 BEARISH ENTRY FIX: near_entry (%.2f) < price (%.2f), capping at price (inside OB: %s)",
+                            near_entry, current_price, price_inside_ob)
+                near_entry = current_price
+                
             rationale = f"Entry zone based on {best_ob.timeframe} bearish order block"
+            if price_inside_ob:
+                rationale += " (price inside OB - immediate entry)"
             used_structure = True
             entry_zone = EntryZone(
                 near_entry=near_entry,

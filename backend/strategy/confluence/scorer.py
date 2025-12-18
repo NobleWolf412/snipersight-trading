@@ -1314,6 +1314,360 @@ def calculate_confluence_score(
                 logger.warning("🚫 Timeframe Conflict BLOCKED: conflicts: %s",
                              ', '.join(conflict_result['conflicts']))
     
+    # --- NEW: Premium/Discount Zone Scoring ---
+    # Bonus for trading in the optimal zone for direction
+    try:
+        if current_price is not None and smc_snapshot.premium_discount_zones:
+            # Get the zone from the primary planning timeframe
+            primary_tf = getattr(config, 'primary_planning_timeframe', '4h')
+            pd_zone = smc_snapshot.premium_discount_zones.get(primary_tf) or smc_snapshot.premium_discount_zones.get(primary_tf.upper())
+            
+            if pd_zone:
+                current_zone = pd_zone.get('current_zone', 'neutral')
+                zone_pct = pd_zone.get('zone_percentage', 50)
+                
+                pd_score = 50.0  # Neutral baseline
+                pd_rationale = "Price at equilibrium"
+                
+                # For LONG: discount zone is preferred
+                if direction in ('bullish', 'long'):
+                    if current_zone == 'discount':
+                        if zone_pct < 30:  # Deep discount
+                            pd_score = 100.0
+                            pd_rationale = f"Deep discount zone ({zone_pct:.0f}%) - ideal for longs"
+                        else:
+                            pd_score = 75.0
+                            pd_rationale = f"Discount zone ({zone_pct:.0f}%) - good for longs"
+                    elif current_zone == 'premium':
+                        if zone_pct > 70:  # Deep premium
+                            pd_score = 20.0
+                            pd_rationale = f"Deep premium zone ({zone_pct:.0f}%) - risky for longs"
+                        else:
+                            pd_score = 35.0
+                            pd_rationale = f"Premium zone ({zone_pct:.0f}%) - caution for longs"
+                
+                # For SHORT: premium zone is preferred
+                elif direction in ('bearish', 'short'):
+                    if current_zone == 'premium':
+                        if zone_pct > 70:  # Deep premium
+                            pd_score = 100.0
+                            pd_rationale = f"Deep premium zone ({zone_pct:.0f}%) - ideal for shorts"
+                        else:
+                            pd_score = 75.0
+                            pd_rationale = f"Premium zone ({zone_pct:.0f}%) - good for shorts"
+                    elif current_zone == 'discount':
+                        if zone_pct < 30:  # Deep discount
+                            pd_score = 20.0
+                            pd_rationale = f"Deep discount zone ({zone_pct:.0f}%) - risky for shorts"
+                        else:
+                            pd_score = 35.0
+                            pd_rationale = f"Discount zone ({zone_pct:.0f}%) - caution for shorts"
+                
+                factors.append(ConfluenceFactor(
+                    name="Premium/Discount Zone",
+                    score=pd_score,
+                    weight=0.08,  # Notable but not dominant
+                    rationale=pd_rationale
+                ))
+    except Exception as e:
+        logger.debug("P/D zone scoring failed: %s", e)
+    
+    # --- NEW: Inside Order Block Bonus ---
+    # Extra confluence when price is inside a valid aligned OB
+    try:
+        if current_price is not None:
+            for ob in smc_snapshot.order_blocks:
+                ob_direction = getattr(ob, 'direction', None)
+                ob_low = getattr(ob, 'low', 0)
+                ob_high = getattr(ob, 'high', 0)
+                
+                # Check if price is inside this OB
+                if ob_low <= current_price <= ob_high:
+                    # Check if OB direction aligns with trade direction
+                    if (direction in ('bullish', 'long') and ob_direction == 'bullish') or \
+                       (direction in ('bearish', 'short') and ob_direction == 'bearish'):
+                        tf = getattr(ob, 'timeframe', 'unknown')
+                        factors.append(ConfluenceFactor(
+                            name="Inside Order Block",
+                            score=100.0,  # Very bullish signal
+                            weight=0.10,
+                            rationale=f"Price inside {tf} {ob_direction} OB (${ob_low:.2f}-${ob_high:.2f}) - immediate entry zone"
+                        ))
+                        break  # Only count once
+    except Exception as e:
+        logger.debug("Inside OB bonus failed: %s", e)
+    
+    # --- NEW: Opposing Structure Penalty ---
+    # Penalty when opposing OB/FVG is near the entry (immediate resistance/support)
+    try:
+        if current_price is not None:
+            atr = indicators.by_timeframe.get(getattr(config, 'primary_planning_timeframe', '4h'))
+            atr_val = getattr(atr, 'atr', 0) if atr else 0
+            
+            if atr_val > 0:
+                opposing_atr_threshold = 2.0  # Within 2 ATR
+                
+                for ob in smc_snapshot.order_blocks:
+                    ob_direction = getattr(ob, 'direction', None)
+                    ob_low = getattr(ob, 'low', 0)
+                    ob_high = getattr(ob, 'high', 0)
+                    
+                    # For LONG, check for bearish OBs above price (resistance)
+                    if direction in ('bullish', 'long') and ob_direction == 'bearish':
+                        if ob_low > current_price:
+                            dist = (ob_low - current_price) / atr_val
+                            if dist <= opposing_atr_threshold:
+                                tf = getattr(ob, 'timeframe', 'unknown')
+                                penalty_score = max(20.0, 50.0 - (dist * 15))  # Closer = worse
+                                factors.append(ConfluenceFactor(
+                                    name="Opposing Structure",
+                                    score=penalty_score,
+                                    weight=0.08,
+                                    rationale=f"Bearish {tf} OB {dist:.1f} ATR above - resistance threat"
+                                ))
+                                break  # Only count nearest opposing
+                    
+                    # For SHORT, check for bullish OBs below price (support)
+                    elif direction in ('bearish', 'short') and ob_direction == 'bullish':
+                        if ob_high < current_price:
+                            dist = (current_price - ob_high) / atr_val
+                            if dist <= opposing_atr_threshold:
+                                tf = getattr(ob, 'timeframe', 'unknown')
+                                penalty_score = max(20.0, 50.0 - (dist * 15))  # Closer = worse
+                                factors.append(ConfluenceFactor(
+                                    name="Opposing Structure",
+                                    score=penalty_score,
+                                    weight=0.08,
+                                    rationale=f"Bullish {tf} OB {dist:.1f} ATR below - support threat"
+                                ))
+                                break  # Only count nearest opposing
+    except Exception as e:
+        logger.debug("Opposing structure penalty failed: %s", e)
+    
+    # --- NEW: HTF Inflection Point Bonus ---
+    # Big bonus when at HTF support (for LONG) or HTF resistance (for SHORT)
+    # This can tip direction organically when at major reversal zones
+    try:
+        if current_price is not None:
+            htf_tfs = ('1w', '1W', '1d', '1D', '4h', '4H')
+            for ob in smc_snapshot.order_blocks:
+                ob_tf = getattr(ob, 'timeframe', '')
+                if ob_tf not in htf_tfs:
+                    continue
+                    
+                ob_direction = getattr(ob, 'direction', None)
+                ob_low = getattr(ob, 'low', 0)
+                ob_high = getattr(ob, 'high', 0)
+                
+                # Check if price is near HTF support (bullish OB below)
+                if direction in ('bullish', 'long') and ob_direction == 'bullish':
+                    if ob_low < current_price:
+                        atr_obj = indicators.by_timeframe.get(getattr(config, 'primary_planning_timeframe', '4h'))
+                        atr_val = getattr(atr_obj, 'atr', 1) if atr_obj else 1
+                        dist = (current_price - ob_high) / atr_val
+                        if dist <= 2.0:  # Within 2 ATR of support
+                            factors.append(ConfluenceFactor(
+                                name="HTF Inflection Point",
+                                score=100.0,
+                                weight=0.15,  # High weight - can tip direction
+                                rationale=f"At {ob_tf} support OB ({dist:.1f} ATR) - strong reversal zone for longs"
+                            ))
+                            break
+                
+                # Check if price is near HTF resistance (bearish OB above)
+                elif direction in ('bearish', 'short') and ob_direction == 'bearish':
+                    if ob_high > current_price:
+                        atr_obj = indicators.by_timeframe.get(getattr(config, 'primary_planning_timeframe', '4h'))
+                        atr_val = getattr(atr_obj, 'atr', 1) if atr_obj else 1
+                        dist = (ob_low - current_price) / atr_val
+                        if dist <= 2.0:  # Within 2 ATR of resistance
+                            factors.append(ConfluenceFactor(
+                                name="HTF Inflection Point",
+                                score=100.0,
+                                weight=0.15,  # High weight - can tip direction
+                                rationale=f"At {ob_tf} resistance OB ({dist:.1f} ATR) - strong reversal zone for shorts"
+                            ))
+                            break
+    except Exception as e:
+        logger.debug("HTF Inflection bonus failed: %s", e)
+    
+    # --- NEW: Multi-TF Reversal Confluence ---
+    # Bonus when multiple reversal signals align (divergence + sweep + BOS)
+    try:
+        reversal_signals = 0
+        reversal_reasons = []
+        
+        # Check for liquidity sweeps in direction
+        if smc_snapshot.liquidity_sweeps:
+            for sweep in smc_snapshot.liquidity_sweeps:
+                sweep_dir = getattr(sweep, 'direction', None)
+                if (direction in ('bullish', 'long') and sweep_dir == 'bullish') or \
+                   (direction in ('bearish', 'short') and sweep_dir == 'bearish'):
+                    reversal_signals += 1
+                    reversal_reasons.append(f"{getattr(sweep, 'timeframe', 'unknown')} sweep")
+                    break
+        
+        # Check for structural breaks in direction
+        if smc_snapshot.structural_breaks:
+            for brk in smc_snapshot.structural_breaks:
+                brk_dir = getattr(brk, 'direction', None)
+                brk_type = getattr(brk, 'break_type', '')
+                if (direction in ('bullish', 'long') and brk_dir == 'bullish') or \
+                   (direction in ('bearish', 'short') and brk_dir == 'bearish'):
+                    if brk_type in ('bos', 'choch', 'BOS', 'CHoCH'):
+                        reversal_signals += 1
+                        reversal_reasons.append(f"{getattr(brk, 'timeframe', 'unknown')} {brk_type}")
+                        break
+        
+        # Check swing structure for bias alignment
+        if smc_snapshot.swing_structure:
+            for tf, ss in smc_snapshot.swing_structure.items():
+                trend = ss.get('trend', 'neutral') if isinstance(ss, dict) else getattr(ss, 'trend', 'neutral')
+                if (direction in ('bullish', 'long') and trend == 'bullish') or \
+                   (direction in ('bearish', 'short') and trend == 'bearish'):
+                    reversal_signals += 1
+                    reversal_reasons.append(f"{tf} trend={trend}")
+                    break
+        
+        if reversal_signals >= 2:
+            score = min(100.0, 50.0 + (reversal_signals * 15))
+            factors.append(ConfluenceFactor(
+                name="Multi-TF Reversal",
+                score=score,
+                weight=0.12,
+                rationale=f"{reversal_signals} reversal signals: {', '.join(reversal_reasons[:3])}"
+            ))
+    except Exception as e:
+        logger.debug("Multi-TF reversal failed: %s", e)
+    
+    # --- NEW: LTF Structure Shift (Micro-Reversal) ---
+    # Partial bonus when LTF (5m/15m) shows CHoCH/BOS even if HTF is against
+    try:
+        ltf_tfs = ('5m', '15m', '1m')
+        for brk in smc_snapshot.structural_breaks:
+            brk_tf = getattr(brk, 'timeframe', '')
+            if brk_tf not in ltf_tfs:
+                continue
+                
+            brk_dir = getattr(brk, 'direction', None)
+            brk_type = getattr(brk, 'break_type', '')
+            
+            if brk_type in ('choch', 'CHoCH', 'bos', 'BOS'):
+                if (direction in ('bullish', 'long') and brk_dir == 'bullish') or \
+                   (direction in ('bearish', 'short') and brk_dir == 'bearish'):
+                    factors.append(ConfluenceFactor(
+                        name="LTF Structure Shift",
+                        score=75.0,
+                        weight=0.08,
+                        rationale=f"{brk_tf} {brk_type} {brk_dir} - micro-reversal forming"
+                    ))
+                    break
+    except Exception as e:
+        logger.debug("LTF structure shift failed: %s", e)
+    
+    # --- NEW: Institutional Sequence Factor ---
+    # Detects Sweep → OB → BOS pattern (institutional footprint)
+    # Sweep before OB: 3-7 candles (same TF as OB)
+    # BOS after OB: 3-10 candles
+    try:
+        best_sequence_score = 0
+        best_sequence_rationale = ""
+        
+        for ob in smc_snapshot.order_blocks:
+            ob_direction = getattr(ob, 'direction', None)
+            ob_timestamp = getattr(ob, 'timestamp', None)
+            ob_tf = getattr(ob, 'timeframe', '')
+            
+            # Skip OBs that don't align with trade direction
+            if direction in ('bullish', 'long') and ob_direction != 'bullish':
+                continue
+            if direction in ('bearish', 'short') and ob_direction != 'bearish':
+                continue
+            
+            if not ob_timestamp:
+                continue
+            
+            has_sweep_before = False
+            has_bos_after = False
+            sweep_detail = ""
+            bos_detail = ""
+            
+            # Check for liquidity sweep BEFORE this OB (within 7 candles = ~hours on 4H)
+            for sweep in smc_snapshot.liquidity_sweeps:
+                sweep_ts = getattr(sweep, 'timestamp', None)
+                sweep_dir = getattr(sweep, 'direction', None)
+                sweep_tf = getattr(sweep, 'timeframe', '')
+                
+                if not sweep_ts or sweep_tf.lower() != ob_tf.lower():
+                    continue
+                
+                # Sweep should be before OB and align with direction
+                if sweep_ts < ob_timestamp:
+                    time_diff = (ob_timestamp - sweep_ts).total_seconds()
+                    # 7 candles on 4H = 28 hours
+                    max_lookback = 7 * 4 * 3600 if '4' in ob_tf else 7 * 3600
+                    
+                    if time_diff <= max_lookback:
+                        if (direction in ('bullish', 'long') and sweep_dir == 'bullish') or \
+                           (direction in ('bearish', 'short') and sweep_dir == 'bearish'):
+                            has_sweep_before = True
+                            sweep_detail = f"{sweep_tf} sweep"
+                            break
+            
+            # Check for BOS/CHoCH AFTER this OB (within 10 candles)
+            for brk in smc_snapshot.structural_breaks:
+                brk_ts = getattr(brk, 'timestamp', None)
+                brk_dir = getattr(brk, 'direction', None)
+                brk_type = getattr(brk, 'break_type', '')
+                brk_tf = getattr(brk, 'timeframe', '')
+                
+                if not brk_ts:
+                    continue
+                
+                # BOS should be after OB
+                if brk_ts > ob_timestamp:
+                    time_diff = (brk_ts - ob_timestamp).total_seconds()
+                    # 10 candles on 4H = 40 hours
+                    max_forward = 10 * 4 * 3600 if '4' in ob_tf else 10 * 3600
+                    
+                    if time_diff <= max_forward:
+                        if (direction in ('bullish', 'long') and brk_dir == 'bullish') or \
+                           (direction in ('bearish', 'short') and brk_dir == 'bearish'):
+                            has_bos_after = True
+                            bos_detail = f"{brk_tf} {brk_type}"
+                            break
+            
+            # Score the sequence
+            sequence_score = 0
+            if has_sweep_before and has_bos_after:
+                sequence_score = 100  # Full sequence
+                rationale = f"Full institutional sequence: {sweep_detail} → {ob_tf} OB → {bos_detail}"
+            elif has_sweep_before:
+                sequence_score = 60  # Sweep + OB
+                rationale = f"Sweep + OB: {sweep_detail} → {ob_tf} OB (awaiting BOS)"
+            elif has_bos_after:
+                sequence_score = 50  # OB + BOS
+                rationale = f"OB + BOS: {ob_tf} OB → {bos_detail} (no sweep detected)"
+            else:
+                continue  # No sequence worth mentioning
+            
+            if sequence_score > best_sequence_score:
+                best_sequence_score = sequence_score
+                best_sequence_rationale = rationale
+        
+        if best_sequence_score > 0:
+            # Weight based on sequence completeness
+            # Sweep+OB+BOS=20pts (100*0.20), Sweep+OB=12pts, OB+BOS=10pts
+            weight = 0.20 if best_sequence_score == 100 else (0.12 if best_sequence_score == 60 else 0.10)
+            factors.append(ConfluenceFactor(
+                name="Institutional Sequence",
+                score=best_sequence_score,
+                weight=weight,
+                rationale=best_sequence_rationale
+            ))
+    except Exception as e:
+        logger.debug("Institutional sequence failed: %s", e)
+    
     # --- Normalize Weights ---
     
     # If no factors present, return minimal breakdown
@@ -2075,8 +2429,8 @@ def _calculate_synergy_bonus(
         except ImportError:
             pass  # Cycle models not available
     
-    # Clamp synergy bonus to max 10 (validation constraint)
-    return min(bonus, 10.0)
+    # Clamp synergy bonus to max 25 (allow strong multi-factor synergies)
+    return min(bonus, 25.0)
 
 
 def _calculate_conflict_penalty(factors: List[ConfluenceFactor], direction: str) -> float:
@@ -2112,8 +2466,8 @@ def _calculate_conflict_penalty(factors: List[ConfluenceFactor], direction: str)
             penalty += 8.0
             logger.debug("HTF neutral penalty applied: +8")
     
-    # Cap penalty to maintain symmetry with synergy bonus cap
-    return min(penalty, 25.0)
+    # Cap penalty to 35 (limit downside impact)
+    return min(penalty, 35.0)
 
 
 def _detect_regime(smc: SMCSnapshot, indicators: IndicatorSet) -> str:
