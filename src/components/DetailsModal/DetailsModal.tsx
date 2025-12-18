@@ -280,6 +280,13 @@ export function DetailsModal({ isOpen, onClose, result }: DetailsModalProps) {
                         <span>Incomplete Data</span>
                       </div>
                     )}
+                    {/* Leverage Derating Warning */}
+                    {(result as any)?.metadata?.leverage_adjustments?.leverage_derated && (
+                      <div className="flex items-center gap-1.5 text-amber-500 text-xs font-bold px-2.5 py-1.5 rounded bg-amber-500/10 border border-amber-500/20">
+                        <Warning size={14} weight="fill" />
+                        <span>⚠️ Max {(result as any).metadata.leverage_adjustments.suggested_leverage}x Leverage (stop too wide for {(result as any).metadata.leverage_adjustments.original_leverage}x)</span>
+                      </div>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="p-6">

@@ -827,16 +827,43 @@ def generate_trade_plan(
             # Calculate what leverage this setup would require
             # At 10x, ~7% max stop. At 5x, ~15% max stop. At 3x, ~25% max stop.
             stop_pct = (stop_loss.distance_atr * atr / current_price) * 100 if current_price > 0 else 0
-            suggested_lev = None
-            if stop_pct > 0:
-                # Rough calculation: leverage where stop wouldn't hit liquidation
-                # Liquidation at ~(100/leverage)%, we want 30% cushion
-                max_move_pct = stop_pct * 1.5  # With cushion
-                if max_move_pct > 0:
-                    suggested_lev = max(1, int(70 / max_move_pct))  # 70% of margin = safe stop
             
-            lev_hint = f" (try {suggested_lev}x or lower)" if suggested_lev and leverage > 1 and suggested_lev < leverage else ""
-            raise ValueError(f"Stop too wide for {leverage}x leverage ({stop_loss.distance_atr:.1f} ATR, ~{stop_pct:.1f}% move){lev_hint}")
+            if stop_pct > 0 and leverage > 1:
+                # Calculate max safe leverage allowing for a 30% cushion against liquidation
+                # Formula: Max_Lev = 70 / Stop_Pct
+                max_safe_lev = max(1, int(70 / stop_pct))
+                
+                # If our configured leverage is too high for this specific volatility
+                if max_safe_lev < leverage:
+                    # AUTO-DERATE instead of rejecting
+                    new_leverage = max_safe_lev
+                    
+                    logger.warning(
+                        "⚠️ SAFETY DERATING: Stop %.2f%% is too wide for %dx. Derating to %dx.",
+                        stop_pct, leverage, new_leverage
+                    )
+                    
+                    # Record this change so the Executor knows to modify the order
+                    leverage_adjustments = {
+                        'leverage_derated': True,
+                        'original_leverage': leverage,
+                        'suggested_leverage': new_leverage,
+                        'reason': f"Stop distance {stop_pct:.1f}% requires max {new_leverage}x"
+                    }
+                    
+                    # Store in context metadata for downstream use
+                    context.metadata['leverage_adjustments'] = leverage_adjustments
+                    
+                    # Update leverage for this trade
+                    leverage = new_leverage
+                    
+                    # DO NOT REJECT - let the trade pass with lower leverage
+                else:
+                    # Safe to proceed at configured leverage
+                    pass
+            else:
+                # No leverage or zero stop - reject
+                raise ValueError(f"Stop too wide ({stop_loss.distance_atr:.1f} ATR, ~{stop_pct:.1f}% move)")
     if stop_loss.distance_atr < min_stop_atr:
         raise ValueError("Stop too tight relative to ATR")
     
@@ -1366,11 +1393,24 @@ def _calculate_entry_zone(
             return entry_zone, used_structure
         
         else:
-            # NEW: Overwatch Gate (Strict HTF Requirement)
+            # NEW: Overwatch Gate with Volatility Exception
             # Swing modes do NOT take random ATR pullbacks - must have structure
+            # EXCEPTION: If regime is EXPLOSIVE/ELEVATED, structure lags price.
+            # We MUST allow ATR fallback to catch crashes/pumps.
+            
+            regime = _classify_atr_regime(atr, current_price, planner_cfg)
+            
             if config.profile in ('overwatch', 'macro_surveillance'):
-                logger.info("⛔ Overwatch Gate: No valid Bullish OB/FVG structure found. Rejecting trade.")
-                raise ValueError("Overwatch mode requires valid HTF structure for entry (no ATR fallback)")
+                if regime in ('explosive', 'elevated'):
+                    # High volatility - structure can't form fast enough
+                    logger.info(
+                        "⚠️ Overwatch Exception: %s volatility detected. Allowing ATR fallback despite no structure.",
+                        regime.upper()
+                    )
+                else:
+                    # Normal/compressed volatility - require structure
+                    logger.info("⛔ Overwatch Gate: No valid Bullish OB/FVG structure & low volatility. Rejecting trade.")
+                    raise ValueError("Overwatch mode requires valid HTF structure for entry (no ATR fallback)")
 
             # Fallback: use ATR-based zone below current price
             logger.critical(f"ENTRY ZONE FALLBACK: current_price={current_price}, atr={atr}")
@@ -1552,10 +1592,23 @@ def _calculate_entry_zone(
             return entry_zone, used_structure
         
         else:
-            # NEW: Overwatch Gate (Strict HTF Requirement)
+            # NEW: Overwatch Gate with Volatility Exception (Bearish)
+            # Swing modes do NOT take random ATR pullbacks - must have structure
+            # EXCEPTION: If regime is EXPLOSIVE/ELEVATED, structure lags price.
+            
+            regime = _classify_atr_regime(atr, current_price, planner_cfg)
+            
             if config.profile in ('overwatch', 'macro_surveillance'):
-                logger.info("⛔ Overwatch Gate: No valid Bearish OB/FVG structure found. Rejecting trade.")
-                raise ValueError("Overwatch mode requires valid HTF structure for entry (no ATR fallback)")
+                if regime in ('explosive', 'elevated'):
+                    # High volatility - structure can't form fast enough
+                    logger.info(
+                        "⚠️ Overwatch Exception: %s volatility detected. Allowing ATR fallback despite no structure.",
+                        regime.upper()
+                    )
+                else:
+                    # Normal/compressed volatility - require structure
+                    logger.info("⛔ Overwatch Gate: No valid Bearish OB/FVG structure & low volatility. Rejecting trade.")
+                    raise ValueError("Overwatch mode requires valid HTF structure for entry (no ATR fallback)")
 
             # Fallback: use ATR-based zone above current price
             # For shorts: near_entry > far_entry (near is farther from price, higher value)
