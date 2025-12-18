@@ -86,10 +86,10 @@ class ConfluenceBreakdown:
             raise ValueError(f"Total score must be 0-100, got {self.total_score}")
         if not self.factors:
             raise ValueError("Confluence breakdown must have at least one factor")
-        if not 0 <= self.synergy_bonus <= 10:
-            raise ValueError(f"Synergy bonus must be 0-10, got {self.synergy_bonus}")
-        if not 0 <= self.conflict_penalty <= 20:
-            raise ValueError(f"Conflict penalty must be 0-20, got {self.conflict_penalty}")
+        if not 0 <= self.synergy_bonus <= 25:
+            raise ValueError(f"Synergy bonus must be 0-25, got {self.synergy_bonus}")
+        if not 0 <= self.conflict_penalty <= 35:
+            raise ValueError(f"Conflict penalty must be 0-35, got {self.conflict_penalty}")
         
         # Validate factor weights sum to approximately 1.0
         total_weight = sum(f.weight for f in self.factors)
