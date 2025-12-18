@@ -1305,10 +1305,14 @@ def calculate_confluence_score(
     # --- Weekly StochRSI Bonus ---
     # Directional bonus/penalty system based on weekly momentum
     # Replaces the old hard gate - no longer blocks, just influences score
+    # SKIP for LTF-only modes (surgical, precision) - weekly momentum is too slow for scalps
     weekly_stoch_rsi_bonus = 0.0
     weekly_stoch_rsi_analysis = None
     
-    if getattr(config, 'weekly_stoch_rsi_gate_enabled', True):  # Config key kept for backward compat
+    # Check if this mode should skip Weekly StochRSI
+    skip_weekly_stoch = current_profile in ('precision', 'surgical')
+    
+    if not skip_weekly_stoch and getattr(config, 'weekly_stoch_rsi_gate_enabled', True):
         weekly_stoch_rsi_analysis = evaluate_weekly_stoch_rsi_bonus(
             indicators=indicators,
             direction=direction,
@@ -1926,6 +1930,56 @@ def calculate_confluence_score(
     except Exception as e:
         logger.debug("Institutional sequence failed: %s", e)
     
+    # ===========================================================================
+    # === PRIMARY FAILURE DAMPENING ===
+    # ===========================================================================
+    # If a "hard gate" fires (MACD veto, HTF Momentum blocked), we should NOT
+    # quadruple-punish the same underlying issue. Reduce overlapping soft 
+    # penalties by 50% to prevent score obliteration.
+    
+    # Identify hard gate failures
+    hard_gate_fired = False
+    hard_gate_reason = None
+    
+    # Check for MACD veto (factor with score=0, name contains "MACD")
+    for f in factors:
+        if 'MACD Veto' in f.name and f.score == 0:
+            hard_gate_fired = True
+            hard_gate_reason = "MACD Veto"
+            break
+        if 'HTF_Momentum_Gate' in f.name and f.score < 30:  # Blocked or severely penalized
+            hard_gate_fired = True
+            hard_gate_reason = "HTF Momentum Gate"
+            break
+    
+    # Dampen overlapping soft penalties if hard gate fired
+    if hard_gate_fired:
+        dampened_factors = {
+            'Timeframe_Conflict_Resolution',
+            'HTF Structure Bias',
+            'HTF Pullback Setup',
+            'Opposing Structure',
+            'Weekly StochRSI Bonus'
+        }
+        
+        dampened_count = 0
+        for i, f in enumerate(factors):
+            if f.name in dampened_factors and f.score < 50:  # Only dampen penalties, not bonuses
+                # Reduce penalty weight by 50% (move score toward neutral)
+                original_weight = f.weight
+                new_weight = f.weight * 0.5
+                factors[i] = ConfluenceFactor(
+                    name=f.name,
+                    score=f.score,
+                    weight=new_weight,
+                    rationale=f.rationale + f" [dampened: {hard_gate_reason}]"
+                )
+                dampened_count += 1
+        
+        if dampened_count > 0:
+            logger.debug("🔇 Primary failure dampening: %d factors reduced (cause: %s)", 
+                        dampened_count, hard_gate_reason)
+    
     # --- Normalize Weights ---
     
     # If no factors present, return minimal breakdown
@@ -1998,7 +2052,26 @@ def calculate_confluence_score(
     
     # --- Final Score ---
     
-    final_score = weighted_score + synergy_bonus - conflict_penalty
+    raw_score = weighted_score + synergy_bonus - conflict_penalty
+    
+    # ===========================================================================
+    # === DIMINISHING RETURNS CURVE ===
+    # ===========================================================================
+    # Prevent score inflation where "everything aligned" = 95%+
+    # After 75, additional points contribute at 50% strength.
+    # This creates separation between "good" (70-75) and "exceptional" (75-85)
+    # while preventing saturation above 85.
+    
+    DIMINISHING_THRESHOLD = 75.0
+    DIMINISHING_RATE = 0.5  # 50% credit above threshold
+    
+    if raw_score > DIMINISHING_THRESHOLD:
+        excess = raw_score - DIMINISHING_THRESHOLD
+        final_score = DIMINISHING_THRESHOLD + (excess * DIMINISHING_RATE)
+        logger.debug("📉 Diminishing returns applied: %.1f → %.1f (excess: %.1f)", 
+                    raw_score, final_score, excess)
+    else:
+        final_score = raw_score
 
     final_score = max(0.0, min(100.0, final_score))  # Clamp to 0-100
     
