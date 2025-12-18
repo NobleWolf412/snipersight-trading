@@ -39,6 +39,198 @@ logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
+# MODE-SPECIFIC FACTOR WEIGHTS
+# ==============================================================================
+# Tunes the scoring engine to prioritize factors relevant to each trading style.
+#
+# OVERWATCH (Swing): Prioritizes HTF alignment, structure, and institutional accumulation.
+# STRIKE (Intraday): Prioritizes Momentum, Flow, and Volatility.
+# SURGICAL (Scalp): Prioritizes Structure, Precision Timing (Kill Zones), and specific OBs.
+# STEALTH (Balanced): Balanced approach across all factors.
+
+MODE_FACTOR_WEIGHTS = {
+    'macro_surveillance': {  # OVERWATCH
+        'order_block': 0.25,
+        'fvg': 0.18,
+        'market_structure': 0.20,
+        'liquidity_sweep': 0.18,
+        'kill_zone': 0.03,
+        'momentum': 0.08,
+        'volume': 0.10,
+        'volatility': 0.08,
+        'htf_alignment': 0.25,
+        'htf_proximity': 0.15,
+        'btc_impulse': 0.12,
+        'weekly_stoch_rsi': 0.12,
+        'htf_structure_bias': 0.15,
+        'premium_discount': 0.12,
+        'inside_ob': 0.10,
+        'nested_ob': 0.10,
+        'opposing_structure': 0.06,
+        'htf_inflection': 0.18,
+        'multi_tf_reversal': 0.12,
+        'ltf_structure_shift': 0.05,
+        'institutional_sequence': 0.15,
+        'timeframe_conflict': 0.10,
+        'macd_veto': 0.05
+    },
+    'intraday_aggressive': {  # STRIKE
+        'order_block': 0.18,
+        'fvg': 0.12,
+        'market_structure': 0.28,
+        'liquidity_sweep': 0.12,
+        'kill_zone': 0.08,
+        'momentum': 0.15,
+        'volume': 0.10,
+        'volatility': 0.10,
+        'htf_alignment': 0.12,
+        'htf_proximity': 0.10,
+        'btc_impulse': 0.08,
+        'weekly_stoch_rsi': 0.06,
+        'htf_structure_bias': 0.10,
+        'premium_discount': 0.06,
+        'inside_ob': 0.10,
+        'nested_ob': 0.08,
+        'opposing_structure': 0.10,
+        'htf_inflection': 0.10,
+        'multi_tf_reversal': 0.12,
+        'ltf_structure_shift': 0.10,
+        'institutional_sequence': 0.12,
+        'timeframe_conflict': 0.12,
+        'macd_veto': 0.05
+    },
+    'precision': {  # SURGICAL
+        'order_block': 0.15,
+        'fvg': 0.10,
+        'market_structure': 0.30,
+        'liquidity_sweep': 0.10,
+        'kill_zone': 0.10,
+        'momentum': 0.12,
+        'volume': 0.08,
+        'volatility': 0.12,
+        'htf_alignment': 0.10,
+        'htf_proximity': 0.08,
+        'btc_impulse': 0.05,
+        'weekly_stoch_rsi': 0.05,
+        'htf_structure_bias': 0.08,
+        'premium_discount': 0.05,
+        'inside_ob': 0.10,
+        'nested_ob': 0.05,
+        'opposing_structure': 0.12,
+        'htf_inflection': 0.08,
+        'multi_tf_reversal': 0.10,
+        'ltf_structure_shift': 0.12,
+        'institutional_sequence': 0.10,
+        'timeframe_conflict': 0.15,
+        'macd_veto': 0.05
+    },
+    'stealth_balanced': {  # STEALTH
+        'order_block': 0.20,
+        'fvg': 0.15,
+        'market_structure': 0.25,
+        'liquidity_sweep': 0.15,
+        'kill_zone': 0.05,
+        'momentum': 0.10,
+        'volume': 0.10,
+        'volatility': 0.08,
+        'htf_alignment': 0.18,
+        'htf_proximity': 0.12,
+        'btc_impulse': 0.10,
+        'weekly_stoch_rsi': 0.10,
+        'htf_structure_bias': 0.12,
+        'premium_discount': 0.08,
+        'inside_ob': 0.10,
+        'nested_ob': 0.08,
+        'opposing_structure': 0.08,
+        'htf_inflection': 0.12,
+        'multi_tf_reversal': 0.12,
+        'ltf_structure_shift': 0.08,
+        'institutional_sequence': 0.12,
+        'timeframe_conflict': 0.10,
+        'macd_veto': 0.05
+    },
+    # Surgical alias
+    'surgical': {  # Maps to precision
+        'order_block': 0.15,
+        'fvg': 0.10,
+        'market_structure': 0.30,
+        'liquidity_sweep': 0.10,
+        'kill_zone': 0.10,
+        'momentum': 0.12,
+        'volume': 0.08,
+        'volatility': 0.12,
+        'htf_alignment': 0.10,
+        'htf_proximity': 0.08,
+        'btc_impulse': 0.05,
+        'weekly_stoch_rsi': 0.05,
+        'htf_structure_bias': 0.08,
+        'premium_discount': 0.05,
+        'inside_ob': 0.10,
+        'nested_ob': 0.05,
+        'opposing_structure': 0.12,
+        'htf_inflection': 0.08,
+        'multi_tf_reversal': 0.10,
+        'ltf_structure_shift': 0.12,
+        'institutional_sequence': 0.10,
+        'timeframe_conflict': 0.15,
+        'macd_veto': 0.05
+    },
+    # Overwatch alias
+    'overwatch': {  # Maps to macro_surveillance
+        'order_block': 0.25,
+        'fvg': 0.18,
+        'market_structure': 0.20,
+        'liquidity_sweep': 0.18,
+        'kill_zone': 0.03,
+        'momentum': 0.08,
+        'volume': 0.10,
+        'volatility': 0.08,
+        'htf_alignment': 0.25,
+        'htf_proximity': 0.15,
+        'btc_impulse': 0.12,
+        'weekly_stoch_rsi': 0.12,
+        'htf_structure_bias': 0.15,
+        'premium_discount': 0.12,
+        'inside_ob': 0.10,
+        'nested_ob': 0.10,
+        'opposing_structure': 0.06,
+        'htf_inflection': 0.18,
+        'multi_tf_reversal': 0.12,
+        'ltf_structure_shift': 0.05,
+        'institutional_sequence': 0.15,
+        'timeframe_conflict': 0.10,
+        'macd_veto': 0.05
+    },
+    # Strike alias
+    'strike': {  # Maps to intraday_aggressive
+        'order_block': 0.18,
+        'fvg': 0.12,
+        'market_structure': 0.28,
+        'liquidity_sweep': 0.12,
+        'kill_zone': 0.08,
+        'momentum': 0.15,
+        'volume': 0.10,
+        'volatility': 0.10,
+        'htf_alignment': 0.12,
+        'htf_proximity': 0.10,
+        'btc_impulse': 0.08,
+        'weekly_stoch_rsi': 0.06,
+        'htf_structure_bias': 0.10,
+        'premium_discount': 0.06,
+        'inside_ob': 0.10,
+        'nested_ob': 0.08,
+        'opposing_structure': 0.10,
+        'htf_inflection': 0.10,
+        'multi_tf_reversal': 0.12,
+        'ltf_structure_shift': 0.10,
+        'institutional_sequence': 0.12,
+        'timeframe_conflict': 0.12,
+        'macd_veto': 0.05
+    }
+}
+
+
+# ==============================================================================
 # HTF CRITICAL GATES - These filter out low-quality signals
 # ==============================================================================
 
@@ -448,7 +640,28 @@ def resolve_timeframe_conflicts(
     
     if not conflicts:
         resolution = 'allowed'
-        resolution_reason_parts.append("All timeframes aligned or neutral")
+        # Check for positive alignment to award bonus
+        # If primary is aligned and at least one HTF is aligned (and none conflict)
+        is_primary_aligned = (is_bullish_trade and primary_trend == 'bullish') or \
+                             (not is_bullish_trade and primary_trend == 'bearish')
+        
+        has_htf_alignment = False
+        for tf in filter_tfs:
+            htf_trend = tf_trends.get(tf, 'neutral')
+            if (is_bullish_trade and htf_trend == 'bullish') or \
+               (not is_bullish_trade and htf_trend == 'bearish'):
+                has_htf_alignment = True
+                break
+        
+        if is_primary_aligned:
+            score_adjustment += 25.0
+            if has_htf_alignment:
+                score_adjustment += 25.0  # Total +50 (Score 100)
+                resolution_reason_parts.append("Perfect multi-timeframe alignment")
+            else:
+                resolution_reason_parts.append("Primary timeframe aligned")
+        else:
+            resolution_reason_parts.append("No conflicts (neutral alignment)")
     
     return {
         'resolution': resolution,
@@ -874,28 +1087,21 @@ def calculate_confluence_score(
     # Normalize direction at entry: LONG/SHORT -> bullish/bearish
     # This ensures consistent format throughout all scoring functions
     direction = _normalize_direction(direction)
+    current_profile = getattr(config, 'profile', 'balanced').lower()
+
+    # Helper to get dynamic weights
+    def get_w(key: str, default: float) -> float:
+        return MODE_FACTOR_WEIGHTS.get(current_profile, {}).get(key, default)
     
     # --- SMC Pattern Scoring ---
     
     # Order Blocks
     ob_score = _score_order_blocks(smc_snapshot.order_blocks, direction)
     if ob_score > 0:
-        # Dynamic Mode-Aware Weight (Fix #1)
-        # Overwatch: Higher weight (HTF OBs are primary)
-        # Strike/Surgical: Lower weight (Momentum/Structure is primary)
-        ob_weight_map = {
-            'macro_surveillance': 0.25, 'overwatch': 0.25,  # HTF-focused
-            'intraday_aggressive': 0.18, 'strike': 0.18,    # Momentum-focused
-            'precision': 0.15, 'surgical': 0.15,            # Refining only
-            'stealth_balanced': 0.20, 'stealth': 0.20       # Balanced
-        }
-        current_profile = getattr(config, 'profile', 'balanced').lower()
-        ob_weight = ob_weight_map.get(current_profile, 0.20)
-        
         factors.append(ConfluenceFactor(
             name="Order Block",
             score=ob_score,
-            weight=ob_weight,
+            weight=get_w('order_block', 0.20),
             rationale=_get_ob_rationale(smc_snapshot.order_blocks, direction)
         ))
     
@@ -905,7 +1111,7 @@ def calculate_confluence_score(
         factors.append(ConfluenceFactor(
             name="Fair Value Gap",
             score=fvg_score,
-            weight=0.15,
+            weight=get_w('fvg', 0.15),
             rationale=_get_fvg_rationale(smc_snapshot.fvgs, direction)
         ))
     
@@ -915,7 +1121,7 @@ def calculate_confluence_score(
         factors.append(ConfluenceFactor(
             name="Market Structure",
             score=structure_score,
-            weight=0.25,
+            weight=get_w('market_structure', 0.25),
             rationale=_get_structure_rationale(smc_snapshot.structural_breaks, direction)
         ))
     
@@ -925,7 +1131,7 @@ def calculate_confluence_score(
         factors.append(ConfluenceFactor(
             name="Liquidity Sweep",
             score=sweep_score,
-            weight=0.15,
+            weight=get_w('liquidity_sweep', 0.15),
             rationale=_get_sweep_rationale(smc_snapshot.liquidity_sweeps, direction)
         ))
     
@@ -940,7 +1146,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="Kill Zone Timing",
                 score=60.0,  # Moderate score (not make-or-break)
-                weight=0.05,  # Low weight - timing bonus, not primary factor
+                weight=get_w('kill_zone', 0.05),
                 rationale=f"In {kz_display} kill zone - high institutional activity"
             ))
             logger.debug("⏰ Kill zone active: %s", kz_display)
@@ -982,7 +1188,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="Momentum",
                 score=momentum_score,
-                weight=0.10,
+                weight=get_w('momentum', 0.10),
                 rationale=momentum_rationale
             ))
         
@@ -992,7 +1198,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="Volume",
                 score=volume_score,
-                weight=0.10,
+                weight=get_w('volume', 0.10),
                 rationale=_get_volume_rationale(primary_indicators)
             ))
 
@@ -1002,7 +1208,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="Volatility",
                 score=volatility_score,
-                weight=0.08,
+                weight=get_w('volatility', 0.08),
                 rationale=_get_volatility_rationale(primary_indicators)
             ))
     
@@ -1033,7 +1239,7 @@ def calculate_confluence_score(
         factors.append(ConfluenceFactor(
             name="MACD Veto",
             score=0.0,
-            weight=0.05,
+            weight=get_w('macd_veto', 0.05),
             rationale=f"MACD opposing direction with veto active: {'; '.join(macd_analysis.get('reasons', []))}"
         ))
     
@@ -1047,7 +1253,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="HTF Alignment",
                 score=htf_score,
-                weight=0.20,
+                weight=get_w('htf_alignment', 0.20),
                 rationale=f"Higher timeframe trend is {htf_trend}, aligns with {direction} setup"
             ))
     
@@ -1061,7 +1267,8 @@ def calculate_confluence_score(
             if within_atr <= atr_cap and within_pct <= pct_cap:
                 # Map proximity to score: closer => higher
                 proximity_score = max(0.0, min(100.0, 100.0 * (1.0 - (within_atr / atr_cap))))
-                weight = float(getattr(config, 'htf_proximity_weight', 0.12))
+                # Use dynamic weight
+                weight = get_w('htf_proximity', 0.12)
                 lvl_tf = htf_context.get('timeframe')
                 lvl_type = htf_context.get('type')
                 factors.append(ConfluenceFactor(
@@ -1083,7 +1290,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="BTC Impulse Gate",
                 score=40.0,
-                weight=0.10,
+                weight=get_w('btc_impulse', 0.10),
                 rationale=f"BTC trend ({btc_impulse}) conflicts with setup direction ({direction})"
             ))
         else:
@@ -1091,7 +1298,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="BTC Impulse Gate",
                 score=100.0,
-                weight=0.10,
+                weight=get_w('btc_impulse', 0.10),
                 rationale=f"BTC trend ({btc_impulse}) supports {direction} setup"
             ))
     
@@ -1120,7 +1327,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="Weekly StochRSI Bonus",
                 score=factor_score,
-                weight=0.10,
+                weight=get_w('weekly_stoch_rsi', 0.10),
                 rationale=f"[+{weekly_stoch_rsi_bonus:.1f}] {weekly_stoch_rsi_analysis['reason']}"
             ))
             logger.debug("📈 Weekly StochRSI BONUS +%.1f: %s", weekly_stoch_rsi_bonus, weekly_stoch_rsi_analysis["reason"])
@@ -1131,7 +1338,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="Weekly StochRSI Bonus",
                 score=factor_score,
-                weight=0.10,  # FIXED: Same weight as bonus (was 0.08, caused long bias)
+                weight=get_w('weekly_stoch_rsi', 0.10),
                 rationale=f"[{weekly_stoch_rsi_bonus:.1f}] {weekly_stoch_rsi_analysis['reason']}"
             ))
             logger.debug("📉 Weekly StochRSI PENALTY %.1f: %s", weekly_stoch_rsi_bonus, weekly_stoch_rsi_analysis["reason"])
@@ -1158,7 +1365,7 @@ def calculate_confluence_score(
                 factors.append(ConfluenceFactor(
                     name="HTF Structure Bias",
                     score=factor_score,
-                    weight=0.12,  # Significant weight for HTF alignment
+                    weight=get_w('htf_structure_bias', 0.12),
                     rationale=f"[+{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}"
                 ))
                 logger.debug("📊 HTF Structure BONUS +%.1f: %s", htf_structure_bonus, htf_structure_analysis['reason'])
@@ -1198,7 +1405,7 @@ def calculate_confluence_score(
                     factors.append(ConfluenceFactor(
                         name="HTF Pullback Setup",
                         score=factor_score,
-                        weight=0.12,  # Same weight as aligned HTF
+                        weight=get_w('htf_structure_bias', 0.12),
                         rationale=f"[+{pullback_bonus:.1f}] {pullback_rationale}"
                     ))
                     logger.debug("🔄 HTF Pullback BONUS +%.1f: %s", pullback_bonus, pullback_rationale)
@@ -1208,7 +1415,7 @@ def calculate_confluence_score(
                     factors.append(ConfluenceFactor(
                         name="HTF Structure Bias",
                         score=factor_score,
-                        weight=0.12,  # FIXED: Same weight as bonus (was 0.08, caused long bias)
+                        weight=get_w('htf_structure_bias', 0.12),
                         rationale=f"[{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}"
                     ))
                     logger.debug("⚠️ HTF Structure PENALTY %.1f: %s", htf_structure_bonus, htf_structure_analysis['reason'])
@@ -1250,7 +1457,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="HTF_Structural_Proximity",
                 score=factor_score,
-                weight=0.15,
+                weight=get_w('htf_proximity', 0.15),
                 rationale=f"{htf_proximity_result['nearest_structure']} ({htf_proximity_result.get('proximity_atr', 'N/A'):.1f} ATR)" if htf_proximity_result.get('proximity_atr') else htf_proximity_result['nearest_structure']
             ))
             
@@ -1279,7 +1486,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="HTF_Momentum_Gate",
                 score=factor_score,
-                weight=0.12,
+                weight=get_w('htf_alignment', 0.12),
                 rationale=momentum_gate['reason']
             ))
             
@@ -1306,7 +1513,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="Timeframe_Conflict_Resolution",
                 score=factor_score,
-                weight=0.10,
+                weight=get_w('timeframe_conflict', 0.10),
                 rationale=conflict_result['resolution_reason']
             ))
             
@@ -1366,7 +1573,7 @@ def calculate_confluence_score(
                 factors.append(ConfluenceFactor(
                     name="Premium/Discount Zone",
                     score=pd_score,
-                    weight=0.08,  # Notable but not dominant
+                    weight=get_w('premium_discount', 0.08),
                     rationale=pd_rationale
                 ))
     except Exception as e:
@@ -1390,7 +1597,7 @@ def calculate_confluence_score(
                         factors.append(ConfluenceFactor(
                             name="Inside Order Block",
                             score=100.0,  # Very bullish signal
-                            weight=0.10,
+                            weight=get_w('inside_ob', 0.10),
                             rationale=f"Price inside {tf} {ob_direction} OB (${ob_low:.2f}-${ob_high:.2f}) - immediate entry zone"
                         ))
                         break  # Only count once
@@ -1437,7 +1644,7 @@ def calculate_confluence_score(
                     factors.append(ConfluenceFactor(
                         name="Nested Order Block",
                         score=100.0,
-                        weight=0.08,
+                        weight=get_w('nested_ob', 0.08),
                         rationale=f"{ltf_tf} {ltf_dir} OB nested inside {htf_tf} OB - stacked institutional structure"
                     ))
                     nested_found = True
@@ -1473,7 +1680,7 @@ def calculate_confluence_score(
                                 factors.append(ConfluenceFactor(
                                     name="Opposing Structure",
                                     score=penalty_score,
-                                    weight=0.08,
+                                    weight=get_w('opposing_structure', 0.08),
                                     rationale=f"Bearish {tf} OB {dist:.1f} ATR above - resistance threat"
                                 ))
                                 break  # Only count nearest opposing
@@ -1488,7 +1695,7 @@ def calculate_confluence_score(
                                 factors.append(ConfluenceFactor(
                                     name="Opposing Structure",
                                     score=penalty_score,
-                                    weight=0.08,
+                                    weight=get_w('opposing_structure', 0.08),
                                     rationale=f"Bullish {tf} OB {dist:.1f} ATR below - support threat"
                                 ))
                                 break  # Only count nearest opposing
@@ -1520,7 +1727,7 @@ def calculate_confluence_score(
                             factors.append(ConfluenceFactor(
                                 name="HTF Inflection Point",
                                 score=100.0,
-                                weight=0.15,  # High weight - can tip direction
+                                weight=get_w('htf_inflection', 0.15),
                                 rationale=f"At {ob_tf} support OB ({dist:.1f} ATR) - strong reversal zone for longs"
                             ))
                             break
@@ -1535,7 +1742,7 @@ def calculate_confluence_score(
                             factors.append(ConfluenceFactor(
                                 name="HTF Inflection Point",
                                 score=100.0,
-                                weight=0.15,  # High weight - can tip direction
+                                weight=get_w('htf_inflection', 0.15),
                                 rationale=f"At {ob_tf} resistance OB ({dist:.1f} ATR) - strong reversal zone for shorts"
                             ))
                             break
@@ -1585,7 +1792,7 @@ def calculate_confluence_score(
             factors.append(ConfluenceFactor(
                 name="Multi-TF Reversal",
                 score=score,
-                weight=0.12,
+                weight=get_w('multi_tf_reversal', 0.12),
                 rationale=f"{reversal_signals} reversal signals: {', '.join(reversal_reasons[:3])}"
             ))
     except Exception as e:
@@ -1609,7 +1816,7 @@ def calculate_confluence_score(
                     factors.append(ConfluenceFactor(
                         name="LTF Structure Shift",
                         score=75.0,
-                        weight=0.08,
+                        weight=get_w('ltf_structure_shift', 0.08),
                         rationale=f"{brk_tf} {brk_type} {brk_dir} - micro-reversal forming"
                     ))
                     break
