@@ -2164,28 +2164,29 @@ def _score_htf_structure_bias(swing_structure: dict, direction: str) -> dict:
         bias_strength = 0.0
     
     # Calculate directional bonus
+    # NOTE: direction is normalized to 'bullish' or 'bearish' (lowercase)
     bonus = 0.0
     reason_parts = []
     
     # Direction aligns with HTF bias → strong bonus
-    if (direction == 'LONG' and htf_bias == 'bullish'):
+    if (direction in ('long', 'bullish') and htf_bias == 'bullish'):
         # Bonus scales with strength: max +15 for full Weekly+Daily+4H alignment
         bonus = min(15.0, bias_strength * 3.5)
         reason_parts.append(f"HTF structure bullish ({', '.join(bullish_tfs)})")
         reason_parts.append("LONG aligns with HTF trend")
         
-    elif (direction == 'SHORT' and htf_bias == 'bearish'):
+    elif (direction in ('short', 'bearish') and htf_bias == 'bearish'):
         bonus = min(15.0, bias_strength * 3.5)
         reason_parts.append(f"HTF structure bearish ({', '.join(bearish_tfs)})")
         reason_parts.append("SHORT aligns with HTF trend")
         
     # Counter-trend setup → penalty (but not blocking)
-    elif (direction == 'LONG' and htf_bias == 'bearish'):
+    elif (direction in ('long', 'bullish') and htf_bias == 'bearish'):
         bonus = max(-8.0, -bias_strength * 2.0)
         reason_parts.append(f"HTF structure bearish ({', '.join(bearish_tfs)})")
         reason_parts.append("LONG is counter-trend (caution)")
         
-    elif (direction == 'SHORT' and htf_bias == 'bullish'):
+    elif (direction in ('short', 'bearish') and htf_bias == 'bullish'):
         bonus = max(-8.0, -bias_strength * 2.0)
         reason_parts.append(f"HTF structure bullish ({', '.join(bullish_tfs)})")
         reason_parts.append("SHORT is counter-trend (caution)")
