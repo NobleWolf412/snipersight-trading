@@ -152,21 +152,48 @@ class ConfluenceService:
                     logger.info("🔄 %s TIE (%.1f) broken by regime: LONG (bullish regime)",
                                context.symbol, bullish_breakdown.total_score)
                 else:
-                    # True neutral with tied scores - NO EDGE, skip this symbol
-                    # FIXED: Don't default to LONG, let the system skip if there's no clear direction
-                    logger.info("🔄 %s TIE (%.1f) with neutral regime: skipping (no directional edge)",
-                               context.symbol, bullish_breakdown.total_score)
+                    # True neutral with tied scores - MODE-AWARE behavior
+                    # Surgical/Precision: Can trade ranges (both directions valid)
+                    # Others: Skip (need clear directional edge for swing/intraday)
                     
-                    # Store the tie info for transparency
-                    context.metadata['chosen_direction'] = None
-                    context.metadata['alt_confluence'] = {
-                        'long': bullish_breakdown.total_score,
-                        'short': bearish_breakdown.total_score,
-                        'tie_break_used': 'skipped_no_edge'
-                    }
+                    current_profile = getattr(self._config, 'profile', 'balanced').lower() if self._config else 'balanced'
+                    is_scalp_mode = current_profile in ('precision', 'surgical')
+                    both_scores_high = bullish_breakdown.total_score >= 70 and bearish_breakdown.total_score >= 70
                     
-                    # Return None to indicate no valid setup - orchestrator will handle this
-                    raise ValueError(f"Confluence tie ({bullish_breakdown.total_score:.1f}) with neutral regime - no directional edge")
+                    if is_scalp_mode and both_scores_high:
+                        # RANGE_REVERSION: Both directions are valid for scalping
+                        # Return the slightly higher one, but store both as valid
+                        if bullish_breakdown.total_score >= bearish_breakdown.total_score:
+                            chosen = bullish_breakdown
+                            chosen_direction = 'LONG'
+                        else:
+                            chosen = bearish_breakdown
+                            chosen_direction = 'SHORT'
+                        
+                        tie_break_used = 'range_reversion'
+                        logger.info("🔄 %s RANGE_REVERSION: Both directions valid (LONG=%.1f, SHORT=%.1f) - %s mode",
+                                   context.symbol, bullish_breakdown.total_score, bearish_breakdown.total_score, current_profile)
+                        
+                        # Store range context for planner
+                        context.metadata['range_reversion'] = {
+                            'active': True,
+                            'long_score': bullish_breakdown.total_score,
+                            'short_score': bearish_breakdown.total_score,
+                            'archetype': 'RANGE_REVERSION'
+                        }
+                    else:
+                        # Non-scalp mode or low scores: Skip (no directional edge)
+                        logger.info("🔄 %s TIE (%.1f) with neutral regime: skipping (no directional edge)",
+                                   context.symbol, bullish_breakdown.total_score)
+                        
+                        context.metadata['chosen_direction'] = None
+                        context.metadata['alt_confluence'] = {
+                            'long': bullish_breakdown.total_score,
+                            'short': bearish_breakdown.total_score,
+                            'tie_break_used': 'skipped_no_edge'
+                        }
+                        
+                        raise ValueError(f"Confluence tie ({bullish_breakdown.total_score:.1f}) with neutral regime - no directional edge")
             
             # CRITICAL: Store chosen direction in context for downstream use
             context.metadata['chosen_direction'] = chosen_direction

@@ -31,6 +31,10 @@ class ScanConfig:
     max_risk_pct: float = 2.0
     leverage: int = 1  # Added: user-selected leverage to allow planner adaptive buffers/targets
     
+    # Regime detection assets - configurable for different exchanges
+    # Examples: Binance: ['BTC/USDT', 'ETH/USDT'], Coinbase: ['BTC-USD', 'ETH-USD']
+    regime_assets: Tuple[str, ...] = ('BTC/USDT', 'ETH/USDT', 'SOL/USDT')
+    
     # SMC detection preset: 'defaults', 'luxalgo_strict', or 'sensitive'
     smc_preset: str = "defaults"
     

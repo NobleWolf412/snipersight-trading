@@ -247,7 +247,10 @@ class Orchestrator:
         fetch_failures: List[str] = []
         
         # Ensure Regime Assets (BTC, ETH, SOL) are included for macro context
-        regime_assets = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']
+        # Configurable to support different exchange symbol formats (e.g., BTC-USD, WBTC/USDC)
+        default_regime_assets = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']
+        regime_assets = getattr(self.config, 'regime_assets', None) or default_regime_assets
+        
         symbols_to_fetch = list(symbols)
         for asset in regime_assets:
             if asset not in symbols_to_fetch:
@@ -414,6 +417,13 @@ class Orchestrator:
                 "policy_min_score": self.regime_policy.min_regime_score
             } if self.current_regime else None
         }
+        
+        # Log concise rejection summary (reduces individual log noise)
+        if rejected_count > 0:
+            reasons = rejection_summary["by_reason"]
+            reason_parts = [f"{k}={v}" for k, v in reasons.items() if v > 0]
+            logger.info("📊 Rejection summary: %d/%d rejected | %s",
+                       rejected_count, len(symbols), " | ".join(reason_parts))
         
         self._progress("COMPLETE", {
             "run_id": run_id,
@@ -645,7 +655,7 @@ class Orchestrator:
             pass
         
         if not context.multi_tf_data or not context.multi_tf_data.timeframes:
-            logger.info("%s [%s]: REJECTED - No market data available", symbol, trace_id)
+            logger.debug("%s [%s]: REJECTED - No market data available", symbol, trace_id)
             self.diagnostics['data_failures'].append({'symbol': symbol, 'trace_id': trace_id})
             return None, {
                 "symbol": symbol,
@@ -876,11 +886,18 @@ class Orchestrator:
         # Check quality gate
         if context.confluence_breakdown.total_score < self.config.min_confluence_score:
             top_factors_str = ' | '.join([f"{f.name}={f.score:.1f}" for f in context.confluence_breakdown.factors[:3]])
-            logger.info("%s [%s]: ❌ GATE FAIL (confluence) | Score=%.1f < %.1f | Top: %s", 
-                       symbol, trace_id,
-                       context.confluence_breakdown.total_score, 
-                       self.config.min_confluence_score,
-                       top_factors_str)
+            
+            # Smart logging: Only log close calls at INFO level to reduce noise
+            # Close call = score > 40 (could have passed with slight improvements)
+            is_close_call = context.confluence_breakdown.total_score > 40
+            log_fn = logger.info if is_close_call else logger.debug
+            
+            log_fn("%s [%s]: ❌ GATE FAIL (confluence) | Score=%.1f < %.1f | Top: %s%s", 
+                   symbol, trace_id,
+                   context.confluence_breakdown.total_score, 
+                   self.config.min_confluence_score,
+                   top_factors_str,
+                   " [CLOSE CALL]" if is_close_call else "")
             
             self.diagnostics['confluence_rejections'].append({
                 'symbol': symbol,
@@ -1027,7 +1044,7 @@ class Orchestrator:
                     "trace_id": trace_id
                 }
             else:
-                logger.info("%s [%s]: REJECTED - No trade plan generated", symbol, trace_id)
+                logger.debug("%s [%s]: REJECTED - No trade plan generated", symbol, trace_id)
                 # Use actual failure reason if available from planner
                 actual_reason = context.metadata.get('plan_failure_reason', 'Insufficient SMC patterns for entry/stop placement')
                 self.diagnostics['planner_rejections'].append({

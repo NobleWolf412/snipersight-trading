@@ -73,38 +73,47 @@ def _has_bos_confirmation(
     df: pd.DataFrame,
     candle_idx: int,
     direction: str,
-    lookback: int
+    lookback: int,
+    min_candles_after: int = 2
 ) -> bool:
     """
     Verify that displacement culminated in break of structure.
+    
+    IMPORTANT: Requires BOS to occur on a DIFFERENT candle than the OB formation.
+    This prevents whale spike false positives where a single candle triggers BOTH
+    the volume spike AND the BOS (e.g., stop hunt wicks that immediately reverse).
     
     Args:
         df: OHLCV DataFrame
         candle_idx: Index of the OB candle
         direction: 'bullish' or 'bearish'
         lookback: Candles to check before/after
+        min_candles_after: Minimum candles AFTER OB before BOS counts (default 2)
+                          This ensures the move "stuck" rather than immediately reversing.
         
     Returns:
-        bool: True if structure was broken
+        bool: True if structure was broken on a subsequent candle
     """
     prior_start = max(0, candle_idx - lookback)
+    # Start checking from min_candles_after to ensure BOS is not the same candle
+    future_start = candle_idx + min_candles_after
     future_end = min(len(df), candle_idx + 1 + lookback)
     
     prior_df = df.iloc[prior_start:candle_idx]
-    future_df = df.iloc[candle_idx + 1:future_end]
+    future_df = df.iloc[future_start:future_end]
     
-    if len(prior_df) < 3 or len(future_df) < 2:
+    if len(prior_df) < 3 or len(future_df) < 1:
         return False
     
     if direction == "bullish":
         # Get prior swing high
         prior_swing_high = prior_df['high'].max()
-        # Check if future candles broke it
+        # Check if future candles broke it (starting from min_candles_after)
         return any(future_df['high'] > prior_swing_high)
     else:
         # Get prior swing low
         prior_swing_low = prior_df['low'].min()
-        # Check if future candles broke it
+        # Check if future candles broke it (starting from min_candles_after)
         return any(future_df['low'] < prior_swing_low)
 
 

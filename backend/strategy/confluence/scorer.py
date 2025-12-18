@@ -2055,21 +2055,34 @@ def calculate_confluence_score(
     raw_score = weighted_score + synergy_bonus - conflict_penalty
     
     # ===========================================================================
-    # === DIMINISHING RETURNS CURVE ===
+    # === DIMINISHING RETURNS CURVE (Mode-Aware) ===
     # ===========================================================================
     # Prevent score inflation where "everything aligned" = 95%+
-    # After 75, additional points contribute at 50% strength.
-    # This creates separation between "good" (70-75) and "exceptional" (75-85)
-    # while preventing saturation above 85.
+    # After threshold, additional points contribute at 50% strength.
+    # 
+    # Mode-aware thresholds:
+    # - Overwatch/Swing: 80 (more selective, allow higher scores)
+    # - Surgical/Scalp: 70 (stricter, cap scores earlier)
+    # - Strike/Intraday: 75 (balanced)
     
-    DIMINISHING_THRESHOLD = 75.0
+    MODE_DIMINISHING_THRESHOLDS = {
+        'macro_surveillance': 80.0,  # Overwatch
+        'overwatch': 80.0,
+        'precision': 70.0,  # Surgical
+        'surgical': 70.0,
+        'intraday_aggressive': 75.0,  # Strike
+        'strike': 75.0,
+        'stealth_balanced': 75.0,  # Stealth
+    }
+    
+    DIMINISHING_THRESHOLD = MODE_DIMINISHING_THRESHOLDS.get(current_profile, 75.0)
     DIMINISHING_RATE = 0.5  # 50% credit above threshold
     
     if raw_score > DIMINISHING_THRESHOLD:
         excess = raw_score - DIMINISHING_THRESHOLD
         final_score = DIMINISHING_THRESHOLD + (excess * DIMINISHING_RATE)
-        logger.debug("📉 Diminishing returns applied: %.1f → %.1f (excess: %.1f)", 
-                    raw_score, final_score, excess)
+        logger.debug("📉 Diminishing returns applied: %.1f → %.1f (threshold: %.0f, mode: %s)", 
+                    raw_score, final_score, DIMINISHING_THRESHOLD, current_profile)
     else:
         final_score = raw_score
 

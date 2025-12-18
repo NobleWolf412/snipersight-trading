@@ -126,10 +126,21 @@ def _adjust_stop_for_leverage(
     leverage: int,
     is_bullish: bool,
     min_cushion_pct: float = 30.0,
-    mmr: float = 0.004
+    mmr: float = 0.004,
+    margin_type: str = 'isolated_linear'
 ) -> tuple[float, bool, dict]:
     """
     Adjust stop loss to ensure minimum cushion from liquidation price.
+    
+    ⚠️ IMPORTANT: This function assumes ISOLATED MARGIN on LINEAR (USDT-margined) contracts.
+    
+    The liquidation formula used:
+    - LONG:  liq_price = entry * (1 + mmr - 1/leverage)
+    - SHORT: liq_price = entry * (1 - mmr + 1/leverage)
+    
+    This is INCORRECT for:
+    - Cross Margin: Liquidation depends on total account equity, not just position
+    - Inverse/Coin-margined: Different formula involving contract value in coin terms
     
     For high leverage positions, the original structure-based stop may be
     too close to liquidation. This function tightens the stop if needed
@@ -142,12 +153,25 @@ def _adjust_stop_for_leverage(
         is_bullish: True for long, False for short
         min_cushion_pct: Minimum cushion percentage from liquidation (default 30%)
         mmr: Maintenance margin rate (default 0.4%)
+        margin_type: 'isolated_linear' (default), 'isolated_inverse', 'cross'
+                     Only 'isolated_linear' is currently supported.
         
     Returns:
         Tuple of (adjusted_stop, was_adjusted, adjustment_meta)
     """
     if leverage <= 1:
         return stop_level, False, {}
+    
+    # Warn if margin type is not supported
+    if margin_type != 'isolated_linear':
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "⚠️ Liquidation calculation assumes ISOLATED LINEAR margin. "
+            "For %s margin, the stop adjustment may be INCORRECT. "
+            "Manual verification recommended for leverage=%dx positions.",
+            margin_type, leverage
+        )
     
     entry = near_entry
     
