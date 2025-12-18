@@ -220,8 +220,8 @@ MODES: Dict[str, ScannerMode] = {
         primary_planning_timeframe="15m",
         max_pullback_atr=2.0,
         min_stop_atr=0.15,  # TUNED: was 0.25 - surgical needs tightest stops
-        max_stop_atr=5.0,   # TUNED: was 4.0 - allow HTF structure stops normalized to LTF ATR
-        entry_timeframes=("15m", "5m"),  # TUNED: added 15m - 5m-only was too restrictive
+        max_stop_atr=6.0,   # TUNED: was 5.0 - allow HTF structure stops (6 ATR cap with hard ceiling 2x)
+        entry_timeframes=("4h", "1h", "15m", "5m"),  # TUNED: added 4h/1h - allows HTF OB entries when no LTF OBs exist
         structure_timeframes=("4h", "1h", "15m"),  # Precision structure from 4h/1h/15m (added 4h for HTF awareness)
         stop_timeframes=("4h", "1h", "15m", "5m"),  # TUNED: added 4h for HTF structure stops
         target_timeframes=("4h", "1h", "15m"),  # TUNED: added 4h for major targets
@@ -232,8 +232,8 @@ MODES: Dict[str, ScannerMode] = {
         volume_accel_lookback=3,  # Shortest lookback - scalp/surgical needs fastest reaction to volume changes
         overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0008, "bias_gate": 0.7, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True, "entry_zone_offset_atr": 0.05},
         # NEW: Nested OB entry hierarchy
-        zone_timeframes=("5m",),  # Entry zone OBs (scalp precision)
-        entry_trigger_timeframes=("1m",),  # Refined entry OBs
+        zone_timeframes=("4h", "1h", "15m", "5m"),  # Entry zone OBs - includes HTF for institutional context
+        entry_trigger_timeframes=("5m", "1m"),  # Refined entry OBs
     ),
     # STEALTH replaces both RECON and GHOST (merged per SMC_PIPELINE_REFACTOR.md)
     # Use stealth_strict=False for balanced (was RECON), stealth_strict=True for higher conviction (was GHOST)

@@ -203,59 +203,65 @@ class SMCDetectionService:
         
         # 1. Filter LTF Order Blocks without HTF Backing (Fix #2)
         # Prevents "floating" 5m/15m OBs in empty space being used for signals
-        # Applies to Strike/Surgical modes where LTF OBs are enabled
-        ltf_tfs = {'1m', '5m', '15m'}
-        htf_tfs = {'1h', '1H', '4h', '4H', '1d', '1D', '1w', '1W'}
+        # SKIP for Surgical mode - precision entries can use isolated LTF OBs
+        # (confluence scoring will still penalize weak setups)
+        skip_htf_backing_filter = self._mode in ('surgical', 'precision')
         
-        # Build HTF zones index for fast lookup
-        htf_zones = []
-        for ob in all_order_blocks:
-            if ob.timeframe in htf_tfs:
-                # HTF OB Zone
-                htf_zones.append({
-                    'min': ob.low, 
-                    'max': ob.high, 
-                    'dir': ob.direction,
-                    'type': 'OB'
-                })
-        for fvg in all_fvgs:
-            if fvg.timeframe in htf_tfs:
-                # HTF FVG Zone
-                top = fvg.top
-                bottom = fvg.bottom
-                htf_zones.append({
-                    'min': min(top, bottom), 
-                    'max': max(top, bottom), 
-                    'dir': fvg.direction,
-                    'type': 'FVG'
-                })
-        
-        validated_obs = []
-        for ob in all_order_blocks:
-            # If it's an LTF OB, require backing
-            if ob.timeframe in ltf_tfs:
-                has_backing = False
-                for zone in htf_zones:
-                    # Must match direction (Bullish OB inside Bullish HTF Zone)
-                    if zone['dir'] == ob.direction:
-                        # Check for overlap (even partial)
-                        # Zone Min <= OB High AND Zone Max >= OB Low
-                        if (zone['min'] <= ob.high and zone['max'] >= ob.low):
-                            has_backing = True
-                            break
-                
-                if has_backing:
-                    validated_obs.append(ob)
+        if skip_htf_backing_filter:
+            logger.debug("⏭️ HTF backing filter SKIPPED for %s mode", self._mode)
+        else:
+            ltf_tfs = {'1m', '5m', '15m'}
+            htf_tfs = {'1h', '1H', '4h', '4H', '1d', '1D', '1w', '1W'}
+            
+            # Build HTF zones index for fast lookup
+            htf_zones = []
+            for ob in all_order_blocks:
+                if ob.timeframe in htf_tfs:
+                    # HTF OB Zone
+                    htf_zones.append({
+                        'min': ob.low, 
+                        'max': ob.high, 
+                        'dir': ob.direction,
+                        'type': 'OB'
+                    })
+            for fvg in all_fvgs:
+                if fvg.timeframe in htf_tfs:
+                    # HTF FVG Zone
+                    top = fvg.top
+                    bottom = fvg.bottom
+                    htf_zones.append({
+                        'min': min(top, bottom), 
+                        'max': max(top, bottom), 
+                        'dir': fvg.direction,
+                        'type': 'FVG'
+                    })
+            
+            validated_obs = []
+            for ob in all_order_blocks:
+                # If it's an LTF OB, require backing
+                if ob.timeframe in ltf_tfs:
+                    has_backing = False
+                    for zone in htf_zones:
+                        # Must match direction (Bullish OB inside Bullish HTF Zone)
+                        if zone['dir'] == ob.direction:
+                            # Check for overlap (even partial)
+                            # Zone Min <= OB High AND Zone Max >= OB Low
+                            if (zone['min'] <= ob.high and zone['max'] >= ob.low):
+                                has_backing = True
+                                break
+                    
+                    if has_backing:
+                        validated_obs.append(ob)
+                    else:
+                        # Log rejection debug (reduced noise)
+                        # logger.debug("Refined: Rejected isolated %s %s OB at %s (no HTF backing)", 
+                        #             ob.timeframe, ob.direction, ob.low)
+                        pass
                 else:
-                    # Log rejection debug (reduced noise)
-                    # logger.debug("Refined: Rejected isolated %s %s OB at %s (no HTF backing)", 
-                    #             ob.timeframe, ob.direction, ob.low)
-                    pass
-            else:
-                # HTF/MTF OBs pass through
-                validated_obs.append(ob)
-        
-        all_order_blocks = validated_obs
+                    # HTF/MTF OBs pass through
+                    validated_obs.append(ob)
+            
+            all_order_blocks = validated_obs
 
         # Deduplicate equal highs/lows
         unique_equal_highs = list(set(all_equal_highs))

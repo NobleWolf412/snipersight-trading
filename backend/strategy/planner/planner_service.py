@@ -800,7 +800,19 @@ def generate_trade_plan(
             # HTF structure stop - allow if within hard ceiling
             logger.info(f"Allowing HTF structure stop: {stop_loss.distance_atr:.2f} ATR > {max_stop_atr} but <= hard ceiling {hard_ceiling_atr}")
         else:
-            raise ValueError("Stop too wide relative to ATR")
+            # Calculate what leverage this setup would require
+            # At 10x, ~7% max stop. At 5x, ~15% max stop. At 3x, ~25% max stop.
+            stop_pct = (stop_loss.distance_atr * atr / current_price) * 100 if current_price > 0 else 0
+            suggested_lev = None
+            if stop_pct > 0:
+                # Rough calculation: leverage where stop wouldn't hit liquidation
+                # Liquidation at ~(100/leverage)%, we want 30% cushion
+                max_move_pct = stop_pct * 1.5  # With cushion
+                if max_move_pct > 0:
+                    suggested_lev = max(1, int(70 / max_move_pct))  # 70% of margin = safe stop
+            
+            lev_hint = f" (try {suggested_lev}x or lower)" if suggested_lev and leverage > 1 and suggested_lev < leverage else ""
+            raise ValueError(f"Stop too wide for {leverage}x leverage ({stop_loss.distance_atr:.1f} ATR, ~{stop_pct:.1f}% move){lev_hint}")
     if stop_loss.distance_atr < min_stop_atr:
         raise ValueError("Stop too tight relative to ATR")
     
@@ -1168,49 +1180,53 @@ def _calculate_entry_zone(
                     logger.debug(f"Filtered invalid bullish OB (broken or tapped): low={ob.low} high={ob.high} ts={ob.timestamp}")
             obs = validated
         
-        # NEW: Surgical Mode Gate (Grade A/B only)
-        # Precision modes reject weak (Grade C) signals
-        if config.profile in ('precision', 'surgical'):
-            obs = [ob for ob in obs if getattr(ob, 'grade', 'B') in ('A', 'B')]
-            logger.debug(f"Surgical Gate: Filtered to {len(obs)} Grade A/B bullish OBs")
+        # NOTE: Removed Grade A/B filter - confluence scoring already penalizes weak OBs.
+        # If a symbol passes the confluence gate (70%+), entry zone should be allowed.
+        # Double-filtering was blocking valid high-confluence setups with weaker individual OBs.
+        logger.debug(f"Bullish OBs for entry zone: {len(obs)} (all grades allowed, confluence handles quality)")
 
         # NEW: Validate LTF OBs have HTF backing (Top-Down Confirmation)
+        # SKIP for Surgical mode - precision entries can use isolated LTF OBs
+        # (confluence scoring will still penalize weak setups)
+        skip_htf_backing = config.profile in ('precision', 'surgical')
         
-        # NEW: Validate LTF OBs have HTF backing (Top-Down Confirmation)
-        # Prevent taking 5m/15m entries in empty space
-        validated_backing = []
-        ltf_tfs = ('1m', '5m', '15m')
-        htf_tfs = ('1h', '4h', '1d', '1w')
-        
-        for ob in obs:
-            if ob.timeframe in ltf_tfs:
-                # Check for overlapping HTF structure (OB or FVG)
-                has_backing = False
-                
-                # Check OBs
-                for htf_ob in smc_snapshot.order_blocks:
-                    if htf_ob.timeframe in htf_tfs and htf_ob.direction == "bullish":
-                        # Check overlap: LTF OB inside or touching HTF OB
-                        if (htf_ob.low <= ob.high and htf_ob.high >= ob.low):
-                            has_backing = True
-                            break
-                            
-                # Check FVGs if no OB backing
-                if not has_backing:
-                    for htf_fvg in smc_snapshot.fvgs:
-                         if htf_fvg.timeframe in htf_tfs and htf_fvg.direction == "bullish":
-                            if (htf_fvg.bottom <= ob.high and htf_fvg.top >= ob.low): # FVG bottom/top are low/high
+        if skip_htf_backing:
+            logger.debug("HTF backing filter SKIPPED for bullish OBs (%s mode)", config.profile)
+        else:
+            # Prevent taking 5m/15m entries in empty space
+            validated_backing = []
+            ltf_tfs = ('1m', '5m', '15m')
+            htf_tfs = ('1h', '4h', '1d', '1w')
+            
+            for ob in obs:
+                if ob.timeframe in ltf_tfs:
+                    # Check for overlapping HTF structure (OB or FVG)
+                    has_backing = False
+                    
+                    # Check OBs
+                    for htf_ob in smc_snapshot.order_blocks:
+                        if htf_ob.timeframe in htf_tfs and htf_ob.direction == "bullish":
+                            # Check overlap: LTF OB inside or touching HTF OB
+                            if (htf_ob.low <= ob.high and htf_ob.high >= ob.low):
                                 has_backing = True
                                 break
-                
-                if has_backing:
-                    validated_backing.append(ob)
+                                
+                    # Check FVGs if no OB backing
+                    if not has_backing:
+                        for htf_fvg in smc_snapshot.fvgs:
+                             if htf_fvg.timeframe in htf_tfs and htf_fvg.direction == "bullish":
+                                if (htf_fvg.bottom <= ob.high and htf_fvg.top >= ob.low): # FVG bottom/top are low/high
+                                    has_backing = True
+                                    break
+                    
+                    if has_backing:
+                        validated_backing.append(ob)
+                    else:
+                        logger.debug(f"Filtered isolated LTF OB (no HTF backing): {ob.timeframe} at {ob.low}")
                 else:
-                    logger.debug(f"Filtered isolated LTF OB (no HTF backing): {ob.timeframe} at {ob.low}")
-            else:
-                # MTF/HTF OBs are self-validating or handled by structure scoring
-                validated_backing.append(ob)
-        obs = validated_backing
+                    # MTF/HTF OBs are self-validating or handled by structure scoring
+                    validated_backing.append(ob)
+            obs = validated_backing
         
         # Prefer higher timeframe / freshness / displacement / low mitigation
         tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
@@ -1374,40 +1390,45 @@ def _calculate_entry_zone(
                     logger.debug(f"Filtered invalid bearish OB (broken or tapped): low={ob.low} high={ob.high} ts={ob.timestamp}")
             obs = validated_b
             
-        # NEW: Surgical Mode Gate (Grade A/B only)
-        if config.profile in ('precision', 'surgical'):
-            obs = [ob for ob in obs if getattr(ob, 'grade', 'B') in ('A', 'B')]
-            logger.debug(f"Surgical Gate: Filtered to {len(obs)} Grade A/B bearish OBs")
+        # NOTE: Removed Grade A/B filter - confluence scoring already penalizes weak OBs.
+        # If a symbol passes the confluence gate (70%+), entry zone should be allowed.
+        logger.debug(f"Bearish OBs for entry zone: {len(obs)} (all grades allowed, confluence handles quality)")
 
         # NEW: Validate LTF OBs have HTF backing (Top-Down Confirmation)
-        validated_backing = []
-        ltf_tfs = ('1m', '5m', '15m')
-        htf_tfs = ('1h', '4h', '1d', '1w')
+        # SKIP for Surgical mode - precision entries can use isolated LTF OBs
+        skip_htf_backing = config.profile in ('precision', 'surgical')
         
-        for ob in obs:
-            if ob.timeframe in ltf_tfs:
-                has_backing = False
-                # Check OBs
-                for htf_ob in smc_snapshot.order_blocks:
-                    if htf_ob.timeframe in htf_tfs and htf_ob.direction == "bearish":
-                        if (htf_ob.low <= ob.high and htf_ob.high >= ob.low):
-                            has_backing = True
-                            break
-                # Check FVGs
-                if not has_backing:
-                    for htf_fvg in smc_snapshot.fvgs:
-                         if htf_fvg.timeframe in htf_tfs and htf_fvg.direction == "bearish":
-                            if (htf_fvg.bottom <= ob.high and htf_fvg.top >= ob.low):
+        if skip_htf_backing:
+            logger.debug("HTF backing filter SKIPPED for bearish OBs (%s mode)", config.profile)
+        else:
+            validated_backing = []
+            ltf_tfs = ('1m', '5m', '15m')
+            htf_tfs = ('1h', '4h', '1d', '1w')
+            
+            for ob in obs:
+                if ob.timeframe in ltf_tfs:
+                    has_backing = False
+                    # Check OBs
+                    for htf_ob in smc_snapshot.order_blocks:
+                        if htf_ob.timeframe in htf_tfs and htf_ob.direction == "bearish":
+                            if (htf_ob.low <= ob.high and htf_ob.high >= ob.low):
                                 has_backing = True
                                 break
-                
-                if has_backing:
-                    validated_backing.append(ob)
+                    # Check FVGs
+                    if not has_backing:
+                        for htf_fvg in smc_snapshot.fvgs:
+                             if htf_fvg.timeframe in htf_tfs and htf_fvg.direction == "bearish":
+                                if (htf_fvg.bottom <= ob.high and htf_fvg.top >= ob.low):
+                                    has_backing = True
+                                    break
+                    
+                    if has_backing:
+                        validated_backing.append(ob)
+                    else:
+                        logger.debug(f"Filtered isolated LTF Bearish OB: {ob.timeframe} at {ob.high}")
                 else:
-                    logger.debug(f"Filtered isolated LTF Bearish OB: {ob.timeframe} at {ob.high}")
-            else:
-                validated_backing.append(ob)
-        obs = validated_backing
+                    validated_backing.append(ob)
+            obs = validated_backing
         tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
         def _ob_score_b(ob: OrderBlock) -> float:
             base_score = ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)

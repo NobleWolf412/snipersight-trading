@@ -298,6 +298,11 @@ class ScannerService:
             self._orchestrator.apply_mode(mode)
             self._orchestrator.config.min_confluence_score = effective_min
             self._orchestrator.config.macro_overlay_enabled = params["macro_overlay"]
+            # Inject leverage for proper stop validation
+            try:
+                setattr(self._orchestrator.config, 'leverage', params["leverage"])
+            except Exception:
+                pass
             self._orchestrator.exchange_adapter = current_adapter
             self._orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
             

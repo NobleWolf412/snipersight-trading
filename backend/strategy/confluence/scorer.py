@@ -1397,6 +1397,57 @@ def calculate_confluence_score(
     except Exception as e:
         logger.debug("Inside OB bonus failed: %s", e)
     
+    # --- NEW: Nested Order Block Bonus ---
+    # Extra confluence when LTF OB is nested inside HTF OB (same direction)
+    # This indicates stacked institutional demand/supply zones
+    try:
+        ltf_timeframes = {'5m', '15m'}
+        htf_timeframes = {'1h', '1H', '4h', '4H', '1d', '1D'}
+        
+        # Separate OBs by timeframe category
+        ltf_obs = [ob for ob in smc_snapshot.order_blocks if ob.timeframe.lower() in ltf_timeframes]
+        htf_obs = [ob for ob in smc_snapshot.order_blocks if ob.timeframe.lower().replace('h', 'h').replace('d', 'd') in htf_timeframes or ob.timeframe in htf_timeframes]
+        
+        nested_found = False
+        for ltf_ob in ltf_obs:
+            ltf_dir = getattr(ltf_ob, 'direction', None)
+            ltf_low = getattr(ltf_ob, 'low', 0)
+            ltf_high = getattr(ltf_ob, 'high', 0)
+            ltf_tf = getattr(ltf_ob, 'timeframe', 'unknown')
+            
+            # Check if this LTF OB aligns with trade direction
+            if not ((direction in ('bullish', 'long') and ltf_dir == 'bullish') or \
+                    (direction in ('bearish', 'short') and ltf_dir == 'bearish')):
+                continue
+            
+            # Find an HTF OB that contains/overlaps this LTF OB (same direction)
+            for htf_ob in htf_obs:
+                htf_dir = getattr(htf_ob, 'direction', None)
+                htf_low = getattr(htf_ob, 'low', 0)
+                htf_high = getattr(htf_ob, 'high', 0)
+                htf_tf = getattr(htf_ob, 'timeframe', 'unknown')
+                
+                # Same direction required
+                if htf_dir != ltf_dir:
+                    continue
+                
+                # Check overlap: LTF OB must be at least partially inside HTF OB
+                # Overlap = (LTF low <= HTF high) AND (LTF high >= HTF low)
+                if ltf_low <= htf_high and ltf_high >= htf_low:
+                    factors.append(ConfluenceFactor(
+                        name="Nested Order Block",
+                        score=100.0,
+                        weight=0.08,
+                        rationale=f"{ltf_tf} {ltf_dir} OB nested inside {htf_tf} OB - stacked institutional structure"
+                    ))
+                    nested_found = True
+                    break
+            
+            if nested_found:
+                break  # Only count once
+    except Exception as e:
+        logger.debug("Nested OB bonus failed: %s", e)
+    
     # --- NEW: Opposing Structure Penalty ---
     # Penalty when opposing OB/FVG is near the entry (immediate resistance/support)
     try:
