@@ -112,6 +112,12 @@ class IndicatorSnapshot:
     macd_signal_series: Optional[list] = None
     macd_histogram_series: Optional[list] = None
     
+    # ADX (Average Directional Index) - Trend Strength
+    adx: Optional[float] = None  # Trend strength 0-100 (>25 = trending, >50 = strong trend)
+    adx_plus_di: Optional[float] = None  # Plus Directional Indicator (+DI)
+    adx_minus_di: Optional[float] = None  # Minus Directional Indicator (-DI)
+    atr_series: Optional[list] = None  # ATR history for slope analysis
+    
     def __post_init__(self):
         """Validate indicator ranges."""
         # RSI should be 0-100

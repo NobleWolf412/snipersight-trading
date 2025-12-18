@@ -244,6 +244,106 @@ def compute_mfi(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return mfi
 
 
+def compute_adx(
+    df: pd.DataFrame,
+    period: int = 14,
+    smooth_period: int = 14
+) -> Tuple[float, float, float]:
+    """
+    Compute ADX (Average Directional Index) for trend strength detection.
+    
+    ADX measures trend strength (0-100):
+    - 0-20: Weak/No trend (range-bound market)
+    - 20-40: Developing trend
+    - 40-60: Strong trend
+    - 60+: Very strong trend
+    
+    Args:
+        df: DataFrame with 'high', 'low', 'close' columns
+        period: ADX period (default 14)
+        smooth_period: Signal smoothing period (default 14)
+        
+    Returns:
+        Tuple[float, float, float]: (ADX, +DI, -DI) - latest values only
+                                    Returns (None, None, None) if calculation fails
+    """
+    required_cols = ['high', 'low', 'close']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        logger.warning(f"ADX: Missing columns {missing_cols}")
+        return None, None, None
+    
+    min_len = period * 2 + smooth_period
+    if len(df) < min_len:
+        logger.debug(f"ADX: Not enough data (need {min_len} rows, got {len(df)})")
+        return None, None, None
+    
+    # Use pandas-ta if available
+    if PANDAS_TA_AVAILABLE:
+        try:
+            adx_df = ta.adx(df['high'], df['low'], df['close'], length=period, lensig=smooth_period)
+            if adx_df is not None and not adx_df.empty:
+                # pandas-ta column naming: ADX_14, DMP_14, DMN_14
+                adx_col = f"ADX_{period}"
+                dmp_col = f"DMP_{period}"
+                dmn_col = f"DMN_{period}"
+                
+                if all(col in adx_df.columns for col in [adx_col, dmp_col, dmn_col]):
+                    adx_val = adx_df[adx_col].iloc[-1]
+                    plus_di = adx_df[dmp_col].iloc[-1]
+                    minus_di = adx_df[dmn_col].iloc[-1]
+                    
+                    # Handle NaN values
+                    if pd.notna(adx_val):
+                        return float(adx_val), float(plus_di) if pd.notna(plus_di) else None, float(minus_di) if pd.notna(minus_di) else None
+        except Exception as e:
+            logger.debug(f"pandas-ta ADX failed: {e}, using fallback")
+    
+    # Fallback: Manual Wilder's Smoothing implementation
+    try:
+        high = df['high']
+        low = df['low']
+        close = df['close']
+        
+        # True Range
+        tr1 = high - low
+        tr2 = abs(high - close.shift(1))
+        tr3 = abs(low - close.shift(1))
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        
+        # Directional Movement
+        plus_dm = high.diff()
+        minus_dm = -low.diff()
+        
+        # Positive DM only when it's larger and positive
+        plus_dm = plus_dm.where((plus_dm > minus_dm) & (plus_dm > 0), 0)
+        # Negative DM only when it's larger and positive  
+        minus_dm = minus_dm.where((minus_dm > plus_dm) & (minus_dm > 0), 0)
+        
+        # Wilder's Smoothing (similar to EMA with alpha = 1/period)
+        atr = tr.ewm(span=period, adjust=False).mean()
+        plus_dm_smooth = plus_dm.ewm(span=period, adjust=False).mean()
+        minus_dm_smooth = minus_dm.ewm(span=period, adjust=False).mean()
+        
+        # Directional Indicators
+        plus_di = 100 * (plus_dm_smooth / atr)
+        minus_di = 100 * (minus_dm_smooth / atr)
+        
+        # DX (Directional Index)
+        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+        dx = dx.replace([np.inf, -np.inf], 0).fillna(0)
+        
+        # ADX (Average DX)
+        adx = dx.ewm(span=smooth_period, adjust=False).mean()
+        
+        # Return latest values
+        return float(adx.iloc[-1]), float(plus_di.iloc[-1]), float(minus_di.iloc[-1])
+        
+    except Exception as e:
+        logger.warning(f"ADX manual calculation failed: {e}")
+        return None, None, None
+
+
 def validate_momentum_indicators(df: pd.DataFrame) -> dict:
     """
     Validate momentum indicators for debugging purposes.

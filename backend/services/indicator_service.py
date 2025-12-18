@@ -24,6 +24,7 @@ from backend.indicators.momentum import (
     compute_stoch_rsi,
     compute_mfi,
     compute_macd,
+    compute_adx,
 )
 
 # Volatility indicators
@@ -123,6 +124,9 @@ class IndicatorService:
         
         macd_line, macd_signal, macd_hist = self._safe_compute_macd(df, timeframe)
         
+        # ADX for trend strength detection
+        adx_val, adx_plus_di, adx_minus_di = self._safe_compute_adx(df, timeframe)
+        
         # Volatility indicators
         atr = compute_atr(df)
         bb_upper, bb_middle, bb_lower = compute_bollinger_bands(df)
@@ -217,6 +221,11 @@ class IndicatorService:
             volume_is_accelerating=vol_accel_data['is_accelerating'] if vol_accel_data else None,
             volume_accel_direction=vol_accel_data['direction'] if vol_accel_data else None,
             volume_exhaustion=vol_accel_data['exhaustion'] if vol_accel_data else None,
+            # ADX - Trend Strength
+            adx=adx_val,
+            adx_plus_di=adx_plus_di,
+            adx_minus_di=adx_minus_di,
+            atr_series=atr.iloc[-10:].tolist() if len(atr) >= 10 else atr.tolist(),
         )
         
         # Attach MACD values if available
@@ -230,6 +239,14 @@ class IndicatorService:
             return compute_macd(df)
         except Exception as e:
             logger.debug("MACD computation failed for %s: %s", timeframe, e)
+            return None, None, None
+    
+    def _safe_compute_adx(self, df: pd.DataFrame, timeframe: str):
+        """Safely compute ADX with error handling."""
+        try:
+            return compute_adx(df)
+        except Exception as e:
+            logger.debug("ADX computation failed for %s: %s", timeframe, e)
             return None, None, None
     
     def _safe_compute_realized_volatility(self, df: pd.DataFrame, timeframe: str):

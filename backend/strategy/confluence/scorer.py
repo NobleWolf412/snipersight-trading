@@ -418,124 +418,195 @@ def evaluate_htf_momentum_gate(
     direction: str,
     mode_config: ScanConfig,
     swing_structure: Optional[Dict] = None,
-    reversal_context: Optional[dict] = None
+    reversal_context: Optional[dict] = None  # Kept for API compatibility
 ) -> Dict:
     """
-    HTF Momentum Gate - blocks counter-trend trades during strong HTF momentum.
+    UNIVERSAL MOMENTUM GATE (FINAL).
     
-    If HTF is in strong momentum AGAINST trade direction, apply veto or heavy penalty.
-    EXCEPTION: If a valid Reversal Setup is detected, allow the trade (fade the momentum).
+    A unified gate that handles Scalp, Intraday, and Swing logic correctly.
+    
+    Improvements over basic version:
+    1. "Elastic" Timeframes: Checks the *driver* timeframe (e.g. 15m -> 4H), not just the macro.
+    2. Mode-Aware Risk: 
+       - Surgical/Strike: Allows fading standard extensions (RSI 70+).
+       - Overwatch: Requires EXTREME extensions (RSI 80+) to fade.
+    3. Climax Logic: Distinguishes between "Strong Trend" (Block Fades) and "Parabolic" (Allow Fades).
     """
-    primary_tf = getattr(mode_config, 'primary_planning_timeframe', '1h')
-    structure_tfs = getattr(mode_config, 'structure_timeframes', ('4h', '1d'))
     
-    htf = max(structure_tfs, key=lambda x: {'5m': 0, '15m': 1, '1h': 2, '4h': 3, '1d': 4, '1w': 5}.get(x, 0))
-    htf_ind = indicators.by_timeframe.get(htf)
+    # 1. MODE IDENTIFICATION & SETTINGS
+    profile = getattr(mode_config, 'profile', 'balanced')
+    mode_name = getattr(mode_config, 'name', 'stealth').lower()
     
-    if not htf_ind:
+    # Defaults
+    momentum_tf = '4h'
+    fade_threshold_rsi = 75.0  # Standard extension
+    
+    # Configure per Mode
+    if mode_name == 'overwatch' or profile == 'macro_surveillance':
+        # SWING: Look at Daily. Hard to turn. Needs extreme evidence.
+        momentum_tf = '1d'
+        fade_threshold_rsi = 80.0  # RSI > 80 required to fade
+    
+    elif mode_name == 'stealth' or profile == 'stealth_balanced':
+        # BALANCED: Look at 4H.
+        momentum_tf = '4h'
+        fade_threshold_rsi = 75.0
+        
+    elif mode_name in ['surgical', 'strike'] or profile in ('precision', 'intraday_aggressive'):
+        # SCALP: Look at 1H/4H. Quick turns allowed.
+        momentum_tf = '1h'
+        fade_threshold_rsi = 70.0  # RSI > 70 is enough for a scalp fade
+        
+    # 2. GET DATA
+    # Elastic fallback if specific TF is missing
+    if momentum_tf not in indicators.by_timeframe:
+        available = sorted(
+            list(indicators.by_timeframe.keys()), 
+            key=lambda x: {'1m': 1, '5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440, '1w': 10080}.get(x, 0)
+        )
+        momentum_tf = available[-1] if available else None
+
+    ind = indicators.by_timeframe.get(momentum_tf)
+    if not ind:
         return {
-            'allowed': True,
-            'score_adjustment': 0.0,
+            'allowed': True, 
+            'score_adjustment': 0.0, 
             'htf_momentum': 'unknown',
             'htf_trend': 'unknown',
-            'reason': f'No {htf} indicators available'
+            'reason': 'No indicator data available'
         }
-    
-    # Detect HTF trend from swing structure
-    htf_trend = 'neutral'
-    if swing_structure and htf in swing_structure:
-        ss = swing_structure[htf]
-        htf_trend = ss.get('trend', 'neutral')
-    
-    # Detect momentum strength from ATR expansion
-    atr = htf_ind.atr
-    atr_series = getattr(htf_ind, 'atr_series', [])
-    
-    momentum_strength = 'normal'
-    if atr and len(atr_series) >= 10:
-        recent_atr = atr_series[-10:]
-        atr_expanding = sum(1 for i in range(1, len(recent_atr)) if recent_atr[i] > recent_atr[i-1])
-        
-        if atr_expanding >= 7:
-            momentum_strength = 'strong'
-        elif atr_expanding >= 5:
-            momentum_strength = 'building'
-        elif atr_expanding <= 3:
-            momentum_strength = 'calm'
-    
-    # Check volume confirmation
-    volume_strong = False
-    if hasattr(htf_ind, 'relative_volume'):
-        rel_vol = htf_ind.relative_volume
-        if rel_vol and rel_vol > 1.3:
-            volume_strong = True
-    
-    is_bullish_trade = direction.lower() in ('bullish', 'long')
-    htf_is_bullish = htf_trend == 'bullish'
-    htf_is_bearish = htf_trend == 'bearish'
-    
-    # Case 1: Strong momentum AGAINST trade direction
-    if momentum_strength in ('strong', 'building'):
-        # Normalize comparison
-        is_counter_trend = (is_bullish_trade and htf_is_bearish) or (not is_bullish_trade and htf_is_bullish)
-        
-        if is_counter_trend:
-            # CHECK EXCEPTION: Is this a Reversal Setup?
-            # Reversal setups rely on fading strong momentum at key levels
-            if reversal_context and getattr(reversal_context, 'is_reversal_setup', False):
-                # Ensure reversal matches our trade direction
-                rev_dir = getattr(reversal_context, 'direction', '').lower()
-                trade_dir = direction.lower()
-                if (trade_dir in ('long', 'bullish') and rev_dir in ('long', 'bullish')) or \
-                   (trade_dir in ('short', 'bearish') and rev_dir in ('short', 'bearish')):
-                    
-                    return {
-                        'allowed': True,
-                        'score_adjustment': 0.0, # Neutralize penalty
-                        'htf_momentum': momentum_strength,
-                        'htf_trend': htf_trend,
-                        'reason': f"Momentum Gate overridden by Reversal Setup (Fading {htf_trend} momentum)"
-                    }
 
-            # Standard Logic: Block counter-trend
-            penalty = -50.0 if volume_strong else -35.0
-            block_reason = f"{htf} in strong {'bearish' if htf_is_bearish else 'bullish'} momentum (blocking {direction})"
+    # 3. ANALYZE MOMENTUM
+    adx = getattr(ind, 'adx', None)
+    rsi = getattr(ind, 'rsi', 50.0)
+    
+    # Determine Trend Strength (0-100)
+    momentum_state = "neutral"
+    
+    if adx is not None:
+        if adx > 50: 
+            momentum_state = "extreme"
+        elif adx > 30: 
+            momentum_state = "strong"
+        elif adx > 20: 
+            momentum_state = "building"
+        else: 
+            momentum_state = "weak"
+    else:
+        # Fallback to ATR Slope
+        atr_series = getattr(ind, 'atr_series', [])
+        if len(atr_series) >= 5:
+            slope = (atr_series[-1] - atr_series[0]) / atr_series[0] if atr_series[0] > 0 else 0
+            if slope > 0.10: 
+                momentum_state = "strong"
+            elif slope > 0.02: 
+                momentum_state = "building"
+            
+    # 4. ALIGNMENT CHECK
+    htf_trend_dir = "neutral"
+    if swing_structure and momentum_tf in swing_structure:
+        htf_trend_dir = swing_structure[momentum_tf].get('trend', 'neutral')
+    # Also check uppercase version for compatibility
+    if htf_trend_dir == "neutral" and swing_structure and momentum_tf.upper() in swing_structure:
+        htf_trend_dir = swing_structure[momentum_tf.upper()].get('trend', 'neutral')
+
+    is_long = direction.lower() in ('bullish', 'long')
+    
+    # Define alignment
+    is_aligned = (is_long and htf_trend_dir == 'bullish') or (not is_long and htf_trend_dir == 'bearish')
+    is_opposed = (is_long and htf_trend_dir == 'bearish') or (not is_long and htf_trend_dir == 'bullish')
+
+    # === LOGIC BRANCHES ===
+
+    # A. TREND FOLLOWING (Aligned)
+    if is_aligned:
+        # Overwatch/Trend modes love strong momentum
+        if momentum_state in ['strong', 'extreme']:
+            bonus = 20.0 if mode_name == 'overwatch' else 15.0
+            return {
+                'allowed': True,
+                'score_adjustment': bonus,
+                'htf_momentum': momentum_state,
+                'htf_trend': htf_trend_dir,
+                'reason': f"Perfect alignment with strong {momentum_tf} momentum"
+            }
+        elif momentum_state == 'building':
+            return {
+                'allowed': True,
+                'score_adjustment': 10.0,
+                'htf_momentum': momentum_state,
+                'htf_trend': htf_trend_dir,
+                'reason': f"{momentum_tf} momentum building in direction"
+            }
+        else:
+            return {
+                'allowed': True, 
+                'score_adjustment': 0.0, 
+                'htf_momentum': momentum_state, 
+                'htf_trend': htf_trend_dir,
+                'reason': f"Aligned with {htf_trend_dir} {momentum_tf} trend"
+            }
+
+    # B. COUNTER-TREND (Opposed)
+    if is_opposed:
+        # 1. Check for CLIMAX (The only valid reason to fade a strong trend)
+        is_climax = False
+        current_rsi = rsi if rsi else 50.0
+        
+        if is_long:  # Trying to catch a bottom
+            # Oversold condition
+            threshold = 100.0 - fade_threshold_rsi  # e.g., 30 or 20
+            if current_rsi < threshold:
+                is_climax = True
+        else:  # Trying to catch a top
+            # Overbought condition
+            if current_rsi > fade_threshold_rsi:
+                is_climax = True
+        
+        # 2. Decision Time
+        if is_climax:
+            # ALLOW the fade, specifically because it's overextended
+            # Bonus usually higher for Scalp modes (they thrive on this)
+            climax_bonus = 10.0 if mode_name in ['surgical', 'strike'] else 5.0
+            
+            return {
+                'allowed': True,
+                'score_adjustment': climax_bonus,
+                'htf_momentum': momentum_state,
+                'htf_trend': htf_trend_dir,
+                'reason': f"CLIMAX DETECTED: {momentum_tf} RSI {current_rsi:.1f} allows counter-trend fade"
+            }
+            
+        elif momentum_state in ['strong', 'extreme', 'building']:
+            # BLOCK the fade. Trend is strong and NOT overextended.
+            # This is the "Suicide Prevention" block.
+            penalty = -100.0 if mode_name == 'overwatch' else -40.0
             
             return {
                 'allowed': False,
                 'score_adjustment': penalty,
-                'htf_momentum': momentum_strength,
-                'htf_trend': htf_trend,
-                'reason': block_reason
+                'htf_momentum': momentum_state,
+                'htf_trend': htf_trend_dir,
+                'reason': f"BLOCKED: Fighting strong {momentum_tf} trend without climax (RSI {current_rsi:.1f})"
             }
-    
-    # Case 2: Calm/ranging HTF - allow counter-trend
-    if momentum_strength == 'calm' or htf_trend == 'neutral':
-        return {
-            'allowed': True,
-            'score_adjustment': 0.0,
-            'htf_momentum': momentum_strength,
-            'htf_trend': htf_trend,
-            'reason': f"{htf} {htf_trend} with {momentum_strength} momentum"
-        }
-    
-    # Case 3: Momentum WITH trade direction - bonus
-    if (is_bullish_trade and htf_is_bullish) or (not is_bullish_trade and htf_is_bearish):
-        bonus = 10.0 if momentum_strength == 'strong' else 5.0
-        return {
-            'allowed': True,
-            'score_adjustment': bonus,
-            'htf_momentum': momentum_strength,
-            'htf_trend': htf_trend,
-            'reason': f"{htf} momentum supports {direction}"
-        }
-    
+            
+        else:
+            # Trend is weak/neutral. Counter-trading allowed but risky.
+            return {
+                'allowed': True,
+                'score_adjustment': -5.0,  # Small penalty for counter-trend
+                'htf_momentum': momentum_state,
+                'htf_trend': htf_trend_dir,
+                'reason': f"Counter-trend allowed (weak {momentum_tf} momentum)"
+            }
+
+    # C. NEUTRAL/CHOP
     return {
         'allowed': True,
         'score_adjustment': 0.0,
-        'htf_momentum': momentum_strength,
-        'htf_trend': htf_trend,
-        'reason': f"{htf} {htf_trend} with {momentum_strength} momentum"
+        'htf_momentum': momentum_state,
+        'htf_trend': htf_trend_dir,
+        'reason': f"{momentum_tf} context neutral"
     }
 
 
