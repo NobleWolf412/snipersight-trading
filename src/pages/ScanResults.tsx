@@ -18,6 +18,11 @@ import { RejectionSummary } from '@/components/RejectionSummary';
 import { RegimeIndicator } from '@/components/RegimeIndicator';
 import { ConvictionBadge } from '@/components/ConvictionBadge';
 import { ReversalBadge } from '@/components/ReversalBadge';
+import { ExecutiveSummary } from '@/components/ExecutiveSummary';
+import { TierBadge } from '@/components/TierBadge';
+import { WhySignalsPassed } from '@/components/WhySignalsPassed';
+import { WarningsContext } from '@/components/WarningsContext';
+import { Recommendations } from '@/components/Recommendations';
 import { api } from '@/utils/api';
 import type { RegimeMetadata, TrendRegime, VolatilityRegime, LiquidityRegime } from '@/types/regime';
 
@@ -263,6 +268,32 @@ export function ScanResults() {
           <LiveTicker symbols={sortedResults.slice(0, 6).map(r => r.pair)} />
         </div>
 
+        {/* Executive Summary - NEW */}
+        <ExecutiveSummary
+          results={results}
+          rejections={rejectionStats}
+          metadata={scanMetadata}
+        />
+
+        {/* Why These Signals Passed */}
+        <WhySignalsPassed
+          results={results}
+          metadata={scanMetadata}
+        />
+
+        {/* Warnings & Context */}
+        <WarningsContext
+          results={results}
+          metadata={scanMetadata}
+        />
+
+        {/* Recommendations */}
+        <Recommendations
+          results={results}
+          rejections={rejectionStats}
+          metadata={scanMetadata}
+        />
+
         {scanMetadata && (
           <Card className="bg-accent/5 border-accent/30 card-3d overflow-hidden">
             <CardHeader
@@ -352,6 +383,7 @@ export function ScanResults() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-border/40 hover:bg-accent/5">
+                      <TableHead className="heading-hud text-xs">TIER</TableHead>
                       <TableHead className="heading-hud text-xs">PAIR</TableHead>
                       <TableHead className="heading-hud text-xs">LIVE PRICE</TableHead>
                       <TableHead className="heading-hud text-xs" title="Expected Value in R-multiples: EV = p(win) × R − (1 − p(win))">EV</TableHead>
@@ -371,6 +403,9 @@ export function ScanResults() {
                         className="border-border/40 hover:bg-accent/5 transition-colors"
                         style={{ animationDelay: `${index * 50}ms` }}
                       >
+                        <TableCell>
+                          <TierBadge confidenceScore={result.confidenceScore} />
+                        </TableCell>
                         <TableCell className="font-bold text-accent">{result.pair}</TableCell>
                         <TableCell>
                           <PriceDisplay symbol={result.pair} size="sm" />
