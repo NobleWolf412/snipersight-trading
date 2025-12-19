@@ -193,6 +193,22 @@ function getModeStyle(modeName: string) {
       bgClass: 'bg-cyan-600/45',
       textEffect: 'drop-shadow-[0_0_8px_rgba(101,186,195,0.5)]',
     },
+    strike: {
+      icon: Lightning,
+      color: 'text-amber-300',
+      glowClass: 'bg-amber-500/30',
+      borderClass: 'ring-amber-400/60',
+      bgClass: 'bg-amber-600/40',
+      textEffect: 'drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]',
+    },
+    surgical: {
+      icon: Crosshair,
+      color: 'text-purple-300',
+      glowClass: 'bg-purple-500/30',
+      borderClass: 'ring-purple-400/60',
+      bgClass: 'bg-purple-600/40',
+      textEffect: 'drop-shadow-[0_0_8px_rgba(168,85,247,0.5)]',
+    },
     stealth: {
       icon: Skull,
       color: 'text-violet-300',
