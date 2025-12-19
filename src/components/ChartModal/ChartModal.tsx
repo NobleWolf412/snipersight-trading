@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { ScanResult } from '@/utils/mockData';
 import { IntelDeck } from './IntelDeck';
 import { ChartAnalysis } from './ChartAnalysis';
-// import { TradingViewChart } from './TradingViewChart'; // Assuming this exists or using placeholder
+import { TradingViewChart } from './TradingViewChart'; // Assuming this exists or using placeholder
 
 interface ChartModalProps {
   isOpen: boolean;
@@ -52,14 +52,7 @@ export function ChartModal({ isOpen, onClose, result }: ChartModalProps) {
               </div>
 
               <TabsContent value="chart" className="flex-1 h-full m-0 p-0 outline-none relative">
-                {/* Placeholder for TradingView Chart - In production this would be the actual Chart component */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground/30 pointer-events-none">
-                  <svg className="w-24 h-24 mb-4 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-                  </svg>
-                  <span className="text-sm uppercase tracking-widest font-semibold opacity-50">TradingView Chart Integration</span>
-                </div>
-                {/* <TradingViewChart result={result} /> */}
+                <TradingViewChart result={result} />
               </TabsContent>
 
               <TabsContent value="report" className="flex-1 h-full m-0 p-0 bg-background overflow-y-auto">

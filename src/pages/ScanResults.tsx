@@ -8,7 +8,7 @@ import type { ScanResult } from '@/utils/mockData';
 
 import { useState, useEffect } from 'react';
 import { ChartModal } from '@/components/ChartModal/ChartModal';
-import { DetailsModal } from '@/components/DetailsModal/DetailsModal';
+import { ChartModal } from '@/components/ChartModal/ChartModal';
 import { LiveTicker } from '@/components/LiveTicker';
 import { PriceDisplay } from '@/components/PriceDisplay';
 import { PageHeader } from '@/components/layout/PageLayout';
@@ -37,7 +37,7 @@ export function ScanResults() {
   const [rejectionStats, setRejectionStats] = useState<any>(null);
   const [selectedResult, setSelectedResult] = useState<ScanResult | null>(null);
   const [isChartModalOpen, setIsChartModalOpen] = useState(false);
-  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isChartModalOpen, setIsChartModalOpen] = useState(false);
   const [showMetadata, setShowMetadata] = useState(false);
   const [showResults, setShowResults] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -196,10 +196,7 @@ export function ScanResults() {
     setIsChartModalOpen(true);
   };
 
-  const handleViewDetails = (result: ScanResult) => {
-    setSelectedResult(result);
-    setIsDetailsModalOpen(true);
-  };
+
 
   const handleOpenCompare = () => {
     if (selectedForCompare.length < 2) return;
@@ -631,11 +628,7 @@ export function ScanResults() {
               onClose={() => setIsChartModalOpen(false)}
               result={selectedResult}
             />
-            <DetailsModal
-              isOpen={isDetailsModalOpen}
-              onClose={() => setIsDetailsModalOpen(false)}
-              result={selectedResult}
-            />
+
           </>
         )}
 

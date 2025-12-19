@@ -193,38 +193,6 @@ function getModeStyle(modeName: string) {
       bgClass: 'bg-cyan-600/45',
       textEffect: 'drop-shadow-[0_0_8px_rgba(101,186,195,0.5)]',
     },
-    recon: {
-      icon: Eye,
-      color: 'text-primary',
-      glowClass: 'bg-primary/30',
-      borderClass: 'ring-emerald-300/60',
-      bgClass: 'bg-emerald-600/45',
-      textEffect: 'drop-shadow-[0_0_8px_rgba(114,195,132,0.5)]',
-    },
-    strike: {
-      icon: Lightning,
-      color: 'text-warning',
-      glowClass: 'bg-warning/30',
-      borderClass: 'ring-amber-300/60',
-      bgClass: 'bg-amber-600/50',
-      textEffect: 'drop-shadow-[0_0_10px_rgba(224,186,90,0.6)]',
-    },
-    surgical: {
-      icon: Crosshair,
-      color: 'text-success',
-      glowClass: 'bg-success/30',
-      borderClass: 'ring-green-300/60',
-      bgClass: 'bg-green-600/45',
-      textEffect: 'drop-shadow-[0_0_8px_rgba(114,195,132,0.5)] tracking-widest',
-    },
-    ghost: {
-      icon: Skull,
-      color: 'text-muted-foreground',
-      glowClass: 'bg-muted/30',
-      borderClass: 'ring-cyan-400/60',
-      bgClass: 'bg-cyan-700/35',
-      textEffect: 'drop-shadow-[0_0_6px_rgba(200,200,200,0.3)] opacity-80',
-    },
     stealth: {
       icon: Skull,
       color: 'text-violet-300',
@@ -235,5 +203,5 @@ function getModeStyle(modeName: string) {
     },
   };
 
-  return styles[modeName.toLowerCase()] || styles.recon;
+  return styles[modeName.toLowerCase()] || styles.overwatch;
 }

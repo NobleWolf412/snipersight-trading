@@ -58,7 +58,7 @@ export function Recommendations({ results, rejections, metadata }: Recommendatio
         recommendations.push({
             priority: 'consider',
             title: 'Consider Lowering Threshold',
-            description: `Only ${passRate.toFixed(0)}% pass rate. Switch to RECON or STRIKE mode for more signals.`,
+            description: `Only ${passRate.toFixed(0)}% pass rate. Switch to STEALTH or STRIKE mode for more signals.`,
             icon: <ChartLine size={18} className="text-warning" />
         });
     }
@@ -157,10 +157,10 @@ export function Recommendations({ results, rejections, metadata }: Recommendatio
                                 <div
                                     key={idx}
                                     className={`p-3 rounded-lg border flex items-start gap-3 ${rec.priority === 'action'
-                                            ? 'bg-success/10 border-success/30'
-                                            : rec.priority === 'consider'
-                                                ? 'bg-accent/10 border-accent/30'
-                                                : 'bg-background/60 border-border/40'
+                                        ? 'bg-success/10 border-success/30'
+                                        : rec.priority === 'consider'
+                                            ? 'bg-accent/10 border-accent/30'
+                                            : 'bg-background/60 border-border/40'
                                         }`}
                                 >
                                     <div className="mt-0.5">{rec.icon}</div>
@@ -172,10 +172,10 @@ export function Recommendations({ results, rejections, metadata }: Recommendatio
                                             <Badge
                                                 variant="outline"
                                                 className={`text-[10px] uppercase ${rec.priority === 'action'
-                                                        ? 'text-success border-success/50'
-                                                        : rec.priority === 'consider'
-                                                            ? 'text-accent border-accent/50'
-                                                            : 'text-muted-foreground border-border'
+                                                    ? 'text-success border-success/50'
+                                                    : rec.priority === 'consider'
+                                                        ? 'text-accent border-accent/50'
+                                                        : 'text-muted-foreground border-border'
                                                     }`}
                                             >
                                                 {rec.priority}

@@ -159,7 +159,7 @@ const getModeSuggestion = (reason: string, threshold?: number): { action: string
     if (threshold && threshold >= 70) {
       return { action: 'Lower threshold to 65%', mode: 'STRIKE' };
     }
-    return { action: 'Try exploration mode', mode: 'RECON' };
+    return { action: 'Try exploration mode', mode: 'STEALTH' };
   }
   if (reason === 'no_trade_plan') {
     return { action: 'For tighter entries', mode: 'SURGICAL' };
@@ -471,7 +471,7 @@ export function RejectionSummary({ rejections, totalScanned, defaultCollapsed = 
 
       <div className="mt-4 pt-4 border-t border-border/50">
         <p className="text-xs text-muted-foreground">
-          💡 <strong>Tip:</strong> Try lowering the mode threshold or switching to a different mode (Strike, Recon, Ghost) for more signals.
+          💡 <strong>Tip:</strong> Try lowering the mode threshold or switching to a different mode (Strike, Surgical, Stealth) for more signals.
         </p>
       </div>
     </Card>
