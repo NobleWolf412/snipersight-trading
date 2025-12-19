@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -104,9 +104,13 @@ export function TableControls({ results, onFilteredResults, onSortChange }: Tabl
     }, [results, filters, sortField, sortDirection]);
 
     // Notify parent of filtered results changes (in useEffect, not during render!)
+    // Using a ref to store the callback to avoid dependency issues
+    const onFilteredResultsRef = useRef(onFilteredResults);
+    onFilteredResultsRef.current = onFilteredResults;
+
     useEffect(() => {
-        onFilteredResults(filteredResults);
-    }, [filteredResults, onFilteredResults]);
+        onFilteredResultsRef.current(filteredResults);
+    }, [filteredResults]);
 
     const handleSort = (field: SortField) => {
         if (field === sortField) {
