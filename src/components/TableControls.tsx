@@ -104,12 +104,22 @@ export function TableControls({ results, onFilteredResults, onSortChange }: Tabl
     }, [results, filters, sortField, sortDirection]);
 
     // Notify parent of filtered results changes (in useEffect, not during render!)
-    // Using a ref to store the callback to avoid dependency issues
+    // Using a ref to store the callback AND previous results to prevent infinite loops
     const onFilteredResultsRef = useRef(onFilteredResults);
     onFilteredResultsRef.current = onFilteredResults;
 
+    // Track previous filtered result IDs to detect actual changes
+    const prevFilteredIdsRef = useRef<string>('');
+
     useEffect(() => {
-        onFilteredResultsRef.current(filteredResults);
+        // Create a stable key from the result IDs to detect actual changes
+        const currentIds = filteredResults.map(r => r.id).join(',');
+
+        // Only notify parent if the filtered results actually changed
+        if (currentIds !== prevFilteredIdsRef.current) {
+            prevFilteredIdsRef.current = currentIds;
+            onFilteredResultsRef.current(filteredResults);
+        }
     }, [filteredResults]);
 
     const handleSort = (field: SortField) => {

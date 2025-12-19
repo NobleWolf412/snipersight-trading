@@ -35,7 +35,7 @@ export function ScanResults() {
   const [selectedResult, setSelectedResult] = useState<ScanResult | null>(null);
   const [isChartModalOpen, setIsChartModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-  const [showMetadata, setShowMetadata] = useState(true);
+  const [showMetadata, setShowMetadata] = useState(false);
   const [showResults, setShowResults] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [globalRegime, setGlobalRegime] = useState<RegimeMetadata | undefined>(undefined);
@@ -354,12 +354,7 @@ export function ScanResults() {
           </Card>
         )}
 
-        {rejectionStats && rejectionStats.total_rejected > 0 && (
-          <RejectionSummary
-            rejections={rejectionStats}
-            totalScanned={scanMetadata?.scanned || rejectionStats.total_rejected}
-          />
-        )}
+
 
         <Card className="bg-card/50 border-accent/30 card-3d overflow-hidden">
           <CardHeader
@@ -389,38 +384,73 @@ export function ScanResults() {
                   onSortChange={() => { }}
                 />
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                 <Table>
-                  <TableHeader>
-                    <TableRow className="border-border/40 hover:bg-accent/5">
-                      <TableHead className="heading-hud text-xs">TIER</TableHead>
-                      <TableHead className="heading-hud text-xs">PAIR</TableHead>
-                      <TableHead className="heading-hud text-xs">LIVE PRICE</TableHead>
-                      <TableHead className="heading-hud text-xs" title="Expected Value in R-multiples: EV = p(win) × R − (1 − p(win))">EV</TableHead>
-                      <TableHead className="heading-hud text-xs">BIAS</TableHead>
-                      <TableHead className="heading-hud text-xs">ENTRY</TableHead>
-                      <TableHead className="heading-hud text-xs">RISK</TableHead>
-                      <TableHead className="heading-hud text-xs">REGIME</TableHead>
-                      <TableHead className="heading-hud text-xs">CONFLUENCE</TableHead>
-                      <TableHead className="heading-hud text-xs">R:R</TableHead>
-                      <TableHead className="heading-hud text-xs">TYPE</TableHead>
-                      <TableHead className="heading-hud text-xs">ACTIONS</TableHead>
+                  <TableHeader className="sticky top-0 bg-card z-10 shadow-sm">
+                    <TableRow className="border-border/40 bg-card/95 backdrop-blur-sm">
+                      <TableHead className="heading-hud text-xs font-semibold">PAIR</TableHead>
+                      <TableHead className="heading-hud text-xs font-semibold">BIAS</TableHead>
+                      <TableHead className="heading-hud text-xs font-semibold w-40">CONFLUENCE</TableHead>
+                      <TableHead className="heading-hud text-xs font-semibold" title="Expected Value in R-multiples">EV</TableHead>
+                      <TableHead className="heading-hud text-xs font-semibold">R:R</TableHead>
+                      <TableHead className="heading-hud text-xs font-semibold">ENTRY</TableHead>
+                      <TableHead className="heading-hud text-xs font-semibold">REGIME</TableHead>
+                      <TableHead className="heading-hud text-xs font-semibold w-24">ACTIONS</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {(displayedResults.length > 0 ? displayedResults : sortedResults).map((result, index) => (
                       <TableRow
                         key={result.id}
-                        className="border-border/40 hover:bg-accent/5 transition-colors"
+                        className="border-border/40 hover:bg-accent/10 transition-colors cursor-pointer group"
                         style={{ animationDelay: `${index * 50}ms` }}
+                        onClick={() => handleViewChart(result)}
                       >
+                        {/* PAIR - with tier indicator */}
                         <TableCell>
-                          <TierBadge confidenceScore={result.confidenceScore} />
+                          <div className="flex items-center gap-2">
+                            <TierBadge confidenceScore={result.confidenceScore} size="sm" showLabel={false} />
+                            <span className="font-bold text-accent">{result.pair}</span>
+                          </div>
                         </TableCell>
-                        <TableCell className="font-bold text-accent">{result.pair}</TableCell>
+
+                        {/* BIAS */}
                         <TableCell>
-                          <PriceDisplay symbol={result.pair} size="sm" />
+                          <div className="flex flex-col gap-1">
+                            <Badge variant="outline" className={getTrendColor(result.trendBias)}>
+                              <span className="flex items-center gap-1">
+                                {getTrendIcon(result.trendBias)}
+                                {result.trendBias === 'BULLISH' ? 'LONG' : 'SHORT'}
+                              </span>
+                            </Badge>
+                            <ReversalBadge reversalContext={result.reversal_context} size="sm" />
+                          </div>
                         </TableCell>
+
+                        {/* CONFLUENCE - Color gradient bar */}
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="w-28 bg-muted/30 rounded-full h-3 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${result.confidenceScore >= 80 ? 'bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]' :
+                                  result.confidenceScore >= 70 ? 'bg-accent shadow-[0_0_6px_rgba(0,255,255,0.4)]' :
+                                    result.confidenceScore >= 65 ? 'bg-warning' :
+                                      'bg-destructive'
+                                  }`}
+                                style={{ width: `${result.confidenceScore}%` }}
+                              />
+                            </div>
+                            <span className={`text-sm font-bold font-mono ${result.confidenceScore >= 80 ? 'text-success' :
+                              result.confidenceScore >= 70 ? 'text-accent' :
+                                result.confidenceScore >= 65 ? 'text-warning' :
+                                  'text-destructive'
+                              }`}>
+                              {result.confidenceScore.toFixed(0)}%
+                            </span>
+                          </div>
+                        </TableCell>
+
+                        {/* EV */}
                         <TableCell>
                           {(() => {
                             const ev = getEV(result);
@@ -430,76 +460,20 @@ export function ScanResults() {
                               <Badge
                                 variant="outline"
                                 className={`font-mono font-bold ${cls}`}
-                                title={`EV = ${ev.toFixed(2)} (p*R - (1-p)*1); p≈clamped confidence, R=first target/stop`}
+                                title={`EV = ${ev.toFixed(2)}`}
                               >
-                                {ev.toFixed(2)}
+                                {ev.toFixed(2)}R
                               </Badge>
                             );
                           })()}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1.5">
-                            <Badge variant="outline" className={getTrendColor(result.trendBias)}>
-                              <span className="flex items-center gap-1">
-                                {getTrendIcon(result.trendBias)}
-                                {result.trendBias}
-                              </span>
-                            </Badge>
-                            <ReversalBadge
-                              reversalContext={result.reversal_context}
-                              size="sm"
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {(() => {
-                            const planType = result.plan_type;
-                            if (!planType) return <span className="text-xs text-muted-foreground">-</span>;
 
-                            // Map plan_type to friendly labels and colors
-                            const config = {
-                              'SMC': { label: 'SMC', color: 'bg-success/20 text-success border-success/50', title: 'Smart Money Concepts structure used for entry' },
-                              'HYBRID': { label: 'Hybrid', color: 'bg-primary/20 text-primary border-primary/50', title: 'Mix of SMC structure and ATR-based levels' },
-                              'ATR_FALLBACK': { label: 'ATR', color: 'bg-muted text-muted-foreground border-border', title: 'ATR-based entry (no SMC structure found)' },
-                            }[planType] || { label: planType, color: 'bg-muted text-muted-foreground border-border', title: '' };
-
-                            return (
-                              <span
-                                className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold border ${config.color}`}
-                                title={config.title}
-                              >
-                                {config.label}
-                              </span>
-                            );
-                          })()}
-                        </TableCell>
-                        <TableCell>
-                          <RiskAlertBadge result={result} />
-                        </TableCell>
-                        <TableCell>
-                          <RegimeIndicator
-                            regime={symbolRegimes[result.pair] || result.regime || globalRegime}
-                            size="sm"
-                            compact
-                            timeframe={scanMetadata?.appliedTimeframes?.[0]}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className="w-24 bg-muted rounded-full h-2.5">
-                              <div
-                                className="bg-accent h-2.5 rounded-full transition-all duration-500 hud-glow-cyan"
-                                style={{ width: `${result.confidenceScore}%` }}
-                              />
-                            </div>
-                            <span className="text-sm font-bold font-mono text-accent">{result.confidenceScore.toFixed(0)}%</span>
-                          </div>
-                        </TableCell>
+                        {/* R:R */}
                         <TableCell>
                           {(() => {
                             const rr = result.riskReward;
                             if (typeof rr === 'number' && rr > 0) {
-                              const color = rr >= 3 ? 'text-success' : rr >= 2 ? 'text-primary' : rr >= 1.5 ? 'text-warning' : 'text-muted-foreground';
+                              const color = rr >= 3 ? 'text-success' : rr >= 2 ? 'text-accent' : rr >= 1.5 ? 'text-warning' : 'text-muted-foreground';
                               return (
                                 <Badge variant="outline" className={`font-mono font-bold ${color}`}>
                                   {rr.toFixed(1)}:1
@@ -509,26 +483,46 @@ export function ScanResults() {
                             return <span className="text-muted-foreground">-</span>;
                           })()}
                         </TableCell>
+
+                        {/* ENTRY TYPE */}
                         <TableCell>
-                          <Badge
-                            variant={result.classification === 'SWING' ? 'default' : 'secondary'}
-                            className="font-bold"
-                          >
-                            {result.classification}
-                          </Badge>
+                          {(() => {
+                            const planType = result.plan_type;
+                            if (!planType) return <span className="text-xs text-muted-foreground">-</span>;
+                            const config = {
+                              'SMC': { label: 'SMC', color: 'bg-success/20 text-success border-success/50' },
+                              'HYBRID': { label: 'Hybrid', color: 'bg-primary/20 text-primary border-primary/50' },
+                              'ATR_FALLBACK': { label: 'ATR', color: 'bg-muted text-muted-foreground border-border' },
+                            }[planType] || { label: planType, color: 'bg-muted text-muted-foreground border-border' };
+                            return (
+                              <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold border ${config.color}`}>
+                                {config.label}
+                              </span>
+                            );
+                          })()}
                         </TableCell>
+
+                        {/* REGIME */}
                         <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleViewChart(result)}
-                              className="hover:bg-accent/20 hover:border-accent transition-all"
-                            >
-                              <Eye size={16} weight="bold" />
-                              CHART
-                            </Button>
-                          </div>
+                          <RegimeIndicator
+                            regime={symbolRegimes[result.pair] || result.regime || globalRegime}
+                            size="sm"
+                            compact
+                            timeframe={scanMetadata?.appliedTimeframes?.[0]}
+                          />
+                        </TableCell>
+
+                        {/* ACTIONS */}
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleViewChart(result)}
+                            className="hover:bg-accent/20 hover:border-accent transition-all opacity-70 group-hover:opacity-100"
+                          >
+                            <Eye size={16} weight="bold" />
+                            <span className="hidden sm:inline ml-1">View</span>
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -545,6 +539,15 @@ export function ScanResults() {
             EV ≈ p(win) × R − (1 − p(win)) × 1. p(win) bounded 0.20–0.85 from confidence; R uses first target vs stop.
           </p>
         </div>
+
+        {/* Rejection Analysis - Moved below table for better hierarchy */}
+        {rejectionStats && rejectionStats.total_rejected > 0 && (
+          <RejectionSummary
+            rejections={rejectionStats}
+            totalScanned={scanMetadata?.scanned || rejectionStats.total_rejected}
+            defaultCollapsed={true}
+          />
+        )}
 
         {selectedResult && (
           <>

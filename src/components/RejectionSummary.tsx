@@ -62,6 +62,7 @@ interface RejectionStats {
 interface Props {
   rejections: RejectionStats;
   totalScanned: number;
+  defaultCollapsed?: boolean;
 }
 
 const reasonConfig: Record<string, {
@@ -166,8 +167,8 @@ const getModeSuggestion = (reason: string, threshold?: number): { action: string
   return { action: '', mode: '' };
 };
 
-export function RejectionSummary({ rejections, totalScanned }: Props) {
-  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+export function RejectionSummary({ rejections, totalScanned, defaultCollapsed = false }: Props) {
+  const [expandedSection, setExpandedSection] = useState<string | null>(defaultCollapsed ? null : 'main');
   // Dialog for category-level aggregated view
   const [reasonDialog, setReasonDialog] = useState<string | null>(null);
 
