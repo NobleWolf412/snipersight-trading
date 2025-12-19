@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Funnel, SortAscending, SortDescending, Download, Copy, Check,
-    CaretDown, X, Warning, Clock, CurrencyCircleDollar
+    CaretDown, X, Warning, Clock, CurrencyCircleDollar, Rows, SquaresFour
 } from '@phosphor-icons/react';
 import { getSignalTier } from '@/utils/signalTiers';
 import type { ScanResult } from '@/utils/mockData';
@@ -12,11 +12,14 @@ export type SortField = 'confidence' | 'ev' | 'pair' | 'riskReward';
 export type SortDirection = 'asc' | 'desc';
 export type TierFilter = 'all' | 'TOP' | 'HIGH' | 'SOLID';
 export type BiasFilter = 'all' | 'BULLISH' | 'BEARISH';
+export type ViewMode = 'table' | 'grid';
 
 interface TableControlsProps {
     results: ScanResult[];
     onFilteredResults: (results: ScanResult[]) => void;
     onSortChange: (field: SortField, direction: SortDirection) => void;
+    viewMode: ViewMode;
+    onViewModeChange: (mode: ViewMode) => void;
 }
 
 interface FilterState {
@@ -38,7 +41,7 @@ function getEV(r: ScanResult): number {
 /**
  * TableControls - Filter, sort, and export controls for the results table
  */
-export function TableControls({ results, onFilteredResults, onSortChange }: TableControlsProps) {
+export function TableControls({ results, onFilteredResults, onSortChange, viewMode, onViewModeChange }: TableControlsProps) {
     const [filters, setFilters] = useState<FilterState>({
         tier: 'all',
         bias: 'all',
@@ -234,6 +237,28 @@ export function TableControls({ results, onFilteredResults, onSortChange }: Tabl
 
                 {/* Sort & Export */}
                 <div className="flex items-center gap-2">
+                    {/* View Toggle */}
+                    <div className="flex items-center bg-background/60 rounded-lg border border-border/50 p-1 mr-2">
+                        <Button
+                            variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            onClick={() => onViewModeChange('table')}
+                            className="h-7 w-7 p-0"
+                            title="Table View"
+                        >
+                            <Rows size={16} />
+                        </Button>
+                        <Button
+                            variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            onClick={() => onViewModeChange('grid')}
+                            className="h-7 w-7 p-0"
+                            title="Heatmap Grid"
+                        >
+                            <SquaresFour size={16} />
+                        </Button>
+                    </div>
+
                     {/* Sort Dropdown */}
                     <div className="flex items-center gap-1 bg-background/60 rounded-lg border border-border/50 p-1">
                         <span className="text-xs text-muted-foreground px-2 hidden sm:inline">Sort:</span>

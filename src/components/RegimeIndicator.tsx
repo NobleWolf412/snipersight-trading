@@ -9,7 +9,7 @@ import { TrendingUp, TrendingDown, Minus, Activity, Droplets } from 'lucide-reac
 
 interface RegimeIndicatorProps {
   regime?: RegimeMetadata;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   compact?: boolean; // If true, show only the regime label as a badge (for table cells)
   timeframe?: string; // Optional timeframe to display (e.g., '4h')
 }
@@ -132,7 +132,7 @@ export function RegimeIndicator({ regime, size = 'md', compact = false, timefram
   }
 
   return (
-    <div className={`flex items-center gap-2 ${size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-base' : 'text-sm'}`}>
+    <div className={`flex items-center gap-2 ${size === 'xs' ? 'text-[10px]' : size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-base' : 'text-sm'}`}>
       {global && (
         <div className="flex items-center gap-2 px-2 py-1 rounded bg-background/50 border border-border/50" title="Global market regime: affects scoring and risk controls">
           <span className="font-semibold text-foreground">{friendlyGlobalLabel}</span>
@@ -160,7 +160,7 @@ export function RegimeIndicator({ regime, size = 'md', compact = false, timefram
 }
 
 function TrendIcon({ trend, size }: { trend: TrendRegime; size: string }) {
-  const iconSize = size === 'sm' ? 12 : size === 'lg' ? 18 : 14;
+  const iconSize = size === 'xs' ? 10 : size === 'sm' ? 12 : size === 'lg' ? 18 : 14;
 
   if (trend === 'strong_up' || trend === 'up') {
     return <TrendingUp size={iconSize} className="text-green-500" />;
@@ -172,7 +172,7 @@ function TrendIcon({ trend, size }: { trend: TrendRegime; size: string }) {
 }
 
 function VolatilityIcon({ volatility, size }: { volatility: VolatilityRegime; size: string }) {
-  const iconSize = size === 'sm' ? 12 : size === 'lg' ? 18 : 14;
+  const iconSize = size === 'xs' ? 10 : size === 'sm' ? 12 : size === 'lg' ? 18 : 14;
 
   if (volatility === 'chaotic') {
     return <Activity size={iconSize} className="text-red-400 animate-pulse" />;
@@ -191,7 +191,7 @@ function RegimeScore({ score, size, accent }: { score: number; size: string; acc
   const accentColor = accent ? 'text-accent' : color;
 
   return (
-    <span className={`font-mono font-semibold ${size === 'sm' ? 'text-xs' : 'text-sm'} ${accentColor}`}>
+    <span className={`font-mono font-semibold ${size === 'xs' ? 'text-[10px]' : size === 'sm' ? 'text-xs' : 'text-sm'} ${accentColor}`}>
       {score.toFixed(0)}
     </span>
   );

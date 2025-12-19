@@ -1,13 +1,10 @@
-import { useState } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { TradingViewChart } from './TradingViewChart';
-import { ChartAnalysis } from './ChartAnalysis';
-import { TradingStats } from './TradingStats';
 import type { ScanResult } from '@/utils/mockData';
+import { IntelDeck } from './IntelDeck';
+import { ChartAnalysis } from './ChartAnalysis';
+// import { TradingViewChart } from './TradingViewChart'; // Assuming this exists or using placeholder
 
 interface ChartModalProps {
   isOpen: boolean;
@@ -18,125 +15,67 @@ interface ChartModalProps {
 export function ChartModal({ isOpen, onClose, result }: ChartModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      {/* Responsive: use viewport width on mobile; keep content simple */}
-      <DialogContent className="w-[95vw] sm:max-w-5xl max-h-[95vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <span>{result.pair}</span>
-            <Badge variant="outline" className="bg-accent/20 text-accent border-accent/50">
-              {result.trendBias}
-            </Badge>
-          </DialogTitle>
-          <DialogDescription>Interactive chart analysis with technical levels and AI insights</DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-[95vw] w-full lg:max-w-[1400px] h-[90vh] p-0 gap-0 overflow-hidden flex flex-col lg:flex-row bg-background">
 
-        <Tabs defaultValue="chart" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-4">
-            <TabsTrigger value="chart">Chart View</TabsTrigger>
-            <TabsTrigger value="analysis">AI Analysis</TabsTrigger>
-            <TabsTrigger value="stats">Trading Stats</TabsTrigger>
-            <TabsTrigger value="levels">Level Details</TabsTrigger>
-          </TabsList>
+        {/* HEADER (Screen Reader Only - we use custom toolbar) */}
+        <div className="sr-only">
+          <DialogHeader>
+            <DialogTitle>{result.pair} Analysis</DialogTitle>
+            <DialogDescription>Interactive Command Center</DialogDescription>
+          </DialogHeader>
+        </div>
 
-          <TabsContent value="chart" className={"space-y-4"}>
-            {/* Simple fixed-height container; TradingView fills it without stretching */}
-            <div className="w-full h-[60vh]">
-              <TradingViewChart result={result} />
+        {/* LEFT PANE: CHART & MAIN VISUALS (70-75%) */}
+        <div className="flex-1 flex flex-col h-full min-h-[50vh] lg:min-h-0 border-r border-border/40 relative bg-background">
+          {/* Custom Toolbar / Header */}
+          <div className="h-14 border-b border-border/40 flex items-center justify-between px-4 bg-muted/5 shrink-0">
+            <div className="flex items-center gap-3">
+              <span className="text-xl font-bold font-mono tracking-tight">{result.pair}</span>
+              <Badge variant="outline" className={result.trendBias === 'BULLISH' ? 'bg-success/10 text-success border-success/30' : result.trendBias === 'BEARISH' ? 'bg-destructive/10 text-destructive border-destructive/30' : 'bg-muted text-muted-foreground'}>
+                {result.trendBias}
+              </Badge>
+              <Badge variant="secondary" className="font-mono text-xs">
+                {result.classification}
+              </Badge>
             </div>
-          </TabsContent>
+          </div>
 
-          <TabsContent value="analysis" className="space-y-4">
-            <ChartAnalysis result={result} />
-          </TabsContent>
+          {/* CHART AREA */}
+          <div className="flex-1 bg-black/5 dark:bg-black/20 w-full h-full relative group overflow-hidden">
 
-          <TabsContent value="stats" className="space-y-4">
-            <TradingStats result={result} />
-          </TabsContent>
+            <Tabs defaultValue="chart" className="w-full h-full flex flex-col">
+              <div className="absolute top-3 right-4 z-10 w-auto">
+                <TabsList className="grid w-[200px] grid-cols-2 h-8 bg-background/80 backdrop-blur border border-border/40">
+                  <TabsTrigger value="chart" className="text-xs h-6">Chart</TabsTrigger>
+                  <TabsTrigger value="report" className="text-xs h-6">Full Report</TabsTrigger>
+                </TabsList>
+              </div>
 
-          <TabsContent value="levels" className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <h4 className="font-bold text-sm text-foreground">ENTRY ZONE</h4>
-                <div className="bg-success/10 border border-success/50 rounded p-3 space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">High:</span>
-                    <span className="font-mono text-success">${result.entryZone.high.toFixed(5)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Low:</span>
-                    <span className="font-mono text-success">${result.entryZone.low.toFixed(5)}</span>
-                  </div>
+              <TabsContent value="chart" className="flex-1 h-full m-0 p-0 outline-none relative">
+                {/* Placeholder for TradingView Chart - In production this would be the actual Chart component */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground/30 pointer-events-none">
+                  <svg className="w-24 h-24 mb-4 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                  </svg>
+                  <span className="text-sm uppercase tracking-widest font-semibold opacity-50">TradingView Chart Integration</span>
                 </div>
-              </div>
+                {/* <TradingViewChart result={result} /> */}
+              </TabsContent>
 
-              <div className="space-y-2">
-                <h4 className="font-bold text-sm text-foreground">STOP LOSS</h4>
-                <div className="bg-destructive/10 border border-destructive/50 rounded p-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Level:</span>
-                    <span className="font-mono text-destructive">${result.stopLoss.toFixed(5)}</span>
-                  </div>
+              <TabsContent value="report" className="flex-1 h-full m-0 p-0 bg-background overflow-y-auto">
+                <div className="p-8 max-w-4xl mx-auto">
+                  <ChartAnalysis result={result} />
                 </div>
-              </div>
-            </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
 
-            <div className="space-y-2">
-              <h4 className="font-bold text-sm text-foreground">TAKE PROFIT TARGETS</h4>
-              <div className="grid grid-cols-3 gap-2">
-                {result.takeProfits.map((tp, i) => (
-                  <div key={i} className="bg-accent/10 border border-accent/50 rounded p-3">
-                    <div className="text-xs text-muted-foreground mb-1">TP{i + 1}</div>
-                    <div className="font-mono text-accent font-bold">${tp.toFixed(5)}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
+        {/* RIGHT PANE: INTEL DECK (25-30%) */}
+        <div className="w-full lg:w-[380px] h-[40vh] lg:h-full flex-shrink-0 bg-card z-10 shadow-[-5px_0_20px_rgba(0,0,0,0.1)] border-t lg:border-t-0 border-border/40">
+          <IntelDeck result={result} />
+        </div>
 
-            <Separator />
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <h4 className="font-bold text-sm text-foreground">ORDER BLOCKS</h4>
-                <div className="space-y-2">
-                  {result.orderBlocks.map((ob, i) => (
-                    <div key={i} className="bg-card border border-border rounded p-2 text-xs">
-                      <div className="flex justify-between">
-                        <Badge variant="outline" className="text-xs">
-                          {ob.type.toUpperCase()}
-                        </Badge>
-                        <span className="text-muted-foreground">{ob.timeframe}</span>
-                      </div>
-                      <div className="font-mono mt-1">${ob.price.toFixed(5)}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="font-bold text-sm text-foreground">FAIR VALUE GAPS</h4>
-                <div className="space-y-2">
-                  {result.fairValueGaps.map((fvg, i) => (
-                    <div key={i} className="bg-card border border-border rounded p-2 text-xs">
-                      <Badge variant="outline" className="text-xs mb-2">
-                        {fvg.type.toUpperCase()}
-                      </Badge>
-                      <div className="space-y-1">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">High:</span>
-                          <span className="font-mono">${fvg.high.toFixed(5)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Low:</span>
-                          <span className="font-mono">${fvg.low.toFixed(5)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </TabsContent>
-        </Tabs>
       </DialogContent>
     </Dialog>
   );
