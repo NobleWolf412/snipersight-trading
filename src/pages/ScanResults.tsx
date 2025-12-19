@@ -23,6 +23,7 @@ import { TierBadge } from '@/components/TierBadge';
 import { WhySignalsPassed } from '@/components/WhySignalsPassed';
 import { WarningsContext } from '@/components/WarningsContext';
 import { Recommendations } from '@/components/Recommendations';
+import { TableControls, RiskAlertBadge } from '@/components/TableControls';
 import { api } from '@/utils/api';
 import type { RegimeMetadata, TrendRegime, VolatilityRegime, LiquidityRegime } from '@/types/regime';
 
@@ -39,6 +40,7 @@ export function ScanResults() {
   const [isLoading, setIsLoading] = useState(true);
   const [globalRegime, setGlobalRegime] = useState<RegimeMetadata | undefined>(undefined);
   const [symbolRegimes, setSymbolRegimes] = useState<Record<string, RegimeMetadata | undefined>>({});
+  const [displayedResults, setDisplayedResults] = useState<ScanResult[]>([]);
 
   useEffect(() => {
     try {
@@ -378,7 +380,15 @@ export function ScanResults() {
             </div>
           </CardHeader>
           {showResults && (
-            <CardContent className="p-0 animate-in fade-in slide-in-from-top-2 duration-300">
+            <CardContent className="animate-in fade-in slide-in-from-top-2 duration-300">
+              {/* Table Controls */}
+              <div className="px-4 pb-4">
+                <TableControls
+                  results={sortedResults}
+                  onFilteredResults={setDisplayedResults}
+                  onSortChange={() => { }}
+                />
+              </div>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -389,6 +399,7 @@ export function ScanResults() {
                       <TableHead className="heading-hud text-xs" title="Expected Value in R-multiples: EV = p(win) × R − (1 − p(win))">EV</TableHead>
                       <TableHead className="heading-hud text-xs">BIAS</TableHead>
                       <TableHead className="heading-hud text-xs">ENTRY</TableHead>
+                      <TableHead className="heading-hud text-xs">RISK</TableHead>
                       <TableHead className="heading-hud text-xs">REGIME</TableHead>
                       <TableHead className="heading-hud text-xs">CONFLUENCE</TableHead>
                       <TableHead className="heading-hud text-xs">R:R</TableHead>
@@ -397,7 +408,7 @@ export function ScanResults() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedResults.map((result, index) => (
+                    {(displayedResults.length > 0 ? displayedResults : sortedResults).map((result, index) => (
                       <TableRow
                         key={result.id}
                         className="border-border/40 hover:bg-accent/5 transition-colors"
@@ -461,6 +472,9 @@ export function ScanResults() {
                               </span>
                             );
                           })()}
+                        </TableCell>
+                        <TableCell>
+                          <RiskAlertBadge result={result} />
                         </TableCell>
                         <TableCell>
                           <RegimeIndicator

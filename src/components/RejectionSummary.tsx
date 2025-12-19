@@ -121,6 +121,51 @@ const transformToBreakdown = (detail: RejectionDetail): ConfluenceBreakdown => {
   };
 };
 
+// Helper: Get improvement suggestion based on rejection reason and factors
+const getSuggestion = (reason: string, detail: RejectionDetail): string => {
+  // Find weakest factors if available
+  const weakFactors = detail.all_factors
+    ?.filter(f => f.score < 50)
+    ?.map(f => f.name.replace(/_/g, ' '))
+    ?.slice(0, 2) || [];
+
+  if (reason === 'low_confluence') {
+    if (weakFactors.length > 0) {
+      return `Needs better ${weakFactors.join(' and ')}`;
+    }
+    const gap = ((detail.threshold || 0) - (detail.score || 0));
+    if (gap < 3) return 'Very close - may pass on rescan';
+    if (gap < 7) return 'Needs MTF alignment or OB confirmation';
+    return 'Multiple factors need improvement';
+  }
+  if (reason === 'no_trade_plan') {
+    if (detail.reason?.includes('stop')) return 'Stop too tight for ATR';
+    if (detail.reason?.includes('OB') || detail.reason?.includes('order block')) return 'No valid Order Block found';
+    return 'Entry/stop structure missing';
+  }
+  if (reason === 'risk_validation') {
+    return `R:R ${detail.risk_reward?.toFixed(1) || 'N/A'}:1 - needs wider target`;
+  }
+  if (reason === 'no_data') {
+    return 'Price data unavailable - try later';
+  }
+  return 'Check factors in detail view';
+};
+
+// Helper: Get mode suggestion for capturing rejected signals
+const getModeSuggestion = (reason: string, threshold?: number): { action: string; mode: string } => {
+  if (reason === 'low_confluence') {
+    if (threshold && threshold >= 70) {
+      return { action: 'Lower threshold to 65%', mode: 'STRIKE' };
+    }
+    return { action: 'Try exploration mode', mode: 'RECON' };
+  }
+  if (reason === 'no_trade_plan') {
+    return { action: 'For tighter entries', mode: 'SURGICAL' };
+  }
+  return { action: '', mode: '' };
+};
+
 export function RejectionSummary({ rejections, totalScanned }: Props) {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   // Dialog for category-level aggregated view
@@ -309,14 +354,27 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                         >
                           <div className="flex items-center justify-between mb-2">
                             <div className="font-mono text-primary font-medium">{detail.symbol}</div>
-                            <div className="text-xs text-primary flex items-center gap-1">
-                              <Info className="w-3 h-3" />
-                              Details
+                            <div className="flex items-center gap-2">
+                              {detail.score !== undefined && detail.threshold !== undefined && (
+                                <Badge
+                                  variant="outline"
+                                  className={`font-mono text-[10px] ${(detail.threshold - detail.score) < 3
+                                    ? 'text-yellow-400 border-yellow-400/50'
+                                    : 'text-red-400 border-red-400/50'
+                                    }`}
+                                >
+                                  Gap: {(detail.threshold - detail.score).toFixed(1)}%
+                                </Badge>
+                              )}
+                              <div className="text-xs text-primary flex items-center gap-1">
+                                <Info className="w-3 h-3" />
+                                Details
+                              </div>
                             </div>
                           </div>
-                          <div className="text-xs text-muted-foreground">{detail.reason}</div>
+                          {/* Score row */}
                           {detail.score !== undefined && detail.threshold !== undefined && (
-                            <div className="mt-2">
+                            <div className="mb-2">
                               <div className="flex items-center justify-between text-xs mb-1">
                                 <span className="text-yellow-400">Score: {detail.score.toFixed(1)}%</span>
                                 <span className="text-muted-foreground">Threshold: {detail.threshold.toFixed(1)}%</span>
@@ -324,6 +382,10 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                               <Progress value={(detail.score / detail.threshold) * 100} className="h-1" />
                             </div>
                           )}
+                          {/* Suggestion */}
+                          <div className="text-xs text-muted-foreground italic">
+                            💡 {getSuggestion(reason, detail)}
+                          </div>
                           {detail.risk_reward !== undefined && (
                             <div className="mt-2 text-xs text-orange-400">
                               Risk/Reward: {detail.risk_reward.toFixed(2)}:1
@@ -383,6 +445,22 @@ export function RejectionSummary({ rejections, totalScanned }: Props) {
                       +{reasonDetails.length - 10} more rejections...
                     </div>
                   )}
+                  {/* Mode suggestion for capturing these */}
+                  {(() => {
+                    const suggestion = getModeSuggestion(reason, reasonDetails[0]?.threshold);
+                    if (!suggestion.mode) return null;
+                    return (
+                      <div className="mt-3 p-3 rounded-lg bg-accent/10 border border-accent/30">
+                        <div className="text-xs text-accent">
+                          💡 <strong>How to capture these:</strong> {suggestion.action} with{' '}
+                          <Badge className="bg-accent/20 text-accent text-[10px] ml-1">
+                            {suggestion.mode}
+                          </Badge>{' '}
+                          mode
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </CollapsibleContent>
             </Collapsible>
