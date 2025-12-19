@@ -233,6 +233,7 @@ export function ScannerSetup() {
           }
           setIsScanning(false);
           setScanProgress(null);
+          console.log('[ScannerSetup] Scan complete, navigating to /results with', results.length, 'results');
           navigate('/results');
           return; // Exit function
         }
@@ -286,6 +287,7 @@ export function ScannerSetup() {
 
       setIsScanning(false);
       setScanProgress(null);
+      console.log('[ScannerSetup] Fallback mode, navigating to /results with demo data');
       navigate('/results');
     }
   };

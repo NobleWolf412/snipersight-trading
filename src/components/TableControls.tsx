@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,6 +25,16 @@ interface FilterState {
     minConfidence: number;
 }
 
+// EV calculation helper (moved outside component to avoid recreation)
+function getEV(r: ScanResult): number {
+    const metaEV = (r as any)?.metadata?.ev?.expected_value;
+    if (typeof metaEV === 'number') return metaEV;
+    const rr = (r as any)?.riskReward ?? 1.5;
+    const pRaw = (r.confidenceScore ?? 50) / 100;
+    const p = Math.max(0.2, Math.min(0.85, pRaw));
+    return p * rr - (1 - p) * 1.0;
+}
+
 /**
  * TableControls - Filter, sort, and export controls for the results table
  */
@@ -39,7 +49,7 @@ export function TableControls({ results, onFilteredResults, onSortChange }: Tabl
     const [showFilters, setShowFilters] = useState(false);
     const [copied, setCopied] = useState(false);
 
-    // Apply filters
+    // Apply filters and sorting
     const filteredResults = useMemo(() => {
         let filtered = [...results];
 
@@ -90,19 +100,13 @@ export function TableControls({ results, onFilteredResults, onSortChange }: Tabl
             return sortDirection === 'asc' ? aVal - (bVal as number) : (bVal as number) - aVal;
         });
 
-        onFilteredResults(filtered);
         return filtered;
-    }, [results, filters, sortField, sortDirection, onFilteredResults]);
+    }, [results, filters, sortField, sortDirection]);
 
-    // EV calculation helper
-    function getEV(r: ScanResult): number {
-        const metaEV = (r as any)?.metadata?.ev?.expected_value;
-        if (typeof metaEV === 'number') return metaEV;
-        const rr = (r as any)?.riskReward ?? 1.5;
-        const pRaw = (r.confidenceScore ?? 50) / 100;
-        const p = Math.max(0.2, Math.min(0.85, pRaw));
-        return p * rr - (1 - p) * 1.0;
-    }
+    // Notify parent of filtered results changes (in useEffect, not during render!)
+    useEffect(() => {
+        onFilteredResults(filteredResults);
+    }, [filteredResults, onFilteredResults]);
 
     const handleSort = (field: SortField) => {
         if (field === sortField) {
@@ -189,11 +193,11 @@ export function TableControls({ results, onFilteredResults, onSortChange }: Tabl
                                 size="sm"
                                 onClick={() => setFilters(f => ({ ...f, tier }))}
                                 className={`text-xs h-7 px-2 ${filters.tier === tier
-                                        ? tier === 'TOP' ? 'bg-success/20 text-success hover:bg-success/30'
-                                            : tier === 'HIGH' ? 'bg-accent/20 text-accent hover:bg-accent/30'
-                                                : tier === 'SOLID' ? 'bg-primary/20 text-primary hover:bg-primary/30'
-                                                    : 'bg-muted'
-                                        : ''
+                                    ? tier === 'TOP' ? 'bg-success/20 text-success hover:bg-success/30'
+                                        : tier === 'HIGH' ? 'bg-accent/20 text-accent hover:bg-accent/30'
+                                            : tier === 'SOLID' ? 'bg-primary/20 text-primary hover:bg-primary/30'
+                                                : 'bg-muted'
+                                    : ''
                                     }`}
                             >
                                 {tier === 'all' ? 'All' : `${tier} (${tierCounts[tier]})`}
@@ -274,11 +278,11 @@ export function TableControls({ results, onFilteredResults, onSortChange }: Tabl
                                         key={tier}
                                         variant={filters.tier === tier ? "default" : "outline"}
                                         className={`cursor-pointer transition-colors ${filters.tier === tier
-                                                ? tier === 'TOP' ? 'bg-success text-success-foreground'
-                                                    : tier === 'HIGH' ? 'bg-accent text-accent-foreground'
-                                                        : tier === 'SOLID' ? 'bg-primary text-primary-foreground'
-                                                            : ''
-                                                : 'hover:bg-muted'
+                                            ? tier === 'TOP' ? 'bg-success text-success-foreground'
+                                                : tier === 'HIGH' ? 'bg-accent text-accent-foreground'
+                                                    : tier === 'SOLID' ? 'bg-primary text-primary-foreground'
+                                                        : ''
+                                            : 'hover:bg-muted'
                                             }`}
                                         onClick={() => setFilters(f => ({ ...f, tier }))}
                                     >
@@ -299,10 +303,10 @@ export function TableControls({ results, onFilteredResults, onSortChange }: Tabl
                                         key={bias}
                                         variant={filters.bias === bias ? "default" : "outline"}
                                         className={`cursor-pointer transition-colors ${filters.bias === bias
-                                                ? bias === 'BULLISH' ? 'bg-success text-success-foreground'
-                                                    : bias === 'BEARISH' ? 'bg-destructive text-destructive-foreground'
-                                                        : ''
-                                                : 'hover:bg-muted'
+                                            ? bias === 'BULLISH' ? 'bg-success text-success-foreground'
+                                                : bias === 'BEARISH' ? 'bg-destructive text-destructive-foreground'
+                                                    : ''
+                                            : 'hover:bg-muted'
                                             }`}
                                         onClick={() => setFilters(f => ({ ...f, bias }))}
                                     >
@@ -409,8 +413,8 @@ export function RiskAlertBadge({ result }: RiskAlertBadgeProps) {
                     key={i}
                     variant="outline"
                     className={`text-[10px] gap-0.5 ${alert.type === 'warning'
-                            ? 'text-warning border-warning/30 bg-warning/10'
-                            : 'text-muted-foreground border-border bg-muted/50'
+                        ? 'text-warning border-warning/30 bg-warning/10'
+                        : 'text-muted-foreground border-border bg-muted/50'
                         }`}
                 >
                     {alert.icon}
