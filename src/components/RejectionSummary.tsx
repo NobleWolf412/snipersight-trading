@@ -122,6 +122,93 @@ const transformToBreakdown = (detail: RejectionDetail): ConfluenceBreakdown => {
   };
 };
 
+// Helper: Format and clarify rejection reasons for better UX
+const formatRejectionReason = (reason: string): { primary: string; details: string; icon: string } => {
+  // Parse technical validation errors
+  if (reason.includes('Stop') && reason.includes('entry')) {
+    const isShort = reason.toUpperCase().includes('SHORT');
+    const isLong = reason.toUpperCase().includes('LONG');
+
+    if (isShort) {
+      return {
+        primary: 'Invalid Stop Loss Position',
+        details: 'For SHORT positions, stop price must be ABOVE entry price to limit losses on upward moves',
+        icon: '⚠️'
+      };
+    }
+    if (isLong) {
+      return {
+        primary: 'Invalid Stop Loss Position',
+        details: 'For LONG positions, stop price must be BELOW entry price to limit losses on downward moves',
+        icon: '⚠️'
+      };
+    }
+    return {
+      primary: 'Invalid Stop Loss Configuration',
+      details: 'Stop loss price positioning is incorrect for the trade direction',
+      icon: '⚠️'
+    };
+  }
+
+  // Parse confluence score rejections
+  if (reason.includes('Confluence score too low') || reason.includes('confluence')) {
+    const match = reason.match(/(\d+\.?\d*)\s*<\s*(\d+\.?\d*)/);
+    if (match) {
+      const [, score, threshold] = match;
+      const gap = (parseFloat(threshold) - parseFloat(score)).toFixed(1);
+      const percentage = ((parseFloat(score) / parseFloat(threshold)) * 100).toFixed(1);
+      return {
+        primary: 'Confluence Below Threshold',
+        details: `Score: ${score}% | Required: ${threshold}% | Gap: -${gap}% (${percentage}% of threshold)`,
+        icon: '📊'
+      };
+    }
+  }
+
+  // Parse risk/reward rejections
+  if (reason.includes('R:R') || reason.includes('risk') || reason.includes('reward')) {
+    return {
+      primary: 'Risk/Reward Ratio Too Low',
+      details: reason,
+      icon: '⚖️'
+    };
+  }
+
+  // Parse missing data errors
+  if (reason.includes('No data') || reason.includes('data unavailable')) {
+    return {
+      primary: 'Market Data Unavailable',
+      details: 'Unable to fetch price data from exchange - may be temporary',
+      icon: '📡'
+    };
+  }
+
+  // Parse order block / structure errors
+  if (reason.includes('OB') || reason.includes('order block') || reason.includes('Order Block')) {
+    return {
+      primary: 'No Valid Order Block Found',
+      details: 'Insufficient Smart Money Concepts structure for entry placement',
+      icon: '🎯'
+    };
+  }
+
+  // Parse MACD veto
+  if (reason.includes('MACD')) {
+    return {
+      primary: 'MACD Momentum Conflict',
+      details: reason,
+      icon: '📈'
+    };
+  }
+
+  // Default: return original reason
+  return {
+    primary: reason,
+    details: '',
+    icon: '⚠️'
+  };
+};
+
 // Helper: Get improvement suggestion based on rejection reason and factors
 const getSuggestion = (reason: string, detail: RejectionDetail): string => {
   // Find weakest factors if available
@@ -344,103 +431,160 @@ export function RejectionSummary({ rejections, totalScanned, defaultCollapsed = 
 
               <CollapsibleContent>
                 <div className="mt-2 ml-8 space-y-2">
-                  {Array.isArray(reasonDetails) && reasonDetails.slice(0, 10).map((detail, idx) => (
-                    <Dialog key={idx}>
-                      <DialogTrigger asChild>
-                        <div
-                          className="p-3 rounded bg-background/50 border border-border/50 hover:border-primary/50 cursor-pointer transition-colors"
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`View details for ${detail.symbol}`}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="font-mono text-primary font-medium">{detail.symbol}</div>
-                            <div className="flex items-center gap-2">
-                              {detail.score !== undefined && detail.threshold !== undefined && (
-                                <Badge
-                                  variant="outline"
-                                  className={`font-mono text-[10px] ${(detail.threshold - detail.score) < 3
-                                    ? 'text-yellow-400 border-yellow-400/50'
-                                    : 'text-red-400 border-red-400/50'
-                                    }`}
-                                >
-                                  Gap: {(detail.threshold - detail.score).toFixed(1)}%
-                                </Badge>
-                              )}
-                              <div className="text-xs text-primary flex items-center gap-1">
-                                <Info className="w-3 h-3" />
-                                Details
+                  {Array.isArray(reasonDetails) && reasonDetails.slice(0, 10).map((detail, idx) => {
+                    const formatted = formatRejectionReason(detail.reason);
+                    return (
+                      <Dialog key={idx}>
+                        <DialogTrigger asChild>
+                          <div
+                            className="p-4 rounded-lg bg-background/50 border border-border/50 hover:border-primary/50 hover:bg-background/70 cursor-pointer transition-all duration-200 hover:shadow-lg hover:shadow-primary/10"
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`View details for ${detail.symbol}`}
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-2xl">{formatted.icon}</span>
+                                <span className="font-mono text-primary font-semibold text-base">{detail.symbol.replace(':USDT', '')}</span>
                               </div>
-                            </div>
-                          </div>
-                          {/* Score row */}
-                          {detail.score !== undefined && detail.threshold !== undefined && (
-                            <div className="mb-2">
-                              <div className="flex items-center justify-between text-xs mb-1">
-                                <span className="text-yellow-400">Score: {detail.score.toFixed(1)}%</span>
-                                <span className="text-muted-foreground">Threshold: {detail.threshold.toFixed(1)}%</span>
-                              </div>
-                              <Progress value={(detail.score / detail.threshold) * 100} className="h-1" />
-                            </div>
-                          )}
-                          {/* Suggestion */}
-                          <div className="text-xs text-muted-foreground italic">
-                            💡 {getSuggestion(reason, detail)}
-                          </div>
-                          {detail.risk_reward !== undefined && (
-                            <div className="mt-2 text-xs text-orange-400">
-                              Risk/Reward: {detail.risk_reward.toFixed(2)}:1
-                            </div>
-                          )}
-                        </div>
-                      </DialogTrigger>
-                      <DialogContent className="w-full max-w-5xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
-                        <DialogHeader className="pb-4 border-b border-border/30">
-                          <DialogTitle className="flex items-center gap-3 text-xl">
-                            <TrendDown className="w-6 h-6 text-yellow-400" />
-                            Rejection Analysis: {detail.symbol}
-                          </DialogTitle>
-                          <DialogDescription className="text-sm text-muted-foreground mt-1">
-                            Detailed confluence factor breakdown and rejection rationale for {detail.symbol}
-                          </DialogDescription>
-                        </DialogHeader>
-
-                        <div className="space-y-6 pt-6">
-                          {/* Summary Card */}
-                          <Card className="p-5 bg-card/50 border border-border/50">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                              <div>
-                                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Rejection Reason</div>
-                                <p className="text-sm font-medium leading-relaxed break-words">{detail.reason}</p>
-                              </div>
-                              {detail.score !== undefined && detail.threshold !== undefined && (
-                                <div>
-                                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Confluence Score</div>
-                                  <div className="text-2xl font-mono font-semibold">
-                                    <span className="text-yellow-400">{detail.score.toFixed(1)}%</span>
-                                    <span className="text-muted-foreground mx-2">/</span>
-                                    <span className="text-foreground">{detail.threshold.toFixed(1)}%</span>
-                                    <span className="text-sm ml-3 text-red-400 font-normal">
-                                      ({(detail.score - detail.threshold).toFixed(1)}% below threshold)
-                                    </span>
-                                  </div>
+                              <div className="flex items-center gap-2">
+                                {detail.score !== undefined && detail.threshold !== undefined && (
+                                  <Badge
+                                    variant="outline"
+                                    className={`font-mono text-xs ${(detail.threshold - detail.score) < 3
+                                      ? 'text-yellow-400 border-yellow-400/50 bg-yellow-400/5'
+                                      : 'text-red-400 border-red-400/50 bg-red-400/5'
+                                      }`}
+                                  >
+                                    Gap: {(detail.threshold - detail.score).toFixed(1)}%
+                                  </Badge>
+                                )}
+                                <div className="text-xs text-primary flex items-center gap-1 hud-terminal">
+                                  <Info className="w-3 h-3" />
+                                  Details
                                 </div>
+                              </div>
+                            </div>
+
+                            {/* Formatted reason */}
+                            <div className="mb-3 pb-3 border-b border-border/30">
+                              <div className="text-xs text-red-400 mb-1 hud-terminal">⚠️ {formatted.primary}</div>
+                              {formatted.details && (
+                                <div className="text-xs text-muted-foreground">{formatted.details}</div>
                               )}
                             </div>
-                          </Card>
 
-                          {/* REPLACED MANUAL RENDERING WITH TARGET INTEL SCORECARD */}
-                          {detail.all_factors && detail.all_factors.length > 0 ? (
-                            <TargetIntelScorecard breakdown={transformToBreakdown(detail)} />
-                          ) : (
-                            <div className="text-center text-muted-foreground text-sm py-4">
-                              No detailed factor breakdown available.
+                            {/* Score row */}
+                            {detail.score !== undefined && detail.threshold !== undefined && (
+                              <div className="mb-3">
+                                <div className="flex items-center justify-between text-xs mb-1.5">
+                                  <span className="text-yellow-400 hud-terminal">Score: {detail.score.toFixed(1)}%</span>
+                                  <span className="text-muted-foreground hud-terminal">Threshold: {detail.threshold.toFixed(1)}%</span>
+                                </div>
+                                <Progress value={(detail.score / detail.threshold) * 100} className="h-1.5" />
+                              </div>
+                            )}
+                            {/* Suggestion */}
+                            <div className="text-xs text-accent italic flex items-center gap-1">
+                              <span>💡</span>
+                              <span>{getSuggestion(reason, detail)}</span>
                             </div>
-                          )}
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                  ))}
+                            {detail.risk_reward !== undefined && (
+                              <div className="mt-2 text-xs text-orange-400 hud-terminal">
+                                Risk/Reward: {detail.risk_reward.toFixed(2)}:1
+                              </div>
+                            )}
+                          </div>
+                        </DialogTrigger>
+                        <DialogContent className="w-full max-w-5xl max-h-[85vh] overflow-y-auto overflow-x-hidden bg-background/95 backdrop-blur-sm">
+                          <DialogHeader className="pb-4 border-b border-border/50 relative">
+                            {/* Tactical glow effect */}
+                            <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 via-yellow-500/5 to-red-500/5 pointer-events-none" />
+                            <div className="relative">
+                              <div className="flex items-center justify-between gap-4">
+                                <DialogTitle className="flex items-center gap-3 text-xl hud-headline hud-text-amber">
+                                  <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30">
+                                    <XCircle className="w-6 h-6 text-red-400" weight="duotone" />
+                                  </div>
+                                  <span>REJECTION ANALYSIS: {detail.symbol.replace(':USDT', '')}</span>
+                                </DialogTitle>
+                                <Badge variant="destructive" className="font-mono text-xs px-3 py-1 hud-terminal">
+                                  REJECTED
+                                </Badge>
+                              </div>
+                              <DialogDescription className="text-sm text-muted-foreground mt-2 hud-terminal">
+                                Detailed tactical assessment and confluence breakdown
+                              </DialogDescription>
+                            </div>
+                          </DialogHeader>
+
+                          <div className="space-y-6 pt-6">
+                            {/* Primary Rejection Reason Card */}
+                            {(() => {
+                              const formatted = formatRejectionReason(detail.reason);
+                              return (
+                                <Card className="card-3d p-6 bg-gradient-to-br from-red-500/5 to-yellow-500/5 border-red-500/30 relative overflow-hidden">
+                                  {/* Tactical grid background */}
+                                  <div className="absolute inset-0 tactical-grid opacity-5 pointer-events-none" />
+                                  <div className="relative">
+                                    <div className="flex items-start gap-4">
+                                      <div className="text-4xl shrink-0">{formatted.icon}</div>
+                                      <div className="flex-1">
+                                        <div className="text-xs uppercase tracking-wider text-red-400 mb-1 hud-terminal">⚠️ PRIMARY REJECTION REASON</div>
+                                        <h4 className="text-lg font-bold mb-2 hud-headline text-red-300">{formatted.primary}</h4>
+                                        {formatted.details && (
+                                          <p className="text-sm text-muted-foreground leading-relaxed">{formatted.details}</p>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Score comparison with visual gap indicator */}
+                                    {detail.score !== undefined && detail.threshold !== undefined && (
+                                      <div className="mt-4 pt-4 border-t border-border/30">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <span className="text-xs uppercase tracking-wider text-muted-foreground hud-terminal">Confluence Score</span>
+                                          <span className="text-xs text-muted-foreground hud-terminal">
+                                            {((detail.score / detail.threshold) * 100).toFixed(1)}% of threshold
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                          <div className="flex-1">
+                                            <Progress
+                                              value={(detail.score / detail.threshold) * 100}
+                                              className="h-3 bg-background/50"
+                                            />
+                                          </div>
+                                          <div className="text-right">
+                                            <div className="text-xl font-mono font-bold">
+                                              <span className="hud-text-amber">{detail.score.toFixed(1)}%</span>
+                                              <span className="text-muted-foreground mx-1">/</span>
+                                              <span className="text-foreground">{detail.threshold.toFixed(1)}%</span>
+                                            </div>
+                                            <div className="text-xs text-red-400 font-mono">
+                                              Gap: {(detail.score - detail.threshold).toFixed(1)}%
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </Card>
+                              );
+                            })()}
+
+                            {/* REPLACED MANUAL RENDERING WITH TARGET INTEL SCORECARD */}
+                            {detail.all_factors && detail.all_factors.length > 0 ? (
+                              <TargetIntelScorecard breakdown={transformToBreakdown(detail)} />
+                            ) : (
+                              <div className="text-center text-muted-foreground text-sm py-4">
+                                No detailed factor breakdown available.
+                              </div>
+                            )}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    );
+                  })}
                   {Array.isArray(reasonDetails) && reasonDetails.length > 10 && (
                     <div className="text-xs text-center text-muted-foreground pt-2">
                       +{reasonDetails.length - 10} more rejections...
