@@ -8,7 +8,6 @@ import type { ScanResult } from '@/utils/mockData';
 
 import { useState, useEffect } from 'react';
 import { ChartModal } from '@/components/ChartModal/ChartModal';
-import { ChartModal } from '@/components/ChartModal/ChartModal';
 import { LiveTicker } from '@/components/LiveTicker';
 import { PriceDisplay } from '@/components/PriceDisplay';
 import { PageHeader } from '@/components/layout/PageLayout';
@@ -36,7 +35,6 @@ export function ScanResults() {
   const [scanMetadata, setScanMetadata] = useState<any>(null);
   const [rejectionStats, setRejectionStats] = useState<any>(null);
   const [selectedResult, setSelectedResult] = useState<ScanResult | null>(null);
-  const [isChartModalOpen, setIsChartModalOpen] = useState(false);
   const [isChartModalOpen, setIsChartModalOpen] = useState(false);
   const [showMetadata, setShowMetadata] = useState(false);
   const [showResults, setShowResults] = useState(true);
