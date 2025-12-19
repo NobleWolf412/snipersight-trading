@@ -1,7 +1,7 @@
-import { LiveTicker } from '@/components/LiveTicker';
 import { SystemStatus } from '@/components/landing/SystemStatus';
 import { TacticalBriefing } from '@/components/landing/TacticalBriefing';
 import { MarketCyclesBrief } from '@/components/landing/MarketCyclesBrief';
+import { HTFOpportunities } from '@/components/landing/HTFOpportunities';
 import { useTelemetry } from '@/hooks/useTelemetry';
 import { Crosshair, Target, ChartLine, Compass } from '@phosphor-icons/react';
 import { Link } from 'react-router-dom';
@@ -43,10 +43,10 @@ export function Landing() {
           </PageContainer>
         </section>
 
-        {/* Market ticker strip (full bleed inside centered container) */}
-        <section className="relative border-y border-border/40">
-          <PageContainer className="py-2">
-            <LiveTicker />
+        {/* HTF Tactical Opportunities - Live High-Confidence Setups */}
+        <section className="relative py-8 md:py-12">
+          <PageContainer>
+            <HTFOpportunities />
           </PageContainer>
         </section>
 
@@ -64,11 +64,25 @@ export function Landing() {
           </PageContainer>
         </section>
 
+        {/* CTA Button - Deploy Scanner */}
+        <section className="relative py-12">
+          <PageContainer>
+            <Link
+              to="/scanner/setup"
+              className="flex items-center justify-center gap-4 px-12 py-6 rounded-xl font-bold btn-tactical-scanner text-xl mx-auto max-w-md hover:scale-105 transition-transform shadow-lg"
+            >
+              <Crosshair size={28} weight="bold" />
+              DEPLOY SCANNER
+              <span className="text-2xl">→</span>
+            </Link>
+          </PageContainer>
+        </section>
+
         {/* Main Features Grid */}
         <section className="relative py-20 md:py-28">
           <PageContainer>
             <div className="grid md:grid-cols-2 gap-12 md:gap-16">
-              
+
               {/* Scanner Feature */}
               <div className="relative group">
                 <div className="absolute inset-0 bg-gradient-to-br from-accent/10 to-transparent rounded-2xl blur-2xl group-hover:blur-3xl transition-all duration-500" />
@@ -82,9 +96,9 @@ export function Landing() {
                       <p className="hud-headline text-xs md:text-sm text-accent tracking-[0.16em]">MANUAL OPERATIONS</p>
                     </div>
                   </div>
-                  
+
                   <p className="text-base md:text-lg text-slate-300 leading-relaxed mb-10">Multi-timeframe Smart Money Concept detection with institutional-grade confluence scoring. Identify high-probability setups across order blocks, FVGs, liquidity sweeps, and structural breaks.</p>
-                  
+
                   <div className="flex justify-center">
                     <Link
                       to="/scanner/setup"
@@ -111,12 +125,12 @@ export function Landing() {
                       <p className="hud-headline text-xs md:text-sm text-primary tracking-[0.16em]">Automated Execution</p>
                     </div>
                   </div>
-                  
+
                   <p className="text-base md:text-lg text-slate-300 leading-relaxed mb-10">
-                    Fully automated trading execution with multi-layered quality gates, risk controls, and real-time position management. 
+                    Fully automated trading execution with multi-layered quality gates, risk controls, and real-time position management.
                     Deploy capital with institutional discipline and precision.
                   </p>
-                  
+
                   <div className="flex justify-center">
                     <Link
                       to="/bot/setup"
@@ -143,9 +157,9 @@ export function Landing() {
                       <p className="hud-headline text-xs md:text-sm text-blue-500 tracking-[0.16em]">Regime & AI Analysis</p>
                     </div>
                   </div>
-                  
+
                   <p className="text-base md:text-lg text-slate-300 leading-relaxed mb-10">Real-time market regime classification, dominance flows, and AI-powered symbol analysis. Understand market conditions and deploy the right sniper modes at the right time.</p>
-                  
+
                   <div className="flex justify-center">
                     <Link
                       to="/intel"
@@ -172,9 +186,9 @@ export function Landing() {
                       <p className="hud-headline text-xs md:text-sm text-warning tracking-[0.16em]">Simulation Mode</p>
                     </div>
                   </div>
-                  
+
                   <p className="text-base md:text-lg text-slate-300 leading-relaxed mb-10">Practice with simulated market data in a risk-free environment. Master the system's features, test strategies, and build confidence before deploying real capital.</p>
-                  
+
                   <div className="flex justify-center">
                     <Link
                       to="/training"

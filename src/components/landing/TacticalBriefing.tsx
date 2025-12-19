@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  Crosshair, 
-  Eye, 
-  ShieldWarning, 
-  TrendUp, 
-  TrendDown, 
+import {
+  Crosshair,
+  Eye,
+  ShieldWarning,
+  TrendUp,
+  TrendDown,
   Minus,
   Lightning,
   Drop,
@@ -71,21 +71,21 @@ function getDominanceSignal(btcD: number, stableD: number): { signal: string; co
 }
 
 // Mini circular gauge component
-function MiniGauge({ 
-  value, 
-  label, 
+function MiniGauge({
+  value,
+  label,
   color,
-  size = 48 
-}: { 
-  value: number; 
-  label: string; 
+  size = 48
+}: {
+  value: number;
+  label: string;
   color: string;
   size?: number;
 }) {
   const radius = (size - 8) / 2;
   const circumference = 2 * Math.PI * radius;
   const strokeDasharray = `${(value / 100) * circumference} ${circumference}`;
-  
+
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="relative" style={{ width: size, height: size }}>
@@ -123,13 +123,13 @@ function MiniGauge({
 }
 
 // Static metric display (no link - footer has the intel link)
-function MetricDisplay({ 
-  icon: Icon, 
-  label, 
-  value, 
+function MetricDisplay({
+  icon: Icon,
+  label,
+  value,
   subValue,
   color,
-}: { 
+}: {
   icon: typeof Activity;
   label: string;
   value: string | number;
@@ -137,7 +137,7 @@ function MetricDisplay({
   color: string;
 }) {
   return (
-    <div 
+    <div
       className={cn(
         'relative p-3 rounded-xl bg-muted/10 border border-border/30',
         'flex items-center gap-3'
@@ -158,7 +158,7 @@ function MetricDisplay({
 // Interactive Dominance Bar
 function DominanceBar({ btcD, altD, stableD }: { btcD: number; altD: number; stableD: number }) {
   const [hovered, setHovered] = useState<string | null>(null);
-  
+
   const segments = [
     { key: 'btc', value: btcD, label: 'BTC', color: 'from-amber-500 to-orange-600', textColor: 'text-amber-400', icon: CurrencyBtc },
     { key: 'alt', value: altD, label: 'ALT', color: 'from-violet-500 to-purple-600', textColor: 'text-violet-400', icon: Coins },
@@ -166,16 +166,16 @@ function DominanceBar({ btcD, altD, stableD }: { btcD: number; altD: number; sta
   ];
 
   return (
-    <div className="space-y-2">
-      {/* Bar */}
-      <div className="h-6 rounded-lg overflow-hidden flex bg-black/40 border border-white/5">
+    <div className="space-y-3">
+      {/* Bar - BIGGER */}
+      <div className="h-10 rounded-lg overflow-hidden flex bg-black/40 border border-white/5 shadow-lg">
         {segments.map((seg) => (
           <div
             key={seg.key}
             className={cn(
               'relative bg-gradient-to-r transition-all duration-300 flex items-center justify-center cursor-pointer',
               seg.color,
-              hovered === seg.key && 'brightness-125',
+              hovered === seg.key && 'brightness-125 scale-y-105',
               hovered && hovered !== seg.key && 'opacity-50'
             )}
             style={{ width: `${seg.value}%` }}
@@ -184,30 +184,30 @@ function DominanceBar({ btcD, altD, stableD }: { btcD: number; altD: number; sta
           >
             {seg.value > 5 && (
               <span className={cn(
-                "text-[10px] font-bold drop-shadow-sm",
+                "text-sm font-bold drop-shadow-md",
                 seg.key === 'stable' ? 'text-black/90' : 'text-white'
               )}>{seg.label}</span>
             )}
           </div>
         ))}
       </div>
-      
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-1">
+
+      {/* Stats - BIGGER FONTS */}
+      <div className="grid grid-cols-3 gap-2">
         {segments.map((seg) => {
           const Icon = seg.icon;
           return (
             <div
               key={seg.key}
               className={cn(
-                'flex items-center justify-center gap-1.5 py-1 rounded text-xs transition-all',
-                hovered === seg.key && 'bg-white/5'
+                'flex items-center justify-center gap-2 py-2 rounded-lg text-sm transition-all',
+                hovered === seg.key && 'bg-white/5 scale-105'
               )}
               onMouseEnter={() => setHovered(seg.key)}
               onMouseLeave={() => setHovered(null)}
             >
-              <Icon size={12} className={seg.textColor} />
-              <span className={cn('font-mono tabular-nums font-bold', seg.textColor)}>
+              <Icon size={16} className={seg.textColor} weight="bold" />
+              <span className={cn('font-mono tabular-nums font-bold text-base', seg.textColor)}>
                 {seg.value.toFixed(1)}%
               </span>
             </div>
@@ -219,19 +219,19 @@ function DominanceBar({ btcD, altD, stableD }: { btcD: number; altD: number; sta
 }
 
 // Collapsible section
-function CollapsibleSection({ 
-  title, 
+function CollapsibleSection({
+  title,
   icon: Icon,
   defaultOpen = false,
-  children 
-}: { 
+  children
+}: {
   title: string;
   icon: typeof Activity;
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  
+
   return (
     <div className="border border-border/30 rounded-xl overflow-hidden">
       <button
@@ -242,9 +242,9 @@ function CollapsibleSection({
           <Icon size={14} className="text-accent" />
           <span className="text-xs font-bold tracking-wider">{title}</span>
         </div>
-        <CaretDown 
-          size={14} 
-          className={cn('text-muted-foreground transition-transform', isOpen && 'rotate-180')} 
+        <CaretDown
+          size={14}
+          className={cn('text-muted-foreground transition-transform', isOpen && 'rotate-180')}
         />
       </button>
       <div className={cn(
@@ -351,7 +351,7 @@ export function TacticalBriefing() {
 
       {/* Main Content - Compact Two-Row Layout */}
       <div className="p-4 space-y-4">
-        
+
         {/* Row 1: Key Metrics Strip */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Market Score */}
@@ -392,11 +392,8 @@ export function TacticalBriefing() {
           />
         </div>
 
-        {/* Row 2: Dominance + Flow Signal (Interactive) */}
-        <Link 
-          to="/intel"
-          className="block p-4 rounded-xl bg-black/20 border border-white/5 hover:border-accent/30 hover:bg-black/30 transition-all group"
-        >
+        {/* Row 2: Dominance Display */}
+        <div className="p-4 rounded-xl bg-black/20 border border-white/5">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <ChartPie size={14} className="text-accent" weight="fill" />
@@ -417,64 +414,10 @@ export function TacticalBriefing() {
                 )} />
                 <span className={dominanceSignal.color}>{dominanceSignal.signal}</span>
               </div>
-              <CaretRight 
-                size={12} 
-                className="text-muted-foreground group-hover:text-accent group-hover:translate-x-0.5 transition-all" 
-              />
             </div>
           </div>
           <DominanceBar btcD={btcD} altD={altD} stableD={stableD} />
-        </Link>
-
-        {/* Collapsible: Dimension Breakdown */}
-        <CollapsibleSection title="DIMENSION ANALYSIS" icon={Activity} defaultOpen={false}>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { label: 'Trend', value: regime?.dimensions?.trend, score: regime?.trend_score || 0, icon: TrendUp },
-              { label: 'Volatility', value: regime?.dimensions?.volatility, score: regime?.volatility_score || 0, icon: Lightning },
-              { label: 'Liquidity', value: regime?.dimensions?.liquidity, score: regime?.liquidity_score || 0, icon: Drop },
-              { label: 'Risk', value: regime?.dimensions?.risk_appetite, score: regime?.risk_score || 0, icon: ShieldWarning },
-            ].map((dim) => (
-              <div key={dim.label} className="flex items-center gap-2 p-2 rounded-lg bg-muted/10">
-                <dim.icon size={14} className={dim.score >= 60 ? 'text-success' : dim.score >= 40 ? 'text-warning' : 'text-destructive'} />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-muted-foreground">{dim.label}</span>
-                    <span className={cn('text-xs font-bold capitalize', dim.score >= 60 ? 'text-success' : dim.score >= 40 ? 'text-warning' : 'text-destructive')}>
-                      {dim.value || 'N/A'}
-                    </span>
-                  </div>
-                  <div className="h-1 bg-muted/30 rounded-full overflow-hidden mt-1">
-                    <div 
-                      className={cn('h-full rounded-full transition-all', dim.score >= 60 ? 'bg-success' : dim.score >= 40 ? 'bg-warning' : 'bg-destructive')}
-                      style={{ width: `${dim.score}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CollapsibleSection>
-      </div>
-
-      {/* Footer with Market Intel Link */}
-      <div className="px-4 py-2 border-t border-border/40 bg-muted/5 flex items-center justify-between">
-        {error ? (
-          <div className="flex items-center gap-2 text-[10px] text-warning">
-            <Warning size={12} />
-            <span>Cached data</span>
-          </div>
-        ) : (
-          <Link 
-            to="/intel" 
-            className="flex items-center gap-2 text-[10px] text-accent hover:underline group"
-          >
-            <Compass size={12} />
-            <span>Full analysis in Market Intel</span>
-            <CaretRight size={10} className="group-hover:translate-x-0.5 transition-transform" />
-          </Link>
-        )}
-        <span className="text-[10px] text-muted-foreground font-mono">Auto-refresh: 60s</span>
+        </div>
       </div>
     </div>
   );
