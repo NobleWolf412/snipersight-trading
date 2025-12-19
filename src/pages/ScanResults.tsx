@@ -45,6 +45,17 @@ export function ScanResults() {
   const [symbolRegimes, setSymbolRegimes] = useState<Record<string, RegimeMetadata | undefined>>({});
   const [displayedResults, setDisplayedResults] = useState<ScanResult[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+
+  const toggleSelection = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedForCompare(prev =>
+      prev.includes(id)
+        ? prev.filter(item => item !== id)
+        : [...prev, id].slice(0, 3) // Max 3 items
+    );
+  };
 
   useEffect(() => {
     try {
