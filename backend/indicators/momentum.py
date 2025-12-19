@@ -24,13 +24,23 @@ logger = logging.getLogger(__name__)
 
 # Try to import pandas-ta for optimized indicator computation
 try:
-    import pandas_ta as ta
+    import pandas_ta as pta
     PANDAS_TA_AVAILABLE = True
     logger.debug("pandas-ta available - using optimized indicator computation")
 except ImportError:
-    ta = None  # type: ignore[assignment]
+    pta = None  # type: ignore[assignment]
     PANDAS_TA_AVAILABLE = False
     logger.info("pandas-ta not available - using fallback implementations")
+
+# Try to import ta library as alternative
+try:
+    import ta as ta_lib
+    TA_AVAILABLE = True
+    logger.debug("ta library available - using for ADX computation")
+except ImportError:
+    ta_lib = None  # type: ignore[assignment]
+    TA_AVAILABLE = False
+    logger.debug("ta library not available")
 
 
 def compute_rsi(df: pd.DataFrame, period: int = 14, validate_input: bool = True) -> pd.Series:
@@ -278,10 +288,10 @@ def compute_adx(
         logger.debug(f"ADX: Not enough data (need {min_len} rows, got {len(df)})")
         return None, None, None
     
-    # Use pandas-ta if available
-    if PANDAS_TA_AVAILABLE:
+    # Use pandas-ta if available (renamed to pta)
+    if PANDAS_TA_AVAILABLE and pta is not None:
         try:
-            adx_df = ta.adx(df['high'], df['low'], df['close'], length=period, lensig=smooth_period)
+            adx_df = pta.adx(df['high'], df['low'], df['close'], length=period, lensig=smooth_period)
             if adx_df is not None and not adx_df.empty:
                 # pandas-ta column naming: ADX_14, DMP_14, DMN_14
                 adx_col = f"ADX_{period}"
@@ -297,7 +307,29 @@ def compute_adx(
                     if pd.notna(adx_val):
                         return float(adx_val), float(plus_di) if pd.notna(plus_di) else None, float(minus_di) if pd.notna(minus_di) else None
         except Exception as e:
-            logger.debug(f"pandas-ta ADX failed: {e}, using fallback")
+            logger.debug(f"pandas-ta ADX failed: {e}, trying ta library")
+    
+    # Use ta library if available (already installed)
+    if TA_AVAILABLE and ta_lib is not None:
+        try:
+            from ta.trend import ADXIndicator
+            adx_indicator = ADXIndicator(
+                high=df['high'],
+                low=df['low'],
+                close=df['close'],
+                window=period,
+                fillna=False
+            )
+            
+            adx_val = adx_indicator.adx().iloc[-1]
+            plus_di = adx_indicator.adx_pos().iloc[-1]
+            minus_di = adx_indicator.adx_neg().iloc[-1]
+            
+            if pd.notna(adx_val):
+                logger.debug(f"ADX computed via ta library: ADX={adx_val:.2f}, +DI={plus_di:.2f}, -DI={minus_di:.2f}")
+                return float(adx_val), float(plus_di) if pd.notna(plus_di) else None, float(minus_di) if pd.notna(minus_di) else None
+        except Exception as e:
+            logger.debug(f"ta library ADX failed: {e}, using manual fallback")
     
     # Fallback: Manual Wilder's Smoothing implementation
     try:
