@@ -153,7 +153,7 @@ export function ScanHistory({ maxEntries = 10 }: ScanHistoryProps) {
                   >
                     <span className="font-semibold">All Time</span>
                     <span className="text-xs text-slate-300">
-                      {scanHistoryService.getScans().length} total
+                      {scanHistoryService.getAllScans().length} total
                     </span>
                   </Button>
                   <Button
@@ -213,7 +213,7 @@ export function ScanHistory({ maxEntries = 10 }: ScanHistoryProps) {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2 items-center justify-between">
             <div className="flex gap-2">
-              {(['1h','24h','7d','all'] as const).map(tf => (
+              {(['1h', '24h', '7d', 'all'] as const).map(tf => (
                 <Button
                   key={tf}
                   variant={selectedTimeframe === tf ? 'default' : 'outline'}
@@ -228,80 +228,80 @@ export function ScanHistory({ maxEntries = 10 }: ScanHistoryProps) {
             <TimeframeStats timeframe={selectedTimeframe} />
           </div>
           <div className="space-y-3">
-          {scans.map((scan) => {
-            const total = scan.signalsGenerated + scan.signalsRejected;
-            const successRate = total > 0 ? (scan.signalsGenerated / total) * 100 : 0;
+            {scans.map((scan) => {
+              const total = scan.signalsGenerated + scan.signalsRejected;
+              const successRate = total > 0 ? (scan.signalsGenerated / total) * 100 : 0;
 
-            return (
-              <div
-                key={scan.id}
-                className="rounded-lg border border-slate-700/50 bg-black/20 p-4 hover:border-accent/30 transition-all"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Badge className={getModeColor(scan.mode)}>
-                      {scan.mode.toUpperCase()}
+              return (
+                <div
+                  key={scan.id}
+                  className="rounded-lg border border-slate-700/50 bg-black/20 p-4 hover:border-accent/30 transition-all"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Badge className={getModeColor(scan.mode)}>
+                        {scan.mode.toUpperCase()}
+                      </Badge>
+                      <span className="text-xs text-slate-300">
+                        <Clock size={12} weight="bold" className="inline mr-1" />
+                        {formatTimestamp(scan.timestamp)}
+                      </span>
+                    </div>
+                    <Badge
+                      variant={successRate >= 50 ? 'default' : 'secondary'}
+                      className={
+                        successRate >= 50
+                          ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                          : 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                      }
+                    >
+                      {successRate.toFixed(0)}% Success
                     </Badge>
-                    <span className="text-xs text-slate-300">
-                      <Clock size={12} weight="bold" className="inline mr-1" />
-                      {formatTimestamp(scan.timestamp)}
-                    </span>
                   </div>
-                  <Badge
-                    variant={successRate >= 50 ? 'default' : 'secondary'}
-                    className={
-                      successRate >= 50
-                        ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                        : 'bg-orange-500/20 text-orange-400 border-orange-500/30'
-                    }
-                  >
-                    {successRate.toFixed(0)}% Success
-                  </Badge>
-                </div>
 
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <div className="text-xs text-slate-300 mb-1">Scanned</div>
-                    <div className="text-lg font-mono text-slate-200">
-                      <Crosshair size={14} weight="bold" className="inline mr-1 text-accent" />
-                      {scan.symbolsScanned}
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-xs text-slate-300 mb-1">Scanned</div>
+                      <div className="text-lg font-mono text-slate-200">
+                        <Crosshair size={14} weight="bold" className="inline mr-1 text-accent" />
+                        {scan.symbolsScanned}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-300 mb-1">Signals</div>
+                      <div className="text-lg font-mono text-green-400">
+                        <Target size={14} weight="bold" className="inline mr-1" />
+                        {scan.signalsGenerated}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-300 mb-1">Rejected</div>
+                      <div className="text-lg font-mono text-orange-400">
+                        <XCircle size={14} weight="bold" className="inline mr-1" />
+                        {scan.signalsRejected}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-xs text-slate-300 mb-1">Signals</div>
-                    <div className="text-lg font-mono text-green-400">
-                      <Target size={14} weight="bold" className="inline mr-1" />
-                      {scan.signalsGenerated}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-300 mb-1">Rejected</div>
-                    <div className="text-lg font-mono text-orange-400">
-                      <XCircle size={14} weight="bold" className="inline mr-1" />
-                      {scan.signalsRejected}
-                    </div>
-                  </div>
-                </div>
 
-                {scan.timeframes && scan.timeframes.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-700/30">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-slate-300">Timeframes:</span>
-                      {scan.timeframes.map((tf) => (
-                        <Badge
-                          key={tf}
-                          variant="outline"
-                          className="text-xs border-slate-600/50 text-slate-300"
-                        >
-                          {tf}
-                        </Badge>
-                      ))}
+                  {scan.timeframes && scan.timeframes.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-700/30">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-slate-300">Timeframes:</span>
+                        {scan.timeframes.map((tf) => (
+                          <Badge
+                            key={tf}
+                            variant="outline"
+                            className="text-xs border-slate-600/50 text-slate-300"
+                          >
+                            {tf}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                  )}
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       )}

@@ -2,8 +2,6 @@ import tailwindcss from "@tailwindcss/vite";
 import reactSwc from "@vitejs/plugin-react-swc";
 import { defineConfig, PluginOption } from "vite";
 
-import sparkPlugin from "@github/spark/spark-vite-plugin";
-import createIconImportProxy from "@github/spark/vitePhosphorIconProxyPlugin";
 import { resolve } from 'path'
 
 const projectRoot = process.env.PROJECT_ROOT || import.meta.dirname;
@@ -17,8 +15,7 @@ const projectRoot = process.env.PROJECT_ROOT || import.meta.dirname;
 // PUBLIC_PROXY_TIMEOUT_MS -> override proxy timeout (default 300000)
 // Set HOST_BIND=0.0.0.0 in Codespaces or remote containers for browser tunnel & mobile devices.
 
-const isCodespaces = !!process.env.CODESPACE_NAME;
-const isSparkCI = !!process.env.SPARK_ENV; // heuristic – Spark may set its own env markers
+
 
 const frontendPort = process.env.FRONTEND_PORT ? Number(process.env.FRONTEND_PORT) : (Number(process.env.PORT) || 5000);
 const hostBind = process.env.HOST_BIND || '0.0.0.0';
@@ -27,14 +24,13 @@ const proxyTimeout = process.env.PUBLIC_PROXY_TIMEOUT_MS ? Number(process.env.PU
 const backendUrl = process.env.BACKEND_URL || 'http://localhost:8001';
 // If hostBind is 0.0.0.0 and we're behind an HTTPS dev tunnel, forcing HMR host to 0.0.0.0 generates wss://0.0.0.0 which the browser rejects.
 // Allow automatic fallback to window.location.hostname by omitting host when bound to 0.0.0.0 unless HMR_HOST is explicitly provided.
-const hmrHost: string | undefined = process.env.HMR_HOST || (hostBind === '0.0.0.0' ? undefined : hostBind);
+
+
 
 export default defineConfig({
   plugins: [
     reactSwc(),
     tailwindcss(),
-    createIconImportProxy() as PluginOption,
-    sparkPlugin() as PluginOption,
   ],
   server: {
     port: frontendPort,
@@ -43,9 +39,6 @@ export default defineConfig({
     allowedHosts: true,
     hmr: {
       overlay: true,
-      protocol: (process.env.HMR_PROTOCOL) || (hostBind === 'localhost' ? 'ws' : 'wss'),
-      host: hmrHost,
-      clientPort: process.env.HMR_CLIENT_PORT ? Number(process.env.HMR_CLIENT_PORT) : (hostBind === 'localhost' ? frontendPort : 443),
     },
     proxy: {
       '/api': {
@@ -63,7 +56,6 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react/jsx-runtime', 'react-router-dom'],
-    exclude: ['@github/spark'],
     force: false,
     esbuildOptions: {
       target: 'esnext'

@@ -1,5 +1,5 @@
 import { useScanner } from '@/context/ScannerContext';
-import { Radar, WarningCircle } from '@phosphor-icons/react';
+import { Target, WarningCircle } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { HTFOpportunitiesPanel } from './HTFOpportunitiesPanel';
 import { useNavigate } from 'react-router-dom';
@@ -25,7 +25,7 @@ export function HTFAlertBeacon() {
           }
           onClick={() => navigate('/htf')}
         >
-          {alertActive ? <WarningCircle size={22} weight="fill" /> : <Radar size={22} />}
+          {alertActive ? <WarningCircle size={22} weight="fill" /> : <Target size={22} />}
           <span className={
             'absolute -top-1 -right-1 min-w-[22px] h-6 px-1 rounded-full bg-background/95 border text-[10px] font-bold flex items-center justify-center font-mono transition-colors ' +
             (alertActive ? 'border-red-500/60 text-red-500' : 'border-border text-muted-foreground')

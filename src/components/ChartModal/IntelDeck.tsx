@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Target, ShieldWarning, Brain, TrendingUp, Wallet, ArrowRight, Copy } from '@phosphor-icons/react';
+import { Target, ShieldWarning, Brain, TrendUp, Wallet, ArrowRight, Copy } from '@phosphor-icons/react';
 import type { ScanResult } from '@/utils/mockData';
 import { getSignalTier } from '@/utils/signalTiers';
 
@@ -96,7 +96,7 @@ export function IntelDeck({ result }: IntelDeckProps) {
                     {/* AI Analysis Brief */}
                     <div className="space-y-2">
                         <h4 className="text-xs font-semibold flex items-center gap-2 text-primary">
-                            <TrendingUp size={14} />
+                            <TrendUp size={14} />
                             STRATEGY BRIEF
                         </h4>
                         <div className="text-xs text-muted-foreground leading-relaxed bg-muted/20 p-3 rounded-lg border border-border/40">
