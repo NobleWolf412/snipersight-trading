@@ -1,32 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
 import { Target, Lightning, Crosshair, TrendUp, Info, ArrowRight, Activity } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
-import { api } from '@/utils/api';
 import { Link } from 'react-router-dom';
-
-interface HTFOpportunity {
-    symbol: string;
-    level: {
-        price: number;
-        level_type: string;
-        timeframe: string;
-        strength: number;
-        touches: number;
-        proximity_pct: number;
-    };
-    current_price: number;
-    recommended_mode: string;
-    rationale: string;
-    confluence_factors: string[];
-    expected_move_pct: number;
-    confidence: number;
-}
-
-interface HTFOpportunitiesData {
-    opportunities: HTFOpportunity[];
-    total: number;
-    timestamp: string;
-}
+import { useLandingData } from '@/context/LandingContext';
 
 // Circular progress ring for confidence
 function ConfidenceRing({ value, size = 56 }: { value: number; size?: number }) {
@@ -90,52 +65,11 @@ function ModeBadge({ mode }: { mode: string }) {
 }
 
 export function HTFOpportunities() {
-    const [data, setData] = useState<HTFOpportunitiesData | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const { htf: data } = useLandingData();
 
-    const fetchOpportunities = useCallback(async () => {
-        try {
-            const response = await api.getHTFOpportunities({ min_confidence: 60 });
-            if (response.data) {
-                setData(response.data);
-                setError(null);
-            } else if (response.error) {
-                setError(response.error);
-            }
-        } catch (err) {
-            setError('HTF opportunities unavailable');
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchOpportunities();
-        const interval = setInterval(fetchOpportunities, 60000); // Refresh every minute
-        return () => clearInterval(interval);
-    }, [fetchOpportunities]);
-
-    // Loading state
-    if (loading) {
-        return (
-            <div className="relative p-6 rounded-xl border border-border/40 bg-card/50 backdrop-blur-sm">
-                <div className="flex items-center justify-center gap-3 py-4">
-                    <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                    <span className="text-sm tracking-wider text-muted-foreground">Scanning HTF opportunities...</span>
-                </div>
-            </div>
-        );
-    }
-
-    // Error state
-    if (error || !data) {
-        return null; // Silently hide if no opportunities
-    }
-
-    // No opportunities
-    if (data.opportunities.length === 0) {
-        return null; // Silently hide if no opportunities
+    // No opportunities or not loaded yet
+    if (!data || data.opportunities.length === 0) {
+        return null;
     }
 
     // Show top 3 opportunities

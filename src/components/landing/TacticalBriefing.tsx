@@ -1,59 +1,21 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import {
-  Crosshair,
-  Eye,
-  ShieldWarning,
   TrendUp,
   TrendDown,
   Minus,
   Lightning,
-  Drop,
   Target,
-  Smiley,
-  Warning,
-  ArrowsCounterClockwise,
   CurrencyBtc,
   Coins,
   Wallet,
   ChartPie,
   Activity,
   Gauge,
-  Info,
   CaretDown,
-  CaretRight,
-  Clock,
-  Pulse,
-  ArrowUp,
-  ArrowDown,
-  ChartLine,
-  Compass,
+  ShieldWarning,
 } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
-import { api } from '@/utils/api';
-import { Link } from 'react-router-dom';
-
-interface RegimeData {
-  composite: string;
-  score: number;
-  dimensions: {
-    trend: string;
-    volatility: string;
-    liquidity: string;
-    risk_appetite: string;
-    derivatives: string;
-  };
-  trend_score: number;
-  volatility_score: number;
-  liquidity_score: number;
-  risk_score: number;
-  derivatives_score: number;
-  dominance?: {
-    btc_d: number;
-    alt_d: number;
-    stable_d: number;
-  };
-  timestamp: string;
-}
+import { useLandingData } from '@/context/LandingContext';
 
 // Threat level based on score
 function getThreatLevel(score: number): { level: string; color: string; bgColor: string } {
@@ -262,59 +224,17 @@ function CollapsibleSection({
 }
 
 export function TacticalBriefing() {
-  const [regime, setRegime] = useState<RegimeData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const { regime } = useLandingData();
 
-  const fetchRegime = useCallback(async () => {
-    try {
-      const response = await api.getMarketRegime();
-      if (response.data) {
-        setRegime(response.data);
-        setLastUpdate(new Date());
-        setError(null);
-      } else if (response.error) {
-        setError(response.error);
-      }
-    } catch (err) {
-      setError('Intel unavailable');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchRegime();
-    const interval = setInterval(fetchRegime, 60000);
-    return () => clearInterval(interval);
-  }, [fetchRegime]);
-
-  const threatLevel = getThreatLevel(regime?.score || 50);
-  const btcD = regime?.dominance?.btc_d || 50;
-  const altD = regime?.dominance?.alt_d || 35;
-  const stableD = regime?.dominance?.stable_d || 15;
-  const dominanceSignal = getDominanceSignal(btcD, stableD);
-
-  // Loading state - simple and clean
-  if (loading) {
-    return (
-      <div className="relative p-6 rounded-xl border border-accent/30 bg-card/80 backdrop-blur-sm">
-        <div className="flex items-center justify-center gap-4 py-6">
-          <div className="relative">
-            <div className="w-12 h-12 rounded-full border-2 border-accent/30 flex items-center justify-center">
-              <Gauge size={24} className="text-accent" />
-            </div>
-            <div className="absolute inset-0 rounded-full border-2 border-t-accent border-transparent animate-spin" />
-          </div>
-          <div>
-            <div className="text-sm font-bold tracking-wider text-foreground">Analyzing Market</div>
-            <div className="text-xs text-muted-foreground">Gathering regime data...</div>
-          </div>
-        </div>
-      </div>
-    );
+  if (!regime) {
+    return null;
   }
+
+  const threatLevel = getThreatLevel(regime.score || 50);
+  const btcD = regime.dominance?.btc_d || 50;
+  const altD = regime.dominance?.alt_d || 35;
+  const stableD = regime.dominance?.stable_d || 15;
+  const dominanceSignal = getDominanceSignal(btcD, stableD);
 
   return (
     <div className={cn(
@@ -344,7 +264,7 @@ export function TacticalBriefing() {
             THREAT: {threatLevel.level}
           </div>
           <span className="text-[10px] text-muted-foreground font-mono">
-            {lastUpdate?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            {new Date(regime.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>
         </div>
       </div>
@@ -356,7 +276,7 @@ export function TacticalBriefing() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Market Score */}
           <div className="col-span-1 flex items-center gap-3 p-3 rounded-xl bg-muted/10 border border-border/30">
-            <MiniGauge value={regime?.score || 0} label="CLARITY" color={threatLevel.color} />
+            <MiniGauge value={regime.score || 0} label="CLARITY" color={threatLevel.color} />
             <div className="flex-1">
               <div className={cn('text-lg font-bold', threatLevel.color)}>
                 {threatLevel.level}
@@ -369,26 +289,26 @@ export function TacticalBriefing() {
 
           {/* Bias Indicator */}
           <MetricDisplay
-            icon={regime?.dimensions?.trend === 'bullish' ? TrendUp : regime?.dimensions?.trend === 'bearish' ? TrendDown : Minus}
+            icon={regime.dimensions?.trend === 'bullish' ? TrendUp : regime.dimensions?.trend === 'bearish' ? TrendDown : Minus}
             label="TREND BIAS"
-            value={regime?.dimensions?.trend?.toUpperCase() || 'N/A'}
-            color={regime?.trend_score && regime.trend_score >= 60 ? 'text-success' : regime?.trend_score && regime.trend_score >= 40 ? 'text-warning' : 'text-destructive'}
+            value={regime.dimensions?.trend?.toUpperCase() || 'N/A'}
+            color={regime.trend_score && regime.trend_score >= 60 ? 'text-success' : regime.trend_score && regime.trend_score >= 40 ? 'text-warning' : 'text-destructive'}
           />
 
           {/* Volatility */}
           <MetricDisplay
             icon={Lightning}
             label="VOLATILITY"
-            value={regime?.dimensions?.volatility?.toUpperCase() || 'N/A'}
-            color={regime?.volatility_score && regime.volatility_score >= 60 ? 'text-success' : regime?.volatility_score && regime.volatility_score >= 40 ? 'text-warning' : 'text-orange-500'}
+            value={regime.dimensions?.volatility?.toUpperCase() || 'N/A'}
+            color={regime.volatility_score && regime.volatility_score >= 60 ? 'text-success' : regime.volatility_score && regime.volatility_score >= 40 ? 'text-warning' : 'text-orange-500'}
           />
 
           {/* Risk Appetite */}
           <MetricDisplay
             icon={ShieldWarning}
             label="RISK APPETITE"
-            value={regime?.dimensions?.risk_appetite?.toUpperCase() || 'N/A'}
-            color={regime?.risk_score && regime.risk_score >= 60 ? 'text-success' : regime?.risk_score && regime.risk_score >= 40 ? 'text-warning' : 'text-destructive'}
+            value={regime.dimensions?.risk_appetite?.toUpperCase() || 'N/A'}
+            color={regime.risk_score && regime.risk_score >= 60 ? 'text-success' : regime.risk_score && regime.risk_score >= 40 ? 'text-warning' : 'text-destructive'}
           />
         </div>
 

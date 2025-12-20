@@ -1539,6 +1539,11 @@ async def get_market_cycles(symbol: str = Query("BTC/USDT", description="Symbol 
                 "d": round(stoch_rsi_d, 2) if stoch_rsi_d is not None else None,
                 "zone": stoch_zone
             },
+            "temporal": {
+                "score": round(cycle_ctx.temporal_score, 1),
+                "is_active_window": cycle_ctx.timing_window_active,
+                "day_of_week": datetime.now(timezone.utc).strftime('%A')
+            },
             "interpretation": _get_cycle_interpretation(cycle_ctx, stoch_zone),
             "timestamp": datetime.now(timezone.utc).isoformat()
         }

@@ -136,6 +136,14 @@ def detect_cycle_context(
     if dcl_info.get('price') and cycle_high_info.get('price'):
         midpoint = (dcl_info['price'] + cycle_high_info['price']) / 2
     
+    # Calculate temporal bias (Day/Time probability)
+    # Use current time if available, otherwise last candle time
+    check_time = datetime.now() if current_price else df.index[-1]
+    if hasattr(check_time, 'to_pydatetime'):
+        check_time = check_time.to_pydatetime()
+        
+    temporal_score, timing_active = _calculate_temporal_bias(check_time)
+    
     # Determine trade bias
     trade_bias, confidence = _calculate_trade_bias(
         phase=phase,
@@ -145,6 +153,10 @@ def detect_cycle_context(
         dcl_confirmation=dcl_info.get('confirmation', CycleConfirmation.UNCONFIRMED),
         structural_breaks=structural_breaks
     )
+    
+    # Boost confidence if we are in a high probability timing window
+    if timing_active:
+        confidence = min(100.0, confidence + 10.0)
     
     return CycleContext(
         phase=phase,
@@ -163,7 +175,9 @@ def detect_cycle_context(
         in_dcl_zone=in_dcl_zone,
         in_wcl_zone=in_wcl_zone,
         trade_bias=trade_bias,
-        confidence=confidence
+        confidence=confidence,
+        temporal_score=temporal_score,
+        timing_window_active=timing_active
     )
 
 
@@ -417,6 +431,58 @@ def _calculate_translation(dcl_info: dict, cycle_high_info: dict, config: CycleC
         return CycleTranslation.RTR  # 🟩 Bullish - topped late
     else:
         return CycleTranslation.MTR  # 🟧 Neutral
+
+
+def _calculate_temporal_bias(ts: datetime) -> Tuple[float, bool]:
+    """
+    Calculate temporal probability score based on Camel Finance statistics.
+    
+    Statistical Edges:
+    1. Day of Week:
+       - Monday: 40% probability of WCL (Bullish for Lows)
+       - Friday: 20% probability of WCL (Bullish for Lows)
+       - Wednesday/Thursday: Higher probability of Highs
+       
+    2. Time of Day (UTC):
+       - 00:00-02:00: Daily Open (High volume/reversal zone)
+       - 14:00-16:00: NY Mid-Day (Reversal zone)
+       
+    Args:
+        ts: Timestamp to analyze
+        
+    Returns:
+        Tuple of (score 0-100, is_active_window)
+    """
+    score = 0.0
+    active = False
+    
+    # 1. Day of Week Analysis (0=Mon, 6=Sun)
+    day = ts.weekday()
+    
+    if day == 0:  # Monday
+        score += 40.0
+        active = True
+    elif day == 4:  # Friday
+        score += 20.0
+        active = True
+        
+    # 2. Intraday Analysis (UTC Hour)
+    hour = ts.hour
+    
+    # Daily Open Zone (00:00 - 02:00 UTC)
+    if 0 <= hour <= 2:
+        score += 15.0
+        active = True
+        
+    # NY Mid-Day / London Close (14:00 - 16:00 UTC)
+    elif 14 <= hour <= 16:
+        score += 15.0
+        active = True
+        
+    # Cap score
+    score = min(100.0, score)
+    
+    return score, active
 
 
 def _determine_phase(

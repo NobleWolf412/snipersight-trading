@@ -473,6 +473,10 @@ class CycleContext:
     trade_bias: Literal["LONG", "SHORT", "NEUTRAL"] = "NEUTRAL"
     confidence: float = 0.0
     
+    # NEW: Temporal Bias Intelligence (Phase 3.1)
+    temporal_score: float = 0.0  # 0-100 score based on Day/Time probability
+    timing_window_active: bool = False  # True if in high-prob time window (Mon/Fri or Intraday)
+    
     def __post_init__(self):
         """Validate confidence range."""
         self.confidence = max(0.0, min(100.0, self.confidence))

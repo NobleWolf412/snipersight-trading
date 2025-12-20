@@ -3,17 +3,41 @@ import { TacticalBriefing } from '@/components/landing/TacticalBriefing';
 import { MarketCyclesBrief } from '@/components/landing/MarketCyclesBrief';
 import { HTFOpportunities } from '@/components/landing/HTFOpportunities';
 import { useTelemetry } from '@/hooks/useTelemetry';
-import { Crosshair, Target, ChartLine, Compass } from '@phosphor-icons/react';
+import { Crosshair, Target, Compass } from '@phosphor-icons/react';
 import { Link } from 'react-router-dom';
 import { PageContainer } from '@/components/layout/PageContainer';
-// Default logo path; update if your file name differs
 import sniperLogo from '@/assets/images/1000016768.png';
+import { LandingProvider, useLandingData } from '@/context/LandingContext';
+import { LandingLoader } from '@/components/landing/LandingLoader';
 
-export function Landing() {
+function LandingContent() {
   const { system } = useTelemetry();
+  const { isLoading, error } = useLandingData();
+
+  if (isLoading) {
+    return <LandingLoader />;
+  }
+
+  if (error) {
+    // Basic error fallback - could be improved
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-destructive p-4 text-center">
+        <div className="space-y-4">
+          <div className="text-xl font-bold tracking-widest">SYSTEM OFFLINE</div>
+          <div className="text-sm text-muted-foreground">{error}</div>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-destructive/10 hover:bg-destructive/20 rounded border border-destructive/30 text-destructive text-sm font-bold transition-colors"
+          >
+            RETRY CONNECTION
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background" id="main-content">
+    <div className="relative min-h-screen overflow-hidden bg-background animate-in fade-in duration-700" id="main-content">
       <main className="pb-12">
         {/* Tactical grid background (global) */}
         <div className="fixed inset-0 tactical-grid opacity-10 pointer-events-none" aria-hidden="true" />
@@ -214,5 +238,13 @@ export function Landing() {
         </footer>
       </main>
     </div>
+  );
+}
+
+export function Landing() {
+  return (
+    <LandingProvider>
+      <LandingContent />
+    </LandingProvider>
   );
 }
