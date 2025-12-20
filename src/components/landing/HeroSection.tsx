@@ -1,25 +1,69 @@
-import { LiveTicker } from '@/components/LiveTicker';
-import { Crosshair } from '@phosphor-icons/react';
+import { Compass } from '@phosphor-icons/react';
+import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import sniperLogo from '@/assets/images/1000016768.png';
 
 export function HeroSection() {
   return (
-    <header className="relative space-y-8" id="hero">
-      <div className="flex items-center gap-3 text-xs tracking-widest text-accent">
-        <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
-        <span>SYSTEM OPERATIONAL</span>
+    <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden">
+      {/* Content */}
+      <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="space-y-8"
+        >
+          {/* Status badge */}
+          <div className="inline-flex items-center gap-3 px-4 py-2 glass-card-subtle glow-border-green">
+            <div className="w-2 h-2 bg-accent rounded-full animate-pulse shadow-[0_0_8px_rgba(0,255,170,0.8)]" />
+            <span className="text-xs tracking-[0.3em] text-accent/80 uppercase">System Online</span>
+          </div>
+
+          {/* Logo */}
+          <div className="relative inline-block">
+            <div className="absolute inset-0 bg-accent/30 blur-[80px] rounded-full" />
+            <img
+              src={sniperLogo}
+              alt="SniperSight"
+              className="relative h-20 md:h-28 w-auto drop-shadow-[0_0_30px_rgba(0,255,170,0.4)]"
+            />
+          </div>
+
+          {/* Headline */}
+          <h1 className="display-headline text-foreground">
+            Precision Market
+            <span className="block text-accent">Intelligence</span>
+          </h1>
+
+          {/* Subheadline */}
+          <p className="display-subheadline max-w-2xl mx-auto">
+            Crypto reconnaissance • Confluence scoring • Risk control
+          </p>
+
+          {/* CTA Button */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
+            className="flex items-center justify-center pt-4"
+          >
+            <Link
+              to="/intel"
+              className="group flex items-center gap-3 px-8 py-4 glass-card glow-border-green hover:bg-accent/10 transition-all duration-300"
+            >
+              <Compass size={24} weight="bold" className="text-accent" />
+              <span className="text-lg font-bold tracking-wider text-foreground group-hover:text-accent transition-colors">
+                View Intel
+              </span>
+              <span className="text-accent group-hover:translate-x-1 transition-transform">→</span>
+            </Link>
+          </motion.div>
+        </motion.div>
       </div>
-      <div className="space-y-5 relative z-10">
-        <h1 className="text-5xl md:text-6xl font-bold tracking-tight">SniperSight</h1>
-        <p className="text-lg text-muted-foreground max-w-2xl leading-relaxed">
-          Precision crypto market reconnaissance and disciplined execution.
-          Identify high-quality targets, validate confluence, deploy with risk control.
-        </p>
-      </div>
-      <LiveTicker className="rounded-md border border-border/60 relative z-10" />
-      {/* Decorative reticle moved further out, thinner and subtler */}
-      <div className="absolute -top-6 -right-24 w-56 h-56 rounded-full bg-accent/5 border border-accent/30 flex items-center justify-center pointer-events-none opacity-15">
-        <Crosshair size={120} weight="thin" className="text-accent" />
-      </div>
-    </header>
+
+      {/* Bottom fade */}
+      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />
+    </section>
   );
 }

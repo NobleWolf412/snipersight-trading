@@ -293,10 +293,9 @@ export function ScannerSetup() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background" id="main-content">
+    <div className="relative min-h-screen overflow-hidden" id="main-content">
       <main className="py-10 md:py-14">
         <PageContainer>
-          <div className="fixed inset-0 tactical-grid opacity-20 pointer-events-none" aria-hidden="true" />
           <div className="max-w-6xl mx-auto space-y-8">
             <div className="text-center space-y-2">
               <h1 className="text-3xl font-bold hud-headline hud-text-green">SCANNER SETUP</h1>

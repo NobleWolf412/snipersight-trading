@@ -3,6 +3,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { Routes, Route } from 'react-router-dom';
 import { SniperReticle } from '@/components/SniperReticle';
 import { TopBarLite } from '@/components/TopBar/TopBarLite';
+import { TacticalBackground } from '@/components/ui/TacticalBackground';
 
 const Landing = lazy(() => import('@/pages/Landing').then(m => ({ default: m.Landing })));
 const ScannerSetup = lazy(() => import('@/pages/ScannerSetup').then(m => ({ default: m.ScannerSetup })));
@@ -28,12 +29,13 @@ function LoadingFallback() {
 
 function App() {
   console.log('[App] Rendering App component');
-  
+
   return (
-    <div className="min-h-screen w-screen bg-background text-foreground">
+    <div className="min-h-screen w-screen text-foreground">
+      <TacticalBackground />
       <SniperReticle />
       <TopBarLite />
-      <main className="w-full h-full tactical-grid">
+      <main className="w-full h-full relative z-10">
         <Suspense fallback={<LoadingFallback />}>
           <Routes>
             <Route path="/" element={<Landing />} />

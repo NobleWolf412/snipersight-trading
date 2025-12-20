@@ -72,7 +72,7 @@ export function BotSetup() {
   ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground" id="main-content">
+    <div className="min-h-screen text-foreground" id="main-content">
       <main className="py-10 md:py-14">
         <PageContainer>
           <div className="space-y-10 md:space-y-12">
@@ -102,7 +102,7 @@ export function BotSetup() {
 
             <div className="grid md:grid-cols-2 gap-6">
               {configSections.map((section, index) => (
-                <TacticalPanel 
+                <TacticalPanel
                   key={index}
                   className="hover:scale-[1.02] transition-all duration-300"
                 >
@@ -147,7 +147,7 @@ export function BotSetup() {
                       <div>
                         <h3 className="text-lg font-bold text-warning mb-2">Configuration Required</h3>
                         <p className="text-sm text-muted-foreground mb-4">
-                          Complete all configuration sections above before deploying the autonomous bot. 
+                          Complete all configuration sections above before deploying the autonomous bot.
                           This ensures proper risk management and execution parameters are in place.
                         </p>
                         <div className="flex flex-wrap gap-3">
@@ -167,16 +167,16 @@ export function BotSetup() {
 
                   <div className="flex items-center gap-4 pt-4">
                     <Link to="/" className="flex-1">
-                      <Button 
-                        variant="outline" 
-                        size="lg" 
+                      <Button
+                        variant="outline"
+                        size="lg"
                         className="w-full h-12 hover:border-accent/50 transition-all"
                       >
                         ← Back to Landing
                       </Button>
                     </Link>
-                    <Button 
-                      disabled 
+                    <Button
+                      disabled
                       size="lg"
                       className="flex-1 h-12 cursor-not-allowed opacity-50 bg-primary/20 text-primary border border-primary/30"
                     >
