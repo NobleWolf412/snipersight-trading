@@ -2,15 +2,12 @@ import { Compass } from '@phosphor-icons/react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import sniperLogo from '@/assets/images/1000016768.png';
-// import { SniperScope } from './SniperScope';
 
 export function HeroSection() {
   return (
-    <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden">
-      {/* Background Effect - Green Vignette */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-accent/10 via-background to-background" />
-      </div>
+    <section className="relative min-h-[75vh] flex items-center justify-center overflow-hidden">
+      {/* Background - Clean Grid or subtle noise could go here later */}
+      <div className="absolute inset-0 z-0 bg-background" />
 
       {/* Content */}
       <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
@@ -26,9 +23,22 @@ export function HeroSection() {
             <span className="text-xs tracking-[0.3em] text-accent/80 uppercase">System Online</span>
           </div>
 
-          {/* Logo */}
+          {/* Logo with Background Halo Ring */}
           <div className="relative inline-block">
-            <div className="absolute inset-0 bg-accent/30 blur-[80px] rounded-full" />
+            {/* The Green Ring Vignette (Behind Logo) */}
+            <div
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none"
+              style={{
+                width: '180%',   // Larger than logo
+                height: '180%',  // Larger than logo
+                zIndex: -1,      // Behind logo
+                background: 'radial-gradient(circle, transparent 30%, rgba(0, 255, 136, 0.25) 50%, rgba(0, 255, 136, 0.1) 70%, transparent 80%)',
+                filter: 'blur(20px)', // Soften the ring
+              }}
+            />
+            {/* Optional: Inner intense glow for core */}
+            <div className="absolute inset-0 bg-accent/20 blur-[50px] rounded-full z-[-1]" />
+
             <img
               src={sniperLogo}
               alt="SniperSight"
@@ -47,24 +57,7 @@ export function HeroSection() {
             Crypto reconnaissance • Confluence scoring • Risk control
           </p>
 
-          {/* CTA Button */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
-            className="flex items-center justify-center pt-4"
-          >
-            <Link
-              to="/intel"
-              className="group flex items-center gap-3 px-8 py-4 glass-card glow-border-green hover:bg-accent/10 transition-all duration-300"
-            >
-              <Compass size={24} weight="bold" className="text-accent" />
-              <span className="text-lg font-bold tracking-wider text-foreground group-hover:text-accent transition-colors">
-                View Intel
-              </span>
-              <span className="text-accent group-hover:translate-x-1 transition-transform">→</span>
-            </Link>
-          </motion.div>
+
         </motion.div>
       </div>
 

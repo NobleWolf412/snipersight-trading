@@ -1,15 +1,11 @@
 import { SystemStatus } from '@/components/landing/SystemStatus';
-import { TacticalBriefing } from '@/components/landing/TacticalBriefing';
-import { MarketCyclesBrief } from '@/components/landing/MarketCyclesBrief';
-import { HTFOpportunities } from '@/components/landing/HTFOpportunities';
 import { HeroSection } from '@/components/landing/HeroSection';
-import { StatsBar } from '@/components/landing/StatsBar';
 import { FeatureTabs } from '@/components/landing/FeatureTabs';
+import { TacticalDivider } from '@/components/landing/TacticalDivider';
 import { useTelemetry } from '@/hooks/useTelemetry';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { LandingProvider, useLandingData } from '@/context/LandingContext';
 import { LandingLoader } from '@/components/landing/LandingLoader';
-import { motion } from 'framer-motion';
 
 function LandingContent() {
   const { system } = useTelemetry();
@@ -42,70 +38,10 @@ function LandingContent() {
         {/* Hero Section - Full Height */}
         <HeroSection />
 
-        {/* Stats Bar */}
-        <StatsBar />
+        {/* Animated Tactical Page Break */}
+        <TacticalDivider className="my-12 relative z-10" height="h-24" />
 
-        {/* Section Divider */}
-        <div className="section-divider max-w-4xl mx-auto" />
-
-        {/* HTF Tactical Opportunities - Live High-Confidence Setups */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="py-16"
-        >
-          <PageContainer>
-            <div className="text-center mb-8">
-              <h2 className="hud-headline text-xl md:text-2xl text-foreground mb-2">
-                Priority Targets
-              </h2>
-              <p className="text-sm text-muted-foreground tracking-wider">
-                Live high-confidence setups detected by the scanner
-              </p>
-            </div>
-            <div className="glass-card glow-border-red p-6">
-              <HTFOpportunities />
-            </div>
-          </PageContainer>
-        </motion.section>
-
-        {/* Section Divider */}
-        <div className="section-divider max-w-4xl mx-auto" />
-
-        {/* Intelligence Grid - Tactical Briefing & Market Cycles */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="py-16"
-        >
-          <PageContainer>
-            <div className="text-center mb-8">
-              <h2 className="hud-headline text-xl md:text-2xl text-foreground mb-2">
-                Market Intelligence
-              </h2>
-              <p className="text-sm text-muted-foreground tracking-wider">
-                Macro context and cycle analysis at a glance
-              </p>
-            </div>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="glass-card glow-border-green p-6">
-                <TacticalBriefing />
-              </div>
-              <div className="glass-card glow-border-amber p-6">
-                <MarketCyclesBrief />
-              </div>
-            </div>
-          </PageContainer>
-        </motion.section>
-
-        {/* Section Divider */}
-        <div className="section-divider max-w-4xl mx-auto" />
-
-        {/* Feature Tabs */}
+        {/* Complete Trading Arsenal - The only remaining section */}
         <FeatureTabs />
 
         {/* Footer with system status */}
@@ -129,4 +65,3 @@ export function Landing() {
     </LandingProvider>
   );
 }
-
