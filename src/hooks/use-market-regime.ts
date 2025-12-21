@@ -22,28 +22,27 @@ export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegi
     const fetchRegime = async () => {
       try {
         const response = await api.getMarketRegime();
-        
+
         if (response.error || !response.data) {
           console.warn('Market regime fetch failed, using fallback:', response.error);
           return;
         }
 
         const data = response.data;
-        
+
         // Map backend composite regime to frontend RegimeLabel
         const regimeLabel = mapCompositeToLabel(data.composite);
         const visibility = mapScoreToVisibility(data.score);
         const color = mapLabelToColor(regimeLabel);
-        
+
         // Generate guidance based on regime
         const guidanceLines = generateGuidance(regimeLabel, data.dimensions.trend, mode);
-        
-        // Mock dominance values (backend doesn't provide these yet)
-        // TODO: Backend should expose BTC.D, USDT.D, ALT.D when available
-        const btcDominance = data.dimensions.risk_appetite === 'risk_off' ? 55 : 48;
-        const usdtDominance = data.dimensions.liquidity === 'thin' ? 8 : 5;
-        const altDominance = 100 - btcDominance - usdtDominance;
-        
+
+        // Use real dominance data from backend (falls back to estimates if missing)
+        const btcDominance = data.dominance?.btc_d ?? (data.dimensions.risk_appetite === 'risk_off' ? 55 : 48);
+        const usdtDominance = data.dominance?.stable_d ?? (data.dimensions.liquidity === 'thin' ? 8 : 5);
+        const altDominance = data.dominance?.alt_d ?? (100 - btcDominance - usdtDominance);
+
         setRegimeData({
           regimeLabel,
           visibility,
@@ -54,7 +53,7 @@ export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegi
           guidanceLines,
           mode,
         });
-        
+
       } catch (error) {
         console.error('Market regime fetch error:', error);
       }
@@ -62,7 +61,7 @@ export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegi
 
     fetchRegime();
     const interval = setInterval(fetchRegime, 60000); // Refresh every minute
-    
+
     return () => clearInterval(interval);
   }, [mode]);
 
@@ -74,12 +73,12 @@ export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegi
  */
 function mapCompositeToLabel(composite: string): RegimeLabel {
   const lower = composite.toLowerCase();
-  
+
   if (lower.includes('bullish') && lower.includes('risk_on')) return 'ALTSEASON';
   if (lower.includes('bullish') || lower.includes('uptrend')) return 'BTC_DRIVE';
   if (lower.includes('defensive') || lower.includes('risk_off')) return 'DEFENSIVE';
   if (lower.includes('bearish') && lower.includes('high_vol')) return 'PANIC';
-  
+
   return 'CHOPPY';
 }
 

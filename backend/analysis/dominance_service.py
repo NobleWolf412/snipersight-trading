@@ -175,12 +175,73 @@ class DominanceService:
             logger.error("Unexpected error fetching market caps: %s", e)
             return None
     
-    def _calculate_dominance(self, coin_data: List[Dict]) -> Optional[DominanceSnapshot]:
+    def _fetch_stablecoin_market_caps(self) -> float:
+        """
+        Fetch market caps for major stablecoins directly.
+        
+        Uses CryptoCompare's pricemultifull endpoint to get individual coin data.
+        This is needed because stablecoins often don't appear in top-100 by volume.
+        
+        Returns:
+            Total stablecoin market cap in USD
+        """
+        headers = {}
+        if self.api_key:
+            headers['authorization'] = f'Apikey {self.api_key}'
+        
+        # Major stablecoins to track
+        stables = ['USDT', 'USDC', 'DAI', 'BUSD']
+        
+        try:
+            # Use pricemultifull endpoint to get detailed data for specific coins
+            params = {
+                'fsyms': ','.join(stables),
+                'tsyms': 'USD'
+            }
+            
+            response = requests.get(
+                "https://min-api.cryptocompare.com/data/pricemultifull",
+                params=params,
+                headers=headers,
+                timeout=10
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            if data.get('Response') == 'Error':
+                logger.warning("CryptoCompare stablecoin API error: %s", data.get('Message', 'Unknown'))
+                return 0.0
+            
+            total_stable_cap = 0.0
+            raw_data = data.get('RAW', {})
+            
+            for symbol in stables:
+                if symbol in raw_data and 'USD' in raw_data[symbol]:
+                    mktcap = raw_data[symbol]['USD'].get('MKTCAP', 0)
+                    if mktcap:
+                        total_stable_cap += float(mktcap)
+                        logger.debug(f"{symbol} market cap: ${mktcap:,.0f}")
+            
+            logger.info(f"Total stablecoin market cap: ${total_stable_cap:,.0f}")
+            return total_stable_cap
+            
+        except requests.Timeout:
+            logger.warning("CryptoCompare stablecoin API timeout")
+            return 0.0
+        except requests.RequestException as e:
+            logger.warning("CryptoCompare stablecoin API request failed: %s", e)
+            return 0.0
+        except Exception as e:
+            logger.warning("Unexpected error fetching stablecoin market caps: %s", e)
+            return 0.0
+    
+    def _calculate_dominance(self, coin_data: List[Dict], stablecoin_market_cap: float = 0.0) -> Optional[DominanceSnapshot]:
         """
         Calculate dominance percentages from coin market cap data.
         
         Args:
             coin_data: List of coin data from CryptoCompare
+            stablecoin_market_cap: Pre-fetched stablecoin market cap (since they're not in top-100)
             
         Returns:
             DominanceSnapshot or None if calculation fails
@@ -190,7 +251,7 @@ class DominanceService:
         
         total_market_cap = 0.0
         btc_market_cap = 0.0
-        stable_market_cap = 0.0
+        stable_market_cap_from_top100 = 0.0
         
         for coin in coin_data:
             try:
@@ -205,7 +266,7 @@ class DominanceService:
                 if symbol == 'BTC':
                     btc_market_cap = mktcap
                 elif symbol in STABLECOINS:
-                    stable_market_cap += mktcap
+                    stable_market_cap_from_top100 += mktcap
                     
             except (ValueError, TypeError, KeyError) as e:
                 logger.debug("Skipping coin data: %s", e)
@@ -214,6 +275,14 @@ class DominanceService:
         if total_market_cap <= 0:
             logger.warning("Total market cap is zero or negative")
             return None
+        
+        # Use the separately fetched stablecoin market cap if it's higher
+        # (top-100 might not include all stablecoins)
+        stable_market_cap = max(stablecoin_market_cap, stable_market_cap_from_top100)
+        
+        # Add stablecoin market cap to total if it wasn't already counted
+        if stablecoin_market_cap > stable_market_cap_from_top100:
+            total_market_cap += (stablecoin_market_cap - stable_market_cap_from_top100)
         
         alt_market_cap = total_market_cap - btc_market_cap - stable_market_cap
         
@@ -282,7 +351,10 @@ class DominanceService:
                 )
             return None
         
-        snapshot = self._calculate_dominance(coin_data)
+        # Fetch stablecoin market caps separately (they're not in top-100)
+        stablecoin_market_cap = self._fetch_stablecoin_market_caps()
+        
+        snapshot = self._calculate_dominance(coin_data, stablecoin_market_cap)
         if snapshot:
             # Save to cache
             self._save_cache({
