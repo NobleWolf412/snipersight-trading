@@ -225,23 +225,42 @@ class LiquiditySweep:
     Identifies when price sweeps above/below key levels to trigger stops
     before reversing, indicating institutional accumulation/distribution.
     
+    Confirmation Levels:
+    - Level 0: Unconfirmed (just penetration + reversal)
+    - Level 1: Volume spike confirmation
+    - Level 2: Volume + reversal pattern (engulfing/hammer)
+    - Level 3: Volume + BOS/CHoCH structure break
+    
     Attributes:
         level: Price level that was swept
         sweep_type: 'high' (swept above) or 'low' (swept below)
-        confirmation: Whether sweep was confirmed by reversal
+        confirmation: Whether sweep has volume spike confirmation
         timestamp: When the sweep occurred
         grade: Pattern quality grade (A/B/C) based on reversal strength
+        timeframe: Source timeframe for TF filtering
+        confirmation_level: 0-3 based on confirmation signals
+        has_reversal_pattern: Whether engulfing/hammer detected after sweep
+        has_structure_break: Whether BOS/CHoCH followed the sweep
     """
     level: float
     sweep_type: Literal["high", "low"]
-    confirmation: bool
+    confirmation: bool  # Volume spike (Level 1)
     timestamp: datetime
     grade: PatternGrade = 'B'  # Graded by reversal strength in ATR units
+    timeframe: str = '1h'  # Source timeframe for TF filtering
+    confirmation_level: int = 0  # 0=none, 1=volume, 2=volume+pattern, 3=volume+structure
+    has_reversal_pattern: bool = False  # Engulfing/hammer after sweep
+    has_structure_break: bool = False  # BOS/CHoCH followed sweep
     
     @property
     def is_confirmed(self) -> bool:
-        """Check if sweep is confirmed."""
+        """Check if sweep has at least volume confirmation."""
         return self.confirmation
+    
+    @property
+    def is_strongly_confirmed(self) -> bool:
+        """Check if sweep has structure confirmation (level 3)."""
+        return self.confirmation_level >= 3
 
 
 @dataclass
@@ -331,6 +350,7 @@ class SMCSnapshot:
     swing_structure: dict = field(default_factory=dict)  # {timeframe: SwingStructure.to_dict()}
     premium_discount: dict = field(default_factory=dict)  # {timeframe: PremiumDiscountZone.to_dict()}
     key_levels: Optional[dict] = None  # KeyLevels.to_dict()
+    htf_sweep_context: Optional[dict] = None  # HTF sweep context for LTF synergy bonus
     
     def __post_init__(self):
         """Initialize empty lists if None provided."""

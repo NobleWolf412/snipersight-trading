@@ -9,7 +9,7 @@ import {
   Coins,
   Wallet,
   ChartPie,
-  Activity,
+  Pulse,
   Gauge,
   CaretDown,
   ShieldWarning,
@@ -92,7 +92,7 @@ function MetricDisplay({
   subValue,
   color,
 }: {
-  icon: typeof Activity;
+  icon: typeof Pulse;
   label: string;
   value: string | number;
   subValue?: string;
@@ -188,7 +188,7 @@ function CollapsibleSection({
   children
 }: {
   title: string;
-  icon: typeof Activity;
+  icon: typeof Pulse;
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {

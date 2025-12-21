@@ -4,15 +4,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  CheckCircle, 
-  XCircle, 
-  Warning, 
-  Info, 
-  Target, 
+import {
+  CheckCircle,
+  XCircle,
+  Warning,
+  Info,
+  Target,
   TrendUp,
   TrendDown,
-  Activity,
+  Pulse,
   Pause,
   Play
 } from '@phosphor-icons/react';
@@ -74,13 +74,13 @@ export function ActivityFeed({
         // Merge new events, avoiding duplicates
         const existingIds = new Set(prev.map(e => e.id));
         const uniqueNewEvents = newEvents.filter(e => !existingIds.has(e.id));
-        
+
         // Combine and sort by timestamp (newest first)
         const combined = [...uniqueNewEvents, ...prev];
-        combined.sort((a, b) => 
+        combined.sort((a, b) =>
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         );
-        
+
         // Keep only most recent N events
         return combined.slice(0, limit);
       });
@@ -115,7 +115,7 @@ export function ActivityFeed({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <CardTitle className="text-lg font-bold flex items-center gap-2">
-          <Activity size={20} weight="bold" />
+          <Pulse size={20} weight="bold" />
           Activity Feed
         </CardTitle>
         <div className="flex items-center gap-2">

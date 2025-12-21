@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Terminal, Lightning, Cpu, WifiHigh, Activity, Crosshair } from '@phosphor-icons/react';
+import { TerminalWindow, Lightning, Cpu, WifiHigh, Pulse, Crosshair } from '@phosphor-icons/react';
 import { useScanner } from '@/context/ScannerContext';
 import { debugLogger, DebugLogEntry } from '@/utils/debugLogger';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -51,7 +51,7 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
 
   // Timer and Metrics Simulation
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: any;
     let startTime = Date.now();
 
     if (isScanning) {
@@ -100,7 +100,7 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
       {/* Header / Status Bar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-primary/30 bg-primary/5 relative z-10">
         <div className="flex items-center gap-3">
-          <Terminal size={18} className="text-primary animate-pulse" />
+          <TerminalWindow size={18} className="text-primary animate-pulse" />
           <span className="font-mono text-sm font-bold text-primary tracking-widest">SNIPER.SIGHT // CONSOLE</span>
         </div>
 
@@ -111,7 +111,7 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
             <span>CPU: {Math.floor(metrics.cpu)}%</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <Activity size={14} />
+            <Pulse size={14} />
             <span>MEM: {Math.floor(metrics.mem)}%</span>
           </div>
           <div className="flex items-center gap-1.5">

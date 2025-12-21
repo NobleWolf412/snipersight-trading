@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Robot, Key, Shield, Activity, Gear, TrendUp } from '@phosphor-icons/react';
+import { Robot, Key, Shield, Pulse, Gear, TrendUp } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { TacticalPanel } from '@/components/TacticalPanel';
@@ -40,7 +40,7 @@ export function BotSetup() {
       color: 'success',
     },
     {
-      icon: <Activity size={24} weight="bold" className="text-primary" />,
+      icon: <Pulse size={24} weight="bold" className="text-primary" />,
       title: 'Execution Preferences',
       items: [
         'Limit vs market order bias configuration',

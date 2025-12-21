@@ -1,4 +1,4 @@
-import { Target, Lightning, Crosshair, TrendUp, Info, ArrowRight, Activity } from '@phosphor-icons/react';
+import { Target, Lightning, Crosshair, TrendUp, Info, ArrowRight, Pulse } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 import { useLandingData } from '@/context/LandingContext';
@@ -50,7 +50,7 @@ function ModeBadge({ mode }: { mode: string }) {
         overwatch: { icon: Crosshair, color: 'text-cyan-400', bgColor: 'bg-cyan-500/20' },
         strike: { icon: Lightning, color: 'text-amber-400', bgColor: 'bg-amber-500/20' },
         surgical: { icon: Target, color: 'text-purple-400', bgColor: 'bg-purple-500/20' },
-        stealth: { icon: Activity, color: 'text-violet-400', bgColor: 'bg-violet-500/20' },
+        stealth: { icon: Pulse, color: 'text-violet-400', bgColor: 'bg-violet-500/20' },
     };
 
     const config = modeConfig[mode.toLowerCase()] || modeConfig.overwatch;

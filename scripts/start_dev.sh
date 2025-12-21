@@ -20,22 +20,32 @@ FRONT_PID=""
 
 kill_by_port() {
   local port="$1"
+  local max_attempts=5
+  local attempt=1
 
-  if command -v fuser >/dev/null 2>&1; then
-    if fuser -n tcp "$port" >/dev/null 2>&1; then
-      echo "Port $port is in use. Killing process..."
-      fuser -k -n tcp "$port" >/dev/null 2>&1 || true
-      sleep 1
+  while [ $attempt -le $max_attempts ]; do
+    if command -v fuser >/dev/null 2>&1; then
+      if fuser -n tcp "$port" >/dev/null 2>&1; then
+        echo "Port $port is in use (fuser). Killing process..."
+        fuser -k -n tcp "$port" >/dev/null 2>&1 || true
+      else
+        return 0
+      fi
+    elif command -v lsof >/dev/null 2>&1; then
+      if lsof -i :"$port" >/dev/null 2>&1; then
+        echo "Port $port is in use (lsof). Killing process..."
+        lsof -ti :"$port" | xargs -r kill || true
+      else
+        return 0
+      fi
+    else
+      echo "Warning: no fuser or lsof, cannot auto-kill port $port"
+      return 1
     fi
-  elif command -v lsof >/dev/null 2>&1; then
-    if lsof -i :"$port" >/dev/null 2>&1; then
-      echo "Port $port is in use. Killing process..."
-      lsof -ti :"$port" | xargs -r kill || true
-      sleep 1
-    fi
-  else
-    echo "Warning: no fuser or lsof, cannot auto-kill port $port"
-  fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+  echo "Warning: Could not clear port $port after $max_attempts attempts."
 }
 
 start_backend() {
@@ -72,7 +82,8 @@ start_frontend() {
   export HOST_BIND=0.0.0.0
   export BACKEND_URL="http://localhost:$BACKEND_PORT"
 
-  nohup npm run dev:frontend > logs/frontend.log 2>&1 &
+  # Pass --port and --strictPort to ensure we get the desired port or fail
+  nohup npm run dev:frontend -- --port "$FRONTEND_PORT" --strictPort > logs/frontend.log 2>&1 &
   FRONT_PID=$!
   echo "Frontend PID: $FRONT_PID"
 }
@@ -98,13 +109,20 @@ wait_for_health() {
 # Manual restart mode: kill backend/frontend, free ports, restart servers
 if [[ "${1:-}" == "restart" ]]; then
   echo "Restarting backend and frontend..."
-  pkill -f "uvicorn" || true
-  pkill -f "vite" || true
-  sleep 2
+  
+  if [[ "$FORCE_PORTS" == "1" ]]; then
+      FRONTEND_PORT="$FRONTEND_PORT_DEFAULT"
+      BACKEND_PORT="$BACKEND_PORT_DEFAULT"
+  fi
+
+  # Kill existing processes on these ports specifically
   kill_by_port "$BACKEND_PORT"
   kill_by_port "$FRONTEND_PORT"
-  bash "$0"
-  exit 0
+  
+  sleep 1
+  
+  # Use exec to replace the current process
+  exec bash "$0"
 fi
 
 if [[ -f .env.local ]]; then

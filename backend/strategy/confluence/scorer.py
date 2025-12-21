@@ -2471,20 +2471,34 @@ def _score_liquidity_sweeps(sweeps: List[LiquiditySweep], direction: str) -> flo
     if not aligned_sweeps:
         return 0.0
     
-    # Prefer HTF sweeps (they're institutional)
-    # Sort by TF weight descending, then by timestamp
+    # Prefer HTF sweeps (they're institutional), then confirmation level, then timestamp
     best_sweep = max(aligned_sweeps, key=lambda s: (
         _get_timeframe_weight(getattr(s, 'timeframe', '1h')),
+        getattr(s, 'confirmation_level', 1 if s.confirmation else 0),
         s.timestamp
     ))
     
-    # Score based on confirmation
-    base_score = 70.0 if best_sweep.confirmation else 50.0
+    # Phase 4: Score based on confirmation level (0-3)
+    conf_level = getattr(best_sweep, 'confirmation_level', 1 if best_sweep.confirmation else 0)
+    
+    if conf_level >= 3:
+        base_score = 85.0  # Structure-validated = strongest
+    elif conf_level == 2:
+        base_score = 75.0  # Volume + pattern
+    elif conf_level == 1:
+        base_score = 60.0  # Volume or pattern only
+    else:
+        base_score = 45.0  # Unconfirmed sweep
     
     # Apply grade weighting and timeframe weighting
     grade_weight = _get_grade_weight(getattr(best_sweep, 'grade', 'B'))
     tf_weight = _get_timeframe_weight(getattr(best_sweep, 'timeframe', '1h'))
     score = base_score * grade_weight * tf_weight
+    
+    logger.debug("💧 Sweep Score: %.1f (conf_lvl=%d, base=%.1f, grade=%s, tf=%s)",
+                score, conf_level, base_score, 
+                getattr(best_sweep, 'grade', 'B'),
+                getattr(best_sweep, 'timeframe', '?'))
     
     return score
 
@@ -2775,6 +2789,24 @@ def _calculate_synergy_bonus(
     # Liquidity Sweep + Structure = institutional trap reversal
     if "Liquidity Sweep" in factor_names and "Market Structure" in factor_names:
         bonus += 8.0
+    
+    # --- HTF SWEEP → LTF ENTRY SYNERGY ---
+    # When HTF sweep detected, LTF entries in expected direction get bonus
+    htf_context = getattr(smc, 'htf_sweep_context', None)
+    if htf_context and htf_context.get('has_recent_htf_sweep'):
+        expected_dir = htf_context.get('expected_ltf_direction', '')
+        direction_lower = direction.lower() if direction else ''
+        
+        # Check alignment: HTF swept low → expect bullish → LONG gets bonus
+        # HTF swept high → expect bearish → SHORT gets bonus
+        if (expected_dir == 'bullish' and direction_lower in ('long', 'bullish')):
+            bonus += 12.0
+            logger.debug("📊 HTF sweep → LTF long alignment (+12): %s sweep signaled bullish",
+                        htf_context.get('sweep_timeframe', '?'))
+        elif (expected_dir == 'bearish' and direction_lower in ('short', 'bearish')):
+            bonus += 12.0
+            logger.debug("📊 HTF sweep → LTF short alignment (+12): %s sweep signaled bearish",
+                        htf_context.get('sweep_timeframe', '?'))
     
     # HTF Alignment + strong momentum
     if "HTF Alignment" in factor_names and "Momentum" in factor_names:

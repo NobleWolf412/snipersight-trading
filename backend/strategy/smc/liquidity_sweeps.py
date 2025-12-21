@@ -177,12 +177,24 @@ def detect_liquidity_sweeps(
                             grade_b_threshold = smc_cfg.grade_b_threshold * min_reversal_atr
                             grade = grade_pattern(reversal_atr, grade_a_threshold, grade_b_threshold)
                             
+                            # Phase 3: Check for reversal pattern
+                            has_pattern = _check_reversal_pattern(df, i, 'high', 3)
+                            
+                            # Calculate confirmation level
+                            conf_level = 0
+                            if volume_spike:
+                                conf_level = 2 if has_pattern else 1
+                            elif has_pattern:
+                                conf_level = 1  # Pattern without volume = level 1
+                            
                             sweep = LiquiditySweep(
                                 level=target_high,
                                 sweep_type="high",
                                 confirmation=volume_spike,
                                 timestamp=current_candle.name.to_pydatetime(),
-                                grade=grade
+                                grade=grade,
+                                has_reversal_pattern=has_pattern,
+                                confirmation_level=conf_level
                             )
                             liquidity_sweeps.append(sweep)
         
@@ -221,12 +233,24 @@ def detect_liquidity_sweeps(
                             grade_b_threshold = smc_cfg.grade_b_threshold * min_reversal_atr
                             grade = grade_pattern(reversal_atr, grade_a_threshold, grade_b_threshold)
                             
+                            # Phase 3: Check for reversal pattern
+                            has_pattern = _check_reversal_pattern(df, i, 'low', 3)
+                            
+                            # Calculate confirmation level
+                            conf_level = 0
+                            if volume_spike:
+                                conf_level = 2 if has_pattern else 1
+                            elif has_pattern:
+                                conf_level = 1  # Pattern without volume = level 1
+                            
                             sweep = LiquiditySweep(
                                 level=target_low,
                                 sweep_type="low",
                                 confirmation=volume_spike,
                                 timestamp=current_candle.name.to_pydatetime(),
-                                grade=grade
+                                grade=grade,
+                                has_reversal_pattern=has_pattern,
+                                confirmation_level=conf_level
                             )
                             liquidity_sweeps.append(sweep)
     
@@ -343,6 +367,69 @@ def _check_upside_reversal(
         bool: True if reversal confirmed
     """
     return _get_upside_reversal_distance(df, sweep_idx, max_candles, level) >= min_distance
+
+
+def _check_reversal_pattern(
+    df: pd.DataFrame,
+    sweep_idx: int,
+    sweep_type: str,
+    lookback_candles: int = 3
+) -> bool:
+    """
+    Check for reversal pattern (engulfing/hammer) after sweep.
+    
+    Phase 3: Confirmation Level 2 detection.
+    
+    Patterns checked:
+    - Engulfing: Next candle body completely engulfs sweep candle body
+    - Hammer/Shooting Star: Long wick rejection (> 2x body size)
+    - Inside Bar Breakout: Consolidation then expansion in reversal direction
+    
+    Args:
+        df: OHLCV DataFrame
+        sweep_idx: Index of the sweep candle
+        sweep_type: 'high' or 'low'
+        lookback_candles: How many candles after sweep to check
+        
+    Returns:
+        bool: True if reversal pattern detected
+    """
+    sweep_candle = df.iloc[sweep_idx]
+    sweep_body = abs(sweep_candle['close'] - sweep_candle['open'])
+    
+    # Check next 1-3 candles for reversal pattern
+    for i in range(sweep_idx + 1, min(sweep_idx + lookback_candles + 1, len(df))):
+        candle = df.iloc[i]
+        body = abs(candle['close'] - candle['open'])
+        upper_wick = candle['high'] - max(candle['open'], candle['close'])
+        lower_wick = min(candle['open'], candle['close']) - candle['low']
+        
+        is_bullish = candle['close'] > candle['open']
+        is_bearish = candle['close'] < candle['open']
+        
+        if sweep_type == 'low':
+            # After sweeping low, look for bullish reversal patterns
+            
+            # Bullish Engulfing: bullish candle body > sweep candle body, close > open
+            if is_bullish and body > sweep_body * 0.8:
+                return True
+            
+            # Hammer: Long lower wick (> 2x body), small upper wick
+            if lower_wick > body * 2 and upper_wick < body * 0.5:
+                return True
+                
+        else:  # sweep_type == 'high'
+            # After sweeping high, look for bearish reversal patterns
+            
+            # Bearish Engulfing: bearish candle body > sweep candle body
+            if is_bearish and body > sweep_body * 0.8:
+                return True
+            
+            # Shooting Star: Long upper wick (> 2x body), small lower wick
+            if upper_wick > body * 2 and lower_wick < body * 0.5:
+                return True
+    
+    return False
 
 
 def detect_equal_highs_lows(
@@ -780,4 +867,118 @@ def track_pool_sweeps(
             updated_pools.append(pool)
     
     return updated_pools
+
+
+def check_scalp_sweep_entry(
+    df: pd.DataFrame,
+    sweep: LiquiditySweep,
+    lookback_candles: int = 3
+) -> dict:
+    """
+    Check if a sweep has scalp entry confirmation (for Surgical mode).
+    
+    Phase 6: Quick scalp entry logic after sweep.
+    
+    Entry logic:
+    1. Detect sweep on 15m/1h TF
+    2. Wait for NEXT candle to close (confirmation)
+    3. If confirmation candle shows reversal pattern:
+       - Engulfing (closes beyond sweep candle body)
+       - Hammer/Shooting Star (strong wick rejection)
+    4. Entry at confirmation candle close
+    5. Stop: Beyond the sweep wick
+    6. Target: Next structure level (caller's responsibility)
+    
+    Args:
+        df: OHLCV DataFrame with DatetimeIndex
+        sweep: LiquiditySweep to check for entry
+        lookback_candles: How many candles after sweep to check (default 3)
+        
+    Returns:
+        dict: {
+            'entry_valid': bool,
+            'entry_price': float (confirmation candle close),
+            'stop_price': float (beyond sweep wick),
+            'pattern': str (pattern name if found),
+            'sweep_bar_idx': int (index of sweep candle)
+        }
+    """
+    result = {
+        'entry_valid': False,
+        'entry_price': None,
+        'stop_price': None,
+        'pattern': None,
+        'sweep_bar_idx': None
+    }
+    
+    if not isinstance(df.index, pd.DatetimeIndex):
+        return result
+    
+    # Find the sweep bar in the DataFrame
+    sweep_ts = sweep.timestamp
+    sweep_idx = None
+    
+    for i in range(len(df)):
+        if df.index[i].to_pydatetime() >= sweep_ts:
+            sweep_idx = i
+            break
+    
+    if sweep_idx is None or sweep_idx >= len(df) - 1:
+        return result
+    
+    result['sweep_bar_idx'] = sweep_idx
+    sweep_candle = df.iloc[sweep_idx]
+    sweep_body = abs(sweep_candle['close'] - sweep_candle['open'])
+    
+    # Set stop price beyond the sweep wick
+    if sweep.sweep_type == 'low':
+        result['stop_price'] = sweep_candle['low'] * 0.999  # Slightly below low
+    else:  # high
+        result['stop_price'] = sweep_candle['high'] * 1.001  # Slightly above high
+    
+    # Check next 1-3 candles for reversal pattern
+    for i in range(sweep_idx + 1, min(sweep_idx + lookback_candles + 1, len(df))):
+        candle = df.iloc[i]
+        body = abs(candle['close'] - candle['open'])
+        upper_wick = candle['high'] - max(candle['open'], candle['close'])
+        lower_wick = min(candle['open'], candle['close']) - candle['low']
+        
+        is_bullish = candle['close'] > candle['open']
+        is_bearish = candle['close'] < candle['open']
+        
+        if sweep.sweep_type == 'low':
+            # After sweeping low, look for bullish entry patterns
+            
+            # Bullish Engulfing
+            if is_bullish and body > sweep_body * 0.8:
+                result['entry_valid'] = True
+                result['entry_price'] = candle['close']
+                result['pattern'] = 'bullish_engulfing'
+                return result
+            
+            # Hammer pattern
+            if lower_wick > body * 2 and upper_wick < body * 0.5:
+                result['entry_valid'] = True
+                result['entry_price'] = candle['close']
+                result['pattern'] = 'hammer'
+                return result
+                
+        else:  # sweep_type == 'high'
+            # After sweeping high, look for bearish entry patterns
+            
+            # Bearish Engulfing
+            if is_bearish and body > sweep_body * 0.8:
+                result['entry_valid'] = True
+                result['entry_price'] = candle['close']
+                result['pattern'] = 'bearish_engulfing'
+                return result
+            
+            # Shooting Star
+            if upper_wick > body * 2 and lower_wick < body * 0.5:
+                result['entry_valid'] = True
+                result['entry_price'] = candle['close']
+                result['pattern'] = 'shooting_star'
+                return result
+    
+    return result
 

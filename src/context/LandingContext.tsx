@@ -109,7 +109,7 @@ export function LandingProvider({ children }: { children: ReactNode }) {
     const refreshData = useCallback(async () => {
         // Only show progress/loading logic if we are actually in a loading state (no cache)
         const hasCache = !!(cycles || htf || regime);
-        let progressInterval: NodeJS.Timeout | null = null;
+        let progressInterval: any | null = null;
 
         if (!hasCache) {
             setProgress(5);

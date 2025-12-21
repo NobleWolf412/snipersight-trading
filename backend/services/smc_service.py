@@ -21,7 +21,7 @@ from typing import Dict, List, Any, Optional
 
 from backend.shared.models.data import MultiTimeframeData
 from backend.shared.models.smc import SMCSnapshot
-from backend.shared.config.smc_config import SMCConfig, get_tf_smc_config
+from backend.shared.config.smc_config import SMCConfig, get_tf_smc_config, MODE_SWEEP_TIMEFRAMES
 
 # SMC Detection functions
 from backend.strategy.smc.order_blocks import (
@@ -283,6 +283,20 @@ class SMCDetectionService:
         # Update OB mitigation
         all_order_blocks = self._update_mitigation(multi_tf_data, all_order_blocks)
         
+        # --- Phase 2: Mode-specific sweep TF filtering ---
+        sweep_tfs = MODE_SWEEP_TIMEFRAMES.get(self._mode, ('4h', '1h'))
+        unfiltered_count = len(all_liquidity_sweeps)
+        all_liquidity_sweeps = [
+            s for s in all_liquidity_sweeps 
+            if getattr(s, 'timeframe', '1h').lower() in [tf.lower() for tf in sweep_tfs]
+        ]
+        if unfiltered_count > 0 and len(all_liquidity_sweeps) < unfiltered_count:
+            logger.debug("💧 Sweep TF filter (%s): %d → %d sweeps", 
+                        self._mode, unfiltered_count, len(all_liquidity_sweeps))
+        
+        # --- Phase 5: Build HTF sweep context for LTF entries ---
+        htf_sweep_context = self._build_htf_sweep_context(all_liquidity_sweeps)
+        
         return SMCSnapshot(
             order_blocks=all_order_blocks,
             fvgs=all_fvgs,
@@ -293,7 +307,8 @@ class SMCDetectionService:
             liquidity_pools=all_liquidity_pools,
             swing_structure=swing_structure_by_tf,
             premium_discount=premium_discount_by_tf,
-            key_levels=key_levels_data
+            key_levels=key_levels_data,
+            htf_sweep_context=htf_sweep_context  # NEW: for LTF synergy bonus
         )
     
     def _detect_timeframe_patterns(
@@ -384,7 +399,12 @@ class SMCDetectionService:
         # Liquidity sweeps (use TF-specific config for sweep thresholds)
         if tf_config.get('detect_sweep', True):
             try:
-                result['liquidity_sweeps'] = detect_liquidity_sweeps(df, tf_smc_config)
+                sweeps = detect_liquidity_sweeps(df, tf_smc_config)
+                # Set timeframe on each sweep for TF filtering and HTF context
+                from dataclasses import replace
+                result['liquidity_sweeps'] = [
+                    replace(s, timeframe=timeframe.lower()) for s in sweeps
+                ]
             except Exception as e:
                 logger.warning("💧 %s: Sweep detection FAILED: %s", timeframe, e)
                 result['liquidity_sweeps'] = []
@@ -588,6 +608,55 @@ class SMCDetectionService:
         """Log HTF swing structure summary."""
         for tf, ss in swing_structure_by_tf.items():
             logger.info("📈 %s Structure: %s trend", tf, ss.get('trend', 'unknown'))
+    
+    def _build_htf_sweep_context(self, sweeps: List) -> dict:
+        """
+        Build HTF sweep context for LTF entry synergy.
+        
+        When a 4H/1D sweep is detected, it signals 'smart money grabbed liquidity'
+        → Good time for LTF counter-trade entries in the expected direction.
+        
+        Returns:
+            dict: HTF sweep context for synergy bonus calculation
+        """
+        from backend.shared.models.smc import LiquiditySweep  # Avoid circular import
+        
+        if not sweeps:
+            return {'has_recent_htf_sweep': False}
+        
+        # Filter to HTF sweeps only (1d, 4h)
+        htf_sweeps = [
+            s for s in sweeps 
+            if getattr(s, 'timeframe', '1h').lower() in ('1d', '4h')
+        ]
+        
+        if not htf_sweeps:
+            return {'has_recent_htf_sweep': False}
+        
+        # Get most recent HTF sweep
+        latest = max(htf_sweeps, key=lambda s: s.timestamp)
+        
+        # Determine expected LTF direction from sweep type:
+        # - Low swept → liquidity grabbed below → expect bullish reversal
+        # - High swept → liquidity grabbed above → expect bearish reversal
+        expected_direction = 'bullish' if latest.sweep_type == 'low' else 'bearish'
+        
+        context = {
+            'has_recent_htf_sweep': True,
+            'sweep_timeframe': getattr(latest, 'timeframe', '4h'),
+            'sweep_type': latest.sweep_type,
+            'sweep_level': latest.level,
+            'sweep_timestamp': latest.timestamp.isoformat() if hasattr(latest.timestamp, 'isoformat') else str(latest.timestamp),
+            'expected_ltf_direction': expected_direction,
+            'sweep_confirmed': latest.confirmation,
+            'sweep_grade': getattr(latest, 'grade', 'B')
+        }
+        
+        logger.debug("📊 HTF Sweep Context: %s sweep @ %.2f (%s) → expect %s",
+                    context['sweep_timeframe'], context['sweep_level'], 
+                    context['sweep_type'], expected_direction)
+        
+        return context
 
 
 # Singleton

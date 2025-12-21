@@ -15,7 +15,7 @@ import {
   TrendDown,
   Wallet,
   ChartLine,
-  Activity,
+  Pulse,
   Clock,
   Trophy,
   Warning,
@@ -92,7 +92,7 @@ export function TrainingGround() {
   const [trades, setTrades] = useState<CompletedPaperTrade[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const pollRef = useRef<number | null>(null);
 
   // Fetch status
@@ -126,7 +126,7 @@ export function TrainingGround() {
   // Poll status when running
   useEffect(() => {
     fetchStatus();
-    
+
     // Set up polling - use longer interval (15s) to avoid overwhelming backend during heavy scans
     // Backend can take 10-20s to respond when scanner is actively processing
     if (status?.status === 'running') {
@@ -135,7 +135,7 @@ export function TrainingGround() {
         fetchTrades();
       }, 15000);
     }
-    
+
     return () => {
       if (pollRef.current) {
         clearInterval(pollRef.current);
@@ -148,7 +148,7 @@ export function TrainingGround() {
   const handleStart = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const response = await api.startPaperTrading(config);
       if (response.error) {
@@ -168,7 +168,7 @@ export function TrainingGround() {
   const handleStop = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const response = await api.stopPaperTrading();
       if (response.error) {
@@ -188,7 +188,7 @@ export function TrainingGround() {
   const handleReset = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const response = await api.resetPaperTrading();
       if (response.error) {
@@ -226,14 +226,14 @@ export function TrainingGround() {
               </p>
             </div>
           </div>
-          
+
           {/* Status Badge */}
           {status && (
             <Badge
               variant={isRunning ? 'default' : isStopped ? 'secondary' : 'outline'}
               className={`text-sm px-3 py-1 ${isRunning ? 'bg-green-500/20 text-green-400 border-green-500/30' : ''}`}
             >
-              {isRunning && <Activity size={14} className="mr-1 animate-pulse" />}
+              {isRunning && <Pulse size={14} className="mr-1 animate-pulse" />}
               {status.status.toUpperCase()}
             </Badge>
           )}
@@ -277,7 +277,7 @@ export function TrainingGround() {
               onChange={setConfig}
               disabled={isRunning}
             />
-            
+
             {/* Start Button */}
             <div className="flex gap-4">
               <Button
@@ -293,7 +293,7 @@ export function TrainingGround() {
                 )}
                 {isLoading ? 'STARTING...' : 'START PAPER TRADING'}
               </Button>
-              
+
               {isStopped && (
                 <Button
                   onClick={handleReset}
@@ -319,7 +319,7 @@ export function TrainingGround() {
                     <div className="text-xs text-muted-foreground">SESSION</div>
                     <div className="font-mono text-sm">{status?.session_id || '—'}</div>
                   </div>
-                  
+
                   {/* Uptime */}
                   <div>
                     <div className="text-xs text-muted-foreground">UPTIME</div>
@@ -328,7 +328,7 @@ export function TrainingGround() {
                       {formatDuration(status?.uptime_seconds || 0)}
                     </div>
                   </div>
-                  
+
                   {/* Next Scan */}
                   {isRunning && status?.next_scan_in_seconds !== null && (
                     <div>
@@ -339,7 +339,7 @@ export function TrainingGround() {
                       </div>
                     </div>
                   )}
-                  
+
                   {/* Cache Hit Rate */}
                   {status?.cache_stats && (
                     <div>
@@ -349,7 +349,7 @@ export function TrainingGround() {
                       </div>
                     </div>
                   )}
-                  
+
                   {/* Mode */}
                   <div>
                     <div className="text-xs text-muted-foreground">MODE</div>
@@ -358,7 +358,7 @@ export function TrainingGround() {
                     </Badge>
                   </div>
                 </div>
-                
+
                 {/* Control Buttons */}
                 <div className="flex gap-3">
                   {isRunning ? (
@@ -498,7 +498,7 @@ export function TrainingGround() {
                     </h3>
                     <Badge variant="outline">{status?.positions?.length || 0}</Badge>
                   </div>
-                  
+
                   {status?.positions && status.positions.length > 0 ? (
                     <div className="space-y-3">
                       {status.positions.map((pos) => (
@@ -519,11 +519,11 @@ export function TrainingGround() {
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="heading-hud text-lg text-foreground flex items-center gap-2">
-                      <Activity size={20} className="text-primary" />
+                      <Pulse size={20} className="text-primary" />
                       ACTIVITY FEED
                     </h3>
                   </div>
-                  
+
                   {status?.recent_activity && status.recent_activity.length > 0 ? (
                     <div className="space-y-2 max-h-80 overflow-y-auto">
                       {status.recent_activity.slice(-15).reverse().map((event, i) => (
@@ -550,7 +550,7 @@ export function TrainingGround() {
                   </h3>
                   <Badge variant="outline">{trades.length} trades</Badge>
                 </div>
-                
+
                 {trades.length > 0 ? (
                   <div className="space-y-2">
                     {trades.slice(0, 10).map((trade) => (
@@ -605,7 +605,7 @@ export function TrainingGround() {
 function PositionCard({ position }: { position: PaperTradingPosition }) {
   const isLong = position.direction === 'LONG';
   const isProfitable = position.unrealized_pnl >= 0;
-  
+
   return (
     <div className="p-3 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors">
       <div className="flex items-center justify-between mb-2">
@@ -623,7 +623,7 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
           {formatPct(position.unrealized_pnl_pct)}
         </div>
       </div>
-      
+
       <div className="grid grid-cols-3 gap-2 text-xs">
         <div>
           <div className="text-muted-foreground">Entry</div>
@@ -638,7 +638,7 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
           <div className="font-mono text-red-400">${position.stop_loss.toFixed(2)}</div>
         </div>
       </div>
-      
+
       <div className="mt-2 flex items-center gap-2 text-xs">
         {position.breakeven_active && (
           <Badge variant="secondary" className="text-xs">BE Active</Badge>
@@ -676,7 +676,7 @@ function ActivityItem({ event }: { event: PaperTradingActivity }) {
       case 'trade_error':
         return <XCircle size={16} className="text-red-400" />;
       default:
-        return <Activity size={16} className="text-muted-foreground" />;
+        return <Pulse size={16} className="text-muted-foreground" />;
     }
   };
 
@@ -721,7 +721,7 @@ function ActivityItem({ event }: { event: PaperTradingActivity }) {
 function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
   const isLong = trade.direction === 'LONG';
   const isProfitable = trade.pnl >= 0;
-  
+
   return (
     <div className="flex items-center justify-between p-3 bg-background rounded-lg border border-border">
       <div className="flex items-center gap-3">

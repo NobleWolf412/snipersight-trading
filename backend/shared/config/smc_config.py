@@ -279,6 +279,15 @@ TIMEFRAME_SMC_CONFIGS = {
     },
 }
 
+# Mode-specific sweep timeframe filtering
+# Controls which TF sweeps are relevant per mode (HTF sweeps → LTF entries)
+MODE_SWEEP_TIMEFRAMES = {
+    'overwatch': ('1d', '4h'),      # HTF sweeps only - swing positioning
+    'strike': ('4h', '1h'),         # Mid-TF sweeps - intraday momentum
+    'surgical': ('1h', '15m'),      # LTF precision sweeps
+    'stealth': ('1d', '4h', '1h'),  # Mixed - swing + intraday
+}
+
 # Mode overrides - which patterns matter per mode
 MODE_SMC_OVERRIDES = {
     'overwatch': {

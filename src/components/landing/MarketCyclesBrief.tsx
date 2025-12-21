@@ -3,7 +3,7 @@ import {
   ChartLine,
   CheckCircle,
   Question,
-  Activity,
+  Pulse,
   Lightning,
 } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
@@ -198,7 +198,7 @@ export function MarketCyclesBrief() {
         {/* Column 2: Momentum & Bias */}
         <div className="space-y-4 p-4 rounded-xl bg-muted/10 border border-border/20">
           <div className="flex items-center gap-2 mb-2">
-            <Activity size={16} className="text-muted-foreground" />
+            <Pulse size={16} className="text-muted-foreground" />
             <span className="text-xs font-bold tracking-wider text-muted-foreground">MOMENTUM & BIAS</span>
           </div>
 

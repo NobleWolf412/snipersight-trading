@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
-  ChartLine, 
-  TrendUp, 
-  TrendDown, 
-  Activity,
+import {
+  ChartLine,
+  TrendUp,
+  TrendDown,
+  Pulse,
   Target,
   Crosshair,
   Eye,
@@ -97,8 +97,8 @@ function ModeChip({ mode, status, icon: Icon }: ModeReadiness) {
         <Icon size={20} weight="bold" />
         <div className="font-bold text-sm">{mode}</div>
       </div>
-      <Badge 
-        variant="outline" 
+      <Badge
+        variant="outline"
         className={cn('text-xs font-mono border-current', statusColors[status])}
       >
         {status}
@@ -116,19 +116,19 @@ export function Intel() {
 
   const modeReadiness = getModeReadiness(regimeProps.regimeLabel, regimeProps.visibility);
 
-  const btcDomChange = regimeProps.previousBtcDominance 
-    ? regimeProps.btcDominance! - regimeProps.previousBtcDominance 
+  const btcDomChange = regimeProps.previousBtcDominance
+    ? regimeProps.btcDominance! - regimeProps.previousBtcDominance
     : 0;
-  const usdtDomChange = regimeProps.previousUsdtDominance 
-    ? regimeProps.usdtDominance! - regimeProps.previousUsdtDominance 
+  const usdtDomChange = regimeProps.previousUsdtDominance
+    ? regimeProps.usdtDominance! - regimeProps.previousUsdtDominance
     : 0;
-  const altDomChange = regimeProps.previousAltDominance 
-    ? regimeProps.altDominance! - regimeProps.previousAltDominance 
+  const altDomChange = regimeProps.previousAltDominance
+    ? regimeProps.altDominance! - regimeProps.previousAltDominance
     : 0;
 
-  const compositeScore = regimeProps.visibility === 'HIGH' ? 85 : 
-                         regimeProps.visibility === 'MEDIUM' ? 60 :
-                         regimeProps.visibility === 'LOW' ? 35 : 15;
+  const compositeScore = regimeProps.visibility === 'HIGH' ? 85 :
+    regimeProps.visibility === 'MEDIUM' ? 60 :
+      regimeProps.visibility === 'LOW' ? 35 : 15;
 
   const alerts: AlertItem[] = [
     {
@@ -155,10 +155,10 @@ export function Intel() {
     const cleanSymbol = symbol.trim().toUpperCase();
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const response = await fetch(`/api/market-intel/symbol?symbol=${cleanSymbol}`);
-      
+
       if (response.ok) {
         const data = await response.json();
         setIntel(data);
@@ -167,7 +167,7 @@ export function Intel() {
       }
     } catch (err) {
       console.log('Falling back to mock data:', err);
-      
+
       const mockIntel: SymbolIntel = {
         symbol: cleanSymbol,
         trendSummary: regimeProps.regimeLabel === 'DEFENSIVE' ? 'Defensive consolidation' : 'Strong uptrend',
@@ -179,22 +179,22 @@ export function Intel() {
         riskNote: regimeProps.regimeLabel === 'PANIC' ? 'High risk - reduce position sizes' : 'Standard risk protocols apply',
         aiCommentary: `${cleanSymbol} is trading in a ${regimeProps.regimeLabel} market regime with ${regimeProps.visibility} visibility. Consider ${regimeProps.regimeLabel === 'DEFENSIVE' ? 'conservative entries with tight stops' : 'standard setups with confirmation'}.`
       };
-      
+
       setIntel(mockIntel);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const globalCommentary = regimeProps.regimeLabel === 'DEFENSIVE' 
+  const globalCommentary = regimeProps.regimeLabel === 'DEFENSIVE'
     ? "Market is in a defensive, choppy regime with money rotating into BTC and stables. Favor conservative modes like Surgical and avoid aggressive trend continuation setups. Reduce position sizes and tighten stops."
     : regimeProps.regimeLabel === 'PANIC'
-    ? "PANIC regime detected with very low signal visibility. Avoid new positions except for high-conviction BTC/ETH scalps. Wait for regime shift before deploying aggressive strategies."
-    : regimeProps.regimeLabel === 'BTC_DRIVE'
-    ? "BTC-driven uptrend with moderate volatility. Overwatch and Strike modes can be selectively deployed. Focus on BTC and major alts with strong confirmation."
-    : regimeProps.regimeLabel === 'ALTSEASON'
-    ? "ALTSEASON regime with high visibility. All sniper modes favorable. Focus on altcoins with strong momentum and proper liquidity."
-    : "Choppy market conditions with mixed signals. Favor Surgical and Recon modes. Wait for clearer price action before deploying aggressive setups.";
+      ? "PANIC regime detected with very low signal visibility. Avoid new positions except for high-conviction BTC/ETH scalps. Wait for regime shift before deploying aggressive strategies."
+      : regimeProps.regimeLabel === 'BTC_DRIVE'
+        ? "BTC-driven uptrend with moderate volatility. Overwatch and Strike modes can be selectively deployed. Focus on BTC and major alts with strong confirmation."
+        : regimeProps.regimeLabel === 'ALTSEASON'
+          ? "ALTSEASON regime with high visibility. All sniper modes favorable. Focus on altcoins with strong momentum and proper liquidity."
+          : "Choppy market conditions with mixed signals. Favor Surgical and Recon modes. Wait for clearer price action before deploying aggressive setups.";
 
   return (
     <PageContainer id="main-content">
@@ -260,7 +260,7 @@ export function Intel() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Activity size={20} className="text-accent" weight="bold" />
+                  <Pulse size={20} className="text-accent" weight="bold" />
                   <span className="text-sm">
                     Signal clarity: <span className="font-bold">{regimeProps.visibility}</span>
                   </span>
@@ -366,8 +366,8 @@ export function Intel() {
                 className="flex-1 font-mono"
                 onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
               />
-              <Button 
-                onClick={handleAnalyze} 
+              <Button
+                onClick={handleAnalyze}
                 disabled={isLoading}
                 className="min-w-[120px]"
               >

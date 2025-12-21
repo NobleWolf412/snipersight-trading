@@ -7,12 +7,11 @@
 
 import { debugLogger } from './debugLogger';
 
-// Resolve API base: prefer Vite env, fallback to same-origin '/api' or localhost:8001
+// Resolve API base: prefer Vite env, otherwise use same-origin '/api' (proxied through Vite)
+// NOTE: Never hardcode localhost:8001 - breaks on Chromebook Crostini where localhost != container
 const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE)
   ? (import.meta as any).env.VITE_API_BASE
-  : (typeof window !== 'undefined' && window.location && window.location.port === '5000'
-      ? 'http://localhost:8001/api'
-      : '/api');
+  : '/api';
 
 // Retry configuration
 const DEFAULT_TIMEOUT_MS = 30000; // 30 seconds
@@ -213,7 +212,7 @@ class ApiClient {
 
     const method = fetchOptions.method || 'GET';
     const fullUrl = `${API_BASE}${endpoint}`;
-    
+
     // Circuit breaker check - fail fast if backend is known to be down
     if (circuitBreakerOpen) {
       const elapsed = Date.now() - circuitBreakerTrippedAt;
@@ -227,7 +226,7 @@ class ApiClient {
       consecutiveFailures = 0;
       if (!silent) debugLogger.info(`⚡ Circuit breaker RESET - attempting connection`, 'api');
     }
-    
+
     if (!silent) {
       debugLogger.api(`→ ${method} ${endpoint}`);
       debugLogger.info(`Connecting to: ${fullUrl}`, 'api');
@@ -235,7 +234,7 @@ class ApiClient {
     }
 
     let lastError: string = 'Unknown error';
-    
+
     for (let attempt = 0; attempt <= (skipRetry ? 0 : maxRetries); attempt++) {
       // Add delay before retry (not on first attempt)
       if (attempt > 0) {
@@ -252,7 +251,7 @@ class ApiClient {
 
       try {
         if (!silent) debugLogger.info(`Sending request... (attempt ${attempt + 1})`, 'api');
-        
+
         const response = await fetch(`${API_BASE}${endpoint}`, {
           ...fetchOptions,
           signal: controller.signal,
@@ -312,7 +311,7 @@ class ApiClient {
       } catch (error) {
         clearTimeout(timeoutId);
         const elapsed = Date.now() - startTime;
-        
+
         if (error instanceof Error) {
           if (error.name === 'AbortError') {
             lastError = `Request timeout after ${timeout / 1000}s`;
@@ -321,15 +320,15 @@ class ApiClient {
             lastError = error.message;
             if (!silent) debugLogger.error(`Network error: ${error.message}`, 'api');
           }
-          
+
           // Network errors are retryable
-          if (!skipRetry && attempt < maxRetries && 
-              (error.name === 'AbortError' || error.message.includes('network') || error.message.includes('fetch'))) {
+          if (!skipRetry && attempt < maxRetries &&
+            (error.name === 'AbortError' || error.message.includes('network') || error.message.includes('fetch'))) {
             if (!silent) debugLogger.info('Will retry...', 'api');
             continue; // Retry
           }
         }
-        
+
         // Track consecutive failures for circuit breaker
         consecutiveFailures++;
         if (consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
@@ -337,7 +336,7 @@ class ApiClient {
           circuitBreakerTrippedAt = Date.now();
           if (!silent) debugLogger.error(`⚡ Circuit breaker TRIPPED after ${consecutiveFailures} failures - pausing requests for 30s`, 'api');
         }
-        
+
         if (!silent) debugLogger.error(`✗ Request failed: ${lastError}`, 'api');
         return { error: lastError };
       }
@@ -384,9 +383,9 @@ class ApiClient {
     return this.request<{ modes: ScannerMode[]; total: number }>('/scanner/modes');
   }
 
-  async getSignals(params?: { 
-    limit?: number; 
-    min_score?: number; 
+  async getSignals(params?: {
+    limit?: number;
+    min_score?: number;
     sniper_mode?: string;
     majors?: boolean;
     altcoins?: boolean;
@@ -472,10 +471,10 @@ class ApiClient {
     const qp = new URLSearchParams();
     qp.set('symbols', symbolsParam);
     if (exchange) qp.set('exchange', exchange);
-    
+
     // Merge environment-aware default with explicit options
     const silent = options?.silent ?? (import.meta.env.MODE === 'production');
-    
+
     return this.request<{
       prices: Array<{ symbol: string; price: number; timestamp: string }>;
       total: number;
@@ -569,16 +568,18 @@ class ApiClient {
     const qp = new URLSearchParams();
     if (params?.min_confidence !== undefined) qp.set('min_confidence', params.min_confidence.toString());
     if (params?.proximity_threshold !== undefined) qp.set('proximity_threshold', params.proximity_threshold.toString());
-    return this.request<{ opportunities: Array<{
-      symbol: string;
-      level: { price: number; level_type: string; timeframe: string; strength: number; touches: number; proximity_pct: number };
-      current_price: number;
-      recommended_mode: string;
-      rationale: string;
-      confluence_factors: string[];
-      expected_move_pct: number;
-      confidence: number;
-    }>; total: number; timestamp: string }>(`/htf/opportunities${qp.toString() ? `?${qp.toString()}` : ''}`);
+    return this.request<{
+      opportunities: Array<{
+        symbol: string;
+        level: { price: number; level_type: string; timeframe: string; strength: number; touches: number; proximity_pct: number };
+        current_price: number;
+        recommended_mode: string;
+        rationale: string;
+        confluence_factors: string[];
+        expected_move_pct: number;
+        confidence: number;
+      }>; total: number; timestamp: string
+    }>(`/htf/opportunities${qp.toString() ? `?${qp.toString()}` : ''}`);
   }
 
   // Optional: symbol-specific regime (if backend supports symbol query)
@@ -777,8 +778,8 @@ export interface PaperTradingStats {
 
 export interface PaperTradingActivity {
   timestamp: string;
-  event_type: 'session_started' | 'session_stopped' | 'scan_started' | 'scan_completed' | 
-              'scan_error' | 'trade_opened' | 'trade_closed' | 'trade_error' | string;
+  event_type: 'session_started' | 'session_stopped' | 'scan_started' | 'scan_completed' |
+  'scan_error' | 'trade_opened' | 'trade_closed' | 'trade_error' | string;
   data: Record<string, any>;
 }
 

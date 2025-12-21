@@ -1168,7 +1168,50 @@ def generate_trade_plan(
                 "move_pct": round(tp1_move_pct, 4),
                 "min_move_threshold": min_target_move_pct,
                 "min_rr_passed": is_valid_rr
-            }
+            },
+            # SMC Geometry Lists for Frontend Overlays - serialized from smc_snapshot
+            "order_blocks_list": [
+                {
+                    "direction": ob.direction,
+                    "timeframe": ob.timeframe,
+                    "low": ob.low,
+                    "high": ob.high,
+                    "timestamp": ob.timestamp.isoformat() if hasattr(ob.timestamp, 'isoformat') else str(ob.timestamp),
+                    "grade": ob.grade,
+                    "freshness_score": ob.freshness_score,
+                    "mitigation_level": ob.mitigation_level,
+                }
+                for ob in smc_snapshot.order_blocks[:15]  # Limit for payload size
+            ],
+            "fvgs_list": [
+                {
+                    "direction": fvg.direction,
+                    "timeframe": fvg.timeframe,
+                    "top": fvg.top,
+                    "bottom": fvg.bottom,
+                    "timestamp": fvg.timestamp.isoformat() if hasattr(fvg.timestamp, 'isoformat') else str(fvg.timestamp),
+                }
+                for fvg in smc_snapshot.fvgs[:15]
+            ],
+            "structural_breaks_list": [
+                {
+                    "break_type": brk.break_type,
+                    "timeframe": brk.timeframe,
+                    "level": brk.level,
+                    "timestamp": brk.timestamp.isoformat() if hasattr(brk.timestamp, 'isoformat') else str(brk.timestamp),
+                }
+                for brk in smc_snapshot.structural_breaks[:10]
+            ],
+            "liquidity_sweeps_list": [
+                {
+                    "sweep_type": sweep.sweep_type,  # 'high' or 'low'
+                    "level": sweep.level,
+                    "timestamp": sweep.timestamp.isoformat() if hasattr(sweep.timestamp, 'isoformat') else str(sweep.timestamp),
+                    "grade": sweep.grade,
+                    "confirmed": sweep.confirmation,
+                }
+                for sweep in smc_snapshot.liquidity_sweeps[:10]
+            ],
         }
     )
     
