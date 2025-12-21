@@ -8,8 +8,11 @@ from fastapi import APIRouter, HTTPException
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
+import logging
 
 from backend.analysis.htf_levels import HTFLevelDetector, LevelOpportunity, HTFLevel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/htf", tags=["HTF Opportunities"])
 
@@ -43,6 +46,11 @@ class HTFOpportunitiesResponse(BaseModel):
     timestamp: str
 
 
+# Default symbols to scan if none provided
+DEFAULT_HTF_SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]
+HTF_TIMEFRAMES = ["4h", "1d"]
+
+
 @router.get("/opportunities", response_model=HTFOpportunitiesResponse)
 async def get_htf_opportunities(
     symbols: Optional[str] = None,  # Comma-separated list
@@ -53,7 +61,7 @@ async def get_htf_opportunities(
     Scan for major swing setups at HTF support/resistance levels.
     
     Args:
-        symbols: Comma-separated symbols to scan (default: top 20)
+        symbols: Comma-separated symbols to scan (default: top 5)
         min_confidence: Minimum confidence score (default 65)
         proximity_threshold: Max % from level to alert (default 2%)
         
@@ -61,87 +69,96 @@ async def get_htf_opportunities(
         List of tactical opportunities with mode recommendations
     """
     try:
-        # TODO: Wire to real exchange adapter once integrated
-        # For now, return mock data showing the concept
+        from backend.data.adapters.phemex import PhemexAdapter
+        from backend.data.ingestion_pipeline import IngestionPipeline
         
+        # Parse symbols
+        symbol_list = symbols.split(",") if symbols else DEFAULT_HTF_SYMBOLS
+        symbol_list = [s.strip() for s in symbol_list]
+        
+        # Initialize detector and adapter
         detector = HTFLevelDetector(proximity_threshold=proximity_threshold)
+        adapter = PhemexAdapter()
+        pipeline = IngestionPipeline(adapter)
         
-        # Mock opportunities (replace with real detection)
-        mock_opportunities = [
-            OpportunityResponse(
-                symbol="BTC/USDT",
-                level=HTFLevelResponse(
-                    price=43200.0,
-                    level_type="support",
-                    timeframe="1d",
-                    strength=85.0,
-                    touches=4,
-                    proximity_pct=0.8
-                ),
-                current_price=43550.0,
-                recommended_mode="overwatch",
-                rationale="Daily support with high confluence - major swing setup",
-                confluence_factors=[
-                    "Price approaching 1d support at $43200.00000",
-                    "Very strong level (4 touches)",
-                    "Support OB present near level",
-                    "FVG gap coincides with support",
-                    "Risk-on regime favors support bounces"
-                ],
-                expected_move_pct=3.5,
-                confidence=88.0
-            ),
-            OpportunityResponse(
-                symbol="ETH/USDT",
-                level=HTFLevelResponse(
-                    price=2295.0,
-                    level_type="resistance",
-                    timeframe="4h",
-                    strength=72.0,
-                    touches=3,
-                    proximity_pct=1.2
-                ),
-                current_price=2268.0,
-                recommended_mode="surgical",
-                rationale="4H resistance with solid confluence - precision swing entry",
-                confluence_factors=[
-                    "Price approaching 4h resistance at $2295.00000",
-                    "Strong level (3 touches)",
-                    "Resistance OB present near level",
-                    "Recent BOS/CHoCH supports directional bias"
-                ],
-                expected_move_pct=2.0,
-                confidence=75.0
-            ),
-            OpportunityResponse(
-                symbol="SOL/USDT",
-                level=HTFLevelResponse(
-                    price=96.50,
-                    level_type="support",
-                    timeframe="4h",
-                    strength=68.0,
-                    touches=2,
-                    proximity_pct=1.8
-                ),
-                current_price=98.20,
-                recommended_mode="surgical",
-                rationale="4H level - balanced approach recommended",
-                confluence_factors=[
-                    "Price approaching 4h support at $96.50000",
-                    "Strong level (2 touches)",
-                    "Support OB present near level"
-                ],
-                expected_move_pct=2.5,
-                confidence=70.0
-            )
-        ]
+        all_opportunities: List[OpportunityResponse] = []
         
-        # Filter by confidence
-        filtered = [opp for opp in mock_opportunities if opp.confidence >= min_confidence]
+        for symbol in symbol_list:
+            try:
+                # Fetch HTF data
+                multi_tf = pipeline.fetch_multi_timeframe(symbol, HTF_TIMEFRAMES, limit=200)
+                if not multi_tf or not multi_tf.timeframes:
+                    continue
+                
+                # Get current price
+                current_price = None
+                for tf in HTF_TIMEFRAMES:
+                    df = multi_tf.timeframes.get(tf)
+                    if df is not None and len(df) > 0:
+                        current_price = float(df['close'].iloc[-1])
+                        break
+                
+                if not current_price:
+                    continue
+                
+                # Detect levels - only include non-None, non-empty DataFrames
+                ohlcv_data = {}
+                for tf in HTF_TIMEFRAMES:
+                    df = multi_tf.timeframes.get(tf)
+                    if df is not None and not df.empty:
+                        ohlcv_data[tf] = df
+                
+                if not ohlcv_data:
+                    logger.warning(f"No OHLCV data available for {symbol}, skipping")
+                    continue
+                
+                levels = detector.detect_levels(symbol, ohlcv_data, current_price)
+                
+                # Also detect Fib levels
+                fib_levels = detector.detect_fib_levels(symbol, ohlcv_data, current_price)
+                all_levels = levels + fib_levels
+                
+                if not all_levels:
+                    continue
+                
+                # Find opportunities (using empty SMC context for now)
+                smc_context = {"order_blocks": [], "fvgs": [], "breaks": []}
+                opportunities = detector.find_opportunities(
+                    symbol, all_levels, current_price, smc_context
+                )
+                
+                # Convert to response format
+                for opp in opportunities:
+                    if opp.confidence >= min_confidence:
+                        all_opportunities.append(OpportunityResponse(
+                            symbol=opp.symbol,
+                            level=HTFLevelResponse(
+                                price=opp.level.price,
+                                level_type=opp.level.level_type,
+                                timeframe=opp.level.timeframe,
+                                strength=opp.level.strength,
+                                touches=opp.level.touches,
+                                proximity_pct=opp.level.proximity_pct
+                            ),
+                            current_price=opp.current_price,
+                            recommended_mode=opp.recommended_mode,
+                            rationale=opp.rationale,
+                            confluence_factors=opp.confluence_factors,
+                            expected_move_pct=opp.expected_move_pct,
+                            confidence=opp.confidence
+                        ))
+                        
+            except Exception as sym_error:
+                # Log but continue with other symbols
+                logger.warning(f"Failed to detect levels for {symbol}: {sym_error}")
+                continue
+        
+        # Sort by confidence
+        all_opportunities.sort(key=lambda x: x.confidence, reverse=True)
         
         return HTFOpportunitiesResponse(
-            opportunities=filtered,
-            total=len(filtered),
+            opportunities=all_opportunities,
+            total=len(all_opportunities),
             timestamp=datetime.now().isoformat()
         )
         
@@ -165,42 +182,97 @@ async def get_symbol_levels(
         List of detected support/resistance levels
     """
     try:
-        # TODO: Replace with real level detection
-        mock_levels = [
-            HTFLevelResponse(
-                price=43200.0,
-                level_type="support",
-                timeframe="1d",
-                strength=85.0,
-                touches=4,
-                proximity_pct=0.8
-            ),
-            HTFLevelResponse(
-                price=44500.0,
-                level_type="resistance",
-                timeframe="1d",
-                strength=78.0,
-                touches=3,
-                proximity_pct=2.2
-            ),
-            HTFLevelResponse(
-                price=42800.0,
-                level_type="support",
-                timeframe="4h",
-                strength=65.0,
-                touches=2,
-                proximity_pct=1.5
-            )
-        ]
+        from backend.data.adapters.phemex import PhemexAdapter
+        from backend.data.ingestion_pipeline import IngestionPipeline
         
-        filtered = [level for level in mock_levels if level.strength >= min_strength]
+        # Normalize symbol format (support BTCUSDT, BTC-USDT, BTC/USDT)
+        normalized_symbol = symbol.upper().replace("-", "/")
+        if "/" not in normalized_symbol and "USDT" in normalized_symbol:
+            normalized_symbol = normalized_symbol.replace("USDT", "/USDT")
+        # Add Phemex perpetual suffix if not present
+        if ":USDT" not in normalized_symbol and normalized_symbol.endswith("/USDT"):
+            normalized_symbol = normalized_symbol + ":USDT"
+        
+        # Initialize detector and adapter
+        detector = HTFLevelDetector(proximity_threshold=5.0)  # Wider threshold for level listing
+        adapter = PhemexAdapter()
+        pipeline = IngestionPipeline(adapter)
+        
+        # Fetch HTF data
+        multi_tf = pipeline.fetch_multi_timeframe(normalized_symbol, HTF_TIMEFRAMES, limit=200)
+        if not multi_tf or not multi_tf.timeframes:
+            return {
+                "symbol": symbol,
+                "levels": [],
+                "total": 0,
+                "timestamp": datetime.now().isoformat(),
+                "error": "No data available for symbol"
+            }
+        
+        # Get current price
+        current_price = None
+        for tf in HTF_TIMEFRAMES:
+            df = multi_tf.timeframes.get(tf)
+            if df is not None and len(df) > 0:
+                current_price = float(df['close'].iloc[-1])
+                break
+        
+        if not current_price:
+            return {
+                "symbol": symbol,
+                "levels": [],
+                "total": 0,
+                "timestamp": datetime.now().isoformat(),
+                "error": "Could not determine current price"
+            }
+        
+        # Detect levels - only include non-None, non-empty DataFrames
+        ohlcv_data = {}
+        for tf in HTF_TIMEFRAMES:
+            df = multi_tf.timeframes.get(tf)
+            if df is not None and not df.empty:
+                ohlcv_data[tf] = df
+        
+        if not ohlcv_data:
+            return {
+                "symbol": symbol,
+                "levels": [],
+                "total": 0,
+                "current_price": current_price,
+                "timestamp": datetime.now().isoformat(),
+                "error": "No valid OHLCV data for level detection"
+            }
+        
+        levels = detector.detect_levels(normalized_symbol, ohlcv_data, current_price)
+        
+        # Also add Fib levels
+        fib_levels = detector.detect_fib_levels(normalized_symbol, ohlcv_data, current_price)
+        all_levels = levels + fib_levels
+        
+        # Convert to response format and filter
+        response_levels = []
+        for level in all_levels:
+            if level.strength >= min_strength:
+                response_levels.append(HTFLevelResponse(
+                    price=level.price,
+                    level_type=level.level_type,
+                    timeframe=level.timeframe,
+                    strength=level.strength,
+                    touches=level.touches,
+                    proximity_pct=level.proximity_pct
+                ))
+        
+        # Sort by strength
+        response_levels.sort(key=lambda x: x.strength, reverse=True)
         
         return {
             "symbol": symbol,
-            "levels": filtered,
-            "total": len(filtered),
+            "levels": response_levels,
+            "total": len(response_levels),
+            "current_price": current_price,
             "timestamp": datetime.now().isoformat()
         }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch levels: {str(e)}")
+

@@ -23,7 +23,6 @@ export function HTFOpportunitiesPanel({ open, onOpenChange }: Props) {
     } else {
       addConsoleLog(`Unable to switch mode: '${modeName}' not found`, 'warning');
     }
-    // TODO: emit telemetry event to backend when implemented
     setTimeout(() => setSwitching(null), 650);
   }
 

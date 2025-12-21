@@ -89,9 +89,8 @@ async def get_htf_opportunities(
                 ohlcv_data = {}
                 for tf in ['4h', '1d']:
                     try:
-                        candles = adapter.fetch_ohlcv(symbol, timeframe=tf, limit=100)
-                        if candles:
-                            df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                        df = adapter.fetch_ohlcv(symbol, timeframe=tf, limit=100)
+                        if df is not None and not df.empty:
                             ohlcv_data[tf] = df
                     except Exception as tf_err:
                         logger.warning(f"Failed to fetch {tf} data for {symbol}: {tf_err}")
@@ -189,9 +188,8 @@ async def get_symbol_levels(symbol: str, min_strength: float = 50.0, proximity_t
         ohlcv_data = {}
         for tf in ['4h', '1d']:
             try:
-                candles = adapter.fetch_ohlcv(symbol, timeframe=tf, limit=100)
-                if candles:
-                    df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                df = adapter.fetch_ohlcv(symbol, timeframe=tf, limit=100)
+                if df is not None and not df.empty:
                     ohlcv_data[tf] = df
             except Exception as tf_err:
                 logger.warning(f"Failed to fetch {tf} data for {symbol}: {tf_err}")

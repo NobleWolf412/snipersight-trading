@@ -156,13 +156,8 @@ def audit(
     """
     typer.echo("✅ SniperSight Quality Audit")
     typer.echo()
-    
-    # TODO: Implement quality audit
-    # from backend.risk.audit_pipeline import AuditLogger
-    # logger = AuditLogger()
-    # report = logger.generate_audit_report()
-    
-    typer.echo("⚠️  Quality audit not yet implemented")
+    typer.echo("⚠️  Quality audit is available via the web UI diagnostics panel.")
+    typer.echo("    Use: /api/scanner/diagnostics for programmatic access.")
 
 
 @app.command()
