@@ -2,10 +2,16 @@ import { Compass } from '@phosphor-icons/react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import sniperLogo from '@/assets/images/1000016768.png';
+// import { SniperScope } from './SniperScope';
 
 export function HeroSection() {
   return (
     <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden">
+      {/* Background Effect - Green Vignette */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-accent/10 via-background to-background" />
+      </div>
+
       {/* Content */}
       <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
         <motion.div
@@ -26,7 +32,7 @@ export function HeroSection() {
             <img
               src={sniperLogo}
               alt="SniperSight"
-              className="relative h-20 md:h-28 w-auto drop-shadow-[0_0_30px_rgba(0,255,170,0.4)]"
+              className="relative h-24 md:h-32 lg:h-40 w-auto drop-shadow-[0_0_30px_rgba(0,255,170,0.4)]"
             />
           </div>
 
@@ -63,7 +69,7 @@ export function HeroSection() {
       </div>
 
       {/* Bottom fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent z-20" />
     </section>
   );
 }
