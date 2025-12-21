@@ -375,7 +375,7 @@ async def debug_smc_patterns(
         
         # Fetch data
         timeframes = ['15m', '1h', '4h', '1d']
-        multi_tf_data = await asyncio.to_thread(pipeline.get_multi_timeframe_data, symbol, timeframes)
+        multi_tf_data = await asyncio.to_thread(pipeline.fetch_multi_timeframe, symbol, timeframes)
         
         if not multi_tf_data or not multi_tf_data.timeframes:
             raise HTTPException(status_code=400, detail=f"No data for {symbol}")
