@@ -94,11 +94,15 @@ const features: Feature[] = [
     }
 ];
 
-export function FeatureTabs() {
+interface FeatureTabsProps {
+    className?: string;
+}
+
+export function FeatureTabs({ className = "" }: FeatureTabsProps) {
     const [activeTab, setActiveTab] = useState("scanner");
 
     return (
-        <section className="relative py-24">
+        <section className={`relative pt-48 pb-24 ${className}`}>
             <div className="max-w-7xl mx-auto px-4">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -107,7 +111,7 @@ export function FeatureTabs() {
                     transition={{ duration: 0.6 }}
                 >
                     {/* Section Header */}
-                    <div className="text-center mb-16">
+                    <div className="text-center mb-32">
                         <h2 className="hud-headline text-2xl md:text-3xl text-foreground mb-4">
                             Complete Trading Arsenal
                         </h2>
@@ -116,9 +120,9 @@ export function FeatureTabs() {
                         </p>
                     </div>
 
-                    <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
+                    <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="pt-8">
                         {/* Tab Triggers */}
-                        <Tabs.List className="flex flex-wrap justify-center gap-2 mb-12">
+                        <Tabs.List className="flex flex-wrap justify-center gap-2 mb-16">
                             {features.map((feature) => (
                                 <Tabs.Trigger
                                     key={feature.id}

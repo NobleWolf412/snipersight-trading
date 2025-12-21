@@ -39,7 +39,7 @@ function LandingContent() {
         <HeroSection />
 
         {/* Animated Tactical Page Break */}
-        <TacticalDivider className="my-12 relative z-10" height="h-24" />
+        {/* <TacticalDivider className="mt-24 mb-32 relative z-50" height="h-48" /> */}
 
         {/* Complete Trading Arsenal - The only remaining section */}
         <FeatureTabs />

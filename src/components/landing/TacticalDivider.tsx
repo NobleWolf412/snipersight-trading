@@ -1,57 +1,50 @@
-import { motion } from 'framer-motion';
+import { useRef } from 'react';
 
 interface TacticalDividerProps {
     className?: string;
     height?: string;
 }
 
-export function TacticalDivider({ className = '', height = 'h-24' }: TacticalDividerProps) {
+export function TacticalDivider({ className = '', height = 'h-32' }: TacticalDividerProps) {
     return (
-        <div className={`relative w-full flex items-center justify-center overflow-hidden ${className} ${height}`}>
-            <div className="relative w-full max-w-7xl px-4 flex flex-col items-center justify-center">
+        <div className={`relative w-full ${height} ${className} flex items-center justify-center overflow-visible`}>
+            {/* Added h-full to ensure positioning context has height */}
+            <div className="relative w-full h-full max-w-[1920px] px-0 flex items-center justify-center">
 
-                {/* Hologram Base Glow */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-1 bg-accent/50 blur-[20px]" />
-
-                {/* The Structure */}
-                <div className="relative w-full h-[2px] bg-gradient-to-r from-transparent via-accent/40 to-transparent">
-                    {/* Moving Scan Blip */}
-                    <div className="absolute top-0 left-0 w-20 h-full bg-accent blur-[4px] animate-scan-fast" />
+                {/* 1. Core Plasma Beam (The Fissure) */}
+                <div className="absolute top-1/2 left-0 -translate-y-1/2 w-full h-[2px] bg-white shadow-[0_0_20px_rgba(255,200,100,0.8)] z-20">
+                    {/* Inner hot core pulsation */}
+                    <div className="absolute inset-0 bg-orange-400 animate-pulse-fast" />
                 </div>
 
-                {/* Holographic Projection Plane */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-12 border-x border-accent/10 bg-accent/5 backdrop-blur-[2px] skew-x-12 flex items-center justify-between px-4 overflow-hidden">
-                    {/* Scanlines */}
-                    <div className="absolute inset-0 bg-[url('/grid-pattern.png')] opacity-10" />
-                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-accent/10 to-transparent animate-pulse" />
+                {/* 2. Neon Glow Field (Massive Spread) */}
+                <div className="absolute top-1/2 left-0 -translate-y-1/2 w-full h-[4px] bg-orange-500 blur-[4px] opacity-80 z-10 shadow-[0_0_60px_rgba(255,100,0,0.6)]" />
 
-                    {/* HUD Text */}
-                    <span className="text-[10px] font-mono text-accent/60 tracking-[0.2em]">SYS.01</span>
+                {/* 3. Atmospheric Halo (Fades into darkness) */}
+                <div
+                    className="absolute top-1/2 left-0 -translate-y-1/2 w-full h-32 bg-gradient-to-r from-transparent via-orange-500/10 to-transparent blur-[40px] z-0 transform scale-y-50 origin-center"
+                    style={{ maskImage: 'linear-gradient(to right, transparent, black 20%, black 80%, transparent)' }}
+                />
 
-                    {/* Center Graphic */}
-                    <div className="flex gap-1">
-                        {[1, 2, 3].map(i => (
-                            <div key={i} className={`w-1 h-1 bg-accent/60 rounded-full animate-ping delay-${i * 100}`} />
-                        ))}
-                    </div>
+                {/* 4. Scanning Filament (Movement) */}
+                <div className="absolute top-1/2 left-0 -translate-y-1/2 w-1/2 h-[1px] bg-gradient-to-r from-transparent via-white/80 to-transparent z-30 animate-scan-bounce blur-[1px]" />
 
-                    <span className="text-[10px] font-mono text-accent/60 tracking-[0.2em] text-right">ACTIVE</span>
-                </div>
-
-                {/* Decorative Brackets */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[640px] h-8 border-x border-accent/20 skew-x-12" />
+                {/* 5. Hard Border Fallback (Safety Line) */}
+                <div className="absolute top-1/2 left-0 -translate-y-1/2 w-full h-[1px] bg-orange-500/20" />
 
             </div>
 
             <style>{`
-        @keyframes scan-fast {
-            0% { left: 0%; opacity: 0; }
-            20% { opacity: 1; }
-            80% { opacity: 1; }
-            100% { left: 100%; opacity: 0; }
+        @keyframes scan-bounce {
+            0% { transform: translateX(-50%) scaleX(0.2); opacity: 0; }
+            50% { transform: translateX(0%) scaleX(1); opacity: 1; }
+            100% { transform: translateX(50%) scaleX(0.2); opacity: 0; }
         }
-        .animate-scan-fast {
-            animation: scan-fast 3s linear infinite;
+        .animate-scan-bounce {
+            animation: scan-bounce 4s ease-in-out infinite alternate;
+        }
+        .animate-pulse-fast {
+            animation: pulse 0.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
       `}</style>
         </div>
