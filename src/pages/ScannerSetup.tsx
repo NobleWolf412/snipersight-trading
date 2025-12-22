@@ -355,8 +355,8 @@ export function ScannerSetup() {
                   <div>
                     <div className="flex items-end justify-between mb-4">
                       <div>
-                        <label className="block text-base font-bold font-mono text-[#00ff88] tracking-widest uppercase mb-1">CONFLUENCE GATE (STRICTNESS)</label>
-                        <p className="text-sm text-muted-foreground">Minimum Confidence Threshold</p>
+                        <label className="block text-base font-bold font-mono text-[#00ff88] tracking-widest uppercase mb-1">CONFLUENCE GATE</label>
+                        <p className="text-sm text-muted-foreground">Only show setups scoring above this %</p>
                       </div>
                       <div className="flex items-center gap-3 bg-black/40 border border-white/10 px-3 py-1.5 rounded-lg">
                         <span className="text-xs font-bold px-2 py-0.5 rounded-sm bg-black/60 border border-white/5 uppercase tracking-wider" style={{ color: minScoreOverride <= 60 ? '#fbbf24' : minScoreOverride <= 75 ? '#00ff88' : '#3b82f6' }}>
@@ -409,6 +409,7 @@ export function ScannerSetup() {
                   <TacticalToggle
                     label="MAJORS"
                     sublabel="BTC, ETH, SOL (High Liquidity)"
+                    tooltip="Top-tier cryptocurrencies with massive trading volumes. Lower volatility, tighter spreads, and more predictable price action. Best for consistent setups."
                     checked={scanConfig.categories.majors}
                     onChange={(checked) => setScanConfig({ ...scanConfig, categories: { ...scanConfig.categories, majors: checked } })}
                     icon={<CurrencyBtc size={32} weight="duotone" />}
@@ -417,6 +418,7 @@ export function ScannerSetup() {
                   <TacticalToggle
                     label="ALTCOINS"
                     sublabel="High Volatility Targets"
+                    tooltip="Mid-cap altcoins outside the top 10. Higher volatility means bigger moves but less liquidity. Good for breakout plays and momentum trades."
                     checked={scanConfig.categories.altcoins}
                     onChange={(checked) => setScanConfig({ ...scanConfig, categories: { ...scanConfig.categories, altcoins: checked } })}
                     icon={<Lightning size={32} weight="duotone" />}
@@ -425,6 +427,7 @@ export function ScannerSetup() {
                   <TacticalToggle
                     label="MEME PROTOCOL"
                     sublabel="Extreme Risk / High Reward"
+                    tooltip="⚠️ DEGEN MODE: Meme coins (DOGE, SHIB, PEPE, etc). Extreme volatility, thin liquidity, and unpredictable behavior. Only for high-risk traders who accept potential 50%+ swings."
                     checked={scanConfig.categories.memeMode}
                     onChange={(checked) => setScanConfig({ ...scanConfig, categories: { ...scanConfig.categories, memeMode: checked } })}
                     icon={<Biohazard size={32} weight="duotone" />}
@@ -435,7 +438,8 @@ export function ScannerSetup() {
 
                   <TacticalToggle
                     label="MACRO OVERLAY"
-                    sublabel="Require BTC.D Alignment"
+                    sublabel="Adjust scores based on BTC.D"
+                    tooltip="When enabled, trade scores are adjusted based on the overall market regime. If BTC Dominance is rising (Risk-Off), altcoin longs get penalized. If capital is flowing into alts (Risk-On), altcoin longs get boosted. Helps you avoid swimming upstream."
                     checked={scanConfig.macroOverlay}
                     onChange={(checked) => {
                       setScanConfig({ ...scanConfig, macroOverlay: checked });

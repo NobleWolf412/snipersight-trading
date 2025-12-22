@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { Check, Warning } from '@phosphor-icons/react';
+import { Check, Warning, Info } from '@phosphor-icons/react';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 // --- Tactical Selector Grid ---
 // --- Tactical Selector Grid ---
@@ -213,6 +216,7 @@ export function TacticalSlider({
 interface TacticalToggleProps {
     label: string;
     sublabel?: string;
+    tooltip?: string; // Info tooltip explaining this option
     checked: boolean;
     onChange: (checked: boolean) => void;
     icon?: React.ReactNode;
@@ -220,8 +224,10 @@ interface TacticalToggleProps {
     className?: string;
 }
 
-export function TacticalToggle({ label, sublabel, checked, onChange, icon, isHazard, className }: TacticalToggleProps) {
-    return (
+export function TacticalToggle({ label, sublabel, tooltip, checked, onChange, icon, isHazard, className }: TacticalToggleProps) {
+    const [infoOpen, setInfoOpen] = useState(false);
+
+    const toggleContent = (
         <button
             type="button"
             onClick={() => onChange(!checked)}
@@ -278,6 +284,24 @@ export function TacticalToggle({ label, sublabel, checked, onChange, icon, isHaz
                         {sublabel}
                     </div>
                 )}
+
+                {/* Info tooltip trigger */}
+                {tooltip && (
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setInfoOpen(true);
+                        }}
+                        className="absolute top-3 left-3 z-20 p-1 rounded-full hover:bg-white/10 transition-colors"
+                        aria-label={`Info about ${label}`}
+                    >
+                        <Info size={20} weight="fill" className={cn(
+                            "transition-colors",
+                            checked ? (isHazard ? "text-amber-400/60" : "text-[#00ff88]/60") : "text-white/30"
+                        )} />
+                    </button>
+                )}
             </div>
 
             {/* Hazard Warning */}
@@ -288,4 +312,42 @@ export function TacticalToggle({ label, sublabel, checked, onChange, icon, isHaz
             )}
         </button>
     );
+
+    // Wrap in tooltip if tooltip text is provided (for desktop hover)
+    // Also render Dialog for mobile tap
+    if (tooltip) {
+        return (
+            <>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        {toggleContent}
+                    </TooltipTrigger>
+                    <TooltipContent
+                        side="top"
+                        sideOffset={8}
+                        className="max-w-xs bg-black/95 border border-[#00ff88]/30 text-white text-sm p-3 rounded-lg shadow-[0_0_20px_rgba(0,255,136,0.2)] hidden sm:block"
+                    >
+                        <p className="leading-relaxed">{tooltip}</p>
+                    </TooltipContent>
+                </Tooltip>
+
+                {/* Mobile info dialog */}
+                <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
+                    <DialogContent className="glass-card glow-border-green max-w-sm">
+                        <DialogHeader>
+                            <DialogTitle className="hud-headline hud-text-green flex items-center gap-2">
+                                {icon}
+                                {label}
+                            </DialogTitle>
+                        </DialogHeader>
+                        <DialogDescription className="text-muted-foreground text-sm leading-relaxed">
+                            {tooltip}
+                        </DialogDescription>
+                    </DialogContent>
+                </Dialog>
+            </>
+        );
+    }
+
+    return toggleContent;
 }
