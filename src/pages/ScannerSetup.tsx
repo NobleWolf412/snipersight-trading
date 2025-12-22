@@ -49,7 +49,7 @@ export function ScannerSetup() {
 
   const handleArmScanner = async () => {
     setIsScanning(true);
-    setScanProgress({ current: 0, total: 0 });
+    setScanProgress({ current: 0, total: scanConfig.topPairs || 20 });
     setConsoleExpanded(true); // Auto-expand console during scan
     const startedAt = Date.now();
     let heartbeatId: number | null = null;
@@ -506,7 +506,12 @@ export function ScannerSetup() {
               {consoleExpanded && (
                 <div className="px-4 lg:px-5 pb-4 lg:pb-5">
                   <div className="h-[500px] lg:h-[600px]">
-                    <ScannerConsole isScanning={isScanning} className="h-full" />
+                    <ScannerConsole
+                      isScanning={isScanning}
+                      className="h-full"
+                      progressCurrent={scanProgress?.current}
+                      progressTotal={scanProgress?.total}
+                    />
                   </div>
                 </div>
               )}

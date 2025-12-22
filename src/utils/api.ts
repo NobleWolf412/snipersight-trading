@@ -579,7 +579,7 @@ class ApiClient {
         expected_move_pct: number;
         confidence: number;
       }>; total: number; timestamp: string
-    }>(`/htf/opportunities${qp.toString() ? `?${qp.toString()}` : ''}`);
+    }>(`/htf/opportunities${qp.toString() ? `?${qp.toString()}` : ''}`, { timeout: 90000 }); // Increase timeout to 90s for heavy analysis
   }
 
   // Optional: symbol-specific regime (if backend supports symbol query)

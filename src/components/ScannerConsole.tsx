@@ -11,6 +11,8 @@ import { SystemVitals } from './scanner/SystemVitals';
 interface ScannerConsoleProps {
   className?: string;
   isScanning: boolean;
+  progressCurrent?: number;
+  progressTotal?: number;
 }
 
 // Regex to match crypto trading pairs like BTC/USDT, ETH/USDT, SOL/USDT, etc.
@@ -85,7 +87,7 @@ function highlightSymbols(message: string): ReactNode[] {
   return parts.length > 0 ? parts : [message];
 }
 
-export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
+export function ScannerConsole({ isScanning, className, progressCurrent, progressTotal }: ScannerConsoleProps) {
   const { consoleLogs } = useScanner();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -246,8 +248,8 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
           <div className="flex-1 p-3 overflow-y-auto">
             <SystemVitals
               isScanning={isScanning}
-              targetsFound={radarBlips.length}
-              targetsTotal={isScanning ? 50 : 0}
+              targetsFound={progressCurrent || radarBlips.length}
+              targetsTotal={progressTotal || (isScanning ? 50 : 0)}
             />
           </div>
         </div>

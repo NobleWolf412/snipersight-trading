@@ -40,8 +40,17 @@ export function ModeVisuals({ activeMode }: ModeVisualsProps) {
             setHasWebGLError(true);
             return;
         }
+
+        // Handle WebGL context loss gracefully
+        const handleContextLost = (event: Event) => {
+            event.preventDefault();
+            console.warn('[ModeVisuals] WebGL context lost, switching to fallback');
+            setHasWebGLError(true);
+        };
+        canvas.addEventListener('webglcontextlost', handleContextLost);
+
         renderer.setSize(container.clientWidth, container.clientHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Reduce pixel ratio to save GPU memory
 
         const contentGroup = new THREE.Group();
         scene.add(contentGroup);
@@ -388,6 +397,7 @@ export function ModeVisuals({ activeMode }: ModeVisualsProps) {
         return () => {
             resizeObserver.disconnect();
             cancelAnimationFrame(animId);
+            canvas.removeEventListener('webglcontextlost', handleContextLost);
             renderer.dispose();
             contentGroup.clear();
         };

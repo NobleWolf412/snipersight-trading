@@ -104,7 +104,7 @@ const fallbackModes: ScannerMode[] = [
   {
     name: 'overwatch',
     description: 'SWING TRADES (Days-Weeks) • High-conviction setups only • Weekly/Daily structure alignment • Best for: Patient traders wanting A+ quality with 2:1+ R:R minimum',
-    timeframes: ['1w','1d','4h','1h','15m','5m'],
+    timeframes: ['1w', '1d', '4h', '1h', '15m', '5m'],
     min_confluence_score: 75,
     profile: 'macro_surveillance',
     critical_timeframes: ['1w', '1d'],
@@ -118,7 +118,7 @@ const fallbackModes: ScannerMode[] = [
   {
     name: 'strike',
     description: 'INTRADAY TRADES (Hours) • Aggressive momentum plays • More signals, faster entries • Best for: Active traders comfortable with quick decision-making and 1.2:1+ R:R',
-    timeframes: ['4h','1h','15m','5m'],
+    timeframes: ['4h', '1h', '15m', '5m'],
     min_confluence_score: 60,
     profile: 'intraday_aggressive',
     critical_timeframes: ['15m'],
@@ -131,7 +131,7 @@ const fallbackModes: ScannerMode[] = [
   {
     name: 'surgical',
     description: 'SCALP/INTRADAY (Minutes-Hours) • Precision entries with tight stops • Fewer but cleaner setups • Best for: Experienced traders wanting controlled risk with 1.5:1+ R:R',
-    timeframes: ['1h','15m','5m'],
+    timeframes: ['1h', '15m', '5m'],
     min_confluence_score: 70,
     profile: 'precision',
     critical_timeframes: ['15m'],
@@ -144,7 +144,7 @@ const fallbackModes: ScannerMode[] = [
   {
     name: 'stealth',
     description: 'BALANCED (Hours-Days) • Mix of swing and intraday setups • Good signal volume with solid quality • Best for: All-around trading with 1.8:1+ R:R minimum',
-    timeframes: ['1d','4h','1h','15m','5m'],
+    timeframes: ['1d', '4h', '1h', '15m', '5m'],
     min_confluence_score: 65,
     profile: 'stealth_balanced',
     critical_timeframes: ['4h', '1h'],
@@ -159,13 +159,16 @@ const fallbackModes: ScannerMode[] = [
 const ScannerContext = createContext<ScannerContextType | undefined>(undefined);
 
 export function ScannerProvider({ children }: { children: ReactNode }) {
-  console.log('[ScannerContext] Initializing ScannerProvider...');
-  
+  // Only log in development and limit frequency
+  if (import.meta.env.MODE === 'development' && Math.random() < 0.1) {
+    console.debug('[ScannerContext] ScannerProvider mount');
+  }
+
   const [scanConfig, setScanConfig] = useLocalStorage<ScanConfig>('scan-config', defaultScanConfig);
   const [botConfig, setBotConfig] = useLocalStorage<BotConfig>('bot-config', defaultBotConfig);
   const [isScanning, setIsScanning] = useLocalStorage<boolean>('is-scanning', false);
   const [isBotActive, setIsBotActive] = useLocalStorage<boolean>('is-bot-active', false);
-  
+
   const [scannerModes, setScannerModes] = useState<ScannerMode[]>(fallbackModes);
   const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(null);
   // Console logs should be ephemeral per session; do NOT persist in localStorage
@@ -207,10 +210,10 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Poll HTF tactical opportunities every 60s
+  // Poll HTF tactical opportunities every 5 minutes (300s)
   useEffect(() => {
     refreshHTFOpportunities();
-    const id = setInterval(() => refreshHTFOpportunities(), 60000);
+    const id = setInterval(() => refreshHTFOpportunities(), 300000);
     return () => clearInterval(id);
   }, [refreshHTFOpportunities]);
 
@@ -246,7 +249,7 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  console.log('[ScannerContext] Provider ready');
+  // Provider ready - no need to log every render
 
   return (
     <ScannerContext.Provider

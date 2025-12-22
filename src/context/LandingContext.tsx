@@ -188,17 +188,13 @@ export function LandingProvider({ children }: { children: ReactNode }) {
     // Initial load
     useEffect(() => {
         refreshData();
-        // Auto-refresh every 60s
+        // Auto-refresh every 5 minutes (300s)
         const id = setInterval(() => {
             // Silent refresh - do not trigger loading screen or progress bar updates (managed by refreshData condition)
-            // Actually refreshData checks !hasCache, but hasCache is boolean from closure?
-            // No, refreshData has deps [cycles, ...], so it updates.
-            // But we don't want to re-trigger the interval.
-            // Let's just call the APIs directly to be safe and avoid side effects.
             api.getMarketCycles('BTCUSDT').then(res => res.data && setCycles(res.data));
             api.getHTFOpportunities({ min_confidence: 60 }).then(res => res.data && setHtf(res.data));
             api.getMarketRegime().then(res => res.data && setRegime(res.data));
-        }, 60000);
+        }, 300000);
         return () => clearInterval(id);
     }, [refreshData, setCycles, setHtf, setRegime]);
 

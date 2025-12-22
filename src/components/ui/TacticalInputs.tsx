@@ -285,22 +285,29 @@ export function TacticalToggle({ label, sublabel, tooltip, checked, onChange, ic
                     </div>
                 )}
 
-                {/* Info tooltip trigger */}
+                {/* Info tooltip trigger - using div to avoid button-in-button nesting */}
                 {tooltip && (
-                    <button
-                        type="button"
+                    <div
+                        role="button"
+                        tabIndex={0}
                         onClick={(e) => {
                             e.stopPropagation();
                             setInfoOpen(true);
                         }}
-                        className="absolute top-3 left-3 z-20 p-1 rounded-full hover:bg-white/10 transition-colors"
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.stopPropagation();
+                                setInfoOpen(true);
+                            }
+                        }}
+                        className="absolute top-3 left-3 z-20 p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
                         aria-label={`Info about ${label}`}
                     >
                         <Info size={20} weight="fill" className={cn(
                             "transition-colors",
                             checked ? (isHazard ? "text-amber-400/60" : "text-[#00ff88]/60") : "text-white/30"
                         )} />
-                    </button>
+                    </div>
                 )}
             </div>
 
