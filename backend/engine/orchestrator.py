@@ -632,6 +632,9 @@ class Orchestrator:
         # Generate trace_id for correlation
         trace_id = f"{run_id}_{symbol.replace('/', '_')}_{int(timestamp.timestamp())}"
         
+        # Log symbol analysis start
+        logger.info("🎯 %s: Analyzing symbol...", symbol)
+        
         # Stage 1: Initialize context
         context = SniperContext(
             symbol=symbol,
@@ -639,6 +642,9 @@ class Orchestrator:
             run_id=run_id,
             timestamp=timestamp
         )
+        
+        # Inject macro context (computed once per scan)
+        context.macro_context = self.macro_context
         
         # Stage 2: Data ingestion (use pre-fetched data if available, else fetch)
         if prefetched_data is not None:
@@ -649,7 +655,8 @@ class Orchestrator:
         try:
             tf_list = list(context.multi_tf_data.timeframes.keys()) if context.multi_tf_data else []
             candle_counts = {tf: len(df) for tf, df in (context.multi_tf_data.timeframes.items() if context.multi_tf_data else [])}
-            logger.info("📊 %s data: TFs=%s | Candles=%s", symbol, ', '.join(tf_list), candle_counts)
+            total_candles = sum(candle_counts.values())
+            logger.info("📊 %s: Data loaded | TFs: %s | Total candles: %d", symbol, ', '.join(tf_list), total_candles)
             self._progress("INGEST", {"symbol": symbol, "timeframes": tf_list, "candle_counts": candle_counts})
         except Exception:
             pass
@@ -737,12 +744,24 @@ class Orchestrator:
             self.diagnostics['smc_rejections'].extend(rejections)
 
             snap = context.smc_snapshot
+            ob_count = len(getattr(snap, 'order_blocks', []) or [])
+            fvg_count = len(getattr(snap, 'fvgs', []) or [])
+            bos_count = len(getattr(snap, 'structural_breaks', []) or [])
+            sweep_count = len(getattr(snap, 'liquidity_sweeps', []) or [])
+            
+            # Log SMC summary for console
+            if ob_count + fvg_count + bos_count > 0:
+                logger.info("🔍 %s: SMC detected | OB: %d | FVG: %d | BOS: %d | Sweeps: %d",
+                           symbol, ob_count, fvg_count, bos_count, sweep_count)
+            else:
+                logger.info("🔍 %s: SMC scan complete | No patterns found", symbol)
+                
             self._progress("SMC", {
                 "symbol": symbol,
-                "order_blocks": len(getattr(snap, 'order_blocks', []) or []),
-                "fvgs": len(getattr(snap, 'fvgs', []) or []),
-                "structure_breaks": len(getattr(snap, 'structural_breaks', []) or []),
-                "liquidity_sweeps": len(getattr(snap, 'liquidity_sweeps', []) or []),
+                "order_blocks": ob_count,
+                "fvgs": fvg_count,
+                "structure_breaks": bos_count,
+                "liquidity_sweeps": sweep_count,
                 "equal_highs": len(getattr(snap, 'equal_highs', []) or []),
                 "equal_lows": len(getattr(snap, 'equal_lows', []) or [])
             })
@@ -892,12 +911,12 @@ class Orchestrator:
             is_close_call = context.confluence_breakdown.total_score > 40
             log_fn = logger.info if is_close_call else logger.debug
             
-            log_fn("%s [%s]: ❌ GATE FAIL (confluence) | Score=%.1f < %.1f | Top: %s%s", 
-                   symbol, trace_id,
+            log_fn("%s: ❌ REJECTED (confluence) | Score: %.1f%% < %.1f%% | Top factors: %s%s", 
+                   symbol,
                    context.confluence_breakdown.total_score, 
                    self.config.min_confluence_score,
                    top_factors_str,
-                   " [CLOSE CALL]" if is_close_call else "")
+                   " [CLOSE CALL - near threshold]" if is_close_call else "")
             
             self.diagnostics['confluence_rejections'].append({
                 'symbol': symbol,
@@ -944,6 +963,13 @@ class Orchestrator:
                 "htf_aligned": context.confluence_breakdown.htf_aligned,
                 "btc_impulse_gate": context.confluence_breakdown.btc_impulse_gate
             }
+        
+        # Log confluence pass
+        logger.info("✅ %s: Confluence PASS | Score: %.1f%% >= %.1f%% | Direction: %s",
+                   symbol,
+                   context.confluence_breakdown.total_score,
+                   self.config.min_confluence_score,
+                   context.metadata.get('chosen_direction', 'LONG'))
         
         # Stage 5.5: Check cooldown before trade planning
         proposed_direction = context.metadata.get('chosen_direction', 'LONG')

@@ -13,7 +13,7 @@ from backend.shared.models.smc import SMCSnapshot
 from backend.shared.models.scoring import ConfluenceBreakdown
 from backend.shared.models.planner import TradePlan
 from backend.contracts.risk_contract import RiskPlan
-
+from backend.analysis.macro_context import MacroContext
 
 @dataclass
 class SniperContext:
@@ -40,6 +40,7 @@ class SniperContext:
     multi_tf_data: Optional[MultiTimeframeData] = None
     multi_tf_indicators: Optional[IndicatorSet] = None
     smc_snapshot: Optional[SMCSnapshot] = None
+    macro_context: Optional[MacroContext] = None
     confluence_breakdown: Optional[ConfluenceBreakdown] = None
     plan: Optional[TradePlan] = None
     risk_plan: Optional[RiskPlan] = None

@@ -292,6 +292,11 @@ class SymbolClassifier:
             self._cache.mark_error()
             return {}
 
+    def enable_auto_fetch(self) -> None:
+        """Enable automatic CoinGecko fetching."""
+        self._auto_fetch = True
+        logger.info("SymbolClassifier: Auto-fetch enabled via runtime configuration")
+
     def _ensure_cache(self) -> None:
         """Ensure cache is populated, fetching if needed (only when auto_fetch=True)."""
         if not self._auto_fetch:

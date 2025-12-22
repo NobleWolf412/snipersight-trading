@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
 interface ArsenalVisualsProps {
@@ -9,20 +9,29 @@ export function ArsenalVisuals({ activeTab }: ArsenalVisualsProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
+    const [hasWebGLError, setHasWebGLError] = useState(false);
+
     useEffect(() => {
         if (!containerRef.current || !canvasRef.current) return;
+        if (hasWebGLError) return;
 
         const container = containerRef.current;
         const canvas = canvasRef.current;
 
         // SETUP
         const scene = new THREE.Scene();
-        // scene.visible = false; // Fade in?
 
         const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 100);
         camera.position.z = 5;
 
-        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+        let renderer: THREE.WebGLRenderer;
+        try {
+            renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+        } catch (e) {
+            console.warn("WebGL not supported, falling back to 2D mode", e);
+            setHasWebGLError(true);
+            return;
+        }
         renderer.setSize(container.clientWidth, container.clientHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
@@ -265,6 +274,24 @@ export function ArsenalVisuals({ activeTab }: ArsenalVisualsProps) {
         };
 
     }, [activeTab]);
+
+    if (hasWebGLError) {
+        return (
+            <div ref={containerRef} className="w-full h-full min-h-[300px] relative flex items-center justify-center p-8 bg-black/40">
+                <div className="text-center space-y-4">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-500/10 border border-red-500/30 text-red-500 animate-pulse">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" viewBox="0 0 256 256"><path d="M224,48H32A16,16,0,0,0,16,64V192a16,16,0,0,0,16,16H224a16,16,0,0,0,16-16V64A16,16,0,0,0,224,48Zm0,144H32V64H224V192ZM96,136a8,8,0,0,1-8,8H48a8,8,0,0,1,0-16H88A8,8,0,0,1,96,136Zm28-20a28,28,0,1,1,28,28A28,28,0,0,1,124,116Zm40,0a12,12,0,1,0-12,12A12,12,0,0,0,164,116Zm-24,36h32a8,8,0,0,1,0,16H140a8,8,0,0,1,0-16Z"></path></svg>
+                    </div>
+                    <div className="font-mono text-red-400 text-sm tracking-widest uppercase">
+                        Visual System Offline<br />
+                        <span className="text-xs text-red-500/50">WebGL Context Error</span>
+                    </div>
+                </div>
+                {/* Keep the grid background */}
+                <div className="absolute inset-0 bg-gradient-to-l from-transparent via-transparent to-background/10 pointer-events-none" />
+            </div>
+        );
+    }
 
     return (
         <div ref={containerRef} className="w-full h-full min-h-[300px] relative">

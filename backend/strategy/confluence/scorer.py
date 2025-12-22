@@ -30,6 +30,7 @@ from backend.strategy.smc.volume_profile import VolumeProfile, calculate_volume_
 from backend.analysis.premium_discount import detect_premium_discount
 from backend.analysis.pullback_detector import detect_pullback_setup, PullbackSetup
 from backend.strategy.smc.sessions import is_kill_zone_active, get_current_kill_zone
+from backend.analysis.macro_context import MacroContext, compute_macro_score
 
 # Conditional imports for type hints
 if TYPE_CHECKING:
@@ -1132,7 +1133,11 @@ def calculate_confluence_score(
     cycle_context: Optional["CycleContext"] = None,
     reversal_context: Optional["ReversalContext"] = None,
     volume_profile: Optional[VolumeProfile] = None,
-    current_price: Optional[float] = None
+    current_price: Optional[float] = None,
+    # Macro context injection
+    macro_context: Optional[MacroContext] = None,
+    is_btc: bool = False,
+    is_alt: bool = True
 ) -> ConfluenceBreakdown:
     """
     Calculate comprehensive confluence score for a trade setup.
@@ -1149,6 +1154,9 @@ def calculate_confluence_score(
         reversal_context: Optional reversal detection context for synergy bonuses
         volume_profile: Optional volume profile for institutional-grade VAP analysis
         current_price: Optional current price for volume profile entry analysis
+        macro_context: Global macro/dominance context (Macro Overlay)
+        is_btc: Whether symbol is Bitcoin
+        is_alt: Whether symbol is an Altcoin
         
     Returns:
         ConfluenceBreakdown: Complete scoring breakdown with factors
@@ -2100,6 +2108,36 @@ def calculate_confluence_score(
     
     conflict_penalty = _calculate_conflict_penalty(factors, direction)
     
+    # --- Macro Overlay (if enabled) ---
+    macro_score_val = 0.0
+    if config and getattr(config, 'macro_overlay_enabled', False) and macro_context:
+        # Use boolean flags if available, otherwise heuristics based on symbol being passed down?
+        # Scorer doesn't have 'symbol', relying on flags 'is_btc', 'is_alt' passed in
+        raw_macro = compute_macro_score(macro_context, direction, is_btc, is_alt)
+        
+        # Scale impact: +/- 1 raw point = +/- 5% adjustment
+        # Max impact: +/- 4 * 5 = +/- 20%
+        macro_score_val = raw_macro * 5.0
+        
+        if macro_score_val != 0:
+            logger.info("🌍 Macro Overlay Applied: Raw=%d -> Adj=%.1f", raw_macro, macro_score_val)
+            
+            # Add explicit factor for visibility in "Details" modal
+            rationale_prefix = "MACRO " + ("BONUS" if macro_score_val > 0 else "PENALTY")
+            macro_notes = "; ".join(macro_context.notes[-2:]) # Last few notes
+            factors.append(ConfluenceFactor(
+                name="Macro Overlay",
+                score=50.0 + macro_score_val, # Center around 50 for display
+                weight=0.0, # Information only, score applied via multiplier/adjustment below
+                rationale=f"{rationale_prefix}: {macro_notes} ({macro_score_val:+.1f})"
+            ))
+            
+            # Apply to bonuses/penalties to affect final score without breaking weight normalization
+            if macro_score_val > 0:
+                synergy_bonus += macro_score_val
+            else:
+                conflict_penalty += abs(macro_score_val)
+
     # --- LTF-Only Penalty ---
     # Penalize setups that have NO HTF pattern backing (all patterns are 15m/5m)
     htf_timeframes = {'1w', '1W', '1d', '1D', '4h', '4H', '1h', '1H'}
@@ -2172,7 +2210,8 @@ def calculate_confluence_score(
         htf_proximity_atr=(htf_context or {}).get('within_atr'),
         htf_proximity_pct=(htf_context or {}).get('within_pct'),
         nearest_htf_level_timeframe=(htf_context or {}).get('timeframe'),
-        nearest_htf_level_type=(htf_context or {}).get('type')
+        nearest_htf_level_type=(htf_context or {}).get('type'),
+        macro_score=macro_score_val
     )
     
     return breakdown

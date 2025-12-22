@@ -158,6 +158,30 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Enable live symbol classification on startup
+from backend.analysis.symbol_classifier import get_classifier
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize background services on startup."""
+    logger.info("Starting up SniperSight API...")
+    
+    # Enable live symbol classification (CoinGecko)
+    # We do this in a background thread to avoid blocking startup
+    classifier = get_classifier()
+    classifier.enable_auto_fetch()
+    
+    def refresh_classifier_cache():
+        try:
+            logger.info("Initializing symbol classifier cache (live data)...")
+            classifier.refresh_cache()
+            logger.info("Symbol classifier cache initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize symbol classifier: {e}")
+            
+    # Run in background to not block server startup
+    threading.Thread(target=refresh_classifier_cache, daemon=True).start()
+
 # Include routers
 app.include_router(htf_router)
 

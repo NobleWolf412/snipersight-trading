@@ -247,7 +247,10 @@ class ConfluenceService:
             cycle_context=cycle_context,
             reversal_context=reversal_context,
             volume_profile=context.metadata.get('_volume_profile_obj'),
-            current_price=current_price
+            current_price=current_price,
+            macro_context=context.macro_context,
+            is_btc=("BTC" in context.symbol.upper()),
+            is_alt=("BTC" not in context.symbol.upper())
         )
 
 

@@ -80,6 +80,9 @@ class ConfluenceBreakdown:
     nearest_htf_level_timeframe: Optional[str] = None
     nearest_htf_level_type: Optional[Literal['support','resistance']] = None
     
+    # Macro Overlay Score (adjustment based on BTC dominance/Risk regimes)
+    macro_score: float = 0.0
+    
     def __post_init__(self):
         """Validate confluence breakdown data."""
         if not 0 <= self.total_score <= 100:

@@ -1,11 +1,89 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import { TerminalWindow, Lightning, Cpu, WifiHigh, Pulse, Crosshair } from '@phosphor-icons/react';
+import { TerminalWindow, Lightning, Crosshair } from '@phosphor-icons/react';
 import { useScanner } from '@/context/ScannerContext';
 import { debugLogger, DebugLogEntry } from '@/utils/debugLogger';
 import { motion, AnimatePresence } from 'framer-motion';
+import { TacticalRadar } from './scanner/TacticalRadar';
+import { WaveformMonitor } from './scanner/WaveformMonitor';
+import { SystemVitals } from './scanner/SystemVitals';
 
-interface ScannerConsoleProps { className?: string; isScanning: boolean; }
+interface ScannerConsoleProps {
+  className?: string;
+  isScanning: boolean;
+}
+
+// Regex to match crypto trading pairs like BTC/USDT, ETH/USDT, SOL/USDT, etc.
+const SYMBOL_REGEX = /([A-Z0-9]{2,10}\/(?:USDT|USD|USDC|BTC|ETH|BUSD))/g;
+
+// Regex to match confluence scores like "78%" or "Confluence: 78%"
+const SCORE_REGEX = /(?:Confluence[:\s]*)?(\d{1,3})%/gi;
+
+// Mini progress bar for scores
+function ScoreBadge({ score }: { score: number }) {
+  const barCount = 10;
+  const filledBars = Math.round((score / 100) * barCount);
+  const color = score >= 70 ? '#00ff88' : score >= 50 ? '#ffaa00' : '#ff4444';
+  const status = score >= 70 ? 'PASS' : score >= 50 ? 'WEAK' : 'FAIL';
+
+  return (
+    <span className="inline-flex items-center gap-1.5 mx-1 px-1.5 py-0.5 rounded bg-black/40 border border-white/10">
+      <span className="font-bold tabular-nums" style={{ color }}>{score}%</span>
+      <span className="flex gap-px">
+        {Array.from({ length: barCount }).map((_, i) => (
+          <span
+            key={i}
+            className="w-1 h-2.5 rounded-sm"
+            style={{
+              backgroundColor: i < filledBars ? color : 'rgba(255,255,255,0.1)',
+              boxShadow: i < filledBars ? `0 0 4px ${color}` : 'none',
+            }}
+          />
+        ))}
+      </span>
+      <span className="text-[9px] font-bold tracking-wider" style={{ color }}>{status}</span>
+    </span>
+  );
+}
+
+// Parse log message and highlight crypto symbols + scores
+function highlightSymbols(message: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  let key = 0;
+
+  // First pass: split by symbols
+  const symbolSplits = message.split(SYMBOL_REGEX);
+
+  symbolSplits.forEach((part, partIndex) => {
+    // Check if this part matches a symbol
+    if (SYMBOL_REGEX.test(part)) {
+      SYMBOL_REGEX.lastIndex = 0; // Reset
+      parts.push(
+        <span
+          key={key++}
+          className="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded bg-[#00ff88]/15 border border-[#00ff88]/30 text-[#00ff88] font-bold text-[11px] tracking-wide"
+        >
+          {part}
+        </span>
+      );
+    } else {
+      // Second pass on non-symbol parts: find scores
+      const scoreParts = part.split(SCORE_REGEX);
+
+      scoreParts.forEach((scorePart, scoreIndex) => {
+        // Check if this is a score number
+        const scoreNum = parseInt(scorePart);
+        if (!isNaN(scoreNum) && scoreNum >= 0 && scoreNum <= 100 && /^\d{1,3}$/.test(scorePart)) {
+          parts.push(<ScoreBadge key={key++} score={scoreNum} />);
+        } else if (scorePart) {
+          parts.push(scorePart);
+        }
+      });
+    }
+  });
+
+  return parts.length > 0 ? parts : [message];
+}
 
 export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
   const { consoleLogs } = useScanner();
@@ -13,14 +91,13 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [scanLogs, setScanLogs] = useState<DebugLogEntry[]>([]);
   const wasScanning = useRef(false);
+  const [radarBlips, setRadarBlips] = useState<{ symbol: string; score: number; angle: number; distance: number }[]>([]);
 
-  // Simulated system metrics
-  const [metrics, setMetrics] = useState({ cpu: 12, mem: 45, net: 24 });
-
-  // Subscribe to debug logger (FILTERED for tactical updates only)
+  // Subscribe to debug logger
   useEffect(() => {
     if (isScanning && !wasScanning.current) {
       setScanLogs([]);
+      setRadarBlips([]);
       wasScanning.current = true;
     }
 
@@ -30,9 +107,7 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
 
     if (isScanning) {
       const unsubscribe = debugLogger.subscribe((entry) => {
-        // Filter: Only show scanner source logs (not API network spam)
         if (entry.source === 'scanner') {
-          // Further filter: Skip verbose API-related messages
           const isSpam = entry.message.includes('Response:') ||
             entry.message.includes('Request successful') ||
             entry.message.includes('Connecting to:') ||
@@ -42,6 +117,21 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
 
           if (!isSpam) {
             setScanLogs(prev => [...prev, entry]);
+
+            // Add radar blip for completed symbol analysis
+            if (entry.message.includes('Confluence:') || entry.message.includes('rejected')) {
+              const scoreMatch = entry.message.match(/(\d+)%/);
+              const symbolMatch = entry.message.match(/([A-Z]+\/USDT)/);
+              if (symbolMatch) {
+                const score = scoreMatch ? parseInt(scoreMatch[1]) : 30;
+                setRadarBlips(prev => [...prev.slice(-15), {
+                  symbol: symbolMatch[1],
+                  score,
+                  angle: Math.random() * Math.PI * 2,
+                  distance: 0.3 + Math.random() * 0.6,
+                }]);
+              }
+            }
           }
         }
       });
@@ -49,24 +139,17 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
     }
   }, [isScanning]);
 
-  // Timer and Metrics Simulation
+  // Timer
   useEffect(() => {
-    let interval: any;
-    let startTime = Date.now();
+    let interval: number;
+    const startTime = Date.now();
 
     if (isScanning) {
-      interval = setInterval(() => {
+      interval = window.setInterval(() => {
         setElapsedMs(Date.now() - startTime);
-        // Fluctuate metrics
-        setMetrics(prev => ({
-          cpu: Math.min(99, Math.max(5, prev.cpu + (Math.random() * 10 - 5))),
-          mem: Math.min(90, Math.max(20, prev.mem + (Math.random() * 4 - 2))),
-          net: Math.min(100, Math.max(10, prev.net + (Math.random() * 20 - 10))),
-        }));
-      }, 1000);
+      }, 100);
     } else {
       setElapsedMs(0);
-      setMetrics({ cpu: 12, mem: 45, net: 24 });
     }
 
     return () => clearInterval(interval);
@@ -76,155 +159,202 @@ export function ScannerConsole({ isScanning, className }: ScannerConsoleProps) {
     const totalSeconds = Math.floor(ms / 1000);
     const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
     const s = (totalSeconds % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
+    const cs = Math.floor((ms % 1000) / 10).toString().padStart(2, '0');
+    return `${m}:${s}.${cs}`;
   };
 
-  const mergedLogs = [...consoleLogs, ...scanLogs].sort((a, b) => a.timestamp - b.timestamp);
+  const mergedLogs = useMemo(() =>
+    [...consoleLogs, ...scanLogs].sort((a, b) => a.timestamp - b.timestamp),
+    [consoleLogs, scanLogs]
+  );
 
   // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [mergedLogs.length, metrics]); // Scroll on metrics update too to keep it alive
+  }, [mergedLogs.length]);
 
   return (
     <div className={cn(
-      "flex flex-col h-full max-h-full overflow-hidden rounded-lg relative z-0 border border-primary/20 bg-black/90 shadow-[0_0_30px_rgba(0,255,0,0.1)]",
+      "flex flex-col h-full max-h-full overflow-hidden rounded-xl relative border border-[#00ff88]/30 bg-[#0a0f0a] shadow-[0_0_40px_rgba(0,255,136,0.15),inset_0_0_60px_rgba(0,0,0,0.8)]",
       className
     )}>
 
       {/* CRT Scanline Effect */}
-      <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-[5] bg-[length:100%_2px,3px_100%] opacity-20" />
+      <div
+        className="absolute inset-0 pointer-events-none z-50 opacity-[0.03]"
+        style={{
+          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.3) 2px, rgba(0,0,0,0.3) 4px)',
+        }}
+      />
 
-      {/* Header / Status Bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-primary/30 bg-primary/5 relative z-10">
+      {/* Vignette Effect */}
+      <div
+        className="absolute inset-0 pointer-events-none z-40"
+        style={{
+          background: 'radial-gradient(ellipse at center, transparent 0%, transparent 60%, rgba(0,0,0,0.4) 100%)',
+        }}
+      />
+
+      {/* Header Bar */}
+      <div className="relative z-10 flex items-center justify-between px-4 py-2.5 border-b border-[#00ff88]/30 bg-gradient-to-r from-[#00ff88]/10 via-transparent to-[#00ff88]/10">
         <div className="flex items-center gap-3">
-          <TerminalWindow size={18} className="text-primary animate-pulse" />
-          <span className="font-mono text-sm font-bold text-primary tracking-widest">SNIPER.SIGHT // CONSOLE</span>
+          <TerminalWindow size={18} className="text-[#00ff88]" weight="bold" />
+          <span className="font-mono text-sm font-bold text-[#00ff88] tracking-[0.2em]">
+            SNIPERSIGHT // TACTICAL OPS CONSOLE
+          </span>
         </div>
 
-        {/* System Metrics */}
-        <div className="flex items-center gap-6 text-xs font-mono text-primary/70">
-          <div className="flex items-center gap-1.5">
-            <Cpu size={14} />
-            <span>CPU: {Math.floor(metrics.cpu)}%</span>
+        <div className="flex items-center gap-4">
+          {/* Elapsed timer */}
+          <div className="font-mono text-xs text-[#00ff88]/70 tabular-nums">
+            T+{formatElapsed(elapsedMs)}
           </div>
-          <div className="flex items-center gap-1.5">
-            <Pulse size={14} />
-            <span>MEM: {Math.floor(metrics.mem)}%</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <WifiHigh size={14} />
-            <span>NET: {Math.floor(metrics.net)}ms</span>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-3">
+          {/* Status badge */}
           {isScanning ? (
-            <div className="flex items-center gap-2 bg-primary/10 px-2 py-0.5 rounded border border-primary/30">
-              <span className="text-xs font-mono text-primary animate-pulse">SCANNING</span>
-              <span className="text-xs font-mono text-primary">{formatElapsed(elapsedMs)}</span>
-              <Lightning size={14} className="text-warning animate-spin-slow" />
+            <div className="flex items-center gap-2 px-3 py-1 rounded border border-[#00ff88]/50 bg-[#00ff88]/10">
+              <div className="w-2 h-2 rounded-full bg-[#00ff88] animate-pulse shadow-[0_0_8px_rgba(0,255,136,0.8)]" />
+              <span className="text-xs font-mono font-bold text-[#00ff88] tracking-widest">SCANNING</span>
+              <Lightning size={14} className="text-amber-400 animate-pulse" />
             </div>
           ) : (
-            <div className="flex items-center gap-2 px-2 py-0.5">
-              <span className="text-xs font-mono text-muted-foreground">IDLE</span>
+            <div className="flex items-center gap-2 px-3 py-1 rounded border border-muted-foreground/30">
               <div className="w-2 h-2 rounded-full bg-muted-foreground/50" />
+              <span className="text-xs font-mono text-muted-foreground tracking-widest">STANDBY</span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="relative flex-1 flex min-h-0 max-h-full overflow-hidden">
+      {/* Main Content - Multi-Panel Layout */}
+      <div className="relative z-10 flex-1 flex min-h-0 overflow-hidden">
 
-        {/* Log Stream */}
-        <div
-          ref={scrollRef}
-          className="flex-1 p-4 font-mono text-xs space-y-1.5 overflow-y-auto overflow-x-hidden min-h-0 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent"
-        >
-          <AnimatePresence initial={false}>
-            {mergedLogs.length > 0 ? (
-              mergedLogs.map((log, i) => (
-                <motion.div
-                  key={`${log.timestamp}-${i}`}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="flex gap-3 group hover:bg-primary/5 p-0.5 rounded transition-colors min-w-0"
-                >
-                  <span className="text-primary/40 shrink-0 select-none">
-                    {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                  </span>
+        {/* Left Panel - Radar + Vitals */}
+        <div className="w-56 border-r border-[#00ff88]/20 flex flex-col bg-black/40">
+          {/* Radar */}
+          <div className="h-56 p-2 border-b border-[#00ff88]/20">
+            <TacticalRadar
+              isScanning={isScanning}
+              blips={radarBlips}
+              className="w-full h-full"
+            />
+          </div>
 
-                  {/* Source Badge */}
-                  <span className={cn(
-                    "shrink-0 w-16 text-center text-[10px] uppercase tracking-wider border rounded px-1 py-px select-none",
-                    (log as DebugLogEntry).source === 'api' ? "border-cyan-500/30 text-cyan-400" :
-                      (log as DebugLogEntry).source === 'scanner' ? "border-primary/30 text-primary" :
-                        "border-slate-700 text-slate-500"
-                  )}>
-                    {(log as DebugLogEntry).source || 'system'}
-                  </span>
-
-                  <span className={cn(
-                    "flex-1 break-words overflow-hidden whitespace-pre-wrap",
-                    "[word-break:break-word]",
-                    log.type === 'success' && "text-emerald-400 font-bold",
-                    log.type === 'warning' && "text-amber-400",
-                    log.type === 'error' && "text-rose-500 font-bold",
-                    log.type === 'api' && "text-cyan-300",
-                    (log.type === 'info' || !log.type) && "text-slate-300",
-                    log.type === 'config' && "text-slate-500 italic"
-                  )}>
-                    {log.type === 'success' && '✓ '}
-                    {log.type === 'error' && '✗ '}
-                    {log.type === 'warning' && '⚠ '}
-                    {log.message}
-                  </span>
-                </motion.div>
-              ))
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center opacity-30">
-                <Crosshair size={48} className="text-primary mb-4 animate-[spin_10s_linear_infinite]" />
-                <p className="text-primary tracking-widest text-sm">SYSTEM READY</p>
-                <p className="text-xs mt-2">AWAITING TARGET PARAMETERS...</p>
-              </div>
-            )}
-          </AnimatePresence>
-
-          {/* Typing Cursor */}
-          {isScanning && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex items-center gap-2 text-primary/50 mt-2 pl-24"
-            >
-              <span className="animate-pulse">_</span>
-            </motion.div>
-          )}
+          {/* System Vitals */}
+          <div className="flex-1 p-3 overflow-y-auto">
+            <SystemVitals
+              isScanning={isScanning}
+              targetsFound={radarBlips.length}
+              targetsTotal={isScanning ? 50 : 0}
+            />
+          </div>
         </div>
 
-        {/* Right Side Visualizer (Decorative) */}
-        <div className="w-12 border-l border-primary/20 bg-black/50 flex flex-col items-center py-4 gap-1">
-          {Array.from({ length: 20 }).map((_, i) => (
+        {/* Right Panel - Log + Waveform */}
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+
+          {/* Operation Log */}
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <div className="px-4 py-2 border-b border-[#00ff88]/20 bg-black/30 shrink-0">
+              <span className="text-[10px] font-mono text-[#00ff88]/60 tracking-wider">OPERATION LOG</span>
+            </div>
+
             <div
-              key={i}
-              className={cn(
-                "w-1.5 rounded-full transition-all duration-300",
-                isScanning
-                  ? (Math.random() > 0.5 ? "bg-primary/80 h-3 shadow-[0_0_5px_rgba(0,255,0,0.5)]" : "bg-primary/20 h-1")
-                  : "bg-primary/10 h-1"
+              ref={scrollRef}
+              className="flex-1 p-3 font-mono text-xs space-y-1 overflow-y-auto overflow-x-hidden min-h-0 scrollbar-thin scrollbar-thumb-[#00ff88]/20 scrollbar-track-transparent"
+            >
+              <AnimatePresence initial={false}>
+                {mergedLogs.length > 0 ? (
+                  mergedLogs.slice(-100).map((log, i) => (
+                    <motion.div
+                      key={`${log.timestamp}-${i}`}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="flex gap-2 group hover:bg-[#00ff88]/5 px-1 py-0.5 rounded transition-colors"
+                    >
+                      <span className="text-[#00ff88]/30 shrink-0 select-none tabular-nums">
+                        {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </span>
+
+                      <span className={cn(
+                        "shrink-0 text-[9px] uppercase tracking-wider border rounded px-1 py-px select-none",
+                        (log as DebugLogEntry).source === 'api' ? "border-blue-500/30 text-blue-400/70 bg-blue-500/5" :
+                          (log as DebugLogEntry).source === 'scanner' ? "border-[#00ff88]/30 text-[#00ff88]/70 bg-[#00ff88]/5" :
+                            "border-slate-600 text-slate-500"
+                      )}>
+                        {(log as DebugLogEntry).source === 'api' ? 'FE·API' :
+                          (log as DebugLogEntry).source === 'scanner' ? 'BE·SCAN' :
+                            (log as DebugLogEntry).source || 'SYS'}
+                      </span>
+
+                      <span className={cn(
+                        "flex-1 break-words overflow-hidden",
+                        log.type === 'success' && "text-emerald-400 font-bold",
+                        log.type === 'warning' && "text-amber-400",
+                        log.type === 'error' && "text-rose-400 font-bold",
+                        log.type === 'api' && "text-cyan-300",
+                        (log.type === 'info' || !log.type) && "text-slate-300",
+                        log.type === 'config' && "text-slate-500 italic"
+                      )}>
+                        {log.type === 'success' && '✓ '}
+                        {log.type === 'error' && '✗ '}
+                        {log.type === 'warning' && '⚠ '}
+                        {highlightSymbols(log.message)}
+                      </span>
+                    </motion.div>
+                  ))
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center opacity-40">
+                    <Crosshair size={40} className="text-[#00ff88] mb-3 animate-[spin_15s_linear_infinite]" />
+                    <p className="text-[#00ff88] tracking-[0.3em] text-xs font-bold">SYSTEM READY</p>
+                    <p className="text-[10px] text-[#00ff88]/60 mt-1">AWAITING OPERATIONAL PARAMETERS</p>
+                  </div>
+                )}
+              </AnimatePresence>
+
+              {/* Blinking cursor */}
+              {isScanning && (
+                <div className="flex items-center gap-1 text-[#00ff88]/50 mt-2">
+                  <span className="animate-pulse">▌</span>
+                </div>
               )}
+            </div>
+          </div>
+
+          {/* Waveform Monitor */}
+          <div className="h-24 border-t border-[#00ff88]/20 bg-black/30">
+            <WaveformMonitor
+              isActive={isScanning}
+              intensity={isScanning ? 0.7 : 0.1}
+              className="w-full h-full"
             />
-          ))}
+          </div>
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="px-4 py-1 bg-primary/5 border-t border-primary/20 flex justify-between items-center text-[10px] font-mono text-primary/40">
-        <span>VER 2.4.0-ALPHA</span>
-        <span>SECURE CONNECTION // ENCRYPTED</span>
+      {/* Footer Status Bar */}
+      <div className="relative z-10 px-4 py-1.5 bg-gradient-to-r from-[#00ff88]/5 via-black to-[#00ff88]/5 border-t border-[#00ff88]/20 flex justify-between items-center text-[10px] font-mono">
+        <div className="flex items-center gap-4 text-[#00ff88]/50">
+          <span>VER 3.0.0-TACTICAL</span>
+          <span className="text-[#00ff88]/30">│</span>
+          <span className="flex items-center gap-1">
+            <div className="w-1 h-1 rounded-full bg-[#00ff88]" />
+            UPLINK: ENCRYPTED
+          </span>
+        </div>
+        <div className="flex items-center gap-4 text-[#00ff88]/50">
+          <span>BUFFER: {mergedLogs.length} ENTRIES</span>
+          <span className="text-[#00ff88]/30">│</span>
+          <span className="flex items-center gap-1.5">
+            <div className={cn(
+              "w-1.5 h-1.5 rounded-full",
+              isScanning ? "bg-[#00ff88] animate-pulse" : "bg-muted-foreground/50"
+            )} />
+            {isScanning ? 'LIVE FEED' : 'IDLE'}
+          </span>
+        </div>
       </div>
     </div>
   );
