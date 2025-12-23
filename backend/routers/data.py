@@ -259,10 +259,16 @@ async def get_candles(
     try:
         exchange_key = (exchange or 'phemex').lower()
         
+        # Normalize symbol for cache lookup
+        logger.info(f"🔍 [CACHE DEBUG] Requested symbol: {symbol}, Timeframe: {timeframe.value}")
+        
         # First, try to get data from OHLCV cache (scanner's cached data)
         cache = get_ohlcv_cache()
         if cache:
+            # Note: Accessing private _cache for debugging purposes only
+            logger.info(f"🔍 [CACHE DEBUG] Cache available, keys: {list(cache._cache.keys())[:10]}")  # Show first 10 keys
             cached_df = cache.get(symbol, timeframe.value)
+            logger.info(f"🔍 [CACHE DEBUG] Cache lookup result: {'HIT' if cached_df is not None and not cached_df.empty else 'MISS'}")
             if cached_df is not None and not cached_df.empty:
                 logger.info(f"Serving {symbol} {timeframe.value} from OHLCV cache ({len(cached_df)} candles)")
                 df = cached_df.tail(limit) if len(cached_df) > limit else cached_df
@@ -299,17 +305,34 @@ async def get_candles(
         df = pd.DataFrame()
         error_msg = None
         
-        for attempt_market_type in [market_type, 'spot' if market_type == 'swap' else 'swap']:
+        # For Phemex, don't pass market_type (it's ignored and causes issues)
+        if exchange_key == 'phemex':
             try:
-                df = adapter.fetch_ohlcv(symbol, timeframe.value, limit=limit, market_type=attempt_market_type)
-                if not df.empty:
-                    if attempt_market_type != market_type:
-                        logger.info(f"Fell back to {attempt_market_type} market for {symbol}")
-                    break
+                # Phemex API often fails with "Check input arguments" when limit < 500
+                # Enforce minimum limit of 500 to match working scanner configuration
+                request_limit = max(500, limit)
+                df = adapter.fetch_ohlcv(symbol, timeframe.value, limit=request_limit)
+                
+                if not df.empty and limit < len(df):
+                     df = df.iloc[-limit:] # Slice back to requested limit
+                if df.empty:
+                    error_msg = "No data returned from Phemex"
             except Exception as e:
                 error_msg = str(e)
-                logger.debug(f"Failed to fetch {symbol} as {attempt_market_type}: {e}")
-                continue
+                logger.error(f"Error fetching {symbol} {timeframe.value} from Phemex: {e}")
+        else:
+            # For other exchanges, try with market_type parameter
+            for attempt_market_type in [market_type, 'spot' if market_type == 'swap' else 'swap']:
+                try:
+                    df = adapter.fetch_ohlcv(symbol, timeframe.value, limit=limit, market_type=attempt_market_type)
+                    if not df.empty:
+                        if attempt_market_type != market_type:
+                            logger.info(f"Fell back to {attempt_market_type} market for {symbol}")
+                        break
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.debug(f"Failed to fetch {symbol} as {attempt_market_type}: {e}")
+                    continue
         
         if df.empty:
             raise HTTPException(

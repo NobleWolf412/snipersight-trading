@@ -11,6 +11,7 @@ import { WarningsContext } from '@/components/WarningsContext';
 import { RegimeIndicator } from '@/components/RegimeIndicator';
 import { RegimeMetadata } from '@/types/regime';
 import { LightweightChart } from '@/components/charts/LightweightChart';
+import { MultiTimeframeChartGrid } from '@/components/charts/MultiTimeframeChartGrid';
 
 interface IntelDossierProps {
     result: ScanResult;
@@ -42,6 +43,32 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
     const factors = result.confluence_breakdown
         ? Object.keys(result.confluence_breakdown).filter(k => (result.confluence_breakdown as any)[k])
         : ['High Timeframe Alignment', 'Momentum Confirmation', 'Key Level Reaction'];
+
+    // Extract order blocks by timeframe from metadata
+    const orderBlocksByTimeframe: Record<string, any[]> = {};
+    const scannedTimeframes: string[] = [];
+
+    if (metadata?.applied_timeframes || metadata?.appliedTimeframes) {
+        scannedTimeframes.push(...(metadata.applied_timeframes || metadata.appliedTimeframes));
+    }
+
+    // Extract OBs from metadata (structure varies by backend version)
+    if (metadata?.order_blocks_by_timeframe) {
+        Object.assign(orderBlocksByTimeframe, metadata.order_blocks_by_timeframe);
+    } else if ((result.metadata as any)?.order_blocks) {
+        // Fallback: group OBs by timeframe if they have tf property
+        const allOBs = (result.metadata as any).order_blocks || [];
+        allOBs.forEach((ob: any) => {
+            const tf = ob.timeframe || result.timeframe || '1h';
+            if (!orderBlocksByTimeframe[tf]) {
+                orderBlocksByTimeframe[tf] = [];
+            }
+            orderBlocksByTimeframe[tf].push(ob);
+        });
+    }
+
+    // Determine scanner mode from metadata
+    const scannerMode = metadata?.mode || 'surgical';
 
     return (
         <div className="h-full flex flex-col bg-black/20 backdrop-blur-sm relative">
@@ -111,16 +138,31 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
                                 <MetricCard label="Classification" value={result.classification || 'SWING'} color="purple" />
                             </div>
 
-                            {/* Live Chart with Order Blocks */}
-                            <div className="aspect-video w-full rounded-xl border border-[#00ff88]/20 bg-black/40 overflow-hidden">
-                                <LightweightChart
-                                    symbol={result.pair}
-                                    timeframe={result.timeframe || '1h'}
-                                    orderBlocks={(result.metadata as any)?.order_blocks || []}
-                                    entryPrice={entryPrice}
-                                    stopLoss={stopPrice}
-                                    takeProfit={targetPrice}
-                                />
+                            {/* Multi-Timeframe Charts with Order Blocks */}
+                            <div className="w-full">
+                                {scannedTimeframes.length > 0 ? (
+                                    <MultiTimeframeChartGrid
+                                        symbol={result.pair}
+                                        mode={scannerMode}
+                                        timeframes={scannedTimeframes}
+                                        orderBlocksByTimeframe={orderBlocksByTimeframe}
+                                        entryPrice={entryPrice}
+                                        stopLoss={stopPrice}
+                                        takeProfit={targetPrice}
+                                    />
+                                ) : (
+                                    // Fallback to single chart if no timeframe data
+                                    <div className="aspect-video w-full rounded-xl border border-[#00ff88]/20 bg-black/40 overflow-hidden">
+                                        <LightweightChart
+                                            symbol={result.pair}
+                                            timeframe={result.timeframe || '1h'}
+                                            orderBlocks={(result.metadata as any)?.order_blocks || []}
+                                            entryPrice={entryPrice}
+                                            stopLoss={stopPrice}
+                                            takeProfit={targetPrice}
+                                        />
+                                    </div>
+                                )}
                             </div>
                         </TabsContent>
 

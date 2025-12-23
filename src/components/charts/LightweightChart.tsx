@@ -1,8 +1,9 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
-import { createChart, ColorType, CrosshairMode, CandlestickSeries } from 'lightweight-charts';
+import { createChart, ColorType, CrosshairMode, CandlestickSeries, BaselineSeries } from 'lightweight-charts';
 import type { IChartApi, ISeriesApi, CandlestickData, Time, SeriesMarker } from 'lightweight-charts';
 import { api } from '@/utils/api';
 import { cn } from '@/lib/utils';
+import { TimeframeLegend, TIMEFRAME_COLORS } from './TimeframeLegend';
 
 interface OrderBlock {
     price_high: number;
@@ -10,6 +11,7 @@ interface OrderBlock {
     timestamp: number;
     type: 'bullish' | 'bearish';
     mitigated?: boolean;
+    timeframe?: string; // Optional: for color-coding in overlay mode
 }
 
 interface LightweightChartProps {
@@ -20,6 +22,8 @@ interface LightweightChartProps {
     stopLoss?: number;
     takeProfit?: number;
     className?: string;
+    title?: string; // Optional chart title
+    showLegend?: boolean; // Show timeframe legend if OBs have timeframe property
 }
 
 interface CandleResponse {
@@ -43,6 +47,8 @@ export function LightweightChart({
     stopLoss,
     takeProfit,
     className = '',
+    title,
+    showLegend = false,
 }: LightweightChartProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
@@ -52,28 +58,63 @@ export function LightweightChart({
     const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<CandlestickData[]>([]);
 
+    // Helper to determine candle limit based on timeframe
+    const getLimitForTimeframe = (tf: string): number => {
+        switch (tf.toLowerCase()) {
+            case '1w': return 150;
+            case '1d': return 300;
+            case '4h': return 500;
+            case '1h': return 600;
+            case '15m': return 700;
+            case '5m': return 700;
+            case '1m': return 300;
+            default: return 300;
+        }
+    };
+
     // Fetch candle data
     const fetchData = useCallback(async () => {
         try {
             setIsLoading(true);
             setError(null);
 
-            const response = await api.getCandles(symbol, timeframe, 200);
+            const limit = getLimitForTimeframe(timeframe);
+            const response = await api.getCandles(symbol, timeframe, limit);
 
-            // Handle both direct array and object with candles property
-            const candles = Array.isArray(response) ? response : (response?.candles || []);
+            // Handle direct array, object with candles, OR wrapped data object
+            const candles = Array.isArray(response)
+                ? response
+                : ((response as any)?.candles || (response as any)?.data?.candles || []);
 
             if (!candles || candles.length === 0) {
                 throw new Error('No candle data available');
             }
 
-            const candleData: CandlestickData[] = candles.map((candle) => ({
-                time: (new Date(candle.timestamp).getTime() / 1000) as Time,
-                open: candle.open,
-                high: candle.high,
-                low: candle.low,
-                close: candle.close,
-            }));
+            const candleData: CandlestickData[] = candles.map((candle: any) => {
+                try {
+                    const timestamp = new Date(candle.timestamp).getTime() / 1000;
+                    if (isNaN(timestamp)) {
+                        return null;
+                    }
+                    return {
+                        time: timestamp as Time,
+                        open: candle.open,
+                        high: candle.high,
+                        low: candle.low,
+                        close: candle.close,
+                    };
+                } catch (e) {
+                    return null;
+                }
+            }).filter((c: any) => c !== null) as CandlestickData[];
+
+            if (candleData.length === 0) {
+                throw new Error('Failed to parse any valid candles');
+            }
+
+            if (candleData.length === 0) {
+                throw new Error('Failed to parse any valid candles');
+            }
 
             setData(candleData);
         } catch (err: any) {
@@ -128,7 +169,7 @@ export function LightweightChart({
             height: containerRef.current.clientHeight,
         });
 
-        const candleSeries = chart.addCandlestickSeries({
+        const candleSeries = chart.addSeries(CandlestickSeries, {
             upColor: '#00ff88',
             downColor: '#ff4444',
             borderUpColor: '#00ff88',
@@ -177,12 +218,24 @@ export function LightweightChart({
         // Create shaded zones for each order block
         orderBlocks.forEach((ob, index) => {
             const isBullish = ob.type === 'bullish';
-            // Bullish: Cyan Blue, Bearish: Neon Orange
-            const fillColor = isBullish ? 'rgba(6, 182, 212, 0.2)' : 'rgba(255, 138, 0, 0.2)';
-            const lineColor = isBullish ? '#06b6d4' : '#ff8a00';
+
+            // Use timeframe-specific color if available, otherwise default bull/bear colors
+            let fillColor: string;
+            let lineColor: string;
+
+            if (ob.timeframe && TIMEFRAME_COLORS[ob.timeframe]) {
+                // Timeframe-specific color (for overlay mode)
+                const tfColor = TIMEFRAME_COLORS[ob.timeframe].color;
+                fillColor = tfColor.replace('rgb', 'rgba').replace(')', ', 0.2)');
+                lineColor = tfColor;
+            } else {
+                // Default: Bullish = Cyan Blue, Bearish = Neon Orange
+                fillColor = isBullish ? 'rgba(6, 182, 212, 0.2)' : 'rgba(255, 138, 0, 0.2)';
+                lineColor = isBullish ? '#06b6d4' : '#ff8a00';
+            }
 
             // Create baseline series for shaded zone
-            const zoneSeries = chart.addBaselineSeries({
+            const zoneSeries = chart.addSeries(BaselineSeries, {
                 baseValue: { type: 'price', price: ob.price_low },
                 topLineColor: 'transparent',
                 topFillColor1: fillColor,
@@ -190,7 +243,7 @@ export function LightweightChart({
                 bottomLineColor: 'transparent',
                 bottomFillColor1: fillColor,
                 bottomFillColor2: fillColor,
-                lineWidth: 0,
+                lineWidth: 1,
                 priceLineVisible: false,
                 lastValueVisible: false,
             });
@@ -205,13 +258,16 @@ export function LightweightChart({
             zoneSeriesRefs.current.push(zoneSeries);
 
             // Add boundary lines with labels
+            const tfLabel = ob.timeframe ? ` (${ob.timeframe.toUpperCase()})` : '';
+            const emoji = ob.timeframe ? '' : (isBullish ? '🔵' : '🟠');
+
             candleSeries.createPriceLine({
                 price: ob.price_high,
                 color: lineColor,
                 lineWidth: 2,
                 lineStyle: 0, // Solid
                 axisLabelVisible: true,
-                title: `${isBullish ? '🔵' : '🟠'} OB${index + 1} Top`,
+                title: `${emoji} OB${index + 1}${tfLabel} Top`,
             });
 
             candleSeries.createPriceLine({
@@ -220,7 +276,7 @@ export function LightweightChart({
                 lineWidth: 1,
                 lineStyle: 2, // Dashed
                 axisLabelVisible: true,
-                title: `${isBullish ? '🔵' : '🟠'} OB${index + 1} Bot`,
+                title: `${emoji} OB${index + 1}${tfLabel} Bot`,
             });
         });
 
@@ -285,6 +341,16 @@ export function LightweightChart({
                 </div>
             )}
 
+
+            {/* Optional Chart Title */}
+            {title && (
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30">
+                    <div className="px-4 py-1.5 rounded bg-black/70 backdrop-blur-sm border border-[#00ff88]/30">
+                        <span className="text-sm font-mono font-bold text-[#00ff88]">{title}</span>
+                    </div>
+                </div>
+            )}
+
             {/* Symbol and Timeframe badges */}
             <div className="absolute top-2 left-2 flex items-center gap-2 z-30">
                 <div className="px-3 py-1.5 rounded bg-black/70 backdrop-blur-sm border border-[#00ff88]/40">
@@ -294,6 +360,20 @@ export function LightweightChart({
                     <span className="text-sm font-mono font-bold text-[#00ff88]">{timeframe}</span>
                 </div>
             </div>
+
+            {/* Timeframe Legend (for overlay mode) */}
+            {showLegend && orderBlocks.some(ob => ob.timeframe) && (
+                <div className="absolute bottom-2 left-2 right-2 z-30">
+                    <div className="px-3 py-2 rounded bg-black/70 backdrop-blur-sm border border-[#00ff88]/20">
+                        <TimeframeLegend
+                            timeframes={Array.from(new Set(orderBlocks.map(ob => ob.timeframe).filter(Boolean))).map(tf => ({
+                                tf: tf!,
+                                color: TIMEFRAME_COLORS[tf!]?.color || '#888',
+                            }))}
+                        />
+                    </div>
+                </div>
+            )}
 
             <div ref={containerRef} className="w-full h-full" />
         </div>

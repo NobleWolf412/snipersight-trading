@@ -59,6 +59,9 @@ export interface ScannerMode {
   primary_planning_timeframe?: string;
   entry_timeframes?: string[];
   structure_timeframes?: string[];
+  zone_timeframes?: string[];
+  target_timeframes?: string[];
+  stop_timeframes?: string[];
   atr_multiplier?: number;
   min_rr_ratio?: number;
 }

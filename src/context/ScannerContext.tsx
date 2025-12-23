@@ -235,6 +235,11 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
       timeframes: m.timeframes,
       min_confluence_score: m.min_confluence_score,
       profile: m.profile,
+      structure_timeframes: m.structure_timeframes,
+      entry_timeframes: m.entry_timeframes,
+      zone_timeframes: m.zone_timeframes,
+      target_timeframes: m.target_timeframes,
+      stop_timeframes: m.stop_timeframes,
     }));
     console.log('[ScannerContext] Processed modes:', modes);
     setScannerModes(modes.length ? modes : fallbackModes);
