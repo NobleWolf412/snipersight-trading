@@ -3,7 +3,7 @@
 Detects major swing setups at higher timeframe levels and recommends mode switches.
 """
 from fastapi import APIRouter, HTTPException
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
 import logging
@@ -81,83 +81,29 @@ async def get_htf_opportunities(
         target_symbols = symbols.split(',') if symbols else ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']
         target_symbols = [s.strip() for s in target_symbols]
         
-        all_opportunities: List[OpportunityResponse] = []
+        # Run blocking analysis in thread pool
+        import asyncio
+        loop = asyncio.get_event_loop()
         
+        tasks = []
         for symbol in target_symbols:
-            try:
-                # Fetch OHLCV data for HTF analysis
-                ohlcv_data = {}
-                for tf in ['4h', '1d']:
-                    try:
-                        df = adapter.fetch_ohlcv(symbol, timeframe=tf, limit=100)
-                        if df is not None and not df.empty:
-                            ohlcv_data[tf] = df
-                    except Exception as tf_err:
-                        logger.warning(f"Failed to fetch {tf} data for {symbol}: {tf_err}")
-                        continue
-                
-                if not ohlcv_data:
-                    logger.warning(f"No OHLCV data available for {symbol}, skipping")
-                    continue
-                
-                # Get current price
-                ticker = adapter.fetch_ticker(symbol)
-                current_price = ticker.get('last', 0) if ticker else 0
-                if not current_price:
-                    logger.warning(f"No price available for {symbol}, skipping")
-                    continue
-                
-                # Detect levels (support/resistance)
-                sr_levels = detector.detect_levels(symbol, ohlcv_data, current_price)
-                
-                # Detect Fibonacci retracement levels
-                fib_levels = detector.detect_fib_levels(symbol, ohlcv_data, current_price)
-                
-                # Merge all levels for opportunity detection
-                all_levels = sr_levels + fib_levels
-                
-                if not all_levels:
-                    logger.debug(f"{symbol}: No levels detected (S/R: {len(sr_levels)}, Fib: {len(fib_levels)})")
-                    continue
-                
-                logger.info(f"{symbol}: Detected {len(sr_levels)} S/R levels + {len(fib_levels)} Fib levels")
-                
-                # Find opportunities (using empty SMC context for now - could integrate with orchestrator)
-                smc_context = {'order_blocks': [], 'fvgs': [], 'bos_choch': None}
-                opportunities = detector.find_opportunities(
-                    symbol=symbol,
-                    levels=all_levels,
-                    current_price=current_price,
-                    smc_context=smc_context,
-                    regime=None
+            tasks.append(
+                loop.run_in_executor(
+                    None, 
+                    _analyze_symbol_sync, 
+                    symbol, 
+                    detector, 
+                    adapter, 
+                    min_confidence
                 )
-                
-                # Convert to response model
-                for opp in opportunities:
-                    if opp.confidence >= min_confidence:
-                        all_opportunities.append(OpportunityResponse(
-                            symbol=opp.symbol,
-                            level=HTFLevelResponse(
-                                price=opp.level.price,
-                                level_type=opp.level.level_type,
-                                timeframe=opp.level.timeframe,
-                                strength=opp.level.strength,
-                                touches=opp.level.touches,
-                                proximity_pct=opp.level.proximity_pct,
-                                fib_ratio=getattr(opp.level, 'fib_ratio', None),
-                                trend_direction=getattr(opp.level, 'trend_direction', None),
-                            ),
-                            current_price=opp.current_price,
-                            recommended_mode=opp.recommended_mode,
-                            rationale=opp.rationale,
-                            confluence_factors=opp.confluence_factors,
-                            expected_move_pct=opp.expected_move_pct,
-                            confidence=opp.confidence,
-                        ))
-                        
-            except Exception as sym_err:
-                logger.error(f"Error processing {symbol} for HTF opportunities: {sym_err}")
-                continue
+            )
+            
+        results = await asyncio.gather(*tasks)
+        
+        # Flatten results
+        all_opportunities = []
+        for res in results:
+            all_opportunities.extend(res)
         
         # Sort by confidence descending
         all_opportunities.sort(key=lambda x: x.confidence, reverse=True)
@@ -173,6 +119,83 @@ async def get_htf_opportunities(
         raise HTTPException(status_code=500, detail=f"Failed to detect opportunities: {e}")
 
 
+def _analyze_symbol_sync(
+    symbol: str, 
+    detector: HTFLevelDetector, 
+    adapter: PhemexAdapter, 
+    min_confidence: float
+) -> List[OpportunityResponse]:
+    """Synchronous helper for single symbol analysis (run in thread)."""
+    opportunities: List[OpportunityResponse] = []
+    try:
+        # Fetch OHLCV data for HTF analysis
+        ohlcv_data = {}
+        for tf in ['4h', '1d']:
+            try:
+                # API Call (Blocking)
+                df = adapter.fetch_ohlcv(symbol, timeframe=tf, limit=100)
+                if df is not None and not df.empty:
+                    ohlcv_data[tf] = df
+            except Exception as tf_err:
+                logger.warning(f"Failed to fetch {tf} data for {symbol}: {tf_err}")
+                continue
+        
+        if not ohlcv_data:
+            return []
+        
+        # Get current price (Blocking)
+        ticker = adapter.fetch_ticker(symbol)
+        current_price = ticker.get('last', 0) if ticker else 0
+        if not current_price:
+            return []
+        
+        # Detect levels (CPU Bound)
+        sr_levels = detector.detect_levels(symbol, ohlcv_data, current_price)
+        fib_levels = detector.detect_fib_levels(symbol, ohlcv_data, current_price)
+        all_levels = sr_levels + fib_levels
+        
+        if not all_levels:
+            return []
+        
+        # Find opportunities
+        smc_context = {'order_blocks': [], 'fvgs': [], 'bos_choch': None}
+        raw_opps = detector.find_opportunities(
+            symbol=symbol,
+            levels=all_levels,
+            current_price=current_price,
+            smc_context=smc_context,
+            regime=None
+        )
+        
+        # Filter and convert
+        for opp in raw_opps:
+            if opp.confidence >= min_confidence:
+                opportunities.append(OpportunityResponse(
+                    symbol=opp.symbol,
+                    level=HTFLevelResponse(
+                        price=opp.level.price,
+                        level_type=opp.level.level_type,
+                        timeframe=opp.level.timeframe,
+                        strength=opp.level.strength,
+                        touches=opp.level.touches,
+                        proximity_pct=opp.level.proximity_pct,
+                        fib_ratio=getattr(opp.level, 'fib_ratio', None),
+                        trend_direction=getattr(opp.level, 'trend_direction', None),
+                    ),
+                    current_price=opp.current_price,
+                    recommended_mode=opp.recommended_mode,
+                    rationale=opp.rationale,
+                    confluence_factors=opp.confluence_factors,
+                    expected_move_pct=opp.expected_move_pct,
+                    confidence=opp.confidence,
+                ))
+                
+    except Exception as e:
+        logger.error(f"Error processing {symbol} for HTF opportunities: {e}")
+        
+    return opportunities
+
+
 @router.get("/levels/{symbol}")
 async def get_symbol_levels(symbol: str, min_strength: float = 50.0, proximity_threshold: float = 5.0):
     """
@@ -184,6 +207,34 @@ async def get_symbol_levels(symbol: str, min_strength: float = 50.0, proximity_t
         detector = _get_detector(proximity_threshold)
         adapter = _get_adapter()
         
+        # Run blocking analysis in thread pool
+        import asyncio
+        loop = asyncio.get_event_loop()
+        
+        result = await loop.run_in_executor(
+            None,
+            _get_symbol_levels_sync,
+            symbol,
+            detector,
+            adapter,
+            min_strength
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch levels for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch levels: {e}")
+
+
+def _get_symbol_levels_sync(
+    symbol: str,
+    detector: HTFLevelDetector,
+    adapter: PhemexAdapter,
+    min_strength: float
+) -> Dict[str, Any]:
+    """Synchronous helper for single symbol level detection."""
+    try:
         # Fetch OHLCV data
         ohlcv_data = {}
         for tf in ['4h', '1d']:
@@ -238,7 +289,6 @@ async def get_symbol_levels(symbol: str, min_strength: float = 50.0, proximity_t
             "total": len(filtered),
             "timestamp": datetime.now().isoformat(),
         }
-        
     except Exception as e:
-        logger.error(f"Failed to fetch levels for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch levels: {e}")
+        logger.error(f"Error in _get_symbol_levels_sync for {symbol}: {e}")
+        raise

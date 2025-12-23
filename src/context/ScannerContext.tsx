@@ -19,6 +19,7 @@ export interface ScanConfig {
   sniperMode: SniperMode;
   customTimeframes?: string[];
   macroOverlay: boolean;
+  marketType?: string;
 }
 
 export interface BotConfig {
@@ -82,6 +83,7 @@ const defaultScanConfig: ScanConfig = {
   sniperMode: 'stealth',
   customTimeframes: [],
   macroOverlay: false,
+  marketType: 'swap',
 };
 
 const defaultBotConfig: BotConfig = {

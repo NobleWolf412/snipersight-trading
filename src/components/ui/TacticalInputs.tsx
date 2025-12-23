@@ -9,18 +9,30 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 // --- Tactical Selector Grid ---
 interface TacticalSelectorProps {
     label?: string;
-    subLabel?: string; // Additional instruction label below main label
-    options: { value: string; label: string; subLabel?: string; icon?: React.ReactNode }[];
+    subLabel?: string;
+    options: { value: string; label: string; subLabel?: string; icon?: React.ReactNode; color?: string }[];
     value: string;
     onChange: (value: string) => void;
     className?: string;
     gridCols?: number;
+    variant?: 'default' | '3d';
+    centeredLabel?: boolean;
 }
 
-export function TacticalSelector({ label, subLabel, options, value, onChange, className, gridCols = 2 }: TacticalSelectorProps) {
+export function TacticalSelector({
+    label,
+    subLabel,
+    options,
+    value,
+    onChange,
+    className,
+    gridCols = 2,
+    variant = 'default',
+    centeredLabel = false
+}: TacticalSelectorProps) {
     return (
         <div className={className}>
-            <div className="mb-4">
+            <div className={cn("mb-4", centeredLabel && "text-center")}>
                 {label && <label className="block text-base font-bold font-mono text-[#00ff88] tracking-widest uppercase mb-1">{label}</label>}
                 {subLabel && <p className="text-sm text-muted-foreground">{subLabel}</p>}
             </div>
@@ -30,6 +42,48 @@ export function TacticalSelector({ label, subLabel, options, value, onChange, cl
             >
                 {options.map((option) => {
                     const isSelected = value === option.value;
+                    const activeColor = option.color || '#00ff88';
+
+                    if (variant === '3d') {
+                        return (
+                            <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => onChange(option.value)}
+                                className={cn(
+                                    "relative flex flex-col items-center justify-center gap-1.5 p-5 rounded-xl transition-all duration-150 group overflow-hidden h-full",
+                                    "border-2 border-b-[6px] active:border-b-2 active:translate-y-[4px]",
+                                    isSelected
+                                        ? "text-white shadow-lg"
+                                        : "border-white/10 bg-black/40 text-muted-foreground hover:bg-white/5 hover:border-white/20"
+                                )}
+                                style={isSelected ? {
+                                    backgroundColor: `${activeColor}20`,
+                                    borderColor: activeColor,
+                                    boxShadow: `0 0 30px ${activeColor}40`
+                                } : {}}
+                            >
+                                <span className="relative z-10 flex items-center gap-3 font-mono text-lg font-bold uppercase tracking-wide">
+                                    {option.icon && <span className={cn("transition-opacity", isSelected ? "text-white" : "opacity-70")}>{option.icon}</span>}
+                                    {option.label}
+                                </span>
+                                {option.subLabel && (
+                                    <span className={cn(
+                                        "relative z-10 text-xs font-mono uppercase tracking-wider font-semibold",
+                                        isSelected ? "text-white/80" : "text-muted-foreground/40"
+                                    )}>
+                                        {option.subLabel}
+                                    </span>
+                                )}
+                                {/* Glow effect background */}
+                                {isSelected && (
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/0 via-white/5 to-white/10 pointer-events-none" />
+                                )}
+                            </button>
+                        );
+                    }
+
+                    // Default Variant
                     return (
                         <button
                             key={option.value}
@@ -38,14 +92,20 @@ export function TacticalSelector({ label, subLabel, options, value, onChange, cl
                             className={cn(
                                 "relative flex flex-col items-center justify-center gap-1.5 p-5 rounded-xl border-2 transition-all duration-200 group overflow-hidden h-full",
                                 isSelected
-                                    ? "border-[#00ff88] bg-[#00ff88]/10 text-[#00ff88] shadow-[0_0_20px_rgba(0,255,136,0.15)]"
+                                    ? "bg-opacity-10 shadow-[0_0_20px_rgba(0,255,136,0.15)]"
                                     : "border-white/5 bg-black/40 text-muted-foreground hover:border-white/20 hover:text-white hover:bg-white/5"
                             )}
+                            style={isSelected ? {
+                                borderColor: activeColor,
+                                backgroundColor: `${activeColor}1a`, // 10% opacity
+                                color: activeColor
+                            } : {}}
                         >
                             {isSelected && (
                                 <motion.div
                                     layoutId={`glow-${label}`}
-                                    className="absolute inset-0 bg-[#00ff88]/5"
+                                    className="absolute inset-0"
+                                    style={{ backgroundColor: `${activeColor}0d` }} // 5% opacity
                                     transition={{ duration: 0.2 }}
                                 />
                             )}
@@ -53,8 +113,8 @@ export function TacticalSelector({ label, subLabel, options, value, onChange, cl
                             {/* Corner accents for selected state */}
                             {isSelected && (
                                 <>
-                                    <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-[#00ff88]" />
-                                    <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-[#00ff88]" />
+                                    <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2" style={{ borderColor: activeColor }} />
+                                    <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2" style={{ borderColor: activeColor }} />
                                 </>
                             )}
 
@@ -66,8 +126,10 @@ export function TacticalSelector({ label, subLabel, options, value, onChange, cl
                             {option.subLabel && (
                                 <span className={cn(
                                     "relative z-10 text-xs font-mono uppercase tracking-wider font-semibold",
-                                    isSelected ? "text-[#00ff88]/80" : "text-muted-foreground/40"
-                                )}>
+                                    isSelected ? "opacity-80" : "text-muted-foreground/40"
+                                )}
+                                    style={isSelected ? { color: activeColor } : {}}
+                                >
                                     {option.subLabel}
                                 </span>
                             )}
@@ -357,4 +419,60 @@ export function TacticalToggle({ label, sublabel, tooltip, checked, onChange, ic
     }
 
     return toggleContent;
+}
+
+// --- Tactical Dropdown ---
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+
+interface TacticalDropdownProps {
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    options: { value: string; label: string; icon?: React.ReactNode; disabled?: boolean }[];
+    className?: string;
+}
+
+export function TacticalDropdown({ label, value, onChange, options, className }: TacticalDropdownProps) {
+    return (
+        <div className={className}>
+            <label className="block text-base font-bold font-mono text-[#00ff88] tracking-widest uppercase mb-1">{label}</label>
+            <Select value={value} onValueChange={onChange}>
+                <SelectTrigger className="w-full h-16 bg-black/40 border-2 border-white/5 data-[state=open]:border-[#00ff88] data-[state=open]:bg-[#00ff88]/5 rounded-xl text-lg font-mono font-bold tracking-wide text-white hover:border-white/20 transition-all focus:ring-0 focus:ring-offset-0 relative overflow-hidden group">
+                    <div className="flex items-center gap-3 relative z-10 w-full">
+                        {options.find(o => o.value === value)?.icon && (
+                            <span className="text-[#00ff88] group-hover:text-white transition-colors">
+                                {options.find(o => o.value === value)?.icon}
+                            </span>
+                        )}
+                        <SelectValue placeholder="SELECT OPTION" />
+                    </div>
+                    {/* Corner accents */}
+                    <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-white/10 group-data-[state=open]:border-[#00ff88]" />
+                    <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-white/10 group-data-[state=open]:border-[#00ff88]" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0a0a0a]/95 backdrop-blur-xl border border-[#00ff88]/30 rounded-xl shadow-[0_0_30px_rgba(0,255,136,0.1)] overflow-hidden">
+                    {options.map((option) => (
+                        <SelectItem
+                            key={option.value}
+                            value={option.value}
+                            disabled={option.disabled}
+                            className="text-base font-mono focus:bg-[#00ff88]/10 focus:text-[#00ff88] text-muted-foreground py-3 cursor-pointer data-[disabled]:opacity-50"
+                        >
+                            <div className="flex items-center gap-3">
+                                {option.icon}
+                                <span>{option.label}</span>
+                                {option.disabled && <span className="text-[10px] ml-2 px-1.5 py-0.5 rounded border border-white/10 text-muted-foreground uppercase">SOON</span>}
+                            </div>
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+    );
 }

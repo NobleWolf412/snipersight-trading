@@ -393,6 +393,7 @@ class ApiClient {
     exchange?: string;
     leverage?: number;
     macro_overlay?: boolean;
+    market_type?: string;
   }) {
     const queryParams: Record<string, string> = {};
     if (params) {
@@ -405,6 +406,7 @@ class ApiClient {
       if (params.exchange) queryParams.exchange = params.exchange;
       if (params.leverage !== undefined) queryParams.leverage = params.leverage.toString();
       if (params.macro_overlay !== undefined) queryParams.macro_overlay = params.macro_overlay.toString();
+      if (params.market_type) queryParams.market_type = params.market_type;
     }
     const query = new URLSearchParams(queryParams).toString();
     return this.request<SignalsResponse>(
@@ -487,7 +489,7 @@ class ApiClient {
 
   async getCandles(symbol: string, timeframe = '1h', limit = 100) {
     return this.request(
-      `/market/candles/${symbol}?timeframe=${timeframe}&limit=${limit}`
+      `/market/candles/${encodeURIComponent(symbol)}?timeframe=${timeframe}&limit=${limit}`
     );
   }
 
@@ -604,6 +606,7 @@ class ApiClient {
     exchange?: string;
     leverage?: number;
     macro_overlay?: boolean;
+    market_type?: string;
   }) {
     const queryParams: Record<string, string> = {};
     if (params.limit !== undefined) queryParams.limit = params.limit.toString();
@@ -615,6 +618,7 @@ class ApiClient {
     if (params.exchange) queryParams.exchange = params.exchange;
     if (params.leverage !== undefined) queryParams.leverage = params.leverage.toString();
     if (params.macro_overlay !== undefined) queryParams.macro_overlay = params.macro_overlay.toString();
+    if (params.market_type) queryParams.market_type = params.market_type;
 
     const query = new URLSearchParams(queryParams).toString();
     return this.request<{

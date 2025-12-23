@@ -24,8 +24,10 @@ from enum import Enum
 import logging
 import asyncio
 import time
+import pandas as pd
 
 from backend.data.ohlcv_cache import get_ohlcv_cache
+from backend.routers.htf_opportunities import _get_adapter as get_htf_phemex_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +76,32 @@ def configure_data_router(
 
 def get_exchange_adapters():
     return _shared_state.get('exchange_adapters', {})
+
+
+# Adapter instance cache - singleton pattern for warm adapters
+_adapter_instances: Dict[str, Any] = {}
+
+
+def get_or_create_adapter(exchange_key: str):
+    """Get or create a cached adapter instance.
+    
+    This ensures adapters are reused between requests, keeping them warm
+    with loaded markets and proper CCXT state.
+    """
+    global _adapter_instances
+    
+    if exchange_key in _adapter_instances:
+        return _adapter_instances[exchange_key]
+    
+    exchange_adapters = get_exchange_adapters()
+    if exchange_key not in exchange_adapters:
+        return None
+    
+    # Create new adapter instance and cache it
+    adapter = exchange_adapters[exchange_key]()
+    _adapter_instances[exchange_key] = adapter
+    logger.info(f"Created and cached adapter instance for {exchange_key}")
+    return adapter
 
 
 def get_price_cache():
@@ -219,24 +247,75 @@ async def get_prices(
         raise HTTPException(status_code=502, detail="Failed to fetch prices from exchange") from e
 
 
-@router.get("/api/market/candles/{symbol}")
+@router.get("/api/market/candles/{symbol:path}")
 async def get_candles(
     symbol: str,
     timeframe: Timeframe = Query(default=Timeframe.H1),
     limit: int = Query(default=100, ge=1, le=1000),
-    exchange: str | None = Query(default=None)
+    exchange: str | None = Query(default=None),
+    market_type: str = Query(default='swap')
 ):
-    """Get candlestick data via selected exchange adapter."""
-    exchange_adapters = get_exchange_adapters()
-    
+    """Get candlestick data via selected exchange adapter or cache."""
     try:
         exchange_key = (exchange or 'phemex').lower()
-        if exchange_key not in exchange_adapters:
-            raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange_key}")
+        
+        # First, try to get data from OHLCV cache (scanner's cached data)
+        cache = get_ohlcv_cache()
+        if cache:
+            cached_df = cache.get(symbol, timeframe.value)
+            if cached_df is not None and not cached_df.empty:
+                logger.info(f"Serving {symbol} {timeframe.value} from OHLCV cache ({len(cached_df)} candles)")
+                df = cached_df.tail(limit) if len(cached_df) > limit else cached_df
+                
+                candles = []
+                for _, row in df.iterrows():
+                    candles.append({
+                        'timestamp': row['timestamp'].to_pydatetime().isoformat(),
+                        'open': float(row['open']),
+                        'high': float(row['high']),
+                        'low': float(row['low']),
+                        'close': float(row['close']),
+                        'volume': float(row['volume']),
+                    })
+                
+                return {
+                    "symbol": symbol,
+                    "timeframe": timeframe.value,
+                    "candles": candles,
+                }
+        
+        # Cache miss - try to fetch fresh data
+        logger.debug(f"Cache miss for {symbol} {timeframe.value}, attempting fresh fetch")
+        
+        # Use the HTF opportunities singleton adapter for phemex (it's warm and works)
+        if exchange_key == 'phemex':
+            adapter = get_htf_phemex_adapter()
+        else:
+            adapter = get_or_create_adapter(exchange_key)
+            if adapter is None:
+                raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange_key}")
 
-        adapter = exchange_adapters[exchange_key]()
-
-        df = adapter.fetch_ohlcv(symbol, timeframe.value, limit=limit)
+        # Try to fetch with requested market type, fallback to opposite if it fails
+        df = pd.DataFrame()
+        error_msg = None
+        
+        for attempt_market_type in [market_type, 'spot' if market_type == 'swap' else 'swap']:
+            try:
+                df = adapter.fetch_ohlcv(symbol, timeframe.value, limit=limit, market_type=attempt_market_type)
+                if not df.empty:
+                    if attempt_market_type != market_type:
+                        logger.info(f"Fell back to {attempt_market_type} market for {symbol}")
+                    break
+            except Exception as e:
+                error_msg = str(e)
+                logger.debug(f"Failed to fetch {symbol} as {attempt_market_type}: {e}")
+                continue
+        
+        if df.empty:
+            raise HTTPException(
+                status_code=502,
+                detail=f"No cached data available and fresh fetch failed for {symbol}. Try running a scan first to populate the cache."
+            )
         candles = []
         if not df.empty:
             for _, row in df.iterrows():

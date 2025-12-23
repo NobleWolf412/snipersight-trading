@@ -4,7 +4,6 @@ import { TerminalWindow, Lightning, Crosshair } from '@phosphor-icons/react';
 import { useScanner } from '@/context/ScannerContext';
 import { debugLogger, DebugLogEntry } from '@/utils/debugLogger';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TacticalRadar } from './scanner/TacticalRadar';
 import { WaveformMonitor } from './scanner/WaveformMonitor';
 import { SystemVitals } from './scanner/SystemVitals';
 
@@ -87,6 +86,8 @@ function highlightSymbols(message: string): ReactNode[] {
   return parts.length > 0 ? parts : [message];
 }
 
+
+
 export function ScannerConsole({ isScanning, className, progressCurrent, progressTotal }: ScannerConsoleProps) {
   const { consoleLogs } = useScanner();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -126,7 +127,7 @@ export function ScannerConsole({ isScanning, className, progressCurrent, progres
               const symbolMatch = entry.message.match(/([A-Z]+\/USDT)/);
               if (symbolMatch) {
                 const score = scoreMatch ? parseInt(scoreMatch[1]) : 30;
-                setRadarBlips(prev => [...prev.slice(-15), {
+                setRadarBlips(prev => [...prev.slice(-30), { // Keep more blips for 3D globe
                   symbol: symbolMatch[1],
                   score,
                   angle: Math.random() * Math.PI * 2,
@@ -183,9 +184,25 @@ export function ScannerConsole({ isScanning, className, progressCurrent, progres
       className
     )}>
 
-      {/* CRT Scanline Effect */}
+      {/* 2D TACTICAL BACKGROUND */}
+      <div className="absolute inset-0 z-0">
+        <div className="absolute inset-0 bg-[#0a0f0a] bg-[radial-gradient(ellipse_at_center,rgba(0,255,136,0.05)_0%,rgba(0,0,0,0)_70%)]" />
+        {/* Grid lines */}
+        <div className="absolute inset-0"
+          style={{
+            backgroundImage: `
+                       linear-gradient(rgba(0, 255, 136, 0.03) 1px, transparent 1px),
+                       linear-gradient(90deg, rgba(0, 255, 136, 0.03) 1px, transparent 1px)
+                   `,
+            backgroundSize: '40px 40px',
+            maskImage: 'radial-gradient(circle at 50% 50%, black 40%, transparent 80%)'
+          }}
+        />
+      </div>
+
+      {/* CRT Scanline Effect (CSS Overlay) */}
       <div
-        className="absolute inset-0 pointer-events-none z-50 opacity-[0.03]"
+        className="absolute inset-0 pointer-events-none z-10 opacity-[0.03]"
         style={{
           backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.3) 2px, rgba(0,0,0,0.3) 4px)',
         }}
@@ -193,106 +210,87 @@ export function ScannerConsole({ isScanning, className, progressCurrent, progres
 
       {/* Vignette Effect */}
       <div
-        className="absolute inset-0 pointer-events-none z-40"
+        className="absolute inset-0 pointer-events-none z-10"
         style={{
-          background: 'radial-gradient(ellipse at center, transparent 0%, transparent 60%, rgba(0,0,0,0.4) 100%)',
+          background: 'radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(0,0,0,0.8) 100%)',
         }}
       />
 
       {/* Header Bar */}
-      <div className="relative z-10 flex items-center justify-between px-4 py-2.5 border-b border-[#00ff88]/30 bg-gradient-to-r from-[#00ff88]/10 via-transparent to-[#00ff88]/10">
+      <div className="relative z-20 flex items-center justify-between px-4 py-2.5 border-b border-[#00ff88]/30 bg-black/40 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <TerminalWindow size={18} className="text-[#00ff88]" weight="bold" />
-          <span className="font-mono text-sm font-bold text-[#00ff88] tracking-[0.2em]">
-            SNIPERSIGHT // TACTICAL OPS CONSOLE
+          <span className="font-mono text-sm font-bold text-[#00ff88] tracking-[0.2em] drop-shadow-[0_0_5px_rgba(0,255,136,0.8)]">
+            SNIPERSIGHT // COMMAND LINK
           </span>
         </div>
 
         <div className="flex items-center gap-4">
           {/* Elapsed timer */}
-          <div className="font-mono text-xs text-[#00ff88]/70 tabular-nums">
+          <div className="font-mono text-xs text-[#00ff88] tabular-nums bg-black/50 px-2 py-0.5 rounded border border-[#00ff88]/20">
             T+{formatElapsed(elapsedMs)}
           </div>
 
           {/* Status badge */}
           {isScanning ? (
-            <div className="flex items-center gap-2 px-3 py-1 rounded border border-[#00ff88]/50 bg-[#00ff88]/10">
+            <div className="flex items-center gap-2 px-3 py-1 rounded border border-[#00ff88]/50 bg-[#00ff88]/20 backdrop-blur-md">
               <div className="w-2 h-2 rounded-full bg-[#00ff88] animate-pulse shadow-[0_0_8px_rgba(0,255,136,0.8)]" />
-              <span className="text-xs font-mono font-bold text-[#00ff88] tracking-widest">SCANNING</span>
+              <span className="text-xs font-mono font-bold text-[#00ff88] tracking-widest">SCANNING SECTOR</span>
               <Lightning size={14} className="text-amber-400 animate-pulse" />
             </div>
           ) : (
-            <div className="flex items-center gap-2 px-3 py-1 rounded border border-muted-foreground/30">
+            <div className="flex items-center gap-2 px-3 py-1 rounded border border-muted-foreground/30 bg-black/40">
               <div className="w-2 h-2 rounded-full bg-muted-foreground/50" />
-              <span className="text-xs font-mono text-muted-foreground tracking-widest">STANDBY</span>
+              <span className="text-xs font-mono text-muted-foreground tracking-widest">SYSTEM IDLE</span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Main Content - Multi-Panel Layout */}
-      <div className="relative z-10 flex-1 flex min-h-0 overflow-hidden">
+      {/* Main Content - Floating HUD Panels */}
+      <div className="relative z-20 flex-1 flex min-h-0 overflow-hidden p-4 gap-4 pointer-events-none">
 
-        {/* Left Panel - Radar + Vitals */}
-        <div className="w-56 border-r border-[#00ff88]/20 flex flex-col bg-black/40">
-          {/* Radar */}
-          <div className="h-56 p-2 border-b border-[#00ff88]/20">
-            <TacticalRadar
-              isScanning={isScanning}
-              blips={radarBlips}
-              className="w-full h-full"
-            />
-          </div>
-
-          {/* System Vitals */}
-          <div className="flex-1 p-3 overflow-y-auto">
-            <SystemVitals
-              isScanning={isScanning}
-              targetsFound={progressCurrent || radarBlips.length}
-              targetsTotal={progressTotal || (isScanning ? 50 : 0)}
-            />
+        {/* Left HUD Panel - Vitals */}
+        <div className="w-64 flex flex-col gap-4 pointer-events-auto">
+          <div className="bg-black/40 backdrop-blur-md border border-[#00ff88]/20 p-3 rounded-lg flex-1 flex flex-col shadow-[0_0_20px_rgba(0,0,0,0.5)]">
+            <div className="text-[10px] font-mono text-[#00ff88]/60 tracking-wider mb-2 border-b border-[#00ff88]/10 pb-1">SYSTEM VITALS</div>
+            <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+              <SystemVitals
+                isScanning={isScanning}
+                targetsFound={progressCurrent || radarBlips.length}
+                targetsTotal={progressTotal || (isScanning ? 50 : 0)}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Right Panel - Log + Waveform */}
-        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
-
-          {/* Operation Log */}
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <div className="px-4 py-2 border-b border-[#00ff88]/20 bg-black/30 shrink-0">
-              <span className="text-[10px] font-mono text-[#00ff88]/60 tracking-wider">OPERATION LOG</span>
+        {/* Right HUD Panel - Logs (now fills available space since 3D globe was removed) */}
+        <div className="flex-1 flex flex-col pointer-events-auto">
+          <div className="bg-black/60 backdrop-blur-md border border-[#00ff88]/20 rounded-lg flex flex-col h-full shadow-[0_0_20px_rgba(0,0,0,0.5)] overflow-hidden">
+            <div className="px-3 py-2 border-b border-[#00ff88]/10 bg-[#00ff88]/5 flex justify-between items-center">
+              <span className="text-[10px] font-mono text-[#00ff88]/80 tracking-wider">COMMS LOG</span>
+              <div className="flex gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#00ff88]" />
+                <div className="w-1.5 h-1.5 rounded-full bg-[#00ff88]/50" />
+                <div className="w-1.5 h-1.5 rounded-full bg-[#00ff88]/20" />
+              </div>
             </div>
 
             <div
               ref={scrollRef}
-              className="flex-1 p-3 font-mono text-xs space-y-1 overflow-y-auto overflow-x-hidden min-h-0 scrollbar-thin scrollbar-thumb-[#00ff88]/20 scrollbar-track-transparent"
+              className="flex-1 p-3 font-mono text-xs space-y-1 overflow-y-auto overflow-x-hidden min-h-0 scrollbar-none"
             >
               <AnimatePresence initial={false}>
                 {mergedLogs.length > 0 ? (
                   mergedLogs.slice(-100).map((log, i) => (
                     <motion.div
                       key={`${log.timestamp}-${i}`}
-                      initial={{ opacity: 0, x: -10 }}
+                      initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
                       className="flex gap-2 group hover:bg-[#00ff88]/5 px-1 py-0.5 rounded transition-colors"
                     >
-                      <span className="text-[#00ff88]/30 shrink-0 select-none tabular-nums">
-                        {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                      </span>
-
                       <span className={cn(
-                        "shrink-0 text-[9px] uppercase tracking-wider border rounded px-1 py-px select-none",
-                        (log as DebugLogEntry).source === 'api' ? "border-blue-500/30 text-blue-400/70 bg-blue-500/5" :
-                          (log as DebugLogEntry).source === 'scanner' ? "border-[#00ff88]/30 text-[#00ff88]/70 bg-[#00ff88]/5" :
-                            "border-slate-600 text-slate-500"
-                      )}>
-                        {(log as DebugLogEntry).source === 'api' ? 'FE·API' :
-                          (log as DebugLogEntry).source === 'scanner' ? 'BE·SCAN' :
-                            (log as DebugLogEntry).source || 'SYS'}
-                      </span>
-
-                      <span className={cn(
-                        "flex-1 break-words overflow-hidden",
+                        "flex-1 break-words overflow-auto", // Changed overflow-hidden to auto
                         log.type === 'success' && "text-emerald-400 font-bold",
                         log.type === 'warning' && "text-amber-400",
                         log.type === 'error' && "text-rose-400 font-bold",
@@ -300,61 +298,50 @@ export function ScannerConsole({ isScanning, className, progressCurrent, progres
                         (log.type === 'info' || !log.type) && "text-slate-300",
                         log.type === 'config' && "text-slate-500 italic"
                       )}>
+                        <span className="opacity-50 text-[10px] mr-2">
+                          {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
                         {log.type === 'success' && '✓ '}
-                        {log.type === 'error' && '✗ '}
-                        {log.type === 'warning' && '⚠ '}
                         {highlightSymbols(log.message)}
                       </span>
                     </motion.div>
                   ))
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center opacity-40">
-                    <Crosshair size={40} className="text-[#00ff88] mb-3 animate-[spin_15s_linear_infinite]" />
-                    <p className="text-[#00ff88] tracking-[0.3em] text-xs font-bold">SYSTEM READY</p>
-                    <p className="text-[10px] text-[#00ff88]/60 mt-1">AWAITING OPERATIONAL PARAMETERS</p>
+                    <span className="text-[#00ff88] text-xs tracking-widest animate-pulse">NO SIGNAL</span>
                   </div>
                 )}
               </AnimatePresence>
 
               {/* Blinking cursor */}
               {isScanning && (
-                <div className="flex items-center gap-1 text-[#00ff88]/50 mt-2">
-                  <span className="animate-pulse">▌</span>
-                </div>
+                <div className="text-[#00ff88] animate-pulse">_</div>
               )}
             </div>
-          </div>
-
-          {/* Waveform Monitor */}
-          <div className="h-24 border-t border-[#00ff88]/20 bg-black/30">
-            <WaveformMonitor
-              isActive={isScanning}
-              intensity={isScanning ? 0.7 : 0.1}
-              className="w-full h-full"
-            />
           </div>
         </div>
       </div>
 
-      {/* Footer Status Bar */}
-      <div className="relative z-10 px-4 py-1.5 bg-gradient-to-r from-[#00ff88]/5 via-black to-[#00ff88]/5 border-t border-[#00ff88]/20 flex justify-between items-center text-[10px] font-mono">
+      {/* Footer Status Bar - Floating */}
+      <div className="relative z-20 px-4 py-2 flex justify-between items-center text-[10px] font-mono bg-gradient-to-t from-black to-transparent">
         <div className="flex items-center gap-4 text-[#00ff88]/50">
-          <span>VER 3.0.0-TACTICAL</span>
+          <span className="bg-[#00ff88]/10 px-1 rounded">NET: SECURE</span>
           <span className="text-[#00ff88]/30">│</span>
-          <span className="flex items-center gap-1">
-            <div className="w-1 h-1 rounded-full bg-[#00ff88]" />
-            UPLINK: ENCRYPTED
-          </span>
+          <WaveformMonitor
+            isActive={isScanning}
+            intensity={isScanning ? 0.8 : 0.1}
+            className="w-32 h-8 opacity-80"
+          />
         </div>
         <div className="flex items-center gap-4 text-[#00ff88]/50">
-          <span>BUFFER: {mergedLogs.length} ENTRIES</span>
+          <span>BUFFER: {mergedLogs.length}</span>
           <span className="text-[#00ff88]/30">│</span>
           <span className="flex items-center gap-1.5">
             <div className={cn(
               "w-1.5 h-1.5 rounded-full",
               isScanning ? "bg-[#00ff88] animate-pulse" : "bg-muted-foreground/50"
             )} />
-            {isScanning ? 'LIVE FEED' : 'IDLE'}
+            {isScanning ? 'LIVE UPLINK' : 'OFFLINE'}
           </span>
         </div>
       </div>

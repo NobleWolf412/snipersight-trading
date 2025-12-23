@@ -714,6 +714,9 @@ class Orchestrator:
             
             ind_tfs = list(context.multi_tf_indicators.by_timeframe.keys()) if context.multi_tf_indicators else []
             self._progress("INDICATORS", {"symbol": symbol, "timeframes": ind_tfs})
+            
+            # Yield GIL to allow main thread to process API requests during heavy scans
+            time.sleep(0.001)
         except Exception as e:
             logger.error(f"Indicator service failed for {symbol}: {e}")
             return None, {"symbol": symbol, "reason": str(e), "reason_type": "errors"}
@@ -765,6 +768,9 @@ class Orchestrator:
                 "equal_highs": len(getattr(snap, 'equal_highs', []) or []),
                 "equal_lows": len(getattr(snap, 'equal_lows', []) or [])
             })
+            
+            # Yield GIL again after heavy SMC detection
+            time.sleep(0.001)
         except Exception as e:
             logger.error(f"SMC service failed for {symbol}: {e}")
             return None, {"symbol": symbol, "reason": str(e), "reason_type": "errors"}

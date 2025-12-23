@@ -130,6 +130,7 @@ def select_symbols(
     altcoins: bool,
     meme_mode: bool,
     leverage: Optional[int] = None,
+    market_type: Optional[str] = None,
 ) -> List[str]:
     """Resolve final symbol list based on adapter data and category toggles.
 
@@ -140,6 +141,17 @@ def select_symbols(
     """
 
     try:
+        # Pass market_type if adapter supports it (it should based on Protocol but we use kwargs or direct if typed)
+        # SupportsTopSymbols protocol doesn't explicitly type market_type in get_top_symbols but PhemexAdapter does.
+        # We'll try passing it as a named argument if the adapter accepts it, or rely on adapter state.
+        # However, checking signature at runtime is messy. PhemexAdapter has it.
+        # Let's assume adapter follows the updated contract or ignores extra kwargs if we were dynamic,
+        # but here we know we are usually working with PhemexAdapter.
+        # Safest way: check if it takes market_type or just pass it if we are confident.
+        # Given the previous context, PhemexAdapter.get_top_symbols *does* take market_type.
+        all_symbols = adapter.get_top_symbols(n=min(limit * 3, 50), quote_currency="USDT", market_type=market_type)
+    except TypeError:
+         # Fallback for adapters that might not accept market_type yet
         all_symbols = adapter.get_top_symbols(n=min(limit * 3, 50), quote_currency="USDT")
     except Exception:
         all_symbols = []
@@ -151,7 +163,8 @@ def select_symbols(
     all_symbols = [s for s in all_symbols if not _is_stable_base(s)]
 
     # If leverage is requested (>1), prefer/require perp/marginable symbols
-    if (leverage or 1) > 1:
+    # BUT only if we are NOT explicitly in spot mode.
+    if (leverage or 1) > 1 and market_type != 'spot':
         perp_symbols = [s for s in all_symbols if _is_perp_with_fallback(adapter, s)]
         # Require perp when leverage > 1; if empty, try fallback perp-filter
         if perp_symbols:
@@ -214,10 +227,11 @@ def select_symbols(
         memes_cnt = len([s for s in all_symbols if _is_meme_symbol(s)]) if meme_mode else 0
         alts_cnt = len([s for s in all_symbols if s not in majors_list and not _is_meme_symbol(s)]) if altcoins else 0
         logger.info(
-            "selection adapter=%s limit=%s leverage=%s toggles majors=%s memes=%s alts=%s fetched=%s final=%s buckets majors=%s memes=%s alts=%s examples majors=%s memes=%s alts=%s",
+            "selection adapter=%s limit=%s leverage=%s market=%s toggles majors=%s memes=%s alts=%s fetched=%s final=%s buckets majors=%s memes=%s alts=%s examples majors=%s memes=%s alts=%s",
             adapter.__class__.__name__,
             limit,
             (leverage or 1),
+            market_type,
             int(majors),
             int(meme_mode),
             int(altcoins),

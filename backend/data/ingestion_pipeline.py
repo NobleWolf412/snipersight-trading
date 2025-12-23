@@ -171,16 +171,29 @@ class IngestionPipeline:
                 if i < len(symbols) - 1:
                     time.sleep(0.1)
 
-            # Collect results as they complete
-            for future in as_completed(future_to_symbol):
-                symbol = future_to_symbol[future]
-                try:
-                    data = future.result()
-                    results[symbol] = data
-                    logger.debug(f"✓ Completed fetch for {symbol}")
-                except Exception as e:
-                    logger.error(f"✗ Failed to fetch {symbol}: {e}")
-                    failed_symbols.append(symbol)
+            # Collect results with timeout
+            try:
+                # Use a total timeout for the entire batch to prevent indefinite hangs
+                # 45s should be enough for parallel fetching of 10-20 symbols
+                for future in as_completed(future_to_symbol, timeout=45):
+                    symbol = future_to_symbol[future]
+                    try:
+                        data = future.result()
+                        results[symbol] = data
+                        logger.debug(f"✓ Completed fetch for {symbol}")
+                    except Exception as e:
+                        logger.error(f"✗ Failed to fetch {symbol}: {e}")
+                        failed_symbols.append(symbol)
+            except TimeoutError:
+                logger.error("Parallel fetch timed out after 45s - some symbols may be missing")
+                # Cancel remaining futures
+                for f in future_to_symbol:
+                    f.cancel()
+                # Log which ones failed/timed out
+                for f, s in future_to_symbol.items():
+                    if not f.done():
+                        failed_symbols.append(s)
+                        logger.warning(f"TIMEOUT: {s} fetch cancelled")
 
         # Log cache stats after fetch
         if self.use_cache and self._cache:
@@ -283,7 +296,8 @@ class IngestionPipeline:
     def fetch_universe_symbols(
         self,
         universe: str,
-        quote_currency: str = 'USDT'
+        quote_currency: str = 'USDT',
+        market_type: Optional[str] = None
     ) -> List[str]:
         """
         Get symbol list based on universe selection.
@@ -291,6 +305,7 @@ class IngestionPipeline:
         Args:
             universe: Universe identifier ('top10', 'top20', 'top50')
             quote_currency: Quote currency to filter by
+            market_type: Market type ('spot' or 'swap')
 
         Returns:
             List of symbol strings
@@ -304,10 +319,18 @@ class IngestionPipeline:
 
         n = universe_map.get(universe.lower(), 20)
         
-        logger.info(f"Fetching {universe} symbols ({n} symbols)")
+        logger.info(f"Fetching {universe} symbols ({n} symbols) type={market_type}")
         
         if hasattr(self.adapter, 'get_top_symbols'):
-            return self.adapter.get_top_symbols(n=n, quote_currency=quote_currency)
+            # Only pass market_type if the adapter's method accepts it
+            # Python's inspect could be used, but consistent adapter interface is better
+            # For now, we assume updated adapters support it (like PhemexAdapter)
+            try:
+                return self.adapter.get_top_symbols(n=n, quote_currency=quote_currency, market_type=market_type)
+            except TypeError:
+                # Fallback for adapters not yet updated
+                logger.warning(f"Adapter {self.adapter.__class__.__name__} does not support market_type in get_top_symbols")
+                return self.adapter.get_top_symbols(n=n, quote_currency=quote_currency)
         else:
             # Fallback to hardcoded list if adapter doesn't support it
             logger.warning("Adapter doesn't support get_top_symbols, using default list")

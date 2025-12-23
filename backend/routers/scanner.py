@@ -215,6 +215,7 @@ async def get_scanner_pairs(
     meme_mode: bool = Query(default=False),
     exchange: str = Query(default="phemex"),
     leverage: int = Query(default=1, ge=1, le=125),
+    market_type: str = Query(default="swap", regex="^(spot|swap)$"),
 ):
     """Preview pairs the scanner would use without running a scan.
 
@@ -231,6 +232,11 @@ async def get_scanner_pairs(
             )
 
         adapter = exchange_adapters[exchange_key]()
+        
+        # Configure adapter default type if supported
+        if hasattr(adapter, 'default_type'):
+            adapter.default_type = market_type
+
         symbols = select_symbols(
             adapter=adapter,
             limit=limit,
@@ -238,6 +244,7 @@ async def get_scanner_pairs(
             altcoins=altcoins,
             meme_mode=meme_mode,
             leverage=leverage,
+            market_type=market_type,
         )
 
         return {
@@ -500,7 +507,8 @@ async def create_scan_run(
     meme_mode: bool = Query(default=False),
     exchange: str = Query(default="phemex"),
     leverage: int = Query(default=1, ge=1, le=125),
-    macro_overlay: bool = Query(default=False)
+    macro_overlay: bool = Query(default=False),
+    market_type: Optional[str] = Query(default="swap")
 ):
     """Start a background scan job and return immediately with run_id."""
     service = get_scanner_service()
@@ -521,7 +529,8 @@ async def create_scan_run(
         meme_mode=meme_mode,
         exchange=exchange,
         leverage=leverage,
-        macro_overlay=macro_overlay
+        macro_overlay=macro_overlay,
+        market_type=market_type
     )
     
     return {
@@ -582,7 +591,8 @@ async def get_signals(
     meme_mode: bool = Query(default=False),
     exchange: str = Query(default="phemex"),
     leverage: int = Query(default=1, ge=1, le=125),
-    macro_overlay: bool = Query(default=False)
+    macro_overlay: bool = Query(default=False),
+    market_type: str = Query(default="swap", regex="^(spot|swap)$"),
 ):
     """Generate trading signals synchronously."""
     orchestrator = get_orchestrator()
@@ -606,6 +616,10 @@ async def get_signals(
         # Create fresh adapter instance for this scan
         current_adapter = exchange_adapters[exchange_key]()
         
+        # Configure adapter default type
+        if hasattr(current_adapter, 'default_type'):
+            current_adapter.default_type = market_type
+        
         # Resolve requested mode
         try:
             mode = get_mode(sniper_mode)
@@ -615,7 +629,7 @@ async def get_signals(
         # Determine effective threshold
         effective_min = max(min_score, mode.min_confluence_score) if min_score > 0 else mode.min_confluence_score
 
-        logger.info("Scan request: mode=%s, exchange=%s, leverage=%dx", mode.name, exchange, leverage)
+        logger.info("Scan request: mode=%s, exchange=%s, leverage=%dx, market=%s", mode.name, exchange, leverage, market_type)
 
         # Resolve symbols
         symbols = select_symbols(
@@ -625,6 +639,7 @@ async def get_signals(
             altcoins=altcoins,
             meme_mode=meme_mode,
             leverage=leverage,
+            market_type=market_type,
         )
 
         with orchestrator_lock:

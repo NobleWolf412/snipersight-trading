@@ -104,22 +104,7 @@ export function SystemVitals({ isScanning, apiLatency = 50, targetsFound = 0, ta
     const getApiColor = () => metrics.api > 150 ? 'red' : metrics.api > 100 ? 'amber' : 'green';
 
     return (
-        <div className={cn('space-y-3', className)}>
-            {/* Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-[#00ff88]/20">
-                <div className="flex items-center gap-2">
-                    <Activity size={14} className="text-[#00ff88]" />
-                    <span className="text-xs font-mono text-[#00ff88] tracking-wider">SYSTEM VITALS</span>
-                </div>
-                <div className={cn(
-                    'px-2 py-0.5 rounded border text-[10px] font-mono',
-                    isScanning
-                        ? 'border-[#00ff88]/50 bg-[#00ff88]/10 text-[#00ff88]'
-                        : 'border-muted-foreground/30 bg-muted/10 text-muted-foreground'
-                )}>
-                    {isScanning ? 'ACTIVE' : 'STANDBY'}
-                </div>
-            </div>
+        <div className={cn('space-y-4', className)}>
 
             {/* Vitals Grid */}
             <div className="space-y-3">
@@ -138,14 +123,14 @@ export function SystemVitals({ isScanning, apiLatency = 50, targetsFound = 0, ta
                     animated={isScanning}
                 />
                 <VitalGauge
-                    label="BANDWIDTH"
+                    label="NET I/O"
                     value={metrics.net}
                     icon={<WifiHigh size={12} />}
                     color="green"
                     animated={isScanning}
                 />
                 <VitalGauge
-                    label="API LATENCY"
+                    label="LATENCY"
                     value={metrics.api}
                     maxValue={200}
                     unit="ms"
@@ -157,16 +142,16 @@ export function SystemVitals({ isScanning, apiLatency = 50, targetsFound = 0, ta
 
             {/* Target counter */}
             {targetsTotal > 0 && (
-                <div className="pt-3 mt-3 border-t border-[#00ff88]/20">
-                    <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono text-[#00ff88]/60 tracking-wider">TARGETS</span>
-                        <span className="text-sm font-mono text-[#00ff88] font-bold">
-                            {targetsFound}<span className="text-[#00ff88]/40">/{targetsTotal}</span>
+                <div className="pt-3 mt-1 border-t border-[#00ff88]/20">
+                    <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-mono text-[#00ff88]/60 tracking-wider">TARGET ACQUISITION</span>
+                        <span className="text-xs font-mono text-[#00ff88] font-bold">
+                            {targetsFound} <span className="opacity-40">/ {targetsTotal}</span>
                         </span>
                     </div>
-                    <div className="mt-1.5 h-1 bg-black/60 rounded-full overflow-hidden border border-[#00ff88]/20">
+                    <div className="h-1 bg-black/40 rounded-full overflow-hidden border border-[#00ff88]/20">
                         <div
-                            className="h-full bg-[#00ff88] rounded-full transition-all duration-500"
+                            className="h-full bg-[#00ff88] rounded-full transition-all duration-500 shadow-[0_0_10px_rgba(0,255,136,0.5)]"
                             style={{ width: `${targetsTotal > 0 ? (targetsFound / targetsTotal) * 100 : 0}%` }}
                         />
                     </div>

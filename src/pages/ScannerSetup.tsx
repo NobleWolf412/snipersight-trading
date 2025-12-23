@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Crosshair, Lightning, CaretDown, CaretUp,
-  Globe, CurrencyBtc, Biohazard, Target, Activity, Cpu
+  Globe, CurrencyBtc, Biohazard, Target, Activity, Cpu, Coin
 } from '@phosphor-icons/react';
 import { convertSignalToScanResult, generateDemoScanResults } from '@/utils/mockData';
-import { TacticalSelector, TacticalSlider, TacticalToggle } from '@/components/ui/TacticalInputs';
+import { TacticalSelector, TacticalSlider, TacticalToggle, TacticalDropdown } from '@/components/ui/TacticalInputs';
 import { Slider } from '@/components/ui/slider';
 import { ScannerModeTabs } from '@/components/scanner/ScannerModeTabs';
 import { api } from '@/utils/api';
@@ -78,6 +78,7 @@ export function ScannerSetup() {
         exchange: scanConfig.exchange,
         leverage: scanConfig.leverage || 1,
         macro_overlay: scanConfig.macroOverlay,
+        market_type: scanConfig.marketType,
       });
 
       if (runResponse.error || !runResponse.data) {
@@ -288,6 +289,32 @@ export function ScannerSetup() {
               </p>
             </div>
 
+            {/* Market Type Selection - Centered Top */}
+            <div className="flex justify-center max-w-md mx-auto w-full">
+              <TacticalSelector
+                label="MARKET TYPE"
+                value={scanConfig.marketType || 'swap'}
+                onChange={(val) => {
+                  // Force leverage to 1 if switching to spot
+                  const updates = { marketType: val };
+                  if (val === 'spot') {
+                    updates['leverage'] = 1;
+                  }
+                  setScanConfig({ ...scanConfig, ...updates });
+                  addConsoleLog(`CONFIG: Market type set to ${val.toUpperCase()}`, 'config');
+                }}
+                gridCols={2}
+                variant="3d"
+                centeredLabel={true}
+                options={[
+                  { value: 'swap', label: 'FUTURES', icon: <Activity className="text-purple-400" size={24} />, subLabel: 'PERPETUALS', color: '#a855f7' },
+                  { value: 'spot', label: 'SPOT', icon: <Coin className="text-yellow-400" size={24} />, subLabel: 'ASSETS', color: '#eab308' },
+                ]}
+              />
+            </div>
+
+
+
             {/* Mode Selection - Full Width */}
             <section className="glass-card glow-border-green p-4 lg:p-8 rounded-2xl">
               <h2 className="text-xl lg:text-2xl font-semibold mb-6 hud-headline hud-text-green">SELECT MODE</h2>
@@ -309,47 +336,70 @@ export function ScannerSetup() {
                 <div className="flex-1 flex flex-col justify-between gap-10 lg:gap-12 relative z-10">
 
                   {/* 1. Server Uplink (Exchange) */}
-                  <TacticalSelector
-                    label="EXCHANGE UPLINK"
-                    value={scanConfig.exchange}
-                    onChange={(val) => setScanConfig({ ...scanConfig, exchange: val })}
-                    options={[
-                      { value: 'phemex', label: 'PHEMEX', icon: <Lightning weight="fill" className="text-amber-400" size={24} /> },
-                      { value: 'bybit', label: 'BYBIT', icon: <Activity weight="bold" className="text-blue-400" size={24} /> },
-                      { value: 'okx', label: 'OKX', icon: <Globe weight="duotone" className="text-purple-400" size={24} /> },
-                      { value: 'bitget', label: 'BITGET', icon: <Cpu weight="bold" className="text-cyan-400" size={24} /> },
-                    ]}
-                  />
-
-                  {/* 2. Risk Multiplier (Leverage) */}
-                  <div>
-                    <div className="flex items-end justify-between mb-4">
-                      <div>
-                        <label className="block text-base font-bold font-mono text-[#00ff88] tracking-widest uppercase mb-1">RISK MULTIPLIER (LEVERAGE)</label>
-                        <p className="text-sm text-muted-foreground">Capital Exposure Factor</p>
-                      </div>
-                      <div className="flex items-center gap-3 bg-black/40 border border-white/10 px-3 py-1.5 rounded-lg">
-                        <span className="text-2xl font-bold font-mono tabular-nums leading-none" style={{ color: (scanConfig.leverage || 1) <= 5 ? '#00ff88' : (scanConfig.leverage || 1) <= 10 ? '#fbbf24' : '#ef4444' }}>
-                          {scanConfig.leverage || 1}x
-                        </span>
-                      </div>
-                    </div>
-                    <Slider
-                      value={[scanConfig.leverage || 1]}
-                      onValueChange={(val) => {
-                        setScanConfig({ ...scanConfig, leverage: val[0] });
-                        addConsoleLog(`CONFIG: Leverage set to ${val[0]}x`, 'config');
-                      }}
-                      min={1}
-                      max={20}
-                      step={1}
-                      zones={[
-                        { limit: 5, color: '#00ff88', label: 'SAFE' },
-                        { limit: 10, color: '#fbbf24', label: 'MODERATE' },
-                        { limit: 20, color: '#ef4444', label: 'HIGH' },
+                  <div className="w-full">
+                    <TacticalDropdown
+                      label="EXCHANGE UPLINK"
+                      value={scanConfig.exchange}
+                      onChange={(val) => setScanConfig({ ...scanConfig, exchange: val })}
+                      options={[
+                        { value: 'phemex', label: 'PHEMEX', icon: <Lightning weight="fill" className="text-amber-400" size={24} /> },
+                        { value: 'bybit', label: 'BYBIT', icon: <Activity weight="bold" className="text-blue-400" size={24} />, disabled: true },
+                        { value: 'binance', label: 'BINANCE', icon: <Globe weight="fill" className="text-yellow-500" size={24} />, disabled: true },
+                        { value: 'coinbase', label: 'COINBASE', icon: <Target weight="bold" className="text-blue-600" size={24} />, disabled: true },
+                        { value: 'kraken', label: 'KRAKEN', icon: <Cpu weight="bold" className="text-purple-500" size={24} />, disabled: true },
                       ]}
                     />
                   </div>
+
+                  {/* 2. Risk Multiplier (Leverage) - HIDDEN for Spot */}
+                  {(!scanConfig.marketType || scanConfig.marketType === 'swap') ? (
+                    <div>
+                      <div className="flex items-end justify-between mb-4">
+                        <div>
+                          <label className="block text-base font-bold font-mono text-[#00ff88] tracking-widest uppercase mb-1">RISK MULTIPLIER (LEVERAGE)</label>
+                          <p className="text-sm text-muted-foreground">Capital Exposure Factor</p>
+                        </div>
+                        <div className="flex items-center gap-3 bg-black/40 border border-white/10 px-3 py-1.5 rounded-lg">
+                          <span className="text-2xl font-bold font-mono tabular-nums leading-none" style={{ color: (scanConfig.leverage || 1) <= 5 ? '#00ff88' : (scanConfig.leverage || 1) <= 10 ? '#fbbf24' : '#ef4444' }}>
+                            {scanConfig.leverage || 1}x
+                          </span>
+                        </div>
+                      </div>
+                      <Slider
+                        value={[scanConfig.leverage || 1]}
+                        onValueChange={(val) => {
+                          setScanConfig({ ...scanConfig, leverage: val[0] });
+                          addConsoleLog(`CONFIG: Leverage set to ${val[0]}x`, 'config');
+                        }}
+                        min={1}
+                        max={20}
+                        step={1}
+                        zones={[
+                          { limit: 5, color: '#00ff88', label: 'SAFE' },
+                          { limit: 10, color: '#fbbf24', label: 'MODERATE' },
+                          { limit: 20, color: '#ef4444', label: 'HIGH' },
+                        ]}
+                      />
+                    </div>
+                  ) : (
+                    /* Disabled/Hidden State for Spot */
+                    <div className="opacity-50 pointer-events-none grayscale">
+                      <div className="flex items-end justify-between mb-4">
+                        <div>
+                          <label className="block text-base font-bold font-mono text-muted-foreground tracking-widest uppercase mb-1">LEVERAGE DISABLED</label>
+                          <p className="text-sm text-muted-foreground">Not available for Spot markets</p>
+                        </div>
+                        <div className="flex items-center gap-3 bg-black/40 border border-white/5 px-3 py-1.5 rounded-lg">
+                          <span className="text-2xl font-bold font-mono tabular-nums leading-none text-muted-foreground">
+                            1x
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-16 flex items-center justify-center border-2 border-white/5 rounded-full bg-black/20">
+                        <span className="font-mono text-xs text-muted-foreground tracking-widest">SPOT EXECUTION ONLY</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* 3. Confluence Gate (Min Score) */}
                   <div>

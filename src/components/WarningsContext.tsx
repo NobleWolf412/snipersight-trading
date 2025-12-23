@@ -8,6 +8,8 @@ import { useState } from 'react';
 interface WarningsContextProps {
     results: ScanResult[];
     metadata: any;
+    embedded?: boolean;
+    className?: string;
 }
 
 interface WarningItem {
@@ -22,7 +24,7 @@ interface WarningItem {
 /**
  * WarningsContext - Displays risk alerts and important context for the scan
  */
-export function WarningsContext({ results, metadata }: WarningsContextProps) {
+export function WarningsContext({ results, metadata, embedded = false, className = '' }: WarningsContextProps) {
     const [isExpanded, setIsExpanded] = useState(true);
 
     if (!results || results.length === 0) return null;
@@ -118,6 +120,7 @@ export function WarningsContext({ results, metadata }: WarningsContextProps) {
 
     // If no warnings, show all-clear message
     if (warnings.length === 0) {
+        if (embedded) return null; // Don't show "all clear" in embedded mode to save space
         return (
             <Card className="bg-gradient-to-br from-success/5 via-background to-success/5 border-success/30">
                 <CardContent className="p-4">
@@ -139,11 +142,58 @@ export function WarningsContext({ results, metadata }: WarningsContextProps) {
 
     const highSeverityCount = warnings.filter(w => w.severity === 'high').length;
 
+    // Embedded mode renders a simpler list without the Card wrapper
+    if (embedded) {
+        return (
+            <div className={`space-y-3 ${className}`}>
+                {warnings.sort((a, b) => {
+                    const severityOrder = { high: 0, medium: 1, low: 2 };
+                    return severityOrder[a.severity] - severityOrder[b.severity];
+                }).map((warning, idx) => (
+                    <div
+                        key={idx}
+                        className={`p-3 rounded-lg border ${warning.severity === 'high'
+                            ? 'bg-warning/10 border-warning/30'
+                            : warning.severity === 'medium'
+                                ? 'bg-yellow-500/10 border-yellow-500/30'
+                                : 'bg-blue-500/10 border-blue-500/30'
+                            }`}
+                    >
+                        <div className="flex items-start gap-3">
+                            <div className="mt-0.5">{warning.icon}</div>
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-sm font-medium text-foreground">
+                                        {warning.title}
+                                    </span>
+                                    <Badge
+                                        variant="outline"
+                                        className={`text-[10px] uppercase ${warning.severity === 'high'
+                                            ? 'text-warning border-warning/50'
+                                            : warning.severity === 'medium'
+                                                ? 'text-yellow-400 border-yellow-400/50'
+                                                : 'text-blue-400 border-blue-400/50'
+                                            }`}
+                                    >
+                                        {warning.severity}
+                                    </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    {warning.description}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
     return (
         <Card className={`border overflow-hidden ${highSeverityCount > 0
-                ? 'bg-gradient-to-br from-warning/10 via-background to-orange-500/5 border-warning/40'
-                : 'bg-gradient-to-br from-yellow-500/5 via-background to-accent/5 border-yellow-500/30'
-            }`}>
+            ? 'bg-gradient-to-br from-warning/10 via-background to-orange-500/5 border-warning/40'
+            : 'bg-gradient-to-br from-yellow-500/5 via-background to-accent/5 border-yellow-500/30'
+            } ${className}`}>
             <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
                 <CollapsibleTrigger className="w-full">
                     <CardHeader className="cursor-pointer hover:bg-warning/5 transition-colors">
@@ -185,10 +235,10 @@ export function WarningsContext({ results, metadata }: WarningsContextProps) {
                                 <div
                                     key={idx}
                                     className={`p-3 rounded-lg border ${warning.severity === 'high'
-                                            ? 'bg-warning/10 border-warning/30'
-                                            : warning.severity === 'medium'
-                                                ? 'bg-yellow-500/10 border-yellow-500/30'
-                                                : 'bg-blue-500/10 border-blue-500/30'
+                                        ? 'bg-warning/10 border-warning/30'
+                                        : warning.severity === 'medium'
+                                            ? 'bg-yellow-500/10 border-yellow-500/30'
+                                            : 'bg-blue-500/10 border-blue-500/30'
                                         }`}
                                 >
                                     <div className="flex items-start gap-3">
@@ -201,10 +251,10 @@ export function WarningsContext({ results, metadata }: WarningsContextProps) {
                                                 <Badge
                                                     variant="outline"
                                                     className={`text-[10px] uppercase ${warning.severity === 'high'
-                                                            ? 'text-warning border-warning/50'
-                                                            : warning.severity === 'medium'
-                                                                ? 'text-yellow-400 border-yellow-400/50'
-                                                                : 'text-blue-400 border-blue-400/50'
+                                                        ? 'text-warning border-warning/50'
+                                                        : warning.severity === 'medium'
+                                                            ? 'text-yellow-400 border-yellow-400/50'
+                                                            : 'text-blue-400 border-blue-400/50'
                                                         }`}
                                                 >
                                                     {warning.severity}

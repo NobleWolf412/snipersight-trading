@@ -155,7 +155,8 @@ class ScannerService:
         meme_mode: bool = False,
         exchange: str = "phemex",
         leverage: int = 1,
-        macro_overlay: bool = False
+        macro_overlay: bool = False,
+        market_type: Optional[str] = None
     ) -> ScanJob:
         """
         Create and start a new background scan job.
@@ -172,7 +173,8 @@ class ScannerService:
             "meme_mode": meme_mode,
             "exchange": exchange,
             "leverage": leverage,
-            "macro_overlay": macro_overlay
+            "macro_overlay": macro_overlay,
+            "market_type": market_type or "swap" # Default to swap for backward compatibility
         }
         
         job = ScanJob(run_id=run_id, params=params)
@@ -184,14 +186,14 @@ class ScannerService:
         job.task = asyncio.create_task(self._execute_scan(job))
         
         return job
-    
+
     def get_job(self, run_id: str) -> Optional[ScanJob]:
-        """Get a scan job by run_id."""
+        """Get a scan job by ID."""
         with self._jobs_lock:
             return self._jobs.get(run_id)
     
-    def list_jobs(self, limit: int = 50) -> List[ScanJob]:
-        """List recent scan jobs, newest first."""
+    def list_jobs(self, limit: int = 20) -> List[ScanJob]:
+        """List recent scan jobs."""
         with self._jobs_lock:
             jobs = sorted(
                 self._jobs.values(),
@@ -201,68 +203,45 @@ class ScannerService:
             return jobs[:limit]
     
     def cancel_job(self, run_id: str) -> bool:
-        """
-        Cancel a running scan job.
-        
-        Returns True if job was cancelled, False if already complete.
-        """
+        """Cancel a running scan job."""
         job = self.get_job(run_id)
         if not job:
             return False
         
-        if job.status in ["completed", "failed", "cancelled"]:
-            return False
-        
         if job.task and not job.task.done():
             job.task.cancel()
-        
-        job.status = "cancelled"
-        job.completed_at = datetime.now(timezone.utc)
-        return True
+            job.status = "cancelled"
+            job.completed_at = datetime.now(timezone.utc)
+            return True
+        return False
     
-    def cleanup_old_jobs(self) -> int:
-        """
-        Remove completed/failed jobs older than SCAN_JOB_MAX_AGE_SECONDS.
-        
-        Returns number of jobs cleaned up.
-        """
+    def cleanup_old_jobs(self):
+        """Remove old completed jobs to prevent memory leaks."""
         now = datetime.now(timezone.utc)
         cutoff = now - timedelta(seconds=SCAN_JOB_MAX_AGE_SECONDS)
-        cleaned = 0
         
         with self._jobs_lock:
-            to_remove = []
-            completed_jobs = []
-            
-            for run_id, job in self._jobs.items():
-                if job.status in ('completed', 'failed', 'cancelled'):
-                    completed_jobs.append((job.completed_at or job.created_at, run_id))
-                    if job.completed_at and job.completed_at < cutoff:
-                        to_remove.append(run_id)
-                    elif job.created_at < cutoff:
-                        to_remove.append(run_id)
-            
-            # Also remove oldest completed if over limit
-            completed_jobs.sort()
-            if len(completed_jobs) > SCAN_JOB_MAX_COMPLETED:
-                excess = len(completed_jobs) - SCAN_JOB_MAX_COMPLETED
-                for _, run_id in completed_jobs[:excess]:
-                    if run_id not in to_remove:
-                        to_remove.append(run_id)
-            
-            for run_id in to_remove:
+            # Remove jobs older than cutoff
+            old_ids = [
+                run_id for run_id, job in self._jobs.items()
+                if job.status in ["completed", "failed", "cancelled"]
+                and job.completed_at and job.completed_at < cutoff
+            ]
+            for run_id in old_ids:
                 del self._jobs[run_id]
-                cleaned += 1
-        
-        if cleaned > 0:
-            logger.info("Cleaned up %d old scan jobs", cleaned)
-        
-        return cleaned
-    
-    # =========================================================================
-    # Scan Execution
-    # =========================================================================
-    
+            
+            # Also limit total completed jobs
+            completed = [
+                j for j in self._jobs.values()
+                if j.status in ["completed", "failed", "cancelled"]
+            ]
+            if len(completed) > SCAN_JOB_MAX_COMPLETED:
+                # Sort by completed_at and remove oldest
+                completed.sort(key=lambda j: j.completed_at or now)
+                for job in completed[:-SCAN_JOB_MAX_COMPLETED]:
+                    if job.run_id in self._jobs:
+                        del self._jobs[job.run_id]
+
     async def _execute_scan(self, job: ScanJob):
         """Execute scan in background, updating job status as it progresses."""
         # Set this job as the current log recipient
@@ -282,6 +261,12 @@ class ScannerService:
             
             current_adapter = self._exchange_adapters[exchange_key]()
             
+            # Configure adapter for market type (if supported)
+            market_type = params.get("market_type", "swap")
+            if hasattr(current_adapter, 'default_type'):
+                 current_adapter.default_type = market_type
+                 logger.info(f"Configured {exchange_key} adapter for {market_type} markets")
+
             # Resolve mode
             try:
                 mode = get_mode(params["sniper_mode"])
@@ -307,13 +292,31 @@ class ScannerService:
             self._orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
             
             # Resolve symbols via centralized selector
-            symbols = select_symbols(
-                adapter=current_adapter,
-                limit=params["limit"],
-                majors=params["majors"],
-                altcoins=params["altcoins"],
-                meme_mode=params["meme_mode"],
-                leverage=params["leverage"],
+            # Note: select_symbols currently doesn't accept market_type explicitly, 
+            # but it uses adapter.get_top_symbols which we updated in IngestionPipeline
+            # Wait, select_symbols is a standalone function. We should verify if it uses IngestionPipeline or adapter directly.
+            # It uses adapter directly. So we rely on adapter configuration OR pass it if we update select_symbols.
+            # For now, let's update select_symbols call to be safe IF we update that function,
+            # OR rely on the fact that IngestionPipeline uses adapter.get_top_symbols...
+            # Actually, `select_symbols` calls `adapter.get_top_symbols`.
+            # We updated `IngestionPipeline` but `select_symbols` is usually separate.
+            # Let's check `select_symbols` signature or just configure the adapter (done above).
+            # If adapter.default_type is set, get_top_symbols (without args) should use it? 
+            # PhemexAdapter.get_top_symbols uses `market_type or self.default_type`. 
+            # So setting `current_adapter.default_type = market_type` ABOVE is crucial and sufficient!
+            
+            # Run symbol selection in thread pool to avoid blocking event loop
+            loop = asyncio.get_event_loop()
+            symbols = await loop.run_in_executor(
+                None,
+                select_symbols,
+                current_adapter,
+                params["limit"],
+                params["majors"],
+                params["altcoins"],
+                params["meme_mode"],
+                params["leverage"],
+                market_type
             )
             job.total = len(symbols)
             
