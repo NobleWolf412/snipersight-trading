@@ -75,6 +75,8 @@ export function LightweightChart({
     // Fetch candle data
     const fetchData = useCallback(async () => {
         try {
+            // Clear previous data immediately to prevent "ghosting" (showing old symbol's chart)
+            setData([]);
             setIsLoading(true);
             setError(null);
 
@@ -112,11 +114,18 @@ export function LightweightChart({
                 throw new Error('Failed to parse any valid candles');
             }
 
-            if (candleData.length === 0) {
-                throw new Error('Failed to parse any valid candles');
+            // Sort and Deduplicate to prevent "Time must be distinct" errors
+            const sortedData = candleData
+                .sort((a, b) => (a.time as number) - (b.time as number))
+                .filter((item, index, self) =>
+                    index === 0 || (item.time as number) > (self[index - 1].time as number)
+                );
+
+            if (sortedData.length === 0) {
+                throw new Error('No valid candles after filtering');
             }
 
-            setData(candleData);
+            setData(sortedData);
         } catch (err: any) {
             console.error('Failed to fetch candle data:', err);
             setError(err.message || 'Failed to load chart data');

@@ -214,6 +214,83 @@ class IngestionPipeline:
 
         return results
 
+    def _to_pandas_freq(self, timeframe: str) -> Optional[str]:
+        """Convert exchange timeframe to pandas frequency."""
+        if not timeframe:
+            return None
+        if timeframe.endswith('m'):
+            return f"{timeframe[:-1]}T" # m -> T (min)
+        if timeframe.endswith('h'):
+            return f"{timeframe[:-1]}H"
+        if timeframe.endswith('d'):
+            return f"{timeframe[:-1]}D"
+        if timeframe.endswith('w'):
+            return f"{timeframe[:-1]}W-MON"
+        if timeframe.endswith('M'):
+            return "ME"
+        return None
+
+    def _fill_time_gaps(self, df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
+        """
+        Fill missing candles in the time series.
+        
+        Strategy:
+        - Reindex to continuous timeframe grid
+        - Close: Forward fill (price persists)
+        - Open, High, Low: Fill with Close (flat candle)
+        - Volume: Fill with 0
+        """
+        if df.empty:
+            return df
+            
+        freq = self._to_pandas_freq(timeframe)
+        if not freq:
+            # Can't determine frequency, return as is
+            return df
+
+        # Ensure index is datetime and sorted
+        if 'timestamp' not in df.columns and not isinstance(df.index, pd.DatetimeIndex):
+             return df
+             
+        if not isinstance(df.index, pd.DatetimeIndex):
+            # Use timestamp column if index is not datetime
+            df = df.set_index('timestamp', drop=False)
+            
+        df = df.sort_index()
+        
+        # Create full range index
+        try:
+            full_idx = pd.date_range(start=df.index.min(), end=df.index.max(), freq=freq)
+        except ValueError:
+            # Handle cases where freq might be incompatible or range is weird
+            return df
+            
+        # Reindex
+        df_filled = df.reindex(full_idx)
+        
+        # Check if we actually added rows (gaps existed)
+        if len(df_filled) == len(df):
+            return df_filled.reset_index(drop=True) # No gaps
+            
+        logger.debug(f"Filling {len(df_filled) - len(df)} gaps in {timeframe} data")
+
+        # 1. Volume -> 0
+        df_filled['volume'] = df_filled['volume'].fillna(0)
+        
+        # 2. Close -> ffill (Last price persists)
+        df_filled['close'] = df_filled['close'].ffill()
+        
+        # 3. Open/High/Low -> Fill with the *filled* Close
+        # (If no trade, O=H=L=C = Previous Close)
+        df_filled['open'] = df_filled['open'].fillna(df_filled['close'])
+        df_filled['high'] = df_filled['high'].fillna(df_filled['close'])
+        df_filled['low'] = df_filled['low'].fillna(df_filled['close'])
+        
+        # Restore timestamp column
+        df_filled['timestamp'] = df_filled.index
+        
+        return df_filled.reset_index(drop=True)
+
     def normalize_and_validate(
         self,
         df: pd.DataFrame,
@@ -252,6 +329,9 @@ class IngestionPipeline:
         df['low'] = pd.to_numeric(df['low'], errors='coerce')
         df['close'] = pd.to_numeric(df['close'], errors='coerce')
         df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
+
+        # Fill proper time gaps (critical for Phemex/CCXT data)
+        df = self._fill_time_gaps(df, timeframe)
 
         # Check for NaN values
         if df[required_cols].isnull().any().any():

@@ -628,7 +628,10 @@ class ApiClient {
       run_id: string;
       status: string;
       created_at: string;
-    }>(`/scanner/runs${query ? `?${query}` : ''}`, { method: 'POST' });
+    }>(`/scanner/runs${query ? `?${query}` : ''}`, {
+      method: 'POST',
+      timeout: SCANNER_TIMEOUT_MS  // Allow deep scans to initialize (120s)
+    });
   }
 
   async getScanRun(runId: string, options?: { silent?: boolean }) {

@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any, List, cast
 from functools import wraps
 import pandas as pd
 import ccxt
+import random
 from loguru import logger
 
 from backend.data.adapters.retry import retry_on_rate_limit
@@ -61,61 +62,109 @@ class PhemexAdapter:
         since: Optional[int] = None
     ) -> pd.DataFrame:
         """
-        Fetch OHLCV (candlestick) data from Phemex.
+        Fetch OHLCV data using CCXT (Primary) with Direct REST Fallback.
         
-        Note: market_type parameter is ignored - CCXT handles market selection
-        based on the symbol format and defaultType setting.
-
-        Args:
-            symbol: Trading pair symbol (e.g., 'BTC/USDT')
-            timeframe: Timeframe string (e.g., '1h', '4h', '1d')
-            market_type: Market type ('spot' or 'swap'). IGNORED - for compatibility only
-            limit: Number of candles to fetch
-            since: Timestamp in milliseconds to fetch data from
-
-        Returns:
-            DataFrame with columns: timestamp, open, high, low, close, volume
-
-        Raises:
-            ccxt.ExchangeError: If exchange returns an error
-            ccxt.NetworkError: If network/connection fails
+        Improvements:
+        1. Enforces limit >= 500 (Phemex Requirement)
+        2. Uses CCXT's built-in rate limiter
+        3. Falls back to Direct REST if CCXT fails
         """
+        import requests
+        
+        # Enforce Phemex minimum limit of 500 to avoid Error 30000
+        safe_limit = max(500, limit)
+        
         try:
-            # DO NOT pass market_type to CCXT - it causes failures
-            # CCXT will use the defaultType from initialization
-            ohlcv = self.exchange.fetch_ohlcv(
-                symbol=symbol,
-                timeframe=timeframe,
-                limit=limit,
-                since=since
-            )
-
-            if not ohlcv:
-                logger.warning(f"No OHLCV data returned for {symbol} {timeframe}")
-                return pd.DataFrame()
-
-            # Convert to DataFrame
+            # 1. Primary: CCXT Fetch (Handles Rate Limits & Parsing)
+            ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, limit=safe_limit, since=since)
+            
             df = pd.DataFrame(
                 ohlcv,
                 columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
             )
-
-            # Convert timestamp to datetime
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df.set_index('timestamp', inplace=True)
-            
-            # Reset index to make timestamp a column again (standard format for pipeline)
             df.reset_index(inplace=True)
             
-            logger.debug(f"Fetched {len(df)} candles for {symbol} {timeframe}")
+            # Simple check to ensure we got data
+            if df.empty:
+                logger.warning(f"CCXT returned empty data for {symbol}")
+                # Don't fallback on empty, it might be valid empty.
+                return df
+                
             return df
 
-        except ccxt.ExchangeError as e:
-            logger.error(f"Exchange error fetching OHLCV for {symbol}: {e}")
-            raise
-        except ccxt.NetworkError as e:
-            logger.error(f"Network error fetching OHLCV for {symbol}: {e}")
-            raise
+        except Exception as e:
+            logger.warning(f"CCXT fetch failed for {symbol}: {e}. Attempting Direct REST Fallback.")
+            
+            # 2. Fallback: Direct REST API
+            try:
+                # Resolve Symbol
+                phemex_symbol = symbol.replace('/', '').replace(':USDT', '')
+                if self.is_spot(symbol) and not phemex_symbol.startswith('s'):
+                    phemex_symbol = f"s{phemex_symbol}"
+                    
+                # Resolve Resolution
+                tf_map = {
+                    '1m': 60, '3m': 180, '5m': 300, '15m': 900, '30m': 1800,
+                    '1h': 3600, '2h': 7200, '4h': 14400, '6h': 21600, '12h': 43200,
+                    '1d': 86400, '1w': 604800, '1M': 2592000
+                }
+                resolution = tf_map.get(timeframe, 60)
+                
+                url = "https://api.phemex.com/exchange/public/md/kline"
+                end_time = int(time.time())
+                
+                params = {
+                    "symbol": phemex_symbol,
+                    "resolution": resolution,
+                    "limit": safe_limit,
+                    "to": end_time
+                }
+                if since:
+                    params["from"] = int(since / 1000)
+                else:
+                    params["from"] = end_time - (resolution * params["limit"])
+                    
+                # Polite request
+                time.sleep(random.uniform(0.5, 1.0)) # Extra polite on fallback
+                response = requests.get(url, params=params, timeout=5)
+                data = response.json()
+                
+                if data.get('code', -1) != 0:
+                    raise ccxt.ExchangeError(f"Phemex API Error: {data.get('msg')}")
+                    
+                rows = data.get('data', {}).get('rows', [])
+                if not rows:
+                    return pd.DataFrame()
+                    
+                # Parse
+                # Assume CCXT scaling logic (10^8 for most pairs)
+                # But since this is fallback, keep it simple
+                scale = 100000000.0 if (rows and rows[0][1] > 1000000) else 1.0
+                
+                parsed_data = []
+                for r in rows:
+                    parsed_data.append({
+                        'timestamp': r[0] * 1000,
+                        'open': r[1] / scale,
+                        'high': r[2] / scale,
+                        'low': r[3] / scale,
+                        'close': r[4] / scale,
+                        'volume': r[5] / scale if self.is_spot(symbol) else r[5]
+                    })
+                    
+                df_direct = pd.DataFrame(parsed_data)
+                df_direct['timestamp'] = pd.to_datetime(df_direct['timestamp'], unit='ms')
+                df_direct.set_index('timestamp', inplace=True)
+                df_direct.reset_index(inplace=True)
+                
+                logger.info(f"✓ Recovered {symbol} via Direct REST Fallback")
+                return df_direct
+                
+            except Exception as direct_err:
+                logger.error(f"Direct REST Fallback also failed for {symbol}: {direct_err}")
+                raise e # Raise original CCXT error if both fail
 
 
     @retry_on_rate_limit(max_retries=3)
