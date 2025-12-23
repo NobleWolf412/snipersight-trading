@@ -62,14 +62,15 @@ class PhemexAdapter:
     ) -> pd.DataFrame:
         """
         Fetch OHLCV (candlestick) data from Phemex.
-        
-        Note: market_type parameter is ignored - CCXT handles market selection
-        based on the symbol format and defaultType setting.
+
+        Now properly handles market_type by temporarily switching the exchange's
+        defaultType setting before fetching.
 
         Args:
             symbol: Trading pair symbol (e.g., 'BTC/USDT')
             timeframe: Timeframe string (e.g., '1h', '4h', '1d')
-            market_type: Market type ('spot' or 'swap'). IGNORED - for compatibility only
+            market_type: Market type ('spot' or 'swap'). If specified, temporarily
+                        switches the exchange's default type for this fetch.
             limit: Number of candles to fetch
             since: Timestamp in milliseconds to fetch data from
 
@@ -81,40 +82,57 @@ class PhemexAdapter:
             ccxt.NetworkError: If network/connection fails
         """
         try:
-            # DO NOT pass market_type to CCXT - it causes failures
-            # CCXT will use the defaultType from initialization
-            ohlcv = self.exchange.fetch_ohlcv(
-                symbol=symbol,
-                timeframe=timeframe,
-                limit=limit,
-                since=since
-            )
+            # Ensure markets are loaded
+            if not getattr(self.exchange, 'markets', None):
+                logger.debug(f"Markets not loaded, loading now...")
+                self.exchange.load_markets()
 
-            if not ohlcv:
-                logger.warning(f"No OHLCV data returned for {symbol} {timeframe}")
-                return pd.DataFrame()
+            # Dynamically set market type if specified
+            original_type = self.exchange.options.get('defaultType')
+            if market_type and market_type != original_type:
+                logger.debug(f"Temporarily switching exchange type from {original_type} to {market_type} for {symbol}")
+                self.exchange.options['defaultType'] = market_type
 
-            # Convert to DataFrame
-            df = pd.DataFrame(
-                ohlcv,
-                columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
-            )
+            try:
+                # Fetch OHLCV with the correct market type
+                ohlcv = self.exchange.fetch_ohlcv(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    limit=limit,
+                    since=since
+                )
 
-            # Convert timestamp to datetime
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            df.set_index('timestamp', inplace=True)
-            
-            # Reset index to make timestamp a column again (standard format for pipeline)
-            df.reset_index(inplace=True)
-            
-            logger.debug(f"Fetched {len(df)} candles for {symbol} {timeframe}")
-            return df
+                if not ohlcv:
+                    logger.warning(f"No OHLCV data returned for {symbol} {timeframe} (market_type: {market_type or original_type})")
+                    return pd.DataFrame()
+
+                # Convert to DataFrame
+                df = pd.DataFrame(
+                    ohlcv,
+                    columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
+                )
+
+                # Convert timestamp to datetime
+                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                df.set_index('timestamp', inplace=True)
+
+                # Reset index to make timestamp a column again (standard format for pipeline)
+                df.reset_index(inplace=True)
+
+                logger.debug(f"Fetched {len(df)} candles for {symbol} {timeframe} (market_type: {market_type or original_type})")
+                return df
+
+            finally:
+                # Always restore original type
+                if market_type and market_type != original_type and original_type is not None:
+                    self.exchange.options['defaultType'] = original_type
+                    logger.debug(f"Restored exchange type to {original_type}")
 
         except ccxt.ExchangeError as e:
-            logger.error(f"Exchange error fetching OHLCV for {symbol}: {e}")
+            logger.error(f"Exchange error fetching OHLCV for {symbol} {timeframe} (market_type: {market_type or self.exchange.options.get('defaultType')}): {e}")
             raise
         except ccxt.NetworkError as e:
-            logger.error(f"Network error fetching OHLCV for {symbol}: {e}")
+            logger.error(f"Network error fetching OHLCV for {symbol} {timeframe}: {e}")
             raise
 
 
