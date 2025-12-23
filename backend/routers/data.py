@@ -255,18 +255,26 @@ async def get_candles(
     exchange: str | None = Query(default=None),
     market_type: str = Query(default='swap')
 ):
-    """Get candlestick data via selected exchange adapter or cache."""
+    """Get candlestick data via selected exchange adapter or cache.
+
+    Implements multi-tier fallback:
+    1. Try OHLCV cache (fastest, from scanner)
+    2. Try fresh fetch with requested market type
+    3. Try fresh fetch with alternate market type (swap ↔ spot)
+    4. Return helpful error with guidance
+    """
     try:
         exchange_key = (exchange or 'phemex').lower()
-        
-        # First, try to get data from OHLCV cache (scanner's cached data)
+        errors_encountered = []
+
+        # Tier 1: Try to get data from OHLCV cache (scanner's cached data)
         cache = get_ohlcv_cache()
         if cache:
             cached_df = cache.get(symbol, timeframe.value)
             if cached_df is not None and not cached_df.empty:
-                logger.info(f"Serving {symbol} {timeframe.value} from OHLCV cache ({len(cached_df)} candles)")
+                logger.info(f"✓ Serving {symbol} {timeframe.value} from OHLCV cache ({len(cached_df)} candles)")
                 df = cached_df.tail(limit) if len(cached_df) > limit else cached_df
-                
+
                 candles = []
                 for _, row in df.iterrows():
                     candles.append({
@@ -277,68 +285,113 @@ async def get_candles(
                         'close': float(row['close']),
                         'volume': float(row['volume']),
                     })
-                
+
                 return {
                     "symbol": symbol,
                     "timeframe": timeframe.value,
                     "candles": candles,
+                    "source": "cache"
                 }
-        
-        # Cache miss - try to fetch fresh data
-        logger.debug(f"Cache miss for {symbol} {timeframe.value}, attempting fresh fetch")
-        
+            else:
+                errors_encountered.append("cache_miss")
+                logger.debug(f"Cache miss for {symbol} {timeframe.value}")
+        else:
+            errors_encountered.append("cache_unavailable")
+
+        # Tier 2 & 3: Cache miss - try to fetch fresh data with fallback
+        logger.info(f"Attempting fresh fetch for {symbol} {timeframe.value}")
+
         # Use the HTF opportunities singleton adapter for phemex (it's warm and works)
         if exchange_key == 'phemex':
             adapter = get_htf_phemex_adapter()
         else:
             adapter = get_or_create_adapter(exchange_key)
             if adapter is None:
-                raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange_key}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported exchange: {exchange_key}"
+                )
 
-        # Try to fetch with requested market type, fallback to opposite if it fails
+        # Try both market types with detailed error tracking
         df = pd.DataFrame()
-        error_msg = None
-        
+        successful_market_type = None
+
         for attempt_market_type in [market_type, 'spot' if market_type == 'swap' else 'swap']:
             try:
+                logger.debug(f"Attempting fetch: {symbol} {timeframe.value} as {attempt_market_type}")
                 df = adapter.fetch_ohlcv(symbol, timeframe.value, limit=limit, market_type=attempt_market_type)
+
                 if not df.empty:
+                    successful_market_type = attempt_market_type
                     if attempt_market_type != market_type:
-                        logger.info(f"Fell back to {attempt_market_type} market for {symbol}")
+                        logger.info(f"✓ Fell back to {attempt_market_type} market for {symbol}")
+                    else:
+                        logger.info(f"✓ Successfully fetched {len(df)} candles for {symbol} as {attempt_market_type}")
                     break
+                else:
+                    errors_encountered.append(f"{attempt_market_type}_empty")
+                    logger.warning(f"Empty data returned for {symbol} as {attempt_market_type}")
+
             except Exception as e:
-                error_msg = str(e)
-                logger.debug(f"Failed to fetch {symbol} as {attempt_market_type}: {e}")
+                error_type = type(e).__name__
+                errors_encountered.append(f"{attempt_market_type}_{error_type}")
+                logger.warning(f"Failed to fetch {symbol} as {attempt_market_type}: {error_type}: {e}")
                 continue
-        
+
+        # All attempts failed - return comprehensive error
         if df.empty:
-            raise HTTPException(
-                status_code=502,
-                detail=f"No cached data available and fresh fetch failed for {symbol}. Try running a scan first to populate the cache."
-            )
+            error_detail = {
+                "message": f"Unable to fetch candle data for {symbol}",
+                "symbol": symbol,
+                "timeframe": timeframe.value,
+                "exchange": exchange_key,
+                "attempts": errors_encountered,
+                "suggestion": (
+                    "This symbol may not be available on this exchange, or the market type is incorrect. "
+                    "Try: (1) Run a scanner to populate the cache, (2) Check if symbol exists on exchange, "
+                    "(3) Try a different exchange or market type."
+                ),
+                "troubleshooting": {
+                    "cache_checked": cache is not None,
+                    "market_types_tried": [market_type, 'spot' if market_type == 'swap' else 'swap'],
+                    "exchange": exchange_key
+                }
+            }
+            logger.error(f"All fetch attempts failed for {symbol}: {errors_encountered}")
+            raise HTTPException(status_code=404, detail=error_detail)
+
+        # Success - convert DataFrame to response
         candles = []
-        if not df.empty:
-            for _, row in df.iterrows():
-                candles.append({
-                    'timestamp': row['timestamp'].to_pydatetime().isoformat(),
-                    'open': float(row['open']),
-                    'high': float(row['high']),
-                    'low': float(row['low']),
-                    'close': float(row['close']),
-                    'volume': float(row['volume']),
-                })
+        for _, row in df.iterrows():
+            candles.append({
+                'timestamp': row['timestamp'].to_pydatetime().isoformat(),
+                'open': float(row['open']),
+                'high': float(row['high']),
+                'low': float(row['low']),
+                'close': float(row['close']),
+                'volume': float(row['volume']),
+            })
 
         return {
             "symbol": symbol,
             "timeframe": timeframe.value,
             "candles": candles,
+            "source": "exchange",
+            "market_type": successful_market_type
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to fetch candles for %s on %s: %s", symbol, exchange or 'phemex', e)
-        raise HTTPException(status_code=502, detail="Failed to fetch candles from exchange") from e
+        logger.error("Unexpected error fetching candles for %s on %s: %s", symbol, exchange or 'phemex', e)
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "Unexpected error fetching candle data",
+                "error": str(e),
+                "type": type(e).__name__
+            }
+        ) from e
 
 
 # =============================================================================

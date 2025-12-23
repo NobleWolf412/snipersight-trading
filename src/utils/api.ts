@@ -487,9 +487,14 @@ class ApiClient {
     );
   }
 
-  async getCandles(symbol: string, timeframe = '1h', limit = 100) {
+  async getCandles(symbol: string, timeframe = '1h', limit = 100, marketType: 'swap' | 'spot' = 'swap') {
+    const params = new URLSearchParams({
+      timeframe,
+      limit: limit.toString(),
+      market_type: marketType
+    });
     return this.request(
-      `/market/candles/${encodeURIComponent(symbol)}?timeframe=${timeframe}&limit=${limit}`
+      `/market/candles/${encodeURIComponent(symbol)}?${params.toString()}`
     );
   }
 

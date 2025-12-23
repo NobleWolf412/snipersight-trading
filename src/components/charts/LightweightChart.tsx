@@ -52,21 +52,58 @@ export function LightweightChart({
     const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<CandlestickData[]>([]);
 
-    // Fetch candle data
+    // Fetch candle data with comprehensive error handling
     const fetchData = useCallback(async () => {
         try {
             setIsLoading(true);
             setError(null);
 
-            const response = await api.getCandles(symbol, timeframe, 200);
+            const apiResponse = await api.getCandles(symbol, timeframe, 200);
 
-            // Handle both direct array and object with candles property
-            const candles = Array.isArray(response) ? response : (response?.candles || []);
+            // Enhanced error handling from API response
+            if (apiResponse.error) {
+                // Handle structured error responses from backend
+                const errorDetail = apiResponse.error;
+                let errorMessage = 'Failed to load chart data';
 
-            if (!candles || candles.length === 0) {
-                throw new Error('No candle data available');
+                if (typeof errorDetail === 'object' && errorDetail.message) {
+                    errorMessage = errorDetail.message;
+
+                    // Add helpful suggestions
+                    if (errorDetail.suggestion) {
+                        errorMessage += `\n\n${errorDetail.suggestion}`;
+                    }
+
+                    // Log detailed troubleshooting info for debugging
+                    if (errorDetail.troubleshooting) {
+                        console.warn('[Chart Debug Info]', errorDetail.troubleshooting);
+                    }
+                } else if (typeof errorDetail === 'string') {
+                    errorMessage = errorDetail;
+                }
+
+                throw new Error(errorMessage);
             }
 
+            // Handle both direct array and object with candles property
+            const responseData = apiResponse.data || apiResponse;
+            const candles = Array.isArray(responseData) ? responseData : (responseData?.candles || []);
+
+            // Graceful handling of empty data
+            if (!candles || candles.length === 0) {
+                const suggestions = [
+                    `Symbol: ${symbol} | Timeframe: ${timeframe}`,
+                    '',
+                    'Possible solutions:',
+                    '• Run a scanner to populate the cache',
+                    '• Check if this symbol is available on the exchange',
+                    '• Try a different timeframe or symbol'
+                ].join('\n');
+
+                throw new Error(`No candle data available\n\n${suggestions}`);
+            }
+
+            // Convert candles to chart format
             const candleData: CandlestickData[] = candles.map((candle) => ({
                 time: (new Date(candle.timestamp).getTime() / 1000) as Time,
                 open: candle.open,
@@ -75,10 +112,24 @@ export function LightweightChart({
                 close: candle.close,
             }));
 
+            // Log success with data source info
+            const source = responseData?.source || 'unknown';
+            const marketType = responseData?.market_type;
+            console.log(`✓ Loaded ${candleData.length} candles from ${source}${marketType ? ` (${marketType})` : ''}`);
+
             setData(candleData);
         } catch (err: any) {
             console.error('Failed to fetch candle data:', err);
-            setError(err.message || 'Failed to load chart data');
+
+            // Extract user-friendly error message
+            let userMessage = 'Failed to load chart data';
+            if (err.message) {
+                userMessage = err.message;
+            } else if (typeof err === 'string') {
+                userMessage = err;
+            }
+
+            setError(userMessage);
         } finally {
             setIsLoading(false);
         }
@@ -272,9 +323,11 @@ export function LightweightChart({
 
             {error && (
                 <div className="absolute inset-0 flex items-center justify-center bg-[#0a0f0a]/90 z-20">
-                    <div className="flex flex-col items-center gap-3 max-w-md px-4">
-                        <div className="text-2xl">📊</div>
-                        <p className="text-sm text-red-400 text-center font-mono">{error}</p>
+                    <div className="flex flex-col items-center gap-3 max-w-lg px-6 py-4">
+                        <div className="text-3xl">📊</div>
+                        <div className="text-sm text-red-400 text-left font-mono whitespace-pre-line max-h-64 overflow-y-auto border border-red-400/30 rounded p-3 bg-red-400/5 w-full">
+                            {error}
+                        </div>
                         <button
                             onClick={fetchData}
                             className="px-4 py-2 bg-[#00ff88]/10 hover:bg-[#00ff88]/20 border border-[#00ff88]/30 rounded text-sm text-[#00ff88] font-mono transition-colors"
