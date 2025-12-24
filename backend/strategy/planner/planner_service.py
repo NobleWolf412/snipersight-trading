@@ -55,18 +55,23 @@ from backend.analysis.fibonacci import calculate_fib_levels, FibLevel
 def _check_htf_fib_alignment(
     entry_price: float,
     ohlcv_data: dict,
-    tolerance_pct: float = 1.0
+    tolerance_pct: float = 1.0,
+    mode_profile: str = 'balanced'
 ) -> tuple[bool, Optional[str], float]:
     """
-    Check if entry price aligns with HTF Fibonacci levels.
+    Check if entry price aligns with HTF Fibonacci retracement levels.
     
-    Only checks 4H and 1D timeframes (LTF Fib is noise).
+    Mode-aware behavior:
+    - Scalp modes (Strike, Surgical): Skip (Fib alignment is noise)
+    - Swing modes: Use mode-appropriate HTFs
+    
     Only checks 50% and 61.8% levels (statistically meaningful).
     
     Args:
         entry_price: The calculated entry price from SMC structure
         ohlcv_data: Dict of {timeframe: DataFrame} with candle data
         tolerance_pct: How close entry must be to Fib (default 1%)
+        mode_profile: Scanner mode for mode-aware filtering
         
     Returns:
         Tuple of (is_aligned, alignment_note, boost_value)
@@ -74,15 +79,30 @@ def _check_htf_fib_alignment(
     if not ohlcv_data:
         return False, None, 0.0
     
-    htf_timeframes = ['4h', '1d']
+    profile = (mode_profile or 'balanced').lower()
+    
+    # Skip Fibs entirely for scalp/intraday modes
+    if profile in ('precision', 'surgical', 'intraday_aggressive', 'strike'):
+        return False, None, 0.0
+    
+    # Mode-specific HTF timeframes for Fib alignment
+    fib_tf_map = {
+        'macro_surveillance': ('1w', '1d'),  # Overwatch: Weekly + Daily
+        'overwatch': ('1w', '1d'),
+        'stealth_balanced': ('1d', '4h'),    # Stealth: Daily + 4H
+        'stealth': ('1d', '4h'),
+        'balanced': ('1d', '4h'),
+    }
+    
+    htf_timeframes = fib_tf_map.get(profile, ('1d', '4h'))
     
     for tf in htf_timeframes:
-        df = ohlcv_data.get(tf)
+        df = ohlcv_data.get(tf) or ohlcv_data.get(tf.lower()) or ohlcv_data.get(tf.upper())
         if df is None or len(df) < 30:
             continue
             
         try:
-            # Find major swing range in last 50 candles
+            # Find swing range in last 50 candles
             recent = df.tail(50)
             swing_high = recent['high'].max()
             swing_low = recent['low'].min()
@@ -90,7 +110,7 @@ def _check_htf_fib_alignment(
             if swing_high <= swing_low:
                 continue
             
-            # Determine trend direction based on price position
+            # Determine trend direction
             current_price = df.iloc[-1]['close']
             mid_range = (swing_high + swing_low) / 2
             trend_direction = 'bullish' if current_price > mid_range else 'bearish'
@@ -103,14 +123,13 @@ def _check_htf_fib_alignment(
                 timeframe=tf
             )
             
-            # Check if entry aligns with any Fib level
+            # Check if entry aligns with 50% or 61.8% Fib
             for fib in fib_levels:
                 distance_pct = abs(entry_price - fib.price) / fib.price * 100
                 
                 if distance_pct <= tolerance_pct:
-                    # Entry aligns with Fib!
-                    boost = 7.0 if fib.ratio == 0.618 else 5.0  # 61.8% gets higher boost
-                    note = f"Entry aligns with {tf.upper()} Fib {fib.display_ratio} (monitored level)"
+                    boost = 7.0 if fib.ratio == 0.618 else 5.0
+                    note = f"Entry aligns with {tf.upper()} Fib {fib.display_ratio}"
                     return True, note, boost
                     
         except Exception as e:
@@ -627,7 +646,8 @@ def generate_trade_plan(
         fib_aligned, fib_note, fib_boost = _check_htf_fib_alignment(
             entry_price=avg_entry,
             ohlcv_data=ohlcv_data,
-            tolerance_pct=1.0  # 1% tolerance
+            tolerance_pct=1.0,
+            mode_profile=config.profile if hasattr(config, 'profile') else 'balanced'
         )
         if fib_aligned:
             htf_fib_boost = fib_boost
@@ -741,7 +761,8 @@ def generate_trade_plan(
         setup_archetype=setup_archetype,
         regime_label=confluence_breakdown.regime,
         rr_scale=rr_scale,
-        confluence_breakdown=confluence_breakdown
+        confluence_breakdown=confluence_breakdown,
+        multi_tf_data=multi_tf_data  # NEW: Pass for HTF swing detection
     )
     
     # --- Apply Leverage-Based Target Adjustment ---
@@ -2161,6 +2182,317 @@ def _calculate_stop_loss(
     return stop_loss, used_structure
 
 
+# =============================================================================
+# HTF TARGET HELPER FUNCTIONS
+# =============================================================================
+# These functions identify high-probability target levels using structural
+# confluence: swing highs/lows, BOS levels, EQH/EQL liquidity, Fib extensions,
+# and unfilled FVGs. Each returns levels with scores for confluence ranking.
+# =============================================================================
+
+def _find_htf_swing_targets(
+    is_bullish: bool,
+    avg_entry: float,
+    multi_tf_data: Optional['MultiTimeframeData'],
+    allowed_tfs: tuple,
+    max_targets: int = 5
+) -> List[tuple]:
+    """
+    Find major swing highs/lows from HTF candle data for target placement.
+    
+    Args:
+        is_bullish: True for long trades, False for short
+        avg_entry: Average entry price
+        multi_tf_data: Multi-timeframe candle data
+        allowed_tfs: Timeframes to scan (e.g., ('1w', '1d', '4h'))
+        max_targets: Maximum levels to return
+        
+    Returns:
+        List of (level, timeframe, score=1) tuples, sorted by distance from entry
+    """
+    if not multi_tf_data:
+        return []
+    
+    swing_levels = []
+    ohlcv = getattr(multi_tf_data, 'ohlcv_by_timeframe', None) or getattr(multi_tf_data, 'timeframes', {})
+    
+    for tf in allowed_tfs:
+        # Explicit None checks to avoid DataFrame ambiguous truth error
+        df = ohlcv.get(tf)
+        if df is None:
+            df = ohlcv.get(tf.lower())
+        if df is None:
+            df = ohlcv.get(tf.upper())
+        if df is None or len(df) < 20:
+            continue
+        
+        # Use 3-bar swing detection (stricter than 1-bar)
+        for i in range(2, len(df) - 2):
+            try:
+                if is_bullish:
+                    # Swing high: bar is highest among 5-bar window
+                    if (df.iloc[i]['high'] > df.iloc[i-1]['high'] and
+                        df.iloc[i]['high'] > df.iloc[i-2]['high'] and
+                        df.iloc[i]['high'] > df.iloc[i+1]['high'] and
+                        df.iloc[i]['high'] > df.iloc[i+2]['high'] and
+                        df.iloc[i]['high'] > avg_entry):
+                        swing_levels.append((df.iloc[i]['high'], tf, 1))
+                else:
+                    # Swing low: bar is lowest among 5-bar window
+                    if (df.iloc[i]['low'] < df.iloc[i-1]['low'] and
+                        df.iloc[i]['low'] < df.iloc[i-2]['low'] and
+                        df.iloc[i]['low'] < df.iloc[i+1]['low'] and
+                        df.iloc[i]['low'] < df.iloc[i+2]['low'] and
+                        df.iloc[i]['low'] < avg_entry):
+                        swing_levels.append((df.iloc[i]['low'], tf, 1))
+            except (IndexError, KeyError):
+                continue
+    
+    # Sort by distance from entry, return closest N
+    swing_levels.sort(key=lambda x: abs(x[0] - avg_entry))
+    return swing_levels[:max_targets]
+
+
+def _get_htf_bos_levels(
+    is_bullish: bool,
+    avg_entry: float,
+    smc_snapshot: 'SMCSnapshot',
+    allowed_tfs: tuple
+) -> List[tuple]:
+    """
+    Get BOS/CHoCH levels as potential target zones. Score = 2 (higher confluence).
+    
+    Args:
+        is_bullish: True for long trades
+        avg_entry: Average entry price
+        smc_snapshot: SMC patterns detected
+        allowed_tfs: Allowed timeframes for structure
+        
+    Returns:
+        List of (level, timeframe, score=2) tuples
+    """
+    bos_levels = []
+    
+    for brk in smc_snapshot.structural_breaks:
+        tf = brk.timeframe.lower() if brk.timeframe else ''
+        if allowed_tfs and tf not in [t.lower() for t in allowed_tfs]:
+            continue
+        
+        if is_bullish and brk.level > avg_entry:
+            bos_levels.append((brk.level, tf, 2))  # Score 2 for BOS
+        elif not is_bullish and brk.level < avg_entry:
+            bos_levels.append((brk.level, tf, 2))
+    
+    # Sort by distance from entry
+    bos_levels.sort(key=lambda x: abs(x[0] - avg_entry))
+    return bos_levels[:5]
+
+
+def _find_eqh_eql_zones(
+    is_bullish: bool,
+    avg_entry: float,
+    multi_tf_data: Optional['MultiTimeframeData'],
+    allowed_tfs: tuple,
+    tolerance_pct: float = 0.5
+) -> List[tuple]:
+    """
+    Detect equal highs/lows (liquidity pools) within tolerance band.
+    Score = 2 (high confluence - stop hunt magnets).
+    
+    Args:
+        is_bullish: True for long trades
+        avg_entry: Average entry price
+        multi_tf_data: Multi-timeframe candle data
+        allowed_tfs: Timeframes to scan
+        tolerance_pct: Percentage band for "equal" detection (0.5% default)
+        
+    Returns:
+        List of (level, timeframe, score=2) tuples
+    """
+    if not multi_tf_data:
+        return []
+    
+    eqh_eql_levels = []
+    ohlcv = getattr(multi_tf_data, 'ohlcv_by_timeframe', None) or getattr(multi_tf_data, 'timeframes', {})
+    
+    for tf in allowed_tfs:
+        # Explicit None checks to avoid DataFrame ambiguous truth error
+        df = ohlcv.get(tf)
+        if df is None:
+            df = ohlcv.get(tf.lower())
+        if df is None:
+            df = ohlcv.get(tf.upper())
+        if df is None or len(df) < 10:
+            continue
+        
+        if is_bullish:
+            # Find equal highs above entry (liquidity above = target for longs)
+            highs = df['high'].values
+            for i in range(len(highs) - 1):
+                for j in range(i + 1, min(i + 20, len(highs))):  # Check next 20 bars
+                    if highs[i] > avg_entry and highs[j] > avg_entry:
+                        diff_pct = abs(highs[i] - highs[j]) / max(highs[i], 1e-12) * 100
+                        if diff_pct <= tolerance_pct:
+                            # Equal highs found! Use average as target
+                            eqh_level = (highs[i] + highs[j]) / 2
+                            eqh_eql_levels.append((eqh_level, tf, 2))
+                            break
+        else:
+            # Find equal lows below entry (liquidity below = target for shorts)
+            lows = df['low'].values
+            for i in range(len(lows) - 1):
+                for j in range(i + 1, min(i + 20, len(lows))):
+                    if lows[i] < avg_entry and lows[j] < avg_entry:
+                        diff_pct = abs(lows[i] - lows[j]) / max(lows[i], 1e-12) * 100
+                        if diff_pct <= tolerance_pct:
+                            eql_level = (lows[i] + lows[j]) / 2
+                            eqh_eql_levels.append((eql_level, tf, 2))
+                            break
+    
+    # Dedupe and sort
+    seen = set()
+    unique = []
+    for level, tf, score in eqh_eql_levels:
+        rounded = round(level, 6)
+        if rounded not in seen:
+            seen.add(rounded)
+            unique.append((level, tf, score))
+    
+    unique.sort(key=lambda x: abs(x[0] - avg_entry))
+    return unique[:5]
+
+
+def _calculate_fib_extensions(
+    is_bullish: bool,
+    avg_entry: float,
+    multi_tf_data: Optional['MultiTimeframeData'],
+    allowed_tfs: tuple,
+    mode_profile: str = 'balanced'
+) -> List[tuple]:
+    """
+    Calculate 1.618 Fib extensions from recent impulse move.
+    Score = 1 (supporting confluence).
+    
+    Mode-aware behavior:
+    - Scalp modes (Strike, Surgical): Skip entirely (Fibs are noise)
+    - Swing modes (Overwatch, Stealth): Use top 2 HTFs only
+    
+    Args:
+        is_bullish: True for long trades
+        avg_entry: Average entry price
+        multi_tf_data: Multi-timeframe candle data
+        allowed_tfs: Timeframes to scan (will be filtered by mode)
+        mode_profile: Scanner mode profile for mode-aware filtering
+        
+    Returns:
+        List of (level, ratio_label, score=1) tuples
+    """
+    if not multi_tf_data:
+        return []
+    
+    profile = (mode_profile or 'balanced').lower()
+    
+    # Skip Fibs entirely for scalp/intraday modes - too noisy
+    if profile in ('precision', 'surgical', 'intraday_aggressive', 'strike'):
+        logger.debug(f"Fib extensions skipped for {profile} mode (scalp noise)")
+        return []
+    
+    # Mode-specific Fib timeframes (top 2 HTFs only)
+    fib_tf_map = {
+        'macro_surveillance': ('1w', '1d'),  # Overwatch: Weekly + Daily
+        'overwatch': ('1w', '1d'),
+        'stealth_balanced': ('1d', '4h'),    # Stealth: Daily + 4H
+        'stealth': ('1d', '4h'),
+        'balanced': ('1d', '4h'),            # Default
+    }
+    
+    fib_tfs = fib_tf_map.get(profile, ('1d', '4h'))
+    
+    fib_levels = []
+    ohlcv = getattr(multi_tf_data, 'ohlcv_by_timeframe', None) or getattr(multi_tf_data, 'timeframes', {})
+    
+    for tf in fib_tfs:
+        # Explicit None checks to avoid DataFrame ambiguous truth error
+        df = ohlcv.get(tf)
+        if df is None:
+            df = ohlcv.get(tf.lower())
+        if df is None:
+            df = ohlcv.get(tf.upper())
+        if df is None or len(df) < 30:
+            continue
+        
+        try:
+            # Use recent 50 candles to find impulse
+            recent = df.tail(50)
+            swing_high = recent['high'].max()
+            swing_low = recent['low'].min()
+            impulse_range = swing_high - swing_low
+            
+            if impulse_range <= 0:
+                continue
+            
+            if is_bullish:
+                # Project 1.618 extension above swing high (skip 2.618 - too far)
+                fib_1618 = swing_high + (impulse_range * 0.618)
+                
+                if fib_1618 > avg_entry:
+                    fib_levels.append((fib_1618, f"{tf}-1.618", 1))
+            else:
+                # Project 1.618 extension below swing low
+                fib_1618 = swing_low - (impulse_range * 0.618)
+                
+                if fib_1618 < avg_entry and fib_1618 > 0:
+                    fib_levels.append((fib_1618, f"{tf}-1.618", 1))
+                    
+        except Exception as e:
+            logger.debug(f"Fib extension calc failed for {tf}: {e}")
+            continue
+    
+    fib_levels.sort(key=lambda x: abs(x[0] - avg_entry))
+    return fib_levels[:2]  # Max 2 Fib levels (one per HTF)
+
+
+def _get_unfilled_htf_fvgs(
+    is_bullish: bool,
+    avg_entry: float,
+    smc_snapshot: 'SMCSnapshot',
+    allowed_tfs: tuple
+) -> List[tuple]:
+    """
+    Get unfilled HTF FVGs as target magnets. Score = 1.
+    
+    Args:
+        is_bullish: True for long trades
+        avg_entry: Average entry price
+        smc_snapshot: SMC patterns detected
+        allowed_tfs: Allowed timeframes
+        
+    Returns:
+        List of (level, timeframe, score=1) tuples (uses FVG midpoint)
+    """
+    fvg_targets = []
+    
+    for fvg in smc_snapshot.fvgs:
+        tf = fvg.timeframe.lower() if fvg.timeframe else ''
+        if allowed_tfs and tf not in [t.lower() for t in allowed_tfs]:
+            continue
+        
+        # Use midpoint of FVG as target
+        fvg_mid = (fvg.top + fvg.bottom) / 2
+        
+        if is_bullish:
+            # Bearish FVGs above entry = resistance targets for longs
+            if fvg.direction == "bearish" and fvg_mid > avg_entry:
+                fvg_targets.append((fvg_mid, tf, 1))
+        else:
+            # Bullish FVGs below entry = support targets for shorts
+            if fvg.direction == "bullish" and fvg_mid < avg_entry:
+                fvg_targets.append((fvg_mid, tf, 1))
+    
+    fvg_targets.sort(key=lambda x: abs(x[0] - avg_entry))
+    return fvg_targets[:5]
+
+
 def _calculate_targets(
     is_bullish: bool,
     entry_zone: EntryZone,
@@ -2172,16 +2504,125 @@ def _calculate_targets(
     setup_archetype: SetupArchetype,
     regime_label: str,
     rr_scale: float = 1.0,
-    confluence_breakdown: Optional[ConfluenceBreakdown] = None
+    confluence_breakdown: Optional[ConfluenceBreakdown] = None,
+    multi_tf_data: Optional['MultiTimeframeData'] = None  # NEW: For HTF swing detection
 ) -> List[Target]:
     """
     Calculate tiered targets based on structure and R:R multiples.
+    
+    For swing modes (Overwatch, Stealth), uses HTF confluence scoring:
+    - Swing highs/lows, BOS levels, EQH/EQL, Fib extensions, unfilled FVGs
+    - Clusters nearby levels and ranks by confluence score
     
     Returns 3 targets: conservative, moderate, aggressive.
     """
     avg_entry = (entry_zone.near_entry + entry_zone.far_entry) / 2
     risk_distance = abs(avg_entry - stop_loss.level)
     allowed_tfs = _get_allowed_structure_tfs(config)
+    target_tfs = getattr(config, 'target_timeframes', allowed_tfs or ('1d', '4h', '1h'))
+    
+    # Determine if this is a swing mode that should use HTF confluence targeting
+    mode_profile = getattr(config, 'profile', 'balanced').lower()
+    is_swing_mode = mode_profile in ('macro_surveillance', 'overwatch', 'stealth_balanced', 'stealth')
+    
+    # === HTF CONFLUENCE TARGETING (Swing Modes Only) ===
+    if is_swing_mode and multi_tf_data:
+        logger.debug(f"Using HTF confluence targeting for {mode_profile} mode")
+        
+        # Debug: Check what timeframes are available vs requested
+        available_tfs_ohlcv = list(getattr(multi_tf_data, 'ohlcv_by_timeframe', {}).keys())
+        available_tfs_timeframes = list(getattr(multi_tf_data, 'timeframes', {}).keys())
+        logger.debug(f"HTF targeting: target_tfs={target_tfs}, available (ohlcv)={available_tfs_ohlcv}, available (timeframes)={available_tfs_timeframes}")
+        
+        # Collect all confluence levels with scores
+        all_levels = []
+        
+        # 1. HTF Swing Highs/Lows (score=1)
+        swing_levels = _find_htf_swing_targets(is_bullish, avg_entry, multi_tf_data, target_tfs)
+        logger.debug(f"  Swing levels: {len(swing_levels)} found")
+        all_levels.extend(swing_levels)
+        
+        # 2. BOS/CHoCH Levels (score=2)
+        bos_levels = _get_htf_bos_levels(is_bullish, avg_entry, smc_snapshot, target_tfs)
+        all_levels.extend(bos_levels)
+        
+        # 3. EQH/EQL Liquidity Pools (score=2)
+        eqh_eql_levels = _find_eqh_eql_zones(is_bullish, avg_entry, multi_tf_data, target_tfs)
+        all_levels.extend(eqh_eql_levels)
+        
+        # 4. Fib Extensions (score=1) - Mode-aware: skips scalps, uses top 2 HTFs
+        fib_levels = _calculate_fib_extensions(is_bullish, avg_entry, multi_tf_data, target_tfs, mode_profile)
+        all_levels.extend(fib_levels)
+        
+        # 5. Unfilled HTF FVGs (score=1)
+        fvg_levels = _get_unfilled_htf_fvgs(is_bullish, avg_entry, smc_snapshot, target_tfs)
+        all_levels.extend(fvg_levels)
+        
+        logger.debug(f"HTF confluence: found {len(all_levels)} candidate levels")
+        
+        if all_levels:
+            # Cluster nearby levels (within 0.3% band) and sum scores
+            cluster_tolerance = avg_entry * 0.003  # 0.3% band
+            clusters = []
+            
+            for level, source, score in all_levels:
+                # Find existing cluster that this level belongs to
+                found_cluster = False
+                for cluster in clusters:
+                    if abs(cluster['center'] - level) <= cluster_tolerance:
+                        cluster['levels'].append((level, source, score))
+                        cluster['total_score'] += score
+                        # Update center to weighted average
+                        all_lvls = [l[0] for l in cluster['levels']]
+                        cluster['center'] = sum(all_lvls) / len(all_lvls)
+                        found_cluster = True
+                        break
+                
+                if not found_cluster:
+                    clusters.append({
+                        'center': level,
+                        'levels': [(level, source, score)],
+                        'total_score': score
+                    })
+            
+            # Sort clusters by confluence score (descending)
+            clusters.sort(key=lambda c: c['total_score'], reverse=True)
+            
+            # Log top clusters
+            for i, c in enumerate(clusters[:5]):
+                sources = [f"{s}({sc})" for _, s, sc in c['levels']]
+                logger.debug(f"  Cluster {i+1}: {c['center']:.4f} score={c['total_score']} sources={sources}")
+            
+            # Create targets from top clusters
+            targets = []
+            # Lower min R:R for HTF confluence targets (structurally validated = higher probability)
+            # Standard RR targets require 2.0+, but HTF structure only needs 1.2
+            htf_min_rr = 1.2  
+            
+            for i, cluster in enumerate(clusters[:3]):
+                target_level = cluster['center']
+                
+                # Validate R:R (use lower threshold for HTF confluence)
+                if is_bullish:
+                    computed_rr = (target_level - avg_entry) / risk_distance if risk_distance > 0 else 0
+                else:
+                    computed_rr = (avg_entry - target_level) / risk_distance if risk_distance > 0 else 0
+                
+                if computed_rr >= htf_min_rr:
+                    sources = [s for _, s, _ in cluster['levels'][:3]]
+                    source_str = '+'.join(sources)
+                    targets.append(Target(
+                        level=target_level,
+                        percentage=[50.0, 30.0, 20.0][i] if i < 3 else 20.0,
+                        rationale=f"HTF confluence ({cluster['total_score']}pts): {source_str} RR≈{computed_rr:.2f}"
+                    ))
+            
+            # If we have valid HTF targets, return them
+            if targets:
+                logger.info(f"HTF confluence targeting: {len(targets)} targets from {len(clusters)} clusters")
+                return targets
+            else:
+                logger.warning("No HTF targets met minimum R:R, falling back to RR multiples")
     
     targets = []
     

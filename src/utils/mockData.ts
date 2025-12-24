@@ -26,6 +26,8 @@ export interface ScanResult {
   usedStopBufferAtr?: number;
   altStopLevel?: number;
   altStopRationale?: string;
+  timeframe?: string;
+
 
   // Phase 1-5 enhancements
   plan_type?: PlanType;

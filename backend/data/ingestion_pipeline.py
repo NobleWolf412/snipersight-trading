@@ -36,6 +36,43 @@ class IngestionPipeline:
         cache_status = "enabled" if use_cache else "disabled"
         logger.info(f"Ingestion pipeline initialized with {adapter.__class__.__name__} (cache: {cache_status})")
 
+    @staticmethod
+    def get_limit_for_mode(timeframe: str, mode_profile: str = "balanced") -> int:
+        """
+        Get appropriate candle limit based on timeframe and mode profile.
+        
+        Swing modes (overwatch, stealth) need more HTF candles for proper
+        swing high/low detection. Intraday modes (surgical, strike) use
+        standard limits to avoid unnecessary data.
+        
+        Args:
+            timeframe: Timeframe string (e.g., '1w', '1d', '4h')
+            mode_profile: Scanner mode profile name
+        
+        Returns:
+            Number of candles to fetch
+        """
+        tf_lower = timeframe.lower()
+        profile_lower = (mode_profile or "balanced").lower()
+        
+        # Swing modes: more candles on HTF for swing detection
+        is_swing_mode = profile_lower in ('macro_surveillance', 'overwatch', 'stealth_balanced', 'stealth')
+        
+        if is_swing_mode:
+            if tf_lower in ('1w', '1m'):  # 1M = monthly
+                return 500  # ~10 years weekly, already sufficient
+            elif tf_lower == '1d':
+                return 750  # ~2 years daily
+            elif tf_lower == '4h':
+                return 750  # ~125 days
+            elif tf_lower == '1h':
+                return 750  # ~31 days
+            else:
+                return 500  # LTF stays standard
+        else:
+            # Intraday modes: standard limits
+            return 500
+
     def fetch_multi_timeframe(
         self,
         symbol: str,

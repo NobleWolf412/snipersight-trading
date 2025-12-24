@@ -58,17 +58,24 @@ export function LightweightChart({
     const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<CandlestickData[]>([]);
 
-    // Helper to determine candle limit based on timeframe
+    // Helper to determine reasonable limits based on timeframe
     const getLimitForTimeframe = (tf: string): number => {
-        switch (tf.toLowerCase()) {
-            case '1w': return 150;
-            case '1d': return 300;
-            case '4h': return 500;
-            case '1h': return 600;
-            case '15m': return 700;
-            case '5m': return 700;
-            case '1m': return 300;
-            default: return 300;
+        // Phemex API often requires higher limits (>=500) for consistent pagination/alignment
+        switch (tf) {
+            case '1M':
+            case '1w':
+                return 500; // Was 150, bumped for API safety
+            case '1d':
+                return 500; // Was 150
+            case '4h':
+            case '1h':
+                return 500; // Good
+            case '15m':
+            case '5m':
+            case '1m':
+                return 1000; // Higher fidelity for lower TFs
+            default:
+                return 500;
         }
     };
 
@@ -266,38 +273,20 @@ export function LightweightChart({
             zoneSeries.setData(zoneData);
             zoneSeriesRefs.current.push(zoneSeries);
 
-            // Add boundary lines with labels
-            const tfLabel = ob.timeframe ? ` (${ob.timeframe.toUpperCase()})` : '';
-            const emoji = ob.timeframe ? '' : (isBullish ? '🔵' : '🟠');
-
-            candleSeries.createPriceLine({
-                price: ob.price_high,
-                color: lineColor,
-                lineWidth: 2,
-                lineStyle: 0, // Solid
-                axisLabelVisible: true,
-                title: `${emoji} OB${index + 1}${tfLabel} Top`,
-            });
-
-            candleSeries.createPriceLine({
-                price: ob.price_low,
-                color: lineColor,
-                lineWidth: 1,
-                lineStyle: 2, // Dashed
-                axisLabelVisible: true,
-                title: `${emoji} OB${index + 1}${tfLabel} Bot`,
-            });
+            // NOTE: Removed OB boundary price lines (Top/Bot) to reduce chart clutter.
+            // The shaded baseline zones provide sufficient visual indication.
         });
 
         // Always show entry/SL/TP lines (important trade levels)
+        // axisLabelVisible: false removes the filled color rectangles on price axis
         if (entryPrice) {
             candleSeries.createPriceLine({
                 price: entryPrice,
                 color: '#00ff88',
                 lineWidth: 2,
                 lineStyle: 0,
-                axisLabelVisible: true,
-                title: 'ENTRY',
+                axisLabelVisible: false,
+                title: 'E',
             });
         }
 
@@ -307,8 +296,8 @@ export function LightweightChart({
                 color: '#ff4444',
                 lineWidth: 2,
                 lineStyle: 0,
-                axisLabelVisible: true,
-                title: 'STOP',
+                axisLabelVisible: false,
+                title: 'SL',
             });
         }
 
@@ -318,7 +307,7 @@ export function LightweightChart({
                 color: '#00ff88',
                 lineWidth: 2,
                 lineStyle: 0,
-                axisLabelVisible: true,
+                axisLabelVisible: false,
                 title: 'TP',
             });
         }

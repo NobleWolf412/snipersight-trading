@@ -39,33 +39,19 @@ export function MultiTimeframeChartGrid({
     className,
 }: MultiTimeframeChartGridProps) {
 
-    // Determine layout based on number of timeframes
-    const tfCount = timeframes.length;
+    // Always use composite 3-panel layout with labels for consistency across all modes
+    // Previously, modes with <= 4 TFs used a simple 2x2 grid without labels
 
-    if (tfCount <= 4) {
-        // Simple 2×2 grid for 4 or fewer timeframes
-        return (
-            <div className={cn('grid grid-cols-2 gap-4', className)}>
-                {timeframes.map((tf) => (
-                    <div key={tf} className="h-[400px]">
-                        <LightweightChart
-                            symbol={symbol}
-                            timeframe={tf}
-                            orderBlocks={orderBlocksByTimeframe[tf] || []}
-                            entryPrice={entryPrice}
-                            stopLoss={stopLoss}
-                            takeProfit={takeProfit}
-                        />
-                    </div>
-                ))}
-            </div>
-        );
-    }
-
-    // 5-6 TFs: Composite 3-panel layout
     // Determine the active mode's configuration
     const { scannerModes } = useScanner();
-    const activeMode = scannerModes.find(m => m.name.toLowerCase() === mode.toLowerCase()) || scannerModes[0];
+    const activeMode = (scannerModes && scannerModes.length > 0)
+        ? (scannerModes.find(m => m.name.toLowerCase() === mode.toLowerCase()) || scannerModes[0])
+        : {
+            name: 'Default',
+            structure_timeframes: ['1w', '1d'],
+            zone_timeframes: ['4h', '1h'],
+            entry_timeframes: ['15m', '5m']
+        }; // Safe fallback to prevent crash
 
     // Helper: Find which category a set of timeframes belongs to
     const categorizeTimeframes = () => {
@@ -106,12 +92,13 @@ export function MultiTimeframeChartGrid({
 
     const structurePrimaryTF = finalStructure[0] || '1d';
     const zonePrimaryTF = finalZone[0] || '4h';
-    const entryPrimaryTF = finalEntry[0] || '15m';
+    // Fix: Select smallest timeframe (last in array) for Entry execution
+    const entryPrimaryTF = finalEntry[finalEntry.length - 1] || '15m';
 
     return (
         <div className={cn('grid grid-cols-2 gap-4', className)}>
             {/* Top row: Structure chart (full width) */}
-            {structureOBs.length > 0 && (
+            {finalStructure.length > 0 && (
                 <div className="col-span-2 h-[350px] relative group border border-white/5 rounded-xl bg-black/20">
                     <div className="absolute top-2 right-2 z-10 px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-[10px] font-bold text-blue-400 tracking-wider">
                         🛡️ STRUCTURE
@@ -123,14 +110,14 @@ export function MultiTimeframeChartGrid({
                         entryPrice={entryPrice}
                         stopLoss={stopLoss}
                         takeProfit={takeProfit}
-                        title={`BIAS (${finalStructure.map(tf => tf.toUpperCase()).join(' + ')})`}
+                        title={`BIAS (${structurePrimaryTF.toUpperCase()})`}
                         showLegend={true}
                     />
                 </div>
             )}
 
             {/* Bottom Left: Zone chart (The Setup) */}
-            {zoneOBs.length > 0 && (
+            {finalZone.length > 0 && (
                 <div className="h-[400px] relative group rounded-xl border border-amber-500/50 shadow-[0_0_30px_-10px_rgba(255,170,0,0.3)] overflow-hidden bg-black/20">
                     <div className="absolute top-2 right-2 z-10 px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 rounded text-[10px] font-bold text-amber-400 tracking-wider animate-pulse">
                         🎯 ZONE
@@ -142,14 +129,14 @@ export function MultiTimeframeChartGrid({
                         entryPrice={entryPrice}
                         stopLoss={stopLoss}
                         takeProfit={takeProfit}
-                        title={`SETUP (${finalZone.map(tf => tf.toUpperCase()).join(' + ')})`}
+                        title={`SETUP (${zonePrimaryTF.toUpperCase()})`}
                         showLegend={true}
                     />
                 </div>
             )}
 
             {/* Bottom Right: Entry chart (The Trigger) */}
-            {entryOBs.length > 0 && (
+            {finalEntry.length > 0 && (
                 <div className="h-[400px] relative group border border-white/5 rounded-xl bg-black/20">
                     <div className="absolute top-2 right-2 z-10 px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/30 rounded text-[10px] font-bold text-emerald-400 tracking-wider">
                         ⚡ TRIGGER
@@ -161,7 +148,7 @@ export function MultiTimeframeChartGrid({
                         entryPrice={entryPrice}
                         stopLoss={stopLoss}
                         takeProfit={takeProfit}
-                        title={`EXECUTION (${finalEntry.map(tf => tf.toUpperCase()).join(' + ')})`}
+                        title={`EXECUTION (${entryPrimaryTF.toUpperCase()})`}
                         showLegend={true}
                     />
                 </div>

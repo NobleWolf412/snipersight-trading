@@ -70,149 +70,170 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
     // Determine scanner mode from metadata
     const scannerMode = metadata?.mode || 'surgical';
 
-    return (
-        <div className="h-full flex flex-col bg-black/20 backdrop-blur-sm relative">
-            {/* Mobile Close Button */}
-            {onClose && (
-                <button onClick={onClose} className="lg:hidden absolute top-4 left-4 z-50 p-2 bg-black/60 rounded-full border border-white/10 text-white">
-                    <CaretRight size={20} className="rotate-180" />
-                </button>
-            )}
+    // Debug: Log incoming data to help diagnosis
+    console.log('[IntelDossier] Rendering for:', result.pair, {
+        mode: scannerMode,
+        timeframes: scannedTimeframes,
+        obs: Object.keys(orderBlocksByTimeframe).length
+    });
 
-            {/* Hero Header */}
-            <div className="p-6 border-b border-[#00ff88]/20 bg-gradient-to-r from-[#00ff88]/5 to-transparent">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                        <div className="flex items-center gap-3 mb-1">
-                            <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-white">{result.pair}</h1>
-                            <Badge variant="outline" className={cn("text-xs px-2 py-0.5 border font-mono tracking-wider", isBullish ? "border-green-500/50 text-green-400 bg-green-500/10" : "border-red-500/50 text-red-400 bg-red-500/10")}>
-                                {result.trendBias}
-                            </Badge>
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground font-mono">
-                            <span className="flex items-center gap-1">
-                                Ref: <span className="text-white font-bold">${displayPrice.toFixed(displayPrice < 1 ? 5 : 2)}</span>
-                            </span>
-                            <span className="w-px h-3 bg-white/20" />
-                            <RegimeIndicator regime={regime} size="xs" compact />
-                        </div>
-                    </div>
+    try {
+        return (
+            <div className="h-full flex flex-col bg-black/20 backdrop-blur-sm relative">
+                {/* Mobile Close Button */}
+                {onClose && (
+                    <button onClick={onClose} className="lg:hidden absolute top-4 left-4 z-50 p-2 bg-black/60 rounded-full border border-white/10 text-white">
+                        <CaretRight size={20} className="rotate-180" />
+                    </button>
+                )}
 
-                    <div className="flex gap-3">
-                        <Button variant="outline" onClick={copySignal} className="font-mono text-xs border-white/10 hover:bg-white/5 gap-2">
-                            <Copy size={14} /> COPY
-                        </Button>
-                        <Button className="bg-[#00ff88] text-black hover:bg-[#00ff88]/90 font-bold font-mono tracking-wider gap-2">
-                            <Crosshair size={18} weight="bold" /> EXECUTE PLAN
-                        </Button>
+                {/* Hero Header */}
+                <div className="p-6 border-b border-[#00ff88]/20 bg-gradient-to-r from-[#00ff88]/5 to-transparent">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <div className="flex items-center gap-3 mb-1">
+                                <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-white">{result.pair}</h1>
+                                <Badge variant="outline" className={cn("text-xs px-2 py-0.5 border font-mono tracking-wider", isBullish ? "border-green-500/50 text-green-400 bg-green-500/10" : "border-red-500/50 text-red-400 bg-red-500/10")}>
+                                    {result.trendBias}
+                                </Badge>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground font-mono">
+                                <span className="flex items-center gap-1">
+                                    Ref: <span className="text-white font-bold">${displayPrice.toFixed(displayPrice < 1 ? 5 : 2)}</span>
+                                </span>
+                                <span className="w-px h-3 bg-white/20" />
+                                <RegimeIndicator regime={regime} size="xs" compact />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <Button variant="outline" onClick={copySignal} className="font-mono text-xs border-white/10 hover:bg-white/5 gap-2">
+                                <Copy size={14} /> COPY
+                            </Button>
+                            <Button className="bg-[#00ff88] text-black hover:bg-[#00ff88]/90 font-bold font-mono tracking-wider gap-2">
+                                <Crosshair size={18} weight="bold" /> EXECUTE PLAN
+                            </Button>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Main Content Tabs */}
-            <div className="flex-1 overflow-hidden flex flex-col">
-                <Tabs defaultValue="overview" className="flex-1 flex flex-col" onValueChange={setActiveTab}>
-                    <div className="px-6 pt-4 border-b border-[#00ff88]/10">
-                        <TabsList className="bg-black/40 border border-[#00ff88]/20">
-                            <TabsTrigger value="overview" className="gap-2 font-mono text-xs tracking-wider data-[state=active]:bg-[#00ff88]/20 data-[state=active]:text-[#00ff88]">
-                                <ChartLineUp size={14} /> OVERVIEW
-                            </TabsTrigger>
-                            <TabsTrigger value="analysis" className="gap-2 font-mono text-xs tracking-wider data-[state=active]:bg-[#00ff88]/20 data-[state=active]:text-[#00ff88]">
-                                <ShieldWarning size={14} /> INTEL & RISKS
-                            </TabsTrigger>
-                            <TabsTrigger value="plan" className="gap-2 font-mono text-xs tracking-wider data-[state=active]:bg-[#00ff88]/20 data-[state=active]:text-[#00ff88]">
-                                <Crosshair size={14} /> TRADE PLAN
-                            </TabsTrigger>
-                        </TabsList>
-                    </div>
+                {/* Main Content Tabs */}
+                <div className="flex-1 overflow-hidden flex flex-col">
+                    <Tabs defaultValue="overview" className="flex-1 flex flex-col" onValueChange={setActiveTab}>
+                        <div className="px-6 pt-4 border-b border-[#00ff88]/10">
+                            <TabsList className="bg-black/40 border border-[#00ff88]/20">
+                                <TabsTrigger value="overview" className="gap-2 font-mono text-xs tracking-wider data-[state=active]:bg-[#00ff88]/20 data-[state=active]:text-[#00ff88]">
+                                    <ChartLineUp size={14} /> OVERVIEW
+                                </TabsTrigger>
+                                <TabsTrigger value="analysis" className="gap-2 font-mono text-xs tracking-wider data-[state=active]:bg-[#00ff88]/20 data-[state=active]:text-[#00ff88]">
+                                    <ShieldWarning size={14} /> INTEL & RISKS
+                                </TabsTrigger>
+                                <TabsTrigger value="plan" className="gap-2 font-mono text-xs tracking-wider data-[state=active]:bg-[#00ff88]/20 data-[state=active]:text-[#00ff88]">
+                                    <Crosshair size={14} /> TRADE PLAN
+                                </TabsTrigger>
+                            </TabsList>
+                        </div>
 
-                    <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-[#00ff88]/20 scrollbar-track-transparent">
+                        <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-[#00ff88]/20 scrollbar-track-transparent">
 
-                        {/* OVERVIEW TAB */}
-                        <TabsContent value="overview" className="mt-0 space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            {/* Key Metrics Grid */}
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                <MetricCard label="Confluence" value={`${result.confidenceScore}%`} color={result.confidenceScore >= 80 ? 'green' : 'amber'} />
-                                <MetricCard label="Expected Value" value={`${(result.metadata as any)?.ev?.expected_value || '0.0'}R`} color="cyan" />
-                                <MetricCard label="Risk:Reward" value={`${result.riskReward || 0}:1`} color="white" />
-                                <MetricCard label="Classification" value={result.classification || 'SWING'} color="purple" />
-                            </div>
+                            {/* OVERVIEW TAB */}
+                            <TabsContent value="overview" className="mt-0 space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                {/* Key Metrics Grid */}
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <MetricCard label="Confluence" value={`${result.confidenceScore}%`} color={result.confidenceScore >= 80 ? 'green' : 'amber'} />
+                                    <MetricCard label="Expected Value" value={`${(result.metadata as any)?.ev?.expected_value || '0.0'}R`} color="cyan" />
+                                    <MetricCard label="Risk:Reward" value={`${result.riskReward || 0}:1`} color="white" />
+                                    <MetricCard label="Classification" value={result.classification || 'SWING'} color="purple" />
+                                </div>
 
-                            {/* Multi-Timeframe Charts with Order Blocks */}
-                            <div className="w-full">
-                                {scannedTimeframes.length > 0 ? (
-                                    <MultiTimeframeChartGrid
-                                        symbol={result.pair}
-                                        mode={scannerMode}
-                                        timeframes={scannedTimeframes}
-                                        orderBlocksByTimeframe={orderBlocksByTimeframe}
-                                        entryPrice={entryPrice}
-                                        stopLoss={stopPrice}
-                                        takeProfit={targetPrice}
-                                    />
-                                ) : (
-                                    // Fallback to single chart if no timeframe data
-                                    <div className="aspect-video w-full rounded-xl border border-[#00ff88]/20 bg-black/40 overflow-hidden">
-                                        <LightweightChart
+                                {/* Multi-Timeframe Charts with Order Blocks */}
+                                <div className="w-full">
+                                    {scannedTimeframes.length > 0 ? (
+                                        <MultiTimeframeChartGrid
                                             symbol={result.pair}
-                                            timeframe={result.timeframe || '1h'}
-                                            orderBlocks={(result.metadata as any)?.order_blocks || []}
+                                            mode={scannerMode}
+                                            timeframes={scannedTimeframes}
+                                            orderBlocksByTimeframe={orderBlocksByTimeframe}
                                             entryPrice={entryPrice}
                                             stopLoss={stopPrice}
                                             takeProfit={targetPrice}
                                         />
-                                    </div>
-                                )}
-                            </div>
-                        </TabsContent>
-
-                        {/* ANALYSIS TAB */}
-                        <TabsContent value="analysis" className="mt-0 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            <section>
-                                <h3 className="text-lg font-bold hud-headline mb-4 flex items-center gap-2">
-                                    <CheckCircle className="text-[#00ff88]" /> CONFIRMED FACTORS
-                                </h3>
-                                {/* Reusing existing component but styled for panel */}
-                                <div className="prose prose-invert max-w-none">
-                                    <ul className="grid gap-2">
-                                        {factors.map((factor, i) => (
-                                            <li key={i} className="flex gap-2 p-3 bg-black/40 rounded border border-white/5 text-sm">
-                                                <span className="text-[#00ff88] font-bold">✓</span> {formatFactor(factor)}
-                                            </li>
-                                        ))}
-                                    </ul>
+                                    ) : (
+                                        // Fallback to single chart if no timeframe data
+                                        <div className="aspect-video w-full rounded-xl border border-[#00ff88]/20 bg-black/40 overflow-hidden">
+                                            <LightweightChart
+                                                symbol={result.pair}
+                                                timeframe={result.timeframe || '1h'}
+                                                orderBlocks={(result.metadata as any)?.order_blocks || []}
+                                                entryPrice={entryPrice}
+                                                stopLoss={stopPrice}
+                                                takeProfit={targetPrice}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
-                            </section>
+                            </TabsContent>
 
-                            <section>
-                                <h3 className="text-lg font-bold hud-headline mb-4 flex items-center gap-2 text-amber-400">
-                                    <Warning weight="fill" /> RISK FACTORS
-                                </h3>
-                                <WarningsContext results={[result]} metadata={metadata} embedded />
-                            </section>
-                        </TabsContent>
+                            {/* ANALYSIS TAB */}
+                            <TabsContent value="analysis" className="mt-0 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                <section>
+                                    <h3 className="text-lg font-bold hud-headline mb-4 flex items-center gap-2">
+                                        <CheckCircle className="text-[#00ff88]" /> CONFIRMED FACTORS
+                                    </h3>
+                                    {/* Reusing existing component but styled for panel */}
+                                    <div className="prose prose-invert max-w-none">
+                                        <ul className="grid gap-2">
+                                            {factors.map((factor, i) => (
+                                                <li key={i} className="flex gap-2 p-3 bg-black/40 rounded border border-white/5 text-sm">
+                                                    <span className="text-[#00ff88] font-bold">✓</span> {formatFactor(factor)}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                </section>
 
-                        {/* PLAN TAB */}
-                        <TabsContent value="plan" className="mt-0 space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            <div className="grid gap-4 md:grid-cols-3">
-                                <PlanCard title="ENTRY ZONE" value={`$${entryPrice.toFixed(2)}`} type="entry" />
-                                <PlanCard title="STOP LOSS" value={`$${stopPrice.toFixed(2)}`} type="stop" />
-                                <PlanCard title="TAKE PROFIT" value={`$${targetPrice.toFixed(2)}`} type="target" />
-                            </div>
+                                <section>
+                                    <h3 className="text-lg font-bold hud-headline mb-4 flex items-center gap-2 text-amber-400">
+                                        <Warning weight="fill" /> RISK FACTORS
+                                    </h3>
+                                    <WarningsContext results={[result]} metadata={metadata} embedded />
+                                </section>
+                            </TabsContent>
 
-                            <div className="p-4 rounded-xl border border-[#00ff88]/20 bg-[#00ff88]/5">
-                                <h4 className="text-sm font-bold font-mono text-[#00ff88] mb-2 uppercase tracking-widest">Strategy Note</h4>
-                                <p className="text-sm text-muted-foreground leading-relaxed">
-                                    {(result as any).rationale || "No specific strategy notes generated for this setup."}
-                                </p>
-                            </div>
-                        </TabsContent>
+                            {/* PLAN TAB */}
+                            <TabsContent value="plan" className="mt-0 space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                <div className="grid gap-4 md:grid-cols-3">
+                                    <PlanCard title="ENTRY ZONE" value={`$${entryPrice.toFixed(2)}`} type="entry" />
+                                    <PlanCard title="STOP LOSS" value={`$${stopPrice.toFixed(2)}`} type="stop" />
+                                    <PlanCard title="TAKE PROFIT" value={`$${targetPrice.toFixed(2)}`} type="target" />
+                                </div>
 
-                    </div>
-                </Tabs>
+                                <div className="p-4 rounded-xl border border-[#00ff88]/20 bg-[#00ff88]/5">
+                                    <h4 className="text-sm font-bold font-mono text-[#00ff88] mb-2 uppercase tracking-widest">Strategy Note</h4>
+                                    <p className="text-sm text-muted-foreground leading-relaxed">
+                                        {(result as any).rationale || "No specific strategy notes generated for this setup."}
+                                    </p>
+                                </div>
+                            </TabsContent>
+
+                        </div>
+                    </Tabs>
+                </div>
             </div>
-        </div>
-    );
+        );
+    } catch (e: any) {
+        return (
+            <div className="p-10 text-center">
+                <h2 className="text-red-500 font-bold text-xl mb-4">CRITICAL DOSSIER RENDER FAILURE</h2>
+                <div className="p-4 bg-red-950/30 rounded border border-red-500/50 text-left font-mono text-xs overflow-auto">
+                    {e.toString()}
+                </div>
+                <div className="mt-4 text-xs text-muted-foreground">
+                    Please provide this error log to development.
+                </div>
+            </div>
+        );
+    }
 }
 
 function MetricCard({ label, value, color }: { label: string; value: string; color: string }) {
