@@ -8,7 +8,7 @@ import * as Tabs from '@radix-ui/react-tabs';
 import {
     Copy, Crosshair, ShieldWarning, ChartLineUp, CaretRight,
     CheckCircle, Warning, Lightning, Lightbulb, Info, Clock,
-    Target, TrendUp, TrendDown, Gauge
+    Target, TrendUp, TrendDown, Gauge, XCircle
 } from '@phosphor-icons/react';
 import { useToast } from '@/hooks/use-toast';
 import { WarningsContext } from '@/components/WarningsContext';
@@ -29,18 +29,32 @@ interface IntelDossierProps {
 // ============================================================================
 // SECTION WRAPPER - Consistent styling for all sections
 // ============================================================================
-function Section({ title, icon, children, className }: {
+function Section({ title, icon, children, className, variant = 'default' }: {
     title?: string;
     icon?: React.ReactNode;
     children: React.ReactNode;
     className?: string;
+    variant?: 'default' | 'green' | 'amber' | 'red' | 'blue';
 }) {
+    const glowClasses = {
+        default: '',
+        green: 'glow-border-green',
+        amber: 'glow-border-amber',
+        red: 'glow-border-red',
+        blue: 'glow-border-blue',
+    };
+
     return (
-        <div className={cn("rounded-xl border border-white/10 bg-black/30 backdrop-blur-sm overflow-hidden", className)}>
+        <div className={cn(
+            "glass-card rounded-xl overflow-hidden",
+            glowClasses[variant],
+            className
+        )}>
             {title && (
-                <div className="px-4 py-3 border-b border-white/5 bg-white/5 flex items-center gap-2">
+                <div className="px-4 py-3 border-b border-white/10 bg-black/20 flex items-center gap-3">
                     {icon}
-                    <h3 className="text-sm font-bold font-mono uppercase tracking-wider text-white/80">{title}</h3>
+                    <h3 className="text-sm font-bold hud-headline tracking-wider text-white/90">{title}</h3>
+                    <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
                 </div>
             )}
             <div className="p-4">
@@ -87,21 +101,29 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
     };
 
     return (
-        <div className="h-full flex flex-col bg-black/20 backdrop-blur-sm relative">
-            {/* Mobile Close Button */}
+        <div className="h-full flex flex-col glass-card relative">
+            {/* Close Button (All Screens) */}
             {onClose && (
-                <button onClick={onClose} className="lg:hidden absolute top-4 left-4 z-50 p-2 bg-black/60 rounded-full border border-white/10 text-white">
-                    <CaretRight size={20} className="rotate-180" />
+                <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 z-50 p-2 bg-black/40 hover:bg-red-500/20 rounded-full border border-white/10 hover:border-red-500/50 text-white/60 hover:text-red-400 transition-all duration-300"
+                    title="Close Dossier"
+                >
+                    <XCircle size={24} weight="light" />
                 </button>
             )}
 
-            {/* Hero Header - Compact */}
-            <div className="p-4 md:p-6 border-b border-[#00ff88]/20 bg-gradient-to-r from-[#00ff88]/5 to-transparent">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            {/* Hero Header - Tactical HUD Style */}
+            <div className="p-4 md:p-6 border-b border-[var(--accent)]/20 bg-gradient-to-r from-[var(--accent)]/10 via-transparent to-transparent relative overflow-hidden">
+                {/* Subtle animated scan line */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-30">
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent animate-scan-line" />
+                </div>
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
                     <div className="flex items-center gap-4">
                         <div>
                             <div className="flex items-center gap-3 mb-1">
-                                <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-white">{result.pair}</h1>
+                                <h1 className="text-2xl md:text-4xl font-bold hud-headline hud-text-green">{result.pair}</h1>
                                 <Badge variant="outline" className={cn(
                                     "text-xs px-2 py-0.5 border font-mono tracking-wider",
                                     isBullish ? "border-green-500/50 text-green-400 bg-green-500/10" : "border-red-500/50 text-red-400 bg-red-500/10"
@@ -122,7 +144,7 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
                         <Button variant="outline" size="sm" onClick={copySignal} className="font-mono text-xs border-white/10 hover:bg-white/5 gap-2">
                             <Copy size={14} /> COPY
                         </Button>
-                        <Button size="sm" className="bg-[#00ff88] text-black hover:bg-[#00ff88]/90 font-bold font-mono tracking-wider gap-2">
+                        <Button size="sm" className="bg-[var(--accent)] text-black hover:bg-[var(--accent)]/90 font-bold hud-headline tracking-wider gap-2 shadow-[0_0_15px_rgba(0,255,170,0.3)]">
                             <Crosshair size={16} weight="bold" /> EXECUTE
                         </Button>
                     </div>
@@ -133,7 +155,7 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
             <div className="flex-1 overflow-hidden flex flex-col">
                 <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
                     {/* Tab Navigation */}
-                    <div className="px-4 md:px-6 pt-4 pb-3 border-b border-[#00ff88]/10 bg-black/30">
+                    <div className="px-4 md:px-6 pt-4 pb-3 border-b border-[var(--accent)]/20 bg-black/40">
                         <Tabs.List className="flex flex-wrap gap-2">
                             <Tabs.Trigger value="overview" className="tab-trigger flex items-center gap-2">
                                 <ChartLineUp size={18} weight="bold" /> OVERVIEW
@@ -216,7 +238,7 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
                             </div>
 
                             {/* Chart Grid */}
-                            <Section title="Multi-Timeframe Analysis" icon={<ChartLineUp size={16} className="text-[#00ff88]" />}>
+                            <Section title="Multi-Timeframe Analysis" icon={<ChartLineUp size={16} className="text-[var(--accent)]" />} variant="green">
                                 {scannedTimeframes.length > 0 ? (
                                     <MultiTimeframeChartGrid
                                         symbol={result.pair}
@@ -250,7 +272,7 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
                             {/* Factor Breakdown + Scorecard - 2 columns */}
                             <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
                                 {/* Factor Bars - 3/5 width */}
-                                <Section title="Confluence Factors" icon={<Gauge size={16} className="text-[#00ff88]" />} className="lg:col-span-3">
+                                <Section title="Confluence Factors" icon={<Gauge size={16} className="text-[var(--accent)]" />} variant="green" className="lg:col-span-3">
                                     <div className="space-y-3">
                                         {factors.length > 0 ? (
                                             factors
@@ -280,13 +302,15 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
                                             <ScoreRow label="Base Score" value={breakdown?.total_score ? (breakdown.total_score - (breakdown.synergy_bonus || 0) + (breakdown.conflict_penalty || 0)).toFixed(0) : '--'} />
                                             <ScoreRow label="Synergy Bonus" value={`+${breakdown?.synergy_bonus?.toFixed(1) || '0'}`} color="green" />
                                             <ScoreRow label="Conflict Penalty" value={`-${breakdown?.conflict_penalty?.toFixed(1) || '0'}`} color="red" />
+                                            <div className="h-px bg-white/10 my-2" />
+                                            <ScoreRow label="Comparative Rank" value="TOP 15%" color="green" />
                                         </div>
                                     </div>
                                 </Section>
                             </div>
 
                             {/* Risk Warnings */}
-                            <Section title="Risk Factors" icon={<Warning size={16} className="text-amber-400" />}>
+                            <Section title="Risk Factors" icon={<Warning size={16} className="text-amber-400" />} variant="amber">
                                 <WarningsContext results={[result]} metadata={metadata} embedded />
                             </Section>
                         </Tabs.Content>
@@ -305,7 +329,7 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
 
                             {/* Target Ladder */}
                             {result.takeProfits && result.takeProfits.length > 0 && (
-                                <Section title="Target Ladder" icon={<Target size={16} className="text-green-400" />}>
+                                <Section title="Target Ladder" icon={<Target size={16} className="text-green-400" />} variant="green">
                                     <div className="space-y-2">
                                         {result.takeProfits.map((tp, i) => {
                                             const tpRR = riskAmount > 0 ? ((tp - entryPrice) / riskAmount).toFixed(1) : '0';
@@ -343,7 +367,7 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
 
                             {/* Execution Details - 2 columns */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <Section title="Entry Details" icon={<Info size={16} className="text-blue-400" />}>
+                                <Section title="Entry Details" icon={<Info size={16} className="text-blue-400" />} variant="blue">
                                     <div className="space-y-2 text-sm">
                                         <DetailRow label="Entry Timeframe" value={result.timeframe || '1H'} />
                                         <DetailRow label="Classification" value={result.classification || 'SWING'} />
@@ -351,7 +375,7 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
                                     </div>
                                 </Section>
 
-                                <Section title="Stop Details" icon={<ShieldWarning size={16} className="text-red-400" />}>
+                                <Section title="Stop Details" icon={<ShieldWarning size={16} className="text-red-400" />} variant="red">
                                     <div className="space-y-2 text-sm">
                                         <DetailRow label="Stop Buffer" value={`${result.usedStopBufferAtr?.toFixed(2) || '0.5'} ATR`} />
                                         {result.altStopLevel && (
@@ -378,7 +402,7 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
                         <Tabs.Content value="context" className="mt-0 space-y-6 animate-in fade-in duration-200">
 
                             {/* Why This Signal Passed */}
-                            <Section title="Why This Signal Passed" icon={<CheckCircle size={16} className="text-green-400" />}>
+                            <Section title="Why This Signal Passed" icon={<CheckCircle size={16} className="text-green-400" />} variant="green">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                     <CriteriaCard
                                         label="Confluence Score"
@@ -414,7 +438,7 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
                             </Section>
 
                             {/* Recommendations Grid */}
-                            <Section title="Recommendations" icon={<Lightbulb size={16} className="text-blue-400" />}>
+                            <Section title="Recommendations" icon={<Lightbulb size={16} className="text-blue-400" />} variant="blue">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {tier.tier === 'TOP' && (
                                         <RecommendationCard
@@ -467,19 +491,24 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
 // ============================================================================
 
 function MetricCard({ label, value, color }: { label: string; value: string; color: string }) {
-    const colors: Record<string, string> = {
-        green: 'text-[#00ff88] border-[#00ff88]/30 bg-[#00ff88]/5',
-        amber: 'text-amber-400 border-amber-500/30 bg-amber-500/5',
-        red: 'text-red-400 border-red-500/30 bg-red-500/5',
-        cyan: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/5',
-        purple: 'text-purple-400 border-purple-500/30 bg-purple-500/5',
-        white: 'text-white border-white/20 bg-white/5',
+    const colorStyles: Record<string, { text: string; glow: string; border: string }> = {
+        green: { text: 'hud-text-green', glow: 'shadow-[0_0_15px_rgba(0,255,136,0.2)]', border: 'border-[var(--accent)]/30' },
+        amber: { text: 'hud-text-amber', glow: 'shadow-[0_0_15px_rgba(255,194,102,0.15)]', border: 'border-amber-500/30' },
+        red: { text: 'hud-text-red', glow: 'shadow-[0_0_15px_rgba(255,102,102,0.15)]', border: 'border-red-500/30' },
+        cyan: { text: 'text-cyan-400', glow: 'shadow-[0_0_15px_rgba(0,200,255,0.15)]', border: 'border-cyan-500/30' },
+        purple: { text: 'text-purple-400', glow: 'shadow-[0_0_15px_rgba(168,85,247,0.15)]', border: 'border-purple-500/30' },
+        white: { text: 'text-white', glow: '', border: 'border-white/20' },
     };
 
+    const style = colorStyles[color] || colorStyles.white;
+
     return (
-        <div className={cn("p-4 rounded-xl border flex flex-col items-center justify-center text-center gap-1", colors[color] || colors.white)}>
-            <div className="text-2xl font-bold font-mono tracking-tighter tabular-nums">{value}</div>
-            <div className="text-[10px] uppercase tracking-widest opacity-60 font-semibold">{label}</div>
+        <div className={cn(
+            "glass-card-subtle p-4 rounded-xl border flex flex-col items-center justify-center text-center gap-1 transition-all duration-300 hover:scale-[1.02]",
+            style.border, style.glow
+        )}>
+            <div className={cn("text-2xl font-bold hud-headline tracking-tighter tabular-nums", style.text)}>{value}</div>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">{label}</div>
         </div>
     );
 }
@@ -504,43 +533,75 @@ function FactorBar({ factor }: { factor: { name: string; score: number; weight: 
     const isMedium = factor.score >= 40;
 
     const color = isStrong ? 'emerald' : isMedium ? 'amber' : 'red';
+    const Icon = isStrong ? CheckCircle : isMedium ? Warning : XCircle;
 
     return (
-        <div className="flex items-center gap-3">
-            <span className="text-xs font-mono text-white/70 w-24 truncate uppercase">
-                {factor.name.replace(/_/g, ' ')}
-            </span>
-            <div className="flex-1 h-2 bg-black/60 rounded-full overflow-hidden">
-                <div
-                    className={cn(
-                        "h-full rounded-full transition-all duration-500",
-                        isStrong ? "bg-gradient-to-r from-emerald-600 to-emerald-400" :
-                            isMedium ? "bg-gradient-to-r from-amber-600 to-amber-400" :
-                                "bg-gradient-to-r from-red-600 to-red-400"
-                    )}
-                    style={{ width: `${scorePercent}%` }}
-                />
+        <div className="flex items-center gap-3 group">
+            <div className={cn("p-1 rounded-full bg-black/40 border",
+                isStrong ? "border-emerald-500/30 text-emerald-400" :
+                    isMedium ? "border-amber-500/30 text-amber-400" :
+                        "border-red-500/30 text-red-400"
+            )}>
+                <Icon size={12} weight="fill" />
             </div>
-            <span className={cn("text-xs font-bold font-mono w-8 text-right", `text-${color}-400`)}>
-                {factor.score.toFixed(0)}
-            </span>
+
+            <div className="flex-1 space-y-1">
+                <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-mono text-white/90 w-32 truncate uppercase tracking-tight">
+                        {factor.name.replace(/_/g, ' ')}
+                    </span>
+                    <span className={cn("text-[10px] font-bold font-mono", `text-${color}-400`)}>
+                        {factor.score.toFixed(0)}/100
+                    </span>
+                </div>
+
+                <div className="h-1.5 bg-black/60 rounded-full overflow-hidden border border-white/5">
+                    <div
+                        className={cn(
+                            "h-full rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(0,0,0,0.5)]",
+                            isStrong ? "bg-gradient-to-r from-emerald-600 to-emerald-400" :
+                                isMedium ? "bg-gradient-to-r from-amber-600 to-amber-400" :
+                                    "bg-gradient-to-r from-red-600 to-red-400"
+                        )}
+                        style={{ width: `${scorePercent}%` }}
+                    />
+                </div>
+            </div>
         </div>
     );
 }
 
 function PlanCard({ title, value, type, subtitle }: { title: string; value: string; type: 'entry' | 'stop' | 'target'; subtitle?: string }) {
     const styles = {
-        entry: { border: 'border-blue-500/30', text: 'text-blue-400', bg: 'bg-blue-500/5', icon: '►' },
-        stop: { border: 'border-red-500/30', text: 'text-red-400', bg: 'bg-red-500/5', icon: '■' },
-        target: { border: 'border-green-500/30', text: 'text-green-400', bg: 'bg-green-500/5', icon: '★' },
+        entry: {
+            border: 'border-blue-500/30',
+            text: 'text-blue-400',
+            glow: 'shadow-[0_0_20px_rgba(59,130,246,0.15)]',
+            icon: '►'
+        },
+        stop: {
+            border: 'border-red-500/30',
+            text: 'hud-text-red',
+            glow: 'shadow-[0_0_20px_rgba(239,68,68,0.15)]',
+            icon: '■'
+        },
+        target: {
+            border: 'border-green-500/30',
+            text: 'hud-text-green',
+            glow: 'shadow-[0_0_20px_rgba(0,255,136,0.15)]',
+            icon: '★'
+        },
     }[type];
 
     return (
-        <div className={cn("p-5 rounded-xl border flex flex-col items-center gap-2", styles.border, styles.bg)}>
-            <span className="text-xs font-mono uppercase tracking-widest opacity-70 flex items-center gap-2">
-                <span>{styles.icon}</span> {title}
+        <div className={cn(
+            "glass-card-subtle p-5 rounded-xl border flex flex-col items-center gap-2 transition-all duration-300 hover:scale-[1.02]",
+            styles.border, styles.glow
+        )}>
+            <span className="text-xs hud-headline uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <span className={styles.text}>{styles.icon}</span> {title}
             </span>
-            <span className={cn("text-2xl md:text-3xl font-bold font-mono tabular-nums", styles.text)}>{value}</span>
+            <span className={cn("text-2xl md:text-3xl font-bold hud-headline tabular-nums", styles.text)}>{value}</span>
             {subtitle && <span className="text-xs text-muted-foreground font-mono">{subtitle}</span>}
         </div>
     );

@@ -1,18 +1,18 @@
 
-// War Room Layout - Force Rebuild
+// War Room Layout - Glass Cockpit Edition
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { api } from '@/utils/api';
 import { ScanResult } from '@/utils/mockData';
 import { Button } from '@/components/ui/button';
-import { TrendUp } from '@phosphor-icons/react';
+import { TrendUp, Globe, Broadcast, WifiHigh } from '@phosphor-icons/react';
 import { RegimeMetadata } from '@/types/regime';
 import { cn } from '@/lib/utils';
 import { TargetList } from '@/components/ScanResults/TargetList';
 import { IntelDossier } from '@/components/ScanResults/IntelDossier';
 import { MissionStatsHero } from '@/components/ScanResults/MissionStatsHero';
-import { HomeButton } from '@/components/layout/HomeButton';
 import { TacticalBackground } from '@/components/ui/TacticalBackground';
+import { LiveBadge, DataPill } from '@/components/ui/TacticalComponents';
 
 export function ScanResults() {
   const navigate = useNavigate();
@@ -65,117 +65,146 @@ export function ScanResults() {
 
   const selectedResult = scanResults.find(r => r.id === selectedId);
 
+  // Loading State
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#0a0f0a] flex items-center justify-center">
-        <div className="animate-pulse text-[#00ff88] font-mono tracking-widest">INITIALIZING WAR ROOM...</div>
+      <div className="min-h-screen bg-[#0a0f0a] flex flex-col items-center justify-center gap-4">
+        <div className="relative w-24 h-24">
+          <div className="absolute inset-0 rounded-full border-4 border-[#00ff88]/20 border-t-[#00ff88] animate-spin" />
+          <div className="absolute inset-4 rounded-full border-4 border-[#00ff88]/20 border-b-[#00ff88] animate-spin-reverse" />
+        </div>
+        <div className="hud-headline text-[#00ff88] animate-pulse">ESTABLISHING UPLINK...</div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[#0a0f0a] text-foreground flex flex-col">
+    <div className="fixed inset-0 overflow-hidden bg-[#050505] text-foreground font-sans selection:bg-[#00ff88]/30 selection:text-[#00ff88]">
       <TacticalBackground />
 
-      {/* Top Navigation Bar (Compact) */}
-      <header className="h-14 border-b border-[#00ff88]/20 bg-black/40 backdrop-blur-md flex items-center justify-between px-4 z-50 shrink-0">
-        <div className="flex items-center gap-4">
-          <HomeButton />
-          <div className="h-6 w-px bg-white/10" />
-          <h1 className="text-lg font-bold hud-headline tracking-widest text-white hidden md:block">
-            TACTICAL COMMAND
-          </h1>
-        </div>
+      {/* GLOBAL GRID CONTAINER */}
+      <div className="grid h-full w-full grid-rows-[60px_1fr] relative z-10">
 
-        <div className="flex items-center gap-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/scan')}
-            className="border-[#00ff88]/30 hover:bg-[#00ff88]/10 text-[#00ff88] font-mono text-xs"
-          >
-            <TrendUp weight="bold" className="mr-2" /> NEW SCAN
-          </Button>
-        </div>
-      </header>
+        {/* HEADER: STATUS BAR */}
+        {/* HEADER: STATUS BAR */}
+        <header className="h-[60px] border-b border-white/10 bg-black/60 backdrop-blur-md flex items-center justify-between px-6 z-50">
 
-      {/* Main Content Area - Split Pane */}
-      <div className="flex-1 flex overflow-hidden relative z-10">
+          {/* LEFT: SYSTEM & CONTEXT */}
+          <div className="flex items-center gap-6">
 
-        {/* LEFT PANEL: Target Feed - FLOATING GLASS DESIGN */}
-        <div className={cn(
-          "w-full md:w-[350px] lg:w-[400px] flex-shrink-0 h-full transition-transform duration-300 absolute md:relative z-20 bg-[#0a0f0a] md:bg-transparent",
-          selectedId ? "-translate-x-full md:translate-x-0" : "translate-x-0"
-        )}>
-          <div className="h-full w-full md:p-4 md:pr-2">
-            {/* Outer Glow Container */}
-            <div className="h-full w-full relative group/panel">
-              {/* Floating Glow Effect - Bottom (intensifies on hover) */}
-              <div className="absolute -bottom-3 left-6 right-6 h-20 bg-[#00ff88]/15 blur-3xl rounded-full transition-all duration-500 group-hover/panel:bg-[#00ff88]/30 group-hover/panel:h-24" />
-
-              {/* Main Card - Dark Glass */}
-              <div className="h-full w-full overflow-hidden md:rounded-2xl relative
-                md:border md:border-white/10
-                md:bg-gradient-to-b md:from-[#151515] md:via-[#0d0d0d] md:to-[#0a0a0a]
-                md:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.05)]
-                md:backdrop-blur-xl
-                transition-all duration-300
-                group-hover/panel:border-[#00ff88]/30
-                group-hover/panel:shadow-[0_25px_60px_-12px_rgba(0,255,136,0.15),0_0_0_1px_rgba(0,255,136,0.2)]
-              ">
-                {/* Animated Shimmer Effect (on hover) */}
-                <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
-                  <div className="absolute inset-0 -translate-x-full group-hover/panel:translate-x-full transition-transform duration-1000 ease-in-out bg-gradient-to-r from-transparent via-white/5 to-transparent" />
-                </div>
-
-                {/* Top Edge Highlight */}
-                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent group-hover/panel:via-[#00ff88]/40 transition-colors duration-300" />
-
-                {/* Scanline Effect */}
-                <div className="absolute inset-0 pointer-events-none opacity-[0.02]"
-                  style={{
-                    backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)',
-                  }}
-                />
-
-                {/* Corner Brackets - Tactical HUD */}
-                <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-white/20 group-hover/panel:border-[#00ff88]/60 transition-colors duration-300" />
-                <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-white/20 group-hover/panel:border-[#00ff88]/60 transition-colors duration-300" />
-                <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-white/20 group-hover/panel:border-[#00ff88]/60 transition-colors duration-300" />
-                <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-white/20 group-hover/panel:border-[#00ff88]/60 transition-colors duration-300" />
-
-                {/* Status Indicator Light */}
-                <div className="absolute top-4 right-10 flex items-center gap-2 z-10">
-                  <div className="w-2 h-2 rounded-full bg-[#00ff88] animate-pulse shadow-[0_0_8px_rgba(0,255,136,0.8)]" />
-                  <span className="text-[9px] font-mono text-[#00ff88]/60 tracking-wider">LIVE</span>
-                </div>
-
-                <TargetList
-                  results={scanResults}
-                  selectedId={selectedId}
-                  onSelect={(r) => setSelectedId(r.id)}
-                  className="md:bg-transparent md:border-none"
-                />
+            {/* System Status (Clean) */}
+            <div className="flex items-center gap-2.5">
+              <div className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-accent"></span>
               </div>
+              <span className="text-[10px] font-bold tracking-[0.2em] text-accent uppercase font-mono">
+                SYSTEM ONLINE
+              </span>
+            </div>
+
+            <div className="h-6 w-px bg-white/10 rotate-12" />
+
+            {/* Breadcrumb Context */}
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-sm font-bold tracking-widest text-white uppercase hud-headline">
+                {(scanMetadata?.mode || 'SCANNER')}
+              </h1>
+              <span className="text-[10px] text-zinc-500 font-mono tracking-wider uppercase">
+                  // {scanMetadata?.profile || 'PRECISION'}
+              </span>
             </div>
           </div>
-        </div>
 
-        {/* RIGHT PANEL: Intel Dossier (Main) */}
-        <div className="flex-1 h-full relative bg-black/40 backdrop-blur-sm overflow-hidden">
-          {selectedResult ? (
-            <IntelDossier
-              result={selectedResult}
-              metadata={scanMetadata}
-              regime={symbolRegimes[selectedResult.pair] || globalRegime}
-              onClose={() => setSelectedId(null)}
-            />
-          ) : (
-            <MissionStatsHero
+          {/* RIGHT: STATS & ACTIONS */}
+          <div className="flex items-center gap-6">
+
+            {/* Stats Group (Text Only, No Boxes) */}
+            <div className="hidden lg:flex items-center gap-6 text-[10px] font-mono tracking-wider text-zinc-500">
+              <div className="flex items-center gap-2">
+                <span>TARGETS</span>
+                <span className="text-white font-bold text-sm">{scanResults.length}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span>LATENCY</span>
+                <span className="text-accent">1.2s</span>
+              </div>
+            </div>
+
+            {/* Live Indicator */}
+            <div className="flex items-center gap-2 px-2 py-1 bg-red-500/10 rounded border border-red-500/20">
+              <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-[9px] font-bold text-red-500 tracking-widest">LIVE</span>
+            </div>
+
+            <div className="h-6 w-px bg-white/10" />
+
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+              {selectedId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedId(null)}
+                  className="h-8 text-[10px] font-mono text-zinc-400 hover:text-white hover:bg-white/5 tracking-wider"
+                >
+                  <Globe className="mr-2 h-3 w-3" /> DEBRIEF
+                </Button>
+              )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/scan')}
+                className="h-8 border-accent/20 bg-accent/5 hover:bg-accent/10 hover:border-accent/40 text-accent text-[10px] font-bold tracking-widest font-mono shadow-[0_0_10px_-4px_rgba(0,255,170,0.3)]"
+              >
+                NEW SCAN
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        {/* MAIN CONTENT GRID: SIDEBAR | MAIN */}
+        <div className="grid grid-cols-1 md:grid-cols-[380px_1fr] lg:grid-cols-[450px_1fr] overflow-hidden relative">
+
+          {/* LEFT PANEL: TARGET FEED */}
+          <div className={cn(
+            "h-full border-r border-white/5 bg-black/20 backdrop-blur-sm relative transition-transform duration-300 md:translate-x-0 z-20",
+            selectedId ? "-translate-x-full md:translate-x-0 absolute md:relative w-full md:w-auto" : "translate-x-0 w-full"
+          )}>
+            <TargetList
               results={scanResults}
-              metadata={scanMetadata}
+              selectedId={selectedId}
+              onSelect={(r) => setSelectedId(r.id)}
+              className="h-full bg-transparent border-none"
             />
-          )}
+          </div>
+
+          {/* RIGHT PANEL: INTEL CENTER */}
+          <div className="relative h-full overflow-hidden bg-black/40">
+            {/* Background Texture */}
+            <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+              style={{ backgroundImage: 'radial-gradient(circle at center, #00ff88 1px, transparent 1px)', backgroundSize: '40px 40px' }}
+            />
+
+            {/* Content Container */}
+            <div className="h-full w-full relative z-10">
+              {selectedResult ? (
+                <IntelDossier
+                  result={selectedResult}
+                  metadata={scanMetadata}
+                  regime={symbolRegimes[selectedResult.pair] || globalRegime}
+                  onClose={() => setSelectedId(null)}
+                />
+              ) : (
+                <MissionStatsHero
+                  results={scanResults}
+                  metadata={scanMetadata}
+                />
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
