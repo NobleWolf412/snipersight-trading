@@ -656,3 +656,14 @@ body {
 .tab-trigger[data-state="active"]::after {
   content: none;
 }
+
+/* Custom sweep animation for TargetList filter pills */
+@keyframes sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(200%);
+  }
+}

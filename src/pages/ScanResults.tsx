@@ -173,11 +173,11 @@ export function ScanResults() {
           </header>
 
           {/* SPLIT VIEW: SIDEBAR | MAIN */}
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-[380px_1fr] lg:grid-cols-[450px_1fr] overflow-hidden relative">
+          <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[320px_1fr] lg:grid-cols-[380px_1fr] overflow-hidden relative">
 
             {/* LEFT PANEL: TARGET FEED */}
             <div className={cn(
-              "h-full border-r border-white/5 bg-black/20 backdrop-blur-sm relative transition-transform duration-300 md:translate-x-0 z-20",
+              "h-full min-h-0 border-r border-white/5 bg-black/20 backdrop-blur-sm relative transition-transform duration-300 md:translate-x-0 z-20",
               selectedId ? "-translate-x-full md:translate-x-0 absolute md:relative w-full md:w-auto" : "translate-x-0 w-full"
             )}>
               <TargetList

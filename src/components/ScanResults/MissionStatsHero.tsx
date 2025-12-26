@@ -63,7 +63,7 @@ export function MissionStatsHero({ results, metadata }: MissionStatsHeroProps) {
     }, { scope: containerRef });
 
     return (
-        <div ref={containerRef} className="h-full w-full flex items-center justify-center p-6 lg:p-12 relative overflow-hidden">
+        <div ref={containerRef} className="h-full w-full flex items-start justify-center p-6 lg:p-12 relative overflow-y-auto">
 
             {/* Ambient Background Glows */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -76,7 +76,7 @@ export function MissionStatsHero({ results, metadata }: MissionStatsHeroProps) {
             <div className="relative z-10 w-full h-full flex flex-col">
 
                 {/* ADVANCED TECH FRAME */}
-                <div className="flex-1 h-full flex flex-col bg-black/80 backdrop-blur-xl rounded-2xl overflow-hidden relative group border border-white/10 shadow-2xl">
+                <div className="flex flex-col bg-black/80 backdrop-blur-xl rounded-2xl overflow-visible relative group border border-white/10 shadow-2xl min-h-fit">
 
                     {/* 3D TACTICAL SCENE (BACKGROUND) */}
                     <div className="scan-scene absolute inset-0 z-0 opacity-0 mix-blend-screen pointer-events-none overflow-hidden">
@@ -99,45 +99,45 @@ export function MissionStatsHero({ results, metadata }: MissionStatsHeroProps) {
                     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-64 h-2 bg-accent/20 clips-path-notch-top" />
 
                     {/* INNER CONTENT - FLEX COLUMN FOR FULL HEIGHT */}
-                    <div className="flex-1 p-8 md:p-12 lg:p-16 flex flex-col relative z-30 justify-between h-full min-h-0">
+                    <div className="p-8 md:p-12 lg:p-16 flex flex-col relative z-30 gap-8">
 
-                        {/* HEADER SECTION (Spaced Out) */}
-                        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-8 shrink-0">
-                            <div className="header-item flex items-center gap-8 opacity-0 translate-y-4">
-                                <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
+                        {/* HEADER SECTION - Improved Layout */}
+                        <div className="flex flex-col gap-6 shrink-0">
+                            {/* Top Row: Title + Gauge */}
+                            <div className="header-item flex flex-col lg:flex-row items-start lg:items-center gap-6 opacity-0 translate-y-4">
+                                {/* Icon */}
+                                <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
                                     <div className="absolute inset-0 bg-accent/10 rounded-full animate-ping opacity-20" />
                                     <div className="absolute inset-0 border-2 border-accent/40 rounded-full animate-spin-slow-reverse border-dashed" />
-                                    <CheckCircle weight="fill" className="text-accent w-12 h-12 drop-shadow-[0_0_20px_rgba(0,255,170,0.6)]" />
+                                    <CheckCircle weight="fill" className="text-accent w-10 h-10 drop-shadow-[0_0_20px_rgba(0,255,170,0.6)]" />
                                 </div>
-                                <div className="text-left">
+
+                                {/* Title */}
+                                <div className="text-left flex-1 min-w-0">
                                     <div className="flex items-center gap-3 mb-2">
-                                        <div className="w-2.5 h-2.5 bg-accent animate-pulse shadow-[0_0_10px_#00ff88]" />
-                                        <div className="text-sm font-bold tracking-[0.4em] text-accent uppercase opacity-90 drop-shadow-md">MISSION STATUS</div>
+                                        <div className="w-2 h-2 bg-accent animate-pulse shadow-[0_0_10px_#00ff88]" />
+                                        <div className="text-xs font-bold tracking-[0.3em] text-accent uppercase opacity-90">MISSION STATUS</div>
                                     </div>
-                                    <h1 className="text-5xl md:text-7xl font-bold font-mono text-white tracking-tighter bg-gradient-to-r from-white via-white to-white/50 bg-clip-text text-transparent drop-shadow-sm">
+                                    <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold font-mono text-white tracking-tighter">
                                         SCAN COMPLETE
                                     </h1>
                                 </div>
+
+                                {/* Gauge - Directly inline, no card wrapper */}
+                                <div className="w-32 h-20 shrink-0 hidden md:block">
+                                    <TacticalGauge
+                                        value={Math.round((longCount / (totalTargets || 1)) * 100)}
+                                        label={longCount >= shortCount ? "BULLISH" : "BEARISH"}
+                                        color={longCount >= shortCount ? "#00ff88" : "#ef4444"}
+                                    />
+                                </div>
                             </div>
 
-                            {/* STATS ROW (Floating Card) */}
-                            <div className="header-item flex items-center gap-8 p-6 bg-black/40 backdrop-blur-xl rounded-2xl border border-white/10 opacity-0 translate-y-4 shadow-xl">
-                                <StatPill label="TARGETS IDENTIFIED" value={totalTargets} icon={<Target />} size="lg" />
-
-                                <div className="hidden md:block w-px h-16 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
-
-                                {/* Market Bias Gauge */}
-                                <div className="w-48 h-28 relative hidden md:block">
-                                    <div className="absolute inset-0 bg-white/5 rounded-xl border border-white/5 overflow-hidden">
-                                        <div className="w-full h-full p-2">
-                                            <TacticalGauge
-                                                value={Math.round((longCount / (totalTargets || 1)) * 100)}
-                                                label={longCount >= shortCount ? "BULLISH" : "BEARISH"}
-                                                color={longCount >= shortCount ? "#00ff88" : "#ef4444"}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
+                            {/* Stats Row - Below the title */}
+                            <div className="header-item flex flex-wrap items-center gap-4 opacity-0 translate-y-4">
+                                <StatPill label="TARGETS" value={totalTargets} icon={<Target />} size="md" />
+                                <StatPill label="LONGS" value={longCount} icon={<TrendUp />} size="md" color="green" />
+                                <StatPill label="SHORTS" value={shortCount} icon={<TrendDown />} size="md" color="red" />
                             </div>
                         </div>
 
@@ -156,58 +156,77 @@ export function MissionStatsHero({ results, metadata }: MissionStatsHeroProps) {
                                     <div className="flex-1 h-px bg-gradient-to-r from-accent/50 to-transparent" />
                                 </div>
 
-                                <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-8 min-h-0 h-full">
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                     {topTargets.map((target, i) => (
                                         <div
                                             key={target.id}
-                                            className="card-item group relative bg-gradient-to-b from-white/5 to-transparent hover:bg-white/10 border border-white/10 hover:border-accent/60 rounded-xl p-8 xl:p-10 transition-all duration-500 cursor-pointer flex flex-col overflow-hidden hover:-translate-y-2 hover:shadow-[0_0_50px_-10px_rgba(0,255,136,0.2)] opacity-0 translate-y-4 h-full justify-between"
+                                            className="card-item group relative rounded-xl p-[3px] cursor-pointer overflow-hidden hover:-translate-y-2 transition-all duration-500 opacity-0 translate-y-4"
                                         >
-                                            {/* Hover Glow Gradient */}
-                                            <div className="absolute inset-0 bg-gradient-to-tr from-accent/0 via-accent/0 to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                            {/* Gradient Border Background - fills the 3px padding */}
+                                            <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-accent/70 via-white/40 to-accent/70 opacity-60 group-hover:opacity-100 transition-opacity duration-500" />
 
-                                            {/* Tech Corners (Mini) */}
-                                            <div className="absolute top-0 left-0 w-4 h-4 border-l-2 border-t-2 border-white/20 group-hover:border-accent transition-colors duration-300" />
-                                            <div className="absolute top-0 right-0 w-4 h-4 border-r-2 border-t-2 border-white/20 group-hover:border-accent transition-colors duration-300" />
-                                            <div className="absolute bottom-0 left-0 w-4 h-4 border-l-2 border-b-2 border-white/20 group-hover:border-accent transition-colors duration-300" />
-                                            <div className="absolute bottom-0 right-0 w-4 h-4 border-r-2 border-b-2 border-white/20 group-hover:border-accent transition-colors duration-300" />
+                                            {/* Animated Sweep Glow */}
+                                            <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-transparent via-accent to-transparent opacity-0 group-hover:opacity-80 blur-sm animate-[sweep_2s_linear_infinite] transition-opacity duration-300" />
 
-                                            {/* Card Header & Score */}
-                                            <div className="flex justify-between items-start relative z-10 w-full mb-auto">
-                                                <div className="flex flex-col">
-                                                    <div className="text-6xl xl:text-8xl font-black text-accent tabular-nums tracking-tighter drop-shadow-[0_0_15px_rgba(0,255,170,0.3)]">{target.confidenceScore}%</div>
-                                                    <div className="text-xs text-muted-foreground tracking-[0.3em] uppercase font-bold pl-1">Probability</div>
-                                                </div>
-                                                <div className="w-16 h-16 rounded-xl bg-accent/10 border border-accent/30 flex items-center justify-center text-accent shadow-[0_0_15px_rgba(0,255,170,0.15)] group-hover:scale-110 transition-transform duration-300">
-                                                    <Target size={36} weight="duotone" />
-                                                </div>
-                                            </div>
+                                            {/* Inner Card Content - sits inside the padding, creating the border effect */}
+                                            <div className="relative bg-[#080808] rounded-[9px] p-8 lg:p-10 xl:p-12 h-full flex flex-col overflow-hidden group-hover:shadow-[0_0_60px_-10px_rgba(0,255,136,0.4)]">
 
-                                            {/* Card Main: Symbol */}
-                                            <div className="relative z-10 my-10 pl-4 border-l-4 border-white/10 group-hover:border-accent transition-all duration-300 group-hover:pl-6">
-                                                <div className="text-5xl xl:text-6xl font-black text-white font-mono mb-4 tracking-tighter shadow-black drop-shadow-lg">{target.pair}</div>
+                                                {/* Hover Glow Gradient */}
+                                                <div className="absolute inset-0 bg-gradient-to-tr from-accent/0 via-accent/5 to-accent/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-xl" />
 
-                                                <div className="flex flex-wrap gap-3">
-                                                    <div className={cn(
-                                                        "inline-flex items-center gap-2 px-4 py-2 rounded text-xs font-bold border uppercase tracking-widest bg-black/50 backdrop-blur-sm",
-                                                        target.trendBias === 'BULLISH' ? "border-green-500/50 text-green-400 shadow-[0_0_10px_rgba(74,222,128,0.2)]" : "border-red-500/50 text-red-400 shadow-[0_0_10px_rgba(248,113,113,0.2)]"
-                                                    )}>
-                                                        {target.trendBias === 'BULLISH' ? <TrendUp weight="bold" size={16} /> : <TrendDown weight="bold" size={16} />}
-                                                        {target.trendBias}
+                                                {/* Animated Corner Accents */}
+                                                <div className="absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 border-accent/30 group-hover:border-accent group-hover:w-12 group-hover:h-12 transition-all duration-300 rounded-tl-lg" />
+                                                <div className="absolute top-0 right-0 w-8 h-8 border-r-2 border-t-2 border-accent/30 group-hover:border-accent group-hover:w-12 group-hover:h-12 transition-all duration-300 rounded-tr-lg" />
+                                                <div className="absolute bottom-0 left-0 w-8 h-8 border-l-2 border-b-2 border-accent/30 group-hover:border-accent group-hover:w-12 group-hover:h-12 transition-all duration-300 rounded-bl-lg" />
+                                                <div className="absolute bottom-0 right-0 w-8 h-8 border-r-2 border-b-2 border-accent/30 group-hover:border-accent group-hover:w-12 group-hover:h-12 transition-all duration-300 rounded-br-lg" />
+
+                                                {/* Top edge glow line */}
+                                                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                                                {/* Card Header & Score */}
+                                                <div className="flex justify-between items-start relative z-10 w-full mb-auto">
+                                                    <div className="flex flex-col">
+                                                        <div className="text-6xl xl:text-7xl font-black text-accent tabular-nums tracking-tighter drop-shadow-[0_0_20px_rgba(0,255,170,0.4)] group-hover:drop-shadow-[0_0_30px_rgba(0,255,170,0.6)] transition-all">
+                                                            {Math.round(target.confidenceScore)}%
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground tracking-[0.3em] uppercase font-bold pl-1">Probability</div>
+                                                    </div>
+                                                    <div className="w-16 h-16 rounded-xl bg-accent/10 border border-accent/40 flex items-center justify-center text-accent shadow-[0_0_20px_rgba(0,255,170,0.2)] group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(0,255,170,0.4)] transition-all duration-300">
+                                                        <Target size={36} weight="duotone" />
                                                     </div>
                                                 </div>
-                                            </div>
 
-                                            {/* Card Footer: Metrics */}
-                                            <div className="relative z-10 pt-6 border-t border-dashed border-white/10 grid grid-cols-2 gap-6 bg-black/20 -mx-8 -mb-10 p-8 mt-auto backdrop-blur-sm group-hover:bg-accent/5 transition-colors">
-                                                <div>
-                                                    <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-bold">Risk:Reward</div>
-                                                    <div className="text-2xl font-mono text-white font-bold tracking-tight">{target.riskReward}</div>
+                                                {/* Card Main: Symbol */}
+                                                <div className="relative z-10 my-8 pl-4 border-l-4 border-accent/20 group-hover:border-accent group-hover:pl-6 transition-all duration-300">
+                                                    <div className="text-4xl xl:text-5xl font-black text-white font-mono mb-4 tracking-tight">{target.pair}</div>
+
+                                                    <div className="flex flex-wrap gap-3">
+                                                        <div className={cn(
+                                                            "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold border uppercase tracking-widest backdrop-blur-sm",
+                                                            target.trendBias === 'BULLISH'
+                                                                ? "border-green-500/50 text-green-400 bg-green-500/10 shadow-[0_0_15px_rgba(74,222,128,0.2)]"
+                                                                : "border-red-500/50 text-red-400 bg-red-500/10 shadow-[0_0_15px_rgba(248,113,113,0.2)]"
+                                                        )}>
+                                                            {target.trendBias === 'BULLISH' ? <TrendUp weight="bold" size={16} /> : <TrendDown weight="bold" size={16} />}
+                                                            {target.trendBias === 'BULLISH' ? 'LONG' : 'SHORT'}
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-bold">Status</div>
-                                                    <div className="text-xl font-mono text-white font-bold flex items-center gap-3">
-                                                        <div className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse shadow-[0_0_10px_#00ff88]" />
-                                                        ACTIVE
+
+                                                {/* Card Footer: Metrics */}
+                                                <div className="relative z-10 pt-6 border-t border-dashed border-white/10 grid grid-cols-2 gap-6 bg-black/50 -mx-8 lg:-mx-10 xl:-mx-12 -mb-8 lg:-mb-10 xl:-mb-12 p-8 mt-auto backdrop-blur-sm group-hover:bg-accent/5 transition-colors rounded-b-lg">
+                                                    <div>
+                                                        <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-bold">Risk:Reward</div>
+                                                        <div className="text-2xl font-mono text-white font-bold tracking-tight">
+                                                            {typeof target.riskReward === 'number' ? target.riskReward.toFixed(1) : target.riskReward}R
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-bold">Status</div>
+                                                        <div className="text-lg font-mono text-white font-bold flex items-center gap-3">
+                                                            <div className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse shadow-[0_0_12px_#00ff88]" />
+                                                            ACTIVE
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
