@@ -328,8 +328,8 @@ class ScannerService:
                 symbols
             )
             
-            # Transform results to API format
-            signals = self._transform_signals(trade_plans, mode)
+            # Transform results to API format with live price validation
+            signals = self._transform_signals(trade_plans, mode, current_adapter)
             
             job.signals = signals
             job.rejections = rejection_summary
@@ -361,8 +361,13 @@ class ScannerService:
             if self._log_handler:
                 self._log_handler.set_current_job(None)
     
-    def _transform_signals(self, trade_plans: List, mode) -> List[Dict]:
-        """Transform TradePlan objects to API response format."""
+    def _transform_signals(self, trade_plans: List, mode, adapter=None) -> List[Dict]:
+        """
+        Transform TradePlan objects to API response format.
+        
+        Includes live price validation to filter stale signals.
+        """
+        MAX_ENTRY_DRIFT_PCT = 10.0  # 10% threshold - reject signals beyond this
         signals = []
         for plan in trade_plans:
             # Clean symbol: remove '/' and ':USDT' suffix (exchange swap notation)
@@ -438,7 +443,54 @@ class ScannerService:
                 }
             }
             signals.append(signal)
-        return signals
+        
+        # =========================================================================
+        # LIVE PRICE VALIDATION GATE
+        # Filter out signals where entry zone is too far from live market price.
+        # =========================================================================
+        if adapter is None:
+            logger.warning("No adapter for live price validation - returning all signals")
+            return signals
+        
+        validated_signals = []
+        for sig in signals:
+            try:
+                # Get live ticker price from exchange
+                ticker_symbol = sig['symbol'].replace('/', '') + ':USDT'
+                ticker = adapter.exchange.fetch_ticker(ticker_symbol)
+                live_price = ticker.get('last') or ticker.get('close') or 0
+                
+                if live_price > 0:
+                    avg_entry = (sig['entry_near'] + sig['entry_far']) / 2
+                    drift_pct = abs(avg_entry - live_price) / live_price * 100
+                    
+                    # Update signal with actual live price
+                    sig['current_price'] = live_price
+                    sig['_price_validation'] = {
+                        'live_price': live_price,
+                        'avg_entry': avg_entry,
+                        'drift_pct': round(drift_pct, 2),
+                        'validated': drift_pct <= MAX_ENTRY_DRIFT_PCT
+                    }
+                    
+                    if drift_pct > MAX_ENTRY_DRIFT_PCT:
+                        logger.warning(
+                            "⚠️ STALE SIGNAL FILTERED: %s entry $%.2f is %.1f%% from live price $%.2f",
+                            sig['symbol'], avg_entry, drift_pct, live_price
+                        )
+                        continue  # Skip this stale signal
+                        
+                validated_signals.append(sig)
+            except Exception as e:
+                logger.warning("Price validation failed for %s: %s - keeping signal", sig['symbol'], e)
+                validated_signals.append(sig)
+        
+        stale_filtered = len(signals) - len(validated_signals)
+        if stale_filtered > 0:
+            logger.info("🧹 Filtered %d stale signals (entry >%.0f%% from live price)", 
+                       stale_filtered, MAX_ENTRY_DRIFT_PCT)
+        
+        return validated_signals
 
 
 

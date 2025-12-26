@@ -189,14 +189,14 @@ export function ScanResults() {
             </div>
 
             {/* RIGHT PANEL: INTEL CENTER */}
-            <div className="relative h-full overflow-hidden bg-black/40">
+            <div className="relative h-full overflow-auto bg-black/40">
               {/* Background Texture */}
               <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
                 style={{ backgroundImage: 'radial-gradient(circle at center, #00ff88 1px, transparent 1px)', backgroundSize: '40px 40px' }}
               />
 
               {/* Content Container */}
-              <div className="h-full w-full relative z-10">
+              <div className="min-h-full w-full relative z-10">
                 {selectedResult ? (
                   <IntelDossier
                     result={selectedResult}

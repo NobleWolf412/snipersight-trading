@@ -101,7 +101,7 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
     };
 
     return (
-        <div className="h-full flex flex-col glass-card relative">
+        <div className="min-h-full flex flex-col glass-card relative">
             {/* Close Button (All Screens) */}
             {onClose && (
                 <button

@@ -2,11 +2,10 @@
 import { useRef } from 'react';
 import { motion } from 'framer-motion';
 import { ScanResult } from '@/utils/mockData';
-import { Target, Lightning, Crosshair, Globe, CheckCircle, WifiHigh, ChartLineUp, TrendUp, TrendDown } from '@phosphor-icons/react';
+import { Target, Lightning, Crosshair, Globe, CheckCircle, WifiHigh, ChartLineUp, TrendUp, TrendDown, Warning, ShieldWarning, XCircle } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 import { TechPanel } from '@/components/ui/TacticalComponents';
 import { TacticalScanScene } from '@/components/ScanResults/TacticalScanScene';
-import { TacticalGauge } from '@/components/charts/TacticalGauge';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
 
@@ -51,19 +50,21 @@ export function MissionStatsHero({ results, metadata }: MissionStatsHeroProps) {
             }
         }, "-=0.3");
 
-        // 5. Priority Cards Slam In
-        tl.to(".card-item", {
-            autoAlpha: 1,
-            y: 0,
-            duration: 0.4,
-            stagger: 0.1,
-            ease: "back.out(1.7)"
-        }, "-=0.2");
+        // 5. Priority Cards Slam In (only if they exist)
+        if (document.querySelectorAll('.card-item').length > 0) {
+            tl.to(".card-item", {
+                autoAlpha: 1,
+                y: 0,
+                duration: 0.4,
+                stagger: 0.1,
+                ease: "back.out(1.7)"
+            }, "-=0.2");
+        }
 
     }, { scope: containerRef });
 
     return (
-        <div ref={containerRef} className="h-full w-full flex items-start justify-center p-6 lg:p-12 relative overflow-y-auto">
+        <div ref={containerRef} className="h-full w-full flex flex-col p-6 lg:p-12 relative overflow-y-auto">
 
             {/* Ambient Background Glows */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -73,9 +74,49 @@ export function MissionStatsHero({ results, metadata }: MissionStatsHeroProps) {
             </div>
 
             {/* MAIN CENTRAL CONTAINER */}
-            <div className="relative z-10 w-full h-full flex flex-col">
+            <div className="relative z-10 w-full flex-1 flex flex-col gap-6">
 
-                {/* ADVANCED TECH FRAME */}
+                {/* ═══════════════════════════════════════════════════════════════ */}
+                {/* SCAN COMPLETE BADGE - Outside main container, centered on top */}
+                {/* ═══════════════════════════════════════════════════════════════ */}
+                <div className="header-item flex items-center justify-center opacity-0 translate-y-4">
+                    <div className="relative">
+                        {/* Outer Glow */}
+                        <div className="absolute inset-0 bg-accent/20 rounded-2xl blur-xl animate-pulse" />
+
+                        {/* Badge Container */}
+                        <div className="relative flex items-center gap-6 px-10 py-6 bg-gradient-to-r from-accent/20 via-accent/10 to-accent/20 border-2 border-accent/50 rounded-2xl backdrop-blur-xl shadow-[0_0_40px_rgba(0,255,136,0.3)]">
+
+                            {/* Animated Check Icon */}
+                            <div className="relative w-16 h-16 flex items-center justify-center shrink-0">
+                                <div className="absolute inset-0 bg-accent/20 rounded-full animate-ping opacity-30" />
+                                <div className="absolute inset-0 border-2 border-accent/50 rounded-full animate-spin-slow-reverse border-dashed" />
+                                <CheckCircle weight="fill" className="text-accent w-10 h-10 drop-shadow-[0_0_25px_rgba(0,255,170,0.8)]" />
+                            </div>
+
+                            {/* Text */}
+                            <div className="text-left">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <div className="w-2 h-2 bg-accent animate-pulse shadow-[0_0_10px_#00ff88] rounded-full" />
+                                    <span className="text-xs font-bold tracking-[0.4em] text-accent uppercase">MISSION STATUS</span>
+                                </div>
+                                <h1 className="text-4xl md:text-5xl lg:text-6xl font-black font-mono text-white tracking-tight drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+                                    SCAN COMPLETE
+                                </h1>
+                            </div>
+
+                            {/* Decorative Corner Accents */}
+                            <div className="absolute top-0 left-0 w-6 h-6 border-l-2 border-t-2 border-accent rounded-tl-xl" />
+                            <div className="absolute top-0 right-0 w-6 h-6 border-r-2 border-t-2 border-accent rounded-tr-xl" />
+                            <div className="absolute bottom-0 left-0 w-6 h-6 border-l-2 border-b-2 border-accent rounded-bl-xl" />
+                            <div className="absolute bottom-0 right-0 w-6 h-6 border-r-2 border-b-2 border-accent rounded-br-xl" />
+                        </div>
+                    </div>
+                </div>
+
+                {/* ═══════════════════════════════════════════════════════════════ */}
+                {/* MAIN CONTENT FRAME */}
+                {/* ═══════════════════════════════════════════════════════════════ */}
                 <div className="flex flex-col bg-black/80 backdrop-blur-xl rounded-2xl overflow-visible relative group border border-white/10 shadow-2xl min-h-fit">
 
                     {/* 3D TACTICAL SCENE (BACKGROUND) */}
@@ -99,55 +140,24 @@ export function MissionStatsHero({ results, metadata }: MissionStatsHeroProps) {
                     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-64 h-2 bg-accent/20 clips-path-notch-top" />
 
                     {/* INNER CONTENT - FLEX COLUMN FOR FULL HEIGHT */}
-                    <div className="p-8 md:p-12 lg:p-16 flex flex-col relative z-30 gap-8">
+                    <div className="p-8 md:p-10 lg:p-12 flex flex-col relative z-30 gap-6">
 
-                        {/* HEADER SECTION - Improved Layout */}
-                        <div className="flex flex-col gap-6 shrink-0">
-                            {/* Top Row: Title + Gauge */}
-                            <div className="header-item flex flex-col lg:flex-row items-start lg:items-center gap-6 opacity-0 translate-y-4">
-                                {/* Icon */}
-                                <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
-                                    <div className="absolute inset-0 bg-accent/10 rounded-full animate-ping opacity-20" />
-                                    <div className="absolute inset-0 border-2 border-accent/40 rounded-full animate-spin-slow-reverse border-dashed" />
-                                    <CheckCircle weight="fill" className="text-accent w-10 h-10 drop-shadow-[0_0_20px_rgba(0,255,170,0.6)]" />
-                                </div>
-
-                                {/* Title */}
-                                <div className="text-left flex-1 min-w-0">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <div className="w-2 h-2 bg-accent animate-pulse shadow-[0_0_10px_#00ff88]" />
-                                        <div className="text-xs font-bold tracking-[0.3em] text-accent uppercase opacity-90">MISSION STATUS</div>
-                                    </div>
-                                    <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold font-mono text-white tracking-tighter">
-                                        SCAN COMPLETE
-                                    </h1>
-                                </div>
-
-                                {/* Gauge - Directly inline, no card wrapper */}
-                                <div className="w-32 h-20 shrink-0 hidden md:block">
-                                    <TacticalGauge
-                                        value={Math.round((longCount / (totalTargets || 1)) * 100)}
-                                        label={longCount >= shortCount ? "BULLISH" : "BEARISH"}
-                                        color={longCount >= shortCount ? "#00ff88" : "#ef4444"}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Stats Row - Below the title */}
-                            <div className="header-item flex flex-wrap items-center gap-4 opacity-0 translate-y-4">
-                                <StatPill label="TARGETS" value={totalTargets} icon={<Target />} size="md" />
-                                <StatPill label="LONGS" value={longCount} icon={<TrendUp />} size="md" color="green" />
-                                <StatPill label="SHORTS" value={shortCount} icon={<TrendDown />} size="md" color="red" />
-                            </div>
+                        {/* Stats Row - Now at top of this container */}
+                        <div className="header-item flex flex-wrap items-center justify-center gap-4 opacity-0 translate-y-4">
+                            <StatPill label="TARGETS" value={totalTargets} icon={<Target />} size="lg" />
+                            <div className="hidden md:block w-px h-12 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+                            <StatPill label="LONGS" value={longCount} icon={<TrendUp />} size="lg" color="green" />
+                            <div className="hidden md:block w-px h-12 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+                            <StatPill label="SHORTS" value={shortCount} icon={<TrendDown />} size="lg" color="red" />
                         </div>
 
                         {/* SEPARATOR (Glowing Line) */}
-                        <div className="tech-border relative h-px w-full bg-gradient-to-r from-transparent via-accent/30 to-transparent my-10 shrink-0 opacity-50">
+                        <div className="tech-border relative h-px w-full bg-gradient-to-r from-transparent via-accent/30 to-transparent my-6 shrink-0 opacity-50">
                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-1 bg-accent shadow-[0_0_15px_#00ff88]" />
                         </div>
 
                         {/* PRIORITY TARGETS GRID (TOP 3) - MAXIMUM EXPANSION */}
-                        {topTargets.length > 0 && (
+                        {topTargets.length > 0 ? (
                             <div className="flex-1 flex flex-col min-h-0 pt-4">
                                 <div className="header-item text-sm text-accent font-bold tracking-[0.3em] uppercase mb-8 opacity-80 flex items-center gap-4 shrink-0 opacity-0 translate-y-4">
                                     <div className="w-12 h-px bg-accent/50" />
@@ -232,6 +242,80 @@ export function MissionStatsHero({ results, metadata }: MissionStatsHeroProps) {
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            </div>
+                        ) : (
+                            /* NO SIGNALS - REJECTION ANALYSIS */
+                            <div className="flex-1 flex flex-col min-h-0 pt-4">
+                                {/* Header */}
+                                <div className="header-item text-sm text-yellow-500 font-bold tracking-[0.3em] uppercase mb-6 opacity-80 flex items-center gap-4 shrink-0 opacity-0 translate-y-4">
+                                    <div className="w-12 h-px bg-yellow-500/50" />
+                                    <Warning size={20} weight="fill" />
+                                    ANALYSIS SUMMARY /// NO SIGNALS GENERATED
+                                    <div className="flex-1 h-px bg-gradient-to-r from-yellow-500/50 to-transparent" />
+                                </div>
+
+                                {/* Rejection Summary Card */}
+                                <div className="bg-gradient-to-br from-yellow-500/5 to-orange-500/5 border border-yellow-500/20 rounded-xl p-8">
+                                    <div className="flex items-start gap-6 mb-6">
+                                        <div className="w-16 h-16 rounded-xl bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-yellow-500 shrink-0">
+                                            <ShieldWarning size={32} weight="fill" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <h3 className="text-xl font-bold text-white mb-2 font-mono">All Candidates Filtered</h3>
+                                            <p className="text-zinc-400 text-sm leading-relaxed">
+                                                The scanner analyzed all pairs but none met the current mode's quality thresholds.
+                                                This is normal during low-volatility or consolidation periods.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Common Rejection Reasons */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                                        <div className="bg-black/40 rounded-lg p-4 border border-white/5">
+                                            <div className="flex items-center gap-2 text-yellow-400 mb-2">
+                                                <TrendDown size={16} />
+                                                <span className="text-xs font-bold uppercase tracking-wider">Low Confluence</span>
+                                            </div>
+                                            <p className="text-xs text-zinc-500">Multiple factors didn't align. SMC, indicators, and structure need to agree.</p>
+                                        </div>
+                                        <div className="bg-black/40 rounded-lg p-4 border border-white/5">
+                                            <div className="flex items-center gap-2 text-orange-400 mb-2">
+                                                <XCircle size={16} />
+                                                <span className="text-xs font-bold uppercase tracking-wider">Risk Validation</span>
+                                            </div>
+                                            <p className="text-xs text-zinc-500">Entry zones collapsed or R:R ratio didn't meet minimum thresholds.</p>
+                                        </div>
+                                        <div className="bg-black/40 rounded-lg p-4 border border-white/5">
+                                            <div className="flex items-center gap-2 text-red-400 mb-2">
+                                                <Target size={16} />
+                                                <span className="text-xs font-bold uppercase tracking-wider">No Valid Entry</span>
+                                            </div>
+                                            <p className="text-xs text-zinc-500">Could not identify a clean entry point within acceptable distance.</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Suggestions */}
+                                    <div className="bg-accent/5 border border-accent/20 rounded-lg p-4">
+                                        <h4 className="text-xs font-bold text-accent uppercase tracking-widest mb-3 flex items-center gap-2">
+                                            <ChartLineUp size={14} />
+                                            SUGGESTIONS
+                                        </h4>
+                                        <ul className="text-sm text-zinc-400 space-y-2">
+                                            <li className="flex items-start gap-2">
+                                                <span className="text-accent mt-1">•</span>
+                                                <span>Try <b className="text-white">Stealth mode</b> for more relaxed entry requirements</span>
+                                            </li>
+                                            <li className="flex items-start gap-2">
+                                                <span className="text-accent mt-1">•</span>
+                                                <span>Wait for higher volatility or trend confirmation on HTF</span>
+                                            </li>
+                                            <li className="flex items-start gap-2">
+                                                <span className="text-accent mt-1">•</span>
+                                                <span>Check the <b className="text-white">Markets</b> tab for developing setups</span>
+                                            </li>
+                                        </ul>
+                                    </div>
                                 </div>
                             </div>
                         )}

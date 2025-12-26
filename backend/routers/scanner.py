@@ -736,13 +736,56 @@ async def get_signals(
 
             signals.append(signal)
 
-
+        # =========================================================================
+        # LIVE PRICE VALIDATION GATE
+        # Filter out signals where entry zone is too far from live market price.
+        # This prevents stale cached data from producing invalid trade plans.
+        # =========================================================================
+        MAX_ENTRY_DRIFT_PCT = 10.0  # 10% threshold - reject signals beyond this
+        
+        validated_signals = []
+        for sig in signals:
+            try:
+                # Get live ticker price from exchange
+                ticker = current_adapter.exchange.fetch_ticker(sig['symbol'].replace('/', '') + ':USDT')
+                live_price = ticker.get('last') or ticker.get('close') or 0
+                
+                if live_price > 0:
+                    avg_entry = (sig['entry_near'] + sig['entry_far']) / 2
+                    drift_pct = abs(avg_entry - live_price) / live_price * 100
+                    
+                    # Update signal with actual live price
+                    sig['current_price'] = live_price
+                    sig['_price_validation'] = {
+                        'live_price': live_price,
+                        'avg_entry': avg_entry,
+                        'drift_pct': round(drift_pct, 2),
+                        'validated': drift_pct <= MAX_ENTRY_DRIFT_PCT
+                    }
+                    
+                    if drift_pct > MAX_ENTRY_DRIFT_PCT:
+                        logger.warning(
+                            "⚠️ STALE SIGNAL FILTERED: %s entry $%.2f is %.1f%% from live price $%.2f",
+                            sig['symbol'], avg_entry, drift_pct, live_price
+                        )
+                        continue  # Skip this stale signal
+                        
+                validated_signals.append(sig)
+            except Exception as e:
+                logger.warning("Price validation failed for %s: %s - keeping signal", sig['symbol'], e)
+                validated_signals.append(sig)  # Keep signal if validation fails
+        
+        stale_filtered_count = len(signals) - len(validated_signals)
+        if stale_filtered_count > 0:
+            logger.info("🧹 Filtered %d stale signals (entry >%.0f%% from live price)", 
+                       stale_filtered_count, MAX_ENTRY_DRIFT_PCT)
 
         return {
-            "signals": signals,
-            "total": len(signals),
+            "signals": validated_signals,
+            "total": len(validated_signals),
             "scanned": len(symbols),
             "rejected": rejected_count,
+            "stale_filtered": stale_filtered_count,
             "mode": mode.name,
             "rejections": rejection_summary
         }
