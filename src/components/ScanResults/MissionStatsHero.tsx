@@ -6,6 +6,7 @@ import { Target, Lightning, Crosshair, Globe, CheckCircle, WifiHigh, ChartLineUp
 import { cn } from '@/lib/utils';
 import { TechPanel } from '@/components/ui/TacticalComponents';
 import { TacticalScanScene } from '@/components/ScanResults/TacticalScanScene';
+import { RejectionDossier, RejectionSummary } from '@/components/ScanResults/RejectionDossier';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
 
@@ -245,78 +246,14 @@ export function MissionStatsHero({ results, metadata }: MissionStatsHeroProps) {
                                 </div>
                             </div>
                         ) : (
-                            /* NO SIGNALS - REJECTION ANALYSIS */
-                            <div className="flex-1 flex flex-col min-h-0 pt-4">
-                                {/* Header */}
-                                <div className="header-item text-sm text-yellow-500 font-bold tracking-[0.3em] uppercase mb-6 opacity-80 flex items-center gap-4 shrink-0 opacity-0 translate-y-4">
-                                    <div className="w-12 h-px bg-yellow-500/50" />
-                                    <Warning size={20} weight="fill" />
-                                    ANALYSIS SUMMARY /// NO SIGNALS GENERATED
-                                    <div className="flex-1 h-px bg-gradient-to-r from-yellow-500/50 to-transparent" />
-                                </div>
-
-                                {/* Rejection Summary Card */}
-                                <div className="bg-gradient-to-br from-yellow-500/5 to-orange-500/5 border border-yellow-500/20 rounded-xl p-8">
-                                    <div className="flex items-start gap-6 mb-6">
-                                        <div className="w-16 h-16 rounded-xl bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-yellow-500 shrink-0">
-                                            <ShieldWarning size={32} weight="fill" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <h3 className="text-xl font-bold text-white mb-2 font-mono">All Candidates Filtered</h3>
-                                            <p className="text-zinc-400 text-sm leading-relaxed">
-                                                The scanner analyzed all pairs but none met the current mode's quality thresholds.
-                                                This is normal during low-volatility or consolidation periods.
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Common Rejection Reasons */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                                        <div className="bg-black/40 rounded-lg p-4 border border-white/5">
-                                            <div className="flex items-center gap-2 text-yellow-400 mb-2">
-                                                <TrendDown size={16} />
-                                                <span className="text-xs font-bold uppercase tracking-wider">Low Confluence</span>
-                                            </div>
-                                            <p className="text-xs text-zinc-500">Multiple factors didn't align. SMC, indicators, and structure need to agree.</p>
-                                        </div>
-                                        <div className="bg-black/40 rounded-lg p-4 border border-white/5">
-                                            <div className="flex items-center gap-2 text-orange-400 mb-2">
-                                                <XCircle size={16} />
-                                                <span className="text-xs font-bold uppercase tracking-wider">Risk Validation</span>
-                                            </div>
-                                            <p className="text-xs text-zinc-500">Entry zones collapsed or R:R ratio didn't meet minimum thresholds.</p>
-                                        </div>
-                                        <div className="bg-black/40 rounded-lg p-4 border border-white/5">
-                                            <div className="flex items-center gap-2 text-red-400 mb-2">
-                                                <Target size={16} />
-                                                <span className="text-xs font-bold uppercase tracking-wider">No Valid Entry</span>
-                                            </div>
-                                            <p className="text-xs text-zinc-500">Could not identify a clean entry point within acceptable distance.</p>
-                                        </div>
-                                    </div>
-
-                                    {/* Suggestions */}
-                                    <div className="bg-accent/5 border border-accent/20 rounded-lg p-4">
-                                        <h4 className="text-xs font-bold text-accent uppercase tracking-widest mb-3 flex items-center gap-2">
-                                            <ChartLineUp size={14} />
-                                            SUGGESTIONS
-                                        </h4>
-                                        <ul className="text-sm text-zinc-400 space-y-2">
-                                            <li className="flex items-start gap-2">
-                                                <span className="text-accent mt-1">•</span>
-                                                <span>Try <b className="text-white">Stealth mode</b> for more relaxed entry requirements</span>
-                                            </li>
-                                            <li className="flex items-start gap-2">
-                                                <span className="text-accent mt-1">•</span>
-                                                <span>Wait for higher volatility or trend confirmation on HTF</span>
-                                            </li>
-                                            <li className="flex items-start gap-2">
-                                                <span className="text-accent mt-1">•</span>
-                                                <span>Check the <b className="text-white">Markets</b> tab for developing setups</span>
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </div>
+                            /* NO SIGNALS - REJECTION DOSSIER (TABBED ANALYSIS) */
+                            <div className="flex-1 flex flex-col min-h-0">
+                                <RejectionDossier
+                                    rejections={metadata?.rejections || {}}
+                                    scanned={metadata?.scanned || 0}
+                                    rejected={metadata?.rejected || 0}
+                                    mode={metadata?.mode || 'unknown'}
+                                />
                             </div>
                         )}
 

@@ -164,6 +164,18 @@ export function ScannerSetup() {
           const results = (data.signals || []).map(convertSignalToScanResult);
           localStorage.setItem('scan-results', JSON.stringify(results));
 
+          // Transform rejections to match frontend RejectionDossier expected format
+          // Backend returns: { details: { low_confluence: [...], ... } }
+          // Frontend expects: { low_confluence: [...], ... } (flat structure)
+          const rawRejections = data.rejections || {};
+          const flattenedRejections = rawRejections.details || {
+            low_confluence: rawRejections.low_confluence || [],
+            risk_validation: rawRejections.risk_validation || [],
+            no_trade_plan: rawRejections.no_trade_plan || [],
+            missing_critical_tf: rawRejections.missing_critical_tf || [],
+            errors: rawRejections.errors || [],
+          };
+
           const metadata = {
             mode: data.metadata?.mode || scanConfig.sniperMode,
             appliedTimeframes: data.metadata?.applied_timeframes || [],
@@ -175,6 +187,7 @@ export function ScannerSetup() {
             exchange: data.metadata?.exchange,
             leverage: data.metadata?.leverage,
             criticalTimeframes: selectedMode?.critical_timeframes || [],
+            rejections: flattenedRejections, // Include rejections for RejectionDossier
           };
           localStorage.setItem('scan-metadata', JSON.stringify(metadata));
 
