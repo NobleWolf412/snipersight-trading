@@ -1,89 +1,121 @@
 import { useRef, useMemo } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, extend, ReactThreeFiber } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Html } from '@react-three/drei';
+import { Html, Float, Sparkles, Stars, shaderMaterial } from '@react-three/drei';
+
+// --- 1. Custom Shader Material ---
+const HologramMaterial = shaderMaterial(
+    { time: 0, color: new THREE.Color('#00ff88') },
+    // Vertex Shader
+    `
+      varying vec2 vUv;
+      varying vec3 vPosition;
+      void main() {
+        vUv = uv;
+        vPosition = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    // Fragment Shader
+    `
+      uniform float time;
+      uniform vec3 color;
+      varying vec2 vUv;
+      varying vec3 vPosition;
+      
+      void main() {
+        // Scanline effect
+        float scanline = sin(vPosition.y * 50.0 - time * 2.0) * 0.5 + 0.5;
+        
+        // Edge glow (Fresnel)
+        vec3 viewDir = normalize(cameraPosition - vPosition);
+        float fresnel = pow(1.0 - dot(viewDir, normalize(vPosition)), 3.0);
+        
+        // Tech Grid Pattern
+        float gridX = step(0.98, fract(vUv.x * 20.0));
+        float gridY = step(0.98, fract(vUv.y * 20.0));
+        float grid = max(gridX, gridY) * 0.3;
+
+        // Combine
+        float alpha = scanline * 0.1 + fresnel * 0.6 + grid;
+        
+        // Pulse effect
+        float pulse = sin(time) * 0.1 + 0.9;
+        
+        gl_FragColor = vec4(color * pulse, alpha * 0.8);
+      }
+    `
+);
+
+// Register the shader material
+extend({ HologramMaterial });
+
+// Add type definition for the shader material
+declare global {
+    namespace JSX {
+        interface IntrinsicElements {
+            hologramMaterial: ReactThreeFiber.Object3DNode<THREE.ShaderMaterial, typeof HologramMaterial> & { color?: string; time?: number };
+        }
+    }
+}
 
 interface HolographicGlobeProps {
     isScanning: boolean;
     blips?: { symbol: string; score: number; angle: number; distance: number }[];
 }
 
-function BlipMarker({ position, symbol, score, isScanning }: { position: THREE.Vector3; symbol: string; score: number; isScanning: boolean }) {
+function BlipMarker({ position, symbol, score }: { position: THREE.Vector3; symbol: string; score: number }) {
     const meshRef = useRef<THREE.Mesh>(null);
-
-    // Pulse animation for high scores or active scanning
-    useFrame((state) => {
-        if (meshRef.current) {
-            const t = state.clock.getElapsedTime();
-            const scale = 1 + Math.sin(t * 5) * 0.3; // Pulse
-            meshRef.current.scale.setScalar(scale);
-        }
-    });
-
     const color = score >= 75 ? '#00ff88' : score >= 50 ? '#fbbf24' : '#ef4444';
     const size = score >= 75 ? 0.08 : 0.05;
+
+    useFrame((state) => {
+        if (meshRef.current) {
+            meshRef.current.scale.setScalar(1 + Math.sin(state.clock.elapsedTime * 5) * 0.2);
+        }
+    });
 
     return (
         <group position={position}>
             <mesh ref={meshRef}>
                 <sphereGeometry args={[size, 16, 16]} />
-                <meshBasicMaterial color={color} transparent opacity={0.8} />
+                <meshBasicMaterial color={color} transparent opacity={0.9} toneMapped={false} />
             </mesh>
-            {/* Halo */}
-            <mesh>
-                <sphereGeometry args={[size * 2, 16, 16]} />
-                <meshBasicMaterial color={color} transparent opacity={0.2} wireframe />
-            </mesh>
-
-            {/* Label (HTML Overlay) - Only show for high priority items or when few items exist to avoid clutter */}
-            {(score >= 70 || !isScanning) && (
-                <Html distanceFactor={10}>
-                    <div className="pointer-events-none select-none">
-                        <div className="bg-black/80 border border-white/20 px-1 py-0.5 rounded text-[8px] font-mono text-[#00ff88] whitespace-nowrap backdrop-blur-sm">
-                            {symbol} <span className={score >= 75 ? "text-[#00ff88]" : "text-yellow-400"}>{score}%</span>
-                        </div>
-                    </div>
-                </Html>
-            )}
+            {/* Connection Line to Core */}
+            <line>
+                <bufferGeometry>
+                    <float32BufferAttribute
+                        attach="attributes-position"
+                        count={2}
+                        array={new Float32Array([0, 0, 0, -position.x, -position.y, -position.z])}
+                        itemSize={3}
+                    />
+                </bufferGeometry>
+                <lineBasicMaterial color={color} transparent opacity={0.2} />
+            </line>
         </group>
     );
 }
 
 export function HolographicGlobe({ isScanning, blips = [] }: HolographicGlobeProps) {
     const globeRef = useRef<THREE.Group>(null);
-    const coreRef = useRef<THREE.Mesh>(null);
+    const materialRef = useRef<THREE.ShaderMaterial>(null);
 
-    // Rotate globe constantly, faster when scanning
     useFrame((state, delta) => {
         if (globeRef.current) {
-            globeRef.current.rotation.y += delta * (isScanning ? 0.5 : 0.1);
+            globeRef.current.rotation.y += delta * (isScanning ? 0.5 : 0.15);
         }
-        // Pulse the core
-        if (coreRef.current) {
-            const pulse = 1 + Math.sin(state.clock.elapsedTime * 2) * 0.05;
-            coreRef.current.scale.setScalar(pulse);
+        if (materialRef.current) {
+            materialRef.current.uniforms.time.value = state.clock.elapsedTime;
         }
     });
 
-    // Convert 2D blip data (angle/distance) to 3D sphere coordinates
-    // Map distance (0-1) to latitude (equator to pole), angle to longitude
+    // Map blips to 3D Sphere
     const blipElems = useMemo(() => {
         const radius = 2.0;
         return blips.map((blip, i) => {
-            // Simple mapping: 
-            // angle -> longitude (0 to 2PI)
-            // distance -> latitude (spread out from equator)
-
-            const phi = Math.acos(-1 + (2 * i) / blips.length); // Golden spiral distribution for better coverage or just use random/mapped
-            // Let's stick to the input angle/distance for consistency with the 2D radar logic if possible, 
-            // OR re-map them to a sphere surface.
-            // Input: angle (radians), distance (0-1)
-
-            // Map distance to latitude variation (center 0 -> equator)
-            const lat = (blip.distance - 0.5) * Math.PI; // -PI/2 to PI/2
+            const lat = (blip.distance - 0.5) * Math.PI;
             const lon = blip.angle;
-
-            // Spherical to Cartesian
             const x = radius * Math.cos(lat) * Math.cos(lon);
             const y = radius * Math.sin(lat);
             const z = radius * Math.cos(lat) * Math.sin(lon);
@@ -94,43 +126,50 @@ export function HolographicGlobe({ isScanning, blips = [] }: HolographicGlobePro
                     position={new THREE.Vector3(x, y, z)}
                     symbol={blip.symbol}
                     score={blip.score}
-                    isScanning={isScanning}
                 />
             );
         });
-    }, [blips, isScanning]);
+    }, [blips]);
 
     return (
-        <group ref={globeRef}>
-            {/* Wireframe Globe */}
-            <mesh>
-                <icosahedronGeometry args={[2, 2]} />
-                <meshBasicMaterial
-                    color="#00ff88"
-                    wireframe
-                    transparent
-                    opacity={0.15}
-                />
-            </mesh>
+        <group>
+            {/* Ambient Environment */}
+            <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+            <Sparkles count={150} scale={6} size={4} speed={0.4} opacity={0.5} noise={0.2} color="#00ff88" />
 
-            {/* Inner Core (The "Singularity") */}
-            <mesh ref={coreRef}>
-                <sphereGeometry args={[1.0, 32, 32]} />
-                <meshBasicMaterial
-                    color="#002211"
-                    transparent
-                    opacity={0.8}
-                />
-            </mesh>
+            <Float speed={2} rotationIntensity={0.2} floatIntensity={0.2}>
+                <group ref={globeRef}>
+                    {/* HOLOGRAPHIC SPHERE */}
+                    <mesh>
+                        <sphereGeometry args={[2, 64, 64]} />
+                        {/* @ts-ignore */}
+                        <hologramMaterial ref={materialRef} transparent side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} color="#00ff88" />
+                    </mesh>
 
-            {/* Equatorial Ring */}
-            <mesh rotation={[Math.PI / 2, 0, 0]}>
-                <torusGeometry args={[2.2, 0.02, 16, 100]} />
-                <meshBasicMaterial color="#00ff88" opacity={0.4} transparent />
-            </mesh>
+                    {/* Inner Core */}
+                    <mesh>
+                        <sphereGeometry args={[1.5, 32, 32]} />
+                        <meshBasicMaterial color="#003322" transparent opacity={0.3} wireframe />
+                    </mesh>
+                    <mesh>
+                        <sphereGeometry args={[0.8, 32, 32]} />
+                        <meshBasicMaterial color="#00ff88" transparent opacity={0.1} />
+                    </mesh>
 
-            {/* Blips */}
-            {blipElems}
+                    {/* Equatorial Rings */}
+                    <mesh rotation={[Math.PI / 2, 0, 0]}>
+                        <torusGeometry args={[2.5, 0.01, 16, 100]} />
+                        <meshBasicMaterial color="#00ff88" transparent opacity={0.3} />
+                    </mesh>
+                    <mesh rotation={[Math.PI / 2.2, 0, 0]}>
+                        <torusGeometry args={[3, 0.005, 16, 100]} />
+                        <meshBasicMaterial color="#00ff88" transparent opacity={0.1} />
+                    </mesh>
+
+                    {/* Data Blips */}
+                    {blipElems}
+                </group>
+            </Float>
         </group>
     );
 }

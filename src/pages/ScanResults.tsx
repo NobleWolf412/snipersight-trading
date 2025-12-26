@@ -12,7 +12,9 @@ import { TargetList } from '@/components/ScanResults/TargetList';
 import { IntelDossier } from '@/components/ScanResults/IntelDossier';
 import { MissionStatsHero } from '@/components/ScanResults/MissionStatsHero';
 import { TacticalBackground } from '@/components/ui/TacticalBackground';
+import { NavigationRail } from '@/components/Layout/NavigationRail';
 import { LiveBadge, DataPill } from '@/components/ui/TacticalComponents';
+import { SystemTerminal } from '@/components/ui/SystemTerminal';
 
 export function ScanResults() {
   const navigate = useNavigate();
@@ -81,130 +83,136 @@ export function ScanResults() {
   return (
     <div className="fixed inset-0 overflow-hidden bg-[#050505] text-foreground font-sans selection:bg-[#00ff88]/30 selection:text-[#00ff88]">
       <TacticalBackground />
+      <SystemTerminal />
 
-      {/* GLOBAL GRID CONTAINER */}
-      <div className="grid h-full w-full grid-rows-[60px_1fr] relative z-10">
+      {/* GLOBAL APP SHELL GRID: [NAV | SIDEBAR | MAIN] */}
+      <div className="grid h-full w-full grid-cols-[64px_1fr] relative z-10">
 
-        {/* HEADER: STATUS BAR */}
-        {/* HEADER: STATUS BAR */}
-        <header className="h-[60px] border-b border-white/10 bg-black/60 backdrop-blur-md flex items-center justify-between px-6 z-50">
+        {/* COL 1: NAVIGATION RAIL */}
+        <NavigationRail />
 
-          {/* LEFT: SYSTEM & CONTEXT */}
-          <div className="flex items-center gap-6">
+        {/* CONTENT AREA (Dynamic Grid) */}
+        <div className="flex flex-col h-full overflow-hidden relative">
 
-            {/* System Status (Clean) */}
-            <div className="flex items-center gap-2.5">
-              <div className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-accent"></span>
+          {/* HEADER: STATUS BAR */}
+          <header className="h-[60px] border-b border-white/10 bg-black/60 backdrop-blur-md flex items-center justify-between px-6 z-50 shrink-0">
+
+            {/* LEFT: SYSTEM & CONTEXT */}
+            <div className="flex items-center gap-6">
+
+              {/* System Status (Clean) */}
+              <div className="flex items-center gap-2.5">
+                <div className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-accent"></span>
+                </div>
+                <span className="text-[10px] font-bold tracking-[0.2em] text-accent uppercase font-mono">
+                  SYSTEM ONLINE
+                </span>
               </div>
-              <span className="text-[10px] font-bold tracking-[0.2em] text-accent uppercase font-mono">
-                SYSTEM ONLINE
-              </span>
+
+              <div className="h-6 w-px bg-white/10 rotate-12" />
+
+              {/* Breadcrumb Context */}
+              <div className="flex items-baseline gap-2">
+                <h1 className="text-sm font-bold tracking-widest text-white uppercase hud-headline">
+                  {(scanMetadata?.mode || 'SCANNER')}
+                </h1>
+                <span className="text-[10px] text-zinc-500 font-mono tracking-wider uppercase">
+                      // {scanMetadata?.profile || 'PRECISION'}
+                </span>
+              </div>
             </div>
 
-            <div className="h-6 w-px bg-white/10 rotate-12" />
+            {/* RIGHT: STATS & ACTIONS */}
+            <div className="flex items-center gap-6">
 
-            {/* Breadcrumb Context */}
-            <div className="flex items-baseline gap-2">
-              <h1 className="text-sm font-bold tracking-widest text-white uppercase hud-headline">
-                {(scanMetadata?.mode || 'SCANNER')}
-              </h1>
-              <span className="text-[10px] text-zinc-500 font-mono tracking-wider uppercase">
-                  // {scanMetadata?.profile || 'PRECISION'}
-              </span>
-            </div>
-          </div>
+              {/* Stats Group (Text Only, No Boxes) */}
+              <div className="hidden lg:flex items-center gap-6 text-[10px] font-mono tracking-wider text-zinc-500">
+                <div className="flex items-center gap-2">
+                  <span>TARGETS</span>
+                  <span className="text-white font-bold text-sm">{scanResults.length}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>LATENCY</span>
+                  <span className="text-accent">1.2s</span>
+                </div>
+              </div>
 
-          {/* RIGHT: STATS & ACTIONS */}
-          <div className="flex items-center gap-6">
+              {/* Live Indicator */}
+              <div className="flex items-center gap-2 px-2 py-1 bg-red-500/10 rounded border border-red-500/20">
+                <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-[9px] font-bold text-red-500 tracking-widest">LIVE</span>
+              </div>
 
-            {/* Stats Group (Text Only, No Boxes) */}
-            <div className="hidden lg:flex items-center gap-6 text-[10px] font-mono tracking-wider text-zinc-500">
+              <div className="h-6 w-px bg-white/10" />
+
+              {/* Actions */}
               <div className="flex items-center gap-2">
-                <span>TARGETS</span>
-                <span className="text-white font-bold text-sm">{scanResults.length}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>LATENCY</span>
-                <span className="text-accent">1.2s</span>
-              </div>
-            </div>
+                {selectedId && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedId(null)}
+                    className="h-8 text-[10px] font-mono text-zinc-400 hover:text-white hover:bg-white/5 tracking-wider"
+                  >
+                    <Globe className="mr-2 h-3 w-3" /> DEBRIEF
+                  </Button>
+                )}
 
-            {/* Live Indicator */}
-            <div className="flex items-center gap-2 px-2 py-1 bg-red-500/10 rounded border border-red-500/20">
-              <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-[9px] font-bold text-red-500 tracking-widest">LIVE</span>
-            </div>
-
-            <div className="h-6 w-px bg-white/10" />
-
-            {/* Actions */}
-            <div className="flex items-center gap-2">
-              {selectedId && (
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  onClick={() => setSelectedId(null)}
-                  className="h-8 text-[10px] font-mono text-zinc-400 hover:text-white hover:bg-white/5 tracking-wider"
+                  onClick={() => navigate('/scan')}
+                  className="h-8 border-accent/20 bg-accent/5 hover:bg-accent/10 hover:border-accent/40 text-accent text-[10px] font-bold tracking-widest font-mono shadow-[0_0_10px_-4px_rgba(0,255,170,0.3)]"
                 >
-                  <Globe className="mr-2 h-3 w-3" /> DEBRIEF
+                  NEW SCAN
                 </Button>
-              )}
+              </div>
+            </div>
+          </header>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/scan')}
-                className="h-8 border-accent/20 bg-accent/5 hover:bg-accent/10 hover:border-accent/40 text-accent text-[10px] font-bold tracking-widest font-mono shadow-[0_0_10px_-4px_rgba(0,255,170,0.3)]"
-              >
-                NEW SCAN
-              </Button>
+          {/* SPLIT VIEW: SIDEBAR | MAIN */}
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-[380px_1fr] lg:grid-cols-[450px_1fr] overflow-hidden relative">
+
+            {/* LEFT PANEL: TARGET FEED */}
+            <div className={cn(
+              "h-full border-r border-white/5 bg-black/20 backdrop-blur-sm relative transition-transform duration-300 md:translate-x-0 z-20",
+              selectedId ? "-translate-x-full md:translate-x-0 absolute md:relative w-full md:w-auto" : "translate-x-0 w-full"
+            )}>
+              <TargetList
+                results={scanResults}
+                selectedId={selectedId}
+                onSelect={(r) => setSelectedId(r.id)}
+                className="h-full bg-transparent border-none"
+              />
+            </div>
+
+            {/* RIGHT PANEL: INTEL CENTER */}
+            <div className="relative h-full overflow-hidden bg-black/40">
+              {/* Background Texture */}
+              <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+                style={{ backgroundImage: 'radial-gradient(circle at center, #00ff88 1px, transparent 1px)', backgroundSize: '40px 40px' }}
+              />
+
+              {/* Content Container */}
+              <div className="h-full w-full relative z-10">
+                {selectedResult ? (
+                  <IntelDossier
+                    result={selectedResult}
+                    metadata={scanMetadata}
+                    regime={symbolRegimes[selectedResult.pair] || globalRegime}
+                    onClose={() => setSelectedId(null)}
+                  />
+                ) : (
+                  <MissionStatsHero
+                    results={scanResults}
+                    metadata={scanMetadata}
+                  />
+                )}
+              </div>
             </div>
           </div>
-        </header>
-
-        {/* MAIN CONTENT GRID: SIDEBAR | MAIN */}
-        <div className="grid grid-cols-1 md:grid-cols-[380px_1fr] lg:grid-cols-[450px_1fr] overflow-hidden relative">
-
-          {/* LEFT PANEL: TARGET FEED */}
-          <div className={cn(
-            "h-full border-r border-white/5 bg-black/20 backdrop-blur-sm relative transition-transform duration-300 md:translate-x-0 z-20",
-            selectedId ? "-translate-x-full md:translate-x-0 absolute md:relative w-full md:w-auto" : "translate-x-0 w-full"
-          )}>
-            <TargetList
-              results={scanResults}
-              selectedId={selectedId}
-              onSelect={(r) => setSelectedId(r.id)}
-              className="h-full bg-transparent border-none"
-            />
-          </div>
-
-          {/* RIGHT PANEL: INTEL CENTER */}
-          <div className="relative h-full overflow-hidden bg-black/40">
-            {/* Background Texture */}
-            <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
-              style={{ backgroundImage: 'radial-gradient(circle at center, #00ff88 1px, transparent 1px)', backgroundSize: '40px 40px' }}
-            />
-
-            {/* Content Container */}
-            <div className="h-full w-full relative z-10">
-              {selectedResult ? (
-                <IntelDossier
-                  result={selectedResult}
-                  metadata={scanMetadata}
-                  regime={symbolRegimes[selectedResult.pair] || globalRegime}
-                  onClose={() => setSelectedId(null)}
-                />
-              ) : (
-                <MissionStatsHero
-                  results={scanResults}
-                  metadata={scanMetadata}
-                />
-              )}
-            </div>
-          </div>
-
         </div>
       </div>
     </div>
