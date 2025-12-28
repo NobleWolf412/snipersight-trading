@@ -35,6 +35,7 @@ from backend.analysis.macro_context import MacroContext, compute_macro_score
 # Conditional imports for type hints
 if TYPE_CHECKING:
     from backend.shared.models.smc import CycleContext, ReversalContext
+    from backend.shared.models.regime import SymbolRegime
 
 logger = logging.getLogger(__name__)
 
@@ -1141,6 +1142,114 @@ def evaluate_weekly_stoch_rsi_gate(
     }
 
 
+def _score_regime_alignment(
+    regime,  # SymbolRegime
+    direction: str,
+    max_bonus: float = 15.0,
+    max_penalty: float = 12.0
+) -> Dict:
+    """
+    Calculate regime alignment bonus/penalty for confluence scoring.
+    
+    Rewards trades aligned with the symbol's local regime (trend + volatility).
+    Penalizes trades that fight the regime.
+    
+    Logic:
+    - ALIGNED (strong_up/up + long OR strong_down/down + short): +Bonus scaled by regime.score
+    - OPPOSED (strong_up/up + short OR strong_down/down + long): -Penalty scaled by regime.score  
+    - SIDEWAYS/NEUTRAL: Small penalty for lack of directional edge
+    
+    Args:
+        regime: SymbolRegime from RegimeDetector (trend, volatility, score)
+        direction: Trade direction ("bullish"/"bearish" or "long"/"short")
+        max_bonus: Maximum bonus for perfect alignment (default 15)
+        max_penalty: Maximum penalty for opposing strong regime (default 12)
+        
+    Returns:
+        Dict with:
+            - adjustment: float - score adjustment (positive=bonus, negative=penalty)
+            - aligned: bool - whether direction aligns with regime
+            - reason: str - explanation
+            - factor_score: float - 0-100 scaled score for ConfluenceFactor
+    """
+    result = {
+        "adjustment": 0.0,
+        "aligned": True,
+        "reason": "No regime data available",
+        "factor_score": 50.0  # Neutral
+    }
+    
+    if regime is None:
+        return result
+    
+    trend = getattr(regime, 'trend', 'sideways')
+    regime_score = getattr(regime, 'score', 50.0)
+    volatility = getattr(regime, 'volatility', 'normal')
+    
+    # Normalize direction
+    is_long = direction.lower() in ('bullish', 'long')
+    
+    # Score multiplier based on regime confidence (0-100 score -> 0.5-1.0 multiplier)
+    confidence_mult = 0.5 + (regime_score / 200.0)  # 50 -> 0.75, 100 -> 1.0
+    
+    # Alignment logic
+    bullish_trends = ('strong_up', 'up')
+    bearish_trends = ('strong_down', 'down')
+    
+    if trend in bullish_trends:
+        if is_long:
+            # Aligned with bullish regime
+            is_strong = trend == 'strong_up'
+            base_bonus = max_bonus if is_strong else max_bonus * 0.7
+            result["adjustment"] = base_bonus * confidence_mult
+            result["aligned"] = True
+            result["reason"] = f"LONG aligned with {trend} regime (score={regime_score:.0f})"
+            result["factor_score"] = min(100.0, 50.0 + result["adjustment"] * 3.33)
+        else:
+            # Shorting into bullish regime
+            is_strong = trend == 'strong_up'
+            base_penalty = max_penalty if is_strong else max_penalty * 0.7
+            result["adjustment"] = -base_penalty * confidence_mult
+            result["aligned"] = False
+            result["reason"] = f"SHORT opposes {trend} regime (score={regime_score:.0f})"
+            result["factor_score"] = max(0.0, 50.0 + result["adjustment"] * 5.0)
+            
+    elif trend in bearish_trends:
+        if not is_long:
+            # Aligned with bearish regime
+            is_strong = trend == 'strong_down'
+            base_bonus = max_bonus if is_strong else max_bonus * 0.7
+            result["adjustment"] = base_bonus * confidence_mult
+            result["aligned"] = True
+            result["reason"] = f"SHORT aligned with {trend} regime (score={regime_score:.0f})"
+            result["factor_score"] = min(100.0, 50.0 + result["adjustment"] * 3.33)
+        else:
+            # Longing into bearish regime
+            is_strong = trend == 'strong_down'
+            base_penalty = max_penalty if is_strong else max_penalty * 0.7
+            result["adjustment"] = -base_penalty * confidence_mult
+            result["aligned"] = False
+            result["reason"] = f"LONG opposes {trend} regime (score={regime_score:.0f})"
+            result["factor_score"] = max(0.0, 50.0 + result["adjustment"] * 5.0)
+            
+    else:  # sideways
+        # Ranging market - small penalty for either direction unless volatility suggests opportunity
+        if volatility == 'compressed':
+            # Compressed volatility in range = good for breakout anticipation (neutral)
+            result["adjustment"] = 0.0
+            result["aligned"] = True
+            result["reason"] = f"Sideways regime with {volatility} volatility (breakout potential)"
+            result["factor_score"] = 50.0
+        else:
+            # Normal/elevated volatility in range = penalize (chop)
+            result["adjustment"] = -3.0
+            result["aligned"] = True  # Not opposing, just unclear
+            result["reason"] = f"Sideways regime - no directional edge"
+            result["factor_score"] = 40.0
+    
+    return result
+
+
 def calculate_confluence_score(
     smc_snapshot: SMCSnapshot,
     indicators: IndicatorSet,
@@ -1156,7 +1265,9 @@ def calculate_confluence_score(
     # Macro context injection
     macro_context: Optional[MacroContext] = None,
     is_btc: bool = False,
-    is_alt: bool = True
+    is_alt: bool = True,
+    # Symbol-specific regime from RegimeDetector
+    regime: Optional["SymbolRegime"] = None
 ) -> ConfluenceBreakdown:
     """
     Calculate comprehensive confluence score for a trade setup.
@@ -1661,6 +1772,36 @@ def calculate_confluence_score(
                 ))
     except Exception as e:
         logger.debug("P/D zone scoring failed: %s", e)
+    
+    # --- NEW: Symbol Regime Alignment Scoring ---
+    # Rewards trades aligned with the local symbol regime (from RegimeDetector)
+    # Penalizes trades that fight the regime
+    if regime is not None:
+        try:
+            regime_result = _score_regime_alignment(
+                regime=regime,
+                direction=direction,
+                max_bonus=15.0,
+                max_penalty=12.0
+            )
+            
+            # Add as weighted factor (regime alignment is important for timing)
+            factor_score = regime_result['factor_score']
+            factors.append(ConfluenceFactor(
+                name="Regime Alignment",
+                score=factor_score,
+                weight=get_w('htf_alignment', 0.12),  # Use htf_alignment weight as proxy
+                rationale=regime_result['reason']
+            ))
+            
+            if regime_result['aligned']:
+                logger.debug("📊 Regime ALIGNED: %s (adj=%.1f)", 
+                           regime_result['reason'], regime_result['adjustment'])
+            else:
+                logger.debug("⚠️ Regime OPPOSED: %s (adj=%.1f)", 
+                           regime_result['reason'], regime_result['adjustment'])
+        except Exception as e:
+            logger.debug("Regime alignment scoring failed: %s", e)
     
     # --- NEW: Inside Order Block Bonus ---
     # Extra confluence when price is inside a valid aligned OB
