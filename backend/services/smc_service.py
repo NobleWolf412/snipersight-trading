@@ -197,7 +197,6 @@ class SMCDetectionService:
                 })
                 continue
         
-                continue
         
         # --- Post-Detection Filters ---
         

@@ -139,11 +139,18 @@ export function ScanResults() {
                 </div>
               </div>
 
-              {/* Live Indicator */}
-              <div className="flex items-center gap-2 px-2 py-1 bg-red-500/10 rounded border border-red-500/20">
-                <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-[9px] font-bold text-red-500 tracking-widest">LIVE</span>
-              </div>
+              {/* Status Indicator - Shows DEMO MODE when offline */}
+              {scanMetadata?.offline ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/20 rounded border border-amber-500/40 animate-pulse">
+                  <div className="w-2 h-2 rounded-full bg-amber-500" />
+                  <span className="text-[10px] font-bold text-amber-500 tracking-widest">DEMO MODE</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-2 py-1 bg-red-500/10 rounded border border-red-500/20">
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-[9px] font-bold text-red-500 tracking-widest">LIVE</span>
+                </div>
+              )}
 
               <div className="h-6 w-px bg-white/10" />
 

@@ -60,33 +60,6 @@ class SMCConfigUpdate(BaseModel):
     sweep_require_volume_spike: Optional[bool] = None
 
 
-# Copied from api_server.py for consolidation
-class Exchange(str, Enum):
-    """Supported exchanges."""
-    PHEMEX = "phemex"
-    BINANCE = "binance"
-    BYBIT = "bybit"
-
-
-class Timeframe(str, Enum):
-    """Supported timeframes."""
-    M1 = "1m"
-    M5 = "5m"
-    M15 = "15m"
-    H1 = "1h"
-    H4 = "4h"
-    D1 = "1d"
-
-
-class ScannerConfig(BaseModel):
-    """Scanner configuration."""
-    exchange: Exchange
-    symbols: List[str]
-    timeframes: List[Timeframe]
-    min_score: float = Field(ge=0, le=100)
-    indicators: Dict[str, bool]
-
-
 
 # Copied from api_server.py for consolidation
 class Exchange(str, Enum):
@@ -664,127 +637,16 @@ async def get_signals(
         if cleanup_old_scan_jobs:
             cleanup_old_scan_jobs()
 
+        # Transform trade plans to API response format using shared utility
+        from backend.shared.utils.signal_transform import transform_trade_plans_to_signals
         rejected_count = len(symbols) - len(trade_plans)
+        signals = transform_trade_plans_to_signals(trade_plans, mode, current_adapter)
         
-        # Transform response (simplified, assume existing logic)
-        signals = []
-        for plan in trade_plans:
-            clean_symbol = plan.symbol.replace('/', '').replace(':USDT', '')
-            signal = {
-                "symbol": clean_symbol,
-                "direction": plan.direction,
-                "score": plan.confidence_score,
-                "entry_near": plan.entry_zone.near_entry,
-                "entry_far": plan.entry_zone.far_entry,
-                "stop_loss": plan.stop_loss.level,
-                "targets": [{"level": tp.level, "percentage": tp.percentage} for tp in plan.targets],
-                "primary_timeframe": mode.timeframes[-1] if mode.timeframes else "",
-                "current_price": plan.entry_zone.near_entry,
-                "analysis": {
-                    "trend": plan.direction.lower(),
-                    "risk_reward": plan.risk_reward,
-                    "confluence_score": plan.confidence_score # simplified
-                },
-                "rationale": plan.rationale,
-                "setup_type": plan.setup_type
-            }
-            # Attempt to enrich if attributes exist
-            if hasattr(plan, 'confluence_breakdown'):
-                signal['analysis']['confluence_score'] = plan.confluence_breakdown.total_score
-                # Expose full breakdown for UI scorecard - explicitly convert dataclass to dict
-                try:
-                    signal['confluence_breakdown'] = asdict(plan.confluence_breakdown)
-                except Exception:
-                    # Fallback if asdict fails (e.g. if it's not a dataclass for some reason)
-                    signal['confluence_breakdown'] = plan.confluence_breakdown.to_dict() if hasattr(plan.confluence_breakdown, 'to_dict') else plan.confluence_breakdown
-
-            # Expose SMC geometry for chart overlays (OB/FVG price ranges)
-            # Add debug info to signal for frontend visibility
-            signal['_debug_metadata'] = {
-                'has_metadata': hasattr(plan, 'metadata') and plan.metadata is not None,
-                'metadata_keys': list(plan.metadata.keys()) if plan.metadata else [],
-                'has_order_blocks_list': 'order_blocks_list' in (plan.metadata or {}),
-            }
-
-            if hasattr(plan, 'metadata') and plan.metadata:
-                ob_list = plan.metadata.get('order_blocks_list', [])
-                fvg_list = plan.metadata.get('fvgs_list', [])
-                bos_list = plan.metadata.get('structural_breaks_list', [])
-                sweep_list = plan.metadata.get('liquidity_sweeps_list', [])
-                pool_list = plan.metadata.get('liquidity_pools_list', [])
-
-                signal['_debug_metadata']['ob_count'] = len(ob_list)
-                signal['_debug_metadata']['fvg_count'] = len(fvg_list)
-
-                signal['smc_geometry'] = {
-                    'order_blocks': ob_list[:10],  # Limit to top 10 for payload size
-                    'fvgs': fvg_list[:10],
-                    'bos_choch': bos_list[:10],
-                    'liquidity_sweeps': sweep_list[:10],
-                    'liquidity_pools': pool_list[:10],
-                }
-
-                # Expose reversal context for UI notification
-                reversal_data = plan.metadata.get('reversal')
-                if reversal_data and reversal_data.get('is_reversal_setup'):
-                    signal['reversal_context'] = {
-                        'is_reversal_setup': reversal_data.get('is_reversal_setup', False),
-                        'direction': reversal_data.get('direction', ''),
-                        'cycle_aligned': reversal_data.get('cycle_aligned', False),
-                        'htf_bypass_active': reversal_data.get('htf_bypass_active', False),
-                        'confidence': reversal_data.get('confidence', 0.0),
-                        'rationale': reversal_data.get('rationale', '')
-                    }
-
-            signals.append(signal)
-
-        # =========================================================================
-        # LIVE PRICE VALIDATION GATE
-        # Filter out signals where entry zone is too far from live market price.
-        # This prevents stale cached data from producing invalid trade plans.
-        # =========================================================================
-        MAX_ENTRY_DRIFT_PCT = 10.0  # 10% threshold - reject signals beyond this
-        
-        validated_signals = []
-        for sig in signals:
-            try:
-                # Get live ticker price from exchange
-                ticker = current_adapter.exchange.fetch_ticker(sig['symbol'].replace('/', '') + ':USDT')
-                live_price = ticker.get('last') or ticker.get('close') or 0
-                
-                if live_price > 0:
-                    avg_entry = (sig['entry_near'] + sig['entry_far']) / 2
-                    drift_pct = abs(avg_entry - live_price) / live_price * 100
-                    
-                    # Update signal with actual live price
-                    sig['current_price'] = live_price
-                    sig['_price_validation'] = {
-                        'live_price': live_price,
-                        'avg_entry': avg_entry,
-                        'drift_pct': round(drift_pct, 2),
-                        'validated': drift_pct <= MAX_ENTRY_DRIFT_PCT
-                    }
-                    
-                    if drift_pct > MAX_ENTRY_DRIFT_PCT:
-                        logger.warning(
-                            "⚠️ STALE SIGNAL FILTERED: %s entry $%.2f is %.1f%% from live price $%.2f",
-                            sig['symbol'], avg_entry, drift_pct, live_price
-                        )
-                        continue  # Skip this stale signal
-                        
-                validated_signals.append(sig)
-            except Exception as e:
-                logger.warning("Price validation failed for %s: %s - keeping signal", sig['symbol'], e)
-                validated_signals.append(sig)  # Keep signal if validation fails
-        
-        stale_filtered_count = len(signals) - len(validated_signals)
-        if stale_filtered_count > 0:
-            logger.info("🧹 Filtered %d stale signals (entry >%.0f%% from live price)", 
-                       stale_filtered_count, MAX_ENTRY_DRIFT_PCT)
+        stale_filtered_count = 0  # Already handled in transform utility
 
         return {
-            "signals": validated_signals,
-            "total": len(validated_signals),
+            "signals": signals,
+            "total": len(signals),
             "scanned": len(symbols),
             "rejected": rejected_count,
             "stale_filtered": stale_filtered_count,

@@ -271,11 +271,13 @@ export function ScannerSetup() {
         profile: selectedMode?.profile || 'default',
         scanned: demo.length,
         offline: true,
+        offlineReason: errorMessage,
       }));
 
       toast({
         title: 'Operating Offline',
-        description: `Backend unavailable or scan failed. Showing ${demo.length} demo setups.`,
+        description: `${errorMessage}. Showing ${demo.length} demo setups.`,
+        variant: 'destructive',
       });
 
       setIsScanning(false);
