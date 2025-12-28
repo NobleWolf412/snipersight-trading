@@ -12,7 +12,7 @@ import { TargetList } from '@/components/ScanResults/TargetList';
 import { IntelDossier } from '@/components/ScanResults/IntelDossier';
 import { MissionStatsHero } from '@/components/ScanResults/MissionStatsHero';
 import { TacticalBackground } from '@/components/ui/TacticalBackground';
-import { NavigationRail } from '@/components/Layout/NavigationRail';
+import { NavigationRail } from '@/components/layout/NavigationRail';
 import { LiveBadge, DataPill } from '@/components/ui/TacticalComponents';
 import { SystemTerminal } from '@/components/ui/SystemTerminal';
 
