@@ -54,6 +54,9 @@ export interface ScanResult {
     fvgs?: any[];
     bos_choch?: any[];
     liquidity_sweeps?: any[];
+    liquidity_pools?: any[]; // For EQH/EQL zones
+    equal_highs?: number[];
+    equal_lows?: number[];
   };
 
   // Cycle Theory context (Phase 7 - Camel Finance methodology)

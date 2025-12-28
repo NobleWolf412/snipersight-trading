@@ -711,6 +711,7 @@ async def get_signals(
                 fvg_list = plan.metadata.get('fvgs_list', [])
                 bos_list = plan.metadata.get('structural_breaks_list', [])
                 sweep_list = plan.metadata.get('liquidity_sweeps_list', [])
+                pool_list = plan.metadata.get('liquidity_pools_list', [])
 
                 signal['_debug_metadata']['ob_count'] = len(ob_list)
                 signal['_debug_metadata']['fvg_count'] = len(fvg_list)
@@ -720,6 +721,7 @@ async def get_signals(
                     'fvgs': fvg_list[:10],
                     'bos_choch': bos_list[:10],
                     'liquidity_sweeps': sweep_list[:10],
+                    'liquidity_pools': pool_list[:10],
                 }
 
                 # Expose reversal context for UI notification

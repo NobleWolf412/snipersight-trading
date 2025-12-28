@@ -1,0 +1,639 @@
+"""
+Entry Engine Module
+
+Handles entry zone calculation and validation for the Trade Planner, including:
+- Dual Entry Calculation (Near/Far)
+- Order Block Validation (Mitigation, Breaches)
+- Premium/Discount Compliance (Smart Entry)
+- Liquidity Sweep Confirmation (Turtle Soup)
+"""
+
+import logging
+from typing import Optional, List, Literal, cast
+import pandas as pd
+
+from backend.shared.models.planner import EntryZone
+from backend.shared.models.data import MultiTimeframeData
+from backend.shared.models.smc import SMCSnapshot, OrderBlock, FVG, LiquiditySweep
+from backend.shared.models.scoring import ConfluenceBreakdown
+from backend.shared.config.defaults import ScanConfig
+from backend.shared.config.planner_config import PlannerConfig
+from backend.strategy.planner.regime_engine import get_atr_regime, _calculate_htf_bias_factor
+from backend.shared.models.indicators import IndicatorSet
+from backend.strategy.planner.risk_engine import _get_allowed_entry_tfs
+
+logger = logging.getLogger(__name__)
+
+SetupArchetype = Literal[
+    "TREND_OB_PULLBACK",
+    "RANGE_REVERSION",
+    "SWEEP_REVERSAL",
+    "BREAKOUT_RETEST",
+]
+
+def _map_setup_to_archetype(setup_type: str) -> SetupArchetype:
+    s = (setup_type or "").upper().replace(" ", "_")
+    if "SWEEP" in s:
+        return cast(SetupArchetype, "SWEEP_REVERSAL")
+    if "BREAKOUT" in s or "RETEST" in s:
+        return cast(SetupArchetype, "BREAKOUT_RETEST")
+    if "RANGE" in s or "MEAN" in s:
+        return cast(SetupArchetype, "RANGE_REVERSION")
+    return cast(SetupArchetype, "TREND_OB_PULLBACK")
+
+def _is_in_correct_pd_zone(
+    price: float,
+    is_bullish: bool,
+    smc_snapshot: SMCSnapshot,
+    timeframe: str,
+    tolerance: float = 0.0
+) -> bool:
+    """Check if price is in the correct Premium/Discount zone with tolerance."""
+    if not smc_snapshot.premium_discount:
+        return True
+    
+    # Try specific timeframe, then fallback
+    pd_data = smc_snapshot.premium_discount.get(timeframe)
+    if not pd_data:
+        # Fallback to any HTF PD data
+        for tf in ['1w', '1d', '4h']:
+            if tf in smc_snapshot.premium_discount:
+                pd_data = smc_snapshot.premium_discount[tf]
+                break
+    
+    if not pd_data or 'equilibrium' not in pd_data:
+        return True
+        
+    equilibrium = pd_data['equilibrium']
+    
+    # Calculate buffer distance based on range size (if available)
+    buffer = 0.0
+    if tolerance > 0 and 'range_high' in pd_data and 'range_low' in pd_data:
+        range_size = pd_data['range_high'] - pd_data['range_low']
+        buffer = range_size * tolerance
+    
+    if is_bullish:
+        # Longs should be in Discount (below equilibrium)
+        # With tolerance: allow price up to equilibrium + buffer
+        return price <= (equilibrium + buffer)
+    else:
+        # Shorts should be in Premium (above equilibrium)
+        # With tolerance: allow price down to equilibrium - buffer
+        return price >= (equilibrium - buffer)
+
+
+def _has_sweep_backing(
+    ob: OrderBlock,
+    sweeps: List[LiquiditySweep],
+    lookback_candles: int = 5
+) -> bool:
+    """Check if Order Block was immediately preceded by a liquidity sweep."""
+    if not sweeps:
+        return False
+        
+    ob_ts = ob.timestamp
+    
+    # Filter sweeps that happened BEFORE the OB
+    valid_sweeps = [s for s in sweeps if s.timestamp < ob_ts]
+    if not valid_sweeps:
+        return False
+        
+    # Get separate timeframe parsing helper if needed, or estimate duration
+    # Simple heuristic: scan recently preceding sweeps
+    # Assuming standard candle durations for timestamp delta check would be robust,
+    # but for now, we'll check if any sweep constitutes a "setup" for this OB.
+    # A Turtle Soup setup implies the OB *formed* from the reversal of the sweep.
+    # So the sweep timestamp should be very close to OB timestamp.
+    
+    # Let's use a robust proximity check based on timeframe
+    timeframe_minutes = {
+        '1m': 1, '5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440, '1w': 10080
+    }
+    tf_min = timeframe_minutes.get(ob.timeframe.lower(), 60)
+    max_delta_sec = tf_min * 60 * lookback_candles
+    
+    nearest_sweep = max(valid_sweeps, key=lambda s: s.timestamp)
+    gap = (ob_ts - nearest_sweep.timestamp).total_seconds()
+    
+    if gap <= max_delta_sec:
+         # Also check levels: sweep level should be close to OB
+        # For bullish, sweep low should be near/below OB low
+        # For bearish, sweep high should be near/above OB high
+        if ob.direction == "bullish" and nearest_sweep.sweep_type == "low":
+            return True
+        elif ob.direction == "bearish" and nearest_sweep.sweep_type == "high":
+            return True
+            
+    return False
+
+
+def _is_order_block_valid(ob: OrderBlock, df: pd.DataFrame, current_price: float) -> bool:
+    """Validate an order block is not broken and not currently being mitigated."""
+    if df is None or len(df) == 0:
+        return True
+    try:
+        future_candles = df[df.index > ob.timestamp]
+    except Exception:
+        return True
+    if len(future_candles) == 0:
+        return True
+    if ob.direction == "bullish":
+        lowest = future_candles['low'].min()
+        if lowest < ob.low:  # broken through
+            return False
+        if ob.low <= current_price <= ob.high:  # currently inside zone
+            return False
+    else:
+        highest = future_candles['high'].max()
+        if highest > ob.high:
+            return False
+        if ob.low <= current_price <= ob.high:
+            return False
+    return True
+
+def _time_since_last_touch(ob: OrderBlock, df: pd.DataFrame) -> float:
+    """Hours since OB last touched; infinity if never."""
+    if df is None or len(df) == 0:
+        return float('inf')
+    try:
+        future_candles = df[df.index > ob.timestamp]
+    except Exception:
+        return float('inf')
+    if len(future_candles) == 0:
+        return float('inf')
+    if ob.direction == "bullish":
+        touches = future_candles[future_candles['low'] <= ob.high]
+    else:
+        touches = future_candles[future_candles['high'] >= ob.low]
+    if len(touches) == 0:
+        return float('inf')
+    last_touch = touches.index[-1]
+    return (df.index[-1] - last_touch).total_seconds() / 3600.0
+
+
+def _calculate_entry_zone(
+    is_bullish: bool,
+    smc_snapshot: SMCSnapshot,
+    current_price: float,
+    atr: float,
+    primary_tf: str,
+    setup_archetype: SetupArchetype,
+    config: ScanConfig,
+    planner_cfg: PlannerConfig,
+    confluence_breakdown: Optional[ConfluenceBreakdown] = None,
+    multi_tf_data: Optional[MultiTimeframeData] = None,
+    indicators: Optional[IndicatorSet] = None  # NEW: For regime detection
+) -> tuple[EntryZone, bool]:
+    """
+    Calculate dual entry zone based on SMC structure.
+    
+    Near entry: Closer to current price, safer but lower R:R
+    Far entry: Deeper into structure, riskier but better R:R
+    
+    Returns:
+        Tuple of (EntryZone, used_structure_flag)
+    """
+    logger.critical(f"_calculate_entry_zone CALLED: is_bullish={is_bullish}, current_price={current_price}, atr={atr}, num_obs={len(smc_snapshot.order_blocks)}, num_fvgs={len(smc_snapshot.fvgs)}")
+    # DEBUG: Log all OB details before filtering
+    for ob in smc_snapshot.order_blocks:
+        logger.critical(f"  OB: dir={ob.direction} tf={ob.timeframe} low={ob.low:.2f} high={ob.high:.2f}")
+    
+    # Find relevant order block or FVG
+    allowed_tfs = _get_allowed_entry_tfs(config)  # CHANGED: Use entry TFs, not structure TFs
+    
+    if is_bullish:
+        # Look for bullish OB or FVG below current price (OR we are inside it)
+        # Fix: Allowed if we haven't broken the low. Being inside (high >= price >= low) is GOOD.
+        obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bullish" and ob.low < current_price]
+        
+        # NEW: Premium/Discount Enforcement (Smart Entry)
+        if planner_cfg.pd_compliance_required:
+            pre_pd_count = len(obs)
+            # Check if OB acts as support in Discount zone (with tolerance)
+            obs = [ob for ob in obs if _is_in_correct_pd_zone(
+                ob.high, True, smc_snapshot, primary_tf, planner_cfg.pd_compliance_tolerance)]
+            if len(obs) < pre_pd_count:
+                logger.debug(f"PD Gate (Long): Filtered {pre_pd_count - len(obs)} Bullish OBs in Premium")
+        
+        # Filter to allowed ENTRY timeframes if specified
+        if allowed_tfs:
+            # Normalize timeframe case (OBs may have '1H', config has '1h')
+            obs = [ob for ob in obs if ob.timeframe.lower() in allowed_tfs]
+            logger.debug(f"Filtered bullish OBs to entry_timeframes {allowed_tfs}: {len(obs)} remain")
+        # Filter out OBs too far (distance constraint)
+        max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
+        # Fix: If inside OB (price <= high), distance is 0.
+        obs = [ob for ob in obs if (max(0.0, current_price - ob.high) / atr) <= max_pullback_atr]
+        # Filter out heavily mitigated OBs
+        obs = [ob for ob in obs if ob.mitigation_level <= planner_cfg.ob_mitigation_max]
+        # Validate OB integrity (not broken / not currently tapped)
+        if multi_tf_data and primary_tf in getattr(multi_tf_data, 'timeframes', {}):
+            df_primary = multi_tf_data.timeframes[primary_tf]
+            validated = []
+            for ob in obs:
+                # Ensure price hasn't broken the OB
+                if current_price >= ob.low:
+                    validated.append(ob)
+                else:
+                    logger.debug(f"Filtered invalid bullish OB (broken or tapped): low={ob.low} high={ob.high} ts={ob.timestamp}")
+            obs = validated
+        
+        # NOTE: Removed Grade A/B filter - confluence scoring already penalizes weak OBs.
+        # If a symbol passes the confluence gate (70%+), entry zone should be allowed.
+        # Double-filtering was blocking valid high-confluence setups with weaker individual OBs.
+        logger.debug(f"Bullish OBs for entry zone: {len(obs)} (all grades allowed, confluence handles quality)")
+
+        # NEW: Validate LTF OBs have HTF backing (Top-Down Confirmation)
+        # SKIP for Surgical mode - precision entries can use isolated LTF OBs
+        # (confluence scoring will still penalize weak setups)
+        skip_htf_backing = config.profile in ('precision', 'surgical')
+        
+        if skip_htf_backing:
+            logger.debug("HTF backing filter SKIPPED for bullish OBs (%s mode)", config.profile)
+        else:
+            # Prevent taking 5m/15m entries in empty space
+            validated_backing = []
+            ltf_tfs = ('1m', '5m', '15m')
+            htf_tfs = ('1h', '4h', '1d', '1w')
+            
+            for ob in obs:
+                if ob.timeframe in ltf_tfs:
+                    # Check for overlapping HTF structure (OB or FVG)
+                    has_backing = False
+                    
+                    # Check OBs
+                    for htf_ob in smc_snapshot.order_blocks:
+                        if htf_ob.timeframe in htf_tfs and htf_ob.direction == "bullish":
+                            # Check overlap: LTF OB inside or touching HTF OB
+                            if (htf_ob.low <= ob.high and htf_ob.high >= ob.low):
+                                has_backing = True
+                                break
+                                
+                    # Check FVGs if no OB backing
+                    if not has_backing:
+                        for htf_fvg in smc_snapshot.fvgs:
+                            if htf_fvg.timeframe in htf_tfs and htf_fvg.direction == "bullish":
+                                if (htf_fvg.bottom <= ob.high and htf_fvg.top >= ob.low): # FVG bottom/top are low/high
+                                    has_backing = True
+                                    break
+                    
+                    if has_backing:
+                        validated_backing.append(ob)
+                    else:
+                        logger.debug(f"Filtered isolated LTF OB (no HTF backing): {ob.timeframe} at {ob.low}")
+                else:
+                    # MTF/HTF OBs are self-validating or handled by structure scoring
+                    validated_backing.append(ob)
+            obs = validated_backing
+        
+        # Prefer higher timeframe / freshness / displacement / low mitigation
+        tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
+        def _ob_score(ob: OrderBlock) -> float:
+            base_score = ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
+            displacement_factor = 1.0 + (ob.displacement_strength * planner_cfg.ob_displacement_weight)
+            mitigation_penalty = (1.0 - min(ob.mitigation_level, 1.0))
+            
+            # Smart Entry: Sweep Boost
+            sweep_boost = 1.0
+            if _has_sweep_backing(ob, smc_snapshot.liquidity_sweeps, planner_cfg.sweep_lookback_candles):
+                sweep_boost = planner_cfg.sweep_backing_boost
+            
+            return base_score * displacement_factor * mitigation_penalty * sweep_boost
+
+        fvgs = [fvg for fvg in smc_snapshot.fvgs if fvg.direction == "bullish" and fvg.top < current_price]
+        # Filter to allowed ENTRY timeframes if specified
+        if allowed_tfs:
+            fvgs = [fvg for fvg in fvgs if fvg.timeframe in allowed_tfs]
+            logger.debug(f"Filtered bullish FVGs to entry_timeframes {allowed_tfs}: {len(fvgs)} remain")
+        
+        if planner_cfg.pd_compliance_required:
+            pre_pd_count = len(fvgs)
+            fvgs = [f for f in fvgs if _is_in_correct_pd_zone(
+                f.top, True, smc_snapshot, primary_tf, planner_cfg.pd_compliance_tolerance)]
+            if len(fvgs) < pre_pd_count:
+                logger.debug(f"PD Gate (Long): Filtered {pre_pd_count - len(fvgs)} Bullish FVGs in Premium")
+        
+        logger.critical(f"Bullish entry zone: found {len(obs)} OBs and {len(fvgs)} FVGs below current price")
+        if obs:
+            # Use most recent/fresh OB
+            best_ob = max(obs, key=_ob_score)
+            
+            # Log sweep boost if active
+            if _has_sweep_backing(best_ob, smc_snapshot.liquidity_sweeps, planner_cfg.sweep_lookback_candles):
+                 logger.info(f"🐢 TURTLE SOUP: Bullish Entry OB {best_ob.timeframe} backed by liquidity sweep (Score Boosted {planner_cfg.sweep_backing_boost}x)")
+            entry_tf_used = best_ob.timeframe  # Track for metadata
+            logger.critical(f"ENTRY ZONE: Using bullish OB - high={best_ob.high}, low={best_ob.low}, ATR={atr}, TF={entry_tf_used}")
+            
+            # Calculate regime-aware base offset
+            # Calculate regime-aware base offset
+            if indicators:
+                 regime = get_atr_regime(indicators, current_price)
+            else:
+                 regime = "normal"
+            regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
+            base_offset = planner_cfg.entry_zone_offset_atr * regime_multiplier
+            
+            # Apply HTF bias gradient if HTF support is nearby
+            htf_factor = 1.0
+            try:
+                if (
+                    planner_cfg.htf_bias_enabled
+                    and confluence_breakdown is not None
+                    and confluence_breakdown.nearest_htf_level_type == 'support'
+                    and (confluence_breakdown.htf_proximity_atr or 99) <= planner_cfg.htf_bias_max_atr_distance
+                ):
+                    htf_distance = confluence_breakdown.htf_proximity_atr or 99
+                    htf_factor = _calculate_htf_bias_factor(htf_distance, planner_cfg)
+            except Exception:
+                pass
+            
+            offset = base_offset * htf_factor * atr
+            near_entry = best_ob.high - offset
+            far_entry = best_ob.low + offset
+            
+            # FIX: When price is INSIDE the OB (already pulled back), cap near_entry at current price
+            # This allows immediate entry instead of rejecting as "entry above price"
+            price_inside_ob = current_price <= best_ob.high and current_price >= best_ob.low
+            if near_entry > current_price:
+                logger.info("📦 ENTRY ZONE FIX: near_entry (%.2f) > price (%.2f), capping at price (inside OB: %s)",
+                            near_entry, current_price, price_inside_ob)
+                near_entry = current_price  # Allow entry at current price
+                
+            logger.info("📦 ENTRY ZONE CALC: OB=[%.2f-%.2f] | offset=%.2f (base=%.2f * htf=%.2f * atr=%.2f) | near=%.2f, far=%.2f | price=%.2f",
+                        best_ob.low, best_ob.high, offset, base_offset, htf_factor, atr, near_entry, far_entry, current_price)
+            
+            rationale = f"Entry zone based on {best_ob.timeframe} bullish order block"
+            if price_inside_ob:
+                rationale += " (price inside OB - immediate entry)"
+            used_structure = True
+            entry_zone = EntryZone(
+                near_entry=near_entry,
+                far_entry=far_entry,
+                rationale=rationale
+            )
+            # Attach entry_tf_used for metadata tracking
+            entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+            return entry_zone, used_structure
+        
+        elif fvgs:
+            # Use nearest unfilled FVG (filter by overlap threshold)
+            best_fvg = min([fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max], 
+                          key=lambda fvg: abs(fvg.top - current_price), 
+                          default=fvgs[0])
+            entry_tf_used = best_fvg.timeframe  # Track for metadata
+            
+            if indicators:
+                regime = get_atr_regime(indicators, current_price)
+            else:
+                regime = "normal"
+            regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
+            base_offset = planner_cfg.entry_zone_offset_atr * regime_multiplier
+            
+            # Apply HTF bias gradient if HTF support is nearby
+            htf_factor = 1.0
+            try:
+                if (
+                    planner_cfg.htf_bias_enabled
+                    and confluence_breakdown is not None
+                    and confluence_breakdown.nearest_htf_level_type == 'support'
+                    and (confluence_breakdown.htf_proximity_atr or 99) <= planner_cfg.htf_bias_max_atr_distance
+                ):
+                    htf_distance = confluence_breakdown.htf_proximity_atr or 99
+                    htf_factor = _calculate_htf_bias_factor(htf_distance, planner_cfg)
+            except Exception:
+                pass
+            
+            offset = base_offset * htf_factor * atr
+            near_entry = best_fvg.top - offset
+            far_entry = best_fvg.bottom + offset
+            
+            # FIX: Cap near_entry at current price if calculated above
+            if near_entry > current_price:
+                logger.info("📦 FVG ENTRY FIX: near_entry (%.2f) > price (%.2f), capping at price",
+                            near_entry, current_price)
+                near_entry = current_price
+                
+            rationale = f"Entry zone based on {best_fvg.timeframe} bullish FVG"
+            used_structure = True
+            entry_zone = EntryZone(
+                near_entry=near_entry,
+                far_entry=far_entry,
+                rationale=rationale
+            )
+            entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+            return entry_zone, used_structure
+        
+    else:  # Bearish
+        # Look for bearish OB or FVG above current price
+        # Fix: Allowed if we haven't broken the high. Being inside (low <= price <= high) is GOOD.
+        obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bearish" and ob.high > current_price]
+
+        # NEW: Premium/Discount Enforcement
+        if planner_cfg.pd_compliance_required:
+            pre_pd_count = len(obs)
+            # Check if OB acts as resistance in Premium (with tolerance)
+            obs = [ob for ob in obs if _is_in_correct_pd_zone(
+                ob.low, False, smc_snapshot, primary_tf, planner_cfg.pd_compliance_tolerance)]
+            if len(obs) < pre_pd_count:
+                logger.debug(f"PD Gate (Short): Filtered {pre_pd_count - len(obs)} Bearish OBs in Discount")
+        
+        # Filter to allowed ENTRY timeframes
+        if allowed_tfs:
+            obs = [ob for ob in obs if ob.timeframe.lower() in allowed_tfs]
+            logger.debug(f"Filtered bearish OBs to entry_timeframes {allowed_tfs}: {len(obs)} remain")
+        
+        max_pullback_atr = getattr(config, "max_pullback_atr", 3.0)
+        # Fix: If inside OB (price >= low), distance is 0.
+        obs = [ob for ob in obs if (max(0.0, ob.low - current_price) / atr) <= max_pullback_atr]
+        obs = [ob for ob in obs if ob.mitigation_level <= planner_cfg.ob_mitigation_max]
+        if multi_tf_data and primary_tf in getattr(multi_tf_data, 'timeframes', {}):
+             df_primary = multi_tf_data.timeframes[primary_tf]
+             validated = []
+             for ob in obs:
+                 # Ensure price hasn't broken the OB
+                 if current_price <= ob.high:
+                     validated.append(ob)
+                 else:
+                     logger.debug(f"Filtered invalid bearish OB (broken): low={ob.low} high={ob.high}")
+             obs = validated
+
+        logger.debug(f"Bearish OBs for entry zone: {len(obs)} (all grades allowed, confluence handles quality)")
+
+        # NEW: Validate LTF OBs have HTF backing
+        skip_htf_backing = config.profile in ('precision', 'surgical')
+        if not skip_htf_backing:
+             validated_backing = []
+             ltf_tfs = ('1m', '5m', '15m')
+             htf_tfs = ('1h', '4h', '1d', '1w')
+             for ob in obs:
+                 if ob.timeframe in ltf_tfs:
+                     # Check for overlapping HTF structure (OB or FVG)
+                     has_backing = False
+                     # Check OBs
+                     for htf_ob in smc_snapshot.order_blocks:
+                         if htf_ob.timeframe in htf_tfs and htf_ob.direction == "bearish":
+                             if (htf_ob.low <= ob.high and htf_ob.high >= ob.low):
+                                 has_backing = True
+                                 break
+                     # Check FVGs
+                     if not has_backing:
+                         for htf_fvg in smc_snapshot.fvgs:
+                             if htf_fvg.timeframe in htf_tfs and htf_fvg.direction == "bearish":
+                                 if (htf_fvg.bottom <= ob.high and htf_fvg.top >= ob.low): # FVG bottom/top are low/high
+                                     has_backing = True
+                                     break
+                     if has_backing:
+                         validated_backing.append(ob)
+                 else:
+                     validated_backing.append(ob)
+             obs = validated_backing
+
+        tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
+        def _ob_score_bearish(ob: OrderBlock) -> float:
+            base_score = ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
+            displacement_factor = 1.0 + (ob.displacement_strength * planner_cfg.ob_displacement_weight)
+            mitigation_penalty = (1.0 - min(ob.mitigation_level, 1.0))
+            
+            # Smart Entry: Sweep Boost
+            sweep_boost = 1.0
+            if _has_sweep_backing(ob, smc_snapshot.liquidity_sweeps, planner_cfg.sweep_lookback_candles):
+                sweep_boost = planner_cfg.sweep_backing_boost
+            
+            return base_score * displacement_factor * mitigation_penalty * sweep_boost
+
+        fvgs = [fvg for fvg in smc_snapshot.fvgs if fvg.direction == "bearish" and fvg.bottom > current_price]
+        if allowed_tfs:
+            fvgs = [fvg for fvg in fvgs if fvg.timeframe in allowed_tfs]
+            logger.debug(f"Filtered bearish FVGs to entry_timeframes {allowed_tfs}: {len(fvgs)} remain")
+            
+        if planner_cfg.pd_compliance_required:
+            pre_pd_count = len(fvgs)
+            fvgs = [f for f in fvgs if _is_in_correct_pd_zone(
+                f.bottom, False, smc_snapshot, primary_tf, planner_cfg.pd_compliance_tolerance)]
+            if len(fvgs) < pre_pd_count:
+                logger.debug(f"PD Gate (Short): Filtered {pre_pd_count - len(fvgs)} Bearish FVGs in Discount")
+
+        logger.critical(f"Bearish entry zone: found {len(obs)} OBs and {len(fvgs)} FVGs above current price")
+        if obs:
+            best_ob = max(obs, key=_ob_score_bearish)
+
+            # Log sweep boost
+            if _has_sweep_backing(best_ob, smc_snapshot.liquidity_sweeps, planner_cfg.sweep_lookback_candles):
+                 logger.info(f"🐢 TURTLE SOUP: Bearish Entry OB {best_ob.timeframe} backed by liquidity sweep (Score Boosted {planner_cfg.sweep_backing_boost}x)")
+            entry_tf_used = best_ob.timeframe  # Track for metadata
+            logger.critical(f"ENTRY ZONE: Using bearish OB - high={best_ob.high}, low={best_ob.low}, ATR={atr}, TF={entry_tf_used}")
+            # Calculate regime-aware base offset
+            if indicators:
+                regime = get_atr_regime(indicators, current_price)
+            else:
+                regime = "normal"
+            regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
+            base_offset = planner_cfg.entry_zone_offset_atr * regime_multiplier
+            
+            # Apply HTF bias gradient
+            htf_factor = 1.0
+            try:
+                if (
+                    planner_cfg.htf_bias_enabled
+                    and confluence_breakdown is not None
+                    and confluence_breakdown.nearest_htf_level_type == 'resistance'
+                    and (confluence_breakdown.htf_proximity_atr or 99) <= planner_cfg.htf_bias_max_atr_distance
+                ):
+                    htf_distance = confluence_breakdown.htf_proximity_atr or 99
+                    htf_factor = _calculate_htf_bias_factor(htf_distance, planner_cfg)
+            except Exception:
+                pass
+            
+            offset = base_offset * htf_factor * atr
+            near_entry = best_ob.low + offset
+            far_entry = best_ob.high - offset
+            
+            # FIX: Cap near_entry at current price if already inside
+            price_inside_ob = current_price <= best_ob.high and current_price >= best_ob.low
+            if near_entry < current_price:
+                logger.info("📦 ENTRY ZONE FIX: near_entry (%.2f) < price (%.2f), capping at price (inside OB: %s)",
+                            near_entry, current_price, price_inside_ob)
+                near_entry = current_price
+            
+            logger.info("📦 ENTRY ZONE CALC: OB=[%.2f-%.2f] | offset=%.2f (base=%.2f * htf=%.2f * atr=%.2f) | near=%.2f, far=%.2f | price=%.2f",
+                        best_ob.low, best_ob.high, offset, base_offset, htf_factor, atr, near_entry, far_entry, current_price)
+                        
+            rationale = f"Entry zone based on {best_ob.timeframe} bearish order block"
+            if price_inside_ob:
+                rationale += " (price inside OB - immediate entry)"
+            used_structure = True
+            entry_zone = EntryZone(
+                near_entry=near_entry,
+                far_entry=far_entry,
+                rationale=rationale
+            )
+            entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+            return entry_zone, used_structure
+        
+        elif fvgs:
+             best_fvg = min([fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max], 
+                           key=lambda fvg: abs(fvg.bottom - current_price), 
+                           default=fvgs[0])
+             entry_tf_used = best_fvg.timeframe  # Track for metadata
+             
+             if indicators:
+                 regime = get_atr_regime(indicators, current_price)
+             else:
+                 regime = "normal"
+             regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
+             base_offset = planner_cfg.entry_zone_offset_atr * regime_multiplier
+             
+             htf_factor = 1.0
+             try:
+                if (
+                    planner_cfg.htf_bias_enabled
+                    and confluence_breakdown is not None
+                    and confluence_breakdown.nearest_htf_level_type == 'resistance'
+                    and (confluence_breakdown.htf_proximity_atr or 99) <= planner_cfg.htf_bias_max_atr_distance
+                ):
+                    htf_distance = confluence_breakdown.htf_proximity_atr or 99
+                    htf_factor = _calculate_htf_bias_factor(htf_distance, planner_cfg)
+             except Exception:
+                pass
+             
+             offset = base_offset * htf_factor * atr
+             near_entry = best_fvg.bottom + offset
+             far_entry = best_fvg.top - offset
+             
+             # FIX
+             if near_entry < current_price:
+                 logger.info("📦 FVG ENTRY FIX: near_entry (%.2f) < price (%.2f), capping at price",
+                             near_entry, current_price)
+                 near_entry = current_price
+             
+             rationale = f"Entry zone based on {best_fvg.timeframe} bearish FVG"
+             used_structure = True
+             entry_zone = EntryZone(
+                 near_entry=near_entry,
+                 far_entry=far_entry,
+                 rationale=rationale
+             )
+             entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+             return entry_zone, used_structure
+
+    # Fallback to current price with fixed tight stop logic (if no structure found)
+    # The caller will handle this case (likely rejecting plan if strict mode)
+    used_structure = False
+    
+    # Adaptive offset for fallback (dynamic based on ATR)
+    fallback_offset = atr * 0.5
+    
+    if is_bullish:
+        entry_zone = EntryZone(
+            near_entry=current_price,
+            far_entry=current_price - fallback_offset,
+            rationale="No valid SMC structure found in entry zone (fallback)"
+        )
+    else:
+        entry_zone = EntryZone(
+            near_entry=current_price,
+            far_entry=current_price + fallback_offset,
+            rationale="No valid SMC structure found in entry zone (fallback)"
+        )
+    entry_zone.entry_tf_used = "N/A"  # type: ignore
+    return entry_zone, used_structure

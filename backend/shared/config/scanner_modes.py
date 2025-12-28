@@ -265,7 +265,7 @@ MODES: Dict[str, ScannerMode] = {
             "stealth_strict": False,  # Set True for higher conviction mode
         },
         # NEW: Nested OB entry hierarchy
-        zone_timeframes=("1h", "15m"),  # Entry zone OBs (balanced)
+        zone_timeframes=("4h", "1h", "15m"),  # Entry zone OBs (balanced)
         entry_trigger_timeframes=("5m",),  # Refined entry OBs
     ),
 }

@@ -91,7 +91,74 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
     const breakdown = result.confluence_breakdown;
     const factors = breakdown?.factors || [];
     const scannedTimeframes: string[] = metadata?.applied_timeframes || metadata?.appliedTimeframes || [];
-    const orderBlocksByTimeframe: Record<string, any[]> = metadata?.order_blocks_by_timeframe || {};
+
+    // Transform order_blocks (from smc_geometry) into grouped-by-timeframe format
+    // Backend sends OB data per-signal in smc_geometry.order_blocks
+    const orderBlocksList: any[] = (result as any).smc_geometry?.order_blocks || [];
+
+    // DEBUG: Trace OB data sources
+    console.log('[IntelDossier] OB Data Debug:', {
+        hasSmcGeometry: !!(result as any).smc_geometry,
+        orderBlocksCount: orderBlocksList.length,
+        sampleOB: orderBlocksList[0],
+        sampleOBTimeframe: orderBlocksList[0]?.timeframe,
+        allOBTimeframes: orderBlocksList.map((ob: any) => ob.timeframe),
+        // Also check for pre-transformed orderBlocks array
+        preTransformedOBs: (result as any).orderBlocks?.length,
+    });
+
+    const orderBlocksByTimeframe: Record<string, any[]> = orderBlocksList.reduce((acc: Record<string, any[]>, ob: any) => {
+        const tf = ob.timeframe?.toLowerCase() || 'unknown';
+        if (!acc[tf]) acc[tf] = [];
+        acc[tf].push({
+            price_high: ob.high,
+            price_low: ob.low,
+            timestamp: ob.timestamp ? new Date(ob.timestamp).getTime() : Date.now(),
+            type: ob.direction === 'bullish' ? 'bullish' : ob.type || 'bearish',
+            mitigated: ob.mitigation_level > 0.5,
+            timeframe: tf,
+            freshness_score: ob.freshness_score,
+            grade: ob.grade
+        });
+        return acc;
+    }, {} as Record<string, any[]>);
+
+    // DEBUG: Log the transformed OB structure
+    console.log('[IntelDossier] OB Transform Result:', {
+        timeframeKeys: Object.keys(orderBlocksByTimeframe),
+        countsByTF: Object.entries(orderBlocksByTimeframe).map(([tf, obs]) => ({ tf, count: obs.length })),
+        scannedTimeframes,
+    });
+
+    // Extract Liquidity Zones (EQH/EQL)
+    const liquidityPools = (result as any).smc_geometry?.liquidity_pools || (result.metadata as any)?.liquidity_pools_list || [];
+    // Also support checking flat equal_highs/lows if pools structure is different
+    const equalHighs = (result as any).smc_geometry?.equal_highs || [];
+    const equalLows = (result as any).smc_geometry?.equal_lows || [];
+
+    const liquidityZones: any[] = [
+        ...liquidityPools.map((p: any) => ({
+            type: p.type === 'highs' ? 'EQH' : 'EQL',
+            priceLevel: p.price ?? (p.level),
+            strength: p.grade === 'A' ? 0.9 : p.grade === 'B' ? 0.7 : 0.5,
+            ...p
+        })),
+        // Fallback for flat lists if pools empty
+        ...(liquidityPools.length === 0 ? equalHighs.map((price: number) => ({
+            type: 'EQH', priceLevel: price, strength: 0.6
+        })) : []),
+        ...(liquidityPools.length === 0 ? equalLows.map((price: number) => ({
+            type: 'EQL', priceLevel: price, strength: 0.6
+        })) : [])
+    ];
+
+    console.log('[IntelDossier] Liquidity Data:', {
+        poolsCount: liquidityPools.length,
+        eqhCount: equalHighs.length,
+        eqlCount: equalLows.length,
+        totalZones: liquidityZones.length
+    });
+
     const scannerMode = metadata?.mode || 'surgical';
 
     const copySignal = () => {
@@ -245,6 +312,7 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
                                         mode={scannerMode}
                                         timeframes={scannedTimeframes}
                                         orderBlocksByTimeframe={orderBlocksByTimeframe}
+                                        liquidityZones={liquidityZones}
                                         entryPrice={entryPrice}
                                         stopLoss={stopPrice}
                                         takeProfit={targetPrice}

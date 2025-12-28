@@ -10,7 +10,7 @@ This module defines data structures for institutional trading patterns:
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Any
 from enum import Enum
 
 
@@ -351,6 +351,7 @@ class SMCSnapshot:
     premium_discount: dict = field(default_factory=dict)  # {timeframe: PremiumDiscountZone.to_dict()}
     key_levels: Optional[dict] = None  # KeyLevels.to_dict()
     htf_sweep_context: Optional[dict] = None  # HTF sweep context for LTF synergy bonus
+    htf_levels: List[Any] = field(default_factory=list)  # Deduced HTF S/R and Fib levels from analysis
     
     def __post_init__(self):
         """Initialize empty lists if None provided."""
@@ -372,6 +373,8 @@ class SMCSnapshot:
             self.swing_structure = {}
         if self.premium_discount is None:
             self.premium_discount = {}
+        if self.htf_levels is None:
+            self.htf_levels = []
     
     def get_fresh_order_blocks(self) -> List[OrderBlock]:
         """Get only fresh, unmitigated order blocks."""

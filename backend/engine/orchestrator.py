@@ -42,6 +42,7 @@ from backend.strategy.planner.planner_service import generate_trade_plan
 from backend.risk.risk_manager import RiskManager
 from backend.risk.position_sizer import PositionSizer
 from backend.analysis.macro_context import MacroContext, compute_macro_score
+from backend.analysis.htf_levels import HTFLevelDetector
 
 from backend.engine.cooldown_manager import CooldownManager
 
@@ -170,6 +171,9 @@ class Orchestrator:
         self.current_regime: Optional[MarketRegime] = None
         # Macro context (dominance/flows); compute once per scan when available
         self.macro_context: Optional[MacroContext] = None
+        
+        # HTF Level Detector
+        self.htf_level_detector = HTFLevelDetector(proximity_threshold=2.0)
         
         # Concurrency settings
         self.concurrency_workers = max(1, concurrency_workers)
@@ -774,6 +778,29 @@ class Orchestrator:
         except Exception as e:
             logger.error(f"SMC service failed for {symbol}: {e}")
             return None, {"symbol": symbol, "reason": str(e), "reason_type": "errors"}
+        
+        # Stage 4a: HTF Level Detection (S/R and Fibs)
+        try:
+            current_price = context.multi_tf_data.get_current_price() or 0
+            # S/R Levels
+            sr_levels = self.htf_level_detector.detect_levels(
+                symbol=symbol,
+                ohlcv_data=context.multi_tf_data.timeframes,
+                current_price=current_price
+            )
+            # Fib Levels
+            fib_levels = self.htf_level_detector.detect_fib_levels(
+                symbol=symbol,
+                ohlcv_data=context.multi_tf_data.timeframes,
+                current_price=current_price
+            )
+            # Add to snapshot
+            context.smc_snapshot.htf_levels.extend(sr_levels)
+            context.smc_snapshot.htf_levels.extend(fib_levels)
+            
+            logger.info(f"📊 {symbol}: HTF Levels | S/R: {len(sr_levels)} | Fibs: {len(fib_levels)}")
+        except Exception as e:
+            logger.warning(f"HTF Level detection failed for {symbol}: {e}")
 
         
         # Stage 4b: Volume Profile calculation (institutional-grade VAP analysis)
@@ -1298,6 +1325,16 @@ class Orchestrator:
                     }
                     for fvg in context.smc_snapshot.fvgs
                 ]
+                plan.metadata['liquidity_pools_list'] = [
+                    {
+                        'timeframe': str(lp.timeframe),
+                        'type': str(lp.pool_type),
+                        'price': float(lp.level),
+                        'touches': int(lp.touches),
+                        'strength': str(lp.grade)
+                    }
+                    for lp in context.smc_snapshot.liquidity_pools
+                ]
                 plan.metadata['structural_breaks_list'] = [
                     {
                         'timeframe': str(brk.timeframe),
@@ -1316,6 +1353,17 @@ class Orchestrator:
                         'confirmed': bool(sweep.confirmation)
                     }
                     for sweep in context.smc_snapshot.liquidity_sweeps
+                ]
+                # NEW: Liquidity pools for HTF Bias chart
+                plan.metadata['liquidity_pools_list'] = [
+                    {
+                        'level': float(pool.level),
+                        'type': 'highs' if pool.pool_type == 'equal_highs' else 'lows',
+                        'grade': str(pool.grade),
+                        'touches': int(pool.touches),
+                        'fresh': bool(pool.is_fresh)
+                    }
+                    for pool in context.smc_snapshot.liquidity_pools
                 ]
             
             # Add timeframe responsibility metadata

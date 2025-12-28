@@ -4,6 +4,7 @@ import type { IChartApi, ISeriesApi, CandlestickData, Time, SeriesMarker } from 
 import { api } from '@/utils/api';
 import { cn } from '@/lib/utils';
 import { TimeframeLegend, TIMEFRAME_COLORS } from './TimeframeLegend';
+import { Fire } from '@phosphor-icons/react';
 
 interface OrderBlock {
     price_high: number;
@@ -57,6 +58,7 @@ export function LightweightChart({
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<CandlestickData[]>([]);
+    const [showOBZones, setShowOBZones] = useState(true);
 
     // Helper to determine reasonable limits based on timeframe
     const getLimitForTimeframe = (tf: string): number => {
@@ -227,55 +229,67 @@ export function LightweightChart({
         const chart = chartRef.current;
         const candleSeries = candleSeriesRef.current;
 
-        // Clear previous zone series
-        zoneSeriesRefs.current.forEach(series => chart.removeSeries(series));
+        // Clear previous zone series - with null checks to prevent "Value is undefined" errors
+        // This can happen during React Strict Mode remounts or rapid component updates
+        zoneSeriesRefs.current.forEach(series => {
+            try {
+                if (series && chart) {
+                    chart.removeSeries(series);
+                }
+            } catch (e) {
+                // Series may already be removed or chart may be disposed
+                console.debug('[LightweightChart] Series cleanup skipped:', e);
+            }
+        });
         zoneSeriesRefs.current = [];
 
-        // Create shaded zones for each order block
-        orderBlocks.forEach((ob, index) => {
-            const isBullish = ob.type === 'bullish';
+        // Create shaded zones for each order block (only if toggle enabled)
+        if (showOBZones) {
+            orderBlocks.forEach((ob, index) => {
+                const isBullish = ob.type === 'bullish';
 
-            // Use timeframe-specific color if available, otherwise default bull/bear colors
-            let fillColor: string;
-            let lineColor: string;
+                // Use timeframe-specific color if available, otherwise default bull/bear colors
+                let fillColor: string;
+                let lineColor: string;
 
-            if (ob.timeframe && TIMEFRAME_COLORS[ob.timeframe]) {
-                // Timeframe-specific color (for overlay mode)
-                const tfColor = TIMEFRAME_COLORS[ob.timeframe].color;
-                fillColor = tfColor.replace('rgb', 'rgba').replace(')', ', 0.2)');
-                lineColor = tfColor;
-            } else {
-                // Default: Bullish = Cyan Blue, Bearish = Neon Orange
-                fillColor = isBullish ? 'rgba(6, 182, 212, 0.2)' : 'rgba(255, 138, 0, 0.2)';
-                lineColor = isBullish ? '#06b6d4' : '#ff8a00';
-            }
+                if (ob.timeframe && TIMEFRAME_COLORS[ob.timeframe]) {
+                    // Timeframe-specific color (for overlay mode)
+                    const tfColor = TIMEFRAME_COLORS[ob.timeframe].color;
+                    fillColor = tfColor.replace('rgb', 'rgba').replace(')', ', 0.2)');
+                    lineColor = tfColor;
+                } else {
+                    // Default: Bullish = Cyan Blue, Bearish = Neon Orange (reduced opacity for translucency)
+                    fillColor = isBullish ? 'rgba(6, 182, 212, 0.15)' : 'rgba(255, 138, 0, 0.15)';
+                    lineColor = isBullish ? '#06b6d4' : '#ff8a00';
+                }
 
-            // Create baseline series for shaded zone
-            const zoneSeries = chart.addSeries(BaselineSeries, {
-                baseValue: { type: 'price', price: ob.price_low },
-                topLineColor: 'transparent',
-                topFillColor1: fillColor,
-                topFillColor2: fillColor,
-                bottomLineColor: 'transparent',
-                bottomFillColor1: fillColor,
-                bottomFillColor2: fillColor,
-                lineWidth: 1,
-                priceLineVisible: false,
-                lastValueVisible: false,
+                // Create baseline series for shaded zone
+                const zoneSeries = chart.addSeries(BaselineSeries, {
+                    baseValue: { type: 'price', price: ob.price_low },
+                    topLineColor: 'transparent',
+                    topFillColor1: fillColor,
+                    topFillColor2: fillColor,
+                    bottomLineColor: 'transparent',
+                    bottomFillColor1: fillColor,
+                    bottomFillColor2: fillColor,
+                    lineWidth: 1,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+
+                // Fill the zone across the entire chart
+                const zoneData = data.map(candle => ({
+                    time: candle.time,
+                    value: ob.price_high,
+                }));
+
+                zoneSeries.setData(zoneData);
+                zoneSeriesRefs.current.push(zoneSeries);
+
+                // NOTE: Removed OB boundary price lines (Top/Bot) to reduce chart clutter.
+                // The shaded baseline zones provide sufficient visual indication.
             });
-
-            // Fill the zone across the entire chart
-            const zoneData = data.map(candle => ({
-                time: candle.time,
-                value: ob.price_high,
-            }));
-
-            zoneSeries.setData(zoneData);
-            zoneSeriesRefs.current.push(zoneSeries);
-
-            // NOTE: Removed OB boundary price lines (Top/Bot) to reduce chart clutter.
-            // The shaded baseline zones provide sufficient visual indication.
-        });
+        } // End showOBZones conditional
 
         // Always show entry/SL/TP lines (important trade levels)
         // axisLabelVisible: false removes the filled color rectangles on price axis
@@ -311,7 +325,7 @@ export function LightweightChart({
                 title: 'TP',
             });
         }
-    }, [orderBlocks, entryPrice, stopLoss, takeProfit, data]);
+    }, [orderBlocks, entryPrice, stopLoss, takeProfit, data, showOBZones]);
 
     return (
         <div className={cn('relative w-full h-full bg-[#0a0f0a] rounded-lg overflow-hidden', className)}>
@@ -358,6 +372,20 @@ export function LightweightChart({
                     <span className="text-sm font-mono font-bold text-[#00ff88]">{timeframe}</span>
                 </div>
             </div>
+
+            {/* OB Toggle Button - Moved to bottom left */}
+            <button
+                onClick={() => setShowOBZones(!showOBZones)}
+                className={cn(
+                    "absolute bottom-4 left-2 p-2 rounded-lg backdrop-blur-md border-2 transition-all shadow-lg z-30 hover:scale-105 active:scale-95",
+                    showOBZones
+                        ? "bg-emerald-500/30 border-emerald-400 text-emerald-300"
+                        : "bg-black/70 border-zinc-600 text-zinc-400 hover:border-zinc-400"
+                )}
+                title={`Toggle Order Block Zones (${orderBlocks.length} OBs)`}
+            >
+                <Fire size={16} weight="bold" />
+            </button>
 
             {/* Timeframe Legend (for overlay mode) */}
             {showLegend && orderBlocks.some(ob => ob.timeframe) && (

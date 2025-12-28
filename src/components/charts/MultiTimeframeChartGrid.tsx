@@ -1,4 +1,5 @@
 import { LightweightChart } from './LightweightChart';
+import { HTFBiasChart } from './HTFBiasChart';
 import { cn } from '@/lib/utils';
 import { useScanner } from '@/context/ScannerContext';
 
@@ -11,11 +12,13 @@ interface OrderBlock {
     timeframe?: string;
 }
 
+
 interface MultiTimeframeChartGridProps {
     symbol: string;
     mode: string;
     timeframes: string[];
     orderBlocksByTimeframe: Record<string, OrderBlock[]>;
+    liquidityZones?: any[]; // Added for HTF Bias Chart
     entryPrice?: number;
     stopLoss?: number;
     takeProfit?: number;
@@ -33,6 +36,7 @@ export function MultiTimeframeChartGrid({
     mode,
     timeframes,
     orderBlocksByTimeframe,
+    liquidityZones = [], // Default to empty array
     entryPrice,
     stopLoss,
     takeProfit,
@@ -62,7 +66,14 @@ export function MultiTimeframeChartGrid({
 
         const modeStructure = activeMode.structure_timeframes || defaultStructure;
         const modeZone = activeMode.zone_timeframes || defaultZone;
-        const modeEntry = activeMode.entry_timeframes || defaultEntry;
+        // Include both entry_timeframes AND entry_trigger_timeframes (backend uses different names)
+        const entryTriggerTfs = (activeMode as any).entry_trigger_timeframes || [];
+        const modeEntry = [
+            ...(activeMode.entry_timeframes || []),
+            ...entryTriggerTfs
+        ].length > 0
+            ? [...(activeMode.entry_timeframes || []), ...entryTriggerTfs]
+            : defaultEntry;
 
         return {
             structureFiles: timeframes.filter(tf => modeStructure.includes(tf)),
@@ -79,15 +90,35 @@ export function MultiTimeframeChartGrid({
     const finalZone = zoneFiles.length ? zoneFiles : timeframes.slice(2, 4);
     const finalEntry = entryFiles.length ? entryFiles : timeframes.slice(4);
 
-    // Combine Order Blocks
+    // Helper: Case-insensitive timeframe lookup
+    // Backend may use "4H" while mode config uses "4h"
+    const getOBsForTimeframe = (tf: string) => {
+        const tfLower = tf.toLowerCase();
+        // Try exact match first, then case-insensitive
+        if (orderBlocksByTimeframe[tf]) {
+            return orderBlocksByTimeframe[tf];
+        }
+        // Try lowercase key
+        if (orderBlocksByTimeframe[tfLower]) {
+            return orderBlocksByTimeframe[tfLower];
+        }
+        // Try uppercase key
+        const tfUpper = tf.toUpperCase();
+        if (orderBlocksByTimeframe[tfUpper]) {
+            return orderBlocksByTimeframe[tfUpper];
+        }
+        return [];
+    };
+
+    // Combine Order Blocks (case-insensitive lookup)
     const structureOBs = finalStructure.flatMap(tf =>
-        (orderBlocksByTimeframe[tf] || []).map(ob => ({ ...ob, timeframe: tf }))
+        getOBsForTimeframe(tf).map(ob => ({ ...ob, timeframe: tf.toLowerCase() }))
     );
     const zoneOBs = finalZone.flatMap(tf =>
-        (orderBlocksByTimeframe[tf] || []).map(ob => ({ ...ob, timeframe: tf }))
+        getOBsForTimeframe(tf).map(ob => ({ ...ob, timeframe: tf.toLowerCase() }))
     );
     const entryOBs = finalEntry.flatMap(tf =>
-        (orderBlocksByTimeframe[tf] || []).map(ob => ({ ...ob, timeframe: tf }))
+        getOBsForTimeframe(tf).map(ob => ({ ...ob, timeframe: tf.toLowerCase() }))
     );
 
     const structurePrimaryTF = finalStructure[0] || '1d';
@@ -95,23 +126,41 @@ export function MultiTimeframeChartGrid({
     // Fix: Select smallest timeframe (last in array) for Entry execution
     const entryPrimaryTF = finalEntry[finalEntry.length - 1] || '15m';
 
+    // Debug: Log OB data flow with detailed lookups
+    console.log('[MultiTimeframeChartGrid] OB Debug:', {
+        mode,
+        finalStructure,
+        finalZone,
+        finalEntry,
+        structureOBsCount: structureOBs.length,
+        zoneOBsCount: zoneOBs.length,
+        entryOBsCount: entryOBs.length,
+        structureOBsSample: structureOBs.slice(0, 2),
+        allTimeframesInData: Object.keys(orderBlocksByTimeframe),
+        obCountsByTF: Object.entries(orderBlocksByTimeframe).map(([tf, obs]) => ({ tf, count: obs.length }))
+    });
+
     return (
         <div className={cn('grid grid-cols-2 gap-4', className)}>
-            {/* Top row: Structure chart (full width) */}
+            {/* Top row: Structure chart (full width) - HTF Bias with Heatmap */}
             {finalStructure.length > 0 && (
-                <div className="col-span-2 h-[350px] relative group border border-white/5 rounded-xl bg-black/20">
-                    <div className="absolute top-2 right-2 z-10 px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-[10px] font-bold text-blue-400 tracking-wider">
-                        🛡️ STRUCTURE
-                    </div>
-                    <LightweightChart
+                <div className="col-span-2 h-[400px] relative group border border-blue-500/20 rounded-xl bg-black/20 overflow-hidden">
+                    <HTFBiasChart
                         symbol={symbol}
                         timeframe={structurePrimaryTF}
-                        orderBlocks={structureOBs}
+                        orderBlocks={structureOBs.map(ob => ({
+                            price_high: ob.price_high,
+                            price_low: ob.price_low,
+                            timestamp: ob.timestamp,
+                            type: ob.type,
+                            mitigated: ob.mitigated,
+                            timeframe: ob.timeframe
+                        }))}
                         entryPrice={entryPrice}
                         stopLoss={stopLoss}
                         takeProfit={takeProfit}
-                        title={`BIAS (${structurePrimaryTF.toUpperCase()})`}
-                        showLegend={true}
+                        liquidityZones={liquidityZones}
+                        title={`🛡️ STRUCTURE (${structurePrimaryTF.toUpperCase()})`}
                     />
                 </div>
             )}

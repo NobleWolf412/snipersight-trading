@@ -115,6 +115,233 @@ const RejectionCard = ({ symbol, reason, score, icon: Icon = XCircle, iconColor 
     </div>
 );
 
+// Enhanced Confluence Card with Expandable Factor Details
+const ConfluenceDetailCard = ({ rejection }: { rejection: LowConfluenceRejection }) => {
+    const [expanded, setExpanded] = useState(false);
+    const hasFactors = rejection.all_factors && rejection.all_factors.length > 0;
+    const gapToThreshold = rejection.threshold - rejection.score;
+
+    return (
+        <div className="bg-black/40 rounded-lg border border-yellow-500/10 hover:border-yellow-500/30 transition-all overflow-hidden">
+            {/* Header - Always Visible */}
+            <div
+                className={cn("p-4 cursor-pointer transition-colors", hasFactors && "hover:bg-yellow-500/5")}
+                onClick={() => hasFactors && setExpanded(!expanded)}
+            >
+                <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center">
+                            <TrendDown size={16} weight="bold" className="text-yellow-400" />
+                        </div>
+                        <div>
+                            <span className="font-mono font-bold text-white text-lg">{rejection.symbol}</span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Gap to threshold:</span>
+                                <span className="text-xs font-mono font-bold text-red-400">-{gapToThreshold.toFixed(1)}%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        <div className="text-right">
+                            <div className={cn(
+                                "px-3 py-1 rounded-lg text-sm font-mono font-bold",
+                                rejection.score >= 60 ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"
+                            )}>
+                                {rejection.score.toFixed(1)}%
+                            </div>
+                            <div className="text-[10px] text-zinc-500 mt-1">of {rejection.threshold}% required</div>
+                        </div>
+                        {hasFactors && (
+                            <div className="text-zinc-500">
+                                {expanded ? <CaretUp size={20} /> : <CaretDown size={20} />}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Progress bar */}
+                <div className="h-2 bg-black/60 rounded-full overflow-hidden">
+                    <div
+                        className={cn(
+                            "h-full rounded-full transition-all relative",
+                            rejection.score >= 60 ? "bg-yellow-500" : "bg-red-500"
+                        )}
+                        style={{ width: `${Math.min(100, (rejection.score / rejection.threshold) * 100)}%` }}
+                    >
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                    </div>
+                </div>
+
+                {/* Quick Stats Row */}
+                <div className="flex flex-wrap items-center gap-3 mt-3">
+                    {rejection.synergy_bonus !== undefined && rejection.synergy_bonus > 0 && (
+                        <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-green-500/10 border border-green-500/20">
+                            <Lightning size={12} className="text-green-400" />
+                            <span className="text-[10px] font-mono text-green-400">+{rejection.synergy_bonus.toFixed(1)} synergy</span>
+                        </span>
+                    )}
+                    {rejection.conflict_penalty !== undefined && rejection.conflict_penalty > 0 && (
+                        <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-red-500/10 border border-red-500/20">
+                            <Warning size={12} className="text-red-400" />
+                            <span className="text-[10px] font-mono text-red-400">-{rejection.conflict_penalty.toFixed(1)} penalty</span>
+                        </span>
+                    )}
+                    {rejection.top_factors && rejection.top_factors.length > 0 && !expanded && (
+                        <div className="flex flex-wrap gap-1.5 ml-auto">
+                            {rejection.top_factors.slice(0, 2).map((f, j) => (
+                                <span key={j} className="px-2 py-0.5 rounded bg-black/60 text-[10px] text-zinc-400 font-mono">
+                                    {f}
+                                </span>
+                            ))}
+                            {rejection.top_factors.length > 2 && (
+                                <span className="text-[10px] text-zinc-500">+{rejection.top_factors.length - 2} more</span>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Expanded Factor Details */}
+            {expanded && hasFactors && (
+                <div className="border-t border-yellow-500/10 bg-black/20 p-4 space-y-2">
+                    <div className="flex items-center gap-2 mb-3">
+                        <ChartLineUp size={14} className="text-yellow-400" />
+                        <span className="text-xs font-bold text-yellow-400 uppercase tracking-widest">Factor Breakdown</span>
+                    </div>
+                    {rejection.all_factors!
+                        .sort((a, b) => b.weighted_contribution - a.weighted_contribution)
+                        .map((factor, idx) => (
+                            <div key={idx} className="flex items-center gap-3 p-3 bg-black/40 rounded-lg border border-white/5">
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="text-sm font-mono font-bold text-white truncate">{factor.name}</span>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <span className="text-[10px] text-zinc-500">w={factor.weight.toFixed(2)}</span>
+                                            <span className={cn(
+                                                "px-2 py-0.5 rounded text-xs font-mono font-bold",
+                                                factor.score >= 70 ? "bg-green-500/20 text-green-400" :
+                                                    factor.score >= 40 ? "bg-yellow-500/20 text-yellow-400" :
+                                                        "bg-red-500/20 text-red-400"
+                                            )}>
+                                                {factor.score.toFixed(0)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {/* Factor progress bar */}
+                                    <div className="h-1 bg-black/60 rounded-full overflow-hidden mb-2">
+                                        <div
+                                            className={cn(
+                                                "h-full rounded-full transition-all",
+                                                factor.score >= 70 ? "bg-green-500" :
+                                                    factor.score >= 40 ? "bg-yellow-500" :
+                                                        "bg-red-500"
+                                            )}
+                                            style={{ width: `${factor.score}%` }}
+                                        />
+                                    </div>
+                                    {factor.rationale && (
+                                        <p className="text-[11px] text-zinc-500 leading-relaxed">{factor.rationale}</p>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// Enhanced Risk Rejection Card with R:R Display
+const RiskDetailCard = ({ rejection }: { rejection: RiskRejection }) => {
+    return (
+        <div className="bg-black/40 rounded-lg p-4 border border-orange-500/10 hover:border-orange-500/30 transition-colors">
+            <div className="flex items-start gap-4">
+                {/* R:R Badge */}
+                {rejection.risk_reward !== undefined && (
+                    <div className="shrink-0 w-16 h-16 rounded-xl bg-orange-500/10 border border-orange-500/20 flex flex-col items-center justify-center">
+                        <span className="text-lg font-mono font-bold text-orange-400">
+                            {rejection.risk_reward.toFixed(1)}
+                        </span>
+                        <span className="text-[9px] text-orange-400/60 uppercase tracking-wider">R:R</span>
+                    </div>
+                )}
+
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                        <Scales size={16} weight="bold" className="text-orange-400" />
+                        <span className="font-mono font-bold text-white text-lg">{rejection.symbol}</span>
+                    </div>
+                    <p className="text-sm text-zinc-400 leading-relaxed">{rejection.reason}</p>
+
+                    {/* Risk indicators */}
+                    <div className="flex flex-wrap gap-2 mt-3">
+                        {rejection.risk_reward !== undefined && rejection.risk_reward < 1 && (
+                            <span className="flex items-center gap-1 px-2 py-1 rounded bg-red-500/10 border border-red-500/20">
+                                <XCircle size={12} className="text-red-400" />
+                                <span className="text-[10px] font-mono text-red-400">Below 1:1 R:R</span>
+                            </span>
+                        )}
+                        {rejection.risk_reward !== undefined && rejection.risk_reward >= 1 && rejection.risk_reward < 2 && (
+                            <span className="flex items-center gap-1 px-2 py-1 rounded bg-yellow-500/10 border border-yellow-500/20">
+                                <Warning size={12} className="text-yellow-400" />
+                                <span className="text-[10px] font-mono text-yellow-400">Low R:R ratio</span>
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Enhanced Structure Rejection Card
+const StructureDetailCard = ({ rejection }: { rejection: NoPlanRejection }) => {
+    // Parse the reason to detect common issues
+    const hasNoOB = rejection.reason.toLowerCase().includes('order block') || rejection.reason.toLowerCase().includes('ob');
+    const hasNoFVG = rejection.reason.toLowerCase().includes('fvg') || rejection.reason.toLowerCase().includes('fair value');
+    const hasNoEntry = rejection.reason.toLowerCase().includes('entry');
+    const hasATRIssue = rejection.reason.toLowerCase().includes('atr') || rejection.reason.toLowerCase().includes('fallback');
+
+    return (
+        <div className="bg-black/40 rounded-lg p-4 border border-red-500/10 hover:border-red-500/30 transition-colors">
+            <div className="flex items-start gap-3 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                    <Target size={16} weight="bold" className="text-red-400" />
+                </div>
+                <div>
+                    <span className="font-mono font-bold text-white text-lg">{rejection.symbol}</span>
+                    <p className="text-sm text-zinc-400 leading-relaxed mt-1">{rejection.reason}</p>
+                </div>
+            </div>
+
+            {/* Issue Tags */}
+            <div className="flex flex-wrap gap-2 ml-11">
+                {hasNoOB && (
+                    <span className="px-2 py-1 rounded bg-red-500/10 border border-red-500/20 text-[10px] font-mono text-red-400">
+                        No Valid OB
+                    </span>
+                )}
+                {hasNoFVG && (
+                    <span className="px-2 py-1 rounded bg-red-500/10 border border-red-500/20 text-[10px] font-mono text-red-400">
+                        No FVG Found
+                    </span>
+                )}
+                {hasNoEntry && (
+                    <span className="px-2 py-1 rounded bg-red-500/10 border border-red-500/20 text-[10px] font-mono text-red-400">
+                        Entry Zone Invalid
+                    </span>
+                )}
+                {hasATRIssue && (
+                    <span className="px-2 py-1 rounded bg-orange-500/10 border border-orange-500/20 text-[10px] font-mono text-orange-400">
+                        ATR Fallback Required
+                    </span>
+                )}
+            </div>
+        </div>
+    );
+};
+
 export function RejectionDossier({ rejections, scanned, rejected, mode }: RejectionDossierProps) {
     const [activeTab, setActiveTab] = useState('summary');
 
@@ -197,6 +424,13 @@ export function RejectionDossier({ rejections, scanned, rejected, mode }: Reject
                             <Tabs.Trigger value="suggestions" className="tab-trigger flex items-center gap-2">
                                 <Lightbulb size={16} weight="bold" /> SUGGESTIONS
                             </Tabs.Trigger>
+                            {categoryStats.errors > 0 && (
+                                <Tabs.Trigger value="errors" className="tab-trigger flex items-center gap-2">
+                                    <Bug size={16} weight="bold" />
+                                    ERRORS
+                                    <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] font-bold">{categoryStats.errors}</span>
+                                </Tabs.Trigger>
+                            )}
                         </Tabs.List>
                     </div>
 
@@ -298,47 +532,9 @@ export function RejectionDossier({ rejections, scanned, rejected, mode }: Reject
                                     <p className="text-sm text-zinc-500">No low confluence rejections</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="space-y-3">
                                     {lowConfluence.map((rej, i) => (
-                                        <div key={i} className="bg-black/40 rounded-lg p-4 border border-yellow-500/10 hover:border-yellow-500/30 transition-colors">
-                                            <div className="flex items-start justify-between mb-3">
-                                                <div className="flex items-center gap-2">
-                                                    <TrendDown size={16} weight="bold" className="text-yellow-400" />
-                                                    <span className="font-mono font-bold text-white">{rej.symbol}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className={cn(
-                                                        "px-2 py-0.5 rounded text-xs font-mono font-bold",
-                                                        rej.score >= 60 ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"
-                                                    )}>
-                                                        {rej.score.toFixed(1)}%
-                                                    </span>
-                                                    <span className="text-xs text-zinc-500">/ {rej.threshold}%</span>
-                                                </div>
-                                            </div>
-
-                                            {/* Progress bar */}
-                                            <div className="h-1.5 bg-black/60 rounded-full overflow-hidden mb-3">
-                                                <div
-                                                    className={cn(
-                                                        "h-full rounded-full transition-all",
-                                                        rej.score >= 60 ? "bg-yellow-500" : "bg-red-500"
-                                                    )}
-                                                    style={{ width: `${Math.min(100, (rej.score / rej.threshold) * 100)}%` }}
-                                                />
-                                            </div>
-
-                                            {/* Top factors if available */}
-                                            {rej.top_factors && rej.top_factors.length > 0 && (
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {rej.top_factors.slice(0, 3).map((f, j) => (
-                                                        <span key={j} className="px-2 py-0.5 rounded bg-black/60 text-[10px] text-zinc-400 font-mono">
-                                                            {f}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
+                                        <ConfluenceDetailCard key={i} rejection={rej} />
                                     ))}
                                 </div>
                             )}
@@ -364,16 +560,9 @@ export function RejectionDossier({ rejections, scanned, rejected, mode }: Reject
                                     <p className="text-sm text-zinc-500">No risk validation failures</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 gap-3">
+                                <div className="space-y-3">
                                     {riskIssues.map((rej, i) => (
-                                        <RejectionCard
-                                            key={i}
-                                            symbol={rej.symbol}
-                                            reason={rej.reason}
-                                            score={rej.risk_reward}
-                                            icon={XCircle}
-                                            iconColor="orange"
-                                        />
+                                        <RiskDetailCard key={i} rejection={rej} />
                                     ))}
                                 </div>
                             )}
@@ -403,16 +592,13 @@ export function RejectionDossier({ rejections, scanned, rejected, mode }: Reject
                                     {/* No Trade Plan Section */}
                                     {noPlan.length > 0 && (
                                         <div className="space-y-3">
-                                            <h4 className="text-xs font-bold text-red-400 uppercase tracking-widest">No Valid Entry</h4>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <h4 className="text-xs font-bold text-red-400 uppercase tracking-widest flex items-center gap-2">
+                                                <Target size={14} />
+                                                No Valid Entry ({noPlan.length} symbols)
+                                            </h4>
+                                            <div className="space-y-3">
                                                 {noPlan.map((rej, i) => (
-                                                    <RejectionCard
-                                                        key={i}
-                                                        symbol={rej.symbol}
-                                                        reason={rej.reason}
-                                                        icon={Target}
-                                                        iconColor="red"
-                                                    />
+                                                    <StructureDetailCard key={i} rejection={rej} />
                                                 ))}
                                             </div>
                                         </div>
@@ -515,6 +701,41 @@ export function RejectionDossier({ rejections, scanned, rejected, mode }: Reject
                                 </div>
                             </div>
                         </Tabs.Content>
+
+                        {/* ================================================================ */}
+                        {/* TAB: ERRORS */}
+                        {/* ================================================================ */}
+                        {errors.length > 0 && (
+                            <Tabs.Content value="errors" className="mt-0 space-y-4 animate-in fade-in duration-200">
+                                <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4 mb-4">
+                                    <div className="flex items-start gap-3">
+                                        <Bug size={18} className="text-red-400 mt-0.5 shrink-0" />
+                                        <p className="text-sm text-zinc-400">
+                                            These symbols encountered processing errors during the scan. This may be due to
+                                            data issues, API timeouts, or internal processing failures.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {errors.map((err, i) => (
+                                        <div key={i} className="bg-black/40 rounded-lg p-4 border border-red-500/10 hover:border-red-500/30 transition-colors">
+                                            <div className="flex items-start gap-3">
+                                                <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                                                    <Bug size={16} weight="bold" className="text-red-400" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <span className="font-mono font-bold text-white text-lg">{err.symbol}</span>
+                                                    <p className="text-sm text-red-400/80 leading-relaxed mt-1 font-mono bg-red-500/5 p-2 rounded border border-red-500/10">
+                                                        {err.reason}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </Tabs.Content>
+                        )}
 
                     </div>
                 </Tabs.Root>

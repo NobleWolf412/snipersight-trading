@@ -110,31 +110,7 @@ REGIME_POLICIES: Dict[str, RegimePolicy] = {
         }
     ),
     
-    "ghost": RegimePolicy(
-        mode_name="ghost",
-        min_regime_score=55.0,  # Moderate-conservative
-        allow_in_risk_off=True,  # Opportunistic
-        position_size_adjustment={
-            "strong_up": 1.2,
-            "up": 1.0,
-            "sideways": 0.85,
-            "down": 1.0,
-            "strong_down": 1.2,
-        },
-        confluence_adjustment={
-            "bullish_risk_on": 4.0,
-            "bearish_risk_off": 4.0,
-            "range_coiling": 6.0,  # Stealth entries before breakout
-            "choppy_risk_off": -8.0,
-            "chaotic_volatile": -12.0,
-        },
-        rr_adjustment={
-            "sideways": 0.85,
-            "strong_up": 1.25,
-            "strong_down": 1.25,
-            "compressed": 1.3,
-        }
-    ),
+
 }
 
 

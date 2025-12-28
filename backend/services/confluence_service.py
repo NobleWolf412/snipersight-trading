@@ -250,7 +250,9 @@ class ConfluenceService:
             current_price=current_price,
             macro_context=context.macro_context,
             is_btc=("BTC" in context.symbol.upper()),
-            is_alt=("BTC" not in context.symbol.upper())
+            is_alt=("BTC" not in context.symbol.upper()),
+            # Pass symbol-specific regime detected by RegimeDetector
+            regime=context.metadata.get('symbol_regime')
         )
 
 

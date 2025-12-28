@@ -321,6 +321,25 @@ def evaluate_htf_structural_proximity(
             min_distance = distance_atr
             nearest_structure = f"{fvg.timeframe} FVG boundary"
             structure_type = "FVG"
+
+    # 3. Check Pre-Calculated HTF Levels (HTFLevelDetector) - PRIORITY
+    # These are high-quality clustering results
+    if hasattr(smc, 'htf_levels') and smc.htf_levels:
+        for level in smc.htf_levels:
+            if not hasattr(level, 'price') or not hasattr(level, 'level_type'):
+                continue
+            
+            # Filter by timeframe
+            if level.timeframe not in structure_tfs:
+                continue
+                
+            distance = abs(entry_price - level.price)
+            distance_atr = distance / atr
+            
+            if distance_atr < min_distance:
+                min_distance = distance_atr
+                nearest_structure = f"{level.timeframe} {level.level_type.title()} @ {level.price:.5f}"
+                structure_type = "HTF_Level"
     
     # 3. Check HTF Swing Points
     if swing_structure:
@@ -1336,28 +1355,9 @@ def calculate_confluence_score(
                 rationale=f"Higher timeframe trend is {htf_trend}, aligns with {direction} setup"
             ))
     
-    # --- HTF Level Proximity ---
-    if getattr(config, 'htf_proximity_enabled', False) and htf_context:
-        try:
-            within_atr = float(htf_context.get('within_atr', 1e9))
-            within_pct = float(htf_context.get('within_pct', 1e9))
-            atr_cap = max(1e-6, float(getattr(config, 'htf_proximity_atr_max', 1.0)))
-            pct_cap = max(1e-6, float(getattr(config, 'htf_proximity_pct_max', 2.0)))
-            if within_atr <= atr_cap and within_pct <= pct_cap:
-                # Map proximity to score: closer => higher
-                proximity_score = max(0.0, min(100.0, 100.0 * (1.0 - (within_atr / atr_cap))))
-                # Use dynamic weight
-                weight = get_w('htf_proximity', 0.12)
-                lvl_tf = htf_context.get('timeframe')
-                lvl_type = htf_context.get('type')
-                factors.append(ConfluenceFactor(
-                    name="HTF Level Proximity",
-                    score=proximity_score,
-                    weight=weight,
-                    rationale=f"Within {within_atr:.2f} ATR ({within_pct:.2f}%) of {lvl_tf} {lvl_type}"
-                ))
-        except Exception:
-            pass
+    # --- HTF Level Proximity (Redundant - handled by Gate 1 below) ---
+    # Legacy block removed to prefer evaluate_htf_structural_proximity output
+    pass
 
     # --- BTC Impulse Gate ---
     
@@ -2207,10 +2207,11 @@ def calculate_confluence_score(
         btc_impulse_gate=btc_impulse_gate,
         weekly_stoch_rsi_gate=True,  # DEPRECATED - always True (no longer a hard gate)
         weekly_stoch_rsi_bonus=weekly_stoch_rsi_bonus,  # NEW bonus system
-        htf_proximity_atr=(htf_context or {}).get('within_atr'),
-        htf_proximity_pct=(htf_context or {}).get('within_pct'),
-        nearest_htf_level_timeframe=(htf_context or {}).get('timeframe'),
-        nearest_htf_level_type=(htf_context or {}).get('type'),
+        # Prefer internal calculation result, fallback to htf_context for legacy safety
+        htf_proximity_atr=htf_proximity_result.get('proximity_atr') if htf_proximity_result else (htf_context or {}).get('within_atr'),
+        htf_proximity_pct=(htf_context or {}).get('within_pct'),  # Not calculated internally yet
+        nearest_htf_level_timeframe=(htf_context or {}).get('timeframe'), # TODO: Extract from result
+        nearest_htf_level_type=htf_proximity_result.get('structure_type') if htf_proximity_result else (htf_context or {}).get('type'),
         macro_score=macro_score_val
     )
     

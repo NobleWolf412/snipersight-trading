@@ -89,6 +89,12 @@ class PlannerConfig:
     target_clip_to_structure: bool = True  # Clip targets to HTF obstacles
     target_min_rr_after_clip: float = 1.2  # Minimum R:R after clipping to structure
     
+    # Smart Entry Upgrade (Phase 4)
+    pd_compliance_required: bool = False  # Require entry to be in Premium (Short) / Discount (Long)
+    pd_compliance_tolerance: float = 0.05  # 5% tolerance buffer to allow near-miss entries
+    sweep_backing_boost: float = 1.0  # Boost score if OB is backed by recent sweep (1.0 = no boost)
+    sweep_lookback_candles: int = 5  # Candles prior to OB to check for sweep
+    
     @classmethod
     def defaults_for_mode(cls, mode: str) -> "PlannerConfig":
         """
@@ -104,71 +110,78 @@ class PlannerConfig:
         """
         mode_lower = (mode or "intraday").lower()
         
-        if mode_lower == "scalp":
-            # Scalp: tighter offsets, aggressive targets, conservative structure filtering
+        if mode_lower in ("scalp", "precision"):
             return cls(
-                min_rr=1.0,
-                target_rr_ladder=[1.2, 2.0, 3.0],
-                entry_zone_offset_atr=0.08,  # Tighter entry zones
-                stop_buffer_atr=0.25,  # Tighter stops
-                fallback_entry_near_atr=0.3,
-                fallback_entry_far_atr=1.0,
-                atr_regime_multipliers={
-                    "calm": 0.6,
-                    "normal": 0.9,
-                    "elevated": 1.1,
-                    "explosive": 1.3,
-                },
-                htf_bias_offset_min_factor=0.4,  # Less aggressive HTF bias
-                fvg_overlap_max=0.4,  # Stricter FVG filtering (40%)
-                ob_mitigation_max=0.25,  # Stricter OB filtering
-                stop_lookback_bars=15,  # Shorter lookback
-                stop_htf_lookback_bars=30,
-                target_min_rr_after_clip=1.0,  # Accept tighter R:R for scalps
-            )
-        
-        elif mode_lower == "swing":
-            # Swing: wider offsets, patient targets, relaxed structure filtering
-            return cls(
-                min_rr=1.5,
-                target_rr_ladder=[2.0, 3.0, 5.0],
-                entry_zone_offset_atr=0.12,  # Wider entry zones
-                stop_buffer_atr=0.35,  # Wider stops
-                fallback_entry_near_atr=0.7,
-                fallback_entry_far_atr=2.0,
-                atr_regime_multipliers={
-                    "calm": 0.8,
-                    "normal": 1.0,
-                    "elevated": 1.3,
-                    "explosive": 1.7,
-                },
-                htf_bias_offset_min_factor=0.2,  # More aggressive HTF bias
-                fvg_overlap_max=0.6,  # Relaxed FVG filtering (60%)
-                ob_mitigation_max=0.35,  # Relaxed OB filtering
-                stop_lookback_bars=30,  # Longer lookback
-                stop_htf_lookback_bars=60,
-                target_min_rr_after_clip=1.5,  # Maintain higher R:R for swings
-            )
-        
-        else:  # intraday or default
-            # Intraday: balanced settings (current baseline)
-            return cls(
-                min_rr=1.2,
+                min_rr=1.5,  # Quick scalps
                 target_rr_ladder=[1.5, 2.5, 4.0],
-                entry_zone_offset_atr=0.1,
-                stop_buffer_atr=0.3,
-                fallback_entry_near_atr=0.5,
-                fallback_entry_far_atr=1.5,
-                atr_regime_multipliers={
-                    "calm": 0.7,
-                    "normal": 1.0,
-                    "elevated": 1.2,
-                    "explosive": 1.5,
-                },
-                htf_bias_offset_min_factor=0.3,
-                fvg_overlap_max=0.5,
-                ob_mitigation_max=0.3,
-                stop_lookback_bars=20,
-                stop_htf_lookback_bars=50,
-                target_min_rr_after_clip=1.2,
+                entry_zone_offset_atr=0.1,  # Tight entries
+                stop_buffer_atr=0.5,   # Tight stops
+                stop_lookback_bars=5,
+                stop_use_htf_swings=False,  # Don't use HTF stops for scalps
+                target_min_rr_after_clip=1.0, # Accept tighter R:R for scalps
+                pd_compliance_required=False, # Speed over perfection
+                sweep_backing_boost=2.0,      # Prioritize Turtle Soups (High conviction)
+                sweep_lookback_candles=3      # Fast reaction
             )
+        
+        elif mode_lower in ("strike", "intraday_aggressive"):
+            # STRIKE: Aggressive Intraday
+            # Similar to Scalp but slightly looser stops for volatility
+            return cls(
+                min_rr=1.8,
+                target_rr_ladder=[2.0, 3.5, 5.0],
+                entry_zone_offset_atr=0.15,
+                stop_buffer_atr=0.75,
+                stop_lookback_bars=8,
+                stop_use_htf_swings=False,
+                pd_compliance_required=False, # Speed/Volume focus
+                sweep_backing_boost=2.0,      # Heavy focus on liquidity grabs
+                sweep_lookback_candles=5
+            )
+
+        elif mode_lower == "swing" or mode_lower == "overwatch":
+            return cls(
+                min_rr=2.5,  # Higher standard for swing
+                target_rr_ladder=[2.0, 4.0, 8.0], # Big runners
+                entry_zone_offset_atr=0.25, # Patient entries (limit orders)
+                stop_buffer_atr=1.5,   # Wide stops for noise
+                stop_lookback_bars=15,
+                stop_use_htf_swings=True,   # Use HTF structure for stops
+                pd_compliance_required=True,  # Discipline: Only buy Discount / sell Premium
+                pd_compliance_tolerance=0.05, # Allow 5% buffer for near-misses
+                sweep_backing_boost=1.2,      # Less boost (Structure > Sweeps)
+                sweep_lookback_candles=10
+            )
+            
+        elif mode_lower in ("stealth", "stealth_balanced"):
+            # STEALTH: Smart Money / Institutional Shadowing
+            # Balanced but with stricter entry requirements (PD + Structure)
+            return cls(
+                min_rr=2.0,
+                target_rr_ladder=[2.0, 3.0, 6.0],
+                entry_zone_offset_atr=0.2,
+                stop_buffer_atr=1.0,
+                stop_lookback_bars=10,
+                stop_use_htf_swings=True,
+                pd_compliance_required=True,  # Smart money doesn't chase price
+                pd_compliance_tolerance=0.05, # Allow 5% buffer
+                sweep_backing_boost=1.5,      # Balanced sweep importance
+                sweep_lookback_candles=8
+            )
+
+        else:  # "intraday" or default (balanced)
+            return cls(
+                min_risk_reward=2.0,
+                entry_zone_offset_atr=0.2,
+                stop_buffer_atr=1.0,
+                stop_lookback_bars=10,
+                stop_use_htf_swings=True,
+                target_levels=(2.0, 3.0, 5.0),
+                partial_take_profit_ratios=(0.3, 0.4, 0.3),
+                break_even_trigger_r=1.5,
+                trailing_stop_activation_r=2.0,
+                pd_compliance_required=False, # Balance opportunity vs location
+                sweep_backing_boost=1.5,      # Standard sweep boost
+                sweep_lookback_candles=5
+            )
+
