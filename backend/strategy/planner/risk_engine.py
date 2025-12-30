@@ -1124,6 +1124,59 @@ def _get_unfilled_htf_fvgs(
     return fvg_targets[:5]
 
 
+def _get_bollinger_targets(
+    is_bullish: bool,
+    avg_entry: float,
+    indicators: Optional['IndicatorSet'],
+    primary_tf: str
+) -> List[tuple]:
+    """
+    Get Mean Reversion targets based on Bollinger Bands.
+    
+    Returns:
+        List of (level, label, score=2) tuples
+    """
+    if not indicators or not indicators.by_timeframe:
+        return []
+    
+    # Try primary TF, fallback to first available if missing
+    tf = primary_tf
+    if tf not in indicators.by_timeframe:
+        # Try finding a close timeframe
+        candidates = ['15m', '1h', '5m', '4h']
+        found = False
+        for c in candidates:
+            if c in indicators.by_timeframe:
+                tf = c
+                found = True
+                break
+        if not found:
+            return []
+            
+    ind = indicators.by_timeframe[tf]
+    if not (ind.bb_upper and ind.bb_middle and ind.bb_lower):
+        return []
+        
+    targets = []
+    
+    if is_bullish:
+        # Long Targets: Middle Band (TP1), Upper Band (TP2)
+        if ind.bb_middle > avg_entry:
+            targets.append((ind.bb_middle, f"BB Mean ({tf})", 2))
+        
+        if ind.bb_upper > avg_entry:
+            targets.append((ind.bb_upper, f"BB Upper ({tf})", 2))
+            
+    else:
+        # Short Targets: Middle Band (TP1), Lower Band (TP2)
+        if ind.bb_middle < avg_entry:
+            targets.append((ind.bb_middle, f"BB Mean ({tf})", 2))
+            
+        if ind.bb_lower < avg_entry:
+            targets.append((ind.bb_lower, f"BB Lower ({tf})", 2))
+            
+    return targets
+
 def _calculate_swing_structural_targets(
     is_bullish: bool,
     avg_entry: float,
@@ -1232,7 +1285,8 @@ def _calculate_targets(
     regime_label: str,
     rr_scale: float = 1.0,
     confluence_breakdown: Optional[ConfluenceBreakdown] = None,
-    multi_tf_data: Optional['MultiTimeframeData'] = None  # NEW: For HTF swing detection
+    multi_tf_data: Optional['MultiTimeframeData'] = None,  # For HTF swing detection
+    indicators: Optional['IndicatorSet'] = None  # NEW: For Bollinger Band targeting
 ) -> List[Target]:
     """
     Calculate tiered targets based on structure and R:R multiples.
@@ -1259,7 +1313,11 @@ def _calculate_targets(
     mode_profile = getattr(config, 'profile', 'balanced').lower()
     is_swing_mode = mode_profile in ('overwatch', 'macro_surveillance', 'stealth', 'stealth_balanced', 'swing')
     
-    if is_swing_mode:
+    # Force use of structural targeting (vs R:R multiples) for Range Reversion setups
+    # Range setups rely on bands/levels, not generic R:R
+    use_structural_targets = is_swing_mode or setup_archetype == "RANGE_REVERSION" or regime_label == "compressed"
+    
+    if use_structural_targets:
         # Determine relevant HTF timeframes for structure targeting
         # Overwatch: 1W, 1D
         # Stealth: 1D, 4H
@@ -1296,6 +1354,14 @@ def _calculate_targets(
         
         # FVGs (Magnets)
         candidates.extend(_get_unfilled_htf_fvgs(is_bullish, avg_entry, smc_snapshot, target_tfs))
+        
+        # Bollinger Bands (Mean Reversion - Critical for Range Setups)
+        # Always check these if we are in Range Reversion or Compressed regime
+        if setup_archetype == "RANGE_REVERSION" or regime_label == "compressed" or "mean_reversion" in mode_profile:
+             bb_targets = _get_bollinger_targets(is_bullish, avg_entry, indicators, primary_tf=getattr(config, "primary_planning_timeframe", "1h") or "1h")
+             if bb_targets:
+                 logger.info(f"Adding {len(bb_targets)} Bollinger Band targets for Mean Reversion/Range setup")
+                 candidates.extend(bb_targets)
         
         # Sort by distance
         candidates.sort(key=lambda x: abs(x[0] - avg_entry))

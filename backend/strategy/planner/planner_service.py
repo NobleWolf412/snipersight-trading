@@ -262,7 +262,8 @@ def generate_trade_plan(
         regime_label=regime_label,
         rr_scale=1.0,
         confluence_breakdown=confluence_breakdown,
-        multi_tf_data=multi_tf_data
+        multi_tf_data=multi_tf_data,
+        indicators=indicators
     )
     
     # === 5. Leverage Adjustment for Targets (Delegate to Risk Engine) ===

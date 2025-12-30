@@ -376,7 +376,7 @@ class ScannerService:
         """
         from backend.analysis.regime_detector import get_regime_detector
         from backend.strategy.planner.regime_engine import get_mode_recommendation
-        from backend.indicators.wrapper import calculate_all_indicators
+
         
         try:
             # 1. Fetch BTC Data (Market Leader)
