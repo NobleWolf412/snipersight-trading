@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Crosshair, Lightning, CaretDown, CaretUp,
-  Globe, CurrencyBtc, Biohazard, Target, Activity, Cpu, Coin
+  Globe, CurrencyBtc, Biohazard, Target, Activity, Cpu, Coin, CheckCircle, Pulse
 } from '@phosphor-icons/react';
 import { convertSignalToScanResult, generateDemoScanResults } from '@/utils/mockData';
 import { TacticalSelector, TacticalSlider, TacticalToggle, TacticalDropdown } from '@/components/ui/TacticalInputs';
@@ -21,7 +21,7 @@ import { validateScannerConfig, hasBlockingErrors, getSeverityColor, getSeverity
 
 export function ScannerSetup() {
   const navigate = useNavigate();
-  const { scanConfig, setScanConfig, selectedMode, addConsoleLog, clearConsoleLogs } = useScanner();
+  const { scanConfig, setScanConfig, selectedMode, setSelectedMode, scannerModes, addConsoleLog, clearConsoleLogs } = useScanner();
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<{ current: number; total: number; symbol?: string } | null>(null);
   const [consoleExpanded, setConsoleExpanded] = useState(false);
@@ -42,6 +42,8 @@ export function ScannerSetup() {
     reason: string;
     warning: string | null;
     confidence: string;
+    matrix?: Record<string, { trend: string; context?: string; score: number; color: string }>;
+    dominance?: { btc: number; alt: number; stable: number; };
   } | null>(null);
 
   useEffect(() => {
@@ -324,73 +326,149 @@ export function ScannerSetup() {
               </p>
             </div>
 
-            {/* Market Type Selection - Centered Top */}
-            <div className="flex justify-center max-w-md mx-auto w-full">
-              <TacticalSelector
-                label="MARKET TYPE"
-                value={scanConfig.marketType || 'swap'}
-                onChange={(val) => {
-                  // Force leverage to 1 if switching to spot
-                  const updates = { marketType: val };
-                  if (val === 'spot') {
-                    updates['leverage'] = 1;
-                  }
-                  setScanConfig({ ...scanConfig, ...updates });
-                  addConsoleLog(`CONFIG: Market type set to ${val.toUpperCase()}`, 'config');
-                }}
-                gridCols={2}
-                variant="3d"
-                centeredLabel={true}
-                options={[
-                  { value: 'swap', label: 'FUTURES', icon: <Activity className="text-purple-400" size={24} />, subLabel: 'PERPETUALS', color: '#a855f7' },
-                  { value: 'spot', label: 'SPOT', icon: <Coin className="text-yellow-400" size={24} />, subLabel: 'ASSETS', color: '#eab308' },
-                ]}
-              />
+            {/* AI COMMAND CENTER (Unified Advisory & Market Type) */}
+            <div className="max-w-4xl mx-auto w-full relative z-10">
+              <div className="glass-card glow-border-green p-6 lg:p-10 rounded-3xl relative overflow-hidden group transition-all duration-500 hover:shadow-[0_0_50px_rgba(0,255,170,0.15)]">
+                {/* Cinematic Background */}
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-green-500/10 via-transparent to-transparent opacity-40 pointer-events-none group-hover:opacity-60 transition-opacity duration-1000" />
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#00ff88]/50 to-transparent opacity-50" />
+
+                <div className="relative z-10 flex flex-col items-center gap-8 text-center">
+
+                  {/* TOP ROW: Market Sector Selector */}
+                  <div className="flex items-center gap-1 bg-black/40 p-1.5 rounded-xl border border-white/5 backdrop-blur-md">
+                    <button
+                      onClick={() => setScanConfig({ ...scanConfig, marketType: 'swap', leverage: scanConfig.leverage || 5 })}
+                      className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold tracking-wider transition-all duration-300 ${(!scanConfig.marketType || scanConfig.marketType === 'swap')
+                        ? 'bg-[#a855f7]/20 text-[#d8b4fe] shadow-[0_0_15px_rgba(168,85,247,0.3)] border border-[#a855f7]/40'
+                        : 'text-muted-foreground hover:text-white hover:bg-white/5'
+                        }`}
+                    >
+                      <Activity size={18} weight={(!scanConfig.marketType || scanConfig.marketType === 'swap') ? "fill" : "bold"} />
+                      FUTURES
+                    </button>
+                    <button
+                      onClick={() => setScanConfig({ ...scanConfig, marketType: 'spot', leverage: 1 })}
+                      className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold tracking-wider transition-all duration-300 ${scanConfig.marketType === 'spot'
+                        ? 'bg-[#eab308]/20 text-[#fde047] shadow-[0_0_15px_rgba(234,179,8,0.3)] border border-[#eab308]/40'
+                        : 'text-muted-foreground hover:text-white hover:bg-white/5'
+                        }`}
+                    >
+                      <Coin size={18} weight={scanConfig.marketType === 'spot' ? "fill" : "bold"} />
+                      SPOT
+                    </button>
+                  </div>
+
+                  {/* CENTER: AI Recommendation Engine */}
+                  {recommendation ? (
+                    <div className="space-y-6 flex flex-col items-center animate-in fade-in zoom-in-95 duration-700">
+
+                      {/* AI Badge */}
+                      <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-mono tracking-[0.2em] uppercase shadow-[0_0_10px_rgba(0,255,136,0.2)]">
+                        <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                        AI ADVISORY ONLINE
+                      </div>
+
+                      {/* Main Mode Display */}
+                      <div className="space-y-2">
+                        <h2 className="text-5xl lg:text-7xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-green-50 to-green-400/80 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]">
+                          {recommendation.mode.toUpperCase()}
+                        </h2>
+                        <div className="h-1 w-24 mx-auto bg-gradient-to-r from-transparent via-green-500/50 to-transparent rounded-full" />
+                      </div>
+
+                      {/* Analysis Reason */}
+                      <p className="text-lg lg:text-xl text-green-100/80 max-w-2xl mx-auto leading-relaxed font-light">
+                        "{recommendation.reason}"
+                      </p>
+
+                      {/* Warning if exists */}
+                      {recommendation.warning && (
+                        <div className="flex items-center gap-2 text-yellow-400 bg-yellow-400/10 px-4 py-2 rounded-lg text-sm border border-yellow-400/20">
+                          <Biohazard size={16} />
+                          {recommendation.warning}
+                        </div>
+                      )}
+
+                      {/* ACTION BUTTON */}
+                      <div className="pt-2">
+                        {scanConfig.sniperMode !== recommendation.mode.toLowerCase() ? (
+                          <Button
+                            size="lg"
+                            className="h-14 px-10 text-lg bg-[#00ff88] hover:bg-[#00cc6a] text-black font-bold tracking-widest border-2 border-white/20 shadow-[0_0_30px_rgba(0,255,136,0.4)] hover:shadow-[0_0_50px_rgba(0,255,136,0.6)] hover:scale-105 transition-all duration-300 relative overflow-hidden group/btn"
+                            onClick={() => {
+                              const modeName = recommendation.mode.toLowerCase();
+                              setScanConfig({ ...scanConfig, sniperMode: modeName as any });
+                              const mode = scannerModes.find(m => m.name === modeName);
+                              if (mode) setSelectedMode(mode);
+                            }}
+                          >
+                            <div className="absolute inset-0 bg-white/40 skew-x-12 -translate-x-full group-hover/btn:animate-shimmer" />
+                            <Crosshair className="mr-3 animate-spin-slow" size={24} weight="bold" />
+                            ACTIVATE {recommendation.mode.toUpperCase()}
+                          </Button>
+                        ) : (
+                          <div className="flex items-center gap-3 text-[#00ff88] bg-[#00ff88]/10 px-8 py-3 rounded-full border border-[#00ff88]/30 shadow-[0_0_20px_rgba(0,255,136,0.1)]">
+                            <CheckCircle size={24} weight="fill" />
+                            <span className="font-bold tracking-widest">PROTOCOL ACTIVE</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    // Loading State
+                    <div className="py-12 flex flex-col items-center gap-4 text-muted-foreground animate-pulse">
+                      <Pulse size={48} className="text-green-500/50" />
+                      <span className="text-sm font-mono tracking-widest uppercase">Initializing Tactical Analysis...</span>
+                    </div>
+                  )}
+
+                </div>
+              </div>
             </div>
 
 
 
-            {/* Mode Selection - Full Width */}
-            <section className="glass-card glow-border-green p-4 lg:p-8 rounded-2xl">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-                <h2 className="text-xl lg:text-2xl font-semibold hud-headline hud-text-green">SELECT MODE</h2>
 
-                {/* AI ADVISORY WIDGET */}
-                {recommendation && (
-                  <div
-                    className={`flex items-center gap-3 px-4 py-2 rounded-lg backdrop-blur-sm border transition-all duration-500 animate-in fade-in slide-in-from-right-4 ${recommendation.warning
-                      ? 'bg-yellow-500/10 border-yellow-500/30'
-                      : 'bg-black/40 border-[#00ff88]/20'
-                      }`}
-                  >
-                    <div className={`w-2 h-2 rounded-full ${recommendation.warning ? 'bg-yellow-500 animate-pulse' : 'bg-[#00ff88] animate-pulse'
-                      }`} />
-                    <span className={`text-xs font-mono uppercase tracking-wider ${recommendation.warning ? 'text-yellow-400' : 'text-[#00ff88]'
-                      }`}>
-                      AI RECON: <span className="font-bold text-white">{recommendation.mode.toUpperCase()}</span>
-                    </span>
+            {/* MARKET MATRIX (Multi-Timeframe Context) */}
+            {recommendation?.matrix && (
+              <div className="max-w-4xl mx-auto w-full -mt-4 mb-8 grid grid-cols-1 md:grid-cols-3 gap-3 relative z-20 px-2 lg:px-0">
+                {['1w', '1d', '4h'].map(tf => {
+                  const data = recommendation.matrix[tf];
+                  if (!data) return null;
 
-                    <div className="h-4 w-px bg-white/10 hidden lg:block" />
+                  const isUp = data.color.includes('green');
+                  const isDown = data.color.includes('red');
+                  const colorClass = isUp ? 'text-[#00ff88] border-[#00ff88]/30 bg-[#00ff88]/10 shadow-[0_0_15px_rgba(0,255,136,0.1)]' :
+                    isDown ? 'text-red-500 border-red-500/30 bg-red-500/10 shadow-[0_0_15px_rgba(239,68,68,0.1)]' :
+                      'text-yellow-500 border-yellow-500/30 bg-yellow-500/10';
 
-                    <span className="hidden lg:inline text-xs text-muted-foreground truncate max-w-[400px]" title={recommendation.reason}>
-                      {recommendation.reason}
-                    </span>
-
-                    {/* Auto-select button if not active */}
-                    {scanConfig.sniperMode !== recommendation.mode.toLowerCase() && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 text-[10px] px-2 ml-2 border border-white/10 hover:bg-white/10"
-                        onClick={() => setScanConfig({ ...scanConfig, sniperMode: recommendation.mode.toLowerCase() as any })}
-                      >
-                        APPLY
-                      </Button>
-                    )}
-                  </div>
-                )}
+                  return (
+                    <div key={tf} className={`glass-card p-4 rounded-xl border ${colorClass} flex items-center justify-between`}>
+                      <div>
+                        <div className="text-xs text-muted-foreground font-mono uppercase tracking-widest mb-1.5 opacity-80">
+                          {tf === '1w' ? 'WEEKLY' : tf === '1d' ? 'DAILY' : '4-HOUR'}
+                        </div>
+                        <div className="font-bold text-lg lg:text-xl tracking-tight leading-none flex items-center gap-2">
+                          {/* Use backend description if available, else fallback */}
+                          {data.context || data.trend.toUpperCase()}
+                        </div>
+                      </div>
+                      <div className={`p-3 rounded-full ${isUp ? 'bg-green-500/20' : isDown ? 'bg-red-500/20' : 'bg-yellow-500/20'}`}>
+                        {isUp ? <CaretUp size={24} weight="bold" /> :
+                          isDown ? <CaretDown size={24} weight="bold" /> :
+                            <Activity size={24} weight="bold" />}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <ScannerModeTabs />
+            )}
+
+            {/* Mode Selection - Full Width */}
+            <section className="glass-card glow-border-green p-4 lg:p-6 rounded-2xl">
+              {/* Mode Tabs Only - Widget moved to Command Center */}
+              <ScannerModeTabs recommendation={recommendation || undefined} />
             </section>
 
             {/* Configuration Panels - Two Column on Desktop */}

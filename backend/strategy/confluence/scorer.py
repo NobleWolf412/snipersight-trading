@@ -1292,6 +1292,8 @@ def calculate_confluence_score(
         ConfluenceBreakdown: Complete scoring breakdown with factors
     """
     factors = []
+    primary_tf = None
+    macd_analysis = None
     
     # Normalize direction at entry: LONG/SHORT -> bullish/bearish
     # This ensures consistent format throughout all scoring functions
@@ -1387,8 +1389,6 @@ def calculate_confluence_score(
     # --- Indicator Scoring ---
     
     # Select primary timeframe (Anchor Chart) for indicator scoring based on mode
-    primary_tf = None
-    
     # 1. Try mode-specific planning timeframe (e.g. Strike=15m, Overwatch=4h)
     if config and getattr(config, 'primary_planning_timeframe', None):
         cfg_tf = config.primary_planning_timeframe
@@ -1406,6 +1406,17 @@ def calculate_confluence_score(
     # 3. Final Fallback: First available
     if not primary_tf and indicators.by_timeframe:
         primary_tf = list(indicators.by_timeframe.keys())[0]
+
+    # --- PRICE INITIALIZATION (For proximity/alignment checks) ---
+    entry_price = current_price
+    if not entry_price and primary_tf:
+        # Try to get from indicators
+        prim_ind = indicators.by_timeframe.get(primary_tf)
+        if prim_ind and hasattr(prim_ind, 'dataframe') and prim_ind.dataframe is not None:
+            if len(prim_ind.dataframe) > 0:
+                 entry_price = float(prim_ind.dataframe['close'].iloc[-1])
+            else:
+                 entry_price = None
     
     # Get MACD mode config based on profile
     profile = getattr(config, 'profile', 'balanced')
@@ -1414,8 +1425,6 @@ def calculate_confluence_score(
     # Get HTF indicators for MACD bias (if available)
     htf_tf = macd_config.htf_timeframe
     htf_indicators = indicators.by_timeframe.get(htf_tf) if indicators.by_timeframe else None
-    
-    macd_analysis = None
     
     if primary_tf:
         primary_indicators = indicators.by_timeframe[primary_tf]
@@ -1696,14 +1705,6 @@ def calculate_confluence_score(
     # ===========================================================================
     # === CRITICAL HTF GATES (New: filters low-quality signals) ===
     # ===========================================================================
-    
-    # Get current price for proximity calculations
-    entry_price = current_price
-    if not entry_price and primary_tf:
-        # Try to get from indicators
-        prim_ind = indicators.by_timeframe.get(primary_tf)
-        if prim_ind and hasattr(prim_ind, 'dataframe') and prim_ind.dataframe is not None:
-            entry_price = prim_ind.dataframe['close'].iloc[-1] if len(prim_ind.dataframe) > 0 else None
     
     # === Gate 1: HTF STRUCTURAL PROXIMITY GATE ===
     # Entry must be at meaningful HTF structural level

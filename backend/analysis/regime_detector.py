@@ -128,52 +128,38 @@ class RegimeDetector:
             score=score
         )
     
-    def _detect_trend(self, data: MultiTimeframeData):
+    def analyze_timeframe_trend(self, df, timeframe_label: str) -> tuple[str, float]:
         """
-        Detect trend using REAL swing structure, not bar-to-bar noise.
-        
-        Uses existing swing_structure detector for proper HH/HL/LH/LL analysis.
-        
+        Analyze trend for a specific single timeframe dataframe.
         Returns: (trend_label, score)
         """
         from backend.strategy.smc.swing_structure import detect_swing_structure
         from backend.shared.config.smc_config import scale_lookback
         
-        # Use highest available TF for trend
-        tfs = sorted(data.timeframes.keys(), reverse=True)
-        if not tfs:
+        if df is None or len(df) < 50:
             return "sideways", 50.0
             
-        htf = tfs[0]
-        df = data.timeframes[htf]
-        if len(df) < 50:  # Need more data for reliable swing detection
-            return "sideways", 50.0
-        
         try:
-            # FIXED: Scale lookback by timeframe - HTF uses fewer candles (each significant)
+            # Scale lookback by timeframe
             # Base lookback of 15 is for 4H, scale up for LTF, down for HTF
-            scaled_lookback = scale_lookback(15, htf, min_lookback=7, max_lookback=30)
+            scaled_lookback = scale_lookback(15, timeframe_label, min_lookback=7, max_lookback=30)
             
-            # Use your EXISTING swing structure detector with scaled lookback
+            # Use swing structure detector
             swing_struct = detect_swing_structure(df, lookback=scaled_lookback)
-            
-            # It already gives you trend: 'bullish', 'bearish', or 'neutral'
             trend = swing_struct.trend
             
-            # Also check momentum strength (are recent swings strong?)
+            # Check momentum strength
             recent_swings = swing_struct.swing_points[-5:] if len(swing_struct.swing_points) >= 5 else []
             strong_swings = [s for s in recent_swings if s.strength > 1.5]
             has_strong_momentum = len(strong_swings) >= 3
             
-            # Also check MA slope for confirmation
+            # Check MA slope
             df_copy = df.copy()
             df_copy['ma20'] = df_copy['close'].rolling(20).mean()
             
             if not df_copy['ma20'].iloc[-20:].isna().all():
-                # Calculate slope over full MA period (20 bars for 20MA)
                 slope = (df_copy['ma20'].iloc[-1] - df_copy['ma20'].iloc[-20]) / df_copy['ma20'].iloc[-20] * 100
                 
-                # Normalize by volatility
                 atr = df_copy['high'].rolling(14).max() - df_copy['low'].rolling(14).min()
                 current_price = df_copy['close'].iloc[-1]
                 atr_pct = (atr.iloc[-1] / current_price * 100) if current_price > 0 else 1.0
@@ -181,44 +167,70 @@ class RegimeDetector:
             else:
                 normalized_slope = 0
             
-            # Classify based on swing structure + momentum
+            # Classify
             if trend == 'bullish':
                 if has_strong_momentum and normalized_slope > 2.0:
-                    logger.debug("Trend: strong_up (swing structure + momentum)")
-                    return "strong_up", 85.0
+                    return "strong_up", 85.0, "Impulsive Buy Pressure"
                 else:
-                    logger.debug("Trend: up (swing structure, weak momentum)")
-                    return "up", 70.0
+                    return "up", 70.0, "Higher Highs & Lows"
             
             elif trend == 'bearish':
                 if has_strong_momentum and normalized_slope < -2.0:
-                    logger.debug("Trend: strong_down (swing structure + momentum)")
-                    return "strong_down", 15.0
+                    return "strong_down", 15.0, "Heavy Sell Pressure"
                 else:
-                    logger.debug("Trend: down (swing structure, weak momentum)")
-                    return "down", 30.0
+                    return "down", 30.0, "Lower Highs & Lows"
             
             else:
-                logger.debug("Trend: sideways (no clear structure)")
-                return "sideways", 50.0
+                return "sideways", 50.0, "Choppy / No Trend"
         
         except Exception as e:
-            logger.warning(f"Swing structure detection failed: {e}, using fallback")
-            # Fallback to simple MA slope if swing detection fails
+            logger.warning(f"Swing structure detection failed for {timeframe_label}: {e}, using fallback")
+            
+            # Fallback to simple MA slope
+            if df.empty or 'close' not in df:
+                return "sideways", 50.0, "Insufficient Data"
+                
             df_copy = df.copy()
             df_copy['ma20'] = df_copy['close'].rolling(20).mean()
             
             if df_copy['ma20'].iloc[-10:].isna().all():
-                return "sideways", 50.0
+                return "sideways", 50.0, "Insufficient Data"
             
             slope = (df_copy['ma20'].iloc[-1] - df_copy['ma20'].iloc[-10]) / df_copy['ma20'].iloc[-10] * 100
             
             if slope > 3:
-                return "up", 70.0
+                return "up", 70.0, "Momentum Divergence"
             elif slope < -3:
-                return "down", 35.0
+                return "down", 35.0, "Momentum Breakdown"
             else:
-                return "sideways", 50.0
+                return "sideways", 50.0, "Flat Structure"
+
+    def _detect_trend(self, data: MultiTimeframeData):
+        """
+        Detect global trend using the highest available timeframe.
+        """
+        # Use highest available TF for trend
+        # Sort manually to ensure correct order (1d > 4h > 1h)
+        # We prefer 1d if available, else 4h
+        preferred_order = ['1w', '1d', '4h', '1h', '30m', '15m']
+        htf = None
+        
+        for tf in preferred_order:
+            if tf in data.timeframes:
+                htf = tf
+                break
+        
+        if not htf and data.timeframes:
+            # Fallback to whatever is there
+            htf = list(data.timeframes.keys())[0]
+            
+        if not htf:
+            return "sideways", 50.0
+            
+        df = data.timeframes[htf]
+        # Unpack 3 values, return 2 for compatibility with existing callers
+        trend, score, _ = self.analyze_timeframe_trend(df, htf)
+        return trend, score
     
     def _detect_volatility(self, indicators: IndicatorSet):
         """

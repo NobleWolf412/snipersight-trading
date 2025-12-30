@@ -98,9 +98,24 @@ function getModeRecommendation(modeName: string, regime: string | null): { recom
     return { recommended: false, reason: '' };
 }
 
-export function ScannerModeTabs() {
+interface ScannerModeTabsProps {
+    recommendation?: {
+        mode: string;
+        reason: string;
+        warning: string | null;
+        confidence: string;
+        dominance?: {
+            btc: number;
+            alt: number;
+            stable: number;
+        };
+    };
+}
+
+export function ScannerModeTabs({ recommendation: propRecommendation }: ScannerModeTabsProps) {
     const { scannerModes, selectedMode, setSelectedMode, scanConfig, setScanConfig } = useScanner();
     const [marketRegime, setMarketRegime] = useState<string | null>(null);
+    const [activeSegment, setActiveSegment] = useState<'btc' | 'alt' | 'stable'>('btc');
 
     // Fetch market regime on mount
     useEffect(() => {
@@ -135,14 +150,161 @@ export function ScannerModeTabs() {
         }
     };
 
+    // Helper to format regime label
+    const formatRegimeLabel = (label: string) => {
+        const map: Record<string, string> = {
+            'choppy_risk_off': 'CHOPPY (RISK OFF)',
+            'bullish_risk_on': 'BULLISH (RISK ON)',
+            'bearish_risk_off': 'BEARISH (RISK OFF)',
+            'chaotic_volatile': 'CHAOTIC VOLATILITY',
+            'range_coiling': 'RANGE COILING',
+        };
+        if (map[label]) return map[label];
+        return label.replace(/_/g, ' ').toUpperCase();
+    };
+
+    const getRegimeColor = (label: string) => {
+        if (label.includes('strong_up') || label.includes('bullish') || label.includes('risk_on')) return 'text-[#00ff88] border-[#00ff88]/30 bg-[#00ff88]/10';
+        if (label.includes('strong_down') || label.includes('bearish') || label.includes('risk_off') || label.includes('chaotic')) return 'text-red-400 border-red-500/30 bg-red-500/10';
+        return 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10';
+    };
+
     return (
         <Tabs.Root value={currentModeName} onValueChange={handleModeChange} className="w-full">
             {/* Market regime indicator */}
             {marketRegime && (
-                <div className="text-sm text-muted-foreground mb-4 flex items-center gap-2 px-2">
-                    <span className="text-primary">📊</span>
-                    <span>Current Market:</span>
-                    <span className="text-foreground font-medium">{marketRegime.replace(/_/g, ' ')}</span>
+                <div className="mb-6 flex flex-col items-center gap-2">
+                    <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest pl-1">Global Market Context</span>
+                    <div className={`inline-flex items-center gap-3 px-4 py-2 rounded-lg border backdrop-blur-sm ${getRegimeColor(marketRegime)}`}>
+                        <div className="w-2 h-2 rounded-full bg-current animate-pulse" />
+                        <span className="text-lg lg:text-xl font-black italic tracking-tighter">
+                            {formatRegimeLabel(marketRegime)}
+                        </span>
+                    </div>
+
+                    {propRecommendation?.dominance && (
+                        <div className="w-full mt-6 bg-black/20 rounded-2xl p-6 border border-white/5 shadow-2xl relative overflow-hidden group">
+                            {/* Ambient Background Glow */}
+                            <div className="absolute inset-x-0 -top-20 h-40 bg-gradient-to-b from-white/5 to-transparent opacity-50 pointer-events-none" />
+
+                            <div className="relative z-10 flex flex-col items-center">
+                                {/* Combined Title & Season Indicator */}
+                                <div className="flex items-center gap-3 mb-8">
+                                    <div className="h-px w-8 bg-gradient-to-r from-transparent to-white/10" />
+                                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.3em] opacity-80">Capital Flow</span>
+                                    <span className="text-muted-foreground/30">—</span>
+                                    {propRecommendation.dominance.btc > 55 ?
+                                        <span className="text-xs text-orange-400 font-extrabold tracking-[0.2em] animate-pulse">BTC SEASON</span> :
+                                        propRecommendation.dominance.alt > 35 ?
+                                            <span className="text-xs text-purple-400 font-extrabold tracking-[0.2em] animate-pulse">ALT SEASON</span> :
+                                            <span className="text-xs text-emerald-400 font-extrabold tracking-[0.2em]">RISK NEUTRAL</span>
+                                    }
+                                    <div className="h-px w-8 bg-gradient-to-l from-transparent to-white/10" />
+                                </div>
+
+                                {/* Advanced Doughnut Chart */}
+                                <div className="relative w-48 h-48 flex items-center justify-center">
+                                    <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90 overflow-visible">
+                                        {/* Background Track */}
+                                        <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="10" />
+
+                                        {/* Segments calculation: circumference ~264 (r=42) */}
+                                        {/* BTC Segment */}
+                                        <motion.circle
+                                            cx="50" cy="50" r="42"
+                                            fill="none"
+                                            stroke="url(#btcGradient)"
+                                            strokeWidth={activeSegment === 'btc' ? 14 : 10}
+                                            strokeLinecap="round"
+                                            initial={{ strokeDasharray: "0 264" }}
+                                            animate={{ strokeDasharray: `${(propRecommendation.dominance.btc / 100) * 264} 264` }}
+                                            transition={{ duration: 1.5, ease: "circOut" }}
+                                            className={`cursor-pointer transition-all duration-300 ${activeSegment === 'btc' ? 'drop-shadow-[0_0_12px_rgba(249,115,22,0.6)]' : 'opacity-60 hover:opacity-100 hover:stroke-[12px]'}`}
+                                            onClick={() => setActiveSegment('btc')}
+                                        />
+
+                                        {/* ALT Segment - offset by BTC */}
+                                        <motion.circle
+                                            cx="50" cy="50" r="42"
+                                            fill="none"
+                                            stroke="url(#altGradient)"
+                                            strokeWidth={activeSegment === 'alt' ? 14 : 10}
+                                            strokeLinecap="round"
+                                            initial={{ strokeDasharray: "0 264", strokeDashoffset: 0 }}
+                                            animate={{
+                                                strokeDasharray: `${(propRecommendation.dominance.alt / 100) * 264} 264`,
+                                                strokeDashoffset: -((propRecommendation.dominance.btc / 100) * 264)
+                                            }}
+                                            transition={{ duration: 1.5, delay: 0.2, ease: "circOut" }}
+                                            className={`cursor-pointer transition-all duration-300 ${activeSegment === 'alt' ? 'drop-shadow-[0_0_12px_rgba(168,85,247,0.6)]' : 'opacity-60 hover:opacity-100 hover:stroke-[12px]'}`}
+                                            onClick={() => setActiveSegment('alt')}
+                                        />
+
+                                        {/* STABLE Segment - offset by BTC + ALT */}
+                                        <motion.circle
+                                            cx="50" cy="50" r="42"
+                                            fill="none"
+                                            stroke="url(#stableGradient)"
+                                            strokeWidth={activeSegment === 'stable' ? 14 : 10}
+                                            strokeLinecap="round"
+                                            initial={{ strokeDasharray: "0 264", strokeDashoffset: 0 }}
+                                            animate={{
+                                                strokeDasharray: `${(propRecommendation.dominance.stable / 100) * 264} 264`,
+                                                strokeDashoffset: -(((propRecommendation.dominance.btc + propRecommendation.dominance.alt) / 100) * 264)
+                                            }}
+                                            transition={{ duration: 1.5, delay: 0.4, ease: "circOut" }}
+                                            className={`cursor-pointer transition-all duration-300 ${activeSegment === 'stable' ? 'drop-shadow-[0_0_12px_rgba(16,185,129,0.6)]' : 'opacity-60 hover:opacity-100 hover:stroke-[12px]'}`}
+                                            onClick={() => setActiveSegment('stable')}
+                                        />
+
+                                        <defs>
+                                            <linearGradient id="btcGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" stopColor="#ea580c" />
+                                                <stop offset="100%" stopColor="#f97316" />
+                                            </linearGradient>
+                                            <linearGradient id="altGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" stopColor="#9333ea" />
+                                                <stop offset="100%" stopColor="#a855f7" />
+                                            </linearGradient>
+                                            <linearGradient id="stableGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" stopColor="#059669" />
+                                                <stop offset="100%" stopColor="#10b981" />
+                                            </linearGradient>
+                                        </defs>
+                                    </svg>
+
+                                    {/* Center Percentage Display */}
+                                    <AnimatePresence mode="wait">
+                                        <motion.div
+                                            key={activeSegment}
+                                            initial={{ opacity: 0, scale: 0.8, filter: 'blur(8px)' }}
+                                            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                                            exit={{ opacity: 0, scale: 1.1, filter: 'blur(8px)' }}
+                                            transition={{ duration: 0.3, ease: 'easeOut' }}
+                                            className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none"
+                                        >
+                                            <div className={`text-3xl lg:text-4xl font-black tracking-tighter drop-shadow-lg ${activeSegment === 'btc' ? 'text-orange-400' :
+                                                activeSegment === 'alt' ? 'text-purple-400' :
+                                                    'text-emerald-400'
+                                                }`}>
+                                                {Math.round(propRecommendation.dominance[activeSegment])}%
+                                            </div>
+                                            <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mt-1">
+                                                {activeSegment === 'btc' ? 'BTC Dom' : activeSegment === 'alt' ? 'Alt Dom' : 'Stable Dom'}
+                                            </div>
+                                        </motion.div>
+                                    </AnimatePresence>
+                                </div>
+
+                                {/* Minimal Color Indicator Dots (Interaction Hint) */}
+                                <div className="flex gap-4 mt-8 opacity-50">
+                                    <div className={`w-1.5 h-1.5 rounded-full ${activeSegment === 'btc' ? 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]' : 'bg-white/10'}`} />
+                                    <div className={`w-1.5 h-1.5 rounded-full ${activeSegment === 'alt' ? 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]' : 'bg-white/10'}`} />
+                                    <div className={`w-1.5 h-1.5 rounded-full ${activeSegment === 'stable' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-white/10'}`} />
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 

@@ -376,6 +376,7 @@ class ScannerService:
         """
         from backend.analysis.regime_detector import get_regime_detector
         from backend.strategy.planner.regime_engine import get_mode_recommendation
+        from backend.analysis.dominance_service import get_current_dominance
 
         
         try:
@@ -395,7 +396,7 @@ class ScannerService:
             btc_data = await asyncio.to_thread(
                 pipeline.fetch_multi_timeframe, 
                 symbol, 
-                ['1d', '4h', '1h', '15m']
+                ['1w', '1d', '4h', '1h', '15m']
             )
             
             if not btc_data or not btc_data.timeframes:
@@ -422,8 +423,31 @@ class ScannerService:
                  btc_volatility=regime.dimensions.volatility,
                  risk_appetite=regime.dimensions.risk_appetite
             )
+
+            # 5. Build Market Matrix
+            matrix = {}
+            for tf_label in ['1w', '1d', '4h']:
+                 if tf_label in btc_data.timeframes:
+                     # Use the new exposed method method
+                     trend_lbl, tr_score, tr_desc = detector.analyze_timeframe_trend(btc_data.timeframes[tf_label], tf_label)
+                     
+                     # Map trend to color
+                     color = "gray"
+                     if "strong_up" in trend_lbl: color = "bright-green"
+                     elif "up" in trend_lbl: color = "green"
+                     elif "strong_down" in trend_lbl: color = "bright-red"
+                     elif "down" in trend_lbl: color = "red"
+                     elif "sideways" in trend_lbl: color = "yellow"
+                     
+                     matrix[tf_label] = {
+                         "trend": trend_lbl.replace("_", " ").title(),
+                         "context": tr_desc,
+                         "score": tr_score, 
+                         "color": color
+                     }
             
             # Add regime details to response for frontend display
+            # Add regime details to response
             rec['regime'] = {
                 'trend': regime.dimensions.trend,
                 'volatility': regime.dimensions.volatility,
@@ -431,6 +455,17 @@ class ScannerService:
                 'score': regime.score,
                 'composite': regime.composite
             }
+
+            # 6. Add Dominance Data
+            dom = get_current_dominance()
+            if dom:
+                rec['dominance'] = {
+                    'btc': dom.btc_dom,
+                    'alt': dom.alt_dom,
+                    'stable': dom.stable_dom
+                }
+
+            rec['matrix'] = matrix
             
             return rec
             
