@@ -36,6 +36,14 @@ export function ScannerSetup() {
   // New state for Confluence Gate override
   const [minScoreOverride, setMinScoreOverride] = useState<number>(selectedMode?.min_confluence_score || 0);
 
+  // AI Recommendation State
+  const [recommendation, setRecommendation] = useState<{
+    mode: string;
+    reason: string;
+    warning: string | null;
+    confidence: string;
+  } | null>(null);
+
   useEffect(() => {
     if (selectedMode) {
       setMinScoreOverride(selectedMode.min_confluence_score);
@@ -44,6 +52,18 @@ export function ScannerSetup() {
 
   useEffect(() => {
     clearConsoleLogs();
+
+    // Fetch AI Recommendation
+    const fetchRec = async () => {
+      try {
+        const res = await api.getScannerRecommendation();
+        if (res.data) setRecommendation(res.data);
+      } catch (e) {
+        console.error("Failed to fetch recommendation", e);
+      }
+    };
+    fetchRec();
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -332,7 +352,44 @@ export function ScannerSetup() {
 
             {/* Mode Selection - Full Width */}
             <section className="glass-card glow-border-green p-4 lg:p-8 rounded-2xl">
-              <h2 className="text-xl lg:text-2xl font-semibold mb-6 hud-headline hud-text-green">SELECT MODE</h2>
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+                <h2 className="text-xl lg:text-2xl font-semibold hud-headline hud-text-green">SELECT MODE</h2>
+
+                {/* AI ADVISORY WIDGET */}
+                {recommendation && (
+                  <div
+                    className={`flex items-center gap-3 px-4 py-2 rounded-lg backdrop-blur-sm border transition-all duration-500 animate-in fade-in slide-in-from-right-4 ${recommendation.warning
+                      ? 'bg-yellow-500/10 border-yellow-500/30'
+                      : 'bg-black/40 border-[#00ff88]/20'
+                      }`}
+                  >
+                    <div className={`w-2 h-2 rounded-full ${recommendation.warning ? 'bg-yellow-500 animate-pulse' : 'bg-[#00ff88] animate-pulse'
+                      }`} />
+                    <span className={`text-xs font-mono uppercase tracking-wider ${recommendation.warning ? 'text-yellow-400' : 'text-[#00ff88]'
+                      }`}>
+                      AI RECON: <span className="font-bold text-white">{recommendation.mode.toUpperCase()}</span>
+                    </span>
+
+                    <div className="h-4 w-px bg-white/10 hidden lg:block" />
+
+                    <span className="hidden lg:inline text-xs text-muted-foreground truncate max-w-[400px]" title={recommendation.reason}>
+                      {recommendation.reason}
+                    </span>
+
+                    {/* Auto-select button if not active */}
+                    {scanConfig.sniperMode !== recommendation.mode.toLowerCase() && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[10px] px-2 ml-2 border border-white/10 hover:bg-white/10"
+                        onClick={() => setScanConfig({ ...scanConfig, sniperMode: recommendation.mode.toLowerCase() as any })}
+                      >
+                        APPLY
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
               <ScannerModeTabs />
             </section>
 

@@ -199,3 +199,89 @@ def _calculate_htf_bias_factor(
     t = distance_clamped / max_dist if max_dist > 0 else 1.0
     
     return min_factor + (1.0 - min_factor) * t
+
+
+def get_mode_recommendation(
+    btc_trend: str,
+    btc_volatility: str,
+    risk_appetite: str
+) -> Dict[str, str]:
+    """
+    Recommend optimal scanner mode based on global market conditions.
+    
+    Args:
+        btc_trend: Bitcoin trend (strong_up, up, sideways, down, strong_down)
+        btc_volatility: Volatility regime (compressed, normal, elevated, volatile, chaotic)
+        risk_appetite: Risk context (risk_on, balanced, risk_off, extreme_risk_off)
+        
+    Returns:
+        Dict with 'mode', 'reason', 'confidence', and 'warning' (if any).
+    """
+    # Default recommendation
+    rec = {
+        "mode": "stealth",
+        "reason": "Balanced market conditions detected.",
+        "warning": None,
+        "confidence": "neutral"
+    }
+
+    # 1. RISK-OFF SCENARIOS (Safety First)
+    if risk_appetite in ("risk_off", "extreme_risk_off"):
+        if btc_trend in ("strong_down", "down"):
+            rec = {
+                "mode": "surgical",
+                "reason": "Market is Risk-Off and Trending Down. Use Surgical mode for quick scalps or shorts.",
+                "confidence": "high",
+                "warning": "Reduced position sizing recommended."
+            }
+        else:
+             rec = {
+                "mode": "overwatch",
+                "reason": "Market is Risk-Off. Use Overwatch to filter for A+ high-timeframe setups only.",
+                "confidence": "high",
+                "warning": "Avoid alts unless stronger than BTC."
+            }
+
+    # 2. VOLATILITY EXTREMES
+    elif btc_volatility == "chaotic":
+        rec = {
+            "mode": "stealth",
+            "reason": "Volatility is CHAOTIC (>4% ATR). Use Stealth (Balanced) mode to avoid fakeouts.",
+            "confidence": "medium",
+            "warning": "Stops will be wide. Reduce leverage."
+        }
+    elif btc_volatility == "compressed":
+        rec = {
+            "mode": "strike",
+            "reason": "Volatility is COMPRESSED. Use Strike mode to catch breakout expansions.",
+            "confidence": "high",
+            "warning": None
+        }
+
+    # 3. TREND OPPORTUNITIES (Risk-On / Balanced)
+    elif btc_trend in ("strong_up", "up"):
+        if btc_volatility in ("normal", "elevated"):
+            rec = {
+                "mode": "strike",
+                "reason": "Strong Uptrend + Healthy Volatility. Strike mode optimal for momentum.",
+                "confidence": "high",
+                "warning": None
+            }
+        else:
+             rec = {
+                "mode": "overwatch",
+                "reason": "Uptrend detected. Overwatch mode best for riding swing positions.",
+                "confidence": "medium",
+                "warning": None
+            }
+    
+    # 4. CHOP/SIDEWAYS
+    elif btc_trend == "sideways":
+        rec = {
+            "mode": "surgical",
+            "reason": "Market is Ranging/Sideways. Surgical mode best for range-bound scalping.",
+            "confidence": "high",
+            "warning": "Avoid breakout setups in range."
+        }
+
+    return rec

@@ -370,6 +370,79 @@ class ScannerService:
         from backend.shared.utils.signal_transform import transform_trade_plans_to_signals
         return transform_trade_plans_to_signals(trade_plans, mode, adapter)
 
+    async def get_global_regime_recommendation(self) -> Dict[str, Any]:
+        """
+        Fetch BTC data and detect global regime to recommend scanner mode.
+        """
+        from backend.analysis.regime_detector import get_regime_detector
+        from backend.strategy.planner.regime_engine import get_mode_recommendation
+        from backend.indicators.wrapper import calculate_all_indicators
+        
+        try:
+            # 1. Fetch BTC Data (Market Leader)
+            # Use Phemex as reliable default for BTC data
+            exchange_key = 'phemex'
+            if exchange_key not in self._exchange_adapters:
+                # Fallback to first available
+                exchange_key = list(self._exchange_adapters.keys())[0]
+            
+            adapter = self._exchange_adapters[exchange_key]()
+            pipeline = IngestionPipeline(adapter)
+            
+            # Fetch BTC/USDT data (HTF needed for regime)
+            # Standardizing on BTC/USDT perps or spot
+            symbol = "BTC/USDT"
+            btc_data = await asyncio.to_thread(
+                pipeline.fetch_multi_timeframe, 
+                symbol, 
+                ['1d', '4h', '1h', '15m']
+            )
+            
+            if not btc_data or not btc_data.timeframes:
+                 return {
+                     "mode": "stealth", 
+                     "reason": "Market data unavailable.", 
+                     "warning": "Could not fetch BTC data for analysis.",
+                     "confidence": "low"
+                 }
+    
+            # 2. Calculate Indicators (ATR for volatility)
+            # Use local IndicatorService to compute required metrics
+            from backend.services.indicator_service import IndicatorService
+            ind_service = IndicatorService()
+            btc_indicators = ind_service.compute(btc_data)
+            
+            # 3. Detect Global Regime
+            detector = get_regime_detector()
+            regime = detector.detect_global_regime(btc_data, btc_indicators)
+            
+            # 4. Get Recommendation
+            rec = get_mode_recommendation(
+                 btc_trend=regime.dimensions.trend,
+                 btc_volatility=regime.dimensions.volatility,
+                 risk_appetite=regime.dimensions.risk_appetite
+            )
+            
+            # Add regime details to response for frontend display
+            rec['regime'] = {
+                'trend': regime.dimensions.trend,
+                'volatility': regime.dimensions.volatility,
+                'risk': regime.dimensions.risk_appetite,
+                'score': regime.score,
+                'composite': regime.composite
+            }
+            
+            return rec
+            
+        except Exception as e:
+            logger.error("Failed to generate regime recommendation: %s", e)
+            return {
+                "mode": "stealth",
+                "reason": "Analysis failed.",
+                "warning": str(e),
+                "confidence": "low"
+            }
+
 
 
 # Singleton instance

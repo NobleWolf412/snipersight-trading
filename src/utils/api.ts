@@ -386,6 +386,16 @@ class ApiClient {
     return this.request<{ modes: ScannerMode[]; total: number }>('/scanner/modes');
   }
 
+  async getScannerRecommendation() {
+    return this.request<{
+      mode: string;
+      reason: string;
+      warning: string | null;
+      confidence: string;
+      regime?: any;
+    }>('/scanner/recommendation');
+  }
+
   async getSignals(params?: {
     limit?: number;
     min_score?: number;

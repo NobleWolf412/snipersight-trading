@@ -150,6 +150,22 @@ async def get_scanner_modes():
     return {"modes": list_modes(), "total": len(list_modes())}
 
 
+@router.get("/api/scanner/recommendation")
+async def get_scanner_recommendation():
+    """Get AI-driven mode recommendation based on market regime."""
+    service = get_scanner_service()
+    
+    # Fallback if dependency injection failed (rare race condition)
+    if not service:
+        from backend.services.scanner_service import get_scanner_service as fetch_service
+        service = fetch_service()
+    
+    if not service:
+        raise HTTPException(status_code=500, detail="Scanner service not initialized")
+    
+    return await service.get_global_regime_recommendation()
+
+
 @router.get("/api/scanner/mode_active")
 async def get_active_mode():
     """Return current active scanner mode state with critical timeframe expectations."""
