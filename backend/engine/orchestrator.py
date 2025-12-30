@@ -1307,11 +1307,15 @@ class Orchestrator:
                     {
                         'timeframe': str(ob.timeframe),
                         'type': str(ob.direction),
+                        'direction': str(ob.direction),  # Explicit direction field for frontend
                         'price': float(ob.midpoint),
                         'low': float(ob.low),
                         'high': float(ob.high),
                         'timestamp': ob.timestamp.isoformat() if hasattr(ob, 'timestamp') and ob.timestamp else None,
-                        'freshness_score': float(ob.freshness_score)
+                        'freshness_score': float(ob.freshness_score),
+                        'mitigation_level': float(getattr(ob, 'mitigation_level', 0)),
+                        'displacement_strength': float(getattr(ob, 'displacement_score', getattr(ob, 'displacement_strength', 0.5))),
+                        'grade': str(getattr(ob, 'grade', 'B'))
                     }
                     for ob in context.smc_snapshot.order_blocks
                 ]
@@ -1324,16 +1328,6 @@ class Orchestrator:
                         'timestamp': fvg.timestamp.isoformat() if hasattr(fvg, 'timestamp') and fvg.timestamp else None
                     }
                     for fvg in context.smc_snapshot.fvgs
-                ]
-                plan.metadata['liquidity_pools_list'] = [
-                    {
-                        'timeframe': str(lp.timeframe),
-                        'type': str(lp.pool_type),
-                        'price': float(lp.level),
-                        'touches': int(lp.touches),
-                        'strength': str(lp.grade)
-                    }
-                    for lp in context.smc_snapshot.liquidity_pools
                 ]
                 plan.metadata['structural_breaks_list'] = [
                     {
@@ -1354,7 +1348,7 @@ class Orchestrator:
                     }
                     for sweep in context.smc_snapshot.liquidity_sweeps
                 ]
-                # NEW: Liquidity pools for HTF Bias chart
+                # Liquidity pools for HTF Bias chart - use consistent type naming for frontend
                 plan.metadata['liquidity_pools_list'] = [
                     {
                         'level': float(pool.level),

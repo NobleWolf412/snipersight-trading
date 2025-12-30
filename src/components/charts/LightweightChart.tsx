@@ -4,7 +4,7 @@ import type { IChartApi, ISeriesApi, CandlestickData, Time, SeriesMarker } from 
 import { api } from '@/utils/api';
 import { cn } from '@/lib/utils';
 import { TimeframeLegend, TIMEFRAME_COLORS } from './TimeframeLegend';
-import { Fire } from '@phosphor-icons/react';
+import { Fire, Drop } from '@phosphor-icons/react';
 
 interface OrderBlock {
     price_high: number;
@@ -15,10 +15,17 @@ interface OrderBlock {
     timeframe?: string; // Optional: for color-coding in overlay mode
 }
 
+interface LiquidityZone {
+    type: 'EQH' | 'EQL';
+    priceLevel: number;
+    strength?: number; // 0-1, for opacity
+}
+
 interface LightweightChartProps {
     symbol: string;
     timeframe?: string;
     orderBlocks?: OrderBlock[];
+    liquidityZones?: LiquidityZone[];
     entryPrice?: number;
     stopLoss?: number;
     takeProfit?: number;
@@ -44,6 +51,7 @@ export function LightweightChart({
     symbol,
     timeframe = '15m',
     orderBlocks = [],
+    liquidityZones = [],
     entryPrice,
     stopLoss,
     takeProfit,
@@ -59,6 +67,7 @@ export function LightweightChart({
     const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<CandlestickData[]>([]);
     const [showOBZones, setShowOBZones] = useState(true);
+    const [showLiquidityZones, setShowLiquidityZones] = useState(true);
 
     // Helper to determine reasonable limits based on timeframe
     const getLimitForTimeframe = (tf: string): number => {
@@ -291,6 +300,43 @@ export function LightweightChart({
             });
         } // End showOBZones conditional
 
+        // Create shaded zones for liquidity (EQH/EQL)
+        if (showLiquidityZones && liquidityZones.length > 0) {
+            liquidityZones.forEach((liq, index) => {
+                const isEQH = liq.type === 'EQH';
+                const opacity = (liq.strength || 0.5) * 0.25; // Base opacity from strength
+                const fillColor = isEQH
+                    ? `rgba(168, 85, 247, ${opacity})` // Purple for EQH
+                    : `rgba(139, 92, 246, ${opacity})`; // Violet for EQL
+
+                // Create a thin band around the level
+                const bandWidth = (data[data.length - 1]?.close || liq.priceLevel) * 0.001; // 0.1% band
+                const highLevel = liq.priceLevel + bandWidth;
+                const lowLevel = liq.priceLevel - bandWidth;
+
+                const zoneSeries = chart.addSeries(BaselineSeries, {
+                    baseValue: { type: 'price', price: lowLevel },
+                    topLineColor: 'transparent',
+                    topFillColor1: fillColor,
+                    topFillColor2: fillColor,
+                    bottomLineColor: 'transparent',
+                    bottomFillColor1: fillColor,
+                    bottomFillColor2: fillColor,
+                    lineWidth: 1,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+
+                const zoneData = data.map(candle => ({
+                    time: candle.time,
+                    value: highLevel,
+                }));
+
+                zoneSeries.setData(zoneData);
+                zoneSeriesRefs.current.push(zoneSeries);
+            });
+        }
+
         // Always show entry/SL/TP lines (important trade levels)
         // axisLabelVisible: false removes the filled color rectangles on price axis
         if (entryPrice) {
@@ -325,7 +371,7 @@ export function LightweightChart({
                 title: 'TP',
             });
         }
-    }, [orderBlocks, entryPrice, stopLoss, takeProfit, data, showOBZones]);
+    }, [orderBlocks, liquidityZones, entryPrice, stopLoss, takeProfit, data, showOBZones, showLiquidityZones]);
 
     return (
         <div className={cn('relative w-full h-full bg-[#0a0f0a] rounded-lg overflow-hidden', className)}>
@@ -386,6 +432,22 @@ export function LightweightChart({
             >
                 <Fire size={16} weight="bold" />
             </button>
+
+            {/* Liquidity Toggle Button */}
+            {liquidityZones.length > 0 && (
+                <button
+                    onClick={() => setShowLiquidityZones(!showLiquidityZones)}
+                    className={cn(
+                        "absolute bottom-4 left-12 p-2 rounded-lg backdrop-blur-md border-2 transition-all shadow-lg z-30 hover:scale-105 active:scale-95",
+                        showLiquidityZones
+                            ? "bg-purple-500/30 border-purple-400 text-purple-300"
+                            : "bg-black/70 border-zinc-600 text-zinc-400 hover:border-zinc-400"
+                    )}
+                    title={`Toggle Liquidity Zones (${liquidityZones.length} levels)`}
+                >
+                    <Drop size={16} weight="bold" />
+                </button>
+            )}
 
             {/* Timeframe Legend (for overlay mode) */}
             {showLegend && orderBlocks.some(ob => ob.timeframe) && (

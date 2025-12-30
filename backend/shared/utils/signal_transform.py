@@ -46,6 +46,10 @@ def transform_trade_plans_to_signals(
         sweep_list = plan.metadata.get('liquidity_sweeps_list', []) if plan.metadata else []
         pool_list = plan.metadata.get('liquidity_pools_list', []) if plan.metadata else []
         
+        # Extract equal_highs and equal_lows from pools for frontend fallback
+        equal_highs = [p['level'] for p in pool_list if p.get('type') == 'highs']
+        equal_lows = [p['level'] for p in pool_list if p.get('type') == 'lows']
+        
         signal = {
             "symbol": clean_symbol,
             "direction": plan.direction,
@@ -90,6 +94,8 @@ def transform_trade_plans_to_signals(
                 "bos_choch": bos_list[:10],
                 "liquidity_sweeps": sweep_list[:10],
                 "liquidity_pools": pool_list[:10],
+                "equal_highs": equal_highs[:10],  # Flat array for frontend fallback
+                "equal_lows": equal_lows[:10],    # Flat array for frontend fallback
             }
         }
         

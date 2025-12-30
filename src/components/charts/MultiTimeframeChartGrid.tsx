@@ -175,6 +175,7 @@ export function MultiTimeframeChartGrid({
                         symbol={symbol}
                         timeframe={zonePrimaryTF}
                         orderBlocks={zoneOBs}
+                        liquidityZones={liquidityZones}
                         entryPrice={entryPrice}
                         stopLoss={stopLoss}
                         takeProfit={takeProfit}
@@ -194,6 +195,7 @@ export function MultiTimeframeChartGrid({
                         symbol={symbol}
                         timeframe={entryPrimaryTF}
                         orderBlocks={entryOBs}
+                        liquidityZones={liquidityZones}
                         entryPrice={entryPrice}
                         stopLoss={stopLoss}
                         takeProfit={takeProfit}
