@@ -312,6 +312,12 @@ def generate_trade_plan(
         "target_adjustment": target_adj_meta,
         "structure_tfs_used": list(structure_tfs_tuple),
         "missing_critical_tfs": missing_critical_timeframes,
+        # NEW: R:R best/worst case for transparent risk assessment
+        # Best case: Fill at near entry (better R:R), Worst case: Fill at far entry
+        "rr_best": None,
+        "rr_worst": None,
+        # NEW: Pullback probability from entry zone
+        "pullback_probability": getattr(entry_zone, 'pullback_probability', None),
         # NEW: Entry structure details for frontend display
         "entry_structure": {
             "timeframe": getattr(entry_zone, 'entry_tf_used', None) or primary_tf,
@@ -320,5 +326,17 @@ def generate_trade_plan(
             "type": "OB" if "order block" in (entry_zone.rationale or "").lower() else "FVG" if "fvg" in (entry_zone.rationale or "").lower() else "Zone"
         }
     }
+    
+    # Calculate R:R best/worst after targets are finalized
+    if targets:
+        tp1_level = targets[0].level
+        near_risk = abs(entry_zone.near_entry - stop_loss.level)
+        far_risk = abs(entry_zone.far_entry - stop_loss.level)
+        
+        if near_risk > 0 and far_risk > 0:
+            near_reward = abs(tp1_level - entry_zone.near_entry)
+            far_reward = abs(tp1_level - entry_zone.far_entry)
+            plan.metadata["rr_best"] = round(near_reward / near_risk, 2)
+            plan.metadata["rr_worst"] = round(far_reward / far_risk, 2)
     
     return plan

@@ -1344,6 +1344,28 @@ def calculate_confluence_score(
             rationale=_get_sweep_rationale(smc_snapshot.liquidity_sweeps, direction)
         ))
     
+    # --- MODE-AWARE STRUCTURAL MINIMUM GATE ---
+    # Swing modes (overwatch, stealth, macro_surveillance) require at least ONE
+    # structural element (OB, FVG, or sweep) to generate a valid signal.
+    # This prevents pure HTF alignment setups with no valid entry structure.
+    # Scalp/precision modes are exempt - they can trade isolated setups.
+    
+    SWING_PROFILES = ('macro_surveillance', 'stealth_balanced', 'overwatch', 'swing')
+    is_swing_mode = current_profile in SWING_PROFILES
+    
+    has_structural_element = (ob_score > 0 or fvg_score > 0 or sweep_score > 0)
+    
+    if is_swing_mode and not has_structural_element:
+        # Apply severe penalty instead of hard rejection (still shows in scan with explanation)
+        logger.info("⚠️ STRUCTURAL MINIMUM: %s mode requires OB/FVG/Sweep but none found (%s direction)",
+                   current_profile, direction)
+        factors.append(ConfluenceFactor(
+            name="Structural Minimum",
+            score=0.0,  # Zero score
+            weight=0.30,  # High weight penalty
+            rationale=f"Swing mode requires OB, FVG, or Sweep - none detected for {direction}"
+        ))
+    
     # Kill Zone Timing (high-probability institutional windows)
     try:
         from datetime import datetime
@@ -2756,15 +2778,13 @@ def _score_momentum(
                     score += 20.0
                 elif macd_line > macd_signal:
                     score += 12.0
-                else:
-                    score += 5.0
+                # Neutral MACD (opposing) gives 0 points - removed legacy +5 fallback
             else:  # bearish
                 if macd_line < macd_signal and macd_line < 0:
                     score += 20.0
                 elif macd_line < macd_signal:
                     score += 12.0
-                else:
-                    score += 5.0
+                # Neutral MACD (opposing) gives 0 points - removed legacy +5 fallback
 
     # Stoch RSI K/D crossover enhancement (debounced by minimum separation)
     k = getattr(indicators, 'stoch_rsi_k', None)
@@ -3057,6 +3077,13 @@ def _calculate_synergy_bonus(
         
         except ImportError:
             pass  # Cycle models not available
+    
+    # Apply diminishing returns after 15 points
+    # This prevents "lucky" factor stacking from inflating scores excessively
+    if bonus > 15.0:
+        excess = bonus - 15.0
+        bonus = 15.0 + (excess * 0.5)
+        logger.debug("📊 Synergy diminishing applied: excess %.1f → %.1f", excess, excess * 0.5)
     
     # Clamp synergy bonus to max 25 (allow strong multi-factor synergies)
     return min(bonus, 25.0)

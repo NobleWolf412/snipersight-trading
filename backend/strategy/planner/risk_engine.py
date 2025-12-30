@@ -38,6 +38,86 @@ def _get_allowed_structure_tfs(config: ScanConfig) -> tuple:
     return getattr(config, 'structure_timeframes', ())
 
 
+def _filter_targets_by_opposing_structure(
+    targets: List[Target],
+    smc_snapshot: SMCSnapshot,
+    is_bullish: bool,
+    atr: float
+) -> List[Target]:
+    """
+    Filter targets that are blocked by opposing order blocks.
+    
+    Prevents setting TP levels at prices where strong opposing structures
+    (resistance for longs, support for shorts) will likely reject price.
+    
+    Args:
+        targets: List of calculated targets
+        smc_snapshot: SMC data with order blocks
+        is_bullish: True for long (filter bearish OBs), False for short
+        atr: Average true range for proximity threshold
+        
+    Returns:
+        Filtered targets (keeps at least 1 even if all blocked)
+    """
+    if not targets or not smc_snapshot.order_blocks:
+        return targets
+    
+    opposing_dir = "bearish" if is_bullish else "bullish"
+    opposing_obs = [
+        ob for ob in smc_snapshot.order_blocks 
+        if ob.direction == opposing_dir and ob.freshness_score > 0.5
+    ]
+    
+    if not opposing_obs:
+        return targets
+    
+    valid_targets = []
+    proximity_threshold = 0.5 * atr  # Target is blocked if within 0.5 ATR of opposing OB
+    
+    for target in targets:
+        blocked = False
+        for ob in opposing_obs:
+            # Check if target level is inside or very close to opposing OB zone
+            if is_bullish:
+                # For longs, target is above entry - check if blocked by bearish OB above
+                if ob.low <= target.level <= ob.high:
+                    blocked = True
+                    logger.debug("Target %.2f blocked by bearish OB (%.2f-%.2f)", 
+                               target.level, ob.low, ob.high)
+                    break
+                elif abs(target.level - ob.midpoint) < proximity_threshold:
+                    blocked = True
+                    logger.debug("Target %.2f too close to bearish OB midpoint %.2f", 
+                               target.level, ob.midpoint)
+                    break
+            else:
+                # For shorts, target is below entry - check if blocked by bullish OB below
+                if ob.low <= target.level <= ob.high:
+                    blocked = True
+                    logger.debug("Target %.2f blocked by bullish OB (%.2f-%.2f)", 
+                               target.level, ob.low, ob.high)
+                    break
+                elif abs(target.level - ob.midpoint) < proximity_threshold:
+                    blocked = True
+                    logger.debug("Target %.2f too close to bullish OB midpoint %.2f", 
+                               target.level, ob.midpoint)
+                    break
+        
+        if not blocked:
+            valid_targets.append(target)
+    
+    # Always keep at least one target (the closest/safest one)
+    if not valid_targets and targets:
+        logger.info("All targets blocked by opposing structure - keeping first target as fallback")
+        return targets[:1]
+    
+    if len(valid_targets) < len(targets):
+        logger.info("Filtered %d/%d targets due to opposing OB structures",
+                   len(targets) - len(valid_targets), len(targets))
+    
+    return valid_targets
+
+
 def _get_allowed_stop_tfs(config: ScanConfig) -> tuple:
     """Extract stop_timeframes from config, or return empty tuple if unrestricted.
     
@@ -1166,6 +1246,13 @@ def _calculate_targets(
         logger.warning(f"Risk distance is zero for {setup_archetype} setup - returning fallback targets")
         risk_distance = atr  # Fallback
     
+    # Calculate edge case R:Rs for transparency in plan metadata
+    # These are exposed to frontend for honest risk assessment
+    # Best case: Fill at near entry (closest to current price)
+    # Worst case: Fill at far entry (deepest in zone)
+    near_risk = abs(entry_zone.near_entry - stop_loss.level)
+    far_risk = abs(entry_zone.far_entry - stop_loss.level)
+    
     # --- SWING MODE HANDLING (Overwatch / Stealth / Balanced) ---
     # For swing modes, we prefer STRUCTURAL targets (swings, liquidity, levels)
     # over mathematical R:R multiples.
@@ -1246,15 +1333,19 @@ def _calculate_targets(
             # Pick top 3-4 distinct levels
             targets = structural_targets[:4]
             logger.info(f"Using {len(targets)} structural targets for {mode_profile} mode")
+            # Filter targets blocked by opposing OB structures
+            targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
             return targets
         
         else:
             # Fallback for Swing: Use dedicated structure swing calculator
             # This handles cases where no fancy confluence targets exist but we still need structure
             logger.info(f"No specific structural targets found for {mode_profile} mode - using swing fallback")
-            return _calculate_swing_structural_targets(
+            swing_targets = _calculate_swing_structural_targets(
                 is_bullish, avg_entry, risk_distance, atr, smc_snapshot, multi_tf_data, target_tfs, planner_cfg
             )
+            # Filter targets blocked by opposing OB structures
+            return _filter_targets_by_opposing_structure(swing_targets, smc_snapshot, is_bullish, atr)
 
     # --- DEFAULT / SCALP / INTRADAY HANDLING (R:R Multiples) ---
     
@@ -1285,6 +1376,9 @@ def _calculate_targets(
             weight=1.0 - (i * 0.2),  # Decay weight for further targets
             rationale=f"Standard R:R target ({rr:.1f}R)"
         ))
+    
+    # Filter targets blocked by opposing OB structures
+    targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
         
     return targets
 

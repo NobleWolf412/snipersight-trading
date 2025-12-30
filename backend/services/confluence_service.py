@@ -118,21 +118,28 @@ class ConfluenceService:
                        bullish_breakdown.total_score,
                        bearish_breakdown.total_score)
             
+            # NEW: Require minimum margin for directional confidence
+            # Close scores (within margin) are treated as indeterminate
+            DIRECTION_MARGIN = 8.0  # Minimum score edge required
+            score_diff = bullish_breakdown.total_score - bearish_breakdown.total_score
+            
             # Determine winner - use STRICT greater-than to avoid long bias on ties
             # Ties are broken by regime trend
             tie_break_used = None
             
-            if bullish_breakdown.total_score > bearish_breakdown.total_score:
+            if score_diff >= DIRECTION_MARGIN:
+                # Clear bullish edge
                 chosen = bullish_breakdown
                 chosen_direction = 'LONG'
-                logger.info("✅ %s Direction: LONG selected (score %.1f > %.1f)",
-                           context.symbol, bullish_breakdown.total_score, bearish_breakdown.total_score)
+                logger.info("✅ %s Direction: LONG selected (score %.1f > %.1f by %.1f margin)",
+                           context.symbol, bullish_breakdown.total_score, bearish_breakdown.total_score, score_diff)
                            
-            elif bearish_breakdown.total_score > bullish_breakdown.total_score:
+            elif score_diff <= -DIRECTION_MARGIN:
+                # Clear bearish edge
                 chosen = bearish_breakdown
                 chosen_direction = 'SHORT'
-                logger.info("✅ %s Direction: SHORT selected (score %.1f > %.1f)",
-                           context.symbol, bearish_breakdown.total_score, bullish_breakdown.total_score)
+                logger.info("✅ %s Direction: SHORT selected (score %.1f > %.1f by %.1f margin)",
+                           context.symbol, bearish_breakdown.total_score, bullish_breakdown.total_score, abs(score_diff))
                            
             else:
                 # Exact tie - use regime trend as tie-breaker

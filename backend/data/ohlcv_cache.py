@@ -78,6 +78,30 @@ class CacheEntry:
             
         return False
     
+    def is_stale_by_price(self, current_price: float, max_drift_pct: float = 3.0) -> bool:
+        """
+        Check if cache is stale due to significant price movement.
+        
+        Even if time hasn't expired, large price moves can invalidate
+        SMC structures detected from cached data.
+        
+        Args:
+            current_price: Current live market price
+            max_drift_pct: Maximum allowed price drift percentage
+            
+        Returns:
+            True if price has drifted too far from cached close
+        """
+        if self.df.empty or current_price <= 0:
+            return True
+        
+        cached_close = self.df['close'].iloc[-1]
+        if cached_close <= 0:
+            return True
+            
+        drift_pct = abs(current_price - cached_close) / cached_close * 100
+        return drift_pct > max_drift_pct
+    
     def get_age_seconds(self) -> float:
         """Get how old this cache entry is in seconds."""
         return time.time() - self.fetched_at
@@ -125,13 +149,21 @@ class OHLCVCache:
         """Create cache key from symbol and timeframe."""
         return f"{symbol}:{timeframe}"
     
-    def get(self, symbol: str, timeframe: str) -> Optional[pd.DataFrame]:
+    def get(
+        self, 
+        symbol: str, 
+        timeframe: str,
+        current_price: Optional[float] = None,
+        max_price_drift_pct: float = 3.0
+    ) -> Optional[pd.DataFrame]:
         """
         Get cached OHLCV data if available and not expired.
         
         Args:
             symbol: Trading pair (e.g., "BTC/USDT")
             timeframe: Candle timeframe (e.g., "1h")
+            current_price: Optional current price for drift check
+            max_price_drift_pct: Max allowed price drift before cache is stale
             
         Returns:
             Cached DataFrame or None if cache miss/expired
@@ -149,7 +181,16 @@ class OHLCVCache:
                 # Remove expired entry
                 del self._cache[key]
                 self._misses += 1
-                logger.debug(f"Cache EXPIRED: {key} (age={entry.get_age_seconds():.1f}s)")
+                logger.debug(f"Cache EXPIRED (time): {key} (age={entry.get_age_seconds():.1f}s)")
+                return None
+            
+            # NEW: Check price drift if current_price provided
+            if current_price is not None and entry.is_stale_by_price(current_price, max_price_drift_pct):
+                del self._cache[key]
+                self._misses += 1
+                cached_close = entry.df['close'].iloc[-1] if not entry.df.empty else 0
+                drift = abs(current_price - cached_close) / cached_close * 100 if cached_close > 0 else 0
+                logger.debug(f"Cache EXPIRED (price drift): {key} (drift={drift:.1f}% > {max_price_drift_pct}%)")
                 return None
             
             self._hits += 1

@@ -31,6 +31,137 @@ SetupArchetype = Literal[
     "BREAKOUT_RETEST",
 ]
 
+
+def _calculate_pullback_probability(
+    is_bullish: bool,
+    current_price: float,
+    entry_zone_mid: float,
+    atr: float,
+    indicators: Optional[IndicatorSet] = None,
+    htf_trend: Optional[str] = None
+) -> float:
+    """
+    Calculate probability that price will pull back to reach entry zone.
+    
+    Evaluates multiple factors:
+    - Distance to entry in ATR units (closer = higher probability)
+    - Current momentum direction (aligned = higher probability)
+    - HTF trend alignment (aligned = higher probability)
+    
+    Args:
+        is_bullish: True for long (pullback down to entry)
+        current_price: Current market price
+        entry_zone_mid: Midpoint of entry zone
+        atr: Average true range
+        indicators: Technical indicators for momentum analysis
+        htf_trend: Higher timeframe trend direction
+        
+    Returns:
+        Probability score 0.0-1.0 (0 = unlikely, 1 = very likely)
+    """
+    if atr <= 0:
+        return 0.5  # Default to neutral if no ATR
+    
+    probability = 0.5  # Start neutral
+    
+    # 1. DISTANCE FACTOR (40% weight)
+    # Closer entries are more likely to be reached
+    distance_to_entry = abs(current_price - entry_zone_mid)
+    distance_atr = distance_to_entry / atr
+    
+    if distance_atr <= 0.5:
+        # Very close - high probability
+        distance_score = 0.9
+    elif distance_atr <= 1.0:
+        # Within 1 ATR - good probability
+        distance_score = 0.75
+    elif distance_atr <= 2.0:
+        # Within 2 ATR - moderate probability
+        distance_score = 0.5
+    elif distance_atr <= 3.0:
+        # Within 3 ATR - low probability
+        distance_score = 0.3
+    else:
+        # Beyond 3 ATR - very unlikely
+        distance_score = 0.1
+    
+    probability = distance_score * 0.4
+    
+    # 2. MOMENTUM FACTOR (35% weight)
+    # Check if momentum supports pullback direction
+    if indicators and indicators.by_timeframe:
+        try:
+            # Get primary timeframe indicators
+            primary_tf = list(indicators.by_timeframe.keys())[0]
+            ind = indicators.by_timeframe.get(primary_tf)
+            
+            if ind:
+                rsi = getattr(ind, 'rsi', 50)
+                stoch_k = getattr(ind, 'stoch_rsi_k', None)
+                stoch_d = getattr(ind, 'stoch_rsi_d', None)
+                
+                momentum_score = 0.5  # Neutral default
+                
+                if is_bullish:
+                    # For longs, we WANT price to pull back (bearish momentum helps)
+                    # But if already oversold, pullback is limited
+                    if rsi is not None:
+                        if rsi < 30:
+                            # Already oversold - less room to pull back
+                            momentum_score = 0.3
+                        elif rsi < 45:
+                            # Mildly bearish - good for pullback
+                            momentum_score = 0.7
+                        elif rsi > 60:
+                            # Bullish momentum - pullback less likely
+                            momentum_score = 0.4
+                        else:
+                            momentum_score = 0.5
+                else:
+                    # For shorts, we WANT price to push up (bullish momentum helps)
+                    if rsi is not None:
+                        if rsi > 70:
+                            # Already overbought - less room to push up
+                            momentum_score = 0.3
+                        elif rsi > 55:
+                            # Mildly bullish - good for push into short zone
+                            momentum_score = 0.7
+                        elif rsi < 40:
+                            # Bearish momentum - push up less likely
+                            momentum_score = 0.4
+                        else:
+                            momentum_score = 0.5
+                
+                probability += momentum_score * 0.35
+        except (IndexError, AttributeError):
+            probability += 0.5 * 0.35  # Neutral on error
+    else:
+        probability += 0.5 * 0.35  # Neutral if no indicators
+    
+    # 3. HTF TREND FACTOR (25% weight)
+    # Pullback against trend is harder to achieve
+    htf_score = 0.5  # Neutral default
+    if htf_trend:
+        trend_lower = htf_trend.lower()
+        if is_bullish:
+            # For longs, bearish HTF trend makes pullback more likely initially
+            # but the bounce back up is harder
+            if trend_lower == 'bullish':
+                htf_score = 0.65  # Pullback likely to be bought
+            elif trend_lower == 'bearish':
+                htf_score = 0.45  # Pullback may continue (risky)
+        else:
+            # For shorts, bullish HTF trend makes push up likely
+            if trend_lower == 'bearish':
+                htf_score = 0.65  # Push up likely to be sold
+            elif trend_lower == 'bullish':
+                htf_score = 0.45  # Push up may continue (risky)
+    
+    probability += htf_score * 0.25
+    
+    # Clamp to valid range
+    return max(0.0, min(1.0, probability))
+
 def _map_setup_to_archetype(setup_type: str) -> SetupArchetype:
     s = (setup_type or "").upper().replace(" ", "_")
     if "SWEEP" in s:
@@ -796,4 +927,17 @@ def _calculate_entry_zone(
             rationale="No valid SMC structure found in entry zone (fallback)"
         )
     entry_zone.entry_tf_used = "N/A"  # type: ignore
+    
+    # Calculate and store pullback probability
+    entry_mid = entry_zone.midpoint
+    pullback_prob = _calculate_pullback_probability(
+        is_bullish=is_bullish,
+        current_price=current_price,
+        entry_zone_mid=entry_mid,
+        atr=atr,
+        indicators=indicators,
+        htf_trend=None  # Caller can provide via confluence_breakdown if needed
+    )
+    entry_zone.pullback_probability = pullback_prob  # type: ignore
+    
     return entry_zone, used_structure

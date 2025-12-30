@@ -77,7 +77,8 @@ class IngestionPipeline:
         self,
         symbol: str,
         timeframes: List[str],
-        limit: int = 500
+        limit: int = 500,
+        current_price: Optional[float] = None  # NEW: For price drift invalidation
     ) -> MultiTimeframeData:
         """
         Fetch OHLCV data across multiple timeframes for a single symbol.
@@ -87,6 +88,7 @@ class IngestionPipeline:
             symbol: Trading pair symbol (e.g., 'BTC/USDT')
             timeframes: List of timeframe strings (e.g., ['1W', '1D', '4H'])
             limit: Number of candles to fetch per timeframe
+            current_price: Current market price for cache drift invalidation
 
         Returns:
             MultiTimeframeData object with dataframes for each timeframe
@@ -105,9 +107,9 @@ class IngestionPipeline:
             try:
                 df = None
                 
-                # Try cache first
+                # Try cache first (with optional price drift check)
                 if self.use_cache and self._cache:
-                    df = self._cache.get(symbol, tf)
+                    df = self._cache.get(symbol, tf, current_price=current_price)
                     if df is not None:
                         cache_hits += 1
                         logger.debug(f"✓ Cache HIT for {symbol} {tf} ({len(df)} candles)")
@@ -160,7 +162,8 @@ class IngestionPipeline:
         symbols: List[str],
         timeframes: List[str],
         limit: int = 500,
-        max_workers: int = 5
+        max_workers: int = 5,
+        current_prices: Optional[Dict[str, float]] = None  # NEW: For price drift invalidation
     ) -> Dict[str, MultiTimeframeData]:
         """
         Fetch multi-timeframe data for multiple symbols in parallel.
@@ -171,6 +174,7 @@ class IngestionPipeline:
             timeframes: List of timeframe strings
             limit: Number of candles to fetch per timeframe
             max_workers: Maximum number of concurrent workers
+            current_prices: Dict mapping symbol -> current price for cache drift check
 
         Returns:
             Dictionary mapping symbol to MultiTimeframeData
@@ -197,11 +201,14 @@ class IngestionPipeline:
             # Phemex returns error 30000 when concurrent requests hit too fast
             future_to_symbol = {}
             for i, symbol in enumerate(symbols):
+                # Get current price for this symbol if available
+                cp = current_prices.get(symbol) if current_prices else None
                 future = executor.submit(
                     self.fetch_multi_timeframe,
                     symbol,
                     timeframes,
-                    limit
+                    limit,
+                    cp  # Pass current_price for cache drift check
                 )
                 future_to_symbol[future] = symbol
                 # Small stagger (100ms) between submissions to avoid concurrent burst

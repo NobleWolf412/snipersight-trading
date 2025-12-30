@@ -1774,18 +1774,46 @@ class Orchestrator:
 
     def _check_critical_timeframes(self, multi_tf_data: MultiTimeframeData) -> List[str]:
         """
-        Check if critical timeframes are available in data.
+        Check if critical timeframes are available with sufficient data.
         
         Args:
             multi_tf_data: Fetched multi-timeframe data
             
         Returns:
-            List of missing critical timeframes (empty if all present)
+            List of missing/insufficient critical timeframes (empty if all present)
         """
+        # Minimum candle counts for reliable pattern detection
+        MIN_CANDLES = {
+            '1w': 50,   # ~1 year
+            '1W': 50,
+            '1d': 100,  # ~3.5 months
+            '1D': 100,
+            '4h': 150,  # ~25 days
+            '4H': 150,
+            '1h': 200,  # ~8 days
+            '1H': 200,
+            '15m': 300, # ~3 days
+            '5m': 500,  # ~1.7 days
+            '1m': 500,  # ~8 hours
+        }
+        
         available_tfs = set(multi_tf_data.timeframes.keys())
         critical_tfs = set(self.scanner_mode.critical_timeframes)
-        missing = critical_tfs - available_tfs
-        return sorted(missing)
+        
+        # Check both presence AND sufficient candle count
+        issues = []
+        for tf in critical_tfs:
+            if tf not in available_tfs:
+                issues.append(f"{tf}:missing")
+            else:
+                df = multi_tf_data.timeframes[tf]
+                min_required = MIN_CANDLES.get(tf, 100)
+                actual_count = len(df) if df is not None else 0
+                if actual_count < min_required:
+                    issues.append(f"{tf}:{actual_count}/{min_required}")
+                    logger.debug("Insufficient candles for %s: %d < %d", tf, actual_count, min_required)
+        
+        return sorted(issues)
     
     def _detect_global_regime(
         self, 
