@@ -171,6 +171,113 @@ def _time_since_last_touch(ob: OrderBlock, df: pd.DataFrame) -> float:
     return (df.index[-1] - last_touch).total_seconds() / 3600.0
 
 
+def _find_nested_entry_ob(
+    is_bullish: bool,
+    zone_obs: List[OrderBlock],
+    trigger_obs: List[OrderBlock],
+    current_price: float,
+    atr: float
+) -> Optional[tuple]:
+    """
+    Find an LTF trigger OB that sits inside an HTF zone OB for precise entry.
+    
+    This implements TOP-DOWN ENTRY LOGIC:
+    1. HTF Zone OB defines the institutional accumulation/distribution zone
+    2. LTF Trigger OB inside it provides precise entry timing
+    
+    Args:
+        is_bullish: Trade direction
+        zone_obs: HTF zone order blocks (4H/1H)
+        trigger_obs: LTF trigger order blocks (15m/5m)
+        current_price: Current market price
+        atr: ATR for distance validation
+        
+    Returns:
+        Tuple of (trigger_ob, zone_ob) or None if no nested setup found
+    """
+    if not zone_obs or not trigger_obs:
+        return None
+    
+    best_nested = None
+    best_score = -1
+    
+    for zone_ob in zone_obs:
+        # Zone OB must be in correct position relative to price
+        if is_bullish:
+            # For longs, zone should be below or at current price
+            if zone_ob.high > current_price * 1.02:  # 2% tolerance
+                continue
+        else:
+            # For shorts, zone should be above or at current price
+            if zone_ob.low < current_price * 0.98:
+                continue
+        
+        for trigger_ob in trigger_obs:
+            # Check if trigger is INSIDE the zone (nested)
+            is_nested = (
+                trigger_ob.low >= zone_ob.low - (0.1 * atr) and  # Small tolerance
+                trigger_ob.high <= zone_ob.high + (0.1 * atr)
+            )
+            
+            if not is_nested:
+                continue
+            
+            # Check trigger is in correct position
+            if is_bullish:
+                if trigger_ob.high > current_price:
+                    continue  # Trigger must be below price for longs
+            else:
+                if trigger_ob.low < current_price:
+                    continue  # Trigger must be above price for shorts
+            
+            # Score the nested setup
+            # Prefer: higher freshness, larger zone, less mitigated
+            freshness_score = getattr(trigger_ob, 'freshness_score', 0.7)
+            zone_freshness = getattr(zone_ob, 'freshness_score', 0.7)
+            mitigation = getattr(trigger_ob, 'mitigation_level', 0.0)
+            
+            score = (
+                freshness_score * 2 +  # Fresh trigger is key
+                zone_freshness +
+                (zone_ob.high - zone_ob.low) / atr +  # Larger zone = more significant
+                (1 - mitigation) * 2  # Unmitigated trigger
+            )
+            
+            if score > best_score:
+                best_score = score
+                best_nested = (trigger_ob, zone_ob)
+    
+    if best_nested:
+        trigger, zone = best_nested
+        logger.info(
+            f"🎯 NESTED ENTRY: Found {trigger.timeframe} trigger OB inside {zone.timeframe} zone OB | "
+            f"Trigger: [{trigger.low:.2f}-{trigger.high:.2f}] Zone: [{zone.low:.2f}-{zone.high:.2f}]"
+        )
+    
+    return best_nested
+
+
+def _get_zone_and_trigger_tfs(config: ScanConfig) -> tuple:
+    """
+    Get zone and trigger timeframes from config.
+    Falls back to entry_timeframes split if not specified.
+    """
+    zone_tfs = getattr(config, 'zone_timeframes', None)
+    trigger_tfs = getattr(config, 'entry_trigger_timeframes', None)
+    
+    if zone_tfs and trigger_tfs:
+        return zone_tfs, trigger_tfs
+    
+    # Fallback: split entry_timeframes into zone (HTF) and trigger (LTF)
+    entry_tfs = getattr(config, 'entry_timeframes', ())
+    htf = ('1w', '1d', '4h', '1h')
+    ltf = ('15m', '5m', '1m')
+    
+    zone_tfs = tuple(tf for tf in entry_tfs if tf.lower() in [h.lower() for h in htf])
+    trigger_tfs = tuple(tf for tf in entry_tfs if tf.lower() in [l.lower() for l in ltf])
+    
+    return zone_tfs or ('4h', '1h'), trigger_tfs or ('15m', '5m')
+
 def _calculate_entry_zone(
     is_bullish: bool,
     smc_snapshot: SMCSnapshot,
@@ -200,6 +307,43 @@ def _calculate_entry_zone(
     
     # Find relevant order block or FVG
     allowed_tfs = _get_allowed_entry_tfs(config)  # CHANGED: Use entry TFs, not structure TFs
+    
+    # === SWING MODE: Attempt nested entry (LTF trigger inside HTF zone) ===
+    mode_profile = getattr(config, 'profile', 'balanced').lower()
+    is_swing_mode = mode_profile in ('macro_surveillance', 'overwatch', 'stealth_balanced', 'stealth')
+    
+    if is_swing_mode:
+        zone_tfs, trigger_tfs = _get_zone_and_trigger_tfs(config)
+        
+        # Separate OBs by timeframe role
+        zone_obs = [ob for ob in smc_snapshot.order_blocks 
+                   if ob.direction == ("bullish" if is_bullish else "bearish")
+                   and ob.timeframe.lower() in [t.lower() for t in zone_tfs]]
+        trigger_obs = [ob for ob in smc_snapshot.order_blocks 
+                      if ob.direction == ("bullish" if is_bullish else "bearish")
+                      and ob.timeframe.lower() in [t.lower() for t in trigger_tfs]]
+        
+        nested_result = _find_nested_entry_ob(
+            is_bullish=is_bullish,
+            zone_obs=zone_obs,
+            trigger_obs=trigger_obs,
+            current_price=current_price,
+            atr=atr
+        )
+        
+        if nested_result:
+            trigger_ob, zone_ob = nested_result
+            logger.info(f"✅ NESTED ENTRY ACTIVE: Using {trigger_ob.timeframe} trigger inside {zone_ob.timeframe} zone")
+            
+            # Use trigger OB for entry zone
+            entry_zone = EntryZone(
+                near_entry=trigger_ob.high if is_bullish else trigger_ob.low,
+                far_entry=trigger_ob.low if is_bullish else trigger_ob.high,
+                structure_type="nested_ob",
+                timeframe=trigger_ob.timeframe,
+                rationale=f"Nested entry: {trigger_ob.timeframe} OB inside {zone_ob.timeframe} zone OB"
+            )
+            return entry_zone, True  # used_structure = True
     
     if is_bullish:
         # Look for bullish OB or FVG below current price (OR we are inside it)

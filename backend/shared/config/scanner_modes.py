@@ -168,18 +168,18 @@ MODES: Dict[str, ScannerMode] = {
         primary_planning_timeframe="4h",
         max_pullback_atr=4.0,
         min_stop_atr=0.4,
-        max_stop_atr=6.5,  # TUNED: was 8.0 - cap via max_stop_atr validation
+        max_stop_atr=8.0,  # INCREASED: Allow wider stops for true swing invalidation
 
         entry_timeframes=("1w", "1d", "4h", "1h", "15m"),  # TUNED: Allow entries on HTF structure (Overwatch requirement)
         structure_timeframes=("1w", "1d", "4h"),  # RESTORED: HTF structure for target clipping
-        stop_timeframes=("4h", "1h"),
+        stop_timeframes=("1d", "4h", "1h"),  # UPDATED: Include 1d for swing invalidation stops
         target_timeframes=("1d", "4h"),
         min_target_move_pct=1.5,  # Macro moves require >= 1.5% TP1
         smc_preset="luxalgo_strict",  # Institutional-grade strict detection for macro positions
         expected_trade_type="swing",  # HTF macro positions
         allowed_trade_types=("swing",),  # STRICT: Only swing trades allowed
         volume_accel_lookback=8,  # Longer lookback for swing - filters noise, catches institutional accumulation
-        overrides={"min_rr_ratio": 2.0, "atr_floor": 0.0025, "bias_gate": 0.7, "htf_swing_allowed": ("1d", "4h")},
+        overrides={"min_rr_ratio": 2.0, "atr_floor": 0.0025, "bias_gate": 0.7, "htf_swing_allowed": ("1d", "4h", "1h")},  # UPDATED: Include 1h
         # NEW: Nested OB entry hierarchy
         zone_timeframes=("4h", "1h"),  # Entry zone OBs
         entry_trigger_timeframes=("15m", "5m"),  # Refined entry OBs inside zone

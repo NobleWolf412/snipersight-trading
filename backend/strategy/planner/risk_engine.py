@@ -159,6 +159,108 @@ def _find_swing_level(
         return None
 
 
+def _calculate_swing_invalidation_stop(
+    is_bullish: bool,
+    multi_tf_data: Optional[MultiTimeframeData],
+    current_price: float,
+    atr: float,
+    config: ScanConfig
+) -> Optional[tuple]:
+    """
+    Find the swing low/high that defines the trade structure for TRUE swing trades.
+    
+    For swing longs: Find the Higher Low (HL) that defines bullish structure
+    For swing shorts: Find the Lower High (LH) that defines bearish structure
+    
+    This produces stops that respect the SWING THESIS, not just the entry OB.
+    
+    Args:
+        is_bullish: Trade direction
+        multi_tf_data: Multi-timeframe candle data
+        current_price: Current market price
+        atr: ATR for filtering
+        config: Scan configuration
+        
+    Returns:
+        Tuple of (swing_level, timeframe, swing_type) or None if not found
+    """
+    if not multi_tf_data:
+        return None
+    
+    # Import here to avoid circular imports
+    from backend.strategy.smc.swing_structure import detect_swing_structure
+    
+    # HTF priority order for swing invalidation
+    htf_priority = ['1d', '4h', '1h']
+    
+    # Get mode-specific HTF allowlist
+    overrides = getattr(config, 'overrides', None) or {}
+    htf_allowed = overrides.get('htf_swing_allowed', ('1d', '4h', '1h'))
+    
+    for tf in htf_priority:
+        # Check if this TF is allowed for swing stops
+        if tf.lower() not in [h.lower() for h in htf_allowed]:
+            continue
+            
+        # Try to get candle data for this TF
+        df = None
+        ohlcv = getattr(multi_tf_data, 'timeframes', {})
+        if tf in ohlcv:
+            df = ohlcv[tf]
+        elif tf.lower() in ohlcv:
+            df = ohlcv[tf.lower()]
+        elif tf.upper() in ohlcv:
+            df = ohlcv[tf.upper()]
+        
+        if df is None or len(df) < 50:
+            continue
+        
+        try:
+            # Detect swing structure with larger lookback for HTF
+            lookback = 30 if tf in ('1d', '1D') else 20
+            swing_struct = detect_swing_structure(
+                df, 
+                lookback=lookback,
+                min_swing_atr=0.3  # Lower threshold to catch more swings
+            )
+            
+            if is_bullish:
+                # For longs, find the Higher Low that defines the structure
+                if swing_struct.last_hl and swing_struct.last_hl.price < current_price:
+                    swing_level = swing_struct.last_hl.price
+                    logger.info(f"🎯 SWING STOP: Found HL at {swing_level:.2f} on {tf} for bullish invalidation")
+                    return (swing_level, tf, 'HL')
+                    
+                # Fallback: Look for any significant swing low below current price
+                swing_lows = [sp for sp in swing_struct.swing_points 
+                             if not sp.is_high and sp.price < current_price]
+                if swing_lows:
+                    best_swing = max(swing_lows, key=lambda sp: sp.price)
+                    logger.info(f"🎯 SWING STOP: Using swing low at {best_swing.price:.2f} on {tf}")
+                    return (best_swing.price, tf, best_swing.swing_type)
+                    
+            else:  # Bearish
+                # For shorts, find the Lower High that defines the structure
+                if swing_struct.last_lh and swing_struct.last_lh.price > current_price:
+                    swing_level = swing_struct.last_lh.price
+                    logger.info(f"🎯 SWING STOP: Found LH at {swing_level:.2f} on {tf} for bearish invalidation")
+                    return (swing_level, tf, 'LH')
+                
+                # Fallback: Any significant swing high above current price
+                swing_highs = [sp for sp in swing_struct.swing_points 
+                              if sp.is_high and sp.price > current_price]
+                if swing_highs:
+                    best_swing = min(swing_highs, key=lambda sp: sp.price)
+                    logger.info(f"🎯 SWING STOP: Using swing high at {best_swing.price:.2f} on {tf}")
+                    return (best_swing.price, tf, best_swing.swing_type)
+                    
+        except Exception as e:
+            logger.warning(f"Swing structure detection failed for {tf}: {e}")
+            continue
+    
+    logger.debug("No swing invalidation level found on any HTF")
+    return None
+
 def _calculate_stop_loss(
     is_bullish: bool,
     entry_zone: EntryZone,
@@ -205,6 +307,49 @@ def _calculate_stop_loss(
     else:
         stop_buffer = planner_cfg.stop_buffer_atr
         regime = "unknown"
+    
+    # === SWING MODE: Use swing invalidation stops for TRUE swing trades ===
+    # For Overwatch/macro_surveillance, prioritize swing structure over entry OB
+    mode_profile = getattr(config, 'profile', 'balanced').lower()
+    is_swing_mode = mode_profile in ('macro_surveillance', 'overwatch')
+    
+    if is_swing_mode and multi_tf_data and current_price:
+        swing_result = _calculate_swing_invalidation_stop(
+            is_bullish=is_bullish,
+            multi_tf_data=multi_tf_data,
+            current_price=current_price,
+            atr=atr,
+            config=config
+        )
+        
+        if swing_result:
+            swing_level, swing_tf, swing_type = swing_result
+            
+            # Apply buffer beyond swing invalidation
+            if is_bullish:
+                stop_level = swing_level - (stop_buffer * atr)
+                distance_atr = (entry_zone.far_entry - stop_level) / atr
+            else:
+                stop_level = swing_level + (stop_buffer * atr)
+                distance_atr = (stop_level - entry_zone.near_entry) / atr
+            
+            # Validate the stop isn't too extreme (sanity check)
+            max_stop_atr = getattr(config, 'max_stop_atr', 8.0)
+            if distance_atr <= max_stop_atr and distance_atr > 0:
+                logger.info(
+                    f"✅ SWING STOP ACTIVE: Using {swing_tf} {swing_type} at {swing_level:.2f} "
+                    f"-> stop={stop_level:.2f} ({distance_atr:.1f} ATR)"
+                )
+                
+                stop_loss = StopLoss(
+                    level=stop_level,
+                    distance_atr=distance_atr,
+                    rationale=f"Stop beyond {swing_tf} {swing_type} swing invalidation point"
+                )
+                stop_loss.structure_tf_used = swing_tf  # type: ignore
+                return stop_loss, True  # used_structure = True
+            else:
+                logger.info(f"Swing stop too wide ({distance_atr:.1f} ATR > {max_stop_atr}) - falling back to OB-based stop")
     
     if is_bullish:
         # Stop below the entry structure
@@ -642,12 +787,49 @@ def _find_htf_swing_targets(
             swing_levels.sort(key=lambda x: abs(x[0] - avg_entry))
             return swing_levels[:max_targets]
 
-    # If no HTF levels found (or no smc_snapshot), return empty list.
-    # We no longer fall back to manual candle parsing as it is less reliable than the analysis modules.
-    if not swing_levels:
-        logger.debug("No HTF levels found in snapshot for targets")
+    # Priority 2: Fallback to candle-based swing detection
+    # This ensures we have structural targets even when htf_levels isn't populated
+    if not swing_levels and multi_tf_data:
+        from backend.strategy.smc.swing_structure import detect_swing_structure
         
-    return swing_levels
+        ohlcv = getattr(multi_tf_data, 'timeframes', {})
+        
+        for tf in allowed_tfs:
+            # Try to get candle data
+            df = ohlcv.get(tf) or ohlcv.get(tf.lower()) or ohlcv.get(tf.upper())
+            
+            if df is None or len(df) < 50:
+                continue
+            
+            try:
+                # Use larger lookback for HTF swing detection
+                lookback = 25 if tf.lower() in ('1d', '1w') else 15
+                swing_struct = detect_swing_structure(df, lookback=lookback, min_swing_atr=0.3)
+                
+                if is_bullish:
+                    # Find swing highs above entry for long targets
+                    for sp in swing_struct.swing_points:
+                        if sp.is_high and sp.price > avg_entry:
+                            swing_levels.append((sp.price, tf, 1))
+                else:
+                    # Find swing lows below entry for short targets
+                    for sp in swing_struct.swing_points:
+                        if not sp.is_high and sp.price < avg_entry:
+                            swing_levels.append((sp.price, tf, 1))
+                
+                if swing_levels:
+                    logger.debug(f"Found {len(swing_levels)} candle-based swing targets on {tf}")
+                    break  # Stop after first TF with results
+                    
+            except Exception as e:
+                logger.warning(f"Swing detection failed for {tf}: {e}")
+                continue
+    
+    if not swing_levels:
+        logger.debug("No HTF swing levels found for targets (checked htf_levels and candle data)")
+        
+    swing_levels.sort(key=lambda x: abs(x[0] - avg_entry))
+    return swing_levels[:max_targets]
 
 
 def _get_htf_bos_levels(
