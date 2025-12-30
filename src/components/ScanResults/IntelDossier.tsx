@@ -437,7 +437,25 @@ export function IntelDossier({ result, metadata, regime, onClose }: IntelDossier
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <Section title="Entry Details" icon={<Info size={16} className="text-blue-400" />} variant="blue">
                                     <div className="space-y-2 text-sm">
-                                        <DetailRow label="Entry Timeframe" value={result.timeframe || '1H'} />
+                                        {/* Show actual entry structure from OB/FVG metadata */}
+                                        {(() => {
+                                            const entryStructure = (result.metadata as any)?.entry_structure;
+                                            const structureTf = entryStructure?.timeframe?.toUpperCase() || result.timeframe || '1H';
+                                            const structureType = entryStructure?.type || 'Zone';
+                                            const zoneHigh = entryStructure?.zone_high;
+                                            const zoneLow = entryStructure?.zone_low;
+                                            return (
+                                                <>
+                                                    <DetailRow label="Entry Structure" value={`${structureTf} ${structureType}`} />
+                                                    {zoneHigh && zoneLow && (
+                                                        <DetailRow
+                                                            label="Entry Zone Range"
+                                                            value={`${formatPrice(zoneLow)} - ${formatPrice(zoneHigh)}`}
+                                                        />
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
                                         <DetailRow label="Classification" value={result.classification || 'SWING'} />
                                         <DetailRow label="Conviction" value={result.conviction_class || 'B'} />
                                     </div>

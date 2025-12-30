@@ -362,18 +362,19 @@ def _calculate_stop_loss(
                 continue
             # Look for bearish OBs (supply zones) ABOVE our entry zone
             # These represent invalidation levels - if price breaks above, our short is wrong
-            if ob.direction == "bearish" and ob.high > entry_zone.near_entry:
+            # CRITICAL: For shorts, far_entry > near_entry, so compare against far_entry
+            if ob.direction == "bearish" and ob.high > entry_zone.far_entry:
                 potential_stops.append((ob.high, ob.timeframe))
         
         for fvg in smc_snapshot.fvgs:
             # Filter to allowed structure timeframes if specified
             if allowed_tfs and fvg.timeframe not in allowed_tfs:
                 continue
-            if fvg.direction == "bearish" and fvg.top > entry_zone.near_entry:
+            if fvg.direction == "bearish" and fvg.top > entry_zone.far_entry:
                 potential_stops.append((fvg.top, fvg.timeframe))
         
-        # Filter stops that are actually above entry (must be above near_entry for shorts)
-        valid_stops = [(level, tf) for level, tf in potential_stops if level > entry_zone.near_entry]
+        # Filter stops that are actually above entry (must be above far_entry for shorts)
+        valid_stops = [(level, tf) for level, tf in potential_stops if level > entry_zone.far_entry]
         
         if valid_stops:
             # Use closest structure above entry (lowest of the valid stops)
@@ -396,11 +397,10 @@ def _calculate_stop_loss(
             distance_atr = (stop_level - entry_zone.near_entry) / structure_atr
             used_structure = True
         else:
-            # === NEW TIER: Entry OB Edge-Based Stop ===
             # If no separate OBs above entry, use an entry OB's high as invalidation
-            # CRITICAL: OB high must be ABOVE entry, otherwise stop would be below entry!
+            # CRITICAL: OB high must be ABOVE far_entry (for shorts, far_entry is the higher price)
             entry_obs = [ob for ob in smc_snapshot.order_blocks 
-                        if ob.direction == "bearish" and ob.high > entry_zone.near_entry]
+                        if ob.direction == "bearish" and ob.high > entry_zone.far_entry]
             
             if entry_obs:
                 # Use the OB with lowest high (closest to entry but still above)
@@ -424,7 +424,7 @@ def _calculate_stop_loss(
                     candles_df = multi_tf_data.timeframes[primary_tf]
                     swing_level = _find_swing_level(
                         is_bullish=False,
-                        reference_price=entry_zone.near_entry,  # For shorts, find swing above near_entry
+                        reference_price=entry_zone.far_entry,  # For shorts, far_entry is higher - find swing above it
                         candles_df=candles_df,
                         lookback=planner_cfg.stop_lookback_bars,
                         timeframe=primary_tf
@@ -451,7 +451,7 @@ def _calculate_stop_loss(
                             candles_df = multi_tf_data.timeframes[htf]
                             swing_level = _find_swing_level(
                                 is_bullish=False,
-                                reference_price=entry_zone.near_entry,  # For shorts, find swing above near_entry
+                                reference_price=entry_zone.far_entry,  # For shorts, far_entry is higher
                                 candles_df=candles_df,
                                 lookback=planner_cfg.stop_lookback_bars,  # Same base, scaled by timeframe
                                 timeframe=htf
@@ -475,7 +475,7 @@ def _calculate_stop_loss(
                     if emergency_atr_fallback:
                         # Use ATR-based stop for scalp modes when no structure/swing found
                         fallback_atr_mult = 1.5  # Conservative fallback
-                        stop_level = entry_zone.near_entry + (fallback_atr_mult * atr)  # Use near_entry for shorts
+                        stop_level = entry_zone.far_entry + (fallback_atr_mult * atr)  # Use far_entry for shorts (higher)
                         rationale = f"Emergency ATR fallback ({fallback_atr_mult}x ATR) - no swing structure found"
                         distance_atr = fallback_atr_mult
                         used_structure = False

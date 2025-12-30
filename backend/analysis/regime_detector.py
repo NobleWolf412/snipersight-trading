@@ -231,6 +231,15 @@ class RegimeDetector:
         
         Returns: (vol_label, score)
         """
+        # Type check: ensure we received IndicatorSet, not IndicatorSnapshot
+        if not hasattr(indicators, 'by_timeframe'):
+            logger.error(
+                "CRITICAL: _detect_volatility received %s instead of IndicatorSet. "
+                "Check get_atr_regime() call chain.",
+                type(indicators).__name__
+            )
+            return "normal", 75.0
+        
         if not indicators.by_timeframe:
             return "normal", 75.0
         

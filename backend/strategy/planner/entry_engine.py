@@ -203,8 +203,16 @@ def _calculate_entry_zone(
     
     if is_bullish:
         # Look for bullish OB or FVG below current price (OR we are inside it)
-        # Fix: Allowed if we haven't broken the low. Being inside (high >= price >= low) is GOOD.
-        obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bullish" and ob.low < current_price]
+        # FIXED: Only include OBs where:
+        #   1. Price is INSIDE the OB (immediate entry possible), OR
+        #   2. OB.high is at or below current price (pullback entry)
+        # This prevents selecting OBs where the entry zone is entirely above current price
+        obs = [
+            ob for ob in smc_snapshot.order_blocks 
+            if ob.direction == "bullish" 
+            and ob.low < current_price
+            and (ob.high <= current_price or (ob.low <= current_price <= ob.high))
+        ]
         
         # NEW: Premium/Discount Enforcement (Smart Entry)
         if planner_cfg.pd_compliance_required:
@@ -425,8 +433,16 @@ def _calculate_entry_zone(
         
     else:  # Bearish
         # Look for bearish OB or FVG above current price
-        # Fix: Allowed if we haven't broken the high. Being inside (low <= price <= high) is GOOD.
-        obs = [ob for ob in smc_snapshot.order_blocks if ob.direction == "bearish" and ob.high > current_price]
+        # FIXED: Only include OBs where:
+        #   1. Price is INSIDE the OB (immediate entry possible), OR
+        #   2. OB.low is at or above current price (pullback entry)
+        # This prevents selecting OBs where the entry zone is entirely below current price
+        obs = [
+            ob for ob in smc_snapshot.order_blocks 
+            if ob.direction == "bearish" 
+            and ob.high > current_price
+            and (ob.low >= current_price or (ob.low <= current_price <= ob.high))
+        ]
 
         # NEW: Premium/Discount Enforcement
         if planner_cfg.pd_compliance_required:

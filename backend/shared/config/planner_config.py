@@ -171,15 +171,12 @@ class PlannerConfig:
 
         else:  # "intraday" or default (balanced)
             return cls(
-                min_risk_reward=2.0,
+                min_rr=2.0,
+                target_rr_ladder=[2.0, 3.0, 5.0],
                 entry_zone_offset_atr=0.2,
                 stop_buffer_atr=1.0,
                 stop_lookback_bars=10,
                 stop_use_htf_swings=True,
-                target_levels=(2.0, 3.0, 5.0),
-                partial_take_profit_ratios=(0.3, 0.4, 0.3),
-                break_even_trigger_r=1.5,
-                trailing_stop_activation_r=2.0,
                 pd_compliance_required=False, # Balance opportunity vs location
                 sweep_backing_boost=1.5,      # Standard sweep boost
                 sweep_lookback_candles=5

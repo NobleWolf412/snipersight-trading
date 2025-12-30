@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_atr_regime(
-    indicators: IndicatorSet,
+    indicators,  # Accepts IndicatorSet OR IndicatorSnapshot (for backward compat)
     current_price: Optional[float] = None
 ) -> str:
     """
@@ -30,12 +30,30 @@ def get_atr_regime(
     Prioritizes RegimeDetector's logic over local calculations.
     
     Args:
-        indicators: IndicatorSet for the timeframe (usually primary)
+        indicators: IndicatorSet OR IndicatorSnapshot (for backward compatibility).
+                   If a single IndicatorSnapshot is passed, it's wrapped in a temp IndicatorSet.
         current_price: Optional current price (used by detector fallback)
         
     Returns:
         Regime label: "compressed", "normal", "elevated", "volatile", "chaotic"
     """
+    # Handle both IndicatorSet and IndicatorSnapshot for backward compatibility
+    # risk_engine.py passes a single IndicatorSnapshot, entry_engine.py passes IndicatorSet
+    if not hasattr(indicators, 'by_timeframe'):
+        # It's a single IndicatorSnapshot - wrap it in a temporary IndicatorSet
+        from backend.shared.models.indicators import IndicatorSnapshot
+        if isinstance(indicators, IndicatorSnapshot):
+            # Create a minimal IndicatorSet wrapper with the snapshot under a generic TF key
+            class _TempIndicatorSet:
+                def __init__(self, snapshot):
+                    self.by_timeframe = {'_primary': snapshot}
+            indicators = _TempIndicatorSet(indicators)
+            logger.debug("get_atr_regime: Wrapped single IndicatorSnapshot in temp IndicatorSet")
+        else:
+            # Completely unknown type - log error and return fallback
+            logger.error(f"get_atr_regime: Unknown indicator type {type(indicators).__name__}")
+            return "normal"
+    
     # Use the internal detector logic
     # RegimeDetector._detect_volatility returns (label, score)
     label, score = get_regime_detector()._detect_volatility(indicators)

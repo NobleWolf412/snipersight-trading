@@ -46,6 +46,35 @@ SetupArchetype = Literal[
     "BREAKOUT_RETEST",
 ]
 
+# === MODE TO TRADE LABEL MAPPING ===
+# Maps scanner mode names AND profile names to trader-friendly trade labels
+# Modes: overwatch, stealth, surgical, strike
+MODE_TO_TRADE_LABEL = {
+    # Overwatch = Position Trade (Days-Weeks, HTF macro positions)
+    "overwatch": "Position Trade",
+    "macro_surveillance": "Position Trade",
+    
+    # Stealth = Swing Trade (Hours-Days, balanced multi-TF)
+    "stealth": "Swing Trade", 
+    "stealth_balanced": "Swing Trade",
+    
+    # Surgical = Day Trade (Minutes-Hours, precision intraday)
+    "surgical": "Day Trade",
+    "precision": "Day Trade",
+    
+    # Strike = Scalp Trade (Minutes, aggressive momentum plays)
+    "strike": "Scalp Trade",
+    "intraday_aggressive": "Scalp Trade",
+    
+    # Fallback
+    "balanced": "Swing Trade",
+}
+
+def get_trade_label_for_mode(mode: str) -> str:
+    """Get trader-friendly trade label based on scanner mode or profile."""
+    mode_lower = (mode or "stealth").lower()
+    return MODE_TO_TRADE_LABEL.get(mode_lower, "Swing Trade")  # Default to Swing
+
 
 def generate_trade_plan(
     symbol: str,
@@ -84,6 +113,14 @@ def generate_trade_plan(
     """
     if missing_critical_timeframes is None:
         missing_critical_timeframes = []
+    
+    # Type check: indicators should be IndicatorSet, not IndicatorSnapshot
+    if not hasattr(indicators, 'by_timeframe'):
+        raise ValueError(
+            f"Expected IndicatorSet with 'by_timeframe' attribute, "
+            f"got {type(indicators).__name__}. Ensure orchestrator passes "
+            f"context.multi_tf_indicators (IndicatorSet), not a single IndicatorSnapshot."
+        )
     
     # Get primary timeframe indicators
     if not indicators.by_timeframe:
@@ -260,7 +297,7 @@ def generate_trade_plan(
         stop_loss=stop_loss,
         targets=targets,
         risk_reward_ratio=targets[-1].rr_ratio if targets else 0.0,
-        setup_type=setup_type,
+        setup_type=get_trade_label_for_mode(config.profile),  # Use mode-based trade label
         timeframe=primary_tf,
         status="PENDING",
         trade_type=trade_type
@@ -274,7 +311,14 @@ def generate_trade_plan(
         "leverage_stop_adjustment": adj_meta if was_adjusted else None,
         "target_adjustment": target_adj_meta,
         "structure_tfs_used": list(structure_tfs_tuple),
-        "missing_critical_tfs": missing_critical_timeframes
+        "missing_critical_tfs": missing_critical_timeframes,
+        # NEW: Entry structure details for frontend display
+        "entry_structure": {
+            "timeframe": getattr(entry_zone, 'entry_tf_used', None) or primary_tf,
+            "zone_high": entry_zone.far_entry if is_bullish else entry_zone.near_entry,
+            "zone_low": entry_zone.near_entry if is_bullish else entry_zone.far_entry,
+            "type": "OB" if "order block" in (entry_zone.rationale or "").lower() else "FVG" if "fvg" in (entry_zone.rationale or "").lower() else "Zone"
+        }
     }
     
     return plan

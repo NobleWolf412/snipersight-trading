@@ -8,7 +8,7 @@ TradePlan instances must be fully populated.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Dict, Any, Literal
+from typing import List, Dict, Any, Literal, Optional
 from .scoring import ConfluenceBreakdown
 
 
@@ -87,19 +87,24 @@ class Target:
     
     Attributes:
         level: Target price
-        percentage: Percentage of position to close (0-100)
         rationale: Explanation of target placement
+        percentage: Percentage of position to close (0-100), assigned after creation
+        label: Optional short label for display (e.g., "TP1 (2.0R)")
+        rr_ratio: Risk-reward ratio at this target level
+        weight: Weight/priority for this target (0.0-1.0)
     """
     level: float
-    percentage: float
     rationale: str
+    percentage: float = 0.0  # Assigned after target creation
+    label: str = ""  # Optional display label
+    rr_ratio: float = 0.0  # R:R ratio at this target
+    weight: float = 1.0  # Target priority weight
     
     def __post_init__(self):
         """Validate target data."""
         if self.level <= 0:
             raise ValueError(f"Target level must be positive, got {self.level}")
-        if not 0 < self.percentage <= 100:
-            raise ValueError(f"Target percentage must be 0-100, got {self.percentage}")
+        # percentage validation moved to TradePlan level
         if not self.rationale:
             raise ValueError("Target rationale cannot be empty")
 
@@ -115,11 +120,14 @@ class TradePlan:
     Attributes:
         symbol: Trading pair (e.g., 'BTC/USDT')
         direction: 'LONG' or 'SHORT'
-        setup_type: Classification ('scalp', 'swing', 'intraday')
+        setup_type: Trade classification ('Scalp Trade', 'Swing Trade', etc.)
         entry_zone: Entry specification with near/far entries
         stop_loss: Stop loss specification
         targets: List of take profit targets (must have at least 1)
-        risk_reward: Overall R:R ratio (targets weighted by percentage)
+        risk_reward_ratio: Overall R:R ratio (targets weighted by percentage)
+        timeframe: Primary timeframe for this trade
+        status: Plan status ('PENDING', 'ACTIVE', 'CLOSED')
+        trade_type: Derived trade type ('scalp', 'intraday', 'swing')
         confidence_score: Confluence score (0-100)
         confluence_breakdown: Detailed scoring breakdown
         rationale: Multi-paragraph human-readable explanation
@@ -130,27 +138,34 @@ class TradePlan:
     """
     symbol: str
     direction: Literal["LONG", "SHORT"]
-    setup_type: Literal["scalp", "swing", "intraday"]
+    setup_type: Literal["Scalp Trade", "Day Trade", "Swing Trade", "Position Trade"]
     entry_zone: EntryZone
     stop_loss: StopLoss
     targets: List[Target]
-    risk_reward: float
-    confidence_score: float
-    confluence_breakdown: ConfluenceBreakdown
-    rationale: str
-    plan_type: Literal["SMC", "ATR_FALLBACK", "HYBRID"] = "SMC"  # Default to SMC
-    conviction_class: Literal["A", "B", "C"] = "B"  # Default to B
-    missing_critical_timeframes: List[str] = field(default_factory=list)  # Track critical TFs that failed to load
+    risk_reward_ratio: float  # Changed from risk_reward for consistency
+    timeframe: str = "1h"  # Primary planning timeframe
+    status: str = "PENDING"  # Plan status
+    trade_type: str = "swing"  # Derived trade type
+    confidence_score: float = 0.0
+    confluence_breakdown: Optional[ConfluenceBreakdown] = None
+    rationale: str = ""
+    plan_type: Literal["SMC", "ATR_FALLBACK", "HYBRID"] = "SMC"
+    conviction_class: Literal["A", "B", "C"] = "B"
+    missing_critical_timeframes: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.utcnow)
     
+    # Backward compatibility alias
+    @property
+    def risk_reward(self) -> float:
+        return self.risk_reward_ratio
+    
     def __post_init__(self):
-        """Validate trade plan completeness - NO NULL FIELDS."""
+        """Validate trade plan completeness."""
         # Required string fields
         if not self.symbol:
             raise ValueError("Symbol cannot be empty")
-        if not self.rationale:
-            raise ValueError("Rationale cannot be empty - violates No-Null policy")
+        # Rationale is now optional (has default)
         
         # Must have at least one target
         if not self.targets:
@@ -165,8 +180,8 @@ class TradePlan:
             )
         
         # Validate R:R ratio
-        if self.risk_reward < 0:
-            raise ValueError(f"Risk:reward ratio must be positive, got {self.risk_reward}")
+        if self.risk_reward_ratio < 0:
+            raise ValueError(f"Risk:reward ratio must be positive, got {self.risk_reward_ratio}")
         
         # Validate confidence score
         if not 0 <= self.confidence_score <= 100:
