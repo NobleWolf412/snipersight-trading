@@ -92,7 +92,16 @@ def _calculate_pullback_probability(
     if indicators and indicators.by_timeframe:
         try:
             # Get primary timeframe indicators
-            primary_tf = list(indicators.by_timeframe.keys())[0]
+            # Prefer 15m/1h for pullback momentum validity
+            primary_tf = None
+            for tf_candidate in ['15m', '1h', '5m', '4h', '1d']:
+                if tf_candidate in indicators.by_timeframe:
+                    primary_tf = tf_candidate
+                    break
+            
+            if not primary_tf:
+                primary_tf = list(indicators.by_timeframe.keys())[0]
+                
             ind = indicators.by_timeframe.get(primary_tf)
             
             if ind:

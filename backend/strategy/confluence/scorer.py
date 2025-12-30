@@ -1386,8 +1386,26 @@ def calculate_confluence_score(
     
     # --- Indicator Scoring ---
     
-    # Get primary timeframe indicators (assume first in dict or specified)
-    primary_tf = list(indicators.by_timeframe.keys())[0] if indicators.by_timeframe else None
+    # Select primary timeframe (Anchor Chart) for indicator scoring based on mode
+    primary_tf = None
+    
+    # 1. Try mode-specific planning timeframe (e.g. Strike=15m, Overwatch=4h)
+    if config and getattr(config, 'primary_planning_timeframe', None):
+        cfg_tf = config.primary_planning_timeframe
+        if indicators.has_timeframe(cfg_tf):
+            primary_tf = cfg_tf
+            # logger.debug(f"Using mode-specific primary timeframe: {primary_tf}")
+            
+    # 2. Fallback: Try standard anchors if mode TF missing
+    if not primary_tf:
+        for tf_candidate in ['1h', '15m', '4h', '1d']:
+            if indicators.has_timeframe(tf_candidate):
+                primary_tf = tf_candidate
+                break
+                
+    # 3. Final Fallback: First available
+    if not primary_tf and indicators.by_timeframe:
+        primary_tf = list(indicators.by_timeframe.keys())[0]
     
     # Get MACD mode config based on profile
     profile = getattr(config, 'profile', 'balanced')
@@ -1432,6 +1450,32 @@ def calculate_confluence_score(
                 weight=get_w('volume', 0.10),
                 rationale=_get_volume_rationale(primary_indicators)
             ))
+            
+        # VWAP Alignment
+        vwap = getattr(primary_indicators, 'vwap', None)
+        if vwap and entry_price:
+            vwap_score = 0.0
+            vwap_rationale = ""
+            if direction in ('bullish', 'long'):
+                if entry_price < vwap:
+                    vwap_score = 60.0 # Good entry
+                    vwap_rationale = f"Price ({entry_price:.2f}) below VWAP ({vwap:.2f}) - value entry"
+                elif entry_price < vwap * 1.01:
+                    vwap_score = 50.0 # Neutral
+            else: # bearish
+                if entry_price > vwap:
+                    vwap_score = 60.0
+                    vwap_rationale = f"Price ({entry_price:.2f}) above VWAP ({vwap:.2f}) - premium entry"
+                elif entry_price > vwap * 0.99:
+                    vwap_score = 50.0
+
+            if vwap_score > 50.0:
+                 factors.append(ConfluenceFactor(
+                    name="VWAP Alignment",
+                    score=min(100.0, 50.0 + (vwap_score-50.0)*3.0), # Scale 60->80
+                    weight=0.05, # Small weight
+                    rationale=vwap_rationale
+                ))
 
         # Volatility normalization (ATR%) - prefer moderate volatility
         volatility_score = _score_volatility(primary_indicators)
@@ -1441,6 +1485,19 @@ def calculate_confluence_score(
                 score=volatility_score,
                 weight=get_w('volatility', 0.08),
                 rationale=_get_volatility_rationale(primary_indicators)
+            ))
+
+        # MTF Indicator Confluence (New)
+        mtf_score, mtf_rationale = _score_mtf_indicator_confluence(indicators, direction)
+        if mtf_score != 0:
+            # Base 50 +/- bonus. Bonus is 15 -> 15*3.33 = 50. Total 100.
+            # Penalty is -10 -> -10*3.33 = -33. Total 17.
+            mtf_final_score = 50.0 + (mtf_score * 3.33)
+            factors.append(ConfluenceFactor(
+                name="MTF Indicator Alignment",
+                score=min(100.0, max(0.0, mtf_final_score)),
+                weight=get_w('multi_tf_reversal', 0.10),
+                rationale=mtf_rationale
             ))
     
     # --- Volume Profile (Institutional VAP Analysis) ---
@@ -2737,8 +2794,11 @@ def _score_momentum(
     
     if normalized_dir == "bullish":
         # Bullish momentum: oversold RSI, low Stoch RSI, low MFI
-        if indicators.rsi is not None and indicators.rsi < 40:
-            score += 40 * ((40 - indicators.rsi) / 40)
+        if indicators.rsi is not None:
+            if indicators.rsi < 40:
+                score += 40 * ((40 - indicators.rsi) / 40)
+            elif 40 <= indicators.rsi <= 60:
+                score += 20.0  # Trend-following neutral bonus
         
         if indicators.stoch_rsi is not None and indicators.stoch_rsi < 30:
             score += 30 * ((30 - indicators.stoch_rsi) / 30)
@@ -2748,8 +2808,11 @@ def _score_momentum(
     
     else:  # bearish
         # Bearish momentum: overbought RSI, high Stoch RSI, high MFI
-        if indicators.rsi is not None and indicators.rsi > 60:
-            score += 40 * ((indicators.rsi - 60) / 40)
+        if indicators.rsi is not None:
+            if indicators.rsi > 60:
+                score += 40 * ((indicators.rsi - 60) / 40)
+            elif 40 <= indicators.rsi <= 60:
+                score += 20.0  # Trend-following neutral bonus
         
         if indicators.stoch_rsi is not None and indicators.stoch_rsi > 70:
             score += 30 * ((indicators.stoch_rsi - 70) / 30)
@@ -2798,24 +2861,93 @@ def _score_momentum(
                 if k < 20:
                     score += 25.0  # early oversold bullish cross
                 elif k < 50:
-                    score += 15.0
+                    score += 15.0  # moderate bullish cross
                 elif k < 80:
                     score += 8.0
                 else:
                     score += 5.0  # late/exhaustive
+                
+                # Check previous values for FRESH crossover (just happened)
+                k_prev = getattr(indicators, 'stoch_rsi_k_prev', None)
+                d_prev = getattr(indicators, 'stoch_rsi_d_prev', None)
+                if k_prev is not None and d_prev is not None and k_prev <= d_prev:
+                    score += 10.0  # Just crossed over!
+                    
             elif normalized_dir == "bearish" and k < d:
                 if k > 80:
                     score += 25.0  # overbought bearish cross
                 elif k > 50:
-                    score += 15.0
+                    score += 15.0  # moderate bearish cross
                 elif k > 20:
                     score += 8.0
                 else:
                     score += 5.0
+                
+                # Check previous values for FRESH crossover (just happened)
+                k_prev = getattr(indicators, 'stoch_rsi_k_prev', None)
+                d_prev = getattr(indicators, 'stoch_rsi_d_prev', None)
+                if k_prev is not None and d_prev is not None and k_prev >= d_prev:
+                    score += 10.0  # Just crossed under!
             else:
                 # Opposing crossover strong penalty (avoid chasing into momentum shift)
                 if separation >= 5.0:
                     score -= 10.0
+
+    # ADX Trend Strength & DI Confirmation
+    adx = getattr(indicators, 'adx', None)
+    plus_di = getattr(indicators, 'adx_plus_di', None)
+    minus_di = getattr(indicators, 'adx_minus_di', None)
+    
+    if adx is not None and plus_di is not None and minus_di is not None:
+        di_bullish = plus_di > minus_di
+        di_aligned = (normalized_dir == "bullish" and di_bullish) or \
+                     (normalized_dir == "bearish" and not di_bullish)
+        
+        if adx > 25:
+            if di_aligned:
+                score += 20.0  # Strong trend confirmed
+                if adx > 40: score += 5.0 # Very strong trend
+            else:
+                score -= 15.0  # Counter-trend warning
+
+        elif adx < 20:
+            score -= 10.0  # Ranging/Weak trend
+
+    # EMA Trend Alignment (EMA stacking)
+    ema_9 = getattr(indicators, 'ema_9', None)
+    ema_21 = getattr(indicators, 'ema_21', None)
+    ema_50 = getattr(indicators, 'ema_50', None)
+    
+    if ema_9 and ema_21 and ema_50:
+        if normalized_dir == "bullish":
+            if ema_9 > ema_21 > ema_50:
+                score += 15.0 # Strong trend alignment
+            elif ema_9 > ema_21:
+                score += 5.0 # Moderate trend
+        elif normalized_dir == "bearish":
+            if ema_9 < ema_21 < ema_50:
+                score += 15.0 # Strong trend alignment
+            elif ema_9 < ema_21:
+                score += 5.0 # Moderate trend
+
+    # Bollinger Band %B - Mean Reversion / Breakout
+    # %B > 1.0 = Above Upper Band (Strong Momentum or Overbought)
+    # %B < 0.0 = Below Lower Band (Strong Momentum or Oversold)
+    # In trend-following, riding the bands is good. In mean-reversion, it's an entry signal.
+    pct_b = getattr(indicators, 'bb_percent_b', None)
+    if pct_b is not None:
+        if normalized_dir == "bullish":
+            # For bullish trend, we want price supported, not necessarily blown out
+            # But if we are catching a dip, pct_b < 0 is great (oversold)
+            if pct_b < 0.05: 
+                score += 20.0 # Deep discount / Oversold
+            elif 0.4 <= pct_b <= 0.6:
+                score += 5.0 # Supported at mid-band (continuation)
+        elif normalized_dir == "bearish":
+            if pct_b > 0.95:
+                score += 20.0 # Premium / Overbought
+            elif 0.4 <= pct_b <= 0.6:
+                score += 5.0 # Resisting at mid-band
 
     # Clamp lower bound after penalties
     if score < 0:
@@ -2843,11 +2975,22 @@ def _score_volume(indicators: IndicatorSnapshot, direction: str) -> float:
     Returns:
         Volume score 0-100
     """
-    score = 50.0  # Base neutral score
+    score = 40.0  # Base neutral score (lowered from 50 to penalize lack of signals)
     
     # Volume spike bonus
     if indicators.volume_spike:
-        score += 30.0  # 50 -> 80
+        score += 35.0  # 40 -> 75 with spike
+        
+    # OBV trend confirmation
+    obv_trend = getattr(indicators, 'obv_trend', None)
+    if obv_trend:
+        is_bullish_trade = direction.lower() in ('long', 'bullish')
+        if (is_bullish_trade and obv_trend == 'rising'):
+            score += 15.0  # Accumulation confirms bullish
+        elif (not is_bullish_trade and obv_trend == 'falling'):
+            score += 15.0  # Distribution confirms bearish
+        elif obv_trend != 'flat' and obv_trend != 'neutral' and obv_trend != ('rising' if is_bullish_trade else 'falling'):
+            score -= 10.0  # OBV divergence warning
     
     # Volume acceleration bonuses
     vol_accel = getattr(indicators, 'volume_acceleration', None)
@@ -2937,7 +3080,16 @@ def _score_volatility(indicators: IndicatorSnapshot) -> float:
         # 1.5 -> 70 down to 3.0 -> 40
         return 70.0 - (val - 1.5) / (3.0 - 1.5) * (70.0 - 40.0)
     # >3.0
-    return 25.0
+    # >3.0
+    score = 25.0
+    
+    # Apply TTM Squeeze Modifiers
+    if getattr(indicators, 'ttm_squeeze_firing', False):
+        score += 15.0  # Expansion likely - volatility developing
+    elif getattr(indicators, 'ttm_squeeze_on', False):
+        score -= 5.0   # Compression - low volatility warning
+        
+    return max(0.0, min(100.0, score))
 
 
 def _score_htf_alignment(htf_trend: str, direction: str) -> float:
@@ -3270,17 +3422,45 @@ def _get_volume_rationale(indicators: IndicatorSnapshot) -> str:
 def _get_volatility_rationale(indicators: IndicatorSnapshot) -> str:
     """Generate rationale for volatility factor."""
     atr_pct = getattr(indicators, 'atr_percent', None)
-    if atr_pct is None:
-        return "ATR% unavailable"
-    val = atr_pct
-    if val < 0.25:
-        zone = "very low volatility (range risk)"
-    elif val < 0.75:
-        zone = "healthy development volatility"
-    elif val < 1.5:
-        zone = "elevated but acceptable volatility"
-    elif val < 3.0:
-        zone = "high volatility (structure reliability reduced)"
-    else:
-        zone = "extreme volatility (erratic price action)"
-    return f"ATR% {val:.2f}% - {zone}"
+    if atr_pct:
+        val = atr_pct
+        if val < 0.25: return f"Very low volatility ({val:.2f}%) - chop risk"
+        if val < 0.75: return f"Healthy volatility expansion ({val:.2f}%)"
+        if val < 1.5: return f"Moderate volatility ({val:.2f}%)"
+        if val < 3.0: return f"High volatility ({val:.2f}%)"
+        return f"Excessive volatility ({val:.2f}%) - unpredictable"
+    return "Volatility data unavailable"
+
+
+def _score_mtf_indicator_confluence(indicators: IndicatorSet, direction: str) -> Tuple[float, str]:
+    """Check if indicators align across timeframes."""
+    norm_dir = _normalize_direction(direction)
+    is_bullish = norm_dir == 'bullish'
+    aligned_count = 0
+    opposed_count = 0
+    
+    for tf, ind in indicators.by_timeframe.items():
+        rsi = getattr(ind, 'rsi', None)
+        if rsi is None: continue
+            
+        if is_bullish:
+            # Bullish alignment: RSI < 45 (oversold/reversal) or > 50 (trend) depending on logic
+            # Using simple threshold for alignment
+            if rsi < 45 or (getattr(ind, 'macd_line', 0) > getattr(ind, 'macd_signal', 0)):
+                aligned_count += 1
+            elif rsi > 65:
+                # Bearish indication in bullish trade
+                opposed_count += 1
+        else: # Bearish
+            if rsi > 55 or (getattr(ind, 'macd_line', 0) < getattr(ind, 'macd_signal', 0)):
+                aligned_count += 1
+            elif rsi < 35:
+                # Bullish indication in bearish trade
+                opposed_count += 1
+    
+    if aligned_count >= 3 and opposed_count == 0:
+        return 15.0, "Strong MTF alignment"
+    elif opposed_count >= 2:
+        return -10.0, "MTF divergence warning"
+    
+    return 0.0, ""

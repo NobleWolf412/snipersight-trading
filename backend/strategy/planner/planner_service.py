@@ -126,18 +126,26 @@ def generate_trade_plan(
     if not indicators.by_timeframe:
         raise ValueError("No indicators available for trade planning")
     
-    primary_tf = getattr(config, "primary_planning_timeframe", None) or list(indicators.by_timeframe.keys())[-1]
-    # Normalize timeframe to match data keys
-    primary_tf_lower = primary_tf.lower()
-    if primary_tf not in indicators.by_timeframe and primary_tf_lower in indicators.by_timeframe:
-        primary_tf = primary_tf_lower
+    primary_tf = getattr(config, "primary_planning_timeframe", None)
     
-    if primary_tf not in indicators.by_timeframe:
-        available_tfs = list(indicators.by_timeframe.keys())
-        if not available_tfs:
-            raise ValueError(f"No indicators available - primary_tf '{primary_tf}' not found")
-        primary_tf = available_tfs[0]
-        logger.warning(f"Primary planning TF not in indicators, falling back to {primary_tf}")
+    # Intelligent fallback if explicit config missing or not valid
+    if not primary_tf or (indicators.by_timeframe and primary_tf not in indicators.by_timeframe):
+        # normalize provided config
+        if primary_tf and primary_tf.lower() in indicators.by_timeframe:
+            primary_tf = primary_tf.lower()
+        else:
+            # Search for best available anchor
+            found = False
+            for tf_candidate in ['15m', '1h', '5m', '4h', '1d']:
+                if tf_candidate in indicators.by_timeframe:
+                    primary_tf = tf_candidate
+                    found = True
+                    break
+            
+            if not found and indicators.by_timeframe:
+                # Last resort: first available key
+                primary_tf = list(indicators.by_timeframe.keys())[0]
+                logger.warning(f"Primary planning TF fallback to {primary_tf}")
     
     primary_indicators = indicators.by_timeframe[primary_tf]
     

@@ -181,7 +181,34 @@ class IndicatorService:
 
         
         # Extract stoch_rsi values (handles both tuple and series)
-        stoch_k_value, stoch_d_value = self._extract_stoch_values(stoch_rsi)
+        stoch_k_value, stoch_d_value, stoch_k_prev, stoch_d_prev = self._extract_stoch_values(stoch_rsi)
+        
+        # Calculate Bollinger Band %B: (Price - Lower) / (Upper - Lower)
+        bb_range = bb_upper.iloc[-1] - bb_lower.iloc[-1]
+        bb_percent_b = (current_price - bb_lower.iloc[-1]) / bb_range if bb_range > 0 else 0.5
+        
+        # OBV Trend Classification (rising/falling/flat over last 10 bars)
+        obv_trend = 'flat'
+        if len(obv) >= 10:
+            obv_slope = (obv.iloc[-1] - obv.iloc[-10]) / 10
+            avg_obv = obv.iloc[-10:].mean()
+            if avg_obv != 0:
+                obv_slope_pct = obv_slope / abs(avg_obv) * 100
+                if obv_slope_pct > 0.5:
+                    obv_trend = 'rising'
+                elif obv_slope_pct < -0.5:
+                    obv_trend = 'falling'
+        
+        # Compute EMAs (9, 21, 50, 200)
+        close = df['close']
+        ema_9 = close.ewm(span=9, adjust=False).mean().iloc[-1]
+        ema_21 = close.ewm(span=21, adjust=False).mean().iloc[-1]
+        ema_50 = close.ewm(span=50, adjust=False).mean().iloc[-1] if len(df) >= 50 else None
+        ema_200 = close.ewm(span=200, adjust=False).mean().iloc[-1] if len(df) >= 200 else None
+        
+        # VWAP (already computed but need to capture the value)
+        vwap_series = compute_vwap(df)
+        vwap_value = vwap_series.iloc[-1] if vwap_series is not None and len(vwap_series) > 0 else None
         
         # Calculate ATR percentage
         atr_value = atr.iloc[-1]
@@ -196,6 +223,7 @@ class IndicatorService:
             bb_upper=bb_upper.iloc[-1],
             bb_middle=bb_middle.iloc[-1],
             bb_lower=bb_lower.iloc[-1],
+            bb_percent_b=bb_percent_b,  # NEW: Position within bands
             # TTM Squeeze
             ttm_squeeze_on=ttm_squeeze_on,
             ttm_squeeze_firing=ttm_squeeze_firing,
@@ -209,11 +237,21 @@ class IndicatorService:
             mfi=mfi.iloc[-1],
             stoch_rsi_k=stoch_k_value,
             stoch_rsi_d=stoch_d_value,
+            stoch_rsi_k_prev=stoch_k_prev,  # NEW: For crossover detection
+            stoch_rsi_d_prev=stoch_d_prev,  # NEW: For crossover detection
+            # EMAs - NEW
+            ema_9=ema_9,
+            ema_21=ema_21,
+            ema_50=ema_50,
+            ema_200=ema_200,
+            # VWAP - NEW
+            vwap=vwap_value,
             # Optional fields - Volatility
             atr_percent=atr_pct,
             realized_volatility=realized_vol.iloc[-1] if realized_vol is not None else None,
             # Optional fields - Volume
             obv=obv.iloc[-1],
+            obv_trend=obv_trend,  # NEW: rising/falling/flat
             volume_ratio=volume_ratio.iloc[-1] if volume_ratio is not None else None,
             # Optional fields - Volume acceleration
             volume_acceleration=vol_accel_data['acceleration'] if vol_accel_data else None,
@@ -284,16 +322,31 @@ class IndicatorService:
             return None
     
     def _extract_stoch_values(self, stoch_rsi):
-        """Extract K and D values from stoch_rsi (handles tuple or series)."""
+        """Extract K and D values from stoch_rsi (handles tuple or series).
+        
+        Returns:
+            Tuple of (k_value, d_value, k_prev, d_prev) for crossover detection.
+        """
         stoch_k_value = None
         stoch_d_value = None
+        stoch_k_prev = None
+        stoch_d_prev = None
+        
         if isinstance(stoch_rsi, tuple):
             stoch_k, stoch_d = stoch_rsi
             stoch_k_value = stoch_k.iloc[-1]
             stoch_d_value = stoch_d.iloc[-1]
+            # Get previous values for crossover detection
+            if len(stoch_k) > 1:
+                stoch_k_prev = stoch_k.iloc[-2]
+            if len(stoch_d) > 1:
+                stoch_d_prev = stoch_d.iloc[-2]
         else:
             stoch_k_value = stoch_rsi.iloc[-1]
-        return stoch_k_value, stoch_d_value
+            if len(stoch_rsi) > 1:
+                stoch_k_prev = stoch_rsi.iloc[-2]
+        
+        return stoch_k_value, stoch_d_value, stoch_k_prev, stoch_d_prev
     
     def _attach_macd_data(self, snapshot: IndicatorSnapshot, macd_line, macd_signal, macd_hist, timeframe: str):
         """Attach MACD values and series to snapshot if available."""

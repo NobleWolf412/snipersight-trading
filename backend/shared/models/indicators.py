@@ -73,6 +73,8 @@ class IndicatorSnapshot:
     
     # Mean Reversion (optional fields)
     bb_width: Optional[float] = None
+    bb_percent_b: Optional[float] = None  # Position within bands (0=lower, 0.5=mid, 1=upper)
+    
     # TTM Squeeze (Big Move Detector)
     kc_upper: Optional[float] = None
     kc_lower: Optional[float] = None
