@@ -30,7 +30,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export function useSymbolCycles({
   symbols,
-  exchange = 'bybit',
+  exchange = 'phemex',
   autoFetch = true,
   fetchBTCContext = true
 }: UseSymbolCyclesOptions): UseSymbolCyclesResult {
@@ -38,7 +38,7 @@ export function useSymbolCycles({
   const [btcContext, setBtcContext] = useState<BTCCycleContextData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const fetchedRef = useRef(new Set<string>());
   const btcFetchedRef = useRef(false);
 
@@ -56,10 +56,10 @@ export function useSymbolCycles({
       const response = await api.getSymbolCycles(symbol, exchange);
       if (response.data?.status === 'success' && response.data.data) {
         const data = response.data.data;
-        
+
         // Cache it
         cycleCache.set(cacheKey, { data, timestamp: Date.now() });
-        
+
         // Update state
         setCycles(prev => ({ ...prev, [symbol]: data }));
         return data;
@@ -67,7 +67,7 @@ export function useSymbolCycles({
     } catch (e) {
       console.error(`Failed to fetch cycles for ${symbol}:`, e);
     }
-    
+
     return null;
   }, [exchange]);
 
@@ -89,7 +89,7 @@ export function useSymbolCycles({
   // Batch fetch for multiple symbols
   const fetchAll = useCallback(async () => {
     if (!symbols.length) return;
-    
+
     setLoading(true);
     setError(null);
 
@@ -157,18 +157,18 @@ export function getCycleAlignment(
   conflicts: string[];
 } {
   const normalizedDirection = direction === 'BULLISH' ? 'LONG' : direction === 'BEARISH' ? 'SHORT' : direction;
-  
+
   if (!symbolCycles) {
     return { aligned: true, partial: false, conflicts: [] };
   }
 
   const conflicts: string[] = [];
-  
+
   // Check DCL
   const dclOk = normalizedDirection === 'LONG'
     ? symbolCycles.dcl.bias !== 'SHORT'
     : symbolCycles.dcl.bias !== 'LONG';
-  
+
   if (!dclOk) {
     conflicts.push(`DCL ${symbolCycles.dcl.translation === 'left_translated' ? 'LTR' : 'RTR'}`);
   }
@@ -177,7 +177,7 @@ export function getCycleAlignment(
   const wclOk = normalizedDirection === 'LONG'
     ? symbolCycles.wcl.bias !== 'SHORT'
     : symbolCycles.wcl.bias !== 'LONG';
-  
+
   if (!wclOk) {
     conflicts.push(`WCL ${symbolCycles.wcl.translation === 'left_translated' ? 'LTR' : 'RTR'}`);
   }

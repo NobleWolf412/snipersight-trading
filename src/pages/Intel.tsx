@@ -19,6 +19,7 @@ import { PageContainer } from '@/components/layout/PageContainer';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { TacticalPanel } from '@/components/TacticalPanel';
 import { MarketRegimeLens } from '@/components/market/MarketRegimeLens';
+import { BTCCycleIntel } from '@/components/market/BTCCycleIntel';
 import { useMarketRegime } from '@/hooks/useMarketRegime';
 import { cn } from '@/lib/utils';
 
@@ -232,6 +233,12 @@ export function Intel() {
                 <MarketRegimeLens {...regimeProps} />
               </div>
             </div>
+          </div>
+        </TacticalPanel>
+
+        <TacticalPanel className="mb-6">
+          <div className="p-0">
+            <BTCCycleIntel autoRefresh className="border-0 bg-transparent shadow-none" />
           </div>
         </TacticalPanel>
 
