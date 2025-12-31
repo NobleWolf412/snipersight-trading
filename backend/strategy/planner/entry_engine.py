@@ -479,10 +479,11 @@ def _calculate_entry_zone(
             entry_zone = EntryZone(
                 near_entry=trigger_ob.high if is_bullish else trigger_ob.low,
                 far_entry=trigger_ob.low if is_bullish else trigger_ob.high,
-                structure_type="nested_ob",
-                timeframe=trigger_ob.timeframe,
                 rationale=f"Nested entry: {trigger_ob.timeframe} OB inside {zone_ob.timeframe} zone OB"
             )
+            # Set additional metadata as attributes (EntryZone model only accepts near_entry, far_entry, rationale)
+            entry_zone.entry_tf_used = trigger_ob.timeframe  # type: ignore
+            entry_zone.structure_type = "nested_ob"  # type: ignore
             return entry_zone, True  # used_structure = True
     
     if is_bullish:

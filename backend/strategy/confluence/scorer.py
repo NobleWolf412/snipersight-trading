@@ -2680,19 +2680,33 @@ def _score_fvgs(fvgs: List[FVG], direction: str) -> float:
 def _score_structural_breaks(breaks: List[StructuralBreak], direction: str) -> float:
     """Score structural breaks (BOS/CHoCH) with grade and TF weighting.
     
-    Note: Filters to meaningful HTF breaks first (1H+). LTF breaks are
-    heavily penalized to prevent 5m BOS from driving the structure score.
+    Note: Filters to direction-aligned breaks and meaningful HTF breaks (1H+). 
+    LTF breaks are heavily penalized to prevent 5m BOS from driving the structure score.
     """
     if not breaks:
         return 0.0
     
+    # Normalize direction: LONG/SHORT -> bullish/bearish
+    normalized_dir = _normalize_direction(direction)
+    
+    # Filter to direction-aligned breaks FIRST
+    aligned_breaks = [b for b in breaks if getattr(b, 'direction', 'bullish') == normalized_dir]
+    
+    if not aligned_breaks:
+        # No aligned breaks - log and return 0
+        opposite_dir = 'bearish' if normalized_dir == 'bullish' else 'bullish'
+        opposite_count = len([b for b in breaks if getattr(b, 'direction', 'bullish') == opposite_dir])
+        logger.debug("📊 Structure Score: 0 aligned (looking for %s) | %d total | %d %s breaks exist",
+                    normalized_dir, len(breaks), opposite_count, opposite_dir)
+        return 0.0
+    
     # Filter to meaningful timeframes (1H+) - LTF breaks are noise
     meaningful_tfs = {'1w', '1W', '1d', '1D', '4h', '4H', '1h', '1H'}
-    meaningful_breaks = [b for b in breaks if getattr(b, 'timeframe', '1h') in meaningful_tfs]
+    meaningful_breaks = [b for b in aligned_breaks if getattr(b, 'timeframe', '1h') in meaningful_tfs]
     
     if not meaningful_breaks:
-        # Fallback to any break but heavily penalized (LTF-only)
-        latest_break = max(breaks, key=lambda b: b.timestamp)
+        # Fallback to any aligned break but heavily penalized (LTF-only)
+        latest_break = max(aligned_breaks, key=lambda b: b.timestamp)
         base_score = 30.0  # Much lower base for LTF-only
         tf_weight = 0.3  # Additional penalty
     else:
@@ -2711,6 +2725,10 @@ def _score_structural_breaks(breaks: List[StructuralBreak], direction: str) -> f
     # Apply grade weighting and timeframe weighting
     grade_weight = _get_grade_weight(getattr(latest_break, 'grade', 'B'))
     score = base_score * grade_weight * tf_weight
+    
+    logger.debug("📊 Structure Score: %.1f (%s %s | base=%.1f, grade=%s, tf=%s)",
+                score, latest_break.break_type, normalized_dir, base_score,
+                getattr(latest_break, 'grade', 'B'), getattr(latest_break, 'timeframe', '?'))
     
     return min(100.0, score)
 

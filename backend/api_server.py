@@ -1443,9 +1443,30 @@ async def get_market_cycles(symbol: str = Query("BTC/USDT", description="Symbol 
     from backend.indicators.momentum import compute_stoch_rsi
     
     try:
-        # Fetch daily candles for cycle analysis (need at least 60 days)
-        adapter = PhemexAdapter()
-        daily_df = adapter.fetch_ohlcv(symbol, "1d", limit=100)
+        # Use shared ingestion pipeline to leverage cache and global rate limiting
+        # instead of spinning up a new uncoordinated adapter instance
+        from backend.services.scanner_service import get_scanner_service
+        
+        pipeline = None
+        service = get_scanner_service()
+        if service and service._orchestrator:
+             pipeline = service._orchestrator.ingestion_pipeline
+        
+        # Fallback if service not ready (should generally be ready)
+        if pipeline:
+             # Fetch daily and weekly data efficiently
+             # Use 500 limit to hit standard cache tiers
+             daily_data = pipeline.fetch_multi_timeframe(
+                 symbol, 
+                 ["1d"], 
+                 limit=500 
+             )
+             daily_df = daily_data.timeframes.get("1d")
+        else:
+             # Fallback to direct adapter if no pipeline available (e.g. startup)
+             logger.warning("Using direct adapter for cycles (pipeline unavailable)")
+             adapter = PhemexAdapter()
+             daily_df = adapter.fetch_ohlcv(symbol, "1d", limit=500)
         
         if daily_df is None or len(daily_df) < 50:
             return {
@@ -1461,7 +1482,7 @@ async def get_market_cycles(symbol: str = Query("BTC/USDT", description="Symbol 
         
         # Convert timestamp column to DatetimeIndex (required by cycle_detector)
         if 'timestamp' in daily_df.columns and not isinstance(daily_df.index, pd.DatetimeIndex):
-            daily_df = daily_df.set_index('timestamp')
+            daily_df = daily_df.set_index('timestamp', drop=False)
         
         # Detect cycle context
         config = CycleConfig()
@@ -1473,9 +1494,21 @@ async def get_market_cycles(symbol: str = Query("BTC/USDT", description="Symbol 
         stoch_zone = "neutral"
         
         try:
-            # Note: Phemex only supports certain limit values (10, 100, etc), use 100 for safety
-            weekly_df = adapter.fetch_ohlcv(symbol, "1w", limit=100)
+            # Fetch weekly data using pipeline if available
+            if pipeline:
+                weekly_data = pipeline.fetch_multi_timeframe(symbol, ["1w"], limit=500)
+                weekly_df = weekly_data.timeframes.get("1w")
+            else:
+                # Fallback
+                if 'adapter' not in locals():
+                    adapter = PhemexAdapter()
+                weekly_df = adapter.fetch_ohlcv(symbol, "1w", limit=100)
+
             if weekly_df is not None and len(weekly_df) >= 34:  # Need enough data for stoch RSI
+                # Ensure index for computation
+                if 'timestamp' in weekly_df.columns and not isinstance(weekly_df.index, pd.DatetimeIndex):
+                    weekly_df = weekly_df.set_index('timestamp', drop=False)
+                    
                 k_series, d_series = compute_stoch_rsi(weekly_df)
                 # Get latest values
                 stoch_rsi_k = float(k_series.iloc[-1]) if not k_series.empty else None
