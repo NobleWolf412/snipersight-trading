@@ -1824,7 +1824,7 @@ async def get_btc_cycle_context():
                     "cycle_position_pct": round(fyc.cycle_position_pct, 1),
                     "phase": fyc.phase.value.upper(),
                     "phase_progress_pct": round(fyc.phase_progress_pct, 1),
-                    "translation": "RTR" if fyc.macro_bias == "BULLISH" else ("LTR" if fyc.macro_bias == "BEARISH" else "MTR"),
+                    "translation": "RTR", # 4YC is structurally Right Translated (Post-Halving Peak)
                     "macro_bias": fyc.macro_bias,
                     "confidence": round(fyc.confidence, 1),
                     "last_low": {

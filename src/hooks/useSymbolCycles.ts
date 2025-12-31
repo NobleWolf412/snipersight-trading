@@ -35,6 +35,9 @@ export function useSymbolCycles({
   fetchBTCContext = true
 }: UseSymbolCyclesOptions): UseSymbolCyclesResult {
   const [cycles, setCycles] = useState<Record<string, SymbolCyclesData>>({});
+
+  // Defensive check for symbols
+  const safeSymbols = symbols || [];
   const [btcContext, setBtcContext] = useState<BTCCycleContextData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +91,7 @@ export function useSymbolCycles({
 
   // Batch fetch for multiple symbols
   const fetchAll = useCallback(async () => {
-    if (!symbols.length) return;
+    if (!safeSymbols.length) return;
 
     setLoading(true);
     setError(null);
@@ -101,8 +104,8 @@ export function useSymbolCycles({
 
       // Fetch cycles for each symbol (limit concurrency)
       const BATCH_SIZE = 3;
-      for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
-        const batch = symbols.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < safeSymbols.length; i += BATCH_SIZE) {
+        const batch = safeSymbols.slice(i, i + BATCH_SIZE);
         await Promise.all(
           batch
             .filter(s => !fetchedRef.current.has(s))
@@ -117,14 +120,14 @@ export function useSymbolCycles({
     } finally {
       setLoading(false);
     }
-  }, [symbols, fetchBTCContext, fetchBTC, fetchCycle]);
+  }, [safeSymbols, fetchBTCContext, fetchBTC, fetchCycle]);
 
   // Auto-fetch on mount if enabled
   useEffect(() => {
-    if (autoFetch && symbols.length > 0) {
+    if (autoFetch && safeSymbols.length > 0) {
       fetchAll();
     }
-  }, [autoFetch, symbols.join(','), fetchAll]);
+  }, [autoFetch, safeSymbols.join(','), fetchAll]);
 
   // Refetch function
   const refetch = useCallback(() => {

@@ -368,6 +368,12 @@ class IngestionPipeline:
 
         # Ensure proper data types
         df = df.copy()
+        
+        # Remove duplicate columns if any (fixes "ambiguous truth value" errors)
+        if not df.columns.is_unique:
+            logger.warning(f"Found duplicate columns in {symbol} {timeframe}, keeping first: {df.columns[df.columns.duplicated()].tolist()}")
+            df = df.loc[:, ~df.columns.duplicated()]
+            
         df['open'] = pd.to_numeric(df['open'], errors='coerce')
         df['high'] = pd.to_numeric(df['high'], errors='coerce')
         df['low'] = pd.to_numeric(df['low'], errors='coerce')

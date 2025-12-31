@@ -271,24 +271,54 @@ def _is_order_block_valid(ob: OrderBlock, df: pd.DataFrame, current_price: float
     """Validate an order block is not broken and not currently being mitigated."""
     if df is None or len(df) == 0:
         return True
+    future_index_match = df.index > ob.timestamp
+    # Defensive fix for duplicate columns
+    if isinstance(future_index_match, pd.DataFrame):
+        # If boolean mask is a DataFrame (due to duplicate index?), this is bad data
+        # Fallback: take the first column
+        future_index_match = future_index_match.iloc[:, 0]
+        
     try:
-        future_candles = df[df.index > ob.timestamp]
+        future_candles = df[future_index_match]
+        # Ensure we don't return duplicate columns in future_candles either
+        if not future_candles.columns.is_unique:
+             future_candles = future_candles.loc[:, ~future_candles.columns.duplicated()]
     except Exception:
         return True
     if len(future_candles) == 0:
         return True
     if ob.direction == "bullish":
-        lowest = future_candles['low'].min()
-        if lowest < ob.low:  # broken through
-            return False
-        if ob.low <= current_price <= ob.high:  # currently inside zone
-            return False
+        try:
+            lows = future_candles['low']
+            # Defensive check: if 'low' returns DataFrame (duplicate cols), reduce to min of rows then min of series
+            if isinstance(lows, pd.DataFrame):
+                 lowest = lows.min(axis=1).min()
+            else:
+                 lowest = lows.min()
+                 
+            if lowest < ob.low:  # broken through
+                return False
+            if ob.low <= current_price <= ob.high:  # currently inside zone
+                return False
+        except ValueError:
+            # Fallback if ambiguity persists
+            return True
+            
     else:
-        highest = future_candles['high'].max()
-        if highest > ob.high:
-            return False
-        if ob.low <= current_price <= ob.high:
-            return False
+        try:
+            highs = future_candles['high']
+            if isinstance(highs, pd.DataFrame):
+                 highest = highs.max(axis=1).max()
+            else:
+                 highest = highs.max()
+                 
+            if highest > ob.high:
+                return False
+            if ob.low <= current_price <= ob.high:
+                return False
+        except ValueError:
+            return True
+            
     return True
 
 def _time_since_last_touch(ob: OrderBlock, df: pd.DataFrame) -> float:

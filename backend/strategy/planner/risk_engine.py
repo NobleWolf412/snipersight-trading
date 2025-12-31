@@ -198,43 +198,82 @@ def _find_swing_level(
             return max(relaxed_swing_lows)  # Highest swing low (closest to entry)
         
         # Tier 3: Simple minimum below reference price
-        below_price = recent[recent['low'] < reference_price]['low']
-        if len(below_price) > 0:
-            return below_price.min()  # Absolute lowest point as stop
+        try:
+            below_price = recent[recent['low'] < reference_price]['low']
+            if len(below_price) > 0:
+                if isinstance(below_price, pd.DataFrame):
+                    return below_price.min(axis=1).min()
+                return below_price.min()  # Absolute lowest point as stop
+        except Exception:
+            pass
         
         return None
     
     else:  # bearish - find swing highs above reference price
         # Tier 1: Strict swing (2 bars before/after)
         strict_swing_highs = []
-        for i in range(2, len(recent) - 2):
-            high = recent.iloc[i]['high']
-            if (high > recent.iloc[i-1]['high'] and 
-                high > recent.iloc[i-2]['high'] and
-                high > recent.iloc[i+1]['high'] and 
-                high > recent.iloc[i+2]['high'] and
-                high > reference_price):
-                strict_swing_highs.append(high)
+        try:
+            for i in range(2, len(recent) - 2):
+                high = recent.iloc[i]['high']
+                # Defensive float conversion
+                if isinstance(high, pd.Series): high = high.iloc[0]
+                
+                prev1 = recent.iloc[i-1]['high']
+                if isinstance(prev1, pd.Series): prev1 = prev1.iloc[0]
+                
+                prev2 = recent.iloc[i-2]['high']
+                if isinstance(prev2, pd.Series): prev2 = prev2.iloc[0]
+
+                next1 = recent.iloc[i+1]['high']
+                if isinstance(next1, pd.Series): next1 = next1.iloc[0]
+
+                next2 = recent.iloc[i+2]['high']
+                if isinstance(next2, pd.Series): next2 = next2.iloc[0]
+                
+                if (high > prev1 and 
+                    high > prev2 and
+                    high > next1 and 
+                    high > next2 and
+                    high > reference_price):
+                    strict_swing_highs.append(high)
+        except Exception:
+            pass
         
         if strict_swing_highs:
             return min(strict_swing_highs)  # Lowest swing high (closest to entry)
         
         # Tier 2: Relaxed swing (1 bar before/after)
         relaxed_swing_highs = []
-        for i in range(1, len(recent) - 1):
-            high = recent.iloc[i]['high']
-            if (high > recent.iloc[i-1]['high'] and 
-                high > recent.iloc[i+1]['high'] and
-                high > reference_price):
-                relaxed_swing_highs.append(high)
+        try:
+            for i in range(1, len(recent) - 1):
+                high = recent.iloc[i]['high']
+                if isinstance(high, pd.Series): high = high.iloc[0]
+
+                prev1 = recent.iloc[i-1]['high']
+                if isinstance(prev1, pd.Series): prev1 = prev1.iloc[0]
+
+                next1 = recent.iloc[i+1]['high']
+                if isinstance(next1, pd.Series): next1 = next1.iloc[0]
+
+                if (high > prev1 and 
+                    high > next1 and
+                    high > reference_price):
+                    relaxed_swing_highs.append(high)
+        except Exception:
+            pass
         
         if relaxed_swing_highs:
             return min(relaxed_swing_highs)  # Lowest swing high (closest to entry)
         
         # Tier 3: Simple maximum above reference price
-        above_price = recent[recent['high'] > reference_price]['high']
-        if len(above_price) > 0:
-            return above_price.max()  # Absolute highest point as stop
+        try:
+            above_price = recent[recent['high'] > reference_price]['high']
+            if len(above_price) > 0:
+                if isinstance(above_price, pd.DataFrame):
+                    return above_price.max(axis=1).max()
+                return above_price.max()  # Absolute highest point as stop
+        except Exception:
+            pass
         
         return None
 

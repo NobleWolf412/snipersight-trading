@@ -60,6 +60,11 @@ class BrowserNotificationManager {
         return false;
       }
 
+      if (Notification.permission === 'denied') {
+        this.permission.denied = true;
+        return false;
+      }
+
       const permission = await this.requestPermission();
       if (permission === 'granted') {
         this.isEnabled = true;
@@ -179,7 +184,7 @@ class BrowserNotificationManager {
   }) {
     const statusEmoji = {
       filled: '✅',
-      partial: '🟡', 
+      partial: '🟡',
       cancelled: '❌',
       rejected: '🚫'
     };
@@ -327,7 +332,7 @@ class BrowserNotificationManager {
    */
   private handleNotificationClick(event: Event, tradingNotification: TradingNotification) {
     event.preventDefault();
-    
+
     // Focus the window
     window.focus();
 
@@ -388,7 +393,7 @@ class BrowserNotificationManager {
 
     const soundMap = {
       signal: '/sounds/signal.mp3',
-      risk_alert: '/sounds/alert.mp3', 
+      risk_alert: '/sounds/alert.mp3',
       execution: '/sounds/execution.mp3',
       system: '/sounds/notification.mp3'
     };
@@ -419,7 +424,7 @@ class BrowserNotificationManager {
   private clearOldNotifications() {
     const notifications = Array.from(this.activeNotifications.entries());
     const oldestNotification = notifications[0];
-    
+
     if (oldestNotification) {
       oldestNotification[1].close();
       this.activeNotifications.delete(oldestNotification[0]);
@@ -487,9 +492,9 @@ class BrowserNotificationManager {
 export const notificationManager = new BrowserNotificationManager();
 
 // Export types for use in other components
-export type { 
-  TradingNotification, 
-  NotificationConfig, 
-  NotificationPermissionState, 
-  NotificationPriority 
+export type {
+  TradingNotification,
+  NotificationConfig,
+  NotificationPermissionState,
+  NotificationPriority
 };
