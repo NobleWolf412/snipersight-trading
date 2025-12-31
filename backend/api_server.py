@@ -1681,6 +1681,211 @@ def _get_cycle_interpretation(cycle_ctx, stoch_zone: str) -> dict:
 
 
 # ============================================================================
+# Symbol Cycle Intelligence Endpoints (Cycle Translation System)
+# ============================================================================
+
+@app.get("/api/market/symbol-cycles")
+async def get_symbol_cycles(
+    symbol: str = Query("BTC/USDT", description="Symbol to analyze"),
+    exchange: str = Query("phemex", description="Exchange to fetch data from")
+):
+    """
+    Get cycle intelligence for a specific symbol.
+    
+    Returns DCL (Daily Cycle Low) and WCL (Weekly Cycle Low) states
+    with translation analysis (RTR/MTR/LTR) based on Camel Finance methodology.
+    """
+    # Check cache first (5 minute TTL)
+    cache_key = f"symbol_cycles:{symbol}:{exchange}"
+    cached = CYCLES_CACHE.get(cache_key)
+    if cached:
+        logger.debug("Returning cached symbol cycles for %s", symbol)
+        return cached
+    
+    try:
+        from backend.strategy.smc.symbol_cycle_detector import (
+            detect_symbol_cycles,
+            check_cycle_alerts
+        )
+        from backend.services.scanner_service import get_scanner_service
+        
+        # Use shared pipeline for rate limiting
+        pipeline = None
+        service = get_scanner_service()
+        if service and service._orchestrator:
+            pipeline = service._orchestrator.ingestion_pipeline
+        
+        # Fetch daily data (need ~100 days for cycle analysis)
+        if pipeline:
+            daily_data = pipeline.fetch_multi_timeframe(symbol, ["1d"], limit=500)
+            daily_df = daily_data.timeframes.get("1d")
+        else:
+            logger.warning("Using direct adapter for symbol cycles (pipeline unavailable)")
+            adapter = PhemexAdapter()
+            daily_df = adapter.fetch_ohlcv(symbol, "1d", limit=120)
+        
+        if daily_df is None or len(daily_df) < 60:
+            return {
+                "status": "error",
+                "error": f"Insufficient data for {symbol} cycle analysis",
+                "data": None
+            }
+        
+        # Ensure proper index
+        if 'timestamp' in daily_df.columns and not isinstance(daily_df.index, pd.DatetimeIndex):
+            daily_df = daily_df.set_index('timestamp', drop=False)
+        
+        cycles = detect_symbol_cycles(daily_df, symbol)
+        alerts = check_cycle_alerts(cycles)
+        
+        result = {
+            "status": "success",
+            "data": {
+                **cycles.to_dict(),
+                "alerts": [
+                    {
+                        "type": a.alert_type,
+                        "cycle": a.cycle,
+                        "message": a.message,
+                        "details": a.details
+                    }
+                    for a in alerts
+                ]
+            }
+        }
+        
+        # Cache the result
+        CYCLES_CACHE.set(cache_key, result)
+        return result
+        
+    except Exception as e:
+        logger.error("Symbol cycle detection failed for %s: %s", symbol, e)
+        raise HTTPException(status_code=500, detail=f"Cycle detection error: {str(e)}") from e
+
+
+@app.get("/api/market/btc-cycle-context")
+async def get_btc_cycle_context():
+    """
+    Get complete BTC cycle context across all timeframes.
+    
+    Returns DCL, WCL, and 4-Year Macro Cycle states with alignment assessment.
+    BTC serves as the market leader - use this for macro context on any trade.
+    """
+    # Check cache first (5 minute TTL)
+    cache_key = "btc_cycle_context:global"
+    cached = CYCLES_CACHE.get(cache_key)
+    if cached:
+        logger.debug("Returning cached BTC cycle context")
+        return cached
+    
+    try:
+        from backend.strategy.smc.symbol_cycle_detector import detect_symbol_cycles
+        from backend.strategy.smc.four_year_cycle import (
+            get_four_year_cycle_context,
+            get_halving_info
+        )
+        from backend.services.scanner_service import get_scanner_service
+        
+        # Use shared pipeline for rate limiting
+        pipeline = None
+        service = get_scanner_service()
+        if service and service._orchestrator:
+            pipeline = service._orchestrator.ingestion_pipeline
+        
+        # Fetch BTC daily data
+        symbol = "BTC/USDT"
+        if pipeline:
+            daily_data = pipeline.fetch_multi_timeframe(symbol, ["1d"], limit=500)
+            daily_df = daily_data.timeframes.get("1d")
+        else:
+            logger.warning("Using direct adapter for BTC cycle context (pipeline unavailable)")
+            adapter = PhemexAdapter()
+            daily_df = adapter.fetch_ohlcv(symbol, "1d", limit=120)
+        
+        if daily_df is None or len(daily_df) < 60:
+            raise HTTPException(status_code=500, detail="Failed to fetch BTC data")
+        
+        # Ensure proper index
+        if 'timestamp' in daily_df.columns and not isinstance(daily_df.index, pd.DatetimeIndex):
+            daily_df = daily_df.set_index('timestamp', drop=False)
+        
+        cycles = detect_symbol_cycles(daily_df, "BTC/USDT")
+        fyc = get_four_year_cycle_context()
+        halving = get_halving_info()
+        
+        result = {
+            "status": "success",
+            "data": {
+                "symbol": "BTC/USDT",
+                "dcl": cycles.dcl.to_dict(),
+                "wcl": cycles.wcl.to_dict(),
+                "four_year_cycle": {
+                    "days_since_low": fyc.days_since_fyc_low,
+                    "cycle_position_pct": round(fyc.cycle_position_pct, 1),
+                    "phase": fyc.phase.value.upper(),
+                    "phase_progress_pct": round(fyc.phase_progress_pct, 1),
+                    "translation": "RTR" if fyc.macro_bias == "BULLISH" else ("LTR" if fyc.macro_bias == "BEARISH" else "MTR"),
+                    "macro_bias": fyc.macro_bias,
+                    "confidence": round(fyc.confidence, 1),
+                    "last_low": {
+                        "date": fyc.last_fyc_low_date.isoformat(),
+                        "price": fyc.last_fyc_low_price
+                    },
+                    "expected_next_low": fyc.expected_next_low_date.isoformat(),
+                    "is_danger_zone": fyc.is_in_danger_zone,
+                    "is_opportunity_zone": fyc.is_in_opportunity_zone
+                },
+                "halving": {
+                    "last_halving_date": halving['last_halving']['date'],
+                    "next_halving_date": halving['next_halving']['estimated_date'],
+                    "days_since_halving": halving['last_halving']['days_since'],
+                    "days_until_halving": halving['next_halving']['days_until'],
+                    "halving_history": halving.get('halving_history', [])
+                },
+                "overall": {
+                    "dcl_bias": cycles.dcl.bias,
+                    "wcl_bias": cycles.wcl.bias,
+                    "macro_bias": fyc.macro_bias,
+                    "alignment": _get_btc_alignment(cycles, fyc),
+                    "warnings": cycles.warnings
+                },
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        }
+        
+        # Cache the result
+        CYCLES_CACHE.set(cache_key, result)
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("BTC cycle context failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"BTC cycle error: {str(e)}") from e
+
+
+def _get_btc_alignment(cycles, fyc) -> str:
+    """Determine alignment of all BTC cycle timeframes."""
+    biases = [cycles.dcl.bias, cycles.wcl.bias]
+    macro_signal = "LONG" if fyc.macro_bias == "BULLISH" else ("SHORT" if fyc.macro_bias == "BEARISH" else "NEUTRAL")
+    biases.append(macro_signal)
+    
+    long_count = biases.count("LONG")
+    short_count = biases.count("SHORT")
+    
+    if long_count == 3:
+        return "ALL_BULLISH"
+    elif short_count == 3:
+        return "ALL_BEARISH"
+    elif long_count >= 2:
+        return "MOSTLY_BULLISH"
+    elif short_count >= 2:
+        return "MOSTLY_BEARISH"
+    else:
+        return "MIXED"
+
+
+# ============================================================================
 # Telemetry Endpoints
 # ============================================================================
 

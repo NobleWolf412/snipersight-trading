@@ -14,7 +14,7 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { api, BTCCycleContextData } from '../../utils/api';
+import { api, BTCCycleContextData } from '@/utils/api';
 
 interface BTCCycleIntelProps {
   onLoad?: (data: BTCCycleContextData) => void;
@@ -56,7 +56,7 @@ export const BTCCycleIntel: React.FC<BTCCycleIntelProps> = ({
 
   useEffect(() => {
     fetchData();
-    
+
     if (autoRefresh) {
       const interval = setInterval(fetchData, refreshInterval);
       return () => clearInterval(interval);
@@ -82,7 +82,7 @@ export const BTCCycleIntel: React.FC<BTCCycleIntelProps> = ({
     return (
       <div className={`bg-slate-800/50 rounded-lg p-4 ${className}`}>
         <div className="text-red-400">⚠️ {error || 'No data available'}</div>
-        <button 
+        <button
           onClick={fetchData}
           className="mt-2 text-sm text-cyan-400 hover:text-cyan-300"
         >
@@ -223,15 +223,15 @@ export const BTCCycleIntel: React.FC<BTCCycleIntelProps> = ({
 /**
  * Compact version for headers/sidebars
  */
-const BTCCycleIntelCompact: React.FC<{ data: BTCCycleContextData; className?: string }> = ({ 
-  data, 
-  className = '' 
+const BTCCycleIntelCompact: React.FC<{ data: BTCCycleContextData; className?: string }> = ({
+  data,
+  className = ''
 }) => {
   return (
     <div className={`bg-slate-800/50 rounded-lg p-3 ${className}`}>
       <div className="flex items-center gap-4">
         <span className="text-xl">₿</span>
-        
+
         {/* DCL */}
         <div className="flex items-center gap-1">
           <span className="text-xs text-slate-400">DCL:</span>
@@ -247,11 +247,10 @@ const BTCCycleIntelCompact: React.FC<{ data: BTCCycleContextData; className?: st
         {/* 4YC */}
         <div className="flex items-center gap-1">
           <span className="text-xs text-slate-400">4YC:</span>
-          <span className={`text-xs font-bold ${
-            data.four_year_cycle.macro_bias === 'BULLISH' ? 'text-emerald-400' :
-            data.four_year_cycle.macro_bias === 'BEARISH' ? 'text-red-400' :
-            'text-amber-400'
-          }`}>
+          <span className={`text-xs font-bold ${data.four_year_cycle.macro_bias === 'BULLISH' ? 'text-emerald-400' :
+              data.four_year_cycle.macro_bias === 'BEARISH' ? 'text-red-400' :
+                'text-amber-400'
+            }`}>
             {data.four_year_cycle.phase}
           </span>
         </div>
@@ -268,31 +267,31 @@ const BTCCycleIntelCompact: React.FC<{ data: BTCCycleContextData; className?: st
 /**
  * Translation icon component
  */
-const TranslationIcon: React.FC<{ translation: string; isFailed?: boolean }> = ({ 
-  translation, 
-  isFailed = false 
+const TranslationIcon: React.FC<{ translation: string; isFailed?: boolean }> = ({
+  translation,
+  isFailed = false
 }) => {
   if (isFailed) {
     return <span className="text-red-400 animate-pulse">🚨</span>;
   }
-  
+
   if (translation === 'RTR') {
     return <span className="text-emerald-400">🟢</span>;
   }
-  
+
   if (translation === 'LTR') {
     return <span className="text-red-400">🔴</span>;
   }
-  
+
   return <span className="text-amber-400">🟡</span>;
 };
 
 /**
  * Alignment badge component
  */
-const AlignmentBadge: React.FC<{ 
-  alignment: string; 
-  size?: 'sm' | 'md' 
+const AlignmentBadge: React.FC<{
+  alignment: string;
+  size?: 'sm' | 'md'
 }> = ({ alignment, size = 'md' }) => {
   const configs: Record<string, { color: string; label: string; icon: string }> = {
     'ALL_BULLISH': { color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50', label: 'All Bullish', icon: '🟢' },
@@ -371,22 +370,22 @@ const CycleCard: React.FC<CycleCardProps> = ({
     'NEUTRAL': 'bg-slate-500/20 text-slate-400'
   };
 
-  const progressColor = 
+  const progressColor =
     isFailed ? 'bg-red-500' :
-    translation === 'RTR' ? 'bg-emerald-500' :
-    translation === 'LTR' ? 'bg-red-500' :
-    'bg-amber-500';
+      translation === 'RTR' ? 'bg-emerald-500' :
+        translation === 'LTR' ? 'bg-red-500' :
+          'bg-amber-500';
 
   return (
     <div className={`
       bg-slate-700/30 rounded-lg p-4 border
-      ${isFailed 
-        ? 'border-red-500/50' 
+      ${isFailed
+        ? 'border-red-500/50'
         : isDangerZone
-        ? 'border-orange-500/50'
-        : isInWindow 
-        ? 'border-cyan-500/50'
-        : 'border-slate-600/50'
+          ? 'border-orange-500/50'
+          : isInWindow
+            ? 'border-cyan-500/50'
+            : 'border-slate-600/50'
       }
     `}>
       {/* Header */}
@@ -409,21 +408,21 @@ const CycleCard: React.FC<CycleCardProps> = ({
         <div className="relative h-2 bg-slate-600/50 rounded-full overflow-hidden">
           {/* Midpoint marker for DCL/WCL */}
           {maxDay && (
-            <div 
+            <div
               className="absolute top-0 bottom-0 w-px bg-white/30"
               style={{ left: '50%' }}
             />
           )}
-          
+
           {/* Progress fill */}
-          <div 
+          <div
             className={`absolute top-0 bottom-0 left-0 rounded-full transition-all duration-300 ${progressColor}`}
             style={{ width: `${Math.min(progress, 100)}%` }}
           />
 
           {/* Peak marker */}
           {peakDay && maxDay && (
-            <div 
+            <div
               className="absolute top-0 bottom-0 w-1 bg-white"
               style={{ left: `${(peakDay / maxDay) * 100}%` }}
             />

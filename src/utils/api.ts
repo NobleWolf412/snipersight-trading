@@ -175,6 +175,81 @@ export interface OrderRequest {
   leverage?: number;
 }
 
+// ============================================================================
+// Cycle Intelligence Types (Cycle Translation System)
+// ============================================================================
+
+export type TranslationType = 'right_translated' | 'mid_translated' | 'left_translated' | 'unknown';
+export type CycleStatusType = 'healthy' | 'caution' | 'warning' | 'failed' | 'early' | 'unknown';
+export type CycleBiasType = 'LONG' | 'SHORT' | 'NEUTRAL';
+export type AlignmentType = 'ALIGNED' | 'MIXED' | 'CONFLICTING';
+export type BTCAlignmentType = 'ALL_BULLISH' | 'ALL_BEARISH' | 'MOSTLY_BULLISH' | 'MOSTLY_BEARISH' | 'MIXED';
+
+export interface CycleStateData {
+  cycle_type: 'DCL' | 'WCL';
+  bars_since_low: number;
+  expected_length: { min: number; max: number };
+  midpoint: number;
+  cycle_low: { price: number; bar: number; timestamp: string | null };
+  cycle_high: { price: number | null; bar: number | null; peak_bar: number | null };
+  translation: TranslationType;
+  translation_pct: number;
+  is_failed: boolean;
+  is_in_window: boolean;
+  status: CycleStatusType;
+  bias: CycleBiasType;
+}
+
+export interface SymbolCyclesData {
+  symbol: string;
+  dcl: CycleStateData;
+  wcl: CycleStateData;
+  overall_bias: CycleBiasType;
+  alignment: AlignmentType;
+  warnings: string[];
+  timestamp: string;
+  alerts?: Array<{
+    type: 'INFO' | 'WARNING' | 'CRITICAL';
+    cycle: 'DCL' | 'WCL' | '4YC';
+    message: string;
+    details: Record<string, any>;
+  }>;
+}
+
+export interface BTCCycleContextData {
+  symbol: string;
+  dcl: CycleStateData;
+  wcl: CycleStateData;
+  four_year_cycle: {
+    days_since_low: number;
+    cycle_position_pct: number;
+    phase: 'ACCUMULATION' | 'MARKUP' | 'DISTRIBUTION' | 'MARKDOWN';
+    phase_progress_pct: number;
+    translation: 'RTR' | 'MTR' | 'LTR';
+    macro_bias: 'BULLISH' | 'NEUTRAL' | 'BEARISH';
+    confidence: number;
+    last_low: { date: string; price: number };
+    expected_next_low: string;
+    is_danger_zone: boolean;
+    is_opportunity_zone: boolean;
+  };
+  halving: {
+    last_halving_date: string;
+    next_halving_date: string;
+    days_since_halving: number;
+    days_until_halving: number;
+    halving_history: Array<{ date: string; block_height: number }>;
+  };
+  overall: {
+    dcl_bias: CycleBiasType;
+    wcl_bias: CycleBiasType;
+    macro_bias: 'BULLISH' | 'NEUTRAL' | 'BEARISH';
+    alignment: BTCAlignmentType;
+    warnings: string[];
+  };
+  timestamp: string;
+}
+
 class ApiClient {
   public readonly baseURL = API_BASE;
 
@@ -606,6 +681,40 @@ class ApiClient {
       score: number;
       timestamp: string;
     }>(`/market/regime?symbol=${encodeURIComponent(symbol)}`);
+  }
+
+  // =========================================================================
+  // Cycle Intelligence API (Cycle Translation System)
+  // =========================================================================
+
+  /**
+   * Get DCL/WCL cycle intelligence for a specific symbol.
+   * Uses translation analysis (RTR/MTR/LTR) based on Camel Finance methodology.
+   */
+  async getSymbolCycles(symbol: string, exchange: string = 'phemex') {
+    const params = new URLSearchParams({ symbol, exchange });
+    return this.request<{
+      status: string;
+      data: SymbolCyclesData | null;
+      error?: string;
+    }>(`/market/symbol-cycles?${params.toString()}`, {
+      silent: import.meta.env.MODE === 'production',
+      timeout: 60000
+    });
+  }
+
+  /**
+   * Get complete BTC cycle context (DCL + WCL + 4-Year Macro Cycle).
+   * BTC serves as the market leader - use for macro context on any trade.
+   */
+  async getBTCCycleContext() {
+    return this.request<{
+      status: string;
+      data: BTCCycleContextData;
+    }>('/market/btc-cycle-context', {
+      silent: import.meta.env.MODE === 'production',
+      timeout: 60000
+    });
   }
 
   // Background scan jobs
