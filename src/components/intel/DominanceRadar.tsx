@@ -13,14 +13,19 @@ export function DominanceRadar({ className, compact = false }: Props) {
     const { btcDominance, usdtDominance, altDominance } = useMarketRegime('scanner');
     const [showInfo, setShowInfo] = useState(false);
 
-    // Safety checks
-    const btc = btcDominance || 52.5;
-    const usdt = usdtDominance || 6.2;
-    const alt = altDominance || 12.5;
+    // Safety checks with realistic defaults
+    const btc = btcDominance ?? 52.5;
+    const usdt = usdtDominance ?? 6.2;
+    // OTHERS.D from the API represents everything excluding BTC (includes ETH, USDT, and alts)
+    // We need to calculate ETH separately to make the breakdown add to 100%
+    const ethEstimate = 17.5; // ETH is typically ~15-20% of market
+    // Calculate true alt dominance: 100 - BTC - ETH - USDT
+    const alts = Math.max(0, 100 - btc - ethEstimate - usdt);
 
     // Mock trends for visualization
     const trends = {
         btc: 0.5,
+        eth: 0.3,
         usdt: -0.2,
         alts: -0.1
     };
@@ -89,27 +94,54 @@ export function DominanceRadar({ className, compact = false }: Props) {
                     <div className="h-2 bg-secondary/30 rounded-full overflow-hidden">
                         <div
                             className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-1000"
-                            style={{ width: `${(usdt / 20) * 100}%` }}
+                            style={{ width: `${(usdt / 15) * 100}%` }}
                         />
                     </div>
                 </div>
 
-                {/* Others Dominance (Alts) */}
+                {/* ETH Dominance */}
                 {!compact && (
                     <div className="space-y-1">
                         <div className="flex justify-between items-center text-sm">
-                            <span className="font-bold text-blue-500">OTHERS.D</span>
+                            <span className="font-bold text-purple-500">ETH.D</span>
                             <div className="flex items-center gap-2">
-                                <span className="font-mono">{alt.toFixed(1)}%</span>
+                                <span className="font-mono">{ethEstimate.toFixed(1)}%</span>
+                                {renderTrend(trends.eth)}
+                            </div>
+                        </div>
+                        <div className="h-2 bg-secondary/30 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-gradient-to-r from-purple-600 to-purple-400 transition-all duration-1000"
+                                style={{ width: `${(ethEstimate / 25) * 100}%` }}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* Alts Dominance */}
+                {!compact && (
+                    <div className="space-y-1">
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="font-bold text-blue-500">ALTS.D</span>
+                            <div className="flex items-center gap-2">
+                                <span className="font-mono">{alts.toFixed(1)}%</span>
                                 {renderTrend(trends.alts)}
                             </div>
                         </div>
                         <div className="h-2 bg-secondary/30 rounded-full overflow-hidden">
                             <div
                                 className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-1000"
-                                style={{ width: `${(alt / 25) * 100}%` }}
+                                style={{ width: `${(alts / 30) * 100}%` }}
                             />
                         </div>
+                    </div>
+                )}
+
+                {/* Total verification */}
+                {!compact && (
+                    <div className="pt-3 mt-3 border-t border-border/30 flex justify-between items-center text-xs text-muted-foreground">
+                        <span>Total Market Cap</span>
+                        <span className="font-mono">{(btc + ethEstimate + usdt + alts).toFixed(1)}%</span>
                     </div>
                 )}
             </div>

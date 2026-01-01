@@ -118,7 +118,7 @@ const BIAS_CONFIG = {
 function CompactBadge({ data }: { data: FourYearCycleData }) {
   const config = PHASE_CONFIG[data.phase];
   const biasConfig = BIAS_CONFIG[data.macro_bias];
-  
+
   return (
     <div className={cn(
       "px-3 py-2 rounded-lg border flex items-center gap-3 transition-all hover:shadow-lg",
@@ -148,7 +148,7 @@ function CompactBadge({ data }: { data: FourYearCycleData }) {
  */
 function CycleArc({ position, phase }: { position: number; phase: string }) {
   const config = PHASE_CONFIG[phase as keyof typeof PHASE_CONFIG] || PHASE_CONFIG.UNKNOWN;
-  
+
   // SVG arc path calculation
   // Arc goes from left (0%) to right (100%)
   const radius = 80;
@@ -156,12 +156,12 @@ function CycleArc({ position, phase }: { position: number; phase: string }) {
   const centerY = 90;
   const startAngle = Math.PI; // 180 degrees (left)
   const endAngle = 0; // 0 degrees (right)
-  
+
   // Calculate current position on arc
   const currentAngle = startAngle - (position / 100) * Math.PI;
   const markerX = centerX + radius * Math.cos(currentAngle);
   const markerY = centerY - radius * Math.sin(currentAngle);
-  
+
   return (
     <svg viewBox="0 0 200 100" className="w-full max-w-xs">
       {/* Background track */}
@@ -173,7 +173,7 @@ function CycleArc({ position, phase }: { position: number; phase: string }) {
         strokeLinecap="round"
         className="text-muted/10"
       />
-      
+
       {/* Phase segment: Accumulation (0-25%) */}
       <path
         d="M 20 90 A 80 80 0 0 1 60 30"
@@ -183,7 +183,7 @@ function CycleArc({ position, phase }: { position: number; phase: string }) {
         strokeLinecap="round"
         className="text-blue-500/30"
       />
-      
+
       {/* Phase segment: Markup (25-50%) */}
       <path
         d="M 60 30 A 80 80 0 0 1 100 10"
@@ -192,7 +192,7 @@ function CycleArc({ position, phase }: { position: number; phase: string }) {
         strokeWidth="10"
         className="text-emerald-500/30"
       />
-      
+
       {/* Phase segment: Distribution (50-75%) */}
       <path
         d="M 100 10 A 80 80 0 0 1 140 30"
@@ -201,7 +201,7 @@ function CycleArc({ position, phase }: { position: number; phase: string }) {
         strokeWidth="10"
         className="text-amber-500/30"
       />
-      
+
       {/* Phase segment: Markdown (75-100%) */}
       <path
         d="M 140 30 A 80 80 0 0 1 180 90"
@@ -211,7 +211,7 @@ function CycleArc({ position, phase }: { position: number; phase: string }) {
         strokeLinecap="round"
         className="text-red-500/30"
       />
-      
+
       {/* Progress arc (filled portion) */}
       <path
         d={`M 20 90 A 80 80 0 ${position > 50 ? 1 : 0} 1 ${markerX} ${markerY}`}
@@ -220,7 +220,7 @@ function CycleArc({ position, phase }: { position: number; phase: string }) {
         strokeWidth="10"
         strokeLinecap="round"
       />
-      
+
       {/* Gradient definition */}
       <defs>
         <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -230,7 +230,7 @@ function CycleArc({ position, phase }: { position: number; phase: string }) {
           <stop offset="100%" stopColor="#ef4444" />
         </linearGradient>
       </defs>
-      
+
       {/* Current position marker */}
       <circle
         cx={markerX}
@@ -250,7 +250,7 @@ function CycleArc({ position, phase }: { position: number; phase: string }) {
         r="4"
         className={cn("fill-current", config.color)}
       />
-      
+
       {/* Phase labels */}
       <text x="20" y="98" className="text-[8px] fill-blue-400 font-mono">ACC</text>
       <text x="60" y="20" className="text-[8px] fill-emerald-400 font-mono">MKP</text>
@@ -277,15 +277,36 @@ export function FourYearCycleGauge({ data, compact = false, className }: Props) 
       </div>
     );
   }
-  
-  const config = PHASE_CONFIG[data.phase] || PHASE_CONFIG.UNKNOWN;
-  const biasConfig = BIAS_CONFIG[data.macro_bias];
-  
+
+  // Normalize data with safe defaults for potentially missing API fields
+  const safeData = {
+    days_since_low: data.days_since_low ?? 0,
+    days_until_expected_low: data.days_until_expected_low ?? 0,
+    cycle_position_pct: data.cycle_position_pct ?? 0,
+    phase: data.phase ?? 'UNKNOWN',
+    phase_progress_pct: data.phase_progress_pct ?? 0,
+    macro_bias: data.macro_bias ?? 'NEUTRAL',
+    confidence: data.confidence ?? 0,
+    last_low: {
+      date: data.last_low?.date ?? '2022-11-21',
+      price: data.last_low?.price ?? 0,
+      event: data.last_low?.event ?? 'Unknown'
+    },
+    expected_next_low: data.expected_next_low ?? '2026-10-15',
+    zones: {
+      is_danger_zone: data.zones?.is_danger_zone ?? false,
+      is_opportunity_zone: data.zones?.is_opportunity_zone ?? false
+    }
+  };
+
+  const config = PHASE_CONFIG[safeData.phase as keyof typeof PHASE_CONFIG] || PHASE_CONFIG.UNKNOWN;
+  const biasConfig = BIAS_CONFIG[safeData.macro_bias as keyof typeof BIAS_CONFIG] || BIAS_CONFIG.NEUTRAL;
+
   // Compact version
   if (compact) {
-    return <CompactBadge data={data} />;
+    return <CompactBadge data={safeData as FourYearCycleData} />;
   }
-  
+
   // Full version
   return (
     <div className={cn(
@@ -300,13 +321,13 @@ export function FourYearCycleGauge({ data, compact = false, className }: Props) 
           <span className="text-[10px] text-muted-foreground font-mono">BTC MACRO</span>
         </div>
         <div className="flex items-center gap-2">
-          {data.zones.is_danger_zone && (
+          {safeData.zones.is_danger_zone && (
             <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-destructive/20 text-destructive text-[10px] font-bold animate-pulse">
               <Warning size={12} weight="fill" />
               DANGER ZONE
             </div>
           )}
-          {data.zones.is_opportunity_zone && (
+          {safeData.zones.is_opportunity_zone && (
             <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-success/20 text-success text-[10px] font-bold">
               <TrendUp size={12} weight="bold" />
               OPPORTUNITY
@@ -319,15 +340,15 @@ export function FourYearCycleGauge({ data, compact = false, className }: Props) 
       <div className="p-6">
         {/* Arc Visualization */}
         <div className="relative flex flex-col items-center mb-6">
-          <CycleArc position={data.cycle_position_pct} phase={data.phase} />
-          
+          <CycleArc position={safeData.cycle_position_pct} phase={safeData.phase} />
+
           {/* Center Stats Overlay */}
           <div className="absolute inset-0 flex flex-col items-center justify-center pt-4">
             <div className={cn("text-5xl font-bold", config.color)}>
-              {data.cycle_position_pct.toFixed(0)}%
+              {safeData.cycle_position_pct.toFixed(0)}%
             </div>
             <div className="text-xs text-muted-foreground font-mono">
-              Day {data.days_since_low.toLocaleString()}
+              Day {safeData.days_since_low.toLocaleString()}
             </div>
           </div>
         </div>
@@ -344,18 +365,18 @@ export function FourYearCycleGauge({ data, compact = false, className }: Props) 
           <div className="text-sm text-muted-foreground mb-3">
             {config.description}
           </div>
-          
+
           {/* Phase Progress Bar */}
           <div className="relative pt-1">
             <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
               <span>Phase Start</span>
-              <span>{data.phase_progress_pct.toFixed(0)}% through</span>
+              <span>{safeData.phase_progress_pct.toFixed(0)}% through</span>
               <span>Phase End</span>
             </div>
             <div className="h-2 bg-black/40 rounded-full overflow-hidden">
-              <div 
+              <div
                 className={cn("h-full rounded-full bg-gradient-to-r", config.gradient)}
-                style={{ width: `${data.phase_progress_pct}%` }}
+                style={{ width: `${safeData.phase_progress_pct}%` }}
               />
             </div>
           </div>
@@ -370,10 +391,10 @@ export function FourYearCycleGauge({ data, compact = false, className }: Props) 
             <span className="text-lg">{biasConfig.icon}</span>
             <div>
               <div className={cn("text-sm font-bold", biasConfig.color)}>
-                MACRO BIAS: {data.macro_bias}
+                MACRO BIAS: {safeData.macro_bias}
               </div>
               <div className="text-[10px] text-muted-foreground">
-                {data.confidence.toFixed(0)}% confidence
+                {safeData.confidence.toFixed(0)}% confidence
               </div>
             </div>
           </div>
@@ -387,35 +408,35 @@ export function FourYearCycleGauge({ data, compact = false, className }: Props) 
               LAST 4YC LOW
             </div>
             <div className="text-sm font-bold">
-              {new Date(data.last_low.date).toLocaleDateString('en-US', {
+              {new Date(safeData.last_low.date).toLocaleDateString('en-US', {
                 month: 'short',
                 year: 'numeric'
               })}
             </div>
             <div className="text-xs text-muted-foreground">
-              ${data.last_low.price.toLocaleString()}
+              ${safeData.last_low.price.toLocaleString()}
             </div>
-            <div className="text-[10px] text-muted-foreground/70 mt-1 truncate" title={data.last_low.event}>
-              {data.last_low.event}
+            <div className="text-[10px] text-muted-foreground/70 mt-1 truncate" title={safeData.last_low.event}>
+              {safeData.last_low.event}
             </div>
           </div>
-          
+
           <div className="p-3 rounded-lg bg-muted/10 border border-border/20">
             <div className="flex items-center gap-2 text-[10px] text-muted-foreground mb-1">
               <Target size={12} />
               EXPECTED NEXT LOW
             </div>
             <div className="text-sm font-bold">
-              {new Date(data.expected_next_low).toLocaleDateString('en-US', {
+              {new Date(safeData.expected_next_low).toLocaleDateString('en-US', {
                 month: 'short',
                 year: 'numeric'
               })}
             </div>
             <div className="text-xs text-muted-foreground">
-              ~{data.days_until_expected_low.toLocaleString()} days
+              ~{safeData.days_until_expected_low.toLocaleString()} days
             </div>
             <div className="text-[10px] text-muted-foreground/70 mt-1">
-              Est. {new Date(data.expected_next_low).getFullYear()}
+              Est. {new Date(safeData.expected_next_low).getFullYear()}
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { Quote, Warning, CheckCircle, Brain } from '@phosphor-icons/react';
+import { Quotes, Warning, CheckCircle, Brain } from '@phosphor-icons/react';
 
 interface Props {
     className?: string;
@@ -38,6 +38,8 @@ export function MarketEditorial({ className, regime, btcContext }: Props) {
             date: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
             bottomLine,
             cycleInsight,
+            bias, // Include bias in the returned object
+            phase, // Include phase too for the JSX
             axiom: "In a bull market, bad news is ignored. In a bear market, good news is sold."
         };
     }, [btcContext]);
@@ -66,22 +68,30 @@ export function MarketEditorial({ className, regime, btcContext }: Props) {
                         {editorialContent.bottomLine}
                     </p>
 
-                    <div className="my-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-card/20 p-6 rounded-xl border border-border/40">
-                        <div>
-                            <h4 className="flex items-center gap-2 text-sm font-bold text-muted-foreground uppercase mb-3">
-                                <Brain size={16} /> Cycle Analysis
+                    <div className="my-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Cycle Analysis Card */}
+                        <div className="bg-blue-500/5 p-5 rounded-xl border border-blue-500/20 hover:border-blue-500/40 transition-colors">
+                            <h4 className="flex items-center gap-2 text-sm font-bold text-blue-400 uppercase mb-3 tracking-wide">
+                                <Brain size={18} weight="duotone" /> Cycle Analysis
                             </h4>
                             <p className="text-sm leading-relaxed text-foreground/80">
-                                {editorialContent.cycleInsight} Our proprietary 4-Year Cycle Gauge ({phase}) indicates we are structurally positioned for {bias.toLowerCase()} continuation, despite short-term noise.
+                                {editorialContent.cycleInsight}
+                            </p>
+                            <p className="text-sm leading-relaxed text-foreground/60 mt-3 pt-3 border-t border-blue-500/10">
+                                Our proprietary 4-Year Cycle Gauge (<span className="text-blue-400 font-semibold">{editorialContent.phase}</span>) indicates we are structurally positioned for <span className="font-semibold">{(editorialContent.bias || 'neutral').toLowerCase()}</span> continuation.
                             </p>
                         </div>
 
-                        <div>
-                            <h4 className="flex items-center gap-2 text-sm font-bold text-muted-foreground uppercase mb-3">
-                                <Warning size={16} /> Risk Assessment
+                        {/* Risk Assessment Card */}
+                        <div className="bg-amber-500/5 p-5 rounded-xl border border-amber-500/20 hover:border-amber-500/40 transition-colors">
+                            <h4 className="flex items-center gap-2 text-sm font-bold text-amber-400 uppercase mb-3 tracking-wide">
+                                <Warning size={18} weight="duotone" /> Risk Assessment
                             </h4>
                             <p className="text-sm leading-relaxed text-foreground/80">
-                                Volatility remains elevated. Leverage should be reduced. The primary risk at this moment is {bias === 'BULLISH' ? 'over-leveraged late longs flushing out' : 'short squeezes on relief rallies'}.
+                                Volatility remains elevated. Leverage should be reduced.
+                            </p>
+                            <p className="text-sm leading-relaxed text-foreground/60 mt-3 pt-3 border-t border-amber-500/10">
+                                The primary risk at this moment is <span className="font-semibold text-amber-400">{editorialContent.bias === 'BULLISH' ? 'over-leveraged late longs flushing out' : 'short squeezes on relief rallies'}</span>.
                             </p>
                         </div>
                     </div>
@@ -93,7 +103,7 @@ export function MarketEditorial({ className, regime, btcContext }: Props) {
 
                 {/* Quote / Footer */}
                 <div className="flex items-start gap-4 mt-4 p-4 bg-accent/5 rounded-lg border border-accent/20">
-                    <Quote size={24} className="text-accent flex-shrink-0" weight="fill" />
+                    <Quotes size={24} className="text-accent flex-shrink-0" weight="fill" />
                     <div>
                         <p className="text-sm font-medium italic text-foreground/80">
                             "{editorialContent.axiom}"
