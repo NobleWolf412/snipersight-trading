@@ -37,7 +37,7 @@ export function Intel() {
   };
 
   return (
-    <PageContainer id="main-content" fullWidth>
+    <PageContainer id="main-content" wide>
       <div className="flex flex-col min-h-screen bg-background">
 
         {/* 1. NEWS TICKER (Fixed at top capability usually, but inline here) */}
@@ -48,37 +48,47 @@ export function Intel() {
           {/* Navigation */}
           <div className="flex items-center gap-4 text-muted-foreground hover:text-foreground transition-colors">
             <HomeButton />
-            <span className="text-sm font-mono uppercase tracking-widest">Global Intelligence Command</span>
+            <span className="text-sm font-mono uppercase tracking-widest hud-text-green">Global Intelligence Command</span>
           </div>
 
           {/* 2. EXECUTIVE SUMMARY (Editorial) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="lg:col-span-7">
-              <MarketEditorial
-                regime={regimeProps}
-                btcContext={btcContext}
-              />
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            {/* Editorial Card */}
+            <div className="lg:col-span-7 glass-card glow-border-green p-6 lg:p-8 rounded-2xl relative overflow-hidden group transition-all duration-500 hover:shadow-[0_0_40px_rgba(0,255,170,0.1)]">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_var(--tw-gradient-stops))] from-green-500/5 via-transparent to-transparent opacity-40 pointer-events-none group-hover:opacity-60 transition-opacity duration-700" />
+              <div className="relative z-10">
+                <MarketEditorial
+                  regime={regimeProps}
+                  btcContext={btcContext}
+                />
+              </div>
             </div>
-            {/* Dominance Radar as a "Side Bar" Context */}
+
+            {/* Sidebar: Dominance + Narrative */}
             <div className="lg:col-span-5 flex flex-col gap-6">
-              <div className="bg-card/20 p-6 rounded-2xl border border-border/40">
-                <h3 className="text-sm font-bold text-muted-foreground uppercase mb-4 tracking-widest">
-                  Capital Flow Radar
-                </h3>
-                <DominanceRadar />
+              {/* Capital Flow Radar */}
+              <div className="glass-card glow-border-blue p-6 rounded-2xl relative overflow-hidden group transition-all duration-500 hover:shadow-[0_0_40px_rgba(59,130,246,0.1)]">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-500/5 via-transparent to-transparent opacity-40 pointer-events-none group-hover:opacity-60 transition-opacity duration-700" />
+                <div className="relative z-10">
+                  <h3 className="text-sm font-bold text-blue-400 uppercase mb-4 tracking-widest flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
+                    Capital Flow Radar
+                  </h3>
+                  <DominanceRadar />
+                </div>
               </div>
               <NarrativeTracker />
             </div>
           </div>
 
-          {/* Divider */}
-          <div className="w-full h-px bg-border/30" />
+          {/* Glowing Divider */}
+          <div className="w-full h-px bg-gradient-to-r from-transparent via-green-500/30 to-transparent" />
 
           {/* 3. CYCLE THEORY EDUCATION SECTION */}
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
             <div className="flex flex-col md:flex-row items-end justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-bold font-mono uppercase tracking-tight">Cycle Intelligence</h2>
+                <h2 className="text-2xl font-bold font-mono uppercase tracking-tight hud-headline hud-text-green">Cycle Intelligence</h2>
                 <p className="text-muted-foreground mt-2 max-w-2xl">
                   Price action moves in waves. We track the 4-Year Macro Cycle and fractal daily/weekly cycles to determine structural health.
                 </p>
@@ -87,33 +97,39 @@ export function Intel() {
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
               {/* Theory: How it works */}
-              <CycleTheoryExplainer className="h-full" />
+              <div className="glass-card glow-border-amber p-6 rounded-2xl relative overflow-hidden group transition-all duration-500 hover:shadow-[0_0_40px_rgba(251,191,36,0.1)]">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_var(--tw-gradient-stops))] from-amber-500/5 via-transparent to-transparent opacity-40 pointer-events-none group-hover:opacity-60 transition-opacity duration-700" />
+                <div className="relative z-10">
+                  <CycleTheoryExplainer className="h-full" />
+                </div>
+              </div>
 
               {/* Data: Where we are */}
-              <div className="bg-card/20 rounded-2xl border border-border/40 p-6 flex flex-col items-center justify-center relative overflow-hidden">
-                <div className="absolute top-4 left-6 z-10">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                    Live Macro Position
-                  </span>
+              <div className="relative group">
+                {/* Glow effect behind the gauge */}
+                <div className="absolute -inset-1 bg-gradient-to-r from-green-500/20 via-emerald-500/10 to-green-500/20 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                <div className="relative">
+                  <FourYearCycleGauge
+                    data={gaugeData}
+                    className="glow-border-green"
+                  />
                 </div>
-                <FourYearCycleGauge
-                  data={gaugeData}
-                  className="scale-90 md:scale-100 border-none bg-transparent"
-                />
               </div>
             </div>
           </div>
 
-          {/* Divider */}
-          <div className="w-full h-px bg-border/30" />
+          {/* Glowing Divider */}
+          <div className="w-full h-px bg-gradient-to-r from-transparent via-green-500/30 to-transparent" />
 
           {/* 4. DEEP DIVE (The "Data" Section) */}
           <div className="space-y-6 pb-20 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
-            <h3 className="text-lg font-bold text-muted-foreground uppercase tracking-widest">
+            <h3 className="text-lg font-bold text-green-400 uppercase tracking-widest hud-headline">
               Deep Dive Analysis
             </h3>
             {/* Using the full-featured BTC Cycle Intel component here */}
-            <BTCCycleIntel autoRefresh={false} />
+            <div className="glass-card glow-border-green p-6 rounded-2xl">
+              <BTCCycleIntel autoRefresh={false} />
+            </div>
           </div>
 
         </div>
@@ -123,3 +139,4 @@ export function Intel() {
 }
 
 export default Intel;
+
