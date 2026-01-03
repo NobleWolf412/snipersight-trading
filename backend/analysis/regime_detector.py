@@ -131,18 +131,65 @@ class RegimeDetector:
     def analyze_timeframe_trend(self, df, timeframe_label: str) -> tuple[str, float]:
         """
         Analyze trend for a specific single timeframe dataframe.
-        Returns: (trend_label, score)
+        
+        Uses hybrid approach:
+        1. Swing structure detection (primary) - 50-bar lookback
+        2. ADX check (secondary) - confirms sideways when ADX < 20
+        
+        Returns: (trend_label, score, reason)
         """
         from backend.strategy.smc.swing_structure import detect_swing_structure
         from backend.shared.config.smc_config import scale_lookback
         
         if df is None or len(df) < 50:
-            return "sideways", 50.0
-            
+            return "sideways", 50.0, "Insufficient data"
+        
+        # === 1. Calculate ADX for secondary confirmation ===
+        adx_value = None
         try:
-            # Scale lookback by timeframe
-            # Base lookback of 15 is for 4H, scale up for LTF, down for HTF
-            scaled_lookback = scale_lookback(15, timeframe_label, min_lookback=7, max_lookback=30)
+            # Calculate ADX manually (14-period standard)
+            df_copy = df.copy()
+            
+            # True Range
+            df_copy['tr'] = df_copy.apply(
+                lambda row: max(
+                    row['high'] - row['low'],
+                    abs(row['high'] - df_copy['close'].shift(1).loc[row.name]) if row.name > df_copy.index[0] else row['high'] - row['low'],
+                    abs(row['low'] - df_copy['close'].shift(1).loc[row.name]) if row.name > df_copy.index[0] else row['high'] - row['low']
+                ), axis=1
+            )
+            
+            # +DM and -DM
+            df_copy['plus_dm'] = df_copy['high'].diff()
+            df_copy['minus_dm'] = -df_copy['low'].diff()
+            df_copy['plus_dm'] = df_copy.apply(
+                lambda row: row['plus_dm'] if row['plus_dm'] > row['minus_dm'] and row['plus_dm'] > 0 else 0, axis=1
+            )
+            df_copy['minus_dm'] = df_copy.apply(
+                lambda row: row['minus_dm'] if row['minus_dm'] > row['plus_dm'] and row['minus_dm'] > 0 else 0, axis=1
+            )
+            
+            # Smoothed averages (14-period)
+            period = 14
+            df_copy['atr14'] = df_copy['tr'].rolling(period).mean()
+            df_copy['plus_di'] = 100 * (df_copy['plus_dm'].rolling(period).mean() / df_copy['atr14'])
+            df_copy['minus_di'] = 100 * (df_copy['minus_dm'].rolling(period).mean() / df_copy['atr14'])
+            
+            # DX and ADX
+            df_copy['dx'] = 100 * abs(df_copy['plus_di'] - df_copy['minus_di']) / (df_copy['plus_di'] + df_copy['minus_di'] + 1e-10)
+            df_copy['adx'] = df_copy['dx'].rolling(period).mean()
+            
+            adx_value = df_copy['adx'].iloc[-1]
+            logger.debug(f"ADX for {timeframe_label}: {adx_value:.1f}")
+        except Exception as e:
+            logger.debug(f"ADX calculation failed for {timeframe_label}: {e}")
+            adx_value = None
+        
+        # === 2. Swing Structure Detection (50-bar lookback) ===
+        try:
+            # INCREASED: Base lookback from 15 to 50 for better trend detection
+            # This gives ~8 days on 4H, ~50 days on 1D
+            scaled_lookback = scale_lookback(50, timeframe_label, min_lookback=30, max_lookback=80)
             
             # Use swing structure detector
             swing_struct = detect_swing_structure(df, lookback=scaled_lookback)
@@ -167,21 +214,42 @@ class RegimeDetector:
             else:
                 normalized_slope = 0
             
-            # Classify
+            # === 3. Classification with ADX Confirmation ===
+            
+            # If swing structure found a trend
             if trend == 'bullish':
                 if has_strong_momentum and normalized_slope > 2.0:
+                    logger.info(f"Regime {timeframe_label}: STRONG_UP (swing=bullish, ADX={adx_value:.1f if adx_value else 0})")
                     return "strong_up", 85.0, "Impulsive Buy Pressure"
                 else:
+                    logger.info(f"Regime {timeframe_label}: UP (swing=bullish, ADX={adx_value:.1f if adx_value else 0})")
                     return "up", 70.0, "Higher Highs & Lows"
             
             elif trend == 'bearish':
                 if has_strong_momentum and normalized_slope < -2.0:
+                    logger.info(f"Regime {timeframe_label}: STRONG_DOWN (swing=bearish, ADX={adx_value:.1f if adx_value else 0})")
                     return "strong_down", 15.0, "Heavy Sell Pressure"
                 else:
+                    logger.info(f"Regime {timeframe_label}: DOWN (swing=bearish, ADX={adx_value:.1f if adx_value else 0})")
                     return "down", 30.0, "Lower Highs & Lows"
             
             else:
-                return "sideways", 50.0, "Choppy / No Trend"
+                # Swing structure returned neutral/sideways
+                # Use ADX to confirm: ADX < 20 = definitely ranging
+                if adx_value is not None:
+                    if adx_value < 20:
+                        logger.info(f"Regime {timeframe_label}: SIDEWAYS (ADX={adx_value:.1f} < 20, confirmed ranging)")
+                        return "sideways", 50.0, f"Ranging (ADX={adx_value:.1f})"
+                    elif adx_value < 25:
+                        logger.info(f"Regime {timeframe_label}: SIDEWAYS (ADX={adx_value:.1f}, weak trend)")
+                        return "sideways", 50.0, f"Weak Trend (ADX={adx_value:.1f})"
+                    else:
+                        # ADX > 25 but no swing pattern = choppy/transitional
+                        logger.info(f"Regime {timeframe_label}: SIDEWAYS (ADX={adx_value:.1f} but no clear swing pattern)")
+                        return "sideways", 50.0, "Choppy / Transitional"
+                else:
+                    logger.info(f"Regime {timeframe_label}: SIDEWAYS (no swing pattern, ADX unavailable)")
+                    return "sideways", 50.0, "Choppy / No Trend"
         
         except Exception as e:
             logger.warning(f"Swing structure detection failed for {timeframe_label}: {e}, using fallback")

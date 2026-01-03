@@ -62,10 +62,12 @@ class StopLoss:
         level: Stop loss price
         distance_atr: Distance from entry in ATR units
         rationale: Explanation of stop placement
+        structure_tf_used: Timeframe of structure used for stop (optional)
     """
     level: float
     distance_atr: float
     rationale: str
+    structure_tf_used: Optional[str] = None
     
     def __post_init__(self):
         """Validate stop loss data."""

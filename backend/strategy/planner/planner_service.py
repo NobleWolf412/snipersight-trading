@@ -274,6 +274,30 @@ def generate_trade_plan(
         is_bullish=is_bullish
     )
     
+    # === 5b. Distribute Target Percentages ===
+    # Targets must sum to 100% for TradePlan validation
+    if targets:
+        n = len(targets)
+        if n == 1:
+            targets[0].percentage = 100.0
+        elif n == 2:
+            targets[0].percentage = 60.0
+            targets[1].percentage = 40.0
+        elif n == 3:
+            targets[0].percentage = 50.0
+            targets[1].percentage = 30.0
+            targets[2].percentage = 20.0
+        elif n >= 4:
+            # 40%, 30%, 20%, 10% for first 4, then split remainder
+            percentages = [40.0, 30.0, 20.0, 10.0]
+            for i, pct in enumerate(percentages):
+                if i < n:
+                    targets[i].percentage = pct
+            # If more than 4 targets, split remaining 0% (shouldn't happen often)
+            # The first 4 already sum to 100%
+        
+        logger.debug(f"Target percentages assigned: {[t.percentage for t in targets]}")
+    
     # === 6. Determine Trade Type (Delegate to Risk Engine) ===
     # Collect structure TFs used
     # Fix: explicitly handle list creation to avoid type errors
