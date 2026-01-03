@@ -2,7 +2,7 @@ import { Suspense, lazy } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { Routes, Route } from 'react-router-dom';
 import { SniperReticle } from '@/components/SniperReticle';
-import { TopBarLite } from '@/components/TopBar/TopBarLite';
+import { TopBar } from '@/components/TopBar';
 import { TacticalBackground } from '@/components/ui/TacticalBackground';
 
 const Landing = lazy(() => import('@/pages/Landing').then(m => ({ default: m.Landing })));
@@ -34,7 +34,7 @@ function App() {
     <div className="min-h-screen w-screen text-foreground">
       <TacticalBackground />
       <SniperReticle />
-      <TopBarLite />
+      <TopBar />
       <main className="w-full h-full relative z-10">
         <Suspense fallback={<LoadingFallback />}>
           <Routes>

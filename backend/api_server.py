@@ -419,6 +419,11 @@ app.include_router(data_router)
 
 
 
+import asyncio
+import httpx
+
+# ... existing imports ...
+
 @app.get("/api/health")
 async def health_check():
     """Detailed health check."""
@@ -432,6 +437,33 @@ async def health_check():
             "executor": "ready"
         }
     }
+
+@app.get("/api/market/btc-ticker")
+async def get_btc_ticker_proxy():
+    """
+    Proxy endpoint to fetch BTC/USDT 24hr ticker from Binance.
+    Avoids CORS issues in frontend.
+    """
+    url = "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            # Return normalized data
+            return {
+                "symbol": "BTCUSDT",
+                "lastPrice": data.get("lastPrice", "0"),
+                "priceChange": data.get("priceChange", "0"),
+                "priceChangePercent": data.get("priceChangePercent", "0"),
+                "highPrice": data.get("highPrice", "0"),
+                "lowPrice": data.get("lowPrice", "0"),
+                "volume": data.get("volume", "0"),
+                "quoteVolume": data.get("quoteVolume", "0")
+            }
+    except Exception as e:
+        logger.error(f"Failed to fetch BTC ticker: {e}")
+        raise HTTPException(status_code=502, detail="Failed to fetch upstream market data")
 
 @app.get("/api/scanner/mode_active")
 async def get_active_mode():

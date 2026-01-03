@@ -1,15 +1,16 @@
-import { Link, useLocation } from 'react-router-dom';
-import { Crosshair, Compass, Target, ChartLine, Lightning } from '@phosphor-icons/react';
+import { Link } from 'react-router-dom';
+import { Crosshair, GearSix, CaretDown } from '@phosphor-icons/react';
 import { SessionIndicator } from '@/components/SessionIndicator/SessionIndicator';
 import { WalletConnect } from '@/components/WalletConnect';
-import { NotificationStatus } from '@/components/NotificationStatus';
 import { HTFAlertBeacon } from '@/components/htf/HTFAlertBeacon';
-import { BackendStatusPill } from '@/components/BackendStatusPill';
+import { BTCPricePill } from './BTCPricePill';
 import { debugLogger, LogLevel } from '@/utils/debugLogger';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useState } from 'react';
+import { cn } from '@/lib/utils';
 
 export function TopBar() {
-  const location = useLocation();
+  const [showSettings, setShowSettings] = useState(false);
   const [verbosity, setVerbosity] = useLocalStorage<'silent' | 'essential' | 'verbose'>(
     'log-verbosity',
     (import.meta.env.MODE === 'production') ? 'essential' : 'verbose'
@@ -18,104 +19,95 @@ export function TopBar() {
   // Apply verbosity to debugLogger
   const appliedLevel = verbosity === 'silent' ? LogLevel.SILENT : verbosity === 'essential' ? LogLevel.WARN : LogLevel.INFO;
   debugLogger.setLogLevel(appliedLevel);
-  const links = [
-    { to: '/scanner/setup', label: 'Scanner', icon: <Crosshair size={16} /> },
-    { to: '/bot/setup', label: 'Bot', icon: <Lightning size={16} /> },
-    { to: '/intel', label: 'Intel', icon: <Compass size={16} /> },
-    { to: '/results', label: 'Results', icon: <ChartLine size={16} /> },
-    { to: '/training', label: 'Training', icon: <Target size={16} /> },
-  ];
+
   return (
     <header
-      className="sticky top-0 z-50 border-b border-border/60 bg-gradient-to-r from-background/80 via-background/70 to-background/80 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_4px_24px_-4px_rgba(0,0,0,0.4)]"
+      className="sticky top-0 z-50 border-b border-cyan-500/30 bg-black/80 backdrop-blur-xl animate-[glow-pulse_3s_ease-in-out_infinite]"
+      style={{
+        boxShadow: '0 0 20px rgba(0,255,255,0.08), inset 0 -1px 0 rgba(0,255,255,0.15), 0 4px 30px -10px rgba(0,255,255,0.2)'
+      }}
       role="banner"
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center h-18 md:h-20 gap-4">
+      {/* Main TopBar */}
+      <div className="max-w-[1800px] mx-auto px-4 sm:px-6">
+        <div className="flex items-center h-18 min-h-[72px] gap-6">
+
           {/* Brand */}
           <Link
             to="/"
-            className="group flex items-center gap-3 pr-4 border-r border-border/40"
+            className="group flex items-center gap-3"
             aria-label="SniperSight Home"
           >
-            <div className="relative w-11 h-11 rounded-lg bg-accent/15 flex items-center justify-center ring-1 ring-accent/40 shadow-[0_0_12px_-2px_rgba(0,255,170,0.5)] group-hover:shadow-[0_0_14px_0_rgba(0,255,170,0.65)] transition-shadow">
-              <Crosshair size={26} weight="bold" className="text-accent" />
+            <div className="relative w-11 h-11 rounded-lg bg-cyan-500/10 flex items-center justify-center ring-1 ring-cyan-500/40 shadow-[0_0_15px_-3px_rgba(0,255,255,0.6)] group-hover:shadow-[0_0_20px_0_rgba(0,255,255,0.7)] transition-shadow">
+              <Crosshair size={24} weight="bold" className="text-cyan-400" />
             </div>
-            <div className="flex flex-col">
-              <span className="text-base md:text-lg font-bold tracking-tight leading-none">SNIPERSIGHT</span>
-              <span className="text-[10px] tracking-widest text-muted-foreground/80">PRECISION SYSTEM</span>
+            <div className="hidden sm:flex flex-col">
+              <span className="text-base font-bold tracking-tight text-cyan-100">SNIPERSIGHT</span>
+              <span className="text-[10px] tracking-[0.2em] text-cyan-400/60">PRECISION SYSTEM</span>
             </div>
           </Link>
-          {/* Primary Nav */}
-          <nav className="hidden md:flex flex-1 items-center gap-1" aria-label="Primary">
-            {links.map(l => {
-              const active = location.pathname.startsWith(l.to);
-              return (
-                <Link
-                  key={l.to}
-                  to={l.to}
-                  className={
-                    'inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ' +
-                    (active
-                      ? 'bg-accent/15 text-accent ring-1 ring-accent/40 shadow-[0_0_0_1px_rgba(0,255,170,0.3)]'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-card/40')
-                  }
-                  aria-current={active ? 'page' : undefined}
-                >
-                  {l.icon}
-                  {l.label}
-                </Link>
-              );
-            })}
-          </nav>
-          {/* Session indicator center on large screens */}
-          <div className="hidden xl:flex flex-1 justify-center">
-            <SessionIndicator />
+
+          {/* Center: Session Indicator + BTC Price */}
+          <div className="flex flex-1 items-center justify-center gap-6">
+            {/* Session indicator - centered */}
+            <div className="hidden lg:block">
+              <SessionIndicator />
+            </div>
+            <BTCPricePill />
           </div>
-          {/* Right utilities */}
-          <div className="flex items-center gap-2 sm:gap-3 ml-auto">
-            <HTFAlertBeacon />
-            <BackendStatusPill />
-            <NotificationStatus />
-            <WalletConnect />
-            {/* Log verbosity selector */}
-            <label className="hidden md:flex items-center gap-2 px-2 py-1 rounded-md text-xs text-muted-foreground bg-card/50 border border-border/50">
-              <span>Logs</span>
-              <select
-                aria-label="Log verbosity"
-                className="bg-transparent outline-none text-foreground"
-                value={verbosity}
-                onChange={(e) => setVerbosity(e.target.value as any)}
+
+          {/* Right Utilities Section - Grid Layout */}
+          <div className="grid grid-cols-[auto_auto_auto] gap-16 items-center text-base">
+            <div className="flex justify-center">
+              <HTFAlertBeacon />
+            </div>
+
+            <div className="flex justify-center">
+              <WalletConnect />
+            </div>
+
+            <div className="flex justify-center relative">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium transition-colors",
+                  showSettings
+                    ? "bg-cyan-500/20 text-cyan-400"
+                    : "text-zinc-500 hover:text-cyan-300 hover:bg-cyan-500/10"
+                )}
+                title="Settings"
               >
-                <option value="silent">Silent</option>
-                <option value="essential">Essential</option>
-                <option value="verbose">Verbose</option>
-              </select>
-            </label>
+                <GearSix size={22} weight="bold" />
+                <CaretDown size={14} className={cn("transition-transform duration-200", showSettings && "rotate-180")} />
+              </button>
+
+              {showSettings && (
+                <div className="absolute right-0 top-full mt-2 w-48 py-2 rounded-lg bg-black/95 border border-cyan-500/20 shadow-xl backdrop-blur-xl z-50">
+                  <div className="px-3 py-2 border-b border-cyan-500/10">
+                    <label className="text-[10px] font-bold tracking-wider text-cyan-400/60 uppercase">
+                      Log Verbosity
+                    </label>
+                    <select
+                      aria-label="Log verbosity"
+                      className="w-full mt-1 px-2 py-1.5 rounded bg-black/50 border border-cyan-500/20 text-sm text-foreground outline-none focus:border-cyan-500/50"
+                      value={verbosity}
+                      onChange={(e) => setVerbosity(e.target.value as any)}
+                    >
+                      <option value="silent">Silent</option>
+                      <option value="essential">Essential</option>
+                      <option value="verbose">Verbose</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
-      {/* Mobile nav */}
-      <div className="md:hidden border-t border-border/50 bg-background/90 backdrop-blur-sm">
-        <nav className="flex items-stretch justify-around" aria-label="Mobile">
-          {links.map(l => {
-            const active = location.pathname.startsWith(l.to);
-            return (
-              <Link
-                key={l.to}
-                to={l.to}
-                className={
-                  'flex flex-col items-center justify-center gap-1 flex-1 py-3 text-[11px] font-medium tracking-wide ' +
-                  (active ? 'text-accent bg-accent/10' : 'text-muted-foreground hover:text-foreground')
-                }
-                aria-current={active ? 'page' : undefined}
-              >
-                {l.icon}
-                {l.label}
-              </Link>
-            );
-          })}
-        </nav>
+
+      {/* Mobile: BTC Price strip */}
+      <div className="sm:hidden border-t border-cyan-500/10 bg-black/90 px-4 py-2.5 flex justify-center">
+        <BTCPricePill />
       </div>
     </header>
   );
