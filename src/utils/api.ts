@@ -607,6 +607,20 @@ class ApiClient {
     }>('/market/regime', { silent: import.meta.env.MODE === 'production' });
   }
 
+  // Fear & Greed Index (from alternative.me via backend)
+  async getFearGreedIndex() {
+    return this.request<{
+      value: number;
+      classification: string;
+      sentiment: 'EXTREME_FEAR' | 'FEAR' | 'NEUTRAL' | 'GREED' | 'EXTREME_GREED';
+      bottom_line: string;
+      risk_text: string;
+      timestamp: string;
+      source: string;
+      error?: string;
+    }>('/market/fear-greed', { silent: import.meta.env.MODE === 'production' });
+  }
+
   // Market cycle context (DCL/WCL timing, translation, stochRSI zones)
   async getMarketCycles(symbol: string = 'BTC/USDT') {
     return this.request<{

@@ -1412,6 +1412,98 @@ async def get_market_regime(symbol: Optional[str] = Query(None, description="Opt
         raise HTTPException(status_code=500, detail=f"Regime detection error: {str(e)}") from e
 
 
+@app.get("/api/market/fear-greed")
+async def get_fear_greed_index():
+    """
+    Get the Crypto Fear & Greed Index from alternative.me API.
+    
+    The index ranges from 0 (Extreme Fear) to 100 (Extreme Greed).
+    This is a key sentiment indicator for crypto market timing.
+    
+    Returns:
+        value: 0-100 index value
+        classification: Extreme Fear / Fear / Neutral / Greed / Extreme Greed
+        bottom_line: Trading guidance text based on the index
+        timestamp: When the index was last updated
+    """
+    import httpx
+    
+    # Check cache first (15 minute TTL - index updates daily but we don't want stale data)
+    cache_key = "fear_greed_index"
+    cached = REGIME_CACHE.get(cache_key)
+    if cached:
+        logger.debug("Returning cached fear & greed data")
+        return cached
+    
+    try:
+        # Fetch from alternative.me API (free, no key required)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get("https://api.alternative.me/fng/?limit=1")
+            response.raise_for_status()
+            data = response.json()
+        
+        if not data.get("data") or len(data["data"]) == 0:
+            raise HTTPException(status_code=502, detail="No data from Fear & Greed API")
+        
+        fng = data["data"][0]
+        value = int(fng.get("value", 50))
+        classification = fng.get("value_classification", "Neutral")
+        timestamp = fng.get("timestamp")
+        
+        # Map value to bottom line text
+        if value <= 24:
+            bottom_line = "Extreme fear presents opportunity. Smart money accumulates when retail panics."
+            risk_text = "capitulation selling creating value opportunities"
+            sentiment = "EXTREME_FEAR"
+        elif value <= 45:
+            bottom_line = "Fear persists. The path of least resistance is down until proven otherwise."
+            risk_text = "short squeezes on relief rallies"
+            sentiment = "FEAR"
+        elif value <= 54:
+            bottom_line = "Neutral positioning. Wait for directional clarity before committing size."
+            risk_text = "choppy price action and false breakouts"
+            sentiment = "NEUTRAL"
+        elif value <= 75:
+            bottom_line = "Greed building. Trail stops tight and reduce leverage on euphoric moves."
+            risk_text = "over-leveraged longs getting liquidated on pullbacks"
+            sentiment = "GREED"
+        else:
+            bottom_line = "Extreme greed signals distribution. This is where tops are made."
+            risk_text = "a major correction as smart money exits"
+            sentiment = "EXTREME_GREED"
+        
+        result = {
+            "value": value,
+            "classification": classification,
+            "sentiment": sentiment,
+            "bottom_line": bottom_line,
+            "risk_text": risk_text,
+            "timestamp": datetime.fromtimestamp(int(timestamp), tz=timezone.utc).isoformat() if timestamp else datetime.now(timezone.utc).isoformat(),
+            "source": "alternative.me"
+        }
+        
+        # Cache the result (15 min TTL)
+        REGIME_CACHE.set(cache_key, result)
+        return result
+        
+    except httpx.HTTPError as e:
+        logger.error("Fear & Greed API request failed: %s", e)
+        # Return fallback neutral value on API failure
+        return {
+            "value": 50,
+            "classification": "Neutral",
+            "sentiment": "NEUTRAL",
+            "bottom_line": "Sentiment data unavailable. Trade based on price structure.",
+            "risk_text": "unknown market conditions",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "source": "fallback",
+            "error": str(e)
+        }
+    except Exception as e:
+        logger.error("Fear & Greed processing failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Fear & Greed error: {str(e)}") from e
+
+
 @app.get("/api/market/cycles")
 async def get_market_cycles(symbol: str = Query("BTC/USDT", description="Symbol to analyze cycles for")):
     """
@@ -1825,7 +1917,9 @@ async def get_btc_cycle_context():
                     "phase": fyc.phase.value.upper(),
                     "phase_progress_pct": round(fyc.phase_progress_pct, 1),
                     "translation": "RTR", # 4YC is structurally Right Translated (Post-Halving Peak)
-                    "macro_bias": fyc.macro_bias,
+                    # Apply WCL confirmation filter for macro bias
+                    # Don't flip bearish until WCL confirms with LTR + 3-week buffer
+                    "macro_bias": _confirm_macro_bias_with_wcl(fyc.macro_bias, cycles.wcl, cycles.dcl),
                     "confidence": round(fyc.confidence, 1),
                     "last_low": {
                         "date": fyc.last_fyc_low_date.isoformat(),
@@ -1862,6 +1956,48 @@ async def get_btc_cycle_context():
     except Exception as e:
         logger.error("BTC cycle context failed: %s", e)
         raise HTTPException(status_code=500, detail=f"BTC cycle error: {str(e)}") from e
+
+
+def _confirm_macro_bias_with_wcl(raw_macro_bias: str, wcl, dcl) -> str:
+    """
+    Apply WCL confirmation filter for macro bias.
+    
+    Rules:
+    1. If DCL is RTR (bullish) and WCL is not LTR, stay BULLISH even if 4YC says BEARISH
+    2. Only flip to BEARISH if WCL is LTR (left-translated) for at least 3 weeks
+    3. Use 3-week buffer (~21 days past the week midpoint) for confirmation
+    
+    This prevents premature bearish calls when daily cycle is still bullish.
+    """
+    from backend.strategy.smc.symbol_cycle_detector import Translation
+    
+    # If raw bias is already BULLISH or NEUTRAL, just return it
+    if raw_macro_bias != "BEARISH":
+        return raw_macro_bias
+    
+    # For BEARISH bias, check WCL confirmation
+    wcl_is_ltr = wcl.translation == Translation.LTR
+    dcl_is_rtr = dcl.translation == Translation.RTR
+    
+    # 3-week buffer: WCL must be past midpoint by ~21 days AND be LTR
+    wcl_midpoint = wcl.midpoint  # typically ~42.5 days
+    wcl_buffer_threshold = wcl_midpoint + 21  # ~63.5 days
+    wcl_confirmed_ltr = wcl_is_ltr and wcl.bars_since_low >= wcl_buffer_threshold
+    
+    # If WCL hasn't confirmed LTR with buffer, defer to DCL
+    if not wcl_confirmed_ltr:
+        # DCL still RTR = stay BULLISH (benefit of the doubt during bull runs)
+        if dcl_is_rtr:
+            return "BULLISH"
+        # DCL is MTR = NEUTRAL
+        elif dcl.translation == Translation.MTR:
+            return "NEUTRAL"
+        # DCL is also LTR = confirm BEARISH (both timeframes agree)
+        else:
+            return "BEARISH"
+    
+    # WCL confirmed LTR with buffer → trust the bearish call
+    return "BEARISH"
 
 
 def _get_btc_alignment(cycles, fyc) -> str:

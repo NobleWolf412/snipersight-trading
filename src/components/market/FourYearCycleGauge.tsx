@@ -150,83 +150,101 @@ function CycleArc({ position, phase }: { position: number; phase: string }) {
   const config = PHASE_CONFIG[phase as keyof typeof PHASE_CONFIG] || PHASE_CONFIG.UNKNOWN;
 
   // SVG arc path calculation
-  // Arc goes from left (0%) to right (100%)
   const radius = 80;
   const centerX = 100;
   const centerY = 90;
   const startAngle = Math.PI; // 180 degrees (left)
-  const endAngle = 0; // 0 degrees (right)
 
   // Calculate current position on arc
   const currentAngle = startAngle - (position / 100) * Math.PI;
   const markerX = centerX + radius * Math.cos(currentAngle);
   const markerY = centerY - radius * Math.sin(currentAngle);
 
+  // Arc length for dasharray calculations
+  const arcLength = Math.PI * radius; // Half circle
+
+  // Phase percentages (matching the actual phase boundaries)
+  const phases = [
+    { end: 35, color: '#3b82f6' },   // Accumulation 0-35%
+    { end: 65, color: '#10b981' },   // Markup 35-65%
+    { end: 80, color: '#f59e0b' },   // Distribution 65-80%
+    { end: 100, color: '#ef4444' },  // Markdown 80-100%
+  ];
+
   return (
-    <svg viewBox="0 0 200 100" className="w-full max-w-xs">
-      {/* Background track */}
+    <svg viewBox="0 0 200 110" className="w-full max-w-xs">
+      {/* Single background track - dark base */}
       <path
         d="M 20 90 A 80 80 0 0 1 180 90"
         fill="none"
-        stroke="currentColor"
-        strokeWidth="12"
+        stroke="rgba(255,255,255,0.05)"
+        strokeWidth="14"
         strokeLinecap="round"
-        className="text-muted/10"
       />
 
-      {/* Phase segment: Accumulation (0-25%) */}
+      {/* Accumulation segment (0-35%) */}
       <path
-        d="M 20 90 A 80 80 0 0 1 60 30"
+        d="M 20 90 A 80 80 0 0 1 180 90"
         fill="none"
-        stroke="currentColor"
-        strokeWidth="10"
-        strokeLinecap="round"
-        className="text-blue-500/30"
-      />
-
-      {/* Phase segment: Markup (25-50%) */}
-      <path
-        d="M 60 30 A 80 80 0 0 1 100 10"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="10"
-        className="text-emerald-500/30"
-      />
-
-      {/* Phase segment: Distribution (50-75%) */}
-      <path
-        d="M 100 10 A 80 80 0 0 1 140 30"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="10"
-        className="text-amber-500/30"
-      />
-
-      {/* Phase segment: Markdown (75-100%) */}
-      <path
-        d="M 140 30 A 80 80 0 0 1 180 90"
-        fill="none"
-        stroke="currentColor"
+        stroke="#3b82f6"
         strokeWidth="10"
         strokeLinecap="round"
-        className="text-red-500/30"
+        strokeDasharray={`${arcLength * 0.35} ${arcLength}`}
+        strokeDashoffset="0"
+        opacity="0.4"
       />
 
-      {/* Progress arc (filled portion) */}
+      {/* Markup segment (35-65%) */}
       <path
-        d={`M 20 90 A 80 80 0 ${position > 50 ? 1 : 0} 1 ${markerX} ${markerY}`}
+        d="M 20 90 A 80 80 0 0 1 180 90"
+        fill="none"
+        stroke="#10b981"
+        strokeWidth="10"
+        strokeDasharray={`${arcLength * 0.30} ${arcLength}`}
+        strokeDashoffset={`${-arcLength * 0.35}`}
+        opacity="0.4"
+      />
+
+      {/* Distribution segment (65-80%) */}
+      <path
+        d="M 20 90 A 80 80 0 0 1 180 90"
+        fill="none"
+        stroke="#f59e0b"
+        strokeWidth="10"
+        strokeDasharray={`${arcLength * 0.15} ${arcLength}`}
+        strokeDashoffset={`${-arcLength * 0.65}`}
+        opacity="0.4"
+      />
+
+      {/* Markdown segment (80-100%) */}
+      <path
+        d="M 20 90 A 80 80 0 0 1 180 90"
+        fill="none"
+        stroke="#ef4444"
+        strokeWidth="10"
+        strokeLinecap="round"
+        strokeDasharray={`${arcLength * 0.20} ${arcLength}`}
+        strokeDashoffset={`${-arcLength * 0.80}`}
+        opacity="0.4"
+      />
+
+      {/* Progress arc - bright filled portion showing current position */}
+      <path
+        d="M 20 90 A 80 80 0 0 1 180 90"
         fill="none"
         stroke="url(#progressGradient)"
-        strokeWidth="10"
+        strokeWidth="8"
         strokeLinecap="round"
+        strokeDasharray={`${arcLength * (position / 100)} ${arcLength}`}
+        strokeDashoffset="0"
       />
 
       {/* Gradient definition */}
       <defs>
         <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#3b82f6" />
-          <stop offset="33%" stopColor="#10b981" />
-          <stop offset="66%" stopColor="#f59e0b" />
+          <stop offset="35%" stopColor="#10b981" />
+          <stop offset="65%" stopColor="#f59e0b" />
           <stop offset="100%" stopColor="#ef4444" />
         </linearGradient>
       </defs>
@@ -235,30 +253,23 @@ function CycleArc({ position, phase }: { position: number; phase: string }) {
       <circle
         cx={markerX}
         cy={markerY}
-        r="10"
-        className={cn("fill-current", config.color)}
-      />
-      <circle
-        cx={markerX}
-        cy={markerY}
-        r="6"
-        className="fill-background"
-      />
-      <circle
-        cx={markerX}
-        cy={markerY}
-        r="4"
-        className={cn("fill-current", config.color)}
+        r="8"
+        fill={config.color.includes('blue') ? '#3b82f6' :
+          config.color.includes('emerald') ? '#10b981' :
+            config.color.includes('amber') ? '#f59e0b' : '#ef4444'}
+        stroke="white"
+        strokeWidth="2"
       />
 
-      {/* Phase labels */}
-      <text x="20" y="98" className="text-[8px] fill-blue-400 font-mono">ACC</text>
-      <text x="60" y="20" className="text-[8px] fill-emerald-400 font-mono">MKP</text>
-      <text x="125" y="20" className="text-[8px] fill-amber-400 font-mono">DST</text>
-      <text x="165" y="98" className="text-[8px] fill-red-400 font-mono">MKD</text>
+      {/* Phase labels at bottom */}
+      <text x="15" y="105" className="text-[7px] fill-blue-400 font-mono">ACC</text>
+      <text x="75" y="105" className="text-[7px] fill-emerald-400 font-mono">MKP</text>
+      <text x="115" y="105" className="text-[7px] fill-amber-400 font-mono">DST</text>
+      <text x="165" y="105" className="text-[7px] fill-red-400 font-mono">MKD</text>
     </svg>
   );
 }
+
 
 /**
  * Full 4-Year Cycle Gauge Component
@@ -339,12 +350,12 @@ export function FourYearCycleGauge({ data, compact = false, className }: Props) 
       {/* Main Content */}
       <div className="p-6">
         {/* Arc Visualization */}
-        <div className="relative flex flex-col items-center mb-6">
+        <div className="flex flex-col items-center mb-6">
           <CycleArc position={safeData.cycle_position_pct} phase={safeData.phase} />
 
-          {/* Center Stats Overlay */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center pt-4">
-            <div className={cn("text-5xl font-bold", config.color)}>
+          {/* Stats below arc */}
+          <div className="flex flex-col items-center mt-2">
+            <div className={cn("text-4xl font-bold", config.color)}>
               {safeData.cycle_position_pct.toFixed(0)}%
             </div>
             <div className="text-xs text-muted-foreground font-mono">

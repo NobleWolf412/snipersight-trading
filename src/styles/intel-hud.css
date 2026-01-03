@@ -1,0 +1,684 @@
+/* ==========================================================================
+   Intel HUD Styles - Tactical Command Center Design
+   ========================================================================== */
+
+/* Base Container */
+.intel-page {
+  background: var(--background);
+  color: #0ff;
+  min-height: 100vh;
+  font-family: 'Monaco', 'Courier New', monospace;
+  overflow-x: hidden;
+}
+
+/* Header */
+.intel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1.5rem 2rem;
+  border-bottom: 2px solid #0ff;
+  background: rgba(0, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.intel-header-badge {
+  font-size: 0.75rem;
+  letter-spacing: 2px;
+  color: #0f0;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+}
+
+.intel-header h1 {
+  font-size: 2.2rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  margin: 0;
+  color: #0ff;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+}
+
+.intel-header p {
+  font-size: 1rem;
+  color: #0f0;
+  margin: 0.5rem 0 0 0;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.intel-close-btn {
+  background: none;
+  border: 2px solid #0ff;
+  color: #0ff;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.intel-close-btn:hover {
+  background: rgba(0, 255, 255, 0.1);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+}
+
+/* Main Content */
+.intel-main {
+  padding: 2rem;
+  max-width: 100%;
+}
+
+/* Grid Layouts */
+.intel-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+@media (max-width: 1400px) {
+  .intel-grid-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Section Card */
+.intel-section {
+  background: rgba(0, 255, 255, 0.02);
+  border: 1px solid rgba(0, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 1.5rem;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0, 255, 255, 0.05);
+}
+
+.intel-section.full-width {
+  grid-column: 1 / -1;
+  margin-bottom: 2rem;
+}
+
+/* Section Header */
+.intel-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid rgba(0, 255, 255, 0.2);
+  padding-bottom: 1rem;
+}
+
+.intel-section-header h2 {
+  font-size: 1.5rem;
+  letter-spacing: 2px;
+  margin: 0;
+  color: #0ff;
+  text-shadow: 0 0 8px rgba(0, 255, 255, 0.2);
+}
+
+.intel-section-header .timestamp,
+.intel-section-header .subtitle {
+  font-size: 0.9rem;
+  letter-spacing: 1px;
+  color: #0f0;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+/* Brief Content Blocks */
+.brief-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.bottom-line,
+.analysis-block,
+.risk-block,
+.philosophy-block {
+  padding: 1rem;
+  border-left: 3px solid rgba(0, 255, 255, 0.3);
+  background: rgba(0, 255, 255, 0.02);
+  border-radius: 4px;
+}
+
+.bottom-line {
+  border-left-color: #0f0;
+  background: rgba(0, 255, 0, 0.02);
+}
+
+.bottom-line h3 {
+  color: #0f0;
+  font-size: 1rem;
+  letter-spacing: 1px;
+  margin: 0 0 0.5rem 0;
+}
+
+.bottom-line p {
+  color: #fff;
+  font-size: 1.1rem;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.analysis-block h3 {
+  color: #0ff;
+  font-size: 1rem;
+  letter-spacing: 1px;
+  margin: 0 0 0.5rem 0;
+}
+
+.analysis-block p {
+  color: #fff;
+  font-size: 1rem;
+  margin: 0.4rem 0;
+  line-height: 1.6;
+}
+
+.risk-block {
+  border-left-color: #ff6b00;
+  background: rgba(255, 107, 0, 0.05);
+}
+
+.risk-block h3 {
+  color: #ff6b00;
+  font-size: 0.85rem;
+  letter-spacing: 1px;
+  margin: 0 0 0.5rem 0;
+}
+
+.risk-block p {
+  color: #fff;
+  margin: 0.3rem 0;
+  font-size: 0.85rem;
+}
+
+.risk-block strong {
+  color: #ff6b00;
+}
+
+.philosophy-block {
+  background: rgba(0, 255, 0, 0.02);
+  border-left-color: #0f0;
+}
+
+.philosophy-block .quote {
+  font-style: italic;
+  color: #0f0;
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
+}
+
+.philosophy-block .source {
+  font-size: 0.7rem;
+  color: #0f0;
+  letter-spacing: 1px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+/* Radar Section */
+.radar-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.radar-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.chart-placeholder {
+  background: rgba(0, 255, 0, 0.02);
+  border: 1px dashed rgba(0, 255, 0, 0.3);
+  border-radius: 8px;
+  padding: 1.5rem;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.radar-visual {
+  width: 100%;
+  height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.radar-svg {
+  width: 100%;
+  height: 100%;
+  max-width: 180px;
+  max-height: 180px;
+}
+
+@keyframes radarSweep {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.radar-sweep {
+  transform-origin: 100px 100px;
+  animation: radarSweep 4s linear infinite;
+}
+
+/* Narratives Grid */
+.narratives-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .narratives-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.narrative-card {
+  background: rgba(0, 255, 255, 0.05);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 0.75rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.narrative-label {
+  font-size: 0.85rem;
+  color: #0f0;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.narrative-value {
+  font-size: 1.4rem;
+  color: #0ff;
+  font-weight: 700;
+}
+
+.narrative-trend {
+  font-size: 1.1rem;
+  color: #0f0;
+}
+
+.narrative-trend.down {
+  color: #ff6464;
+}
+
+/* Active Narratives */
+.active-narratives {
+  background: rgba(0, 255, 255, 0.02);
+  border: 1px solid rgba(0, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.active-narratives h3 {
+  font-size: 0.85rem;
+  letter-spacing: 1px;
+  color: #0ff;
+  margin: 0 0 0.75rem 0;
+  text-transform: uppercase;
+}
+
+.narrative-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.narrative-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0.6rem;
+  background: rgba(0, 255, 255, 0.03);
+  border-radius: 4px;
+  border-left: 2px solid rgba(0, 255, 255, 0.2);
+  font-size: 0.8rem;
+}
+
+.narrative-item .label {
+  color: #fff;
+}
+
+.sentiment {
+  font-size: 0.65rem;
+  letter-spacing: 1px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+}
+
+.sentiment.strong {
+  background: rgba(0, 255, 0, 0.2);
+  color: #0f0;
+}
+
+.sentiment.moderate {
+  background: rgba(255, 107, 0, 0.2);
+  color: #ff6b00;
+}
+
+.sentiment.weak {
+  background: rgba(255, 100, 100, 0.2);
+  color: #ff6464;
+}
+
+/* Cycle Intelligence */
+.cycle-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+@media (max-width: 1200px) {
+  .cycle-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cycle-box {
+  background: rgba(0, 255, 255, 0.03);
+  border: 1px solid rgba(0, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cycle-box h3 {
+  font-size: 1.15rem;
+  color: #0ff;
+  letter-spacing: 1px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.theory-text {
+  font-size: 1rem;
+  color: #fff;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.cycle-chart-placeholder {
+  background: rgba(0, 255, 0, 0.03);
+  border: 1px dashed rgba(0, 255, 0, 0.3);
+  border-radius: 6px;
+  padding: 1.5rem;
+  text-align: center;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.placeholder-text {
+  color: #0f0;
+  font-size: 0.85rem;
+  letter-spacing: 1px;
+}
+
+.placeholder-description {
+  color: #0f0;
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Axiom Block */
+.axiom-block {
+  background: rgba(0, 255, 255, 0.05);
+  border-left: 3px solid #0ff;
+  padding: 1rem;
+  border-radius: 4px;
+}
+
+.axiom-block h3 {
+  font-size: 0.8rem;
+  color: #0ff;
+  letter-spacing: 1px;
+  margin: 0 0 0.5rem 0;
+  text-transform: uppercase;
+}
+
+.axiom-text {
+  font-size: 0.85rem;
+  color: #fff;
+  margin: 0;
+  line-height: 1.5;
+  font-style: italic;
+}
+
+/* Distribution Box */
+.distribution-box {
+  background: rgba(255, 107, 0, 0.05);
+  border-left: 3px solid #ff6b00;
+  padding: 1rem;
+  border-radius: 4px;
+}
+
+.distribution-box h3 {
+  font-size: 0.85rem;
+  color: #ff6b00;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: 1px;
+}
+
+.distribution-box .subtitle-sm {
+  font-size: 0.7rem;
+  color: #ff6b00;
+  margin: 0 0 0.75rem 0;
+  text-transform: uppercase;
+}
+
+.distribution-visual {
+  background: rgba(255, 107, 0, 0.1);
+  border: 1px solid rgba(255, 107, 0, 0.3);
+  border-radius: 4px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.phase-label {
+  font-size: 0.7rem;
+  color: #ff6b00;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.phase-value {
+  font-size: 1rem;
+  color: #ff6b00;
+  font-weight: 700;
+}
+
+.macro-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.date-block {
+  background: rgba(255, 107, 0, 0.05);
+  border: 1px solid rgba(255, 107, 0, 0.2);
+  border-radius: 4px;
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.date-label {
+  font-size: 0.65rem;
+  color: #ff6b00;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.date-value {
+  font-size: 0.9rem;
+  color: #fff;
+  font-weight: 700;
+}
+
+.date-price {
+  font-size: 0.7rem;
+  color: #ff6b00;
+}
+
+/* Deep Dive Analysis */
+.deepdive-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 1000px) {
+  .deepdive-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.deepdive-card {
+  background: rgba(0, 255, 255, 0.03);
+  border: 1px solid rgba(0, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.deepdive-card h3 {
+  font-size: 0.95rem;
+  color: #0ff;
+  letter-spacing: 1px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.deepdive-card .card-subtitle {
+  font-size: 0.7rem;
+  color: #0f0;
+  letter-spacing: 1px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.placeholder-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.placeholder-bar {
+  background: rgba(0, 255, 255, 0.05);
+  border: 1px dashed rgba(0, 255, 255, 0.2);
+  border-radius: 4px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(0, 255, 255, 0.5);
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+}
+
+/* Total Line */
+.total-line {
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+  border-top: 1px solid rgba(0, 255, 255, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: #0f0;
+}
+
+/* ==========================================================================
+   4-Year Cycle Gauge HUD Overrides
+   Remove duplicate card styling when embedded in Intel page
+   ========================================================================== */
+
+.four-year-gauge-container {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+/* Remove the gauge's internal card styling */
+.four-year-gauge-container .hud-gauge-override {
+  border: none !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+/* Style the header to match HUD theme */
+.four-year-gauge-container .hud-gauge-override>div:first-child {
+  background: rgba(0, 255, 255, 0.05) !important;
+  border-bottom: 1px solid rgba(0, 255, 255, 0.15) !important;
+  border-radius: 6px 6px 0 0;
+}
+
+/* Main content area */
+.four-year-gauge-container .hud-gauge-override>div:nth-child(2) {
+  background: rgba(0, 255, 255, 0.02);
+  border-radius: 0 0 6px 6px;
+  border: 1px solid rgba(0, 255, 255, 0.1);
+  border-top: none;
+}
+
+/* Phase card styling */
+.four-year-gauge-container [class*="rounded-lg"] {
+  background: rgba(0, 255, 255, 0.05) !important;
+  border-color: rgba(0, 255, 255, 0.2) !important;
+}
+
+/* Progress bars */
+.four-year-gauge-container [class*="bg-black"] {
+  background: rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Stats cards */
+.four-year-gauge-container [class*="bg-muted"] {
+  background: rgba(0, 255, 255, 0.03) !important;
+  border-color: rgba(0, 255, 255, 0.1) !important;
+}
+
+/* Adjust text colors to match HUD cyan/green theme */
+.four-year-gauge-container [class*="text-muted-foreground"] {
+  color: rgba(0, 255, 255, 0.6) !important;
+}
+
+/* Ensure arc visualization has enough space */
+.four-year-gauge-container svg {
+  max-height: 200px;
+}

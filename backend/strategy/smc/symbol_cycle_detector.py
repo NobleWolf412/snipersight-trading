@@ -317,14 +317,23 @@ def _detect_cycle(
         cycle_high_price = current_price
         peak_bar = bars_since_low
     
-    # Calculate translation
+    # Calculate translation percentage (where peak occurred)
     # Translation = where did the peak occur relative to current cycle progress?
     if bars_since_low > 0:
         translation_pct = (peak_bar / bars_since_low) * 100
     else:
         translation_pct = 50.0
     
-    translation = _determine_translation(translation_pct)
+    # Calculate midpoint for buffer logic
+    midpoint = (min_len + max_len) / 2
+    
+    # Determine translation with buffer (3 weeks for WCL, 1 week for DCL)
+    translation = _determine_translation(
+        translation_pct, 
+        bars_since_low=bars_since_low, 
+        midpoint=midpoint, 
+        cycle_type=cycle_type
+    )
     
     # Check if in cycle low window
     is_in_window = min_len <= bars_since_low <= max_len
@@ -340,7 +349,7 @@ def _detect_cycle(
         cycle_type=cycle_type,
         bars_since_low=bars_since_low,
         expected_length=(min_len, max_len),
-        midpoint=(min_len + max_len) / 2,
+        midpoint=midpoint,
         cycle_low_price=cycle_low['price'],
         cycle_low_bar=cycle_low_idx,
         cycle_low_timestamp=cycle_low_ts,
@@ -399,14 +408,49 @@ def _find_swing_lows(df: pd.DataFrame, lookback: int = 3) -> List[Dict]:
     return swing_lows
 
 
-def _determine_translation(translation_pct: float) -> Translation:
-    """Determine translation based on peak position percentage."""
+def _determine_translation(
+    translation_pct: float, 
+    bars_since_low: int = 0, 
+    midpoint: float = 0, 
+    cycle_type: str = "DCL"
+) -> Translation:
+    """
+    Determine translation based on peak position percentage WITH buffer logic.
+    
+    Buffer Logic:
+    - DCL: 3 day buffer past midpoint before confirming LTR/RTR
+    - WCL: 5 day buffer past midpoint before confirming LTR/RTR
+    - If within buffer zone, return MTR (waiting for confirmation)
+    
+    This ensures confirmation happens ~3 days before cycle max to remain actionable.
+    
+    Args:
+        translation_pct: Where peak occurred as % of cycle (0-100)
+        bars_since_low: Current bars into the cycle
+        midpoint: Midpoint bar number for the cycle
+        cycle_type: "DCL" or "WCL"
+    """
+    # Buffer in bars/days (confirm ~3 days before cycle max)
+    buffer = 5 if cycle_type == "WCL" else 3  # 5 days for WCL, 3 days for DCL
+    
+    # First check basic translation thresholds
     if translation_pct >= TRANSLATION_THRESHOLDS["rtr_min"] * 100:
-        return Translation.RTR
+        raw_translation = Translation.RTR
     elif translation_pct <= TRANSLATION_THRESHOLDS["ltr_max"] * 100:
-        return Translation.LTR
+        raw_translation = Translation.LTR
     else:
+        return Translation.MTR  # Clearly mid-translated, no buffer needed
+    
+    # Apply buffer: must be past midpoint + buffer to confirm non-MTR translation
+    confirmation_threshold = midpoint + buffer
+    
+    if bars_since_low < confirmation_threshold:
+        # Not enough time has passed - still could change
+        # Return MTR (pending) instead of premature LTR/RTR
         return Translation.MTR
+    
+    # Past the buffer - translation is confirmed
+    return raw_translation
 
 
 def _determine_status(
