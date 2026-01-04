@@ -32,19 +32,7 @@ interface LightweightChartProps {
     className?: string;
     title?: string; // Optional chart title
     showLegend?: boolean; // Show timeframe legend if OBs have timeframe property
-}
-
-interface CandleResponse {
-    symbol: string;
-    timeframe: string;
-    candles: Array<{
-        timestamp: string;
-        open: number;
-        high: number;
-        low: number;
-        close: number;
-        volume: number;
-    }>;
+    uniformOBColor?: boolean; // Force uniform color (purple) for all OBs
 }
 
 export function LightweightChart({
@@ -58,6 +46,7 @@ export function LightweightChart({
     className = '',
     title,
     showLegend = false,
+    uniformOBColor = false,
 }: LightweightChartProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
@@ -261,15 +250,19 @@ export function LightweightChart({
                 let fillColor: string;
                 let lineColor: string;
 
-                if (ob.timeframe && TIMEFRAME_COLORS[ob.timeframe]) {
+                if (uniformOBColor) {
+                    // Force Uniform Translucent Purple
+                    fillColor = 'rgba(168, 85, 247, 0.15)'; // Purple-500 @ 15%
+                    lineColor = '#a855f7'; // Purple-500
+                } else if (ob.timeframe && TIMEFRAME_COLORS[ob.timeframe]) {
                     // Timeframe-specific color (for overlay mode)
                     const tfColor = TIMEFRAME_COLORS[ob.timeframe].color;
                     fillColor = tfColor.replace('rgb', 'rgba').replace(')', ', 0.2)');
                     lineColor = tfColor;
                 } else {
-                    // Default: Bullish = Cyan Blue, Bearish = Neon Orange (reduced opacity for translucency)
-                    fillColor = isBullish ? 'rgba(6, 182, 212, 0.15)' : 'rgba(255, 138, 0, 0.15)';
-                    lineColor = isBullish ? '#06b6d4' : '#ff8a00';
+                    // Default: Translucent Purple as requested
+                    fillColor = 'rgba(168, 85, 247, 0.15)'; // Purple-500
+                    lineColor = isBullish ? '#a855f7' : '#9333ea'; // Purple-500 / Purple-600
                 }
 
                 // Create baseline series for shaded zone
@@ -342,7 +335,7 @@ export function LightweightChart({
         if (entryPrice) {
             candleSeries.createPriceLine({
                 price: entryPrice,
-                color: '#00ff88',
+                color: '#22d3ee', // Cyan-400 to distinguish from TP
                 lineWidth: 2,
                 lineStyle: 0,
                 axisLabelVisible: false,
@@ -371,7 +364,7 @@ export function LightweightChart({
                 title: 'TP',
             });
         }
-    }, [orderBlocks, liquidityZones, entryPrice, stopLoss, takeProfit, data, showOBZones, showLiquidityZones]);
+    }, [orderBlocks, liquidityZones, entryPrice, stopLoss, takeProfit, data, showOBZones, showLiquidityZones, uniformOBColor]);
 
     return (
         <div className={cn('relative w-full h-full bg-[#0a0f0a] rounded-lg overflow-hidden', className)}>
@@ -419,13 +412,13 @@ export function LightweightChart({
                 </div>
             </div>
 
-            {/* OB Toggle Button - Moved to bottom left */}
+            {/* OB Toggle Button - Changed to Bottom Right */}
             <button
                 onClick={() => setShowOBZones(!showOBZones)}
                 className={cn(
-                    "absolute bottom-4 left-2 p-2 rounded-lg backdrop-blur-md border-2 transition-all shadow-lg z-30 hover:scale-105 active:scale-95",
+                    "absolute !bottom-4 !right-2 p-2 rounded-lg backdrop-blur-md border-2 transition-all shadow-lg z-30 hover:scale-105 active:scale-95",
                     showOBZones
-                        ? "bg-emerald-500/30 border-emerald-400 text-emerald-300"
+                        ? "bg-purple-500/30 border-purple-400 text-purple-300"
                         : "bg-black/70 border-zinc-600 text-zinc-400 hover:border-zinc-400"
                 )}
                 title={`Toggle Order Block Zones (${orderBlocks.length} OBs)`}
@@ -433,12 +426,12 @@ export function LightweightChart({
                 <Fire size={16} weight="bold" />
             </button>
 
-            {/* Liquidity Toggle Button */}
+            {/* Liquidity Toggle Button - Changed to Bottom Right (next to OB) */}
             {liquidityZones.length > 0 && (
                 <button
                     onClick={() => setShowLiquidityZones(!showLiquidityZones)}
                     className={cn(
-                        "absolute bottom-4 left-12 p-2 rounded-lg backdrop-blur-md border-2 transition-all shadow-lg z-30 hover:scale-105 active:scale-95",
+                        "absolute !bottom-4 !right-12 p-2 rounded-lg backdrop-blur-md border-2 transition-all shadow-lg z-30 hover:scale-105 active:scale-95",
                         showLiquidityZones
                             ? "bg-purple-500/30 border-purple-400 text-purple-300"
                             : "bg-black/70 border-zinc-600 text-zinc-400 hover:border-zinc-400"

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Crosshair, GearSix, CaretDown } from '@phosphor-icons/react';
 import { SessionIndicator } from '@/components/SessionIndicator/SessionIndicator';
 import { WalletConnect } from '@/components/WalletConnect';
-import { HTFAlertBeacon } from '@/components/htf/HTFAlertBeacon';
+
 import { BTCPricePill } from './BTCPricePill';
 import { debugLogger, LogLevel } from '@/utils/debugLogger';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
@@ -58,9 +58,7 @@ export function TopBar() {
 
           {/* Right Utilities Section - Grid Layout */}
           <div className="grid grid-cols-[auto_auto_auto] gap-16 items-center text-base">
-            <div className="flex justify-center">
-              <HTFAlertBeacon />
-            </div>
+
 
             <div className="flex justify-center">
               <WalletConnect />

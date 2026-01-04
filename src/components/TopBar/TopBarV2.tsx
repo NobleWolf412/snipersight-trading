@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Crosshair, GearSix, CaretDown } from '@phosphor-icons/react';
 import { SessionIndicator } from '@/components/SessionIndicator/SessionIndicator';
 import { WalletConnect } from '@/components/WalletConnect';
-import { HTFAlertBeacon } from '@/components/htf/HTFAlertBeacon';
+
 import { BTCPricePill } from './BTCPricePill';
 import { debugLogger, LogLevel } from '@/utils/debugLogger';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
@@ -58,7 +58,6 @@ export function TopBar() {
 
                     {/* Right Utilities Section - Margin-based Spacing (Proven to work) */}
                     <div className="flex items-center text-base">
-                        <HTFAlertBeacon />
 
                         <div style={{ marginLeft: '40px' }}>
                             <WalletConnect />
