@@ -217,8 +217,13 @@ export function HTFBiasChart({
             orderBlocks: orderBlocks.slice(0, 3), // Log first 3
             priceRange: { minPrice, maxPrice }
         });
-        if (showOBZones) {
+        if (showOBZones && orderBlocks && orderBlocks.length > 0) {
             orderBlocks.forEach(ob => {
+                // Skip malformed OB entries
+                if (!ob || typeof ob.price_low !== 'number' || typeof ob.price_high !== 'number') {
+                    return;
+                }
+
                 const isBullish = ob.type === 'bullish';
                 const freshness = ob.freshness_score ?? 0.8;
                 const displacement = ob.displacement_strength ?? 0.5;
@@ -246,8 +251,12 @@ export function HTFBiasChart({
 
         // Build liquidity zone markAreas
         const liqMarkAreas: any[] = [];
-        if (showLiquidity && liquidityZones.length > 0) {
+        if (showLiquidity && liquidityZones && liquidityZones.length > 0) {
             liquidityZones.forEach(lz => {
+                // Skip malformed entries
+                if (!lz || typeof lz.priceLevel !== 'number') {
+                    return;
+                }
                 const bandSize = (maxPrice - minPrice) * 0.005; // 0.5% band
                 liqMarkAreas.push([
                     {

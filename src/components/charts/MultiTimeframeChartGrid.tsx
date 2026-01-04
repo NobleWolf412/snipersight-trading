@@ -141,10 +141,10 @@ export function MultiTimeframeChartGrid({
     });
 
     return (
-        <div className={cn('grid grid-cols-2 gap-4', className)}>
+        <div className={cn('grid grid-cols-1 lg:grid-cols-2 gap-4', className)}>
             {/* Top row: Structure chart (full width) - HTF Bias with Heatmap */}
             {finalStructure.length > 0 && (
-                <div className="col-span-2 h-[400px] relative group border border-blue-500/20 rounded-xl bg-black/20 overflow-hidden">
+                <div className="col-span-1 lg:col-span-2 h-[400px] relative group border border-blue-500/20 rounded-xl bg-black/20 overflow-hidden">
                     <HTFBiasChart
                         symbol={symbol}
                         timeframe={structurePrimaryTF}

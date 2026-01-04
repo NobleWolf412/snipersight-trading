@@ -672,6 +672,15 @@ def _calculate_entry_zone(
             
             offset = base_offset * htf_factor * atr
             near_entry = best_ob.high - offset
+            offset = base_offset * htf_factor * atr
+            
+            # FIX: Clamp offset to prevent entry zone inversion (near crossing far)
+            zone_width = best_ob.high - best_ob.low
+            max_offset = zone_width / 2.0 * 0.9  # Max 45% of width
+            if offset > max_offset:
+                offset = max(max_offset, 0.0)
+                
+            near_entry = best_ob.high - offset
             far_entry = best_ob.low + offset
             
             # FIX: When price is INSIDE the OB (already pulled back), cap near_entry at current price
@@ -696,6 +705,15 @@ def _calculate_entry_zone(
             )
             # Attach entry_tf_used for metadata tracking
             entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+            
+            # Calculate pullback probability
+            entry_zone.pullback_probability = _calculate_pullback_probability(  # type: ignore
+                is_bullish=True,
+                current_price=current_price,
+                entry_zone_mid=entry_zone.midpoint,
+                atr=atr,
+                indicators=indicators
+            )
             return entry_zone, used_structure
         
         elif fvgs:
@@ -728,6 +746,15 @@ def _calculate_entry_zone(
             
             offset = base_offset * htf_factor * atr
             near_entry = best_fvg.top - offset
+            offset = base_offset * htf_factor * atr
+            
+            # FIX: Clamp offset to prevent inversion
+            zone_width = best_fvg.bottom - best_fvg.top
+            max_offset = abs(zone_width) / 2.0 * 0.9
+            if offset > max_offset:
+                offset = max(max_offset, 0.0)
+                
+            near_entry = best_fvg.top - offset
             far_entry = best_fvg.bottom + offset
             
             # FIX: Cap near_entry at current price if calculated above
@@ -744,6 +771,15 @@ def _calculate_entry_zone(
                 rationale=rationale
             )
             entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+            
+            # Calculate pullback probability
+            entry_zone.pullback_probability = _calculate_pullback_probability(  # type: ignore
+                is_bullish=True,
+                current_price=current_price,
+                entry_zone_mid=entry_zone.midpoint,
+                atr=atr,
+                indicators=indicators
+            )
             return entry_zone, used_structure
         
     else:  # Bearish
@@ -877,6 +913,15 @@ def _calculate_entry_zone(
             
             offset = base_offset * htf_factor * atr
             near_entry = best_ob.low + offset
+            offset = base_offset * htf_factor * atr
+            
+            # FIX: Clamp offset to prevent inversion for Shorts (near > far)
+            zone_width = best_ob.high - best_ob.low
+            max_offset = zone_width / 2.0 * 0.9
+            if offset > max_offset:
+                offset = max(max_offset, 0.0)
+
+            near_entry = best_ob.low + offset
             far_entry = best_ob.high - offset
             
             # FIX: Cap near_entry at current price if already inside
@@ -899,6 +944,15 @@ def _calculate_entry_zone(
                 rationale=rationale
             )
             entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+            
+            # Calculate pullback probability
+            entry_zone.pullback_probability = _calculate_pullback_probability(  # type: ignore
+                is_bullish=False,
+                current_price=current_price,
+                entry_zone_mid=entry_zone.midpoint,
+                atr=atr,
+                indicators=indicators
+            )
             return entry_zone, used_structure
         
         elif fvgs:
@@ -928,6 +982,13 @@ def _calculate_entry_zone(
                 pass
              
              offset = base_offset * htf_factor * atr
+             
+             # FIX: Clamp offset to prevent inversion
+             zone_width = best_fvg.top - best_fvg.bottom
+             max_offset = abs(zone_width) / 2.0 * 0.9
+             if offset > max_offset:
+                 offset = max(max_offset, 0.0)
+
              near_entry = best_fvg.bottom + offset
              far_entry = best_fvg.top - offset
              
@@ -945,6 +1006,15 @@ def _calculate_entry_zone(
                  rationale=rationale
              )
              entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+             
+             # Calculate pullback probability
+             entry_zone.pullback_probability = _calculate_pullback_probability(  # type: ignore
+                 is_bullish=False,
+                 current_price=current_price,
+                 entry_zone_mid=entry_zone.midpoint,
+                 atr=atr,
+                 indicators=indicators
+             )
              return entry_zone, used_structure
 
     # Fallback to current price with fixed tight stop logic (if no structure found)

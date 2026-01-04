@@ -446,7 +446,7 @@ async def get_btc_ticker_proxy():
     """
     url = "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT"
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=2.0) as client:
             response = await client.get(url)
             response.raise_for_status()
             data = response.json()
@@ -459,11 +459,21 @@ async def get_btc_ticker_proxy():
                 "highPrice": data.get("highPrice", "0"),
                 "lowPrice": data.get("lowPrice", "0"),
                 "volume": data.get("volume", "0"),
-                "quoteVolume": data.get("quoteVolume", "0")
+                "quoteVolume": data.get("quoteVolume", "0"),
             }
     except Exception as e:
-        logger.error(f"Failed to fetch BTC ticker: {e}")
-        raise HTTPException(status_code=502, detail="Failed to fetch upstream market data")
+        print(f"BTC Ticker Error: {e}")
+        # Return Fail-Safe Data (don't block UI)
+        return {
+            "symbol": "BTCUSDT",
+            "lastPrice": "0.00",
+            "priceChange": "0.00",
+            "priceChangePercent": "0.00",
+            "highPrice": "0.00",
+            "lowPrice": "0.00",
+            "volume": "0",
+            "quoteVolume": "0",
+        }
 
 @app.get("/api/scanner/mode_active")
 async def get_active_mode():
