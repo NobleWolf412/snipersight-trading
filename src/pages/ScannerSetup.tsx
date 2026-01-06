@@ -210,6 +210,11 @@ export function ScannerSetup() {
             leverage: data.metadata?.leverage,
             criticalTimeframes: selectedMode?.critical_timeframes || [],
             rejections: flattenedRejections, // Include rejections for RejectionDossier
+            rejection_summary: data.rejections || {
+              total_rejected: 0,
+              by_reason: {},
+              details: {}
+            }
           };
           localStorage.setItem('scan-metadata', JSON.stringify(metadata));
 

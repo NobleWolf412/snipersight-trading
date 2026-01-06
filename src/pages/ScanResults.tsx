@@ -45,14 +45,20 @@ export function ScanResults() {
         setScanMetadata(meta); // Set scan metadata
         // Parse Rejections
         // structure: meta.rejection_summary.details = { "low_confluence": [...], ... }
+        console.log('[ScanResults] Metadata:', meta);
+        console.log('[ScanResults] Rejection summary:', meta?.rejection_summary);
         if (meta?.rejection_summary?.details) {
+          console.log('[ScanResults] Rejection details:', meta.rejection_summary.details);
           const flatRejections: RejectionInfo[] = [];
           Object.values(meta.rejection_summary.details).forEach((group: any) => {
             if (Array.isArray(group)) {
               flatRejections.push(...group);
             }
           });
+          console.log('[ScanResults] Flat rejections:', flatRejections);
           setRejections(flatRejections);
+        } else {
+          console.log('[ScanResults] No rejection details found');
         }
       }
     } catch (e) {

@@ -356,13 +356,13 @@ class Orchestrator:
             for future in concurrent.futures.as_completed(future_map):
                 symbol = future_map[future]
                 try:
-                    result, rejection_info = future.result(timeout=30)  # 30s timeout per symbol
+                    result, rejection_info = future.result(timeout=120)  # 120s timeout per symbol (increased from 30s)
                 except concurrent.futures.TimeoutError:
-                    logger.warning("⏱️ %s: Symbol processing timed out after 30s", symbol)
+                    logger.warning("⏱️ %s: Symbol processing timed out after 120s", symbol)
                     result, rejection_info = None, {
                         "symbol": symbol,
                         "reason_type": "errors",
-                        "reason": "Processing timed out after 30 seconds"
+                        "reason": "Processing timed out after 120 seconds"
                     }
                 if result:
                     signals.append(result)
@@ -907,9 +907,20 @@ class Orchestrator:
             self.diagnostics['confluence_rejections'].extend(rejections)
 
         except Exception as e:
-            logger.error(f"Confluence service failed for {symbol}: {e}")
-            # Fallback to empty/failed state
-            return None, {"symbol": symbol, "reason": str(e), "reason_type": "errors"}
+            error_msg = str(e)
+            logger.error(f"Confluence service failed for {symbol}: {error_msg}")
+            
+            # Categorize confluence tie errors properly for rejection display
+            if "Confluence tie" in error_msg and "neutral regime" in error_msg:
+                return None, {
+                    "symbol": symbol, 
+                    "reason": error_msg, 
+                    "reason_type": "low_confluence",
+                    "detail": "Confluence scores tied with no clear directional edge in neutral market regime"
+                }
+            
+            # Generic error fallback
+            return None, {"symbol": symbol, "reason": error_msg, "reason_type": "errors"}
         try:
             br = context.confluence_breakdown
             top_factors = [

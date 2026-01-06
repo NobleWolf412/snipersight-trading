@@ -180,7 +180,13 @@ def generate_trade_plan(
 
     leverage = max(1, int(getattr(config, 'leverage', 1) or 1))
     
-    is_bullish = (direction.lower() == "bullish")
+    # FIX: Handle both "LONG"/"SHORT" and "bullish"/"bearish" direction formats
+    # Confluence service returns "LONG"/"SHORT", but code was checking for "bullish"
+    direction_lower = direction.lower()
+    is_bullish = direction_lower in ("long", "bullish")
+    
+    # DEBUG: Log direction conversion
+    logger.info(f"🔍 Direction conversion: '{direction}' -> is_bullish={is_bullish}")
     
     # Map raw setup string to archetype
     # Now imported from entry_engine
@@ -228,6 +234,10 @@ def generate_trade_plan(
         ))
         raise
 
+    # DEBUG: Log entry and stop values BEFORE leverage adjustment
+    logger.info("🔍 DEBUG ENTRY/STOP (before leverage adj): Direction=%s | Entry=[%.4f-%.4f] | Stop=%.4f | Current=%.4f",
+                "LONG" if is_bullish else "SHORT", entry_zone.far_entry, entry_zone.near_entry, stop_loss.level, current_price)
+
     # === 3. Leverage Adjustment for Stop (Delegate to Risk Engine) ===
     # Check liquidation risk
     adjusted_stop_level, was_adjusted, adj_meta = _adjust_stop_for_leverage(
@@ -244,7 +254,9 @@ def generate_trade_plan(
             distance_atr=abs(entry_zone.far_entry - adjusted_stop_level) / atr,
             rationale=f"{stop_loss.rationale} [Liquidation Safety Adjusted]"
         )
-        # We might want to store the reason in metadata later
+        # DEBUG: Log after leverage adjustment
+        logger.info("🔍 DEBUG ENTRY/STOP (after leverage adj): Direction=%s | Entry=[%.4f-%.4f] | Stop=%.4f (adjusted from %.4f)",
+                    "LONG" if is_bullish else "SHORT", entry_zone.far_entry, entry_zone.near_entry, adjusted_stop_level, stop_loss.level)
     
     # === 4. Calculate Targets (Delegate to Risk Engine) ===
     # Get regime label for target adjustment
@@ -322,6 +334,13 @@ def generate_trade_plan(
     )
     
     # === 7. Construct Final Trade Plan ===
+    # DEBUG: Log final values before TradePlan validation
+    logger.info("🔍 DEBUG FINAL VALUES (before TradePlan): Direction=%s | Entry=[%.4f-%.4f] | Stop=%.4f | Targets=%s",
+                "LONG" if is_bullish else "SHORT", 
+                entry_zone.far_entry, entry_zone.near_entry, 
+                stop_loss.level,
+                [f"{t.level:.4f}" for t in targets[:3]])
+    
     plan = TradePlan(
         symbol=symbol,
         direction=direction,
