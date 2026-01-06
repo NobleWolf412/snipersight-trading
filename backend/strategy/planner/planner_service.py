@@ -352,7 +352,8 @@ def generate_trade_plan(
         setup_type=get_trade_label_for_mode(config.profile),  # Use mode-based trade label
         timeframe=primary_tf,
         status="PENDING",
-        trade_type=trade_type
+        trade_type=trade_type,
+        confidence_score=confluence_breakdown.total_score  # FIX: Pass confluence score to plan
     )
     
     # Attach metadata

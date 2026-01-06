@@ -55,6 +55,35 @@ class ConfluenceService:
         """Update scanner mode dynamically."""
         self._scanner_mode = scanner_mode
     
+    def _count_recent_structure(self, context: SniperContext, direction: str, lookback: int = 20) -> int:
+        """Count recent CHoCH + BOS for a direction to detect structural bias.
+        
+        Args:
+            context: SniperContext with SMC snapshot
+            direction: 'LONG' or 'SHORT'
+            lookback: Number of recent breaks to check
+            
+        Returns:
+            Count of structural breaks in the specified direction
+        """
+        snap = context.smc_snapshot
+        if not snap:
+            return 0
+        
+        # Map LONG/SHORT to bullish/bearish (StructuralBreak uses bullish/bearish)
+        target_direction = "bullish" if direction.upper() == "LONG" else "bearish"
+        
+        # Get structural breaks from snapshot (most recent first)
+        breaks = getattr(snap, 'structural_breaks', []) or []
+        
+        # Count breaks in specified direction within lookback
+        count = 0
+        for brk in breaks[:lookback]:  # Limit to recent breaks
+            if hasattr(brk, 'direction') and brk.direction.lower() == target_direction:
+                count += 1
+        
+        return count
+    
     def score(
         self,
         context: SniperContext,
@@ -189,18 +218,66 @@ class ConfluenceService:
                             'archetype': 'RANGE_REVERSION'
                         }
                     else:
-                        # Non-scalp mode or low scores: Skip (no directional edge)
-                        logger.info("🔄 %s TIE (%.1f) with neutral regime: skipping (no directional edge)",
-                                   context.symbol, bullish_breakdown.total_score)
+                        # Non-scalp mode in neutral regime
+                        # NEW: Check if local structure provides directional edge
                         
-                        context.metadata['chosen_direction'] = None
-                        context.metadata['alt_confluence'] = {
-                            'long': bullish_breakdown.total_score,
-                            'short': bearish_breakdown.total_score,
-                            'tie_break_used': 'skipped_no_edge'
-                        }
+                        # Only attempt structure override if scores are strong (>70%)
+                        if bullish_breakdown.total_score > 70 and bearish_breakdown.total_score > 70:
+                            # Count recent structural breaks for each direction
+                            bullish_structure = self._count_recent_structure(context, 'LONG', lookback=20)
+                            bearish_structure = self._count_recent_structure(context, 'SHORT', lookback=20)
+                            
+                            structure_diff = bullish_structure - bearish_structure
+                            
+                            # Require 2+ structure advantage for override
+                            if structure_diff >= 2:
+                                # Clear bullish structural bias overrides neutral regime
+                                chosen = bullish_breakdown
+                                chosen_direction = 'LONG'
+                                tie_break_used = 'structure_override'
+                                logger.info("✅ %s STRUCTURE OVERRIDE: LONG (CHoCH/BOS: %d vs %d, conf=%.1f%%)",
+                                           context.symbol, bullish_structure, bearish_structure, 
+                                           bullish_breakdown.total_score)
+                            
+                            elif structure_diff <= -2:
+                                # Clear bearish structural bias overrides neutral regime
+                                chosen = bearish_breakdown
+                                chosen_direction = 'SHORT'
+                                tie_break_used = 'structure_override'
+                                logger.info("✅ %s STRUCTURE OVERRIDE: SHORT (CHoCH/BOS: %d vs %d, conf=%.1f%%)",
+                                           context.symbol, bearish_structure, bullish_structure,
+                                           bearish_breakdown.total_score)
+                            
+                            else:
+                                # Structure also tied - genuinely no edge
+                                logger.info("🔄 %s TIE (%.1f) with neutral regime AND tied structure (%d vs %d): skipping",
+                                           context.symbol, bullish_breakdown.total_score, 
+                                           bullish_structure, bearish_structure)
+                                
+                                context.metadata['chosen_direction'] = None
+                                context.metadata['alt_confluence'] = {
+                                    'long': bullish_breakdown.total_score,
+                                    'short': bearish_breakdown.total_score,
+                                    'tie_break_used': 'skipped_no_edge',
+                                    'bullish_structure': bullish_structure,
+                                    'bearish_structure': bearish_structure
+                                }
+                                
+                                raise ValueError(f"Confluence tie ({bullish_breakdown.total_score:.1f}) with neutral regime and tied structure")
                         
-                        raise ValueError(f"Confluence tie ({bullish_breakdown.total_score:.1f}) with neutral regime - no directional edge")
+                        else:
+                            # Scores not strong enough for structure override (<=70%)
+                            logger.info("🔄 %s TIE (%.1f) with neutral regime (scores ≤ 70%%): skipping",
+                                       context.symbol, bullish_breakdown.total_score)
+                            
+                            context.metadata['chosen_direction'] = None
+                            context.metadata['alt_confluence'] = {
+                                'long': bullish_breakdown.total_score,
+                                'short': bearish_breakdown.total_score,
+                                'tie_break_used': 'skipped_no_edge'
+                            }
+                            
+                            raise ValueError(f"Confluence tie ({bullish_breakdown.total_score:.1f}) with neutral regime - no directional edge")
             
             # CRITICAL: Store chosen direction in context for downstream use
             context.metadata['chosen_direction'] = chosen_direction
