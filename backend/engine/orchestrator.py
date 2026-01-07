@@ -1071,8 +1071,9 @@ class Orchestrator:
                 })
             else:
                 self._progress("PLANNER_FAIL", {"symbol": symbol, "reason": "no_plan"})
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to generate trade plan: {e}", exc_info=True)
+            self._progress("PLANNER_FAIL", {"symbol": symbol, "reason": "error"})
         
         # Stage 7: Risk validation
         logger.debug("%s [%s]: Validating risk parameters", symbol, trace_id)
@@ -1283,11 +1284,6 @@ class Orchestrator:
                     return str(getattr(val, 'timeframe', '')).lower()
                 except Exception:
                     return ''
-
-            # --- DEBUG LOGGING FOR OVERWATCH REJECTION ---
-            raw_obs = context.smc_snapshot.order_blocks
-            logger.critical(f"🔍 DEBUG SMC OBs (RAW): {len(raw_obs)} total | TFs: {[ob.timeframe for ob in raw_obs]}")
-            logger.critical(f"🔍 DEBUG Allowed TFs for Entry/Structure: {allowed_entry | allowed_structure}")
             
             # Build filtered snapshot respecting responsibilities
             filtered_snapshot = SMCSnapshot(
@@ -1297,8 +1293,6 @@ class Orchestrator:
                 liquidity_sweeps=context.smc_snapshot.liquidity_sweeps,  # sweeps used for context; keep as-is
                 consolidations=[c for c in context.smc_snapshot.consolidations if _tf(c) in (allowed_entry | allowed_structure)] # NEW: Pass consolidations
             )
-            logger.critical(f"🔍 DEBUG SMC OBs (FILTERED): {len(filtered_snapshot.order_blocks)} remain")
-            logger.critical(f"🔍 DEBUG SMC CONSOLIDATIONS (FILTERED): {len(filtered_snapshot.consolidations)} remain")
 
             plan = generate_trade_plan(
                 symbol=context.symbol,
@@ -1610,6 +1604,9 @@ class Orchestrator:
                 # Non-fatal; log debug and proceed with original plan
                 logger.debug("Post-plan revalidation skipped: %s", _reval_err)
 
+                logger.debug("Post-plan revalidation skipped: %s", _reval_err)
+
+            logger.critical(f"DEBUG ORCHESTRATOR RETURN: plan={plan is not None}")
             return plan
             
         except Exception as e:  # noqa: BLE001  # type: ignore[misc] - intentional broad catch for robustness

@@ -212,6 +212,9 @@ def generate_trade_plan(
     )
     
     # === 2. Calculate Stop Loss (Delegate to Risk Engine) ===
+    # Extract consolidation source if entry was from Trend Continuation
+    consolidation_for_stop = getattr(entry_zone, 'consolidation_source', None)
+    
     try:
         stop_loss, used_structure_stop = _calculate_stop_loss(
             is_bullish=is_bullish,
@@ -224,7 +227,8 @@ def generate_trade_plan(
             planner_cfg=planner_cfg,
             multi_tf_data=multi_tf_data,
             current_price=current_price,
-            indicators_by_tf=indicators.by_timeframe  # Pass dict for structure TF lookup
+            indicators_by_tf=indicators.by_timeframe,  # Pass dict for structure TF lookup
+            consolidation_for_stop=consolidation_for_stop  # NEW: Pass consolidation for stop
         )
     except ValueError as e:
         logger.warning(f"Stop loss calculation failed: {e}")
@@ -335,28 +339,28 @@ def generate_trade_plan(
         primary_tf=primary_tf
     )
     
-    # === 7. Construct Final Trade Plan ===
     # DEBUG: Log final values before TradePlan validation
-    logger.info("🔍 DEBUG FINAL VALUES (before TradePlan): Direction=%s | Entry=[%.4f-%.4f] | Stop=%.4f | Targets=%s",
-                "LONG" if is_bullish else "SHORT", 
-                entry_zone.far_entry, entry_zone.near_entry, 
-                stop_loss.level,
-                [f"{t.level:.4f}" for t in targets[:3]])
-    
-    plan = TradePlan(
-        symbol=symbol,
-        direction=direction,
-        timestamp=datetime.utcnow(),
-        entry_zone=entry_zone,
-        stop_loss=stop_loss,
-        targets=targets,
-        risk_reward_ratio=targets[-1].rr_ratio if targets else 0.0,
-        setup_type=get_trade_label_for_mode(config.profile),  # Use mode-based trade label
-        timeframe=primary_tf,
-        status="PENDING",
-        trade_type=trade_type,
-        confidence_score=confluence_breakdown.total_score  # FIX: Pass confluence score to plan
-    )
+    try:
+        targets_levels = [f"{t.level:.4f}" for t in targets[:3]] if targets else []
+        logger.info(f"🔍 DEBUG FINAL VALUES (before TradePlan): Direction={'LONG' if is_bullish else 'SHORT'} | Entry=[{entry_zone.far_entry:.4f}-{entry_zone.near_entry:.4f}] | Stop={stop_loss.level:.4f} | Targets={targets_levels}")
+        
+        plan = TradePlan(
+            symbol=symbol,
+            direction=direction,
+            timestamp=datetime.utcnow(),
+            entry_zone=entry_zone,
+            stop_loss=stop_loss,
+            targets=targets,
+            risk_reward_ratio=targets[-1].rr_ratio if targets else 0.0,
+            setup_type=get_trade_label_for_mode(config.profile),  # Use mode-based trade label
+            timeframe=primary_tf,
+            status="PENDING",
+            trade_type=trade_type,
+            confidence_score=confluence_breakdown.total_score  # FIX: Pass confluence score to plan
+        )
+    except Exception as e:
+        logger.error(f"❌ TradePlan Constructor Failed: {e} | Values: Entry={entry_zone}, Stop={stop_loss}", exc_info=True)
+        raise
     
     # Attach metadata
     plan.metadata = {
@@ -395,4 +399,5 @@ def generate_trade_plan(
             plan.metadata["rr_best"] = round(near_reward / near_risk, 2)
             plan.metadata["rr_worst"] = round(far_reward / far_risk, 2)
     
+    logger.critical(f"DEBUG PLANNER RETURN: result={plan} for {symbol}")
     return plan

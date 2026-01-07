@@ -1193,5 +1193,6 @@ def _find_trend_continuation_entry(
     # Add metadata
     entry_zone.entry_tf_used = best.timeframe  # type: ignore
     entry_zone.pullback_probability = 0.7  # type: ignore  # Moderate probability for consolidation retests
+    entry_zone.consolidation_source = best  # type: ignore  # Attach for stop calculation
     
     return entry_zone

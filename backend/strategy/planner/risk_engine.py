@@ -420,7 +420,8 @@ def _calculate_stop_loss(
     planner_cfg: PlannerConfig,
     multi_tf_data: Optional[MultiTimeframeData] = None,
     current_price: Optional[float] = None,  # NEW: for regime-aware buffer
-    indicators_by_tf: Optional[dict] = None  # NEW: for structure-TF ATR lookup
+    indicators_by_tf: Optional[dict] = None,  # NEW: for structure-TF ATR lookup
+    consolidation_for_stop: Optional['Consolidation'] = None  # NEW: for trend continuation stop
 ) -> tuple[StopLoss, bool]:
     """
     Calculate structure-based stop loss.
@@ -428,6 +429,7 @@ def _calculate_stop_loss(
     Never arbitrary - always beyond invalidation point.
     NOW with dynamic regime-aware stop buffer (Issue #3 fix).
     NOW with structure-TF ATR normalization (prevents ATR mismatch rejections).
+    NOW with consolidation-based stops for Trend Continuation entries.
     
     Returns:
         Tuple of (StopLoss, used_structure_flag)
@@ -455,6 +457,31 @@ def _calculate_stop_loss(
     else:
         stop_buffer = planner_cfg.stop_buffer_atr
         regime = "unknown"
+    
+    # === CONSOLIDATION-BASED STOP (for Trend Continuation entries) ===
+    # Priority: If entry came from consolidation breakout, use consolidation for stop
+    if consolidation_for_stop:
+        if is_bullish:
+            # Long: Stop below consolidation low
+            stop_level = consolidation_for_stop.low - (stop_buffer * atr)
+            distance_atr = (entry_zone.far_entry - stop_level) / atr
+        else:
+            # Short: Stop above consolidation high
+            stop_level = consolidation_for_stop.high + (stop_buffer * atr)
+            distance_atr = (stop_level - entry_zone.near_entry) / atr
+        
+        logger.info(
+            f"✅ CONSOLIDATION STOP: Using {consolidation_for_stop.timeframe} consolidation "
+            f"({consolidation_for_stop.touches} touches) -> stop={stop_level:.4f} ({distance_atr:.1f} ATR)"
+        )
+        
+        stop_loss = StopLoss(
+            level=stop_level,
+            distance_atr=distance_atr,
+            rationale=f"Stop beyond {consolidation_for_stop.timeframe} consolidation invalidation point"
+        )
+        stop_loss.structure_tf_used = consolidation_for_stop.timeframe  # type: ignore
+        return stop_loss, True  # used_structure = True
     
     # === SWING MODE: Use swing invalidation stops for TRUE swing trades ===
     # For Overwatch/macro_surveillance, prioritize swing structure over entry OB
@@ -783,16 +810,27 @@ def _calculate_stop_loss(
     
     # === STOP DIRECTION VALIDATION ===
     # Ensure stop is on the correct side of entry for the trade direction
+    # If not, fallback to emergency ATR stop instead of rejecting the trade
     if is_bullish:
         # For LONG: stop must be BELOW entry
         if stop_level >= entry_zone.far_entry:
-            logger.error(f"Invalid LONG stop: stop {stop_level} >= entry {entry_zone.far_entry}")
-            raise ValueError(f"LONG: Stop ({stop_level:.6f}) must be < entry ({entry_zone.far_entry:.6f})")
+            logger.warning(f"Invalid LONG stop: stop {stop_level} >= entry {entry_zone.far_entry} - using emergency ATR fallback")
+            # Use emergency ATR fallback
+            fallback_atr_mult = 1.5
+            stop_level = entry_zone.far_entry - (fallback_atr_mult * atr)
+            rationale = f"Emergency ATR fallback ({fallback_atr_mult}x ATR) - original stop was above entry"
+            distance_atr = fallback_atr_mult
+            used_structure = False
     else:
         # For SHORT: stop must be ABOVE entry
         if stop_level <= entry_zone.far_entry:
-            logger.error(f"Invalid SHORT stop: stop {stop_level} <= entry {entry_zone.far_entry}")
-            raise ValueError(f"SHORT: Stop ({stop_level:.6f}) must be > entry ({entry_zone.far_entry:.6f})")
+            logger.warning(f"Invalid SHORT stop: stop {stop_level} <= entry {entry_zone.far_entry} - using emergency ATR fallback")
+            # Use emergency ATR fallback
+            fallback_atr_mult = 1.5
+            stop_level = entry_zone.far_entry + (fallback_atr_mult * atr)
+            rationale = f"Emergency ATR fallback ({fallback_atr_mult}x ATR) - original stop was below entry"
+            distance_atr = fallback_atr_mult
+            used_structure = False
     
     stop_loss = StopLoss(
         level=stop_level,
