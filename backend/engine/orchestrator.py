@@ -1606,7 +1606,6 @@ class Orchestrator:
 
                 logger.debug("Post-plan revalidation skipped: %s", _reval_err)
 
-            logger.critical(f"DEBUG ORCHESTRATOR RETURN: plan={plan is not None}")
             return plan
             
         except Exception as e:  # noqa: BLE001  # type: ignore[misc] - intentional broad catch for robustness

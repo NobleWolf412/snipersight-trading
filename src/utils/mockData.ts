@@ -13,6 +13,7 @@ export interface ScanResult {
   classification: 'SWING' | 'SCALP';
   entryZone: { low: number; high: number };
   stopLoss: number;
+  stopLossRationale?: string;
   takeProfits: number[];
   orderBlocks: Array<{ type: 'bullish' | 'bearish'; price: number; timeframe: string }>;
   fairValueGaps: Array<{ low: number; high: number; type: 'bullish' | 'bearish' }>;
@@ -147,7 +148,9 @@ export function convertSignalToScanResult(signal: any): ScanResult {
     riskReward: signal.analysis?.risk_reward,
     classification,
     entryZone: { low: signal.entry_far, high: signal.entry_near },
-    stopLoss: signal.stop_loss,
+    // Handle stop_loss as object (from backend) or number (legacy/fallback)
+    stopLoss: typeof signal.stop_loss === 'object' ? signal.stop_loss.level : signal.stop_loss,
+    stopLossRationale: typeof signal.stop_loss === 'object' ? signal.stop_loss.rationale : undefined,
     takeProfits: signal.targets.map((t: any) => t.level),
     orderBlocks: signal.smc_geometry?.order_blocks
       ? signal.smc_geometry.order_blocks.map((ob: any) => ({

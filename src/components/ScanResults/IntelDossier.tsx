@@ -131,6 +131,11 @@ export function IntelDossier({ result, onClose }: IntelDossierProps) {
                                         <div className="text-2xl font-mono text-red-400 tracking-tight">
                                             {formatPrice(result.stopLoss)}
                                         </div>
+                                        {result.stopLossRationale && (
+                                            <div className="text-[10px] text-zinc-500 font-mono mt-1 max-w-[150px] leading-tight ml-auto">
+                                                {result.stopLossRationale}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 

@@ -41,6 +41,18 @@ export function ResultCard({ result, onClick }: ResultCardProps) {
                             )}>
                                 {result.classification}
                             </span>
+                            {/* Macro Bonus Badge */}
+                            {(() => {
+                                const macroFactor = result.confluence_breakdown?.factors.find(f => f.name === "Macro Overlay");
+                                const bonus = macroFactor ? macroFactor.score - 50 : 0;
+                                if (bonus > 0) return (
+                                    <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-bold font-mono tracking-wider rounded border border-blue-400/30 bg-blue-500/10 text-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.3)] animate-pulse">
+                                        +{bonus.toFixed(0)} MACRO
+                                    </span>
+                                );
+                                return null;
+                            })()}
+
                         </div>
                         <div className="text-sm text-zinc-500 font-mono flex items-center gap-2 mt-1">
                             <span>{result.timeframe || 'H4'}</span>

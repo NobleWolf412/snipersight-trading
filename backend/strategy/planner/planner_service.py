@@ -362,42 +362,48 @@ def generate_trade_plan(
         logger.error(f"❌ TradePlan Constructor Failed: {e} | Values: Entry={entry_zone}, Stop={stop_loss}", exc_info=True)
         raise
     
-    # Attach metadata
-    plan.metadata = {
-        "archetype": archetype,
-        "atr_regime": regime_label,
-        "leverage": leverage,
-        "leverage_stop_adjustment": adj_meta if was_adjusted else None,
-        "target_adjustment": target_adj_meta,
-        "structure_tfs_used": list(structure_tfs_tuple),
-        "missing_critical_tfs": missing_critical_timeframes,
-        # NEW: R:R best/worst case for transparent risk assessment
-        # Best case: Fill at near entry (better R:R), Worst case: Fill at far entry
-        "rr_best": None,
-        "rr_worst": None,
-        # NEW: Pullback probability from entry zone
-        "pullback_probability": getattr(entry_zone, 'pullback_probability', None),
-        # NEW: Entry structure details for frontend display
-        "entry_structure": {
-            "timeframe": getattr(entry_zone, 'entry_tf_used', None) or primary_tf,
-            "zone_high": entry_zone.far_entry if is_bullish else entry_zone.near_entry,
-            "zone_low": entry_zone.near_entry if is_bullish else entry_zone.far_entry,
-            "type": "OB" if "order block" in (entry_zone.rationale or "").lower() else "FVG" if "fvg" in (entry_zone.rationale or "").lower() else "Zone",
-            "ob_mitigation": getattr(entry_zone, 'ob_mitigation', 0.0)  # 0.0-1.0
+    try:
+        # Attach metadata
+        plan.metadata = {
+            "archetype": archetype,
+            "atr_regime": regime_label,
+            "leverage": leverage,
+            "leverage_stop_adjustment": adj_meta if was_adjusted else None,
+            "target_adjustment": target_adj_meta,
+            "structure_tfs_used": list(structure_tfs_tuple),
+            "missing_critical_tfs": missing_critical_timeframes,
+            # NEW: R:R best/worst case for transparent risk assessment
+            # Best case: Fill at near entry (better R:R), Worst case: Fill at far entry
+            "rr_best": None,
+            "rr_worst": None,
+            # NEW: Pullback probability from entry zone
+            "pullback_probability": getattr(entry_zone, 'pullback_probability', None),
+            # NEW: Entry structure details for frontend display
+            "entry_structure": {
+                "timeframe": getattr(entry_zone, 'entry_tf_used', None) or primary_tf,
+                "zone_high": entry_zone.far_entry if is_bullish else entry_zone.near_entry,
+                "zone_low": entry_zone.near_entry if is_bullish else entry_zone.far_entry,
+                "type": "OB" if "order block" in (entry_zone.rationale or "").lower() else "FVG" if "fvg" in (entry_zone.rationale or "").lower() else "Zone",
+                "ob_mitigation": getattr(entry_zone, 'ob_mitigation', 0.0)  # 0.0-1.0
+            }
         }
-    }
-    
-    # Calculate R:R best/worst after targets are finalized
-    if targets:
-        tp1_level = targets[0].level
-        near_risk = abs(entry_zone.near_entry - stop_loss.level)
-        far_risk = abs(entry_zone.far_entry - stop_loss.level)
         
-        if near_risk > 0 and far_risk > 0:
-            near_reward = abs(tp1_level - entry_zone.near_entry)
-            far_reward = abs(tp1_level - entry_zone.far_entry)
-            plan.metadata["rr_best"] = round(near_reward / near_risk, 2)
-            plan.metadata["rr_worst"] = round(far_reward / far_risk, 2)
+        # Calculate R:R best/worst after targets are finalized
+        if targets:
+            tp1_level = targets[0].level
+            near_risk = abs(entry_zone.near_entry - stop_loss.level)
+            far_risk = abs(entry_zone.far_entry - stop_loss.level)
+            
+            if near_risk > 0 and far_risk > 0:
+                near_reward = abs(tp1_level - entry_zone.near_entry)
+                far_reward = abs(tp1_level - entry_zone.far_entry)
+                plan.metadata["rr_best"] = round(near_reward / near_risk, 2)
+                plan.metadata["rr_worst"] = round(far_reward / far_risk, 2)
+    except Exception as e:
+        logger.error(f"❌ Metadata Assignment Failed: {e}", exc_info=True)
+        # Even if metadata fails, we should iterate return the plan (best effort)
+        if plan.metadata is None:
+             plan.metadata = {} # Ensure not None
+
     
-    logger.critical(f"DEBUG PLANNER RETURN: result={plan} for {symbol}")
     return plan
