@@ -46,6 +46,15 @@ export function ResultCard({ result, onClick }: ResultCardProps) {
                             <span>{result.timeframe || 'H4'}</span>
                             <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
                             <span>{result.plan_type}</span>
+                            {result.metadata?.leverage && result.metadata.leverage > 1 && (
+                                <>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
+                                    <span className="text-[#00ff88]">{result.metadata.leverage}x</span>
+                                    {result.metadata.leverage_stop_adjustment && (
+                                        <span className="text-amber-400 text-xs">⚡ STOP ADJ</span>
+                                    )}
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>

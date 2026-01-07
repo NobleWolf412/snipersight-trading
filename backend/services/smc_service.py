@@ -37,6 +37,7 @@ from backend.strategy.smc.bos_choch import detect_structural_breaks, _detect_swi
 from backend.strategy.smc.liquidity_sweeps import detect_liquidity_sweeps, detect_equal_highs_lows, track_pool_sweeps
 from backend.strategy.smc.swing_structure import detect_swing_structure
 from backend.strategy.smc.mitigation_tracker import update_ob_mitigation
+from backend.strategy.smc.consolidation_detector import detect_consolidations
 from backend.indicators.volatility import compute_atr
 
 # Analysis functions
@@ -142,6 +143,7 @@ class SMCDetectionService:
         all_equal_highs = []
         all_equal_lows = []
         all_liquidity_pools: List = []
+        all_consolidations: List = []  # NEW
         swing_structure_by_tf = {}
         premium_discount_by_tf = {}
         
@@ -175,6 +177,7 @@ class SMCDetectionService:
                 all_equal_highs.extend(patterns['equal_highs'])
                 all_equal_lows.extend(patterns['equal_lows'])
                 all_liquidity_pools.extend(patterns['liquidity_pools'])
+                all_consolidations.extend(patterns['consolidations'])  # NEW
                 
                 if patterns['swing_structure']:
                     swing_structure_by_tf[timeframe] = patterns['swing_structure']
@@ -304,6 +307,7 @@ class SMCDetectionService:
             equal_highs=unique_equal_highs,
             equal_lows=unique_equal_lows,
             liquidity_pools=all_liquidity_pools,
+            consolidations=all_consolidations,  # NEW
             swing_structure=swing_structure_by_tf,
             premium_discount=premium_discount_by_tf,
             key_levels=key_levels_data,
@@ -325,6 +329,7 @@ class SMCDetectionService:
             'equal_highs': [],
             'equal_lows': [],
             'liquidity_pools': [],
+            'consolidations': [],  # NEW
             'swing_structure': None,
             'premium_discount': None,
         }
@@ -456,6 +461,9 @@ class SMCDetectionService:
         
         # Premium/Discount zones
         self._detect_premium_discount(timeframe, df, current_price, result)
+        
+        # Consolidations (NEW - for trend continuation entries)
+        self._detect_consolidations(timeframe, df, atr_val, result, tf_smc_config)
         
         return result
     
@@ -656,6 +664,43 @@ class SMCDetectionService:
                     context['sweep_type'], expected_direction)
         
         return context
+    
+    def _detect_consolidations(
+        self,
+        timeframe: str,
+        df,
+        atr_val: float,
+        result: Dict,
+        tf_smc_config: SMCConfig
+    ):
+        """
+        Detect consolidation ranges for trend continuation entries.
+        
+        Consolidations are horizontal trading ranges that break out and retest,
+        providing entry opportunities in trending markets when no fresh OB/FVG exists.
+        """
+        try:
+            # Skip HTF for consolidations (focus on LTF/MTF ranges)
+            if timeframe.lower() in ('1w', '1d'):
+                return
+            
+            consolidations = detect_consolidations(
+                df=df,
+                timeframe=timeframe,
+                min_touches=5,
+                max_height_pct=0.02,  # 2% range max
+                min_duration_candles=10,
+                atr=max(atr_val, 0.001)  # Fallback ATR
+            )
+            
+            if consolidations:
+                result['consolidations'] = consolidations
+                logger.debug("🔄 %s: Detected %d consolidations (breakout confirmed: %d)",
+                           timeframe,
+                           len(consolidations),
+                           sum(1 for c in consolidations if c.breakout_confirmed))
+        except Exception as e:
+            logger.debug("Consolidation detection failed for %s: %s", timeframe, e)
 
 
 # Singleton

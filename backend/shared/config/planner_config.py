@@ -95,6 +95,14 @@ class PlannerConfig:
     sweep_backing_boost: float = 1.0  # Boost score if OB is backed by recent sweep (1.0 = no boost)
     sweep_lookback_candles: int = 5  # Candles prior to OB to check for sweep
     
+    # Trend Continuation Strategy (Fallback when no fresh OBs/FVGs)
+    enable_trend_continuation: bool = False  # Enable consolidation breakout entries
+    consolidation_min_touches: int = 5  # Minimum bounces required for valid consolidation
+    consolidation_max_height_pct: float = 0.02  # Max range height as % of price (2%)
+    consolidation_min_duration_candles: int = 10  # Minimum consolidation duration
+    breakout_displacement_atr: float = 1.0  # Min displacement for valid breakout
+    retest_tolerance_atr: float = 0.5  # Tolerance for retest detection
+    
     @classmethod
     def defaults_for_mode(cls, mode: str) -> "PlannerConfig":
         """
@@ -136,7 +144,11 @@ class PlannerConfig:
                 stop_use_htf_swings=False,
                 pd_compliance_required=False, # Speed/Volume focus
                 sweep_backing_boost=2.0,      # Heavy focus on liquidity grabs
-                sweep_lookback_candles=5
+                sweep_lookback_candles=5,
+                # Trend Continuation for Strike (intraday aggressive)
+                enable_trend_continuation=True,  # ENABLED: Strike can hold for swing-sized moves
+                consolidation_min_duration_candles=8,  # Shorter for intraday speed
+                consolidation_min_touches=4,  # Lower bar for faster detection
             )
 
         elif mode_lower == "swing" or mode_lower == "overwatch":
@@ -150,7 +162,10 @@ class PlannerConfig:
                 pd_compliance_required=True,  # Discipline: Only buy Discount / sell Premium
                 pd_compliance_tolerance=0.05, # Allow 5% buffer for near-misses
                 sweep_backing_boost=1.2,      # Less boost (Structure > Sweeps)
-                sweep_lookback_candles=10
+                sweep_lookback_candles=10,
+                # Trend Continuation (NEW)
+                enable_trend_continuation=True,  # Enable for swing trading
+                consolidation_min_duration_candles=12,  # Longer for HTF consolidations
             )
             
         elif mode_lower in ("stealth", "stealth_balanced"):
@@ -166,7 +181,10 @@ class PlannerConfig:
                 pd_compliance_required=True,  # Smart money doesn't chase price
                 pd_compliance_tolerance=0.05, # Allow 5% buffer
                 sweep_backing_boost=1.5,      # Balanced sweep importance
-                sweep_lookback_candles=8
+                sweep_lookback_candles=8,
+                # Trend Continuation (NEW)
+                enable_trend_continuation=True,  # Enable for balanced/swing
+                consolidation_min_duration_candles=10,  # Balanced duration
             )
 
         else:  # "intraday" or default (balanced)

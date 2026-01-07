@@ -77,6 +77,10 @@ def compute_rsi(df: pd.DataFrame, period: int = 14, validate_input: bool = True)
             raise_on_error=True
         )
     
+    # Ensure unique columns to prevent Series vs DataFrame ambiguity
+    if not df.columns.is_unique:
+         df = df.loc[:, ~df.columns.duplicated()]
+
     # Use pandas-ta if available (faster, C-optimized under the hood)
     if PANDAS_TA_AVAILABLE:
         result = ta.rsi(df['close'], length=period)
@@ -126,6 +130,10 @@ def compute_macd(
     min_len = max(fast, slow) + signal + 1
     if len(df) < min_len:
         raise ValueError(f"DataFrame too short for MACD (need {min_len} rows, got {len(df)})")
+
+    # Ensure unique columns to prevent Series vs DataFrame ambiguity
+    if not df.columns.is_unique:
+         df = df.loc[:, ~df.columns.duplicated()]
 
     # Use pandas-ta if available
     if PANDAS_TA_AVAILABLE:
@@ -182,6 +190,10 @@ def compute_stoch_rsi(
     
     if 'close' not in df.columns:
         raise ValueError("DataFrame must contain 'close' column")
+
+    # Ensure unique columns to prevent Series vs DataFrame ambiguity
+    if not df.columns.is_unique:
+         df = df.loc[:, ~df.columns.duplicated()]
     
     # Use pandas-ta if available
     if PANDAS_TA_AVAILABLE:
@@ -232,6 +244,10 @@ def compute_mfi(df: pd.DataFrame, period: int = 14) -> pd.Series:
     if len(df) < period + 1:
         raise ValueError(f"DataFrame too short for MFI calculation (need {period + 1} rows, got {len(df)})")
     
+    # Ensure unique columns to prevent Series vs DataFrame ambiguity
+    if not df.columns.is_unique:
+         df = df.loc[:, ~df.columns.duplicated()]
+
     # Use pandas-ta if available
     if PANDAS_TA_AVAILABLE:
         result = ta.mfi(df['high'], df['low'], df['close'], df['volume'], length=period)
@@ -287,6 +303,10 @@ def compute_adx(
     if len(df) < min_len:
         logger.debug(f"ADX: Not enough data (need {min_len} rows, got {len(df)})")
         return None, None, None
+
+    # Ensure unique columns to prevent Series vs DataFrame ambiguity
+    if not df.columns.is_unique:
+         df = df.loc[:, ~df.columns.duplicated()]
     
     # Use pandas-ta if available (renamed to pta)
     if PANDAS_TA_AVAILABLE and pta is not None:

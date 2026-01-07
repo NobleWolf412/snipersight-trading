@@ -323,6 +323,73 @@ class LiquidityPool:
 
 
 @dataclass
+class Consolidation:
+    """
+    Consolidation Range - Horizontal channel with multiple touches.
+    
+    Represents a trading range where price oscillates between support and resistance,
+    accumulating liquidity before a breakout. Used for trend continuation entries.
+    
+    Attributes:
+        high: Upper boundary (resistance) of the consolidation
+        low: Lower boundary (support) of the consolidation
+        timestamp_start: When consolidation formation began
+        timestamp_end: When consolidation ended (breakout)
+        touches: Number of bounces within the range
+        strength_score: Quality metric (0-1) based on touches, duration, volume
+        timeframe: Timeframe where detected
+        breakout_confirmed: Whether clean breakout has occurred
+        breakout_direction: Direction of breakout ('bullish' or 'bearish')
+        retest_level: Entry price if retest confirmed (None if no retest yet)
+        fvg_at_breakout: Whether FVG formed at breakout candle
+    """
+    high: float
+    low: float
+    timestamp_start: datetime
+    timestamp_end: datetime
+    touches: int
+    strength_score: float
+    timeframe: str
+    breakout_confirmed: bool = False
+    breakout_direction: Optional[Literal["bullish", "bearish"]] = None
+    retest_level: Optional[float] = None
+    fvg_at_breakout: bool = False
+    
+    def __post_init__(self):
+        """Validate consolidation data."""
+        if self.high <= self.low:
+            raise ValueError(f"Consolidation high ({self.high}) must be > low ({self.low})")
+        if self.touches < 3:
+            raise ValueError(f"Consolidation must have at least 3 touches, got {self.touches}")
+        if not 0 <= self.strength_score <= 1:
+            raise ValueError(f"Strength score must be 0-1, got {self.strength_score}")
+    
+    @property
+    def midpoint(self) -> float:
+        """Calculate midpoint of the consolidation range."""
+        return (self.high + self.low) / 2
+    
+    @property
+    def height(self) -> float:
+        """Calculate height of the consolidation range."""
+        return self.high - self.low
+    
+    @property
+    def is_valid_for_entry(self) -> bool:
+        """Check if consolidation is ready for trend continuation entry."""
+        return (
+            self.breakout_confirmed
+            and self.retest_level is not None
+            and self.strength_score >= 0.5
+            and self.touches >= 5
+        )
+    
+    def contains_price(self, price: float) -> bool:
+        """Check if price is within the consolidation range."""
+        return self.low <= price <= self.high
+
+
+@dataclass
 class SMCSnapshot:
     """
     Complete SMC analysis snapshot for a symbol.
@@ -347,6 +414,7 @@ class SMCSnapshot:
     equal_highs: List[float] = field(default_factory=list)  # DEPRECATED but kept for backward compat
     equal_lows: List[float] = field(default_factory=list)   # DEPRECATED but kept for backward compat
     liquidity_pools: List[LiquidityPool] = field(default_factory=list)  # NEW: structured pools
+    consolidations: List[Consolidation] = field(default_factory=list)  # NEW: horizontal range formations
     swing_structure: dict = field(default_factory=dict)  # {timeframe: SwingStructure.to_dict()}
     premium_discount: dict = field(default_factory=dict)  # {timeframe: PremiumDiscountZone.to_dict()}
     key_levels: Optional[dict] = None  # KeyLevels.to_dict()
@@ -369,6 +437,8 @@ class SMCSnapshot:
             self.equal_lows = []
         if self.liquidity_pools is None:
             self.liquidity_pools = []
+        if self.consolidations is None:
+            self.consolidations = []
         if self.swing_structure is None:
             self.swing_structure = {}
         if self.premium_discount is None:

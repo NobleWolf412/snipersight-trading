@@ -132,6 +132,10 @@ def _check_htf_fib_alignment(
         if df is None or len(df) < 30:
             continue
             
+        # Ensure unique columns to prevent Series vs DataFrame ambiguity
+        if not df.columns.is_unique:
+             df = df.loc[:, ~df.columns.duplicated()]
+            
         try:
             # Find swing range in last 50 candles
             recent = df.tail(50)

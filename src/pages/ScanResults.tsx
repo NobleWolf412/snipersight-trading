@@ -111,6 +111,8 @@ export function ScanResults() {
             <span className="text-zinc-300">{scanMetadata?.profile?.toUpperCase() || 'DEFAULT PROFILE'}</span>
             <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
             <span className="text-zinc-300">MIN SCORE: {scanMetadata?.effectiveMinScore || 0}%</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
+            <span className="text-[#00ff88]">{scanMetadata?.leverage || 1}x LEVERAGE</span>
           </div>
         </div>
 

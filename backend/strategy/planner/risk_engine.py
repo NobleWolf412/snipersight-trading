@@ -173,26 +173,55 @@ def _find_swing_level(
         # Find swing lows below reference price
         # Tier 1: Strict swing (2 bars before/after)
         strict_swing_lows = []
-        for i in range(2, len(recent) - 2):
-            low = recent.iloc[i]['low']
-            if (low < recent.iloc[i-1]['low'] and 
-                low < recent.iloc[i-2]['low'] and
-                low < recent.iloc[i+1]['low'] and 
-                low < recent.iloc[i+2]['low'] and
-                low < reference_price):
-                strict_swing_lows.append(low)
+        try:
+            for i in range(2, len(recent) - 2):
+                low = recent.iloc[i]['low']
+                # Defensive float conversion (matching swing high pattern)
+                if isinstance(low, pd.Series): low = low.iloc[0]
+                
+                prev1 = recent.iloc[i-1]['low']
+                if isinstance(prev1, pd.Series): prev1 = prev1.iloc[0]
+                
+                prev2 = recent.iloc[i-2]['low']
+                if isinstance(prev2, pd.Series): prev2 = prev2.iloc[0]
+                
+                next1 = recent.iloc[i+1]['low']
+                if isinstance(next1, pd.Series): next1 = next1.iloc[0]
+                
+                next2 = recent.iloc[i+2]['low']
+                if isinstance(next2, pd.Series): next2 = next2.iloc[0]
+                
+                if (low < prev1 and 
+                    low < prev2 and
+                    low < next1 and 
+                    low < next2 and
+                    low < reference_price):
+                    strict_swing_lows.append(low)
+        except Exception:
+            pass
         
         if strict_swing_lows:
             return max(strict_swing_lows)  # Highest swing low (closest to entry)
         
         # Tier 2: Relaxed swing (1 bar before/after)
         relaxed_swing_lows = []
-        for i in range(1, len(recent) - 1):
-            low = recent.iloc[i]['low']
-            if (low < recent.iloc[i-1]['low'] and 
-                low < recent.iloc[i+1]['low'] and
-                low < reference_price):
-                relaxed_swing_lows.append(low)
+        try:
+            for i in range(1, len(recent) - 1):
+                low = recent.iloc[i]['low']
+                if isinstance(low, pd.Series): low = low.iloc[0]
+                
+                prev1 = recent.iloc[i-1]['low']
+                if isinstance(prev1, pd.Series): prev1 = prev1.iloc[0]
+                
+                next1 = recent.iloc[i+1]['low']
+                if isinstance(next1, pd.Series): next1 = next1.iloc[0]
+                
+                if (low < prev1 and 
+                    low < next1 and
+                    low < reference_price):
+                    relaxed_swing_lows.append(low)
+        except Exception:
+            pass
         
         if relaxed_swing_lows:
             return max(relaxed_swing_lows)  # Highest swing low (closest to entry)
@@ -200,7 +229,7 @@ def _find_swing_level(
         # Tier 3: Simple minimum below reference price
         try:
             below_price = recent[recent['low'] < reference_price]['low']
-            if len(below_price) > 0:
+            if not below_price.empty:  # FIX: Use .empty instead of len() > 0
                 if isinstance(below_price, pd.DataFrame):
                     return below_price.min(axis=1).min()
                 return below_price.min()  # Absolute lowest point as stop
@@ -268,7 +297,7 @@ def _find_swing_level(
         # Tier 3: Simple maximum above reference price
         try:
             above_price = recent[recent['high'] > reference_price]['high']
-            if len(above_price) > 0:
+            if not above_price.empty:  # FIX: Use .empty instead of len() > 0
                 if isinstance(above_price, pd.DataFrame):
                     return above_price.max(axis=1).max()
                 return above_price.max()  # Absolute highest point as stop
@@ -1009,7 +1038,11 @@ def _find_eqh_eql_zones(
             df = ohlcv.get(tf.upper())
         if df is None or len(df) < 10:
             continue
-        
+            
+        # Ensure unique columns to prevent ambiguity checks on .values
+        if not df.columns.is_unique:
+             df = df.loc[:, ~df.columns.duplicated()]
+
         if is_bullish:
             # Find equal highs above entry (liquidity above = target for longs)
             highs = df['high'].values

@@ -14,7 +14,7 @@ import pandas as pd
 
 from backend.shared.models.planner import EntryZone
 from backend.shared.models.data import MultiTimeframeData
-from backend.shared.models.smc import SMCSnapshot, OrderBlock, FVG, LiquiditySweep
+from backend.shared.models.smc import SMCSnapshot, OrderBlock, FVG, LiquiditySweep, Consolidation
 from backend.shared.models.scoring import ConfluenceBreakdown
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.planner_config import PlannerConfig
@@ -29,6 +29,7 @@ SetupArchetype = Literal[
     "RANGE_REVERSION",
     "SWEEP_REVERSAL",
     "BREAKOUT_RETEST",
+    "TREND_CONTINUATION",  # NEW: Consolidation breakout + retest
 ]
 
 
@@ -179,6 +180,8 @@ def _map_setup_to_archetype(setup_type: str) -> SetupArchetype:
         return cast(SetupArchetype, "BREAKOUT_RETEST")
     if "RANGE" in s or "MEAN" in s:
         return cast(SetupArchetype, "RANGE_REVERSION")
+    if "CONTINUATION" in s or "CONSOLIDATION" in s:
+        return cast(SetupArchetype, "TREND_CONTINUATION")
     return cast(SetupArchetype, "TREND_OB_PULLBACK")
 
 def _is_in_correct_pd_zone(
@@ -285,7 +288,7 @@ def _is_order_block_valid(ob: OrderBlock, df: pd.DataFrame, current_price: float
              future_candles = future_candles.loc[:, ~future_candles.columns.duplicated()]
     except Exception:
         return True
-    if len(future_candles) == 0:
+    if future_candles.empty:  # FIX: Use .empty instead of len() == 0
         return True
     if ob.direction == "bullish":
         try:
@@ -326,16 +329,18 @@ def _time_since_last_touch(ob: OrderBlock, df: pd.DataFrame) -> float:
     if df is None or len(df) == 0:
         return float('inf')
     try:
+        if not df.columns.is_unique:
+             df = df.loc[:, ~df.columns.duplicated()]
         future_candles = df[df.index > ob.timestamp]
     except Exception:
         return float('inf')
-    if len(future_candles) == 0:
+    if future_candles.empty:  # FIX: Use .empty instead of len() == 0
         return float('inf')
     if ob.direction == "bullish":
         touches = future_candles[future_candles['low'] <= ob.high]
     else:
         touches = future_candles[future_candles['high'] >= ob.low]
-    if len(touches) == 0:
+    if touches.empty:  # FIX: Use .empty instead of len() == 0
         return float('inf')
     last_touch = touches.index[-1]
     return (df.index[-1] - last_touch).total_seconds() / 3600.0
@@ -637,6 +642,7 @@ def _calculate_entry_zone(
                 logger.debug(f"PD Gate (Long): Filtered {pre_pd_count - len(fvgs)} Bullish FVGs in Premium")
         
         logger.critical(f"Bullish entry zone: found {len(obs)} OBs and {len(fvgs)} FVGs below current price")
+        
         if obs:
             # Use most recent/fresh OB
             best_ob = max(obs, key=_ob_score)
@@ -705,6 +711,7 @@ def _calculate_entry_zone(
             )
             # Attach entry_tf_used for metadata tracking
             entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+            entry_zone.ob_mitigation = best_ob.mitigation_level  # type: ignore
             
             # Calculate pullback probability
             entry_zone.pullback_probability = _calculate_pullback_probability(  # type: ignore
@@ -781,6 +788,20 @@ def _calculate_entry_zone(
                 indicators=indicators
             )
             return entry_zone, used_structure
+        
+        # NEW: Check for trend continuation entry (consolidation breakout)
+        if planner_cfg.enable_trend_continuation:
+            continuation_entry = _find_trend_continuation_entry(
+                is_bullish=True,
+                smc_snapshot=smc_snapshot,
+                current_price=current_price,
+                atr=atr,
+                config=config,
+                planner_cfg=planner_cfg
+            )
+            if continuation_entry:
+                logger.info("✅ TREND CONTINUATION: Using consolidation breakout entry (no fresh OB/FVG)")
+                return continuation_entry, True  # used_structure=True since we have valid pattern
         
     else:  # Bearish
         # Look for bearish OB or FVG above current price
@@ -881,6 +902,7 @@ def _calculate_entry_zone(
                 logger.debug(f"PD Gate (Short): Filtered {pre_pd_count - len(fvgs)} Bearish FVGs in Discount")
 
         logger.critical(f"Bearish entry zone: found {len(obs)} OBs and {len(fvgs)} FVGs above current price")
+        
         if obs:
             best_ob = max(obs, key=_ob_score_bearish)
 
@@ -944,6 +966,7 @@ def _calculate_entry_zone(
                 rationale=rationale
             )
             entry_zone.entry_tf_used = entry_tf_used  # type: ignore
+            entry_zone.ob_mitigation = best_ob.mitigation_level  # type: ignore
             
             # Calculate pullback probability
             entry_zone.pullback_probability = _calculate_pullback_probability(  # type: ignore
@@ -1017,13 +1040,27 @@ def _calculate_entry_zone(
              )
              return entry_zone, used_structure
 
-    # Fallback to current price with fixed tight stop logic (if no structure found)
+        # NEW: Check for trend continuation entry (consolidation breakout)
+        if planner_cfg.enable_trend_continuation:
+            continuation_entry = _find_trend_continuation_entry(
+                is_bullish=False,
+                smc_snapshot=smc_snapshot,
+                current_price=current_price,
+                atr=atr,
+                config=config,
+                planner_cfg=planner_cfg
+            )
+            if continuation_entry:
+                logger.info("✅ TREND CONTINUATION: Using consolidation breakout entry (no fresh OB/FVG)")
+                return continuation_entry, True  # used_structure=True since we have valid pattern
+
+    # Final fallback if no OBs, FVGs, or consolidations foundt price with fixed tight stop logic (if no structure found)
     # The caller will handle this case (likely rejecting plan if strict mode)
     used_structure = False
-    
+
     # Adaptive offset for fallback (dynamic based on ATR)
     fallback_offset = atr * 0.5
-    
+
     if is_bullish:
         entry_zone = EntryZone(
             near_entry=current_price,
@@ -1051,3 +1088,103 @@ def _calculate_entry_zone(
     entry_zone.pullback_probability = pullback_prob  # type: ignore
     
     return entry_zone, used_structure
+
+
+def _find_trend_continuation_entry(
+    is_bullish: bool,
+    smc_snapshot: SMCSnapshot,
+    current_price: float,
+    atr: float,
+    config: ScanConfig,
+    planner_cfg: PlannerConfig
+) -> Optional[EntryZone]:
+    """
+    Find trend continuation entry via consolidation breakout + retest.
+    
+    Only called when no fresh OBs/FVGs are available (fallback strategy).
+    
+    Args:
+        is_bullish: True for long, False for short
+        smc_snapshot: SMC patterns including consolidations
+        current_price: Current market price
+        atr: Average True Range for validation
+        config: Scanner configuration
+        planner_cfg: Planner configuration
+        
+    Returns:
+        EntryZone if valid consolidation breakout found, None otherwise
+    """
+    if not planner_cfg.enable_trend_continuation:
+        logger.debug("Trend continuation DISABLED for this mode")
+        return None
+    
+    logger.info(f"🔄 Checking for trend continuation entry (consolidations available: {len(smc_snapshot.consolidations)})")
+    
+    # Get allowed entry timeframes
+    allowed_tfs = set(getattr(config, 'entry_timeframes', ()))
+    if not allowed_tfs:
+        allowed_tfs = {'5m', '15m', '1h', '4h'}  # Default LTF/MTF
+    
+    # Filter consolidations by direction and state
+    consolidations = [
+        c for c in smc_snapshot.consolidations
+        if c.is_valid_for_entry  # breakout + retest confirmed
+        and c.timeframe.lower() in [tf.lower() for tf in allowed_tfs]
+        and c.breakout_direction == ("bullish" if is_bullish else "bearish")
+        and c.touches >= planner_cfg.consolidation_min_touches
+    ]
+    
+    if not consolidations:
+        logger.debug("No valid trend continuation consolidations found")
+        return None
+    
+    # Select best consolidation (highest strength score)
+    best = max(consolidations, key=lambda c: c.strength_score)
+    
+    logger.info(
+        f"🔄 Trend Continuation: {best.timeframe} consolidation "
+        f"({best.touches} touches, strength={best.strength_score:.2f}, "
+        f"breakout={best.breakout_direction})"
+    )
+    
+    # Build entry zone
+    if is_bullish:
+        # Bullish breakout retest
+        # Near entry: Retest level (support)
+        # Far entry: Consolidation low ( failed breakdown fallback)
+        near_entry = best.retest_level or best.high
+        far_entry = best.low
+    else:
+        # Bearish breakout retest
+        # Near entry: Retest level (resistance)
+        # Far entry: Consolidation high (failed breakout fallback)
+        near_entry = best.retest_level or best.low
+        far_entry = best.high
+    
+    # Validate entry zone positioning
+    if is_bullish:
+        # Long: near_entry should be at or below current price
+        if near_entry > current_price:
+            logger.warning(f"Trend continuation near_entry ({near_entry}) > price ({current_price}), skipping")
+            return None
+    else:
+        # Short: near_entry should be at or above current price
+        if near_entry < current_price:
+            logger.warning(f"Trend continuation near_entry ({near_entry}) < price ({current_price}), skipping")
+            return None
+    
+    entry_zone = EntryZone(
+        near_entry=near_entry,
+        far_entry=far_entry,
+        rationale=(
+            f"Trend continuation: {best.timeframe} consolidation breakout + retest "
+            f"({best.touches} touches, strength={best.strength_score:.2f}"
+            f"{', FVG confirmed' if best.fvg_at_breakout else ''})"
+        )
+    )
+    
+    # Add metadata
+    entry_zone.entry_tf_used = best.timeframe  # type: ignore
+    entry_zone.pullback_probability = 0.7  # type: ignore  # Moderate probability for consolidation retests
+    
+    return entry_zone

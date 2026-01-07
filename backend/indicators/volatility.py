@@ -71,6 +71,10 @@ def compute_atr(df: pd.DataFrame, period: int = 14, validate_input: bool = True)
             raise_on_error=True
         )
     
+    # Ensure unique columns to prevent Series vs DataFrame ambiguity
+    if not df.columns.is_unique:
+         df = df.loc[:, ~df.columns.duplicated()]
+
     # Use pandas-ta if available (faster)
     if PANDAS_TA_AVAILABLE:
         result = ta.atr(df['high'], df['low'], df['close'], length=period)
@@ -120,6 +124,10 @@ def compute_realized_volatility(
     if len(df) < window + 1:
         raise ValueError(f"DataFrame too short for volatility calculation (need {window + 1} rows, got {len(df)})")
     
+    # Ensure unique columns to prevent Series vs DataFrame ambiguity
+    if not df.columns.is_unique:
+         df = df.loc[:, ~df.columns.duplicated()]
+
     # Calculate logarithmic returns
     log_returns = np.log(df['close'] / df['close'].shift())
     
@@ -163,6 +171,10 @@ def compute_bollinger_bands(
     if len(df) < period:
         raise ValueError(f"DataFrame too short for Bollinger Bands (need {period} rows, got {len(df)})")
     
+    # Ensure unique columns to prevent Series vs DataFrame ambiguity
+    if not df.columns.is_unique:
+         df = df.loc[:, ~df.columns.duplicated()]
+
     # Use pandas-ta if available
     if PANDAS_TA_AVAILABLE:
         bb_df = ta.bbands(df['close'], length=period, std=std_dev)
@@ -218,6 +230,10 @@ def compute_keltner_channels(
     if len(df) < min_length:
         raise ValueError(f"DataFrame too short for Keltner Channels (need {min_length} rows, got {len(df)})")
     
+    # Ensure unique columns to prevent Series vs DataFrame ambiguity
+    if not df.columns.is_unique:
+         df = df.loc[:, ~df.columns.duplicated()]
+
     # Use pandas-ta if available
     if PANDAS_TA_AVAILABLE:
         kc_df = ta.kc(df['high'], df['low'], df['close'], length=ema_period, scalar=atr_multiplier, mamode='ema')

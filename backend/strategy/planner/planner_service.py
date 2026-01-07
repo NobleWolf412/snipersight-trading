@@ -154,9 +154,11 @@ def generate_trade_plan(
         planner_cfg = config.planner
     elif expected_trade_type:
         planner_cfg = PlannerConfig.defaults_for_mode(expected_trade_type)
-        logger.debug(f"Using PlannerConfig for expected_trade_type={expected_trade_type}")
+        logger.info(f"🔧 Planner Config: mode={expected_trade_type}, trend_continuation={planner_cfg.enable_trend_continuation}")
     else:
+        # Fallback to intraday for unknown trade types
         planner_cfg = PlannerConfig.defaults_for_mode("intraday")
+        logger.info(f"🔧 Planner Config: mode=intraday (fallback), trend_continuation={planner_cfg.enable_trend_continuation}")
     
     # Apply overlays
     overrides = getattr(config, 'overrides', None) or {}
@@ -376,7 +378,8 @@ def generate_trade_plan(
             "timeframe": getattr(entry_zone, 'entry_tf_used', None) or primary_tf,
             "zone_high": entry_zone.far_entry if is_bullish else entry_zone.near_entry,
             "zone_low": entry_zone.near_entry if is_bullish else entry_zone.far_entry,
-            "type": "OB" if "order block" in (entry_zone.rationale or "").lower() else "FVG" if "fvg" in (entry_zone.rationale or "").lower() else "Zone"
+            "type": "OB" if "order block" in (entry_zone.rationale or "").lower() else "FVG" if "fvg" in (entry_zone.rationale or "").lower() else "Zone",
+            "ob_mitigation": getattr(entry_zone, 'ob_mitigation', 0.0)  # 0.0-1.0
         }
     }
     
