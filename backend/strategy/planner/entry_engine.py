@@ -1126,16 +1126,23 @@ def _find_trend_continuation_entry(
         allowed_tfs = {'5m', '15m', '1h', '4h'}  # Default LTF/MTF
     
     # Filter consolidations by direction and state
-    consolidations = [
-        c for c in smc_snapshot.consolidations
-        if c.is_valid_for_entry  # breakout + retest confirmed
-        and c.timeframe.lower() in [tf.lower() for tf in allowed_tfs]
-        and c.breakout_direction == ("bullish" if is_bullish else "bearish")
-        and c.touches >= planner_cfg.consolidation_min_touches
-    ]
+    valid_consolidations = []
+    for c in smc_snapshot.consolidations:
+        reasons = []
+        if not c.is_valid_for_entry: reasons.append("not_valid_for_entry")
+        if c.timeframe.lower() not in [tf.lower() for tf in allowed_tfs]: reasons.append(f"tf_mismatch({c.timeframe})")
+        if c.breakout_direction != ("bullish" if is_bullish else "bearish"): reasons.append(f"wrong_dir({c.breakout_direction})")
+        if c.touches < planner_cfg.consolidation_min_touches: reasons.append(f"insufficient_touches({c.touches}<{planner_cfg.consolidation_min_touches})")
+        
+        if not reasons:
+            valid_consolidations.append(c)
+        else:
+             logger.debug(f"⚠️ Filtered consolidation ({c.timeframe}): {', '.join(reasons)}")
+
+    consolidations = valid_consolidations
     
     if not consolidations:
-        logger.debug("No valid trend continuation consolidations found")
+        logger.info("No valid trend continuation consolidations found after filtering")
         return None
     
     # Select best consolidation (highest strength score)

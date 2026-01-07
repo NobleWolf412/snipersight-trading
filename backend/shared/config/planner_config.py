@@ -129,7 +129,12 @@ class PlannerConfig:
                 target_min_rr_after_clip=1.0, # Accept tighter R:R for scalps
                 pd_compliance_required=False, # Speed over perfection
                 sweep_backing_boost=2.0,      # Prioritize Turtle Soups (High conviction)
-                sweep_lookback_candles=3      # Fast reaction
+                sweep_lookback_candles=3,     # Fast reaction
+                # Trend Continuation for Surgical (precision mode)
+                enable_trend_continuation=True,  # ENABLED: Surgical has 4H targets, can benefit from quality consolidations
+                consolidation_min_touches=5,     # Strictest quality (no compromise)
+                consolidation_min_duration_candles=10,  # Balanced duration
+                consolidation_max_height_pct=0.015,  # Tighter than default (1.5% vs 2.0%) for precision
             )
         
         elif mode_lower in ("strike", "intraday_aggressive"):
@@ -165,7 +170,7 @@ class PlannerConfig:
                 sweep_lookback_candles=10,
                 # Trend Continuation (NEW)
                 enable_trend_continuation=True,  # Enable for swing trading
-                consolidation_min_duration_candles=12,  # Longer for HTF consolidations
+                consolidation_min_duration_candles=15,  # INCREASED from 12 for HTF macro ranges (60h on 4H, 15 days on 1D)
             )
             
         elif mode_lower in ("stealth", "stealth_balanced"):

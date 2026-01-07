@@ -202,7 +202,7 @@ MODES: Dict[str, ScannerMode] = {
         target_timeframes=("1h", "15m"),  # TUNED: added 15m for faster targets
         min_target_move_pct=0.4,  # TUNED: was 0.5 - allow tighter scalp targets
         smc_preset="luxalgo_aggressive",  # Loose detection for max signals
-        expected_trade_type="intraday",  # 4h structure with 15m/5m entry = intraday/scalp
+        expected_trade_type="strike",  # FIXED: Changed from "intraday" to "strike" to enable trend continuation
         allowed_trade_types=("swing", "intraday", "scalp"),  # Allow swing since 4h structure produces swing-sized targets
         volume_accel_lookback=4,  # Balanced - faster detection for intraday but not as reactive as scalp
         overrides={"min_rr_ratio": 1.2, "atr_floor": 0.0010, "bias_gate": 0.6, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True, "entry_zone_offset_atr": -0.05},
@@ -227,7 +227,7 @@ MODES: Dict[str, ScannerMode] = {
         target_timeframes=("4h", "1h", "15m"),  # TUNED: added 4h for major targets
         min_target_move_pct=0.4,  # TUNED: was 0.6 - allow tighter surgical precision
         smc_preset="luxalgo_strict",  # Strict detection for precision - quality over quantity
-        expected_trade_type="intraday",  # 1h/15m structure produces intraday setups
+        expected_trade_type="precision",  # FIXED: Changed from "intraday" to "precision" to enable trend continuation
         allowed_trade_types=("intraday", "scalp"),  # Precision focus
         volume_accel_lookback=3,  # Shortest lookback - scalp/surgical needs fastest reaction to volume changes
         overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0008, "bias_gate": 0.7, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True, "entry_zone_offset_atr": 0.05},

@@ -1294,9 +1294,11 @@ class Orchestrator:
                 order_blocks=[ob for ob in context.smc_snapshot.order_blocks if _tf(ob) in (allowed_entry | allowed_structure)],
                 fvgs=[fvg for fvg in context.smc_snapshot.fvgs if _tf(fvg) in allowed_target],
                 structural_breaks=[brk for brk in context.smc_snapshot.structural_breaks if _tf(brk) in allowed_structure],
-                liquidity_sweeps=context.smc_snapshot.liquidity_sweeps  # sweeps used for context; keep as-is
+                liquidity_sweeps=context.smc_snapshot.liquidity_sweeps,  # sweeps used for context; keep as-is
+                consolidations=[c for c in context.smc_snapshot.consolidations if _tf(c) in (allowed_entry | allowed_structure)] # NEW: Pass consolidations
             )
             logger.critical(f"🔍 DEBUG SMC OBs (FILTERED): {len(filtered_snapshot.order_blocks)} remain")
+            logger.critical(f"🔍 DEBUG SMC CONSOLIDATIONS (FILTERED): {len(filtered_snapshot.consolidations)} remain")
 
             plan = generate_trade_plan(
                 symbol=context.symbol,
