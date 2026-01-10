@@ -19,7 +19,8 @@ from typing import List, Dict, Optional, Tuple, TYPE_CHECKING
 from dataclasses import replace
 import pandas as pd
 import numpy as np
-import logging
+import json
+from loguru import logger
 
 from backend.shared.models.smc import SMCSnapshot, OrderBlock, FVG, StructuralBreak, LiquiditySweep
 from backend.shared.models.indicators import IndicatorSet, IndicatorSnapshot
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
     from backend.shared.models.smc import CycleContext, ReversalContext
     from backend.shared.models.regime import SymbolRegime
 
-logger = logging.getLogger(__name__)
+
 
 
 # ==============================================================================
@@ -986,8 +987,10 @@ def evaluate_weekly_stoch_rsi_bonus(
         "aligned": True  # Default to aligned if no data
     }
     
-    # Get weekly indicators
-    weekly_ind = indicators.by_timeframe.get('1W') or indicators.by_timeframe.get('1w')
+    # Get weekly indicators - explicit None checks to avoid potential truthiness errors
+    weekly_ind = indicators.by_timeframe.get('1W')
+    if weekly_ind is None:
+        weekly_ind = indicators.by_timeframe.get('1w')
     if not weekly_ind:
         return result
     
@@ -1267,7 +1270,8 @@ def calculate_confluence_score(
     is_btc: bool = False,
     is_alt: bool = True,
     # Symbol-specific regime from RegimeDetector
-    regime: Optional["SymbolRegime"] = None
+    regime: Optional["SymbolRegime"] = None,
+    symbol: str = "Unknown"
 ) -> ConfluenceBreakdown:
     """
     Calculate comprehensive confluence score for a trade setup.
@@ -1799,9 +1803,11 @@ def calculate_confluence_score(
     # Bonus for trading in the optimal zone for direction
     try:
         if current_price is not None and smc_snapshot.premium_discount_zones:
-            # Get the zone from the primary planning timeframe
+            # Get the zone from the primary planning timeframe - explicit None check
             primary_tf = getattr(config, 'primary_planning_timeframe', '4h')
-            pd_zone = smc_snapshot.premium_discount_zones.get(primary_tf) or smc_snapshot.premium_discount_zones.get(primary_tf.upper())
+            pd_zone = smc_snapshot.premium_discount_zones.get(primary_tf)
+            if pd_zone is None:
+                pd_zone = smc_snapshot.premium_discount_zones.get(primary_tf.upper())
             
             if pd_zone:
                 current_zone = pd_zone.get('current_zone', 'neutral')
@@ -2435,7 +2441,36 @@ def calculate_confluence_score(
         nearest_htf_level_type=htf_proximity_result.get('structure_type') if htf_proximity_result else (htf_context or {}).get('type'),
         macro_score=macro_score_val
     )
-    
+
+    # TRACING: Log detailed score breakdown for analysis
+    # Only trace non-zero scores to reduce noise, unless it's a specific debug target
+    if final_score > 0:
+        try:
+            trace_data = {
+                "symbol": symbol,
+                "direction": direction,
+                "final_score": round(final_score, 2),
+                "raw_score": round(raw_score, 2),
+                "components": {
+                    "weighted_base": round(weighted_score, 2),
+                    "synergy": round(synergy_bonus, 2),
+                    "penalty": round(conflict_penalty, 2),
+                    "macro": round(macro_score_val, 2)
+                },
+                "factors": [
+                    {
+                        "name": f.name,
+                        "raw_score": f.score,
+                        "weight": f.weight,
+                        "contribution": round(f.score * f.weight, 2),
+                        "rationale": f.rationale
+                    } for f in factors
+                ]
+            }
+            logger.info(f"SCORE_TRACE: {json.dumps(trace_data)}")
+        except Exception:
+            pass  # Don't fail scoring if tracing fails
+            
     return breakdown
 
 
@@ -2468,8 +2503,10 @@ def _score_htf_structure_bias(swing_structure: dict, direction: str) -> dict:
     bearish_tfs = []
     
     for tf in htf_priority:
-        # Check both lowercase and uppercase for compatibility
-        ss = swing_structure.get(tf) or swing_structure.get(tf.upper())
+        # Check both lowercase and uppercase for compatibility - explicit None check
+        ss = swing_structure.get(tf)
+        if ss is None:
+            ss = swing_structure.get(tf.upper())
         if ss:
             trend = ss.get('trend', 'neutral')
             if trend == 'bullish':
@@ -2813,31 +2850,42 @@ def _score_momentum(
     
     if normalized_dir == "bullish":
         # Bullish momentum: oversold RSI, low Stoch RSI, low MFI
+        # REFINED: Removed neutral bonus (+20) which inflated mediocre setups.
+        # Now uses steeper gradient for genuine oversold conditions.
+        
         if indicators.rsi is not None:
-            if indicators.rsi < 40:
-                score += 40 * ((40 - indicators.rsi) / 40)
-            elif 40 <= indicators.rsi <= 60:
-                score += 20.0  # Trend-following neutral bonus
+            if indicators.rsi < 45: # Slightly wider window but scaled
+                # RSI 30 -> (45-30) * 2 = 30pts
+                # RSI 20 -> (45-20) * 2 = 50pts (Max cap)
+                rsi_val = max(20, indicators.rsi) # Cap downside reading
+                score += min(50.0, (45 - rsi_val) * 2.0)
         
         if indicators.stoch_rsi is not None and indicators.stoch_rsi < 30:
-            score += 30 * ((30 - indicators.stoch_rsi) / 30)
+            # Stoch 20 -> (30-20) * 1.5 = 15pts
+            # Stoch 0  -> (30-0) * 1.5 = 45pts
+            score += min(45.0, (30 - indicators.stoch_rsi) * 1.5)
         
-        if indicators.mfi is not None and indicators.mfi < 30:
-            score += 30 * ((30 - indicators.mfi) / 30)
-    
+        if indicators.mfi is not None and indicators.mfi < 35:
+            # MFI 20 -> (35-20) * 1.5 = 22.5pts
+            score += min(40.0, (35 - indicators.mfi) * 1.5)
+            
     else:  # bearish
         # Bearish momentum: overbought RSI, high Stoch RSI, high MFI
         if indicators.rsi is not None:
-            if indicators.rsi > 60:
-                score += 40 * ((indicators.rsi - 60) / 40)
-            elif 40 <= indicators.rsi <= 60:
-                score += 20.0  # Trend-following neutral bonus
+            if indicators.rsi > 55:
+                # RSI 70 -> (70-55) * 2 = 30pts
+                # RSI 80 -> (80-55) * 2 = 50pts
+                rsi_val = min(80, indicators.rsi) # Cap upside
+                score += min(50.0, (rsi_val - 55) * 2.0)
         
         if indicators.stoch_rsi is not None and indicators.stoch_rsi > 70:
-            score += 30 * ((indicators.stoch_rsi - 70) / 30)
+            # Stoch 80 -> (80-70) * 1.5 = 15pts
+            # Stoch 100 -> (100-70) * 1.5 = 45pts
+            score += min(45.0, (indicators.stoch_rsi - 70) * 1.5)
         
-        if indicators.mfi is not None and indicators.mfi > 70:
-            score += 30 * ((indicators.mfi - 70) / 30)
+        if indicators.mfi is not None and indicators.mfi > 65:
+            # MFI 80 -> (80-65) * 1.5 = 22.5pts
+            score += min(40.0, (indicators.mfi - 65) * 1.5)
     
     # --- Mode-Aware MACD Evaluation ---
     if macd_config:

@@ -123,7 +123,8 @@ export function ScannerSetup() {
 
       let jobStatus = 'queued';
       let pollAttempts = 0;
-      const MAX_POLL_ATTEMPTS = 300;
+      // INCREASED: 900s (15m) timeout to handle heavy Stealth/Overwatch scans
+      const MAX_POLL_ATTEMPTS = 900;
       let lastProgress = 0;
       let lastLogCount = 0;
 

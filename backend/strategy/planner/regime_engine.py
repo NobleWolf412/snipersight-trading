@@ -128,7 +128,12 @@ def _check_htf_fib_alignment(
     htf_timeframes = fib_tf_map.get(profile, ('1d', '4h'))
     
     for tf in htf_timeframes:
-        df = ohlcv_data.get(tf) or ohlcv_data.get(tf.lower()) or ohlcv_data.get(tf.upper())
+        # Explicit None checks to avoid DataFrame truthiness error
+        df = ohlcv_data.get(tf)
+        if df is None:
+            df = ohlcv_data.get(tf.lower())
+        if df is None:
+            df = ohlcv_data.get(tf.upper())
         if df is None or len(df) < 30:
             continue
             

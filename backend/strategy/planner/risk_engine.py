@@ -572,12 +572,36 @@ def _calculate_stop_loss(
             if indicators_by_tf and structure_tf_used:
                 # Look up structure TF's ATR (try exact match, then lowercase)
                 structure_tf_lower = structure_tf_used.lower()
-                if structure_tf_used in indicators_by_tf and indicators_by_tf[structure_tf_used].atr:
-                    structure_atr = indicators_by_tf[structure_tf_used].atr
-                    logger.debug(f"Using structure TF {structure_tf_used} ATR={structure_atr:.4f} for distance calc")
-                elif structure_tf_lower in indicators_by_tf and indicators_by_tf[structure_tf_lower].atr:
-                    structure_atr = indicators_by_tf[structure_tf_lower].atr
-                    logger.debug(f"Using structure TF {structure_tf_lower} ATR={structure_atr:.4f} for distance calc")
+                
+                # Check exact match
+                if structure_tf_used in indicators_by_tf:
+                    raw_atr = indicators_by_tf[structure_tf_used].atr
+                    if raw_atr is not None:
+                        # Handle potential Series/DataFrame wrapping
+                        if isinstance(raw_atr, (pd.Series, pd.DataFrame)):
+                            try:
+                                structure_atr = float(raw_atr.iloc[-1])
+                            except Exception:
+                                pass # Keep default
+                        else:
+                            structure_atr = float(raw_atr)
+                        logger.debug(f"Using structure TF {structure_tf_used} ATR={structure_atr:.4f} for distance calc")
+                
+                # Check lowercase match if exact match didn't yield result (or wasn't found)
+                # Note: this logic prefers exact match, so only check lower if we haven't updated structure_atr yet? 
+                # Original logic was if/elif so it was mutually exclusive. 
+                # But here I'm unrolling it. Let's keep it mutually exclusive structure.
+                elif structure_tf_lower in indicators_by_tf:
+                    raw_atr = indicators_by_tf[structure_tf_lower].atr
+                    if raw_atr is not None:
+                        if isinstance(raw_atr, (pd.Series, pd.DataFrame)):
+                            try:
+                                structure_atr = float(raw_atr.iloc[-1])
+                            except Exception:
+                                pass
+                        else:
+                            structure_atr = float(raw_atr)
+                        logger.debug(f"Using structure TF {structure_tf_lower} ATR={structure_atr:.4f} for distance calc")
             
             distance_atr = (entry_zone.far_entry - stop_level) / structure_atr
             used_structure = True
@@ -707,12 +731,32 @@ def _calculate_stop_loss(
             structure_atr = atr  # Default to primary ATR
             if indicators_by_tf and structure_tf_used:
                 structure_tf_lower = structure_tf_used.lower()
-                if structure_tf_used in indicators_by_tf and indicators_by_tf[structure_tf_used].atr:
-                    structure_atr = indicators_by_tf[structure_tf_used].atr
-                    logger.debug(f"Using structure TF {structure_tf_used} ATR={structure_atr:.4f} for distance calc")
-                elif structure_tf_lower in indicators_by_tf and indicators_by_tf[structure_tf_lower].atr:
-                    structure_atr = indicators_by_tf[structure_tf_lower].atr
-                    logger.debug(f"Using structure TF {structure_tf_lower} ATR={structure_atr:.4f} for distance calc")
+                
+                # Check exact match
+                if structure_tf_used in indicators_by_tf:
+                    raw_atr = indicators_by_tf[structure_tf_used].atr
+                    if raw_atr is not None:
+                        if isinstance(raw_atr, (pd.Series, pd.DataFrame)):
+                            try:
+                                structure_atr = float(raw_atr.iloc[-1])
+                            except Exception:
+                                pass
+                        else:
+                            structure_atr = float(raw_atr)
+                        logger.debug(f"Using structure TF {structure_tf_used} ATR={structure_atr:.4f} for distance calc")
+                
+                # Check lowercase match
+                elif structure_tf_lower in indicators_by_tf:
+                    raw_atr = indicators_by_tf[structure_tf_lower].atr
+                    if raw_atr is not None:
+                        if isinstance(raw_atr, (pd.Series, pd.DataFrame)):
+                            try:
+                                structure_atr = float(raw_atr.iloc[-1])
+                            except Exception:
+                                pass
+                        else:
+                            structure_atr = float(raw_atr)
+                        logger.debug(f"Using structure TF {structure_tf_lower} ATR={structure_atr:.4f} for distance calc")
             
             distance_atr = (stop_level - entry_zone.near_entry) / structure_atr
             used_structure = True
@@ -981,8 +1025,12 @@ def _find_htf_swing_targets(
         ohlcv = getattr(multi_tf_data, 'timeframes', {})
         
         for tf in allowed_tfs:
-            # Try to get candle data
-            df = ohlcv.get(tf) or ohlcv.get(tf.lower()) or ohlcv.get(tf.upper())
+            # Try to get candle data - explicit None checks to avoid DataFrame truthiness error
+            df = ohlcv.get(tf)
+            if df is None:
+                df = ohlcv.get(tf.lower())
+            if df is None:
+                df = ohlcv.get(tf.upper())
             
             if df is None or len(df) < 50:
                 continue
@@ -1626,16 +1674,32 @@ def _derive_trade_type(
     target_move_pct: float,
     stop_distance_atr: float,
     structure_timeframes: tuple,
-    primary_tf: str
+    primary_tf: str,
+    expected_trade_type: Optional[str] = None  # NEW: Hint from scanner mode
 ) -> Literal['scalp', 'swing', 'intraday']:
     """
     Derive trade type from setup characteristics, not mode.
     
+    Args:
+        target_move_pct: Distance to TP1 in %
+        stop_distance_atr: Stop width in ATR
+        structure_timeframes: TFs providing structure
+        primary_tf: Main planning timeframe
+        expected_trade_type: Mode-based hint (e.g. 'precision', 'swings')
+        
     Returns:
         'scalp', 'swing', or 'intraday'
     """
-    HTF = ('1w', '1d', '4h')
-    MTF = ('1h',)  # Mid-timeframe - intraday territory
+    is_scalp_mode = expected_trade_type in ('precision', 'surgical', 'strike', 'scalp', 'intraday_aggressive')
+    
+    # Adjust structure definitions based on mode intent
+    # For Scalpers, 4H is context/bias, not "Swing Structure"
+    if is_scalp_mode:
+        HTF = ('1w', '1d')
+    else:
+        HTF = ('1w', '1d', '4h')
+        
+    MTF = ('1h', '4h') if is_scalp_mode else ('1h',)  # 4H is MTF for scalpers
     LTF = ('15m', '5m', '1m')
     
     # Check structure timeframe categories
@@ -1644,20 +1708,28 @@ def _derive_trade_type(
     ltf_only = all(tf in LTF for tf in structure_timeframes) if structure_timeframes else False
     mtf_or_ltf_only = all(tf in MTF + LTF for tf in structure_timeframes) if structure_timeframes else False
     
+    # === SENSITIVITY ADJUSTMENT BASED ON MODE ===
+    # If mode expects precision/scalps, we raise the bar for what counts as a "Swing"
+    # Crypto moves 3-5% intraday easily, so 3.5% shouldn't auto-flag as swing in Surgical mode
+    
+    swing_target_threshold = 8.0 if is_scalp_mode else 3.5
+    swing_stop_atr_threshold = 6.0 if is_scalp_mode else 3.5
+    
     # Very large target moves are swing regardless of structure
-    if target_move_pct >= 3.5:
+    if target_move_pct >= swing_target_threshold:
         return 'swing'
     
     # Large target moves with HTF structure = swing
-    if target_move_pct >= 2.5 and htf_structure:
+    if target_move_pct >= (swing_target_threshold * 0.7) and htf_structure:
         return 'swing'
     
     # Wide stops from HTF structure indicate swing trades
-    if stop_distance_atr >= 3.5 and htf_structure:
+    if stop_distance_atr >= swing_stop_atr_threshold and htf_structure:
         return 'swing'
     
     # HTF primary timeframe with moderate targets = swing
-    if target_move_pct >= 1.5 and primary_tf in ('4h', '1d'):
+    # But only if NOT in scalp mode (sometimes 4H is used for bias in scalp modes, but planning is LTF)
+    if not is_scalp_mode and target_move_pct >= 1.5 and primary_tf in ('4h', '1d'):
         return 'swing'
     
     # Tight stops with LTF-only structure = scalp
@@ -1669,7 +1741,7 @@ def _derive_trade_type(
         return 'scalp'
     
     # MTF or LTF structure with moderate moves = intraday (SURGICAL, STRIKE)
-    if mtf_or_ltf_only and target_move_pct < 2.5:
+    if mtf_or_ltf_only and target_move_pct < swing_target_threshold:
         return 'intraday'
     
     # Default: intraday (middle ground)

@@ -740,11 +740,13 @@ class Orchestrator:
                 logger.debug("%s: Symbol regime detection skipped: %s", symbol, e)
         
         # Stage 4: SMC detection
+        logger.info("%s [%s]: 🔍 Starting SMC detection", symbol, trace_id)
         try:
             # Get current price for P/D zones
             current_price = context.multi_tf_data.get_current_price() or 0
             
             context.smc_snapshot = self.smc_service.detect(context.multi_tf_data, current_price)
+            logger.debug("%s [%s]: SMC detection completed", symbol, trace_id)
             
             # Merge diagnostics
             rejections = self.smc_service.diagnostics.get('smc_rejections', [])
@@ -780,6 +782,7 @@ class Orchestrator:
             return None, {"symbol": symbol, "reason": str(e), "reason_type": "errors"}
         
         # Stage 4a: HTF Level Detection (S/R and Fibs)
+        logger.debug("%s [%s]: 🔎 Stage 4a: HTF Level Detection", symbol, trace_id)
         try:
             current_price = context.multi_tf_data.get_current_price() or 0
             # S/R Levels
@@ -804,6 +807,7 @@ class Orchestrator:
 
         
         # Stage 4b: Volume Profile calculation (institutional-grade VAP analysis)
+        logger.debug("%s [%s]: 🔎 Stage 4b: Volume Profile", symbol, trace_id)
         try:
             # FIXED: Use mode's primary TF instead of hardcoded 4H
             vp_tf = getattr(self.config, 'primary_planning_timeframe', '4h')
@@ -838,6 +842,7 @@ class Orchestrator:
             logger.debug("Volume profile calculation skipped: %s", e)
         
         # Stage 5: Confluence scoring (Delegated to service)
+        logger.info("%s [%s]: 📊 Starting confluence scoring", symbol, trace_id)
         try:
             # --- Inline Context Detection ---
             # 1. Cycle Context
@@ -907,8 +912,10 @@ class Orchestrator:
             self.diagnostics['confluence_rejections'].extend(rejections)
 
         except Exception as e:
+            import traceback
             error_msg = str(e)
             logger.error(f"Confluence service failed for {symbol}: {error_msg}")
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
             
             # Categorize confluence tie errors properly for rejection display
             if "Confluence tie" in error_msg and "neutral regime" in error_msg:
@@ -919,8 +926,8 @@ class Orchestrator:
                     "detail": "Confluence scores tied with no clear directional edge in neutral market regime"
                 }
             
-            # Generic error fallback
-            return None, {"symbol": symbol, "reason": error_msg, "reason_type": "errors"}
+            # Generic error fallback - include full error for debugging
+            return None, {"symbol": symbol, "reason": f"Confluence scoring failed: {error_msg}", "reason_type": "errors"}
         try:
             br = context.confluence_breakdown
             top_factors = [
@@ -1048,7 +1055,12 @@ class Orchestrator:
         # Stage 6: Trade planning
         logger.debug("%s [%s]: Generating trade plan", symbol, trace_id)
         # current_price already computed above for cooldown check
+        chosen_direction = context.metadata.get('chosen_direction', 'UNKNOWN')
+        logger.info("%s [%s]: 🎯 Calling _generate_trade_plan (direction=%s, score=%.1f)", 
+                   symbol, trace_id, chosen_direction, context.confluence_breakdown.total_score)
         context.plan = self._generate_trade_plan(context, current_price)
+        logger.info("%s [%s]: 🎯 _generate_trade_plan returned: %s", 
+                   symbol, trace_id, "SUCCESS" if context.plan else "None")
         try:
             if context.plan:
                 tf_meta = context.plan.metadata.get('tf_responsibility', {})
@@ -1184,7 +1196,21 @@ class Orchestrator:
         except Exception:
             pass
         
-        return context.plan, None
+        # Final return - log what we're returning
+        logger.info("%s [%s]: 🏁 _process_symbol returning: plan=%s", 
+                   symbol, trace_id, "SUCCESS" if context.plan else "None")
+        
+        if context.plan:
+            return context.plan, None
+        else:
+            # Construct meaningful rejection info from metadata
+            reason = context.metadata.get('plan_failure_reason', 'No trade plan generated')
+            return None, {
+                "symbol": symbol,
+                "reason": reason,
+                "reason_type": "risk_validation" if "revalidation" in reason else "no_trade_plan",
+                "details": {"context": context.metadata}
+            }
     
     def _ingest_data(self, symbol: str) -> Optional[MultiTimeframeData]:
         """
@@ -1318,11 +1344,13 @@ class Orchestrator:
                         'price': float(ob.midpoint),
                         'low': float(ob.low),
                         'high': float(ob.high),
-                        'timestamp': ob.timestamp.isoformat() if hasattr(ob, 'timestamp') and ob.timestamp else None,
+                        'timestamp': ob.timestamp.isoformat() if hasattr(ob, 'timestamp') and ob.timestamp and not hasattr(ob.timestamp, 'dtype') else None,
                         'freshness_score': float(ob.freshness_score),
-                        'mitigation_level': float(getattr(ob, 'mitigation_level', 0)),
+                        'mitigation_level': float(getattr(ob, 'mitigation_level', 0.0)),
                         'displacement_strength': float(getattr(ob, 'displacement_score', getattr(ob, 'displacement_strength', 0.5))),
-                        'grade': str(getattr(ob, 'grade', 'B'))
+                        'grade': str(getattr(ob, 'grade', 'B')),
+                        # Ensure no numpy bools leak
+                        'active': bool(getattr(ob, 'active', True))
                     }
                     for ob in context.smc_snapshot.order_blocks
                 ]
@@ -1332,7 +1360,7 @@ class Orchestrator:
                         'type': str(fvg.direction),
                         'low': float(fvg.bottom),
                         'high': float(fvg.top),
-                        'timestamp': fvg.timestamp.isoformat() if hasattr(fvg, 'timestamp') and fvg.timestamp else None
+                        'timestamp': fvg.timestamp.isoformat() if hasattr(fvg, 'timestamp') and fvg.timestamp and not hasattr(fvg.timestamp, 'dtype') else None
                     }
                     for fvg in context.smc_snapshot.fvgs
                 ]
@@ -1341,7 +1369,7 @@ class Orchestrator:
                         'timeframe': str(brk.timeframe),
                         'type': str(brk.break_type),
                         'level': float(brk.level),
-                        'timestamp': brk.timestamp.isoformat() if hasattr(brk, 'timestamp') and brk.timestamp else None,
+                        'timestamp': brk.timestamp.isoformat() if hasattr(brk, 'timestamp') and brk.timestamp and not hasattr(brk.timestamp, 'dtype') else None,
                         'direction': 'bullish' if brk.break_type == 'BOS' else 'bearish'
                     }
                     for brk in context.smc_snapshot.structural_breaks
@@ -1349,7 +1377,7 @@ class Orchestrator:
                 plan.metadata['liquidity_sweeps_list'] = [
                     {
                         'level': float(sweep.level),
-                        'timestamp': sweep.timestamp.isoformat() if hasattr(sweep, 'timestamp') and sweep.timestamp else None,
+                        'timestamp': sweep.timestamp.isoformat() if hasattr(sweep, 'timestamp') and sweep.timestamp and not hasattr(sweep.timestamp, 'dtype') else None,
                         'type': str(sweep.sweep_type),
                         'confirmed': bool(sweep.confirmation)
                     }
@@ -1565,7 +1593,9 @@ class Orchestrator:
 
                 invalid_reason = None
                 # Use strict inequality for consistency with planner validation
-                if is_bullish and plan.entry_zone.near_entry > live_price:
+                # Fix: For LONG, only reject if price is below the entire zone (far entry)
+                # allowing execution inside the zone.
+                if is_bullish and plan.entry_zone.far_entry > live_price:
                     invalid_reason = 'revalidation_entry_above_price'
                 elif (not is_bullish) and plan.entry_zone.far_entry < live_price:
                     invalid_reason = 'revalidation_entry_below_price'
@@ -1574,6 +1604,11 @@ class Orchestrator:
 
                 if invalid_reason:
                     # Emit telemetry rejection and drop plan
+                    logger.warning("❌ %s: Post-plan revalidation FAILED: %s | live_price=%.4f, entry=[%.4f-%.4f], drift_pct=%.2f%%, drift_atr=%.2f",
+                                  context.symbol, invalid_reason, live_price, 
+                                  plan.entry_zone.near_entry, plan.entry_zone.far_entry,
+                                  drift_pct * 100, drift_atr)
+                    context.metadata['plan_failure_reason'] = f"Post-plan revalidation failed: {invalid_reason}"
                     self.telemetry.log_event(create_signal_rejected_event(
                         run_id=context.run_id,
                         symbol=context.symbol,
@@ -1609,7 +1644,9 @@ class Orchestrator:
             return plan
             
         except Exception as e:  # noqa: BLE001  # type: ignore[misc] - intentional broad catch for robustness
+            import traceback
             logger.error("Trade plan generation failed: %s", e)
+            logger.error("Full traceback:\\n%s", traceback.format_exc())
             # Store the actual failure reason for accurate rejection reporting
             context.metadata['plan_failure_reason'] = str(e)
             return None
@@ -1813,7 +1850,19 @@ class Orchestrator:
         issues = []
         for tf in critical_tfs:
             if tf not in available_tfs:
-                issues.append(f"{tf}:missing")
+                # OVERWATCH RESILIENCE: Fallback if 1W missing but 1D present logic
+                fallback_active = False
+                if self.scanner_mode.name == 'overwatch' and tf in ('1w', '1W'):
+                    # Check if we have solid 1D data to compensate
+                    d1_key = '1d' if '1d' in available_tfs else '1D'
+                    if d1_key in available_tfs:
+                        d1_count = len(multi_tf_data.timeframes[d1_key])
+                        if d1_count >= 100:
+                             logger.warning("⚠️ OVERWATCH FALLBACK: Missing 1W data, but sufficient 1D data (%d candles). Proceeding.", d1_count)
+                             fallback_active = True
+                
+                if not fallback_active:
+                    issues.append(f"{tf}:missing")
             else:
                 df = multi_tf_data.timeframes[tf]
                 min_required = MIN_CANDLES.get(tf, 100)

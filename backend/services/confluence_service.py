@@ -248,8 +248,25 @@ class ConfluenceService:
                                            context.symbol, bearish_structure, bullish_structure,
                                            bearish_breakdown.total_score)
                             
+                            elif both_scores_high:
+                                # NEW: Elite Score Tiebreaker (>75%)
+                                # If both signals are incredibly strong, don't throw them away due to a tie.
+                                # Pick the winner based on raw score, however small the margin.
+                                if bullish_breakdown.total_score >= bearish_breakdown.total_score:
+                                    chosen = bullish_breakdown
+                                    chosen_direction = 'LONG'
+                                    tie_break_used = 'elite_score_long'
+                                    logger.info("✅ %s ELITE TIEBREAKER: LONG selected (%.1f vs %.1f) - forcing trade due to high conviction",
+                                               context.symbol, bullish_breakdown.total_score, bearish_breakdown.total_score)
+                                else:
+                                    chosen = bearish_breakdown
+                                    chosen_direction = 'SHORT'
+                                    tie_break_used = 'elite_score_short'
+                                    logger.info("✅ %s ELITE TIEBREAKER: SHORT selected (%.1f vs %.1f) - forcing trade due to high conviction",
+                                               context.symbol, bearish_breakdown.total_score, bullish_breakdown.total_score)
+
                             else:
-                                # Structure also tied - genuinely no edge
+                                # Structure also tied and scores not elite - genuinely no edge
                                 logger.info("🔄 %s TIE (%.1f) with neutral regime AND tied structure (%d vs %d): skipping",
                                            context.symbol, bullish_breakdown.total_score, 
                                            bullish_structure, bearish_structure)
@@ -336,7 +353,8 @@ class ConfluenceService:
             is_btc=("BTC" in context.symbol.upper()),
             is_alt=("BTC" not in context.symbol.upper()),
             # Pass symbol-specific regime detected by RegimeDetector
-            regime=context.metadata.get('symbol_regime')
+            regime=context.metadata.get('symbol_regime'),
+            symbol=context.symbol
         )
 
 

@@ -54,17 +54,17 @@ MODE_TO_TRADE_LABEL = {
     "overwatch": "Position Trade",
     "macro_surveillance": "Position Trade",
     
-    # Stealth = Swing Trade (Hours-Days, balanced multi-TF)
-    "stealth": "Swing Trade", 
-    "stealth_balanced": "Swing Trade",
+    # Stealth = Hybrid Trade (All types, balanced mix)
+    "stealth": "Hybrid Trade", 
+    "stealth_balanced": "Hybrid Trade",
     
-    # Surgical = Day Trade (Minutes-Hours, precision intraday)
-    "surgical": "Day Trade",
-    "precision": "Day Trade",
+    # Surgical = Scalp Trade (Minutes, extreme precision)
+    "surgical": "Scalp Trade",
+    "precision": "Scalp Trade",
     
-    # Strike = Scalp Trade (Minutes, aggressive momentum plays)
-    "strike": "Scalp Trade",
-    "intraday_aggressive": "Scalp Trade",
+    # Strike = Day Trade (Hours, aggressive momentum)
+    "strike": "Day Trade",
+    "intraday_aggressive": "Day Trade",
     
     # Fallback
     "balanced": "Swing Trade",
@@ -197,19 +197,23 @@ def generate_trade_plan(
     logger.info(f"Generating plan for {symbol} ({direction}) | ATR={atr:.2f} | Setup={setup_type} ({archetype})")
     
     # === 1. Calculate Entry Zone (Delegate to Entry Engine) ===
-    entry_zone, used_structure_entry = _calculate_entry_zone(
-        is_bullish=is_bullish,
-        smc_snapshot=smc_snapshot,
-        current_price=current_price,
-        atr=atr,
-        primary_tf=primary_tf,
-        setup_archetype=archetype,
-        config=config,
-        planner_cfg=planner_cfg,
-        confluence_breakdown=confluence_breakdown,
-        multi_tf_data=multi_tf_data,
-        indicators=indicators  # Pass full set for regime detection
-    )
+    try:
+        entry_zone, used_structure_entry = _calculate_entry_zone(
+            is_bullish=is_bullish,
+            smc_snapshot=smc_snapshot,
+            current_price=current_price,
+            atr=atr,
+            primary_tf=primary_tf,
+            setup_archetype=archetype,
+            config=config,
+            planner_cfg=planner_cfg,
+            confluence_breakdown=confluence_breakdown,
+            multi_tf_data=multi_tf_data,
+            indicators=indicators  # Pass full set for regime detection
+        )
+    except Exception as e:
+        logger.error(f"Entry zone calculation failed for {symbol}: {e}")
+        raise ValueError(f"Entry zone calculation failed: {e}") from e
     
     # === 2. Calculate Stop Loss (Delegate to Risk Engine) ===
     # Extract consolidation source if entry was from Trend Continuation
@@ -268,29 +272,37 @@ def generate_trade_plan(
     # Get regime label for target adjustment
     regime_label = get_atr_regime(indicators, current_price)
     
-    targets = _calculate_targets(
-        is_bullish=is_bullish,
-        entry_zone=entry_zone,
-        stop_loss=stop_loss,
-        smc_snapshot=smc_snapshot,
-        atr=atr,
-        config=config,
-        planner_cfg=planner_cfg,
-        setup_archetype=archetype,
-        regime_label=regime_label,
-        rr_scale=1.0,
-        confluence_breakdown=confluence_breakdown,
-        multi_tf_data=multi_tf_data,
-        indicators=indicators
-    )
+    try:
+        targets = _calculate_targets(
+            is_bullish=is_bullish,
+            entry_zone=entry_zone,
+            stop_loss=stop_loss,
+            smc_snapshot=smc_snapshot,
+            atr=atr,
+            config=config,
+            planner_cfg=planner_cfg,
+            setup_archetype=archetype,
+            regime_label=regime_label,
+            rr_scale=1.0,
+            confluence_breakdown=confluence_breakdown,
+            multi_tf_data=multi_tf_data,
+            indicators=indicators
+        )
+    except Exception as e:
+        logger.error(f"Target calculation failed for {symbol}: {e}")
+        raise ValueError(f"Target calculation failed: {e}") from e
     
     # === 5. Leverage Adjustment for Targets (Delegate to Risk Engine) ===
-    targets, target_adj_meta = _adjust_targets_for_leverage(
-        targets=targets,
-        leverage=leverage,
-        entry_price=(entry_zone.near_entry + entry_zone.far_entry) / 2,
-        is_bullish=is_bullish
-    )
+    try:
+        targets, target_adj_meta = _adjust_targets_for_leverage(
+            targets=targets,
+            leverage=leverage,
+            entry_price=(entry_zone.near_entry + entry_zone.far_entry) / 2,
+            is_bullish=is_bullish
+        )
+    except Exception as e:
+        logger.error(f"Target leverage adjustment failed for {symbol}: {e}")
+        raise ValueError(f"Target leverage adjustment failed: {e}") from e
     
     # === 5b. Distribute Target Percentages ===
     # Targets must sum to 100% for TradePlan validation
@@ -336,7 +348,8 @@ def generate_trade_plan(
         target_move_pct=tp1_move_pct,
         stop_distance_atr=stop_loss.distance_atr,
         structure_timeframes=structure_tfs_tuple,
-        primary_tf=primary_tf
+        primary_tf=primary_tf,
+        expected_trade_type=(getattr(config, 'profile', None) or expected_trade_type)
     )
     
     # DEBUG: Log final values before TradePlan validation
@@ -352,7 +365,11 @@ def generate_trade_plan(
             stop_loss=stop_loss,
             targets=targets,
             risk_reward_ratio=targets[-1].rr_ratio if targets else 0.0,
-            setup_type=get_trade_label_for_mode(config.profile),  # Use mode-based trade label
+            setup_type={
+                "scalp": "Scalp Trade",
+                "intraday": "Day Trade",
+                "swing": "Swing Trade"
+            }.get(trade_type, "Day Trade"),  # Use dynamic geometry-based label
             timeframe=primary_tf,
             status="PENDING",
             trade_type=trade_type,

@@ -5,14 +5,14 @@ Shared logic for transforming TradePlan objects to API response format.
 Consolidates duplicate code from scanner.py and scanner_service.py.
 """
 
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from dataclasses import asdict
 import logging
 
 logger = logging.getLogger(__name__)
 
 # Maximum allowed drift between entry zone and live price
-MAX_ENTRY_DRIFT_PCT = 10.0
+MAX_ENTRY_DRIFT_PCT = 20.0
 
 
 def transform_trade_plans_to_signals(
@@ -20,7 +20,7 @@ def transform_trade_plans_to_signals(
     mode,
     adapter=None,
     validate_prices: bool = True
-) -> List[Dict]:
+) -> Tuple[List[Dict], List[Dict]]:
     """
     Transform TradePlan objects to API response format.
     
@@ -31,9 +31,10 @@ def transform_trade_plans_to_signals(
         validate_prices: Whether to filter stale signals by price drift
         
     Returns:
-        List of signal dictionaries ready for API response
+        Tuple of (valid_signals, rejected_signals)
     """
     signals = []
+    rejected_signals = []
     
     for plan in trade_plans:
         # Clean symbol: remove '/' and ':USDT' suffix (exchange swap notation)
@@ -52,7 +53,9 @@ def transform_trade_plans_to_signals(
         
         signal = {
             "symbol": clean_symbol,
+            "original_symbol": plan.symbol,  # Preserve original for validation
             "direction": plan.direction,
+            "sniper_mode": mode.name,  # Vital for frontend chart timeframe selection
             "score": plan.confidence_score,
             "entry_near": plan.entry_zone.near_entry,
             "entry_far": plan.entry_zone.far_entry,
@@ -78,7 +81,8 @@ def transform_trade_plans_to_signals(
                 "expected_value": plan.metadata.get('expected_value') if plan.metadata else None
             },
             "rationale": plan.rationale,
-            "setup_type": plan.setup_type,
+            # FIX: Send raw code (e.g. 'intraday') not display label ('Day Trade') so frontend can classify correctly
+            "setup_type": getattr(plan, 'trade_type', plan.setup_type),
             "plan_type": getattr(plan, 'plan_type', 'SMC'),
             "conviction_class": getattr(plan, 'conviction_class', None),
             "missing_critical_timeframes": plan.metadata.get('missing_critical_timeframes', []) if plan.metadata else [],
@@ -142,12 +146,19 @@ def transform_trade_plans_to_signals(
     
     # Validate prices if adapter provided
     if validate_prices and adapter:
-        signals = _validate_signal_prices(signals, adapter)
+        signals, rejected_from_validation = _validate_signal_prices(signals, adapter)
+        rejected_signals.extend(rejected_from_validation)
     
-    return signals
+    stale_filtered = len(rejected_signals)
+    if stale_filtered > 0:
+        logger.info("🧹 Filtered %d stale signals (entry >%.0f%% from live price)", 
+                   stale_filtered, MAX_ENTRY_DRIFT_PCT)
+    
+    # Final safety: recursively sanitize any remaining numpy types
+    return _sanitize_for_json(signals), _sanitize_for_json(rejected_signals)
 
 
-def _validate_signal_prices(signals: List[Dict], adapter) -> List[Dict]:
+def _validate_signal_prices(signals: List[Dict], adapter) -> Tuple[List[Dict], List[Dict]]:
     """
     Filter signals where entry zone is too far from live price.
     
@@ -158,14 +169,19 @@ def _validate_signal_prices(signals: List[Dict], adapter) -> List[Dict]:
         adapter: Exchange adapter with fetch_ticker method
         
     Returns:
-        Filtered list of validated signals
+        Tuple of (validated_signals, rejected_signals)
     """
     validated_signals = []
+    rejected_signals = []
     
     for sig in signals:
         try:
             # Get live ticker price from exchange
-            ticker_symbol = sig['symbol'].replace('/', '') + ':USDT'
+            # Prefer original symbol if preserved, otherwise reconstructed
+            ticker_symbol = sig.get('original_symbol')
+            if not ticker_symbol:
+                ticker_symbol = sig['symbol'].replace('/', '') + ':USDT'
+                
             ticker = adapter.exchange.fetch_ticker(ticker_symbol)
             live_price = ticker.get('last') or ticker.get('close') or 0
             
@@ -187,16 +203,54 @@ def _validate_signal_prices(signals: List[Dict], adapter) -> List[Dict]:
                         "⚠️ STALE SIGNAL FILTERED: %s entry $%.2f is %.1f%% from live price $%.2f",
                         sig['symbol'], avg_entry, drift_pct, live_price
                     )
+                    # Add to rejected list with detailed reason
+                    rejected_signals.append({
+                        "symbol": sig['symbol'],
+                        "reason": f"Entry price drift {drift_pct:.1f}% > {MAX_ENTRY_DRIFT_PCT}%",
+                        "reason_type": "risk_validation",
+                        "details": {
+                            "live_price": live_price,
+                            "entry_avg": avg_entry,
+                            "drift_pct": drift_pct,
+                            "max_drift": MAX_ENTRY_DRIFT_PCT
+                        }
+                    })
                     continue  # Skip this stale signal
                     
             validated_signals.append(sig)
         except Exception as e:
             logger.warning("Price validation failed for %s: %s - keeping signal", sig['symbol'], e)
-            validated_signals.append(sig)  # Keep signal if validation fails
+            # Add to rejected list with detailed reason if validation itself fails
+            rejected_signals.append({
+                "symbol": sig['symbol'],
+                "reason": f"Price validation failed: {e}",
+                "reason_type": "validation_error",
+                "details": {
+                    "error_message": str(e)
+                }
+            })
+            continue # Skip this signal if validation fails
+            
+    return validated_signals, rejected_signals
+
+
+def _sanitize_for_json(obj: Any) -> Any:
+    """
+    Recursively convert numpy types to native Python types for JSON serialization.
+    """
+    import numpy as np
     
-    stale_filtered = len(signals) - len(validated_signals)
-    if stale_filtered > 0:
-        logger.info("🧹 Filtered %d stale signals (entry >%.0f%% from live price)", 
-                   stale_filtered, MAX_ENTRY_DRIFT_PCT)
-    
-    return validated_signals
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_sanitize_for_json(v) for v in obj]
+    elif isinstance(obj, (np.integer, int)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, float)):
+        return float(obj)
+    elif isinstance(obj, (np.bool_, bool)):
+        return bool(obj)
+    elif isinstance(obj, np.ndarray):
+        return _sanitize_for_json(obj.tolist())
+    else:
+        return obj

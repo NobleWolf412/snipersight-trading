@@ -219,7 +219,7 @@ MODES: Dict[str, ScannerMode] = {
         critical_timeframes=("15m",),  # 15m essential for precision entries
         primary_planning_timeframe="15m",
         max_pullback_atr=2.0,
-        min_stop_atr=0.15,  # TUNED: was 0.25 - surgical needs tightest stops
+        min_stop_atr=0.25,  # TUNED: bumped from 0.15 to 0.25 for spread safety
         max_stop_atr=6.0,   # TUNED: was 5.0 - allow HTF structure stops (6 ATR cap with hard ceiling 2x)
         entry_timeframes=("4h", "1h", "15m", "5m"),  # TUNED: added 4h/1h - allows HTF OB entries when no LTF OBs exist
         structure_timeframes=("4h", "1h", "15m"),  # Precision structure from 4h/1h/15m (added 4h for HTF awareness)
@@ -255,7 +255,7 @@ MODES: Dict[str, ScannerMode] = {
         min_target_move_pct=0.5,
         smc_preset="defaults",  # Balanced detection for swing trading
         expected_trade_type="stealth",  # FIXED: Changed from "intraday" to enable trend continuation (PlannerConfig.defaults_for_mode("stealth"))
-        allowed_trade_types=("swing", "intraday"),  # Balanced mix
+        allowed_trade_types=("swing", "intraday", "scalp"),  # Balanced mix of all types
         volume_accel_lookback=5,  # Default balanced - good for mixed swing/intraday
         overrides={
             "min_rr_ratio": 1.8,

@@ -6,7 +6,7 @@ import { ResultCard } from '@/components/ScanResults/ResultCard';
 import { RejectionCard, RejectionInfo } from '@/components/ScanResults/RejectionCard';
 import { IntelDossier } from '@/components/ScanResults/IntelDossier';
 import { ScanResult } from '@/utils/mockData';
-import { Target, WarningCircle, CaretLeft, CaretRight } from '@phosphor-icons/react';
+import { Target, WarningCircle, CaretLeft, CaretRight, ArrowCounterClockwise } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils'; // Assuming cn exists
 
 export function ScanResults() {
@@ -114,6 +114,15 @@ export function ScanResults() {
             <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
             <span className="text-[#00ff88]">{scanMetadata?.leverage || 1}x LEVERAGE</span>
           </div>
+
+          {/* New Scan Action */}
+          <button
+            onClick={() => navigate('/scan')}
+            className="group mt-8 flex items-center gap-3 px-8 py-3 bg-[#0a0a0a] border border-[#00ff88]/30 hover:bg-[#00ff88]/10 text-[#00ff88] rounded-xl font-bold font-mono tracking-widest uppercase transition-all shadow-[0_0_20px_rgba(0,255,136,0.05)] hover:shadow-[0_0_30px_rgba(0,255,136,0.15)] hover:border-[#00ff88]/60"
+          >
+            <ArrowCounterClockwise size={20} weight="bold" className="group-hover:-rotate-180 transition-transform duration-500" />
+            New Scan
+          </button>
         </div>
 
 

@@ -329,7 +329,20 @@ class ScannerService:
             )
             
             # Transform results to API format with live price validation
-            signals = self._transform_signals(trade_plans, mode, current_adapter)
+            signals, rejected_signals = self._transform_signals(trade_plans, mode, current_adapter)
+            
+            # Merge late rejections (e.g. price validation)
+            stale_filtered_count = len(rejected_signals)
+            
+            if stale_filtered_count > 0:
+                rejection_summary["total_rejected"] += stale_filtered_count
+                # Ensure risk_validation key exists
+                if "risk_validation" not in rejection_summary["by_reason"]:
+                    rejection_summary["by_reason"]["risk_validation"] = 0
+                rejection_summary["by_reason"]["risk_validation"] += stale_filtered_count
+                
+                if "risk_validation" in rejection_summary["details"]:
+                    rejection_summary["details"]["risk_validation"].extend(rejected_signals)
             
             job.signals = signals
             job.rejections = rejection_summary

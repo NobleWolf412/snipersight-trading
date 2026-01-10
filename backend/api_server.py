@@ -14,6 +14,14 @@ from enum import Enum
 import logging
 import asyncio
 import time
+import numpy as np
+
+# Monkey-patch for NumPy 2.0 compatibility (restores removed aliases used by libs)
+if not hasattr(np, 'float_'):
+    np.float_ = np.float64
+if not hasattr(np, 'complex_'):
+    np.complex_ = np.complex128
+
 import threading
 import pandas as pd
 
@@ -381,7 +389,7 @@ orchestrator = Orchestrator(
     exchange_adapter=exchange_adapter,
     risk_manager=risk_manager,
     position_sizer=position_sizer,
-    concurrency_workers=4
+    concurrency_workers=32  # INCREASED: 32 workers for parallel I/O (candles/calculation)
 )
 
 # Configure and include routers with shared dependencies

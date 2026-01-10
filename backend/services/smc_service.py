@@ -152,6 +152,11 @@ class SMCDetectionService:
                 continue
             
             try:
+                # CRITICAL FIX: Global deduplication of columns
+                # Prevents "truth value of DataFrame is ambiguous" errors in all detectors
+                if not df.columns.is_unique:
+                    df = df.loc[:, ~df.columns.duplicated()]
+
                 # CRITICAL: Ensure DataFrame has DatetimeIndex (required for OB detection)
                 if not isinstance(df.index, pd.DatetimeIndex):
                     # Auto-fix: Set timestamp column as index if available

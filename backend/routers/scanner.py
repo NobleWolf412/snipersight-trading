@@ -655,11 +655,20 @@ async def get_signals(
 
         # Transform trade plans to API response format using shared utility
         from backend.shared.utils.signal_transform import transform_trade_plans_to_signals
-        rejected_count = len(symbols) - len(trade_plans)
-        signals = transform_trade_plans_to_signals(trade_plans, mode, current_adapter)
         
-        stale_filtered_count = 0  # Already handled in transform utility
-
+        signals, rejected_signals = transform_trade_plans_to_signals(trade_plans, mode, current_adapter)
+        
+        # Merge late rejections (e.g. price validation)
+        stale_filtered_count = len(rejected_signals)
+        rejected_count = (len(symbols) - len(trade_plans)) + stale_filtered_count
+        
+        if stale_filtered_count > 0:
+            # Update rejection summary
+            rejection_summary["total_rejected"] += stale_filtered_count
+            rejection_summary["by_reason"]["risk_validation"] += stale_filtered_count
+            if "risk_validation" in rejection_summary["details"]:
+                rejection_summary["details"]["risk_validation"].extend(rejected_signals)
+        
         return {
             "signals": signals,
             "total": len(signals),

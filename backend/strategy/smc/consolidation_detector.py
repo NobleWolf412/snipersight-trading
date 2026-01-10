@@ -42,6 +42,11 @@ def detect_consolidations(
     if df is None or len(df) < min_duration_candles:
         return []
     
+    # FIX: Ensure no duplicate columns (prevents ambiguous truth value errors)
+    # If duplicates exist (e.g. two 'high' columns), operations return Series instead of scalars
+    if not df.columns.is_unique:
+        df = df.loc[:, ~df.columns.duplicated()]
+    
     consolidations = []
     
     # Rolling window to detect ranges
