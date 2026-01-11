@@ -40,6 +40,18 @@ if TYPE_CHECKING:
 
 
 
+# ==============================================================================
+# SCORING CALIBRATION CONSTANTS
+# ==============================================================================
+# Tuning parameters for gradient scoring and category capping.
+# Adjust these values to calibrate signal sensitivity and prevent score inflation.
+
+MOMENTUM_SLOPE_MULTIPLIER = 2.0  # Gradient multiplier for RSI/Stoch scoring
+VOLUME_RATIO_MULTIPLIER = 20.0   # Multiplier for volume spike scoring
+MOMENTUM_CATEGORY_CAP = 25.0     # Max points from momentum category (prevents RSI+Stoch+MFI inflation)
+NESTED_OB_CONTAINMENT_MIN = 0.5  # Minimum overlap % for nested OB (50% = half of LTF must be inside HTF)
+
+
 
 # ==============================================================================
 # MODE-SPECIFIC FACTOR WEIGHTS
@@ -1914,9 +1926,14 @@ def calculate_confluence_score(
     except Exception as e:
         logger.debug("Inside OB bonus failed: %s", e)
     
-    # --- NEW: Nested Order Block Bonus ---
+    # --- NEW: Nested Order Block Bonus (STRICT VALIDATION) ---
     # Extra confluence when LTF OB is nested inside HTF OB (same direction)
-    # This indicates stacked institutional demand/supply zones
+    # with strict quality requirements:
+    # 1. Containment: LTF must be >=50% inside HTF (not just any overlap)
+    # 2. PD Array: For bearish, LTF must be in Premium (upper 50%) of HTF
+    #              For bullish, LTF must be in Discount (lower 50%) of HTF
+    # 
+    # This prevents "100% nested OB" noise from weak overlap at edges.
     try:
         ltf_timeframes = {'5m', '15m'}
         htf_timeframes = {'1h', '1H', '4h', '4H', '1d', '1D'}
@@ -1937,7 +1954,7 @@ def calculate_confluence_score(
                     (direction in ('bearish', 'short') and ltf_dir == 'bearish')):
                 continue
             
-            # Find an HTF OB that contains/overlaps this LTF OB (same direction)
+            # Find an HTF OB that contains this LTF OB (same direction)
             for htf_ob in htf_obs:
                 htf_dir = getattr(htf_ob, 'direction', None)
                 htf_low = getattr(htf_ob, 'low', 0)
@@ -1948,22 +1965,73 @@ def calculate_confluence_score(
                 if htf_dir != ltf_dir:
                     continue
                 
-                # Check overlap: LTF OB must be at least partially inside HTF OB
-                # Overlap = (LTF low <= HTF high) AND (LTF high >= HTF low)
-                if ltf_low <= htf_high and ltf_high >= htf_low:
-                    factors.append(ConfluenceFactor(
-                        name="Nested Order Block",
-                        score=100.0,
-                        weight=get_w('nested_ob', 0.08),
-                        rationale=f"{ltf_tf} {ltf_dir} OB nested inside {htf_tf} OB - stacked institutional structure"
-                    ))
-                    nested_found = True
-                    break
+                # === STRICT CONTAINMENT CHECK ===
+                # Calculate overlap percentage (how much of LTF is inside HTF)
+                ltf_range = ltf_high - ltf_low
+                if ltf_range <= 0:
+                    continue  # Invalid LTF OB
+                
+                # Calculate overlap boundaries
+                overlap_low = max(ltf_low, htf_low)
+                overlap_high = min(ltf_high, htf_high)
+                
+                if overlap_high <= overlap_low:
+                    # No overlap at all
+                    continue
+                
+                overlap_range = overlap_high - overlap_low
+                overlap_pct = overlap_range / ltf_range
+                
+                # Require at least 50% containment
+                if overlap_pct < NESTED_OB_CONTAINMENT_MIN:
+                    logger.debug("🔍 Nested OB rejected: %s %s OB only %.0f%% inside %s OB (need %.0f%%)",
+                                ltf_tf, ltf_dir, overlap_pct * 100, htf_tf, NESTED_OB_CONTAINMENT_MIN * 100)
+                    continue
+                
+                # === PD ARRAY VALIDATION ===
+                # For bearish: LTF OB should be in Premium (upper 50%) of HTF OB
+                # For bullish: LTF OB should be in Discount (lower 50%) of HTF OB
+                htf_mid = (htf_high + htf_low) / 2
+                ltf_mid = (ltf_high + ltf_low) / 2
+                
+                pd_array_valid = False
+                if ltf_dir == 'bearish':
+                    # Supply zone - should be in premium (upper half)
+                    # Ideally: ltf_low >= htf_mid (entire LTF OB above midpoint)
+                    # Acceptable: ltf_mid >= htf_mid (LTF midpoint above HTF midpoint)
+                    if ltf_mid >= htf_mid:
+                        pd_array_valid = True
+                    else:
+                        logger.debug("🔍 Nested OB rejected: Bearish %s OB in Discount zone of %s OB (mid %.5f < htf_mid %.5f)",
+                                    ltf_tf, htf_tf, ltf_mid, htf_mid)
+                else:  # bullish
+                    # Demand zone - should be in discount (lower half)
+                    # Ideally: ltf_high <= htf_mid (entire LTF OB below midpoint)
+                    # Acceptable: ltf_mid <= htf_mid (LTF midpoint below HTF midpoint)
+                    if ltf_mid <= htf_mid:
+                        pd_array_valid = True
+                    else:
+                        logger.debug("🔍 Nested OB rejected: Bullish %s OB in Premium zone of %s OB (mid %.5f > htf_mid %.5f)",
+                                    ltf_tf, htf_tf, ltf_mid, htf_mid)
+                
+                if not pd_array_valid:
+                    continue
+                
+                # === PASSED ALL CHECKS ===
+                factors.append(ConfluenceFactor(
+                    name="Nested Order Block",
+                    score=100.0,
+                    weight=get_w('nested_ob', 0.08),
+                    rationale=f"{ltf_tf} {ltf_dir} OB (%.0f%% contained) in {htf_tf} {'Premium' if ltf_dir == 'bearish' else 'Discount'} zone - high-quality nested structure" % (overlap_pct * 100)
+                ))
+                nested_found = True
+                break
             
             if nested_found:
                 break  # Only count once
     except Exception as e:
         logger.debug("Nested OB bonus failed: %s", e)
+
     
     # --- NEW: Opposing Structure Penalty ---
     # Penalty when opposing OB/FVG is near the entry (immediate resistance/support)
@@ -2822,6 +2890,49 @@ def _score_liquidity_sweeps(sweeps: List[LiquiditySweep], direction: str) -> flo
 
 # --- Indicator Scoring Functions ---
 
+def _calculate_gradient_score(value: float, neutral_low: float, neutral_high: float, 
+                              extreme_low: float, extreme_high: float, 
+                              direction: str, multiplier: float = 1.0, 
+                              max_points: float = 50.0) -> float:
+    """
+    Calculate gradient score for oscillator values.
+    
+    Implements smooth scoring curve instead of binary thresholds:
+    - Neutral Zone (between neutral_low and neutral_high): 0 points
+    - Gradient from neutral to extreme: linear scaling
+    - Beyond extreme: capped at max_points
+    
+    Args:
+        value: Current indicator value
+        neutral_low: Lower boundary of neutral zone
+        neutral_high: Upper boundary of neutral zone
+        extreme_low: Extreme oversold threshold
+        extreme_high: Extreme overbought threshold
+        direction: 'bullish' or 'bearish'
+        multiplier: Gradient slope multiplier
+        max_points: Maximum points awarded
+        
+    Returns:
+        Score from 0 to max_points
+    """
+    if direction == 'bullish':
+        # Looking for oversold conditions (low values)
+        if value >= neutral_low:
+            return 0.0  # Neutral or overbought - no score
+        # Clamp value to extreme_low
+        clamped = max(extreme_low, value)
+        delta = neutral_low - clamped
+        return min(max_points, delta * multiplier)
+    else:  # bearish
+        # Looking for overbought conditions (high values)
+        if value <= neutral_high:
+            return 0.0  # Neutral or oversold - no score
+        # Clamp value to extreme_high
+        clamped = min(extreme_high, value)
+        delta = clamped - neutral_high
+        return min(max_points, delta * multiplier)
+
+
 def _score_momentum(
     indicators: IndicatorSnapshot, 
     direction: str,
@@ -2842,50 +2953,114 @@ def _score_momentum(
     Returns:
         Tuple of (score, macd_analysis_dict or None)
     """
-    score = 0.0  # FIXED: Was 40.0 which inflated momentum even with no signals
+    score = 0.0
     macd_analysis = None
     
     # Normalize direction: LONG/SHORT -> bullish/bearish
     normalized_dir = _normalize_direction(direction)
     
+    # ==============================================================================
+    # GRADIENT SCORING WITH CATEGORY CAPPING
+    # ==============================================================================
+    # Prior issue: RSI, Stoch, MFI are highly correlated (all reflect same momentum).
+    # Summing them inflated scores (e.g., RSI 30 + Stoch 20 + MFI 25 = 3x signal for one move).
+    # 
+    # Solution: Weighted average with hard cap (MOMENTUM_CATEGORY_CAP).
+    # - RSI: Primary (1.0 weight)
+    # - Stoch: Secondary (0.5 weight) - adds confirmation, not full signal
+    # - MFI: Tertiary (0.5 weight) - volume-weighted RSI, confirms but doesn't triple count
+    # 
+    # This prevents multicollinearity while preserving nuance.
+    # ==============================================================================
+    
+    rsi_score = 0.0
+    stoch_score = 0.0
+    mfi_score = 0.0
+    
     if normalized_dir == "bullish":
         # Bullish momentum: oversold RSI, low Stoch RSI, low MFI
-        # REFINED: Removed neutral bonus (+20) which inflated mediocre setups.
-        # Now uses steeper gradient for genuine oversold conditions.
-        
         if indicators.rsi is not None:
-            if indicators.rsi < 45: # Slightly wider window but scaled
-                # RSI 30 -> (45-30) * 2 = 30pts
-                # RSI 20 -> (45-20) * 2 = 50pts (Max cap)
-                rsi_val = max(20, indicators.rsi) # Cap downside reading
-                score += min(50.0, (45 - rsi_val) * 2.0)
+            # Neutral zone: 45-55 (no score)
+            # Gradient: 45 -> 20 (extreme oversold)
+            # Multiplier: 2.0 (from MOMENTUM_SLOPE_MULTIPLIER)
+            rsi_score = _calculate_gradient_score(
+                value=indicators.rsi,
+                neutral_low=45.0,
+                neutral_high=55.0,
+                extreme_low=20.0,
+                extreme_high=80.0,
+                direction='bullish',
+                multiplier=MOMENTUM_SLOPE_MULTIPLIER,
+                max_points=50.0
+            )
         
-        if indicators.stoch_rsi is not None and indicators.stoch_rsi < 30:
-            # Stoch 20 -> (30-20) * 1.5 = 15pts
-            # Stoch 0  -> (30-0) * 1.5 = 45pts
-            score += min(45.0, (30 - indicators.stoch_rsi) * 1.5)
+        if indicators.stoch_rsi is not None:
+            stoch_score = _calculate_gradient_score(
+                value=indicators.stoch_rsi,
+                neutral_low=40.0,
+                neutral_high=60.0,
+                extreme_low=0.0,
+                extreme_high=100.0,
+                direction='bullish',
+                multiplier=1.5,
+                max_points=45.0
+            )
         
-        if indicators.mfi is not None and indicators.mfi < 35:
-            # MFI 20 -> (35-20) * 1.5 = 22.5pts
-            score += min(40.0, (35 - indicators.mfi) * 1.5)
+        if indicators.mfi is not None:
+            mfi_score = _calculate_gradient_score(
+                value=indicators.mfi,
+                neutral_low=40.0,
+                neutral_high=60.0,
+                extreme_low=0.0,
+                extreme_high=100.0,
+                direction='bullish',
+                multiplier=1.5,
+                max_points=40.0
+            )
             
     else:  # bearish
         # Bearish momentum: overbought RSI, high Stoch RSI, high MFI
         if indicators.rsi is not None:
-            if indicators.rsi > 55:
-                # RSI 70 -> (70-55) * 2 = 30pts
-                # RSI 80 -> (80-55) * 2 = 50pts
-                rsi_val = min(80, indicators.rsi) # Cap upside
-                score += min(50.0, (rsi_val - 55) * 2.0)
+            rsi_score = _calculate_gradient_score(
+                value=indicators.rsi,
+                neutral_low=45.0,
+                neutral_high=55.0,
+                extreme_low=20.0,
+                extreme_high=80.0,
+                direction='bearish',
+                multiplier=MOMENTUM_SLOPE_MULTIPLIER,
+                max_points=50.0
+            )
         
-        if indicators.stoch_rsi is not None and indicators.stoch_rsi > 70:
-            # Stoch 80 -> (80-70) * 1.5 = 15pts
-            # Stoch 100 -> (100-70) * 1.5 = 45pts
-            score += min(45.0, (indicators.stoch_rsi - 70) * 1.5)
+        if indicators.stoch_rsi is not None:
+            stoch_score = _calculate_gradient_score(
+                value=indicators.stoch_rsi,
+                neutral_low=40.0,
+                neutral_high=60.0,
+                extreme_low=0.0,
+                extreme_high=100.0,
+                direction='bearish',
+                multiplier=1.5,
+                max_points=45.0
+            )
         
-        if indicators.mfi is not None and indicators.mfi > 65:
-            # MFI 80 -> (80-65) * 1.5 = 22.5pts
-            score += min(40.0, (indicators.mfi - 65) * 1.5)
+        if indicators.mfi is not None:
+            mfi_score = _calculate_gradient_score(
+                value=indicators.mfi,
+                neutral_low=40.0,
+                neutral_high=60.0,
+                extreme_low=0.0,
+                extreme_high=100.0,
+                direction='bearish',
+                multiplier=1.5,
+                max_points=40.0
+            )
+    
+    # Weighted sum: RSI (primary) + Stoch (secondary) + MFI (tertiary)
+    raw_momentum = (rsi_score * 1.0) + (stoch_score * 0.5) + (mfi_score * 0.5)
+    
+    # Apply category cap to prevent inflation
+    score = min(MOMENTUM_CATEGORY_CAP, raw_momentum)
     
     # --- Mode-Aware MACD Evaluation ---
     if macd_config:
