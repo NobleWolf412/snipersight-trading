@@ -352,6 +352,29 @@ def generate_trade_plan(
         expected_trade_type=(getattr(config, 'profile', None) or expected_trade_type)
     )
     
+    # === TRADE TYPE VALIDATION ===
+    # Enforce mode-specific trade type restrictions (e.g., Overwatch = swing only)
+    allowed_types = getattr(config, 'allowed_trade_types', ('swing', 'intraday', 'scalp'))
+    if allowed_types and trade_type not in allowed_types:
+        mode_name = getattr(config, 'profile', 'unknown')
+        telemetry.log_event(create_signal_rejected_event(
+            run_id=run_id,
+            symbol=symbol,
+            reason="trade_type_mismatch",
+            diagnostics={
+                "derived_type": trade_type,
+                "allowed_types": allowed_types,
+                "mode": mode_name,
+                "tp1_move_pct": tp1_move_pct,
+                "stop_atr": stop_loss.distance_atr
+            }
+        ))
+        raise ValueError(
+            f"Trade type mismatch: Derived '{trade_type}' not allowed in {mode_name} mode "
+            f"(allowed: {allowed_types}). TP1 move: {tp1_move_pct:.1f}%, Stop: {stop_loss.distance_atr:.1f} ATR"
+        )
+    
+    
     # DEBUG: Log final values before TradePlan validation
     try:
         targets_levels = [f"{t.level:.4f}" for t in targets[:3]] if targets else []
@@ -375,6 +398,34 @@ def generate_trade_plan(
             trade_type=trade_type,
             confidence_score=confluence_breakdown.total_score  # FIX: Pass confluence score to plan
         )
+        
+        # === DEBUG LOGGING ===
+        logger.info(
+            f"📋 TRADE PLAN: {symbol} {direction} | "
+            f"{len(targets)} targets | "
+            f"Final R:R = {plan.risk_reward_ratio:.2f}R (from TP{len(targets)})"
+        )
+        
+        # === MINIMUM R:R VALIDATION ===
+        # Enforce mode-specific R:R requirements (e.g., Overwatch = 2.0R minimum)
+        min_rr = getattr(config, 'min_rr_ratio', 0.0)
+        actual_rr = plan.risk_reward_ratio
+        if min_rr > 0 and actual_rr < min_rr:
+            telemetry.log_event(create_signal_rejected_event(
+                run_id=run_id,
+                symbol=symbol,
+                reason="insufficient_rr",
+                diagnostics={
+                    "actual_rr": actual_rr,
+                    "min_rr": min_rr,
+                    "mode": getattr(config, 'profile', 'unknown'),
+                    "trade_type": trade_type,
+                    "tp1_level": targets[0].level if targets else None
+                }
+            ))
+            raise ValueError(
+                f"Insufficient R:R: {actual_rr:.2f}R < {min_rr:.1f}R minimum for {getattr(config, 'profile', 'unknown')} mode"
+            )
     except Exception as e:
         logger.error(f"❌ TradePlan Constructor Failed: {e} | Values: Entry={entry_zone}, Stop={stop_loss}", exc_info=True)
         raise

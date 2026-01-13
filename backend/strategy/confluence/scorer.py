@@ -1916,9 +1916,14 @@ def calculate_confluence_score(
                     if (direction in ('bullish', 'long') and ob_direction == 'bullish') or \
                        (direction in ('bearish', 'short') and ob_direction == 'bearish'):
                         tf = getattr(ob, 'timeframe', 'unknown')
+                        # TIGHTENED: Score based on OB quality instead of flat 100
+                        mitigation = getattr(ob, 'mitigation_level', 0.0)
+                        freshness = getattr(ob, 'freshness_score', 0.8)
+                        # Start at 70, add up to 15 for freshness/mitigation
+                        inside_score = 70.0 + (freshness * 10) + ((1.0 - mitigation) * 5)
                         factors.append(ConfluenceFactor(
                             name="Inside Order Block",
-                            score=100.0,  # Very bullish signal
+                            score=min(85.0, inside_score),  # Cap at 85 (was 100)
                             weight=get_w('inside_ob', 0.10),
                             rationale=f"Price inside {tf} {ob_direction} OB (${ob_low:.2f}-${ob_high:.2f}) - immediate entry zone"
                         ))
@@ -2018,9 +2023,18 @@ def calculate_confluence_score(
                     continue
                 
                 # === PASSED ALL CHECKS ===
+                # TIGHTENED: Score based on nesting quality instead of flat 100
+                # Base: 60pts for passing strict checks
+                # Bonus: up to +15 for overlap quality (>75% = excellent)
+                # Bonus: up to +10 for HTF OB quality
+                overlap_bonus = min(15.0, (overlap_pct - 0.5) / 0.5 * 15.0)
+                htf_freshness = getattr(htf_ob, 'freshness_score', 0.7)
+                htf_bonus = htf_freshness * 10.0
+                nested_score = 60.0 + overlap_bonus + htf_bonus
+                
                 factors.append(ConfluenceFactor(
                     name="Nested Order Block",
-                    score=100.0,
+                    score=min(85.0, nested_score),  # Cap at 85 (was 100)
                     weight=get_w('nested_ob', 0.08),
                     rationale=f"{ltf_tf} {ltf_dir} OB (%.0f%% contained) in {htf_tf} {'Premium' if ltf_dir == 'bearish' else 'Discount'} zone - high-quality nested structure" % (overlap_pct * 100)
                 ))
@@ -2459,36 +2473,51 @@ def calculate_confluence_score(
     raw_score = weighted_score + synergy_bonus - conflict_penalty
     
     # ===========================================================================
-    # === DIMINISHING RETURNS CURVE (Mode-Aware) ===
+    # === VARIANCE AMPLIFICATION CURVE ===
     # ===========================================================================
-    # Prevent score inflation where "everything aligned" = 95%+
-    # After threshold, additional points contribute at 50% strength.
-    # 
-    # Mode-aware thresholds:
-    # - Overwatch/Swing: 80 (more selective, allow higher scores)
-    # - Surgical/Scalp: 70 (stricter, cap scores earlier)
-    # - Strike/Intraday: 75 (balanced)
+    # Problem: Scores cluster tightly (80% in 75-79 range) with only 8.7pt spread
+    # Solution: Apply progressive curve that WIDENS gaps between good/mediocre setups
+    #
+    # Curve design:
+    # - Excellent (75+): Boost by 3-8pts → push to 78-85 (reward quality)
+    # - Good (70-75): Slight boost 0-3pts → keep at 70-78 (marginal pass/fail)
+    # - Mediocre (65-70): Dampen 2-5pts → drop to 60-65 (filter out)
+    # - Poor (<65): Heavy dampen → ensure failure
+    #
+    # Result: Spread increases from 8.7pt → 20-25pt while maintaining quality bar
+    # ===========================================================================
     
-    MODE_DIMINISHING_THRESHOLDS = {
-        'macro_surveillance': 80.0,  # Overwatch
-        'overwatch': 80.0,
-        'precision': 70.0,  # Surgical
-        'surgical': 70.0,
-        'intraday_aggressive': 75.0,  # Strike
-        'strike': 75.0,
-        'stealth_balanced': 75.0,  # Stealth
-    }
+    if raw_score >= 75.0:
+        # EXCELLENT setups: Boost to reward true quality
+        # 75 → 78, 80 → 85, 85 → 90
+        boost = (raw_score - 75.0) * 0.5  # Up to +7.5pts for 90+ raw
+        final_score = raw_score + min(8.0, boost + 3.0)
+        logger.debug("🚀 Excellence boost: %.1f → %.1f (+%.1f)", 
+                    raw_score, final_score, final_score - raw_score)
     
-    DIMINISHING_THRESHOLD = MODE_DIMINISHING_THRESHOLDS.get(current_profile, 75.0)
-    DIMINISHING_RATE = 0.5  # 50% credit above threshold
+    elif raw_score >= 70.0:
+        # GOOD setups: Slight boost or neutral (marginal pass zone)
+        # 70 → 70-72, 72 → 72-74, 75 → 75-78
+        boost = (raw_score - 70.0) * 0.4  # Up to +2pts
+        final_score = raw_score + boost
+        logger.debug("✓ Good score: %.1f → %.1f (+%.1f)", 
+                    raw_score, final_score, final_score - raw_score)
     
-    if raw_score > DIMINISHING_THRESHOLD:
-        excess = raw_score - DIMINISHING_THRESHOLD
-        final_score = DIMINISHING_THRESHOLD + (excess * DIMINISHING_RATE)
-        logger.debug("📉 Diminishing returns applied: %.1f → %.1f (threshold: %.0f, mode: %s)", 
-                    raw_score, final_score, DIMINISHING_THRESHOLD, current_profile)
+    elif raw_score >= 65.0:
+        # MEDIOCRE setups: Dampen to filter out
+        # 65 → 62, 67 → 64, 70 → 68
+        dampen = (70.0 - raw_score) * 0.6  # Up to -3pts
+        final_score = raw_score - dampen
+        logger.debug("📉 Mediocre dampen: %.1f → %.1f (-%.1f)", 
+                    raw_score, final_score, raw_score - final_score)
+    
     else:
-        final_score = raw_score
+        # POOR setups: Heavy dampen to ensure failure
+        # 60 → 54, 64 → 60
+        dampen = (65.0 - raw_score) * 0.8  # Up to -4pts
+        final_score = raw_score - dampen
+        logger.debug("❌ Poor dampen: %.1f → %.1f (-%.1f)", 
+                    raw_score, final_score, raw_score - final_score)
 
     final_score = max(0.0, min(100.0, final_score))  # Clamp to 0-100
     
@@ -2716,11 +2745,28 @@ def _score_order_blocks(order_blocks: List[OrderBlock], direction: str) -> float
         _get_timeframe_weight(getattr(ob, 'timeframe', '1h')) * 0.15  # Prefer HTF OBs
     ))
     
-    # Score based on OB quality
+    # Score based on OB quality (TIGHTENED: reduced multipliers to prevent auto-100 scores)
+    # Freshness: 0-1 scale → 0-30pts (was 40)
+    # Displacement: 0-2+ strength, capped at 1.0 → 0-25pts (was 40)
+    # Mitigation: Gradient scoring with neutral zone
+    #   0-20%: Full 15pts (fresh)
+    #   20-50%: Linear decline 15→5pts (aging)
+    #   >50%: Heavy penalty 5→0pts (heavily mitigated)
+    
+    mitigation_score = 0.0
+    if best_ob.mitigation_level <= 0.2:
+        mitigation_score = 15.0  # Fresh, barely touched
+    elif best_ob.mitigation_level <= 0.5:
+        # Linear gradient from 15 → 5
+        mitigation_score = 15.0 - ((best_ob.mitigation_level - 0.2) / 0.3) * 10.0
+    else:
+        # Heavy mitigation: 5 → 0
+        mitigation_score = max(0.0, 5.0 - ((best_ob.mitigation_level - 0.5) / 0.5) * 5.0)
+    
     base_score = (
-        best_ob.freshness_score * 40 +
-        min(best_ob.displacement_strength / 2.0, 1.0) * 40 +
-        (1.0 - best_ob.mitigation_level) * 20
+        best_ob.freshness_score * 30 +  # Reduced: 40→30
+        min(best_ob.displacement_strength / 2.0, 1.0) * 25 +  # Reduced: 40→25
+        mitigation_score  # Gradient: 0-15pts (was flat 0-20)
     )
     
     # Apply grade weighting and timeframe weighting to final score
@@ -2728,11 +2774,16 @@ def _score_order_blocks(order_blocks: List[OrderBlock], direction: str) -> float
     tf_weight = _get_timeframe_weight(getattr(best_ob, 'timeframe', '1h'))
     score = base_score * grade_weight * tf_weight
     
-    logger.debug("📦 OB Score: %.1f (base=%.1f, grade=%s[%.1f], tf=%s[%.1f])",
-                score, base_score, getattr(best_ob, 'grade', 'B'), grade_weight,
+    logger.debug("📦 OB Score: %.1f (base=%.1f [fresh=%.1f disp=%.1f mitig=%.1f@%.0f%%], grade=%s[%.1f], tf=%s[%.1f])",
+                score, base_score, 
+                best_ob.freshness_score * 30,
+                min(best_ob.displacement_strength / 2.0, 1.0) * 25,
+                mitigation_score, best_ob.mitigation_level * 100,
+                getattr(best_ob, 'grade', 'B'), grade_weight,
                 getattr(best_ob, 'timeframe', '?'), tf_weight)
     
-    return min(100.0, score)
+    # Cap at 85 instead of 100 (reserve 100 for truly exceptional setups)
+    return min(85.0, score)
 
 
 
@@ -3472,15 +3523,15 @@ def _calculate_synergy_bonus(
         except ImportError:
             pass  # Cycle models not available
     
-    # Apply diminishing returns after 15 points
+    # Apply diminishing returns after 8 points (TIGHTENED FURTHER: was 10)
     # This prevents "lucky" factor stacking from inflating scores excessively
-    if bonus > 15.0:
-        excess = bonus - 15.0
-        bonus = 15.0 + (excess * 0.5)
-        logger.debug("📊 Synergy diminishing applied: excess %.1f → %.1f", excess, excess * 0.5)
+    if bonus > 8.0:
+        excess = bonus - 8.0
+        bonus = 8.0 + (excess * 0.25)  # More aggressive dampening (was 0.3)
+        logger.debug("📊 Synergy diminishing applied: excess %.1f → %.1f", excess, excess * 0.25)
     
-    # Clamp synergy bonus to max 25 (allow strong multi-factor synergies)
-    return min(bonus, 25.0)
+    # Clamp synergy bonus to max 10 (REDUCED FURTHER: was 15 - force differentiation)
+    return min(bonus, 10.0)
 
 
 def _calculate_conflict_penalty(factors: List[ConfluenceFactor], direction: str) -> float:

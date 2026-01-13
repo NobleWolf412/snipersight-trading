@@ -19,7 +19,7 @@ import json
 import os
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import List, Dict, Optional, Any
+from typing import Dict, List, Optional, Any, Literal, Callable
 import logging
 import time
 
@@ -203,12 +203,16 @@ class Orchestrator:
             "min_rr": min_rr
         })
     
-    def scan(self, symbols: List[str]) -> tuple[List[TradePlan], Dict[str, Any]]:
+    def scan(self, symbols: List[str], progress_callback: Optional[Callable[[int, int, str], None]] = None) -> tuple[List[TradePlan], Dict[str, Any]]:
         """
-        Execute complete scan pipeline for symbols.
+        Scan a list of symbols and return high-conviction trade plans.
         
         Args:
-            symbols: List of trading pairs to scan
+            symbols: List of trading symbols to analyze
+            progress_callback: Optional callback(completed, total, current_symbol) for progress updates
+        
+        Returns:
+            Tuple of (trade_plans, rejection_summary)ading pairs to scan
             
         Returns:
             Tuple of (TradePlans, rejection_stats dict)
@@ -344,50 +348,80 @@ class Orchestrator:
                 tb = traceback.format_exc()
                 logger.error("❌ %s: Pipeline error - %s\n%s", sym, e, tb)
                 self.telemetry.log_event(create_error_event(
-                    error_message=str(e),
-                    error_type=type(e).__name__,
-                    symbol=sym,
-                    run_id=run_id
-                ))
-                return None, {"symbol": sym, "error": str(e), "reason_type": "errors", "reason": str(e)}
+            error_message=str(e),
+            error_type=type(e).__name__,
+            symbol=sym,
+            run_id=run_id
+        ))
+        
+# Process symbols with ThreadPoolExecutor for parallelism while calling callback
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        # This list will store the results (TradePlan or None, and rejection_info)
+        processed_symbol_results = []
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.concurrency_workers) as executor:
-            future_map = {executor.submit(_safe_process, s): s for s in symbols}
-            for future in concurrent.futures.as_completed(future_map):
-                symbol = future_map[future]
+        with ThreadPoolExecutor(max_workers=self.concurrency_workers) as executor:
+            # Submit all tasks
+            future_to_symbol = {executor.submit(_safe_process, sym): sym for sym in symbols}
+            
+            # Process results as they complete
+            completed = 0
+            for future in as_completed(future_to_symbol):
+                sym = future_to_symbol[future]
                 try:
-                    result, rejection_info = future.result(timeout=120)  # 120s timeout per symbol (increased from 30s)
+                    result, rejection_info = future.result(timeout=120) # 120s timeout per symbol
+                    processed_symbol_results.append((sym, result, rejection_info))
+                    completed += 1
+                    
+                    # Call progress callback if provided
+                    if progress_callback:
+                        try:
+                            progress_callback(completed, len(symbols), sym)
+                        except Exception as e:
+                            logger.debug("Progress callback error: %s", e)
+                            
                 except concurrent.futures.TimeoutError:
-                    logger.warning("⏱️ %s: Symbol processing timed out after 120s", symbol)
+                    logger.warning("⏱️ %s: Symbol processing timed out after 120s", sym)
                     result, rejection_info = None, {
-                        "symbol": symbol,
+                        "symbol": sym,
                         "reason_type": "errors",
                         "reason": "Processing timed out after 120 seconds"
                     }
-                if result:
-                    signals.append(result)
-                    # Track direction stats
-                    if result.direction == "LONG":
-                        direction_stats["longs_generated"] += 1
-                    else:
-                        direction_stats["shorts_generated"] += 1
-                    # Track tie-break usage from metadata
-                    alt_confluence = getattr(result, 'metadata', {}).get('alt_confluence', {})
-                    tie_break = alt_confluence.get('tie_break_used')
-                    if tie_break == 'regime_bullish':
-                        direction_stats["tie_breaks_long"] += 1
-                    elif tie_break == 'regime_bearish':
-                        direction_stats["tie_breaks_short"] += 1
-                    elif tie_break == 'neutral_default_long':
-                        direction_stats["tie_breaks_neutral_default"] += 1
-                    logger.info("✅ %s: Signal generated (%.1f%%) - %s", symbol, result.confidence_score, result.direction)
+                    processed_symbol_results.append((sym, result, rejection_info))
+                    completed += 1
+                    
+                    if progress_callback:
+                        try:
+                            progress_callback(completed, len(symbols), sym)
+                        except Exception as e:
+                            logger.debug("Progress callback error: %s", e)
+        
+        # Process all collected results
+        for symbol, result, rejection_info in processed_symbol_results:
+            if result:
+                signals.append(result)
+                # Track direction stats
+                if result.direction == "LONG":
+                    direction_stats["longs_generated"] += 1
                 else:
-                    rejected_count += 1
-                    # Categorize rejection
-                    if rejection_info:
-                        reason_type = rejection_info.get("reason_type", "errors")
-                        rejection_stats[reason_type].append(rejection_info)
-                    logger.debug("⚪ %s: No qualifying setup", symbol)
+                    direction_stats["shorts_generated"] += 1
+                # Track tie-break usage from metadata
+                alt_confluence = getattr(result, 'metadata', {}).get('alt_confluence', {})
+                tie_break = alt_confluence.get('tie_break_used')
+                if tie_break == 'regime_bullish':
+                    direction_stats["tie_breaks_long"] += 1
+                elif tie_break == 'regime_bearish':
+                    direction_stats["tie_breaks_short"] += 1
+                elif tie_break == 'neutral_default_long':
+                    direction_stats["tie_breaks_neutral_default"] += 1
+                logger.info("✅ %s: Signal generated (%.1f%%) - %s", symbol, result.confidence_score, result.direction)
+            else:
+                rejected_count += 1
+                # Categorize rejection
+                if rejection_info:
+                    reason_type = rejection_info.get("reason_type", "errors")
+                    rejection_stats[reason_type].append(rejection_info)
+                logger.debug("⚪ %s: No qualifying setup", symbol)
         
         # Log scan completed event
         duration = time.time() - start_time

@@ -139,15 +139,30 @@ export function IntelDossier({ result, onClose }: IntelDossierProps) {
                                     </div>
                                 </div>
 
-                                <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 shadow-inner">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <span className="text-sm font-bold text-[#00ff88] font-mono tracking-wide uppercase">Target 1</span>
-                                        <span className="font-mono text-[#00ff88] text-lg">{formatPrice(result.takeProfits[0])}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center opacity-70">
-                                        <span className="text-sm font-bold text-[#00ff88]/70 font-mono tracking-wide uppercase">Target 2</span>
-                                        <span className="font-mono text-[#00ff88]/70">{formatPrice(result.takeProfits[1] || result.takeProfits[0] * 1.02)}</span>
-                                    </div>
+
+                                <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 shadow-inner space-y-2">
+                                    {result.takeProfits.map((tp, idx) => (
+                                        <div
+                                            key={idx}
+                                            className={cn(
+                                                "flex justify-between items-center",
+                                                idx > 0 && "opacity-70"
+                                            )}
+                                        >
+                                            <span className={cn(
+                                                "text-sm font-bold font-mono tracking-wide uppercase",
+                                                idx === 0 ? "text-[#00ff88]" : "text-[#00ff88]/70"
+                                            )}>
+                                                Target {idx + 1}
+                                            </span>
+                                            <span className={cn(
+                                                "font-mono text-lg",
+                                                idx === 0 ? "text-[#00ff88]" : "text-[#00ff88]/70"
+                                            )}>
+                                                {formatPrice(tp)}
+                                            </span>
+                                        </div>
+                                    ))}
                                 </div>
 
                                 <div className="flex items-center justify-between pt-2">

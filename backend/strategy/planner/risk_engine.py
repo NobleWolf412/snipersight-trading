@@ -1427,6 +1427,13 @@ def _calculate_swing_structural_targets(
                 weight=0.5,
                 rationale=f"Projected swing target ({mult}R)"
             ))
+    
+    # === DEBUG LOGGING ===
+    logger.info(
+        f"📊 TARGET CALC: Generated {len(targets)} targets | Entry={avg_entry:.4f} | Stop={stop_loss.level:.4f} | Risk={risk_distance:.4f}"
+    )
+    for i, t in enumerate(targets, 1):
+        logger.info(f"  TP{i}: Level={t.level:.4f} | R:R={t.rr_ratio:.2f}R | Label={t.label}")
             
     return targets
 
@@ -1528,11 +1535,17 @@ def _calculate_targets(
         structural_targets = []
         seen_levels = set()
         
+        # Get mode-specific minimum R:R (e.g., Overwatch requires 2.0R)
+        # Use planner_cfg if available, fallback to 1.0R for other modes
+        min_structural_rr = getattr(planner_cfg, 'min_rr_ratio', 1.0)
+        
         for level, info, score in candidates:
-            # Skip if too close (must be at least 1.0R away)
+            # Skip if too close (must meet mode's minimum R:R requirement)
+            # Overwatch: 2.0R, Surgical: 1.5R, Strike: 1.2R, etc.
             dist = abs(level - avg_entry)
             rr = dist / max(risk_distance, 1e-9)
-            if rr < 1.0:
+            if rr < min_structural_rr:
+                logger.debug(f"Skipping {info} at {level:.2f}: R:R {rr:.2f} < min {min_structural_rr:.1f}")
                 continue
             
             # Dedupe (0.1 ATR radius)
@@ -1650,21 +1663,42 @@ def _adjust_targets_for_leverage(
             new_level = entry_price - adjusted_distance
         
         # Create new Target with adjusted level
+        # IMPORTANT: When both stop and targets shrink by same scale_factor,
+        # R:R should remain relatively the same (not multiplied by scale_factor)
+        # 
+        # Example: Original 2.0R with 100pt risk, 200pt reward
+        #   After 0.8x scale: 80pt risk, 160pt reward = 2.0R (same!)
+        #   NOT 2.0 * 0.8 = 1.6R (WRONG!)
+        #
+        # Since we don't have stop_loss here, we rely on the fact that
+        # if targets scale by X, and stops also scale by X, R:R stays constant
+        
         adjusted_target = Target(
             level=new_level,
             label=target.label,
-            rr_ratio=target.rr_ratio * scale_factor if target.rr_ratio else None,
+            rr_ratio=target.rr_ratio,  # FIXED: R:R stays same when both scale proportionally
             weight=target.weight,
             rationale=f"{target.rationale} [Adjusted {scale_factor:.0%} for {leverage}x leverage]"
         )
         adjusted_targets.append(adjusted_target)
+    
+    # === DEBUG LOGGING ===
+    logger.info(
+        f"🔧 LEVERAGE ADJ: {leverage}x | Scale={scale_factor:.2f} | Tier={tier} | {len(targets)}→{len(adjusted_targets)} targets"
+    )
+    for i, (orig, adj) in enumerate(zip(targets, adjusted_targets), 1):
+        logger.info(
+            f"  TP{i}: {orig.level:.4f} ({orig.rr_ratio:.2f}R) → {adj.level:.4f} ({adj.rr_ratio:.2f}R)"
+        )
     
     adjustment_meta = {
         "tier": tier,
         "scale_factor": scale_factor,
         "leverage": leverage,
         "original_targets": [t.level for t in targets],
-        "adjusted_targets": [t.level for t in adjusted_targets]
+        "adjusted_targets": [t.level for t in adjusted_targets],
+        "original_rrs": [t.rr_ratio for t in targets],
+        "adjusted_rrs": [t.rr_ratio for t in adjusted_targets]
     }
     
     return adjusted_targets, adjustment_meta

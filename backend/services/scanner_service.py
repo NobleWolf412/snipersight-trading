@@ -320,12 +320,19 @@ class ScannerService:
             )
             job.total = len(symbols)
             
+            # Define progress callback to update job state
+            def update_progress(completed: int, total: int, current_symbol: str):
+                job.progress = completed
+                job.current_symbol = current_symbol
+                logger.debug("Scan progress: %d/%d - %s", completed, total, current_symbol)
+            
             # Run scan in thread pool to avoid blocking event loop
             loop = asyncio.get_event_loop()
             trade_plans, rejection_summary = await loop.run_in_executor(
                 None,  # Uses default ThreadPoolExecutor
                 self._orchestrator.scan,
-                symbols
+                symbols,
+                update_progress  # Pass progress callback
             )
             
             # Transform results to API format with live price validation
