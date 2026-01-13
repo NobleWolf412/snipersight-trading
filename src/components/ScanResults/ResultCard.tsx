@@ -146,7 +146,9 @@ export function ResultCard({ result, onClick }: ResultCardProps) {
                                 "px-2 py-0.5 text-xs font-mono uppercase tracking-wider rounded border",
                                 tradeType === 'SWING'
                                     ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
-                                    : "bg-purple-500/10 border-purple-500/20 text-purple-400"
+                                    : tradeType === 'INTRADAY'
+                                        ? "bg-orange-500/10 border-orange-500/20 text-orange-400"
+                                        : "bg-purple-500/10 border-purple-500/20 text-purple-400"
                             )}>
                                 {tradeType}
                             </span>

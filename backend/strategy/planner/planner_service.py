@@ -349,7 +349,7 @@ def generate_trade_plan(
         stop_distance_atr=stop_loss.distance_atr,
         structure_timeframes=structure_tfs_tuple,
         primary_tf=primary_tf,
-        expected_trade_type=(getattr(config, 'profile', None) or expected_trade_type)
+        expected_trade_type=(getattr(config, 'expected_trade_type', None) or expected_trade_type)
     )
     
     # === TRADE TYPE VALIDATION ===

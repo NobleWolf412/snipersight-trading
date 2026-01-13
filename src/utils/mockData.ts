@@ -10,7 +10,7 @@ export interface ScanResult {
   confidenceScore: number;
   riskScore: number;
   riskReward?: number; // Actual R:R ratio from trade plan
-  classification: 'SWING' | 'SCALP';
+  classification: 'SWING' | 'INTRADAY' | 'SCALP';
   entryZone: { low: number; high: number };
   stopLoss: number;
   stopLossRationale?: string;
@@ -112,11 +112,13 @@ export function convertSignalToScanResult(signal: any): ScanResult {
 
   // Determine classification based on setup_type (from backend)
   // setup_type values: 'scalp', 'intraday', 'swing'
-  // Only fall back to timeframe heuristic if setup_type is missing
+  // Map each to its own classification for clarity
   let classification: ScanResult['classification'];
   if (signal.setup_type === 'swing') {
     classification = 'SWING';
-  } else if (signal.setup_type === 'scalp' || signal.setup_type === 'intraday') {
+  } else if (signal.setup_type === 'intraday') {
+    classification = 'INTRADAY';
+  } else if (signal.setup_type === 'scalp') {
     classification = 'SCALP';
   } else {
     // Fallback: infer from timeframe if no setup_type provided
@@ -237,7 +239,7 @@ export function generateDemoScanResults(count = 5, mode: string = 'recon'): Scan
       trendBias: long ? 'BULLISH' : 'BEARISH',
       confidenceScore: confidence,
       riskScore: Math.max(1, Math.min(10, 10 / rr)),
-      classification: mode === 'surgical' || mode === 'strike' ? 'SCALP' : 'SWING',
+      classification: mode === 'surgical' ? 'SCALP' : mode === 'strike' ? 'INTRADAY' : 'SWING',
       entryZone: { low: entryFar, high: entryNear },
       stopLoss: stop,
       takeProfits: [tp1, tp2],

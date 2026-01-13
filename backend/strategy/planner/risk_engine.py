@@ -1013,7 +1013,7 @@ def _find_htf_swing_targets(
                         swing_levels.append((level.price, level.timeframe, 1))
         
         if swing_levels:
-            logger.debug(f"Using {len(swing_levels)} pre-calculated HTF levels for targets")
+            logger.info(f"📊 HTF SWING TARGETS: Found {len(swing_levels)} pre-calculated HTF levels (from smc_snapshot.htf_levels)")
             swing_levels.sort(key=lambda x: abs(x[0] - avg_entry))
             return swing_levels[:max_targets]
 
@@ -1724,7 +1724,7 @@ def _derive_trade_type(
     Returns:
         'scalp', 'swing', or 'intraday'
     """
-    is_scalp_mode = expected_trade_type in ('precision', 'surgical', 'strike', 'scalp', 'intraday_aggressive')
+    is_scalp_mode = expected_trade_type in ('precision', 'surgical', 'strike', 'scalp', 'intraday_aggressive', 'stealth', 'stealth_balanced')
     
     # Adjust structure definitions based on mode intent
     # For Scalpers, 4H is context/bias, not "Swing Structure"
@@ -1749,34 +1749,51 @@ def _derive_trade_type(
     swing_target_threshold = 8.0 if is_scalp_mode else 3.5
     swing_stop_atr_threshold = 6.0 if is_scalp_mode else 3.5
     
+    # === DEBUG LOGGING ===
+    logger.info(
+        f"🔍 TRADE TYPE DERIVATION: expected={expected_trade_type}, is_scalp_mode={is_scalp_mode} | "
+        f"target_move={target_move_pct:.2f}%, stop_atr={stop_distance_atr:.2f}, primary_tf={primary_tf} | "
+        f"htf_structure={htf_structure}, mtf_structure={mtf_structure}, ltf_only={ltf_only} | "
+        f"swing_target_threshold={swing_target_threshold:.1f}%, swing_stop_threshold={swing_stop_atr_threshold:.1f}ATR"
+    )
+    
     # Very large target moves are swing regardless of structure
     if target_move_pct >= swing_target_threshold:
+        logger.info(f"✅ SWING (large target: {target_move_pct:.2f}% >= {swing_target_threshold:.1f}%)")
         return 'swing'
     
     # Large target moves with HTF structure = swing
     if target_move_pct >= (swing_target_threshold * 0.7) and htf_structure:
+        logger.info(f"✅ SWING (target {target_move_pct:.2f}% >= {swing_target_threshold * 0.7:.1f}% + HTF structure)")
         return 'swing'
     
     # Wide stops from HTF structure indicate swing trades
     if stop_distance_atr >= swing_stop_atr_threshold and htf_structure:
+        logger.info(f"✅ SWING (wide stop: {stop_distance_atr:.2f}ATR >= {swing_stop_atr_threshold:.1f}ATR + HTF structure)")
         return 'swing'
     
     # HTF primary timeframe with moderate targets = swing
     # But only if NOT in scalp mode (sometimes 4H is used for bias in scalp modes, but planning is LTF)
     if not is_scalp_mode and target_move_pct >= 1.5 and primary_tf in ('4h', '1d'):
+        logger.info(f"✅ SWING (HTF primary_tf={primary_tf} + target {target_move_pct:.2f}% >= 1.5%)")
         return 'swing'
     
     # Tight stops with LTF-only structure = scalp
     if stop_distance_atr <= 1.5 and ltf_only:
+        logger.info(f"✅ SCALP (tight stop: {stop_distance_atr:.2f}ATR <= 1.5ATR + LTF only)")
         return 'scalp'
     
     # Small moves with LTF context
     if target_move_pct < 0.6 and primary_tf in LTF:
+        logger.info(f"✅ SCALP (small move: {target_move_pct:.2f}% < 0.6% + LTF primary)")
         return 'scalp'
     
     # MTF or LTF structure with moderate moves = intraday (SURGICAL, STRIKE)
     if mtf_or_ltf_only and target_move_pct < swing_target_threshold:
+        logger.info(f"✅ INTRADAY (MTF/LTF only + target {target_move_pct:.2f}% < {swing_target_threshold:.1f}%)")
         return 'intraday'
     
     # Default: intraday (middle ground)
+    logger.info(f"✅ INTRADAY (default fallback)")
     return 'intraday'
+
