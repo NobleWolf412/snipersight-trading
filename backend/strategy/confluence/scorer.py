@@ -33,6 +33,17 @@ from backend.analysis.pullback_detector import detect_pullback_setup, PullbackSe
 from backend.strategy.smc.sessions import is_kill_zone_active, get_current_kill_zone
 from backend.analysis.macro_context import MacroContext, compute_macro_score
 
+# === FILE LOGGING FOR CONFLUENCE BREAKDOWN ===
+# Automatically write detailed breakdowns to file for investigation
+import os
+BREAKDOWN_LOG_PATH = "/tmp/confluence_breakdown.log"
+try:
+    BREAKDOWN_LOG_FILE = open(BREAKDOWN_LOG_PATH, "a", buffering=1)  # Line buffered
+    logger.info(f"📝 Confluence breakdown logging to: {BREAKDOWN_LOG_PATH}")
+except Exception as e:
+    BREAKDOWN_LOG_FILE = None
+    logger.warning(f"Could not open breakdown log file: {e}")
+
 # Conditional imports for type hints
 if TYPE_CHECKING:
     from backend.shared.models.smc import CycleContext, ReversalContext
@@ -2489,10 +2500,10 @@ def calculate_confluence_score(
     
     if raw_score >= 75.0:
         # EXCELLENT setups: Boost to reward true quality
-        # 75 → 78, 80 → 85, 85 → 90
+        # 75 → 76.5, 80 → 82, 85 → 87.5 (more conservative)
         boost = (raw_score - 75.0) * 0.5  # Up to +7.5pts for 90+ raw
-        final_score = raw_score + min(8.0, boost + 3.0)
-        logger.debug("🚀 Excellence boost: %.1f → %.1f (+%.1f)", 
+        final_score = raw_score + min(6.0, boost + 1.5)  # REDUCED: was boost + 3.0
+        logger.debug("🚀 Excellence boost: %.1f → %.1f (+%.1f)",
                     raw_score, final_score, final_score - raw_score)
     
     elif raw_score >= 70.0:
@@ -2542,6 +2553,44 @@ def calculate_confluence_score(
     # TRACING: Log detailed score breakdown for analysis
     # Only trace non-zero scores to reduce noise, unless it's a specific debug target
     if final_score > 0:
+        # === ENHANCED CONFLUENCE BREAKDOWN LOGGING ===
+        logger.info(
+            f"📊 CONFLUENCE BREAKDOWN | {symbol} {direction.upper()}\n"
+            f"├─ Final Score: {final_score:.2f} (Raw: {raw_score:.2f})\n"
+            f"├─ Components:\n"
+            f"│  ├─ Weighted Base: {weighted_score:.2f}\n"
+            f"│  ├─ Synergy Bonus: +{synergy_bonus:.2f}\n"
+            f"│  ├─ Conflict Penalty: -{conflict_penalty:.2f}\n"
+            f"│  └─ Macro Score: {macro_score_val:.2f}\n"
+            f"└─ Top Factors:"
+        )
+        
+        # Show top 5 contributing factors
+        sorted_factors = sorted(factors, key=lambda f: f.score * f.weight, reverse=True)
+        for i, f in enumerate(sorted_factors[:5], 1):
+            contribution = f.score * f.weight
+            logger.info(f"   {i}. {f.name}: {f.score:.1f} × {f.weight:.2f} = {contribution:.2f}pts")
+        
+        # === WRITE TO FILE LOG ===
+        if BREAKDOWN_LOG_FILE:
+            try:
+                BREAKDOWN_LOG_FILE.write(f"\n{'='*80}\n")
+                BREAKDOWN_LOG_FILE.write(f"CONFLUENCE BREAKDOWN | {symbol} {direction.upper()}\n")
+                BREAKDOWN_LOG_FILE.write(f"Final Score: {final_score:.2f} (Raw: {raw_score:.2f})\n")
+                BREAKDOWN_LOG_FILE.write(f"Components:\n")
+                BREAKDOWN_LOG_FILE.write(f"  - Weighted Base: {weighted_score:.2f}\n")
+                BREAKDOWN_LOG_FILE.write(f"  - Synergy Bonus: +{synergy_bonus:.2f}\n")
+                BREAKDOWN_LOG_FILE.write(f"  - Conflict Penalty: -{conflict_penalty:.2f}\n")
+                BREAKDOWN_LOG_FILE.write(f"  - Macro Score: {macro_score_val:.2f}\n")
+                BREAKDOWN_LOG_FILE.write(f"Top Factors:\n")
+                for i, f in enumerate(sorted_factors[:5], 1):
+                    contribution = f.score * f.weight
+                    BREAKDOWN_LOG_FILE.write(f"  {i}. {f.name}: {f.score:.1f} × {f.weight:.2f} = {contribution:.2f}pts\n")
+                BREAKDOWN_LOG_FILE.write(f"{'='*80}\n")
+                BREAKDOWN_LOG_FILE.flush()
+            except Exception as e:
+                logger.warning(f"Failed to write breakdown to file: {e}")
+        
         try:
             trace_data = {
                 "symbol": symbol,
@@ -3109,11 +3158,9 @@ def _score_momentum(
     
     # Weighted sum: RSI (primary) + Stoch (secondary) + MFI (tertiary)
     raw_momentum = (rsi_score * 1.0) + (stoch_score * 0.5) + (mfi_score * 0.5)
-    
-    # Apply category cap to prevent inflation
-    score = min(MOMENTUM_CATEGORY_CAP, raw_momentum)
-    
+
     # --- Mode-Aware MACD Evaluation ---
+    macd_score_contrib = 0.0
     if macd_config:
         # Use new mode-aware MACD scoring
         macd_analysis = evaluate_macd_for_mode(
@@ -3123,7 +3170,14 @@ def _score_momentum(
             htf_indicators=htf_indicators,
             timeframe=timeframe
         )
-        score += macd_analysis["score"]
+        macd_score_contrib = macd_analysis["score"]
+
+    # CRITICAL FIX: Include MACD in category cap BEFORE capping
+    # Otherwise MACD can add 50-80 points on top of the 25pt cap, defeating the purpose
+    raw_momentum_with_macd = raw_momentum + macd_score_contrib
+
+    # Apply category cap to prevent inflation (includes MACD now)
+    score = min(MOMENTUM_CATEGORY_CAP, raw_momentum_with_macd)
     else:
         # Legacy MACD scoring (fallback for backward compatibility)
         macd_line = getattr(indicators, 'macd_line', None)
@@ -3430,11 +3484,11 @@ def _calculate_synergy_bonus(
     
     # Order Block + FVG + Structure = strong setup
     if "Order Block" in factor_names and "Fair Value Gap" in factor_names and "Market Structure" in factor_names:
-        bonus += 10.0
-    
+        bonus += 5.0  # REDUCED: was 10.0 - too generous for basic SMC confluence
+
     # Liquidity Sweep + Structure = institutional trap reversal
     if "Liquidity Sweep" in factor_names and "Market Structure" in factor_names:
-        bonus += 8.0
+        bonus += 4.0  # REDUCED: was 8.0 - still significant but not excessive
     
     # --- HTF SWEEP → LTF ENTRY SYNERGY ---
     # When HTF sweep detected, LTF entries in expected direction get bonus
@@ -3446,12 +3500,12 @@ def _calculate_synergy_bonus(
         # Check alignment: HTF swept low → expect bullish → LONG gets bonus
         # HTF swept high → expect bearish → SHORT gets bonus
         if (expected_dir == 'bullish' and direction_lower in ('long', 'bullish')):
-            bonus += 12.0
-            logger.debug("📊 HTF sweep → LTF long alignment (+12): %s sweep signaled bullish",
+            bonus += 6.0  # REDUCED: was 12.0 - still strong but not excessive
+            logger.debug("📊 HTF sweep → LTF long alignment (+6): %s sweep signaled bullish",
                         htf_context.get('sweep_timeframe', '?'))
         elif (expected_dir == 'bearish' and direction_lower in ('short', 'bearish')):
-            bonus += 12.0
-            logger.debug("📊 HTF sweep → LTF short alignment (+12): %s sweep signaled bearish",
+            bonus += 6.0  # REDUCED: was 12.0 - still strong but not excessive
+            logger.debug("📊 HTF sweep → LTF short alignment (+6): %s sweep signaled bearish",
                         htf_context.get('sweep_timeframe', '?'))
     
     # HTF Alignment + strong momentum
@@ -3523,50 +3577,57 @@ def _calculate_synergy_bonus(
         except ImportError:
             pass  # Cycle models not available
     
-    # Apply diminishing returns after 8 points (TIGHTENED FURTHER: was 10)
+    # Apply diminishing returns after 5 points (TIGHTENED: was 8)
     # This prevents "lucky" factor stacking from inflating scores excessively
-    if bonus > 8.0:
-        excess = bonus - 8.0
-        bonus = 8.0 + (excess * 0.25)  # More aggressive dampening (was 0.3)
-        logger.debug("📊 Synergy diminishing applied: excess %.1f → %.1f", excess, excess * 0.25)
-    
-    # Clamp synergy bonus to max 10 (REDUCED FURTHER: was 15 - force differentiation)
-    return min(bonus, 10.0)
+    if bonus > 5.0:
+        excess = bonus - 5.0
+        bonus = 5.0 + (excess * 0.2)  # Aggressive dampening (was 0.25)
+        logger.debug("📊 Synergy diminishing applied: excess %.1f → %.1f", excess, excess * 0.2)
+
+    # Clamp synergy bonus to max 6 (REDUCED: was 10 - force better differentiation)
+    return min(bonus, 6.0)
 
 
 def _calculate_conflict_penalty(factors: List[ConfluenceFactor], direction: str) -> float:
     """Calculate penalty for conflicting signals."""
     penalty = 0.0
-    
+
     # BTC impulse gate failure is major conflict
     btc_factor = next((f for f in factors if f.name == "BTC Impulse Gate"), None)
-    if btc_factor and btc_factor.score == 0.0:
-        penalty += 20.0
-    
+    if btc_factor and btc_factor.score < 20.0:  # FIXED: was == 0.0 (too strict)
+        # Progressive penalty based on how weak BTC alignment is
+        if btc_factor.score == 0.0:
+            penalty += 20.0  # Complete opposition
+        else:
+            penalty += 10.0  # Weak alignment (0-20)
+        logger.debug("BTC impulse gate conflict: score %.1f → +%.1f penalty", btc_factor.score, penalty)
+
     # Weak momentum in strong setup
     momentum_factor = next((f for f in factors if f.name == "Momentum"), None)
     structure_factor = next((f for f in factors if f.name == "Market Structure"), None)
-    
+
     if momentum_factor and structure_factor:
         if momentum_factor.score < 30 and structure_factor.score > 70:
             penalty += 10.0  # Structure says go, momentum says no
-    
+            logger.debug("Momentum/Structure conflict: Mom %.1f vs Struct %.1f → +10 penalty",
+                        momentum_factor.score, structure_factor.score)
+
     # === HTF ALIGNMENT PENALTY ===
     # FIXED: Only penalize if HTF Alignment wasn't already scored as a factor
     # (otherwise we double-penalize: score 0 AND conflict penalty)
     htf_factor = next((f for f in factors if f.name == "HTF Alignment"), None)
     htf_already_scored_negative = htf_factor and htf_factor.score < 30  # Already penalized via low score
-    
+
     if htf_factor and not htf_already_scored_negative:
-        if htf_factor.score == 0.0:
+        if htf_factor.score < 20.0:  # FIXED: was == 0.0 (too strict)
             # HTF opposing direction - major penalty (only if not already scored low)
             penalty += 15.0
-            logger.debug("HTF opposition penalty applied: +15")
-        elif htf_factor.score == 50.0:
+            logger.debug("HTF opposition penalty: score %.1f → +15", htf_factor.score)
+        elif 40.0 <= htf_factor.score <= 60.0:  # FIXED: was == 50.0 (too strict) - ranging/neutral
             # HTF neutral (ranging) - moderate penalty for counter-trend risk
             penalty += 8.0
-            logger.debug("HTF neutral penalty applied: +8")
-    
+            logger.debug("HTF neutral penalty: score %.1f → +8", htf_factor.score)
+
     # Cap penalty to 35 (limit downside impact)
     return min(penalty, 35.0)
 

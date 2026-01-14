@@ -208,7 +208,7 @@ MODES: Dict[str, ScannerMode] = {
         overrides={"min_rr_ratio": 1.2, "atr_floor": 0.0010, "bias_gate": 0.6, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True, "entry_zone_offset_atr": -0.05},
         # NEW: Nested OB entry hierarchy
         zone_timeframes=("15m", "5m"),  # Entry zone OBs (faster for intraday)
-        entry_trigger_timeframes=("5m", "1m"),  # Refined entry OBs
+        entry_trigger_timeframes=("5m",),  # Refined entry OBs
     ),
     "surgical": ScannerMode(
         name="surgical",
@@ -233,7 +233,7 @@ MODES: Dict[str, ScannerMode] = {
         overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0008, "bias_gate": 0.7, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True, "entry_zone_offset_atr": 0.05},
         # NEW: Nested OB entry hierarchy
         zone_timeframes=("4h", "1h", "15m", "5m"),  # Entry zone OBs - includes HTF for institutional context
-        entry_trigger_timeframes=("5m", "1m"),  # Refined entry OBs
+        entry_trigger_timeframes=("5m",),  # Refined entry OBs
     ),
     # STEALTH replaces both RECON and GHOST (merged per SMC_PIPELINE_REFACTOR.md)
     # Use stealth_strict=False for balanced (was RECON), stealth_strict=True for higher conviction (was GHOST)
