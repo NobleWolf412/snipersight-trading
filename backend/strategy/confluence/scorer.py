@@ -1698,7 +1698,7 @@ def calculate_confluence_score(
                     
                     if nearest_fib:
                         # Calculate proximity percentage
-                        proximity_pct = get_fib_proximity_pct(current_price, nearest_fib.price)
+                        proximity_pct = get_fib_proximity_pct(current_price, nearest_fib)
                         
                         # Score based on proximity to key levels (61.8%, 50%, 38.2%)
                         key_levels = [0.618, 0.5, 0.382]
@@ -1981,12 +1981,12 @@ def calculate_confluence_score(
     # --- NEW: Premium/Discount Zone Scoring ---
     # Bonus for trading in the optimal zone for direction
     try:
-        if current_price is not None and smc_snapshot.premium_discount_zones:
+        if current_price is not None and smc_snapshot.premium_discount:
             # Get the zone from the primary planning timeframe - explicit None check
             primary_tf = getattr(config, 'primary_planning_timeframe', '4h')
-            pd_zone = smc_snapshot.premium_discount_zones.get(primary_tf)
+            pd_zone = smc_snapshot.premium_discount.get(primary_tf)
             if pd_zone is None:
-                pd_zone = smc_snapshot.premium_discount_zones.get(primary_tf.upper())
+                pd_zone = smc_snapshot.premium_discount.get(primary_tf.upper())
             
             if pd_zone:
                 current_zone = pd_zone.get('current_zone', 'neutral')
@@ -2037,8 +2037,8 @@ def calculate_confluence_score(
                 ))
     except Exception as e:
         error_type = type(e).__name__
-        has_pd_zones = smc_snapshot.premium_discount_zones is not None
-        zone_count = len(smc_snapshot.premium_discount_zones) if has_pd_zones else 0
+        has_pd_zones = smc_snapshot.premium_discount is not None
+        zone_count = len(smc_snapshot.premium_discount) if has_pd_zones else 0
         logger.warning(f"📊 P/D Zone DIAGNOSTIC [{symbol}]: Scoring FAILED with {error_type}. "
                       f"Has P/D zones: {has_pd_zones}, Zone count: {zone_count}. Error: {str(e)[:150]}")
         logger.debug(f"📊 P/D Zone DIAGNOSTIC [{symbol}]: Full error", exc_info=True)

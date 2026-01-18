@@ -280,7 +280,7 @@ class ConfluenceService:
                                     'bearish_structure': bearish_structure
                                 }
                                 
-                                raise ValueError(f"Conflicting signals ({bullish_breakdown.total_score:.1f}%) - bullish and bearish setups equally strong with no regime bias")
+                                raise ValueError(f"Conflicting signals ({bullish_breakdown.total_score:.1f}%) - bullish and bearish scores too close to call (<8pt margin) in neutral market")
                         
                         else:
                             # Scores not strong enough for structure override (<=70%)
@@ -294,7 +294,7 @@ class ConfluenceService:
                                 'tie_break_used': 'skipped_no_edge'
                             }
                             
-                            raise ValueError(f"No directional edge ({bullish_breakdown.total_score:.1f}%) - bullish and bearish scores identical in neutral market")
+                            raise ValueError(f"No directional edge ({bullish_breakdown.total_score:.1f}%) - bullish and bearish scores too close to call (<8pt margin) in neutral market")
             
             # CRITICAL: Store chosen direction in context for downstream use
             context.metadata['chosen_direction'] = chosen_direction
