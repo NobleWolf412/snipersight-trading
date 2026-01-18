@@ -1,15 +1,14 @@
 from datetime import datetime, timedelta
 from typing import Literal
 from backend.strategy.planner.planner_service import _calculate_entry_zone
-from backend.shared.models.smc import SMCSnapshot, OrderBlock, FVG
+from backend.shared.models.smc import SMCSnapshot, OrderBlock
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.models.scoring import ConfluenceBreakdown, ConfluenceFactor
 from backend.shared.config.planner_config import PlannerConfig
 
 
 def _dummy_breakdown(
-    htf_type: Literal["support", "resistance"], 
-    htf_prox_atr: float
+    htf_type: Literal["support", "resistance"], htf_prox_atr: float
 ) -> ConfluenceBreakdown:
     # Minimal valid breakdown with single factor weight 1.0
     factor = ConfluenceFactor(name="Dummy", score=50.0, weight=1.0, rationale="test")

@@ -3,12 +3,12 @@ Regime Policies - Mode-specific regime handling
 
 Defines how each scanner mode responds to market regimes.
 """
+
 from typing import Dict
 from backend.shared.models.regime import RegimePolicy
 
 # Per-mode regime policies
 REGIME_POLICIES: Dict[str, RegimePolicy] = {
-    
     "overwatch": RegimePolicy(
         mode_name="overwatch",
         min_regime_score=60.0,  # Conservative - need good conditions
@@ -32,9 +32,8 @@ REGIME_POLICIES: Dict[str, RegimePolicy] = {
             "sideways": 0.8,  # Lower R:R acceptable
             "strong_up": 1.3,  # Can push for higher targets
             "chaotic_volatile": 0.7,
-        }
+        },
     ),
-    
     "recon": RegimePolicy(
         mode_name="recon",
         min_regime_score=45.0,  # Adjusted to 45 (was 50) to capture 'normal' 47.0 regimes
@@ -57,9 +56,8 @@ REGIME_POLICIES: Dict[str, RegimePolicy] = {
             "strong_up": 1.2,
             "strong_down": 1.2,
             "chaotic_volatile": 0.8,
-        }
+        },
     ),
-    
     "strike": RegimePolicy(
         mode_name="strike",
         min_regime_score=40.0,  # Aggressive - can trade most conditions
@@ -82,9 +80,8 @@ REGIME_POLICIES: Dict[str, RegimePolicy] = {
             "strong_up": 1.4,
             "strong_down": 1.4,
             "compressed": 1.2,  # Coils can deliver
-        }
+        },
     ),
-    
     "surgical": RegimePolicy(
         mode_name="surgical",
         min_regime_score=30.0,  # Very aggressive - trades anything
@@ -107,10 +104,8 @@ REGIME_POLICIES: Dict[str, RegimePolicy] = {
             "strong_up": 1.5,
             "strong_down": 1.5,
             "compressed": 1.3,
-        }
+        },
     ),
-    
-
 }
 
 
@@ -125,6 +120,6 @@ def get_regime_policy(mode_name: str) -> RegimePolicy:
             allow_in_risk_off=True,
             position_size_adjustment={},
             confluence_adjustment={},
-            rr_adjustment={}
-        )
+            rr_adjustment={},
+        ),
     )

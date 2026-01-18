@@ -7,19 +7,19 @@
 - Safe fallback behavior when adapter data is unavailable
 - Uses SymbolClassifier for accurate category detection (CoinGecko + heuristics)
 """
+
 from typing import List, Protocol, Optional
 from loguru import logger
 
 from backend.analysis.symbol_classifier import (
     get_classifier,
-    SymbolCategory,
     HEURISTIC_MAJORS,
 )
 
 
 class SupportsTopSymbols(Protocol):
-    def get_top_symbols(self, n: int = 20, quote_currency: str = "USDT") -> List[str]:
-        ...
+    def get_top_symbols(self, n: int = 20, quote_currency: str = "USDT") -> List[str]: ...
+
     # Optional: adapters may expose market type helpers
     def is_perp(self, symbol: str) -> bool:  # type: ignore[override]
         ...
@@ -53,7 +53,7 @@ _classifier = get_classifier()
 
 def _is_meme_symbol(symbol: str) -> bool:
     """Classify symbol as meme using SymbolClassifier.
-    
+
     Uses CoinGecko data when cached, falls back to heuristics.
     """
     return _classifier.is_meme(symbol)
@@ -149,9 +149,11 @@ def select_symbols(
         # but here we know we are usually working with PhemexAdapter.
         # Safest way: check if it takes market_type or just pass it if we are confident.
         # Given the previous context, PhemexAdapter.get_top_symbols *does* take market_type.
-        all_symbols = adapter.get_top_symbols(n=min(limit * 3, 50), quote_currency="USDT", market_type=market_type)
+        all_symbols = adapter.get_top_symbols(
+            n=min(limit * 3, 50), quote_currency="USDT", market_type=market_type
+        )
     except TypeError:
-         # Fallback for adapters that might not accept market_type yet
+        # Fallback for adapters that might not accept market_type yet
         all_symbols = adapter.get_top_symbols(n=min(limit * 3, 50), quote_currency="USDT")
     except Exception:
         all_symbols = []
@@ -164,7 +166,7 @@ def select_symbols(
 
     # If leverage is requested (>1), prefer/require perp/marginable symbols
     # BUT only if we are NOT explicitly in spot mode.
-    if (leverage or 1) > 1 and market_type != 'spot':
+    if (leverage or 1) > 1 and market_type != "spot":
         perp_symbols = [s for s in all_symbols if _is_perp_with_fallback(adapter, s)]
         # Require perp when leverage > 1; if empty, try fallback perp-filter
         if perp_symbols:
@@ -172,7 +174,9 @@ def select_symbols(
         else:
             fallback_perps = [s for s in DEFAULT_FALLBACK if _is_perp_with_fallback(adapter, s)]
             all_symbols = fallback_perps if fallback_perps else DEFAULT_FALLBACK.copy()
-            logger.debug("leverage > 1 but adapter/perp heuristics returned empty; using fallback set")
+            logger.debug(
+                "leverage > 1 but adapter/perp heuristics returned empty; using fallback set"
+            )
 
     # Curated majors when present; preserves ranking order. Fallback to dynamic slice when none found.
     proportional = max(1, int(len(all_symbols) * 0.2))
@@ -225,7 +229,11 @@ def select_symbols(
         fetched_cnt = len(all_symbols)
         majors_cnt = len(majors_list) if majors else 0
         memes_cnt = len([s for s in all_symbols if _is_meme_symbol(s)]) if meme_mode else 0
-        alts_cnt = len([s for s in all_symbols if s not in majors_list and not _is_meme_symbol(s)]) if altcoins else 0
+        alts_cnt = (
+            len([s for s in all_symbols if s not in majors_list and not _is_meme_symbol(s)])
+            if altcoins
+            else 0
+        )
         logger.info(
             "selection adapter=%s limit=%s leverage=%s market=%s toggles majors=%s memes=%s alts=%s fetched=%s final=%s buckets majors=%s memes=%s alts=%s examples majors=%s memes=%s alts=%s",
             adapter.__class__.__name__,
@@ -242,7 +250,9 @@ def select_symbols(
             alts_cnt,
             ",".join(majors_list[:3]),
             ",".join([s for s in all_symbols if _is_meme_symbol(s)][:3]),
-            ",".join([s for s in all_symbols if s not in majors_list and not _is_meme_symbol(s)][:3]),
+            ",".join(
+                [s for s in all_symbols if s not in majors_list and not _is_meme_symbol(s)][:3]
+            ),
         )
     except Exception:
         # Logging must never break selection

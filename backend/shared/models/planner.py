@@ -16,19 +16,20 @@ from .scoring import ConfluenceBreakdown
 class EntryZone:
     """
     Dual entry zone specification.
-    
+
     Provides near (aggressive) and far (conservative) entry points
     anchored to structure (order blocks, FVGs).
-    
+
     Attributes:
         near_entry: Aggressive entry at zone boundary
         far_entry: Conservative entry deeper in zone
         rationale: Explanation of entry zone placement
     """
+
     near_entry: float
     far_entry: float
     rationale: str
-    
+
     def __post_init__(self):
         """Validate entry zone data."""
         if not self.rationale:
@@ -38,12 +39,12 @@ class EntryZone:
         # We can't validate direction here, so just ensure they're different
         if self.near_entry == self.far_entry:
             raise ValueError("Near and far entries must be different")
-    
+
     @property
     def zone_size(self) -> float:
         """Calculate size of entry zone."""
         return abs(self.near_entry - self.far_entry)
-    
+
     @property
     def midpoint(self) -> float:
         """Calculate midpoint of entry zone."""
@@ -54,21 +55,22 @@ class EntryZone:
 class StopLoss:
     """
     Stop loss specification with structure-based placement.
-    
+
     Stop is placed beyond invalidation level (below bullish OB,
     above bearish OB) with ATR-based buffer.
-    
+
     Attributes:
         level: Stop loss price
         distance_atr: Distance from entry in ATR units
         rationale: Explanation of stop placement
         structure_tf_used: Timeframe of structure used for stop (optional)
     """
+
     level: float
     distance_atr: float
     rationale: str
     structure_tf_used: Optional[str] = None
-    
+
     def __post_init__(self):
         """Validate stop loss data."""
         if self.level <= 0:
@@ -83,10 +85,10 @@ class StopLoss:
 class Target:
     """
     Take profit target specification.
-    
+
     Each target includes a price level, percentage of position to close,
     and rationale for placement (structure level, extension, FVG fill).
-    
+
     Attributes:
         level: Target price
         rationale: Explanation of target placement
@@ -95,13 +97,14 @@ class Target:
         rr_ratio: Risk-reward ratio at this target level
         weight: Weight/priority for this target (0.0-1.0)
     """
+
     level: float
     rationale: str
     percentage: float = 0.0  # Assigned after target creation
     label: str = ""  # Optional display label
     rr_ratio: float = 0.0  # R:R ratio at this target
     weight: float = 1.0  # Target priority weight
-    
+
     def __post_init__(self):
         """Validate target data."""
         if self.level <= 0:
@@ -115,10 +118,10 @@ class Target:
 class TradePlan:
     """
     Complete trade plan with all required fields populated.
-    
+
     This is the core output of the SniperSight pipeline. Following the
     "No-Null Outputs" principle, every field must be populated except metadata.
-    
+
     Attributes:
         symbol: Trading pair (e.g., 'BTC/USDT')
         direction: 'LONG' or 'SHORT'
@@ -138,6 +141,7 @@ class TradePlan:
         metadata: Optional additional data
         timestamp: When plan was generated
     """
+
     symbol: str
     direction: Literal["LONG", "SHORT"]
     setup_type: Literal["Scalp Trade", "Day Trade", "Swing Trade", "Position Trade"]
@@ -156,23 +160,23 @@ class TradePlan:
     missing_critical_timeframes: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.utcnow)
-    
+
     # Backward compatibility alias
     @property
     def risk_reward(self) -> float:
         return self.risk_reward_ratio
-    
+
     def __post_init__(self):
         """Validate trade plan completeness."""
         # Required string fields
         if not self.symbol:
             raise ValueError("Symbol cannot be empty")
         # Rationale is now optional (has default)
-        
+
         # Must have at least one target
         if not self.targets:
             raise ValueError("Trade plan must have at least one target")
-        
+
         # Validate target percentages sum to 100
         total_pct = sum(t.percentage for t in self.targets)
         if not 99 <= total_pct <= 101:  # Allow small floating point error
@@ -180,15 +184,15 @@ class TradePlan:
                 f"Target percentages must sum to 100, got {total_pct}. "
                 f"Targets: {[(t.level, t.percentage) for t in self.targets]}"
             )
-        
+
         # Validate R:R ratio
         if self.risk_reward_ratio < 0:
             raise ValueError(f"Risk:reward ratio must be positive, got {self.risk_reward_ratio}")
-        
+
         # Validate confidence score
         if not 0 <= self.confidence_score <= 100:
             raise ValueError(f"Confidence score must be 0-100, got {self.confidence_score}")
-        
+
         # Validate entries and stops make sense for direction
         if self.direction == "LONG":
             # For longs: entry > stop
@@ -218,27 +222,26 @@ class TradePlan:
                         f"SHORT: Target ({target.level}) must be < "
                         f"entry ({self.entry_zone.near_entry})"
                     )
-    
+
     @property
     def risk_amount(self) -> float:
         """Calculate risk amount (entry to stop distance)."""
         return abs(self.entry_zone.near_entry - self.stop_loss.level)
-    
+
     @property
     def reward_amount(self) -> float:
         """Calculate weighted average reward (entry to targets)."""
         total_reward = sum(
-            abs(t.level - self.entry_zone.near_entry) * (t.percentage / 100)
-            for t in self.targets
+            abs(t.level - self.entry_zone.near_entry) * (t.percentage / 100) for t in self.targets
         )
         return total_reward
-    
+
     def calculate_rr(self) -> float:
         """Recalculate risk:reward ratio."""
         if self.risk_amount == 0:
             return 0
         return self.reward_amount / self.risk_amount
-    
+
     def get_summary(self) -> str:
         """Generate a brief summary of the trade plan."""
         return (

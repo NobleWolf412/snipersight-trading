@@ -9,9 +9,9 @@ from backend.shared.cache.cache_manager import (
 )
 
 __all__ = [
-    'CacheManager',
-    'CacheNamespace', 
-    'CacheStats',
-    'get_cache_manager',
-    'TIMEFRAME_SECONDS',
+    "CacheManager",
+    "CacheNamespace",
+    "CacheStats",
+    "get_cache_manager",
+    "TIMEFRAME_SECONDS",
 ]

@@ -10,13 +10,11 @@ Logic is delegated to specialized engines:
 Following the "No-Null, Actionable Outputs" principle.
 """
 
-from typing import Optional, List, Literal, cast
+from typing import Optional, List, Literal
 from datetime import datetime
-import pandas as pd
-import numpy as np
 from loguru import logger
 
-from backend.shared.models.planner import TradePlan, EntryZone, StopLoss, Target
+from backend.shared.models.planner import TradePlan, StopLoss
 from backend.shared.models.data import MultiTimeframeData
 from backend.shared.models.smc import SMCSnapshot
 from backend.shared.models.indicators import IndicatorSet
@@ -29,11 +27,11 @@ from backend.bot.telemetry.events import create_signal_rejected_event
 # Engine Imports
 from backend.strategy.planner.entry_engine import _calculate_entry_zone, _map_setup_to_archetype
 from backend.strategy.planner.risk_engine import (
-    _calculate_stop_loss, 
-    _calculate_targets, 
-    _derive_trade_type, 
-    _adjust_stop_for_leverage, 
-    _adjust_targets_for_leverage
+    _calculate_stop_loss,
+    _calculate_targets,
+    _derive_trade_type,
+    _adjust_stop_for_leverage,
+    _adjust_targets_for_leverage,
 )
 from backend.strategy.planner.regime_engine import get_atr_regime
 
@@ -53,22 +51,19 @@ MODE_TO_TRADE_LABEL = {
     # Overwatch = Position Trade (Days-Weeks, HTF macro positions)
     "overwatch": "Position Trade",
     "macro_surveillance": "Position Trade",
-    
     # Stealth = Hybrid Trade (All types, balanced mix)
-    "stealth": "Hybrid Trade", 
+    "stealth": "Hybrid Trade",
     "stealth_balanced": "Hybrid Trade",
-    
     # Surgical = Scalp Trade (Minutes, extreme precision)
     "surgical": "Scalp Trade",
     "precision": "Scalp Trade",
-    
     # Strike = Day Trade (Hours, aggressive momentum)
     "strike": "Day Trade",
     "intraday_aggressive": "Day Trade",
-    
     # Fallback
     "balanced": "Swing Trade",
 }
+
 
 def get_trade_label_for_mode(mode: str) -> str:
     """Get trader-friendly trade label based on scanner mode or profile."""
@@ -88,11 +83,11 @@ def generate_trade_plan(
     missing_critical_timeframes: Optional[List[str]] = None,
     multi_tf_data: Optional[MultiTimeframeData] = None,
     expected_trade_type: Optional[str] = None,
-    volume_profile: Optional['VolumeProfile'] = None  # NEW: For HVN/LVN target filtering
+    volume_profile: Optional["VolumeProfile"] = None,  # NEW: For HVN/LVN target filtering
 ) -> TradePlan:
     """
     Generate a complete, actionable trade plan.
-    
+
     Args:
         symbol: Trading pair symbol
         direction: "bullish" or "bearish"
@@ -105,30 +100,30 @@ def generate_trade_plan(
         missing_critical_timeframes: List of critical TFs that failed to load
         multi_tf_data: Optional multi-timeframe candle data for swing-based stops
         expected_trade_type: Optional trade type hint (swing, scalp, intraday)
-        
+
     Returns:
         TradePlan: Complete trade plan with entries, stops, targets
-        
+
     Raises:
         ValueError: If unable to generate valid plan (insufficient structure)
     """
     if missing_critical_timeframes is None:
         missing_critical_timeframes = []
-    
+
     # Type check: indicators should be IndicatorSet, not IndicatorSnapshot
-    if not hasattr(indicators, 'by_timeframe'):
+    if not hasattr(indicators, "by_timeframe"):
         raise ValueError(
             f"Expected IndicatorSet with 'by_timeframe' attribute, "
             f"got {type(indicators).__name__}. Ensure orchestrator passes "
             f"context.multi_tf_indicators (IndicatorSet), not a single IndicatorSnapshot."
         )
-    
+
     # Get primary timeframe indicators
     if not indicators.by_timeframe:
         raise ValueError("No indicators available for trade planning")
-    
+
     primary_tf = getattr(config, "primary_planning_timeframe", None)
-    
+
     # Intelligent fallback if explicit config missing or not valid
     if not primary_tf or (indicators.by_timeframe and primary_tf not in indicators.by_timeframe):
         # normalize provided config
@@ -137,66 +132,74 @@ def generate_trade_plan(
         else:
             # Search for best available anchor
             found = False
-            for tf_candidate in ['15m', '1h', '5m', '4h', '1d']:
+            for tf_candidate in ["15m", "1h", "5m", "4h", "1d"]:
                 if tf_candidate in indicators.by_timeframe:
                     primary_tf = tf_candidate
                     found = True
                     break
-            
+
             if not found and indicators.by_timeframe:
                 # Last resort: first available key
                 primary_tf = list(indicators.by_timeframe.keys())[0]
                 logger.warning(f"Primary planning TF fallback to {primary_tf}")
-    
+
     primary_indicators = indicators.by_timeframe[primary_tf]
-    
+
     # Determine Planner Configuration
-    if getattr(config, 'planner', None):
+    if getattr(config, "planner", None):
         planner_cfg = config.planner
     elif expected_trade_type:
         planner_cfg = PlannerConfig.defaults_for_mode(expected_trade_type)
-        logger.info(f"🔧 Planner Config: mode={expected_trade_type}, trend_continuation={planner_cfg.enable_trend_continuation}")
+        logger.info(
+            f"🔧 Planner Config: mode={expected_trade_type}, trend_continuation={planner_cfg.enable_trend_continuation}"
+        )
     else:
         # Fallback to intraday for unknown trade types
         planner_cfg = PlannerConfig.defaults_for_mode("intraday")
-        logger.info(f"🔧 Planner Config: mode=intraday (fallback), trend_continuation={planner_cfg.enable_trend_continuation}")
-    
+        logger.info(
+            f"🔧 Planner Config: mode=intraday (fallback), trend_continuation={planner_cfg.enable_trend_continuation}"
+        )
+
     # Apply overlays
-    overrides = getattr(config, 'overrides', None) or {}
+    overrides = getattr(config, "overrides", None) or {}
     if overrides:
         for key, value in overrides.items():
             if hasattr(planner_cfg, key):
                 setattr(planner_cfg, key, value)
-    
+
     telemetry = get_telemetry_logger()
     run_id = datetime.utcnow().strftime("run-%Y%m%d")
 
     if primary_indicators.atr is None or primary_indicators.atr <= 0:
-        telemetry.log_event(create_signal_rejected_event(
-            run_id=run_id,
-            symbol=symbol,
-            reason="atr_invalid",
-            diagnostics={"atr": primary_indicators.atr}
-        ))
+        telemetry.log_event(
+            create_signal_rejected_event(
+                run_id=run_id,
+                symbol=symbol,
+                reason="atr_invalid",
+                diagnostics={"atr": primary_indicators.atr},
+            )
+        )
         raise ValueError("ATR required for trade planning and must be positive")
     atr = primary_indicators.atr
 
-    leverage = max(1, int(getattr(config, 'leverage', 1) or 1))
-    
+    leverage = max(1, int(getattr(config, "leverage", 1) or 1))
+
     # FIX: Handle both "LONG"/"SHORT" and "bullish"/"bearish" direction formats
     # Confluence service returns "LONG"/"SHORT", but code was checking for "bullish"
     direction_lower = direction.lower()
     is_bullish = direction_lower in ("long", "bullish")
-    
+
     # DEBUG: Log direction conversion
     logger.info(f"🔍 Direction conversion: '{direction}' -> is_bullish={is_bullish}")
-    
+
     # Map raw setup string to archetype
     # Now imported from entry_engine
     archetype = _map_setup_to_archetype(setup_type)
-    
-    logger.info(f"Generating plan for {symbol} ({direction}) | ATR={atr:.2f} | Setup={setup_type} ({archetype})")
-    
+
+    logger.info(
+        f"Generating plan for {symbol} ({direction}) | ATR={atr:.2f} | Setup={setup_type} ({archetype})"
+    )
+
     # === 1. Calculate Entry Zone (Delegate to Entry Engine) ===
     try:
         entry_zone, used_structure_entry = _calculate_entry_zone(
@@ -210,16 +213,16 @@ def generate_trade_plan(
             planner_cfg=planner_cfg,
             confluence_breakdown=confluence_breakdown,
             multi_tf_data=multi_tf_data,
-            indicators=indicators  # Pass full set for regime detection
+            indicators=indicators,  # Pass full set for regime detection
         )
     except Exception as e:
         logger.error(f"Entry zone calculation failed for {symbol}: {e}")
         raise ValueError(f"Entry zone calculation failed: {e}") from e
-    
+
     # === 2. Calculate Stop Loss (Delegate to Risk Engine) ===
     # Extract consolidation source if entry was from Trend Continuation
-    consolidation_for_stop = getattr(entry_zone, 'consolidation_source', None)
-    
+    consolidation_for_stop = getattr(entry_zone, "consolidation_source", None)
+
     try:
         stop_loss, used_structure_stop = _calculate_stop_loss(
             is_bullish=is_bullish,
@@ -233,21 +236,29 @@ def generate_trade_plan(
             multi_tf_data=multi_tf_data,
             current_price=current_price,
             indicators_by_tf=indicators.by_timeframe,  # Pass dict for structure TF lookup
-            consolidation_for_stop=consolidation_for_stop  # NEW: Pass consolidation for stop
+            consolidation_for_stop=consolidation_for_stop,  # NEW: Pass consolidation for stop
         )
     except ValueError as e:
         logger.warning(f"Stop loss calculation failed: {e}")
-        telemetry.log_event(create_signal_rejected_event(
-            run_id=run_id,
-            symbol=symbol,
-            reason="stop_loss_calc_failed",
-            diagnostics={"error": str(e)}
-        ))
+        telemetry.log_event(
+            create_signal_rejected_event(
+                run_id=run_id,
+                symbol=symbol,
+                reason="stop_loss_calc_failed",
+                diagnostics={"error": str(e)},
+            )
+        )
         raise
 
     # DEBUG: Log entry and stop values BEFORE leverage adjustment
-    logger.info("🔍 DEBUG ENTRY/STOP (before leverage adj): Direction=%s | Entry=[%.4f-%.4f] | Stop=%.4f | Current=%.4f",
-                "LONG" if is_bullish else "SHORT", entry_zone.far_entry, entry_zone.near_entry, stop_loss.level, current_price)
+    logger.info(
+        "🔍 DEBUG ENTRY/STOP (before leverage adj): Direction=%s | Entry=[%.4f-%.4f] | Stop=%.4f | Current=%.4f",
+        "LONG" if is_bullish else "SHORT",
+        entry_zone.far_entry,
+        entry_zone.near_entry,
+        stop_loss.level,
+        current_price,
+    )
 
     # === 3. Leverage Adjustment for Stop (Delegate to Risk Engine) ===
     # Check liquidation risk
@@ -255,24 +266,32 @@ def generate_trade_plan(
         stop_level=stop_loss.level,
         near_entry=entry_zone.near_entry,
         leverage=leverage,
-        is_bullish=is_bullish
+        is_bullish=is_bullish,
     )
-    
+
     if was_adjusted:
-        logger.warning(f"Stop loss adjusted for {leverage}x leverage: {stop_loss.level} -> {adjusted_stop_level}")
+        logger.warning(
+            f"Stop loss adjusted for {leverage}x leverage: {stop_loss.level} -> {adjusted_stop_level}"
+        )
         stop_loss = StopLoss(
             level=adjusted_stop_level,
             distance_atr=abs(entry_zone.far_entry - adjusted_stop_level) / atr,
-            rationale=f"{stop_loss.rationale} [Liquidation Safety Adjusted]"
+            rationale=f"{stop_loss.rationale} [Liquidation Safety Adjusted]",
         )
         # DEBUG: Log after leverage adjustment
-        logger.info("🔍 DEBUG ENTRY/STOP (after leverage adj): Direction=%s | Entry=[%.4f-%.4f] | Stop=%.4f (adjusted from %.4f)",
-                    "LONG" if is_bullish else "SHORT", entry_zone.far_entry, entry_zone.near_entry, adjusted_stop_level, stop_loss.level)
-    
+        logger.info(
+            "🔍 DEBUG ENTRY/STOP (after leverage adj): Direction=%s | Entry=[%.4f-%.4f] | Stop=%.4f (adjusted from %.4f)",
+            "LONG" if is_bullish else "SHORT",
+            entry_zone.far_entry,
+            entry_zone.near_entry,
+            adjusted_stop_level,
+            stop_loss.level,
+        )
+
     # === 4. Calculate Targets (Delegate to Risk Engine) ===
     # Get regime label for target adjustment
     regime_label = get_atr_regime(indicators, current_price)
-    
+
     try:
         targets = _calculate_targets(
             is_bullish=is_bullish,
@@ -288,24 +307,24 @@ def generate_trade_plan(
             confluence_breakdown=confluence_breakdown,
             multi_tf_data=multi_tf_data,
             indicators=indicators,
-            volume_profile=volume_profile  # NEW: For HVN/LVN target filtering
+            volume_profile=volume_profile,  # NEW: For HVN/LVN target filtering
         )
     except Exception as e:
         logger.error(f"Target calculation failed for {symbol}: {e}")
         raise ValueError(f"Target calculation failed: {e}") from e
-    
+
     # === 5. Leverage Adjustment for Targets (Delegate to Risk Engine) ===
     try:
         targets, target_adj_meta = _adjust_targets_for_leverage(
             targets=targets,
             leverage=leverage,
             entry_price=(entry_zone.near_entry + entry_zone.far_entry) / 2,
-            is_bullish=is_bullish
+            is_bullish=is_bullish,
         )
     except Exception as e:
         logger.error(f"Target leverage adjustment failed for {symbol}: {e}")
         raise ValueError(f"Target leverage adjustment failed: {e}") from e
-    
+
     # === 5b. Distribute Target Percentages ===
     # Targets must sum to 100% for TradePlan validation
     if targets:
@@ -327,9 +346,9 @@ def generate_trade_plan(
                     targets[i].percentage = pct
             # If more than 4 targets, split remaining 0% (shouldn't happen often)
             # The first 4 already sum to 100%
-        
+
         logger.debug(f"Target percentages assigned: {[t.percentage for t in targets]}")
-    
+
     # === 6. Determine Trade Type (Delegate to Risk Engine) ===
     # Collect structure TFs used
     # Fix: explicitly handle list creation to avoid type errors
@@ -338,50 +357,53 @@ def generate_trade_plan(
         structure_tfs.append(entry_zone.entry_tf_used)
     if stop_loss.structure_tf_used and stop_loss.structure_tf_used != "N/A":
         structure_tfs.append(stop_loss.structure_tf_used)
-    
+
     structure_tfs_tuple = tuple(set(structure_tfs))
-    
+
     tp1_move_pct = 0.0
     if targets:
-        tp1_dist = abs(targets[0].level - ((entry_zone.near_entry + entry_zone.far_entry)/2))
+        tp1_dist = abs(targets[0].level - ((entry_zone.near_entry + entry_zone.far_entry) / 2))
         tp1_move_pct = (tp1_dist / current_price) * 100
-        
+
     trade_type = _derive_trade_type(
         target_move_pct=tp1_move_pct,
         stop_distance_atr=stop_loss.distance_atr,
         structure_timeframes=structure_tfs_tuple,
         primary_tf=primary_tf,
-        expected_trade_type=(getattr(config, 'expected_trade_type', None) or expected_trade_type)
+        expected_trade_type=(getattr(config, "expected_trade_type", None) or expected_trade_type),
     )
-    
+
     # === TRADE TYPE VALIDATION ===
     # Enforce mode-specific trade type restrictions (e.g., Overwatch = swing only)
-    allowed_types = getattr(config, 'allowed_trade_types', ('swing', 'intraday', 'scalp'))
+    allowed_types = getattr(config, "allowed_trade_types", ("swing", "intraday", "scalp"))
     if allowed_types and trade_type not in allowed_types:
-        mode_name = getattr(config, 'profile', 'unknown')
-        telemetry.log_event(create_signal_rejected_event(
-            run_id=run_id,
-            symbol=symbol,
-            reason="trade_type_mismatch",
-            diagnostics={
-                "derived_type": trade_type,
-                "allowed_types": allowed_types,
-                "mode": mode_name,
-                "tp1_move_pct": tp1_move_pct,
-                "stop_atr": stop_loss.distance_atr
-            }
-        ))
+        mode_name = getattr(config, "profile", "unknown")
+        telemetry.log_event(
+            create_signal_rejected_event(
+                run_id=run_id,
+                symbol=symbol,
+                reason="trade_type_mismatch",
+                diagnostics={
+                    "derived_type": trade_type,
+                    "allowed_types": allowed_types,
+                    "mode": mode_name,
+                    "tp1_move_pct": tp1_move_pct,
+                    "stop_atr": stop_loss.distance_atr,
+                },
+            )
+        )
         raise ValueError(
             f"Trade type mismatch: Derived '{trade_type}' not allowed in {mode_name} mode "
             f"(allowed: {allowed_types}). TP1 move: {tp1_move_pct:.1f}%, Stop: {stop_loss.distance_atr:.1f} ATR"
         )
-    
-    
+
     # DEBUG: Log final values before TradePlan validation
     try:
         targets_levels = [f"{t.level:.4f}" for t in targets[:3]] if targets else []
-        logger.info(f"🔍 DEBUG FINAL VALUES (before TradePlan): Direction={'LONG' if is_bullish else 'SHORT'} | Entry=[{entry_zone.far_entry:.4f}-{entry_zone.near_entry:.4f}] | Stop={stop_loss.level:.4f} | Targets={targets_levels}")
-        
+        logger.info(
+            f"🔍 DEBUG FINAL VALUES (before TradePlan): Direction={'LONG' if is_bullish else 'SHORT'} | Entry=[{entry_zone.far_entry:.4f}-{entry_zone.near_entry:.4f}] | Stop={stop_loss.level:.4f} | Targets={targets_levels}"
+        )
+
         plan = TradePlan(
             symbol=symbol,
             direction=direction,
@@ -393,45 +415,52 @@ def generate_trade_plan(
             setup_type={
                 "scalp": "Scalp Trade",
                 "intraday": "Day Trade",
-                "swing": "Swing Trade"
-            }.get(trade_type, "Day Trade"),  # Use dynamic geometry-based label
+                "swing": "Swing Trade",
+            }.get(
+                trade_type, "Day Trade"
+            ),  # Use dynamic geometry-based label
             timeframe=primary_tf,
             status="PENDING",
             trade_type=trade_type,
-            confidence_score=confluence_breakdown.total_score  # FIX: Pass confluence score to plan
+            confidence_score=confluence_breakdown.total_score,  # FIX: Pass confluence score to plan
         )
-        
+
         # === DEBUG LOGGING ===
         logger.info(
             f"📋 TRADE PLAN: {symbol} {direction} | "
             f"{len(targets)} targets | "
             f"Final R:R = {plan.risk_reward_ratio:.2f}R (from TP{len(targets)})"
         )
-        
+
         # === MINIMUM R:R VALIDATION ===
         # Enforce mode-specific R:R requirements (e.g., Overwatch = 2.0R minimum)
-        min_rr = getattr(config, 'min_rr_ratio', 0.0)
+        min_rr = getattr(config, "min_rr_ratio", 0.0)
         actual_rr = plan.risk_reward_ratio
         if min_rr > 0 and actual_rr < min_rr:
-            telemetry.log_event(create_signal_rejected_event(
-                run_id=run_id,
-                symbol=symbol,
-                reason="insufficient_rr",
-                diagnostics={
-                    "actual_rr": actual_rr,
-                    "min_rr": min_rr,
-                    "mode": getattr(config, 'profile', 'unknown'),
-                    "trade_type": trade_type,
-                    "tp1_level": targets[0].level if targets else None
-                }
-            ))
+            telemetry.log_event(
+                create_signal_rejected_event(
+                    run_id=run_id,
+                    symbol=symbol,
+                    reason="insufficient_rr",
+                    diagnostics={
+                        "actual_rr": actual_rr,
+                        "min_rr": min_rr,
+                        "mode": getattr(config, "profile", "unknown"),
+                        "trade_type": trade_type,
+                        "tp1_level": targets[0].level if targets else None,
+                    },
+                )
+            )
             raise ValueError(
                 f"Insufficient R:R: {actual_rr:.2f}R < {min_rr:.1f}R minimum for {getattr(config, 'profile', 'unknown')} mode"
             )
     except Exception as e:
-        logger.error(f"❌ TradePlan Constructor Failed: {e} | Values: Entry={entry_zone}, Stop={stop_loss}", exc_info=True)
+        logger.error(
+            f"❌ TradePlan Constructor Failed: {e} | Values: Entry={entry_zone}, Stop={stop_loss}",
+            exc_info=True,
+        )
         raise
-    
+
     try:
         # Attach metadata
         plan.metadata = {
@@ -447,23 +476,27 @@ def generate_trade_plan(
             "rr_best": None,
             "rr_worst": None,
             # NEW: Pullback probability from entry zone
-            "pullback_probability": getattr(entry_zone, 'pullback_probability', None),
+            "pullback_probability": getattr(entry_zone, "pullback_probability", None),
             # NEW: Entry structure details for frontend display
             "entry_structure": {
-                "timeframe": getattr(entry_zone, 'entry_tf_used', None) or primary_tf,
+                "timeframe": getattr(entry_zone, "entry_tf_used", None) or primary_tf,
                 "zone_high": entry_zone.far_entry if is_bullish else entry_zone.near_entry,
                 "zone_low": entry_zone.near_entry if is_bullish else entry_zone.far_entry,
-                "type": "OB" if "order block" in (entry_zone.rationale or "").lower() else "FVG" if "fvg" in (entry_zone.rationale or "").lower() else "Zone",
-                "ob_mitigation": getattr(entry_zone, 'ob_mitigation', 0.0)  # 0.0-1.0
-            }
+                "type": (
+                    "OB"
+                    if "order block" in (entry_zone.rationale or "").lower()
+                    else "FVG" if "fvg" in (entry_zone.rationale or "").lower() else "Zone"
+                ),
+                "ob_mitigation": getattr(entry_zone, "ob_mitigation", 0.0),  # 0.0-1.0
+            },
         }
-        
+
         # Calculate R:R best/worst after targets are finalized
         if targets:
             tp1_level = targets[0].level
             near_risk = abs(entry_zone.near_entry - stop_loss.level)
             far_risk = abs(entry_zone.far_entry - stop_loss.level)
-            
+
             if near_risk > 0 and far_risk > 0:
                 near_reward = abs(tp1_level - entry_zone.near_entry)
                 far_reward = abs(tp1_level - entry_zone.far_entry)
@@ -473,7 +506,6 @@ def generate_trade_plan(
         logger.error(f"❌ Metadata Assignment Failed: {e}", exc_info=True)
         # Even if metadata fails, we should iterate return the plan (best effort)
         if plan.metadata is None:
-             plan.metadata = {} # Ensure not None
+            plan.metadata = {}  # Ensure not None
 
-    
     return plan

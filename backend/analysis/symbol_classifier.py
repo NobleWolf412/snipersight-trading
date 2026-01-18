@@ -26,14 +26,15 @@ logger = logging.getLogger(__name__)
 
 class SymbolCategory(Enum):
     """Symbol classification categories."""
-    MAJOR = "major"          # BTC, ETH, BNB, SOL - top market cap, high liquidity
-    MEME = "meme"            # DOGE, SHIB, PEPE - meme coins
-    DEFI = "defi"            # AAVE, UNI, LINK - DeFi protocols
-    GAMING = "gaming"        # AXS, SAND, MANA - Gaming/Metaverse
-    AI = "ai"                # FET, RNDR, TAO - AI tokens
-    LAYER1 = "layer1"        # New L1 chains (SUI, TIA, SEI)
-    LAYER2 = "layer2"        # L2 solutions (ARB, OP, MATIC)
-    ALT = "alt"              # Default for unclassified
+
+    MAJOR = "major"  # BTC, ETH, BNB, SOL - top market cap, high liquidity
+    MEME = "meme"  # DOGE, SHIB, PEPE - meme coins
+    DEFI = "defi"  # AAVE, UNI, LINK - DeFi protocols
+    GAMING = "gaming"  # AXS, SAND, MANA - Gaming/Metaverse
+    AI = "ai"  # FET, RNDR, TAO - AI tokens
+    LAYER1 = "layer1"  # New L1 chains (SUI, TIA, SEI)
+    LAYER2 = "layer2"  # L2 solutions (ARB, OP, MATIC)
+    ALT = "alt"  # Default for unclassified
 
 
 # CoinGecko category mappings
@@ -73,92 +74,257 @@ COINGECKO_CATEGORY_MAP: dict[str, SymbolCategory] = {
 # Heuristic fallback data
 HEURISTIC_MAJORS: set[str] = {
     # Top tier (BTC, ETH, major exchanges)
-    "BTC", "ETH", "BNB", "USDT", "USDC",
+    "BTC",
+    "ETH",
+    "BNB",
+    "USDT",
+    "USDC",
     # Top L1s
-    "SOL", "ADA", "AVAX", "DOT", "ATOM", "TON", "TRX", "XLM",
+    "SOL",
+    "ADA",
+    "AVAX",
+    "DOT",
+    "ATOM",
+    "TON",
+    "TRX",
+    "XLM",
     # Popular alts with staying power
-    "XRP", "LTC", "BCH", "ETC", "XMR", "ALGO", "VET", "FIL",
+    "XRP",
+    "LTC",
+    "BCH",
+    "ETC",
+    "XMR",
+    "ALGO",
+    "VET",
+    "FIL",
     # Major L2s (high volume, important infrastructure)
-    "MATIC", "ARB", "OP",
+    "MATIC",
+    "ARB",
+    "OP",
     # Major DeFi blue chips
-    "LINK", "UNI", "AAVE", "CRV", "MKR", "SNX", "COMP",
+    "LINK",
+    "UNI",
+    "AAVE",
+    "CRV",
+    "MKR",
+    "SNX",
+    "COMP",
     # New L1s with high volume (2024-2025)
-    "SUI", "TIA", "INJ", "SEI", "APT", "NEAR", "FTM", "HBAR",
-    "WLD", "JUP", "RUNE", "KAVA", "OSMO", "ROSE", "FET"
+    "SUI",
+    "TIA",
+    "INJ",
+    "SEI",
+    "APT",
+    "NEAR",
+    "FTM",
+    "HBAR",
+    "WLD",
+    "JUP",
+    "RUNE",
+    "KAVA",
+    "OSMO",
+    "ROSE",
+    "FET",
 }
 
 HEURISTIC_MEME_HINTS: tuple[str, ...] = (
     # OG memes (2021-2022)
-    "DOGE", "SHIB", "FLOKI", "ELON", "BABYDOGE", "INU",
+    "DOGE",
+    "SHIB",
+    "FLOKI",
+    "ELON",
+    "BABYDOGE",
+    "INU",
     # Pepe era (2023)
-    "PEPE", "WOJAK", "TURBO", "MEME", "LADYS", "BOBO",
+    "PEPE",
+    "WOJAK",
+    "TURBO",
+    "MEME",
+    "LADYS",
+    "BOBO",
     # Solana memes (2023-2024)
-    "BONK", "WIF", "BOME", "MYRO", "SAMO", "SLERF", "PONKE", "COQ",
-    "MEW", "POPCAT", "SNEK", "TOSHI", "BOB", "SMOG", "SILLY",
+    "BONK",
+    "WIF",
+    "BOME",
+    "MYRO",
+    "SAMO",
+    "SLERF",
+    "PONKE",
+    "COQ",
+    "MEW",
+    "POPCAT",
+    "SNEK",
+    "TOSHI",
+    "BOB",
+    "SMOG",
+    "SILLY",
     # Base chain memes (2024)
-    "BRETT", "DEGEN", "TOSHI", "NORMIE", "KEYCAT",
+    "BRETT",
+    "DEGEN",
+    "TOSHI",
+    "NORMIE",
+    "KEYCAT",
     # Political/narrative memes (2024-2025)
-    "TRUMP", "BODEN", "TREMP", "MAGA", "KAMA",
+    "TRUMP",
+    "BODEN",
+    "TREMP",
+    "MAGA",
+    "KAMA",
     # AI agent memes (2024-2025)
-    "GOAT", "ACT", "FARTCOIN", "ZEREBRO", "AI16Z", "VIRTUAL",
+    "GOAT",
+    "ACT",
+    "FARTCOIN",
+    "ZEREBRO",
+    "AI16Z",
+    "VIRTUAL",
     # Recent viral memes (2024-2025)
-    "PNUT", "NEIRO", "GIGA", "MOG", "CAT", "GROYPER", "RETARDIO",
-    "WEN", "MICHI", "BILLY", "HIGHER", "CHOMP", "FWOG", "MANEKI",
+    "PNUT",
+    "NEIRO",
+    "GIGA",
+    "MOG",
+    "CAT",
+    "GROYPER",
+    "RETARDIO",
+    "WEN",
+    "MICHI",
+    "BILLY",
+    "HIGHER",
+    "CHOMP",
+    "FWOG",
+    "MANEKI",
     # Meme indicators (substring matches)
-    "PEPE", "INU", "DOGE", "SHIB", "FLOKI", "ELON", "MEME",
+    "PEPE",
+    "INU",
+    "DOGE",
+    "SHIB",
+    "FLOKI",
+    "ELON",
+    "MEME",
 )
 
 HEURISTIC_DEFI: set[str] = {
     # Blue chip DeFi
-    "AAVE", "UNI", "LINK", "MKR", "SNX", "COMP", "YFI",
-    "CRV", "SUSHI", "1INCH", "BAL",
+    "AAVE",
+    "UNI",
+    "LINK",
+    "MKR",
+    "SNX",
+    "COMP",
+    "YFI",
+    "CRV",
+    "SUSHI",
+    "1INCH",
+    "BAL",
     # Liquid staking
-    "LDO", "RPL", "FXS", "RETH", "SFRXETH",
+    "LDO",
+    "RPL",
+    "FXS",
+    "RETH",
+    "SFRXETH",
     # Derivatives & perps
-    "GMX", "DYDX", "GNS", "KWENTA", "HMX",
+    "GMX",
+    "DYDX",
+    "GNS",
+    "KWENTA",
+    "HMX",
     # Yield & farming
-    "PENDLE", "JOE", "CAKE", "RAY", "BEEFY",
+    "PENDLE",
+    "JOE",
+    "CAKE",
+    "RAY",
+    "BEEFY",
     # Bridges & infra
-    "ACROSS", "SYN", "CELER", "HOP",
+    "ACROSS",
+    "SYN",
+    "CELER",
+    "HOP",
     # RWA (Real World Assets)
-    "ONDO", "MKR", "TRU", "CFG",
+    "ONDO",
+    "MKR",
+    "TRU",
+    "CFG",
 }
 
 HEURISTIC_AI: set[str] = {
     # Infrastructure AI
-    "FET", "RNDR", "TAO", "AGIX", "OCEAN", "GRT", "NMR",
+    "FET",
+    "RNDR",
+    "TAO",
+    "AGIX",
+    "OCEAN",
+    "GRT",
+    "NMR",
     # AI agents & platforms
-    "AI16Z", "VIRTUAL", "ARKM", "OLAS", "SPEC", "PRIME",
+    "AI16Z",
+    "VIRTUAL",
+    "ARKM",
+    "OLAS",
+    "SPEC",
+    "PRIME",
     # Compute & GPU
-    "AIOZ", "ICP", "CTXC", "AKT",
+    "AIOZ",
+    "ICP",
+    "CTXC",
+    "AKT",
     # Data & oracle AI
-    "ROSE", "ORAI", "DYDX",
+    "ROSE",
+    "ORAI",
+    "DYDX",
 }
 
 HEURISTIC_GAMING: set[str] = {
     # Metaverse OGs
-    "AXS", "SAND", "MANA", "ENJ", "GALA",
+    "AXS",
+    "SAND",
+    "MANA",
+    "ENJ",
+    "GALA",
     # Gaming infrastructure
-    "IMX", "BEAM", "PRIME", "MAGIC", "PORTAL", "RON",
+    "IMX",
+    "BEAM",
+    "PRIME",
+    "MAGIC",
+    "PORTAL",
+    "RON",
     # Play-to-earn
-    "ILV", "PIXELS", "GODS", "ALICE", "TLM", "YGG",
+    "ILV",
+    "PIXELS",
+    "GODS",
+    "ALICE",
+    "TLM",
+    "YGG",
     # NFT gaming
-    "FLOW", "WAX", "ULTRA", "JEWEL",
+    "FLOW",
+    "WAX",
+    "ULTRA",
+    "JEWEL",
 }
 
 HEURISTIC_L2: set[str] = {
     # Major L2s
-    "ARB", "OP", "MATIC", "STRK", "ZK",
+    "ARB",
+    "OP",
+    "MATIC",
+    "STRK",
+    "ZK",
     # New L2s (2024)
-    "MANTA", "BLAST", "SCROLL", "LINEA", "MODE", "METIS",
+    "MANTA",
+    "BLAST",
+    "SCROLL",
+    "LINEA",
+    "MODE",
+    "METIS",
     # Alt-L1 L2s
-    "CELO", "MOVR", "GLMR",
+    "CELO",
+    "MOVR",
+    "GLMR",
 }
 
 
 @dataclass
 class CoinGeckoCache:
     """Cache for CoinGecko API responses with TTL."""
+
     data: dict[str, SymbolCategory] = field(default_factory=dict)
     last_fetch: float = 0.0
     ttl_seconds: float = 600.0  # 10 minutes
@@ -198,13 +364,13 @@ class CoinGeckoCache:
 class SymbolClassifier:
     """
     Classifies trading symbols using CoinGecko API with heuristic fallback.
-    
+
     Usage:
         classifier = get_classifier()
         category = classifier.classify("BTC/USDT")
         if classifier.is_meme("PEPE/USDT"):
             print("Meme coin detected!")
-            
+
     Note:
         By default, classify() uses heuristics only (fast).
         Call refresh_cache() explicitly to fetch CoinGecko data.
@@ -220,7 +386,7 @@ class SymbolClassifier:
     ):
         """
         Initialize classifier.
-        
+
         Args:
             cache_ttl_seconds: How long to cache CoinGecko data
             coingecko_timeout: API request timeout
@@ -240,7 +406,7 @@ class SymbolClassifier:
         # Handle formats like BTCUSDT
         for quote in ("USDT", "BUSD", "USD", "USDC"):
             if symbol.upper().endswith(quote):
-                return symbol.upper()[:-len(quote)]
+                return symbol.upper()[: -len(quote)]
         return symbol.upper()
 
     def _fetch_coingecko_data(self) -> dict[str, SymbolCategory]:
@@ -349,7 +515,7 @@ class SymbolClassifier:
         """Ensure cache is populated, fetching if needed (only when auto_fetch=True)."""
         if not self._auto_fetch:
             return
-            
+
         if self._cache.is_valid():
             return
 
@@ -390,10 +556,10 @@ class SymbolClassifier:
     def classify(self, symbol: str) -> SymbolCategory:
         """
         Classify a trading symbol.
-        
+
         Args:
             symbol: Trading pair (e.g., "BTC/USDT", "BTCUSDT", "BTC")
-            
+
         Returns:
             SymbolCategory classification
         """
@@ -457,13 +623,13 @@ def get_classifier(
 ) -> SymbolClassifier:
     """
     Get the singleton SymbolClassifier instance.
-    
+
     Args:
         cache_ttl_seconds: How long to cache CoinGecko data
         coingecko_timeout: API request timeout
         max_coins: Number of top coins to fetch from CoinGecko
         auto_fetch: If True, automatically fetch from CoinGecko on classify()
-        
+
     Returns:
         Shared SymbolClassifier instance
     """

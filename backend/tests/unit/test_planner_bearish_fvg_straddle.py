@@ -4,6 +4,7 @@ Scenario: FVG spans across the current price; planner should not produce a zone 
 straddles price. It must fallback to ATR-based zone strictly above current price
 with near > far ordering.
 """
+
 from datetime import datetime
 
 from backend.shared.config.defaults import ScanConfig
@@ -27,14 +28,11 @@ def test_bearish_fvg_straddling_price_triggers_fallback():
         timestamp=datetime.utcnow(),
         timeframe="15m",
         size=7.0,
-        overlap_with_price=1.0  # fully overlapped at current price
+        overlap_with_price=1.0,  # fully overlapped at current price
     )
 
     smc_snapshot = SMCSnapshot(
-        order_blocks=[],
-        fvgs=[fvg_straddle],
-        structural_breaks=[],
-        liquidity_sweeps=[]
+        order_blocks=[], fvgs=[fvg_straddle], structural_breaks=[], liquidity_sweeps=[]
     )
 
     entry_zone, used_structure = _calculate_entry_zone(
@@ -47,7 +45,7 @@ def test_bearish_fvg_straddling_price_triggers_fallback():
         config=config,
         planner_cfg=planner_cfg,
         confluence_breakdown=None,
-        multi_tf_data=None
+        multi_tf_data=None,
     )
 
     # Since the gap straddles price, sanity should fallback to ATR-based zone
@@ -55,7 +53,10 @@ def test_bearish_fvg_straddling_price_triggers_fallback():
     # near ≈ 104.5, far ≈ 101.5
     assert used_structure is False, "Should fallback to ATR (not use FVG structure)"
     assert entry_zone.near_entry > entry_zone.far_entry, "Bearish ordering near > far must hold"
-    assert entry_zone.near_entry > current_price and entry_zone.far_entry > current_price, \
-        "Both bearish entries must be strictly above current price after fallback"
+    assert (
+        entry_zone.near_entry > current_price and entry_zone.far_entry > current_price
+    ), "Both bearish entries must be strictly above current price after fallback"
 
-    print(f"✓ Bearish straddle fallback: near={entry_zone.near_entry:.2f} > far={entry_zone.far_entry:.2f} > price={current_price:.2f}")
+    print(
+        f"✓ Bearish straddle fallback: near={entry_zone.near_entry:.2f} > far={entry_zone.far_entry:.2f} > price={current_price:.2f}"
+    )

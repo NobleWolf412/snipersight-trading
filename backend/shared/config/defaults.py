@@ -3,6 +3,7 @@ Default configuration for SniperSight scanner.
 
 Following ARCHITECTURE.md institutional-grade defaults.
 """
+
 from dataclasses import dataclass
 from typing import Tuple, Optional
 
@@ -16,8 +17,9 @@ except ImportError:
 @dataclass
 class ScanConfig:
     """Core scanning configuration."""
+
     profile: str = "balanced"
-    timeframes: Tuple[str, ...] = ('1W', '1D', '4H', '1H', '15m', '5m')
+    timeframes: Tuple[str, ...] = ("1W", "1D", "4H", "1H", "15m", "5m")
     min_confluence_score: float = 65.0
     min_rr_ratio: float = 0.8  # Temporarily lowered for testing
     btc_impulse_gate_enabled: bool = True
@@ -30,14 +32,14 @@ class ScanConfig:
     max_symbols: int = 20
     max_risk_pct: float = 2.0
     leverage: int = 1  # Added: user-selected leverage to allow planner adaptive buffers/targets
-    
+
     # Regime detection assets - configurable for different exchanges
     # Examples: Binance: ['BTC/USDT', 'ETH/USDT'], Coinbase: ['BTC-USD', 'ETH-USD']
-    regime_assets: Tuple[str, ...] = ('BTC/USDT', 'ETH/USDT', 'SOL/USDT')
-    
+    regime_assets: Tuple[str, ...] = ("BTC/USDT", "ETH/USDT", "SOL/USDT")
+
     # SMC detection preset: 'defaults', 'luxalgo_strict', or 'sensitive'
     smc_preset: str = "defaults"
-    
+
     # Planner-specific knobs (wired from scanner mode)
     primary_planning_timeframe: str = "4H"
     max_pullback_atr: float = 3.0
@@ -50,40 +52,41 @@ class ScanConfig:
     htf_proximity_weight: float = 0.12
     htf_proximity_atr_max: float = 1.0
     htf_proximity_pct_max: float = 2.0
-    htf_timeframes: Tuple[str, ...] = ('4H', '1D', '1W')
+    htf_timeframes: Tuple[str, ...] = ("4H", "1D", "1W")
     htf_bias_entry: bool = True
     htf_bias_entry_offset_atr: float = 0.05
     htf_touch_fresh_days_max: int = 14
 
     # Real-time price / drift validation knobs
     max_entry_drift_pct: float = 0.15  # Reject if price moved >15% from planned avg entry
-    max_entry_drift_atr: float = 3.0   # Or if drift exceeds 3 ATRs
-    
+    max_entry_drift_atr: float = 3.0  # Or if drift exceeds 3 ATRs
+
     # Planner configuration (optional - will use defaults_for_mode if not set)
-    planner: Optional['PlannerConfig'] = None
+    planner: Optional["PlannerConfig"] = None
 
 
 @dataclass
 class GlobalThresholds:
     """Global indicator and analysis thresholds."""
+
     # ATR multipliers
     atr_stop_multiplier: float = 1.5
     atr_target_multiplier: float = 3.0
     atr_displacement_threshold: float = 2.0
-    
+
     # RSI levels
     rsi_oversold: float = 30.0
     rsi_overbought: float = 70.0
     rsi_extreme_oversold: float = 20.0
     rsi_extreme_overbought: float = 80.0
-    
+
     # Volume spike detection
     volume_spike_threshold: float = 2.0  # 2x average volume
-    
+
     # Order block freshness
     ob_max_age_candles: int = 100
     ob_min_displacement_strength: float = 0.7
-    
+
     # FVG size thresholds
     fvg_min_size_atr: float = 0.5
 
@@ -91,24 +94,25 @@ class GlobalThresholds:
 @dataclass
 class WindowSizes:
     """Indicator calculation window sizes."""
+
     # EMA periods
     ema_fast: int = 20
     ema_medium: int = 50
     ema_slow: int = 200
-    
+
     # RSI/Momentum
     rsi_period: int = 14
     stoch_rsi_period: int = 14
     mfi_period: int = 14
-    
+
     # Volatility
     atr_period: int = 14
     bb_period: int = 20
     bb_std: float = 2.0
-    
+
     # Volume
     volume_ma_period: int = 20
-    
+
     # Lookback windows
     structure_lookback: int = 50
     liquidity_lookback: int = 20

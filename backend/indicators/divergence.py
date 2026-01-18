@@ -10,9 +10,8 @@ Detects price-indicator divergences for trading signals:
 Works with RSI, MACD, and volume indicators.
 """
 
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 import pandas as pd
-import numpy as np
 from loguru import logger
 
 from backend.indicators.momentum import compute_rsi, compute_macd
@@ -33,7 +32,7 @@ class DivergenceResult:
         price_value_2: float,
         indicator_value_1: float,
         indicator_value_2: float,
-        strength: float  # 0-100, strength of divergence
+        strength: float,  # 0-100, strength of divergence
     ):
         self.divergence_type = divergence_type
         self.indicator = indicator
@@ -50,30 +49,30 @@ class DivergenceResult:
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization"""
         return {
-            'type': self.divergence_type,
-            'indicator': self.indicator,
-            'price_pivots': [self.price_pivot_1, self.price_pivot_2],
-            'indicator_pivots': [self.indicator_pivot_1, self.indicator_pivot_2],
-            'price_values': [self.price_value_1, self.price_value_2],
-            'indicator_values': [self.indicator_value_1, self.indicator_value_2],
-            'strength': self.strength
+            "type": self.divergence_type,
+            "indicator": self.indicator,
+            "price_pivots": [self.price_pivot_1, self.price_pivot_2],
+            "indicator_pivots": [self.indicator_pivot_1, self.indicator_pivot_2],
+            "price_values": [self.price_value_1, self.price_value_2],
+            "indicator_values": [self.indicator_value_1, self.indicator_value_2],
+            "strength": self.strength,
         }
 
     def is_bullish(self) -> bool:
         """Check if divergence is bullish"""
-        return 'bullish' in self.divergence_type
+        return "bullish" in self.divergence_type
 
     def is_bearish(self) -> bool:
         """Check if divergence is bearish"""
-        return 'bearish' in self.divergence_type
+        return "bearish" in self.divergence_type
 
     def is_reversal(self) -> bool:
         """Check if divergence signals reversal (regular divergence)"""
-        return 'regular' in self.divergence_type
+        return "regular" in self.divergence_type
 
     def is_continuation(self) -> bool:
         """Check if divergence signals continuation (hidden divergence)"""
-        return 'hidden' in self.divergence_type
+        return "hidden" in self.divergence_type
 
 
 def find_swing_highs(series: pd.Series, lookback: int = 5) -> List[int]:
@@ -95,8 +94,7 @@ def find_swing_highs(series: pd.Series, lookback: int = 5) -> List[int]:
 
         # Check if current value is higher than lookback bars on both sides
         for j in range(1, lookback + 1):
-            if (series.iloc[i - j] >= current_value or
-                series.iloc[i + j] >= current_value):
+            if series.iloc[i - j] >= current_value or series.iloc[i + j] >= current_value:
                 is_peak = False
                 break
 
@@ -125,8 +123,7 @@ def find_swing_lows(series: pd.Series, lookback: int = 5) -> List[int]:
 
         # Check if current value is lower than lookback bars on both sides
         for j in range(1, lookback + 1):
-            if (series.iloc[i - j] <= current_value or
-                series.iloc[i + j] <= current_value):
+            if series.iloc[i - j] <= current_value or series.iloc[i + j] <= current_value:
                 is_trough = False
                 break
 
@@ -142,7 +139,7 @@ def detect_regular_bullish_divergence(
     indicator_name: str,
     lookback: int = 5,
     min_pivot_distance: int = 10,
-    max_lookback_bars: int = 100
+    max_lookback_bars: int = 100,
 ) -> Optional[DivergenceResult]:
     """
     Detect regular bullish divergence: Price makes lower low, indicator makes higher low.
@@ -160,7 +157,7 @@ def detect_regular_bullish_divergence(
         DivergenceResult if divergence found, None otherwise
     """
     # Find swing lows in both price and indicator
-    price_lows_indices = find_swing_lows(df['low'], lookback)
+    price_lows_indices = find_swing_lows(df["low"], lookback)
     indicator_lows_indices = find_swing_lows(indicator_series, lookback)
 
     if len(price_lows_indices) < 2 or len(indicator_lows_indices) < 2:
@@ -168,7 +165,9 @@ def detect_regular_bullish_divergence(
 
     # Check recent pivots (within max_lookback_bars)
     recent_price_lows = [i for i in price_lows_indices if len(df) - i <= max_lookback_bars]
-    recent_indicator_lows = [i for i in indicator_lows_indices if len(indicator_series) - i <= max_lookback_bars]
+    recent_indicator_lows = [
+        i for i in indicator_lows_indices if len(indicator_series) - i <= max_lookback_bars
+    ]
 
     if len(recent_price_lows) < 2 or len(recent_indicator_lows) < 2:
         return None
@@ -192,8 +191,8 @@ def detect_regular_bullish_divergence(
         return None
 
     # Get values
-    price_value_1 = df['low'].iloc[price_pivot_1]
-    price_value_2 = df['low'].iloc[price_pivot_2]
+    price_value_1 = df["low"].iloc[price_pivot_1]
+    price_value_2 = df["low"].iloc[price_pivot_2]
     indicator_value_1 = indicator_series.iloc[indicator_pivot_1]
     indicator_value_2 = indicator_series.iloc[indicator_pivot_2]
 
@@ -201,13 +200,15 @@ def detect_regular_bullish_divergence(
     if price_value_2 < price_value_1 and indicator_value_2 > indicator_value_1:
         # Calculate strength based on divergence magnitude
         price_change_pct = abs((price_value_2 - price_value_1) / price_value_1) * 100
-        indicator_change_pct = abs((indicator_value_2 - indicator_value_1) / max(indicator_value_1, 1)) * 100
+        indicator_change_pct = (
+            abs((indicator_value_2 - indicator_value_1) / max(indicator_value_1, 1)) * 100
+        )
 
         # Strength: higher when both price and indicator diverge significantly
         strength = min(100, (price_change_pct + indicator_change_pct) * 5)
 
         return DivergenceResult(
-            divergence_type='regular_bullish',
+            divergence_type="regular_bullish",
             indicator=indicator_name,
             price_pivot_1=price_pivot_1,
             price_pivot_2=price_pivot_2,
@@ -217,7 +218,7 @@ def detect_regular_bullish_divergence(
             price_value_2=price_value_2,
             indicator_value_1=indicator_value_1,
             indicator_value_2=indicator_value_2,
-            strength=strength
+            strength=strength,
         )
 
     return None
@@ -229,7 +230,7 @@ def detect_regular_bearish_divergence(
     indicator_name: str,
     lookback: int = 5,
     min_pivot_distance: int = 10,
-    max_lookback_bars: int = 100
+    max_lookback_bars: int = 100,
 ) -> Optional[DivergenceResult]:
     """
     Detect regular bearish divergence: Price makes higher high, indicator makes lower high.
@@ -247,7 +248,7 @@ def detect_regular_bearish_divergence(
         DivergenceResult if divergence found, None otherwise
     """
     # Find swing highs in both price and indicator
-    price_highs_indices = find_swing_highs(df['high'], lookback)
+    price_highs_indices = find_swing_highs(df["high"], lookback)
     indicator_highs_indices = find_swing_highs(indicator_series, lookback)
 
     if len(price_highs_indices) < 2 or len(indicator_highs_indices) < 2:
@@ -255,7 +256,9 @@ def detect_regular_bearish_divergence(
 
     # Check recent pivots (within max_lookback_bars)
     recent_price_highs = [i for i in price_highs_indices if len(df) - i <= max_lookback_bars]
-    recent_indicator_highs = [i for i in indicator_highs_indices if len(indicator_series) - i <= max_lookback_bars]
+    recent_indicator_highs = [
+        i for i in indicator_highs_indices if len(indicator_series) - i <= max_lookback_bars
+    ]
 
     if len(recent_price_highs) < 2 or len(recent_indicator_highs) < 2:
         return None
@@ -279,8 +282,8 @@ def detect_regular_bearish_divergence(
         return None
 
     # Get values
-    price_value_1 = df['high'].iloc[price_pivot_1]
-    price_value_2 = df['high'].iloc[price_pivot_2]
+    price_value_1 = df["high"].iloc[price_pivot_1]
+    price_value_2 = df["high"].iloc[price_pivot_2]
     indicator_value_1 = indicator_series.iloc[indicator_pivot_1]
     indicator_value_2 = indicator_series.iloc[indicator_pivot_2]
 
@@ -288,13 +291,15 @@ def detect_regular_bearish_divergence(
     if price_value_2 > price_value_1 and indicator_value_2 < indicator_value_1:
         # Calculate strength based on divergence magnitude
         price_change_pct = abs((price_value_2 - price_value_1) / price_value_1) * 100
-        indicator_change_pct = abs((indicator_value_2 - indicator_value_1) / max(indicator_value_1, 1)) * 100
+        indicator_change_pct = (
+            abs((indicator_value_2 - indicator_value_1) / max(indicator_value_1, 1)) * 100
+        )
 
         # Strength: higher when both price and indicator diverge significantly
         strength = min(100, (price_change_pct + indicator_change_pct) * 5)
 
         return DivergenceResult(
-            divergence_type='regular_bearish',
+            divergence_type="regular_bearish",
             indicator=indicator_name,
             price_pivot_1=price_pivot_1,
             price_pivot_2=price_pivot_2,
@@ -304,7 +309,7 @@ def detect_regular_bearish_divergence(
             price_value_2=price_value_2,
             indicator_value_1=indicator_value_1,
             indicator_value_2=indicator_value_2,
-            strength=strength
+            strength=strength,
         )
 
     return None
@@ -316,7 +321,7 @@ def detect_hidden_bullish_divergence(
     indicator_name: str,
     lookback: int = 5,
     min_pivot_distance: int = 10,
-    max_lookback_bars: int = 100
+    max_lookback_bars: int = 100,
 ) -> Optional[DivergenceResult]:
     """
     Detect hidden bullish divergence: Price makes higher low, indicator makes lower low.
@@ -333,14 +338,16 @@ def detect_hidden_bullish_divergence(
     Returns:
         DivergenceResult if divergence found, None otherwise
     """
-    price_lows_indices = find_swing_lows(df['low'], lookback)
+    price_lows_indices = find_swing_lows(df["low"], lookback)
     indicator_lows_indices = find_swing_lows(indicator_series, lookback)
 
     if len(price_lows_indices) < 2 or len(indicator_lows_indices) < 2:
         return None
 
     recent_price_lows = [i for i in price_lows_indices if len(df) - i <= max_lookback_bars]
-    recent_indicator_lows = [i for i in indicator_lows_indices if len(indicator_series) - i <= max_lookback_bars]
+    recent_indicator_lows = [
+        i for i in indicator_lows_indices if len(indicator_series) - i <= max_lookback_bars
+    ]
 
     if len(recent_price_lows) < 2 or len(recent_indicator_lows) < 2:
         return None
@@ -359,19 +366,21 @@ def detect_hidden_bullish_divergence(
     if abs(indicator_pivot_1 - price_pivot_1) > lookback * 2:
         return None
 
-    price_value_1 = df['low'].iloc[price_pivot_1]
-    price_value_2 = df['low'].iloc[price_pivot_2]
+    price_value_1 = df["low"].iloc[price_pivot_1]
+    price_value_2 = df["low"].iloc[price_pivot_2]
     indicator_value_1 = indicator_series.iloc[indicator_pivot_1]
     indicator_value_2 = indicator_series.iloc[indicator_pivot_2]
 
     # Hidden bullish divergence: price higher low + indicator lower low
     if price_value_2 > price_value_1 and indicator_value_2 < indicator_value_1:
         price_change_pct = abs((price_value_2 - price_value_1) / price_value_1) * 100
-        indicator_change_pct = abs((indicator_value_2 - indicator_value_1) / max(indicator_value_1, 1)) * 100
+        indicator_change_pct = (
+            abs((indicator_value_2 - indicator_value_1) / max(indicator_value_1, 1)) * 100
+        )
         strength = min(100, (price_change_pct + indicator_change_pct) * 4)
 
         return DivergenceResult(
-            divergence_type='hidden_bullish',
+            divergence_type="hidden_bullish",
             indicator=indicator_name,
             price_pivot_1=price_pivot_1,
             price_pivot_2=price_pivot_2,
@@ -381,7 +390,7 @@ def detect_hidden_bullish_divergence(
             price_value_2=price_value_2,
             indicator_value_1=indicator_value_1,
             indicator_value_2=indicator_value_2,
-            strength=strength
+            strength=strength,
         )
 
     return None
@@ -393,7 +402,7 @@ def detect_hidden_bearish_divergence(
     indicator_name: str,
     lookback: int = 5,
     min_pivot_distance: int = 10,
-    max_lookback_bars: int = 100
+    max_lookback_bars: int = 100,
 ) -> Optional[DivergenceResult]:
     """
     Detect hidden bearish divergence: Price makes lower high, indicator makes higher high.
@@ -410,14 +419,16 @@ def detect_hidden_bearish_divergence(
     Returns:
         DivergenceResult if divergence found, None otherwise
     """
-    price_highs_indices = find_swing_highs(df['high'], lookback)
+    price_highs_indices = find_swing_highs(df["high"], lookback)
     indicator_highs_indices = find_swing_highs(indicator_series, lookback)
 
     if len(price_highs_indices) < 2 or len(indicator_highs_indices) < 2:
         return None
 
     recent_price_highs = [i for i in price_highs_indices if len(df) - i <= max_lookback_bars]
-    recent_indicator_highs = [i for i in indicator_highs_indices if len(indicator_series) - i <= max_lookback_bars]
+    recent_indicator_highs = [
+        i for i in indicator_highs_indices if len(indicator_series) - i <= max_lookback_bars
+    ]
 
     if len(recent_price_highs) < 2 or len(recent_indicator_highs) < 2:
         return None
@@ -436,19 +447,21 @@ def detect_hidden_bearish_divergence(
     if abs(indicator_pivot_1 - price_pivot_1) > lookback * 2:
         return None
 
-    price_value_1 = df['high'].iloc[price_pivot_1]
-    price_value_2 = df['high'].iloc[price_pivot_2]
+    price_value_1 = df["high"].iloc[price_pivot_1]
+    price_value_2 = df["high"].iloc[price_pivot_2]
     indicator_value_1 = indicator_series.iloc[indicator_pivot_1]
     indicator_value_2 = indicator_series.iloc[indicator_pivot_2]
 
     # Hidden bearish divergence: price lower high + indicator higher high
     if price_value_2 < price_value_1 and indicator_value_2 > indicator_value_1:
         price_change_pct = abs((price_value_2 - price_value_1) / price_value_1) * 100
-        indicator_change_pct = abs((indicator_value_2 - indicator_value_1) / max(indicator_value_1, 1)) * 100
+        indicator_change_pct = (
+            abs((indicator_value_2 - indicator_value_1) / max(indicator_value_1, 1)) * 100
+        )
         strength = min(100, (price_change_pct + indicator_change_pct) * 4)
 
         return DivergenceResult(
-            divergence_type='hidden_bearish',
+            divergence_type="hidden_bearish",
             indicator=indicator_name,
             price_pivot_1=price_pivot_1,
             price_pivot_2=price_pivot_2,
@@ -458,7 +471,7 @@ def detect_hidden_bearish_divergence(
             price_value_2=price_value_2,
             indicator_value_1=indicator_value_1,
             indicator_value_2=indicator_value_2,
-            strength=strength
+            strength=strength,
         )
 
     return None
@@ -469,7 +482,7 @@ def detect_rsi_divergence(
     direction: str,
     lookback: int = 5,
     min_pivot_distance: int = 10,
-    max_lookback_bars: int = 100
+    max_lookback_bars: int = 100,
 ) -> List[DivergenceResult]:
     """
     Detect all RSI divergences for a given direction.
@@ -495,32 +508,32 @@ def detect_rsi_divergence(
 
     divergences = []
 
-    if direction == 'bullish':
+    if direction == "bullish":
         # Regular bullish (reversal)
         regular = detect_regular_bullish_divergence(
-            df, rsi, 'rsi', lookback, min_pivot_distance, max_lookback_bars
+            df, rsi, "rsi", lookback, min_pivot_distance, max_lookback_bars
         )
         if regular:
             divergences.append(regular)
 
         # Hidden bullish (continuation)
         hidden = detect_hidden_bullish_divergence(
-            df, rsi, 'rsi', lookback, min_pivot_distance, max_lookback_bars
+            df, rsi, "rsi", lookback, min_pivot_distance, max_lookback_bars
         )
         if hidden:
             divergences.append(hidden)
 
-    elif direction == 'bearish':
+    elif direction == "bearish":
         # Regular bearish (reversal)
         regular = detect_regular_bearish_divergence(
-            df, rsi, 'rsi', lookback, min_pivot_distance, max_lookback_bars
+            df, rsi, "rsi", lookback, min_pivot_distance, max_lookback_bars
         )
         if regular:
             divergences.append(regular)
 
         # Hidden bearish (continuation)
         hidden = detect_hidden_bearish_divergence(
-            df, rsi, 'rsi', lookback, min_pivot_distance, max_lookback_bars
+            df, rsi, "rsi", lookback, min_pivot_distance, max_lookback_bars
         )
         if hidden:
             divergences.append(hidden)
@@ -533,7 +546,7 @@ def detect_macd_divergence(
     direction: str,
     lookback: int = 5,
     min_pivot_distance: int = 10,
-    max_lookback_bars: int = 100
+    max_lookback_bars: int = 100,
 ) -> List[DivergenceResult]:
     """
     Detect all MACD histogram divergences for a given direction.
@@ -559,32 +572,32 @@ def detect_macd_divergence(
 
     divergences = []
 
-    if direction == 'bullish':
+    if direction == "bullish":
         # Regular bullish (reversal)
         regular = detect_regular_bullish_divergence(
-            df, histogram, 'macd', lookback, min_pivot_distance, max_lookback_bars
+            df, histogram, "macd", lookback, min_pivot_distance, max_lookback_bars
         )
         if regular:
             divergences.append(regular)
 
         # Hidden bullish (continuation)
         hidden = detect_hidden_bullish_divergence(
-            df, histogram, 'macd', lookback, min_pivot_distance, max_lookback_bars
+            df, histogram, "macd", lookback, min_pivot_distance, max_lookback_bars
         )
         if hidden:
             divergences.append(hidden)
 
-    elif direction == 'bearish':
+    elif direction == "bearish":
         # Regular bearish (reversal)
         regular = detect_regular_bearish_divergence(
-            df, histogram, 'macd', lookback, min_pivot_distance, max_lookback_bars
+            df, histogram, "macd", lookback, min_pivot_distance, max_lookback_bars
         )
         if regular:
             divergences.append(regular)
 
         # Hidden bearish (continuation)
         hidden = detect_hidden_bearish_divergence(
-            df, histogram, 'macd', lookback, min_pivot_distance, max_lookback_bars
+            df, histogram, "macd", lookback, min_pivot_distance, max_lookback_bars
         )
         if hidden:
             divergences.append(hidden)
@@ -597,7 +610,7 @@ def detect_all_divergences(
     direction: str,
     lookback: int = 5,
     min_pivot_distance: int = 10,
-    max_lookback_bars: int = 100
+    max_lookback_bars: int = 100,
 ) -> Dict[str, List[DivergenceResult]]:
     """
     Detect all divergences (RSI and MACD) for a given direction.
@@ -613,6 +626,10 @@ def detect_all_divergences(
         Dictionary with 'rsi' and 'macd' keys, each containing list of divergences
     """
     return {
-        'rsi': detect_rsi_divergence(df, direction, lookback, min_pivot_distance, max_lookback_bars),
-        'macd': detect_macd_divergence(df, direction, lookback, min_pivot_distance, max_lookback_bars)
+        "rsi": detect_rsi_divergence(
+            df, direction, lookback, min_pivot_distance, max_lookback_bars
+        ),
+        "macd": detect_macd_divergence(
+            df, direction, lookback, min_pivot_distance, max_lookback_bars
+        ),
     }

@@ -66,6 +66,7 @@ def compute_velocities_1h(
     Returns pct change over last ~1h for each dominance series.
     If insufficient data, returns 0.0.
     """
+
     def last_two_pct(series: List[Tuple[float, float]]) -> float:
         if not series or len(series) < 2:
             return 0.0
@@ -181,7 +182,11 @@ def compute_macro_score(
                 notes.append("BTC-led expansion: slight bonus for alt longs")
 
         # Caution flag: BTC fast up, ALTs slow/flat, stables flat → alts can lag then bleed
-        if (ctx.btc_velocity_1h > 0.6 and ctx.alt_velocity_1h < 0.15 and -0.1 <= ctx.stable_velocity_1h <= 0.1):
+        if (
+            ctx.btc_velocity_1h > 0.6
+            and ctx.alt_velocity_1h < 0.15
+            and -0.1 <= ctx.stable_velocity_1h <= 0.1
+        ):
             if is_alt and direction == "LONG":
                 score += -1
                 notes.append("Caution: BTC spike with lagging ALTs; reduce alt-long by 1")

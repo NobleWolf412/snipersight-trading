@@ -13,7 +13,7 @@ from .report import ReportGenerator, ModeStats
 __all__ = [
     # Logger
     "DiagnosticLogger",
-    "DiagnosticEntry", 
+    "DiagnosticEntry",
     "ProbeCategory",
     "Severity",
     # Checkpoint

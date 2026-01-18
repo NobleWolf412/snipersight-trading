@@ -23,11 +23,11 @@ def generate_mock_ohlcv(regime: str, bars: int = 100, seed: int = 42) -> List[OH
     """
     np.random.seed(seed)
 
-    if regime == 'trending':
+    if regime == "trending":
         return generate_trending_data(bars, seed)
-    elif regime == 'ranging':
+    elif regime == "ranging":
         return generate_ranging_data(bars, seed)
-    elif regime == 'volatile':
+    elif regime == "volatile":
         return generate_volatile_data(bars, seed)
     else:
         raise ValueError(f"Unknown regime: {regime}. Use 'trending', 'ranging', or 'volatile'")
@@ -45,11 +45,11 @@ def generate_trending_data(bars: int = 100, seed: int = 42) -> List[OHLCV]:
         List of OHLCV instances with trending pattern
     """
     np.random.seed(seed)
-    
+
     base_price = 40000.0
     trend_strength = 0.001  # 0.1% per bar average
     volatility = 0.02  # 2% volatility
-    
+
     ohlcv_list = []
     current_price = base_price
     start_time = datetime(2024, 1, 1, 0, 0)
@@ -62,7 +62,7 @@ def generate_trending_data(bars: int = 100, seed: int = 42) -> List[OHLCV]:
         # Generate OHLC with realistic wicks
         open_price = current_price
         close_price = current_price * (1 + np.random.normal(trend_strength, volatility * 0.5))
-        
+
         high_price = max(open_price, close_price) * (1 + abs(np.random.normal(0, volatility * 0.3)))
         low_price = min(open_price, close_price) * (1 - abs(np.random.normal(0, volatility * 0.3)))
 
@@ -75,7 +75,7 @@ def generate_trending_data(bars: int = 100, seed: int = 42) -> List[OHLCV]:
             high=round(high_price, 2),
             low=round(low_price, 2),
             close=round(close_price, 2),
-            volume=round(volume, 2)
+            volume=round(volume, 2),
         )
         ohlcv_list.append(ohlcv)
         current_price = close_price
@@ -95,11 +95,11 @@ def generate_ranging_data(bars: int = 100, seed: int = 42) -> List[OHLCV]:
         List of OHLCV instances with ranging pattern
     """
     np.random.seed(seed)
-    
+
     mean_price = 40000.0
     range_width = 0.05  # 5% range around mean
     volatility = 0.015  # 1.5% volatility
-    
+
     ohlcv_list = []
     start_time = datetime(2024, 1, 1, 0, 0)
 
@@ -107,13 +107,13 @@ def generate_ranging_data(bars: int = 100, seed: int = 42) -> List[OHLCV]:
         # Oscillate around mean with sine wave + noise
         oscillation = np.sin(i * 0.2) * range_width
         noise = np.random.normal(0, volatility)
-        
+
         current_price = mean_price * (1 + oscillation + noise)
 
         # Generate OHLC
         open_price = current_price
         close_price = current_price * (1 + np.random.normal(0, volatility * 0.5))
-        
+
         high_price = max(open_price, close_price) * (1 + abs(np.random.normal(0, volatility * 0.4)))
         low_price = min(open_price, close_price) * (1 - abs(np.random.normal(0, volatility * 0.4)))
 
@@ -126,7 +126,7 @@ def generate_ranging_data(bars: int = 100, seed: int = 42) -> List[OHLCV]:
             high=round(high_price, 2),
             low=round(low_price, 2),
             close=round(close_price, 2),
-            volume=round(volume, 2)
+            volume=round(volume, 2),
         )
         ohlcv_list.append(ohlcv)
 
@@ -145,10 +145,10 @@ def generate_volatile_data(bars: int = 100, seed: int = 42) -> List[OHLCV]:
         List of OHLCV instances with volatile pattern
     """
     np.random.seed(seed)
-    
+
     base_price = 40000.0
     volatility = 0.05  # 5% volatility (high)
-    
+
     ohlcv_list = []
     current_price = base_price
     start_time = datetime(2024, 1, 1, 0, 0)
@@ -161,7 +161,7 @@ def generate_volatile_data(bars: int = 100, seed: int = 42) -> List[OHLCV]:
         # Generate OHLC with large wicks
         open_price = current_price
         close_price = current_price * (1 + np.random.normal(0, volatility * 0.8))
-        
+
         high_price = max(open_price, close_price) * (1 + abs(np.random.normal(0, volatility * 0.6)))
         low_price = min(open_price, close_price) * (1 - abs(np.random.normal(0, volatility * 0.6)))
 
@@ -174,7 +174,7 @@ def generate_volatile_data(bars: int = 100, seed: int = 42) -> List[OHLCV]:
             high=round(high_price, 2),
             low=round(low_price, 2),
             close=round(close_price, 2),
-            volume=round(volume, 2)
+            volume=round(volume, 2),
         )
         ohlcv_list.append(ohlcv)
         current_price = close_price
@@ -195,7 +195,7 @@ def generate_with_order_blocks(bars: int = 100, seed: int = 42) -> List[OHLCV]:
         List of OHLCV instances with order block patterns
     """
     np.random.seed(seed)
-    
+
     base_price = 40000.0
     ohlcv_list = []
     current_price = base_price
@@ -207,7 +207,7 @@ def generate_with_order_blocks(bars: int = 100, seed: int = 42) -> List[OHLCV]:
             # Bullish order block: strong down candle with long lower wick
             open_price = current_price
             close_price = current_price * 0.97  # 3% down close
-            low_price = current_price * 0.95   # 5% down wick
+            low_price = current_price * 0.95  # 5% down wick
             high_price = open_price * 1.005
             volume = np.random.uniform(800, 1500)  # Higher volume
         elif i % 20 == 15:
@@ -231,7 +231,7 @@ def generate_with_order_blocks(bars: int = 100, seed: int = 42) -> List[OHLCV]:
             high=round(high_price, 2),
             low=round(low_price, 2),
             close=round(close_price, 2),
-            volume=round(volume, 2)
+            volume=round(volume, 2),
         )
         ohlcv_list.append(ohlcv)
         current_price = close_price

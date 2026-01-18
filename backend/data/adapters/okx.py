@@ -3,9 +3,7 @@ OKX exchange adapter for fetching OHLCV data and market information.
 Institutional-tier exchange with huge liquidity and excellent API.
 """
 
-import time
 from typing import Optional, Dict, Any, List
-from functools import wraps
 import pandas as pd
 import ccxt
 from loguru import logger
@@ -26,12 +24,14 @@ class OKXAdapter:
         Args:
             testnet: If True, use OKX demo trading instead of production
         """
-        self.exchange = ccxt.okx({
-            'enableRateLimit': True,
-            'options': {
-                'defaultType': 'swap',  # USDT perpetual contracts
+        self.exchange = ccxt.okx(
+            {
+                "enableRateLimit": True,
+                "options": {
+                    "defaultType": "swap",  # USDT perpetual contracts
+                },
             }
-        })
+        )
 
         if testnet:
             self.exchange.set_sandbox_mode(True)
@@ -41,11 +41,7 @@ class OKXAdapter:
 
     @retry_on_rate_limit(max_retries=3)
     def fetch_ohlcv(
-        self,
-        symbol: str,
-        timeframe: str,
-        limit: int = 500,
-        since: Optional[int] = None
+        self, symbol: str, timeframe: str, limit: int = 500, since: Optional[int] = None
     ) -> pd.DataFrame:
         """
         Fetch OHLCV (candlestick) data from OKX.
@@ -62,12 +58,9 @@ class OKXAdapter:
         try:
             # OKX uses different symbol format for swaps
             fetch_symbol = self._normalize_symbol(symbol)
-            
+
             ohlcv = self.exchange.fetch_ohlcv(
-                symbol=fetch_symbol,
-                timeframe=timeframe,
-                limit=limit,
-                since=since
+                symbol=fetch_symbol, timeframe=timeframe, limit=limit, since=since
             )
 
             if not ohlcv:
@@ -75,11 +68,10 @@ class OKXAdapter:
                 return pd.DataFrame()
 
             df = pd.DataFrame(
-                ohlcv,
-                columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
+                ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"]
             )
 
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
             return df
 
         except ccxt.ExchangeError as e:
@@ -91,18 +83,18 @@ class OKXAdapter:
 
     def _normalize_symbol(self, symbol: str) -> str:
         """Convert standard symbol format to OKX swap format."""
-        if '/USDT' in symbol and ':USDT' not in symbol:
-            return symbol.replace('/USDT', '/USDT:USDT')
+        if "/USDT" in symbol and ":USDT" not in symbol:
+            return symbol.replace("/USDT", "/USDT:USDT")
         return symbol
 
     @retry_on_rate_limit(max_retries=3)
     def fetch_ticker(self, symbol: str) -> Dict[str, Any]:
         """
         Fetch current ticker data for a symbol.
-        
+
         Args:
             symbol: Trading pair symbol (e.g., 'BTC/USDT')
-            
+
         Returns:
             Ticker data dict with last, bid, ask, volume, etc.
         """
@@ -117,11 +109,7 @@ class OKXAdapter:
             raise
 
     @retry_on_rate_limit(max_retries=3)
-    def get_top_symbols(
-        self,
-        n: int = 50,
-        quote_currency: str = 'USDT'
-    ) -> List[str]:
+    def get_top_symbols(self, n: int = 50, quote_currency: str = "USDT") -> List[str]:
         """
         Get top N trading pairs by 24h volume.
 
@@ -140,20 +128,20 @@ class OKXAdapter:
             valid_symbols = []
             for symbol, market in markets.items():
                 if (
-                    market.get('active', False) and
-                    market.get('quote') == 'USDT' and
-                    market.get('type') == 'swap' and
-                    symbol in tickers
+                    market.get("active", False)
+                    and market.get("quote") == "USDT"
+                    and market.get("type") == "swap"
+                    and symbol in tickers
                 ):
                     # Convert back to standard format
-                    clean_symbol = symbol.replace(':USDT', '')
+                    clean_symbol = symbol.replace(":USDT", "")
                     valid_symbols.append(clean_symbol)
 
             # Sort by 24h volume
             sorted_symbols = sorted(
                 valid_symbols,
-                key=lambda s: tickers.get(s + ':USDT', {}).get('quoteVolume', 0) or 0,
-                reverse=True
+                key=lambda s: tickers.get(s + ":USDT", {}).get("quoteVolume", 0) or 0,
+                reverse=True,
             )
 
             result = sorted_symbols[:n]
@@ -170,12 +158,12 @@ class OKXAdapter:
         OKX swaps typically use the ':USDT' notation in CCXT markets.
         """
         try:
-            if not getattr(self.exchange, 'markets', None):
+            if not getattr(self.exchange, "markets", None):
                 self.exchange.load_markets()
             # OKX uses ':USDT' for swap markets; convert symbol to market key
-            market_key = symbol if ':USDT' in symbol else symbol.replace('/USDT', '/USDT:USDT')
+            market_key = symbol if ":USDT" in symbol else symbol.replace("/USDT", "/USDT:USDT")
             info = self.exchange.markets.get(market_key)
-            if info and info.get('type') == 'swap':
+            if info and info.get("type") == "swap":
                 return True
         except Exception:
             pass

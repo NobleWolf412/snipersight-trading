@@ -13,21 +13,21 @@ from datetime import datetime
 from typing import List, Literal, Optional, Any
 from enum import Enum
 
-
 # Pattern quality grade - A (excellent), B (good), C (marginal)
-PatternGrade = Literal['A', 'B', 'C']
+PatternGrade = Literal["A", "B", "C"]
 
 
 class CyclePhase(str, Enum):
     """
     Market cycle phase based on Camel Finance methodology.
-    
+
     Phases represent where we are in the cycle relative to lows/highs:
     - ACCUMULATION: At or near cycle low (DCL/WCL), smart money accumulating
     - MARKUP: Rising from cycle low toward high, trend in progress
     - DISTRIBUTION: At or near cycle high, smart money distributing
     - MARKDOWN: Falling from cycle high toward next low
     """
+
     ACCUMULATION = "accumulation"
     MARKUP = "markup"
     DISTRIBUTION = "distribution"
@@ -38,14 +38,15 @@ class CyclePhase(str, Enum):
 class CycleTranslation(str, Enum):
     """
     Cycle translation indicates when the cycle topped relative to midpoint.
-    
+
     Per Camel Finance:
     - LTR (Left-Translated): Topped early (before midpoint) = bearish bias
     - MTR (Mid-Translated): Topped mid-cycle = neutral
     - RTR (Right-Translated): Topped late (after midpoint) = bullish bias
     """
-    LTR = "left_translated"   # 🟥 Bearish - topped early
-    MTR = "mid_translated"    # 🟧 Neutral - topped mid-cycle
+
+    LTR = "left_translated"  # 🟥 Bearish - topped early
+    MTR = "mid_translated"  # 🟧 Neutral - topped mid-cycle
     RTR = "right_translated"  # 🟩 Bullish - topped late
     UNKNOWN = "unknown"
 
@@ -53,27 +54,28 @@ class CycleTranslation(str, Enum):
 class CycleConfirmation(str, Enum):
     """
     Confirmation state of a cycle low/high detection.
-    
+
     Based on Camel Finance confirmation logic:
     - CONFIRMED: All rules align, high-confidence trigger
     - UNCONFIRMED: Provisional, not ready yet
     - CANCELLED: Broke down post-trigger, invalidated
     - UPDATED: New low/high replaced an invalidated one
     """
-    CONFIRMED = "confirmed"      # ✅
+
+    CONFIRMED = "confirmed"  # ✅
     UNCONFIRMED = "unconfirmed"  # 🕓
-    CANCELLED = "cancelled"      # ❌
-    UPDATED = "updated"          # 🔄
+    CANCELLED = "cancelled"  # ❌
+    UPDATED = "updated"  # 🔄
 
 
 @dataclass
 class OrderBlock:
     """
     Order Block - Institutional supply/demand zone.
-    
+
     Represents a price zone where smart money entered positions,
     identified by strong rejection candles with displacement.
-    
+
     Attributes:
         timeframe: Timeframe where OB was detected (e.g., '4H', '1H')
         direction: 'bullish' (demand zone) or 'bearish' (supply zone)
@@ -84,6 +86,7 @@ class OrderBlock:
         mitigation_level: How much price has revisited the zone (0-1)
         freshness_score: Recency score, decreases over time (0-100)
     """
+
     timeframe: str
     direction: Literal["bullish", "bearish"]
     high: float
@@ -92,38 +95,45 @@ class OrderBlock:
     displacement_strength: float
     mitigation_level: float
     freshness_score: float
-    grade: PatternGrade = 'B'  # Quality grade: A (excellent), B (good), C (marginal)
+    grade: PatternGrade = "B"  # Quality grade: A (excellent), B (good), C (marginal)
     displacement_atr: float = 0.0  # ATR-normalized displacement for reference
     # NEW: Breaker lifecycle fields (Phase 2.1)
     breaker: bool = False  # OB was broken through, now acts as opposite S/R
     invalidated: bool = False  # Breaker failed (price broke back through)
-    
+
     def __post_init__(self):
         """Validate order block data."""
         if self.high <= self.low:
             raise ValueError(f"OB high ({self.high}) must be > low ({self.low})")
         if not 0 <= self.displacement_strength <= 100:
-            raise ValueError(f"Displacement strength must be 0-100, got {self.displacement_strength}")
+            raise ValueError(
+                f"Displacement strength must be 0-100, got {self.displacement_strength}"
+            )
         if not 0 <= self.mitigation_level <= 1:
             raise ValueError(f"Mitigation level must be 0-1, got {self.mitigation_level}")
         if not 0 <= self.freshness_score <= 100:
             raise ValueError(f"Freshness score must be 0-100, got {self.freshness_score}")
-    
+
     @property
     def is_fresh(self) -> bool:
         """Check if OB is fresh (freshness > 70, mitigation < 0.3, not breaker/invalid)."""
-        return self.freshness_score > 70 and self.mitigation_level < 0.3 and not self.breaker and not self.invalidated
-    
+        return (
+            self.freshness_score > 70
+            and self.mitigation_level < 0.3
+            and not self.breaker
+            and not self.invalidated
+        )
+
     @property
     def is_breaker(self) -> bool:
         """Check if this OB has become a breaker (broken through, now opposite S/R)."""
         return self.breaker and not self.invalidated
-    
+
     @property
     def is_valid(self) -> bool:
         """Check if OB is still valid for trading (not invalidated)."""
         return not self.invalidated
-    
+
     @property
     def midpoint(self) -> float:
         """Calculate midpoint of the order block."""
@@ -134,10 +144,10 @@ class OrderBlock:
 class FVG:
     """
     Fair Value Gap - Price imbalance requiring fill.
-    
+
     Occurs when candle 1's high/low doesn't overlap with candle 3's low/high,
     leaving a gap that price tends to revisit.
-    
+
     Attributes:
         timeframe: Timeframe where FVG was detected
         direction: 'bullish' (gap up) or 'bearish' (gap down)
@@ -148,6 +158,7 @@ class FVG:
         overlap_with_price: Percentage of gap filled by price (0.0-1.0)
         freshness_score: Recency score, decreases over time (0.0-1.0)
     """
+
     timeframe: str
     direction: Literal["bullish", "bearish"]
     top: float
@@ -156,9 +167,9 @@ class FVG:
     size: float
     overlap_with_price: float  # 0.0 (fresh) to 1.0 (completely filled)
     freshness_score: float = 1.0  # Time-based decay, similar to OB
-    grade: PatternGrade = 'B'  # Quality grade: A (excellent), B (good), C (marginal)
+    grade: PatternGrade = "B"  # Quality grade: A (excellent), B (good), C (marginal)
     size_atr: float = 0.0  # ATR-normalized gap size for reference
-    
+
     def __post_init__(self):
         """Validate FVG data."""
         if self.top <= self.bottom:
@@ -166,17 +177,17 @@ class FVG:
         expected_size = self.top - self.bottom
         if abs(self.size - expected_size) > 0.01:  # Allow small floating point error
             raise ValueError(f"FVG size mismatch: {self.size} vs calculated {expected_size}")
-    
+
     @property
     def midpoint(self) -> float:
         """Calculate midpoint of the FVG."""
         return (self.top + self.bottom) / 2
-    
+
     @property
     def is_fresh(self) -> bool:
         """Check if FVG is fresh (freshness > 0.5 and less than 50% filled)."""
         return self.freshness_score > 0.5 and self.overlap_with_price < 0.5
-    
+
     def contains_price(self, price: float) -> bool:
         """Check if a price is within the FVG."""
         return self.bottom <= price <= self.top
@@ -186,10 +197,10 @@ class FVG:
 class StructuralBreak:
     """
     Structural Break - BOS or CHoCH pattern.
-    
+
     - BOS (Break of Structure): Continuation pattern, breaks previous high/low in trend direction
     - CHoCH (Change of Character): Reversal signal, breaks structure against trend
-    
+
     Attributes:
         timeframe: Timeframe where break was detected
         break_type: 'BOS' (continuation) or 'CHoCH' (reversal)
@@ -197,20 +208,21 @@ class StructuralBreak:
         timestamp: When the break occurred
         htf_aligned: Whether break aligns with higher timeframe trend
     """
+
     timeframe: str
     break_type: Literal["BOS", "CHoCH"]
     level: float
     timestamp: datetime
     htf_aligned: bool
-    grade: PatternGrade = 'B'  # Quality grade: A (excellent), B (good), C (marginal)
+    grade: PatternGrade = "B"  # Quality grade: A (excellent), B (good), C (marginal)
     break_distance_atr: float = 0.0  # ATR-normalized break distance for reference
     direction: Literal["bullish", "bearish"] = "bullish"  # Direction of the break
-    
+
     @property
     def is_continuation(self) -> bool:
         """Check if this is a continuation pattern (BOS)."""
         return self.break_type == "BOS"
-    
+
     @property
     def is_reversal(self) -> bool:
         """Check if this is a reversal pattern (CHoCH)."""
@@ -221,16 +233,16 @@ class StructuralBreak:
 class LiquiditySweep:
     """
     Liquidity Sweep - Stop hunt pattern.
-    
+
     Identifies when price sweeps above/below key levels to trigger stops
     before reversing, indicating institutional accumulation/distribution.
-    
+
     Confirmation Levels:
     - Level 0: Unconfirmed (just penetration + reversal)
     - Level 1: Volume spike confirmation
     - Level 2: Volume + reversal pattern (engulfing/hammer)
     - Level 3: Volume + BOS/CHoCH structure break
-    
+
     Attributes:
         level: Price level that was swept
         sweep_type: 'high' (swept above) or 'low' (swept below)
@@ -242,21 +254,22 @@ class LiquiditySweep:
         has_reversal_pattern: Whether engulfing/hammer detected after sweep
         has_structure_break: Whether BOS/CHoCH followed the sweep
     """
+
     level: float
     sweep_type: Literal["high", "low"]
     confirmation: bool  # Volume spike (Level 1)
     timestamp: datetime
-    grade: PatternGrade = 'B'  # Graded by reversal strength in ATR units
-    timeframe: str = '1h'  # Source timeframe for TF filtering
+    grade: PatternGrade = "B"  # Graded by reversal strength in ATR units
+    timeframe: str = "1h"  # Source timeframe for TF filtering
     confirmation_level: int = 0  # 0=none, 1=volume, 2=volume+pattern, 3=volume+structure
     has_reversal_pattern: bool = False  # Engulfing/hammer after sweep
     has_structure_break: bool = False  # BOS/CHoCH followed sweep
-    
+
     @property
     def is_confirmed(self) -> bool:
         """Check if sweep has at least volume confirmation."""
         return self.confirmation
-    
+
     @property
     def is_strongly_confirmed(self) -> bool:
         """Check if sweep has structure confirmation (level 3)."""
@@ -267,10 +280,10 @@ class LiquiditySweep:
 class LiquidityPool:
     """
     Liquidity Pool - Equal highs or equal lows cluster.
-    
+
     Represents clustered swing points at similar price levels where
     stop-loss liquidity accumulates. These are high-probability sweep targets.
-    
+
     Attributes:
         level: Average price level of the cluster
         pool_type: 'equal_highs' or 'equal_lows'
@@ -282,11 +295,12 @@ class LiquidityPool:
         tolerance_used: Price tolerance that defined this cluster
         spread: Price spread within the cluster (high - low of touches)
     """
+
     level: float
     pool_type: Literal["equal_highs", "equal_lows"]
     touches: int
     timeframe: str
-    grade: PatternGrade = 'B'
+    grade: PatternGrade = "B"
     first_touch: Optional[datetime] = None
     last_touch: Optional[datetime] = None
     tolerance_used: float = 0.002  # Tolerance % used for clustering
@@ -295,12 +309,12 @@ class LiquidityPool:
     swept: bool = False  # Pool has been swept (price broke through)
     swept_index: Optional[int] = None  # Bar index when swept
     swept_timestamp: Optional[datetime] = None  # Timestamp when swept
-    
+
     @property
     def is_strong(self) -> bool:
         """Check if this is a strong liquidity pool (3+ touches or Grade A/B)."""
-        return self.touches >= 3 or self.grade in ('A', 'B')
-    
+        return self.touches >= 3 or self.grade in ("A", "B")
+
     @property
     def is_fresh(self) -> bool:
         """Check if pool was touched recently (last 7 days) and not swept."""
@@ -310,12 +324,12 @@ class LiquidityPool:
             return True
         age = datetime.now() - self.last_touch
         return age.days <= 7
-    
+
     @property
     def is_swept(self) -> bool:
         """Check if this pool has been swept."""
         return self.swept
-    
+
     def contains_price(self, price: float) -> bool:
         """Check if price is within the liquidity pool zone."""
         tolerance = self.level * self.tolerance_used
@@ -326,10 +340,10 @@ class LiquidityPool:
 class Consolidation:
     """
     Consolidation Range - Horizontal channel with multiple touches.
-    
+
     Represents a trading range where price oscillates between support and resistance,
     accumulating liquidity before a breakout. Used for trend continuation entries.
-    
+
     Attributes:
         high: Upper boundary (resistance) of the consolidation
         low: Lower boundary (support) of the consolidation
@@ -343,6 +357,7 @@ class Consolidation:
         retest_level: Entry price if retest confirmed (None if no retest yet)
         fvg_at_breakout: Whether FVG formed at breakout candle
     """
+
     high: float
     low: float
     timestamp_start: datetime
@@ -354,7 +369,7 @@ class Consolidation:
     breakout_direction: Optional[Literal["bullish", "bearish"]] = None
     retest_level: Optional[float] = None
     fvg_at_breakout: bool = False
-    
+
     def __post_init__(self):
         """Validate consolidation data."""
         if self.high <= self.low:
@@ -363,17 +378,17 @@ class Consolidation:
             raise ValueError(f"Consolidation must have at least 3 touches, got {self.touches}")
         if not 0 <= self.strength_score <= 1:
             raise ValueError(f"Strength score must be 0-1, got {self.strength_score}")
-    
+
     @property
     def midpoint(self) -> float:
         """Calculate midpoint of the consolidation range."""
         return (self.high + self.low) / 2
-    
+
     @property
     def height(self) -> float:
         """Calculate height of the consolidation range."""
         return self.high - self.low
-    
+
     @property
     def is_valid_for_entry(self) -> bool:
         """Check if consolidation is ready for trend continuation entry."""
@@ -383,7 +398,7 @@ class Consolidation:
             and self.strength_score >= 0.5
             and self.touches >= 5
         )
-    
+
     def contains_price(self, price: float) -> bool:
         """Check if price is within the consolidation range."""
         return self.low <= price <= self.high
@@ -393,12 +408,13 @@ class Consolidation:
 class FilterStats:
     """
     Statistics for mode-specific pattern filtering.
-    
+
     Tracks how many patterns were detected vs filtered by mode requirements.
     """
+
     detected: int
     after_filter: int
-    
+
     @property
     def filtered_count(self) -> int:
         """Calculate number of patterns filtered out."""
@@ -409,9 +425,10 @@ class FilterStats:
 class SMCFilterMetadata:
     """
     Complete filter statistics for all SMC pattern types.
-    
+
     Shows user how mode-specific filtering affected pattern counts.
     """
+
     order_blocks: Optional[FilterStats] = None
     fvgs: Optional[FilterStats] = None
     sweeps: Optional[FilterStats] = None
@@ -422,11 +439,11 @@ class SMCFilterMetadata:
 class SMCSnapshot:
     """
     Complete SMC analysis snapshot for a symbol.
-    
+
     Contains all detected Smart-Money patterns across timeframes.
     This is populated by the SMC detection modules and used for
     confluence scoring and trade planning.
-    
+
     Attributes:
         order_blocks: List of all detected order blocks
         fvgs: List of all detected fair value gaps
@@ -437,21 +454,30 @@ class SMCSnapshot:
         liquidity_pools: List of structured LiquidityPool objects (NEW)
         filter_metadata: Filter statistics for UI display (NEW)
     """
+
     order_blocks: List[OrderBlock]
     fvgs: List[FVG]
     structural_breaks: List[StructuralBreak]
     liquidity_sweeps: List[LiquiditySweep]
-    equal_highs: List[float] = field(default_factory=list)  # DEPRECATED but kept for backward compat
-    equal_lows: List[float] = field(default_factory=list)   # DEPRECATED but kept for backward compat
+    equal_highs: List[float] = field(
+        default_factory=list
+    )  # DEPRECATED but kept for backward compat
+    equal_lows: List[float] = field(default_factory=list)  # DEPRECATED but kept for backward compat
     liquidity_pools: List[LiquidityPool] = field(default_factory=list)  # NEW: structured pools
-    consolidations: List[Consolidation] = field(default_factory=list)  # NEW: horizontal range formations
+    consolidations: List[Consolidation] = field(
+        default_factory=list
+    )  # NEW: horizontal range formations
     swing_structure: dict = field(default_factory=dict)  # {timeframe: SwingStructure.to_dict()}
-    premium_discount: dict = field(default_factory=dict)  # {timeframe: PremiumDiscountZone.to_dict()}
+    premium_discount: dict = field(
+        default_factory=dict
+    )  # {timeframe: PremiumDiscountZone.to_dict()}
     key_levels: Optional[dict] = None  # KeyLevels.to_dict()
     htf_sweep_context: Optional[dict] = None  # HTF sweep context for LTF synergy bonus
-    htf_levels: List[Any] = field(default_factory=list)  # Deduced HTF S/R and Fib levels from analysis
+    htf_levels: List[Any] = field(
+        default_factory=list
+    )  # Deduced HTF S/R and Fib levels from analysis
     filter_metadata: Optional[SMCFilterMetadata] = None  # NEW: Mode filter statistics for UI
-    
+
     def __post_init__(self):
         """Initialize empty lists if None provided."""
         if self.order_blocks is None:
@@ -476,163 +502,168 @@ class SMCSnapshot:
             self.premium_discount = {}
         if self.htf_levels is None:
             self.htf_levels = []
-    
+
     def get_fresh_order_blocks(self) -> List[OrderBlock]:
         """Get only fresh, unmitigated order blocks."""
         return [ob for ob in self.order_blocks if ob.is_fresh]
-    
+
     def get_unfilled_fvgs(self) -> List[FVG]:
         """Get FVGs that haven't been filled yet."""
         return [fvg for fvg in self.fvgs if not fvg.overlap_with_price]
-    
+
     def get_htf_aligned_breaks(self) -> List[StructuralBreak]:
         """Get structural breaks aligned with higher timeframe."""
         return [sb for sb in self.structural_breaks if sb.htf_aligned]
-    
+
     def get_confirmed_sweeps(self) -> List[LiquiditySweep]:
         """Get confirmed liquidity sweeps."""
         return [sweep for sweep in self.liquidity_sweeps if sweep.is_confirmed]
-    
+
     def get_strong_liquidity_pools(self) -> List[LiquidityPool]:
         """Get strong liquidity pools (3+ touches or Grade A/B)."""
         return [pool for pool in self.liquidity_pools if pool.is_strong]
-    
+
     def get_equal_highs_pools(self) -> List[LiquidityPool]:
         """Get liquidity pools of equal highs type."""
         return [pool for pool in self.liquidity_pools if pool.pool_type == "equal_highs"]
-    
+
     def get_equal_lows_pools(self) -> List[LiquidityPool]:
         """Get liquidity pools of equal lows type."""
         return [pool for pool in self.liquidity_pools if pool.pool_type == "equal_lows"]
-    
-    def get_nearest_pool(self, price: float, pool_type: Optional[str] = None) -> Optional[LiquidityPool]:
+
+    def get_nearest_pool(
+        self, price: float, pool_type: Optional[str] = None
+    ) -> Optional[LiquidityPool]:
         """
         Get the nearest liquidity pool to a given price.
-        
+
         Args:
             price: Reference price
             pool_type: Optional filter ('equal_highs' or 'equal_lows')
-            
+
         Returns:
             Nearest LiquidityPool or None
         """
         pools = self.liquidity_pools
         if pool_type:
             pools = [p for p in pools if p.pool_type == pool_type]
-        
+
         if not pools:
             return None
-        
+
         return min(pools, key=lambda p: abs(p.level - price))
-    
+
     def has_smc_data(self) -> bool:
         """Check if any SMC patterns were detected."""
-        return bool(self.order_blocks or self.fvgs or 
-                   self.structural_breaks or self.liquidity_sweeps or
-                   self.liquidity_pools)
+        return bool(
+            self.order_blocks
+            or self.fvgs
+            or self.structural_breaks
+            or self.liquidity_sweeps
+            or self.liquidity_pools
+        )
 
 
 @dataclass
 class CycleContext:
     """
     Cycle timing context based on Camel Finance methodology.
-    
+
     Tracks Daily Cycle Low (DCL), Weekly Cycle Low (WCL), and cycle translation
     to determine optimal entry/exit timing for both long and short trades.
-    
+
     Crypto timing windows (per Camel Finance):
     - DCL: 18-28 trading days
     - WCL: 35-50 trading days (nests 2-3 DCLs)
     - YCL: 200-250 trading days
-    
+
     Attributes:
         phase: Current market cycle phase (accumulation/markup/distribution/markdown)
         translation: Cycle translation (LTR/MTR/RTR) - indicates bearish/neutral/bullish bias
-        
+
         dcl_days_since: Days since last Daily Cycle Low
         dcl_confirmation: Confirmation state of current DCL
         dcl_price: Price level of last confirmed DCL
         dcl_timestamp: Timestamp of last DCL
-        
+
         wcl_days_since: Days since last Weekly Cycle Low
         wcl_confirmation: Confirmation state of current WCL
         wcl_price: Price level of last confirmed WCL
         wcl_timestamp: Timestamp of last WCL
-        
+
         cycle_high_price: Price of current cycle high (for translation calc)
         cycle_high_timestamp: When cycle high occurred
         cycle_midpoint_price: Price at cycle midpoint (DCL high + DCL low) / 2
-        
+
         in_dcl_zone: Whether price is in DCL timing window (ready for long entry)
         in_wcl_zone: Whether price is in WCL timing window (major reversal zone)
-        
+
         trade_bias: Recommended trade direction based on cycle ('LONG', 'SHORT', 'NEUTRAL')
         confidence: Confidence in cycle assessment (0-100)
     """
+
     phase: CyclePhase = CyclePhase.UNKNOWN
     translation: CycleTranslation = CycleTranslation.UNKNOWN
-    
+
     # Daily Cycle Low tracking
     dcl_days_since: Optional[int] = None
     dcl_confirmation: CycleConfirmation = CycleConfirmation.UNCONFIRMED
     dcl_price: Optional[float] = None
     dcl_timestamp: Optional[datetime] = None
-    
+
     # Weekly Cycle Low tracking
     wcl_days_since: Optional[int] = None
     wcl_confirmation: CycleConfirmation = CycleConfirmation.UNCONFIRMED
     wcl_price: Optional[float] = None
     wcl_timestamp: Optional[datetime] = None
-    
+
     # Cycle high tracking (for translation)
     cycle_high_price: Optional[float] = None
     cycle_high_timestamp: Optional[datetime] = None
     cycle_midpoint_price: Optional[float] = None
-    
+
     # Timing zone flags
     in_dcl_zone: bool = False
     in_wcl_zone: bool = False
-    
+
     # Trade recommendation
     trade_bias: Literal["LONG", "SHORT", "NEUTRAL"] = "NEUTRAL"
     confidence: float = 0.0
-    
+
     # NEW: Temporal Bias Intelligence (Phase 3.1)
     temporal_score: float = 0.0  # 0-100 score based on Day/Time probability
     timing_window_active: bool = False  # True if in high-prob time window (Mon/Fri or Intraday)
-    
+
     def __post_init__(self):
         """Validate confidence range."""
         self.confidence = max(0.0, min(100.0, self.confidence))
-    
+
     @property
     def is_at_cycle_low(self) -> bool:
         """Check if currently at a confirmed cycle low (DCL or WCL)."""
-        return (
-            self.in_dcl_zone or self.in_wcl_zone
-        ) and self.phase == CyclePhase.ACCUMULATION
-    
+        return (self.in_dcl_zone or self.in_wcl_zone) and self.phase == CyclePhase.ACCUMULATION
+
     @property
     def is_at_cycle_high(self) -> bool:
         """Check if currently at cycle high (distribution phase with LTR)."""
         return self.phase == CyclePhase.DISTRIBUTION
-    
+
     @property
     def suggests_long(self) -> bool:
         """Check if cycle context suggests looking for longs."""
         return (
-            self.trade_bias == "LONG" or 
-            self.phase == CyclePhase.ACCUMULATION or
-            self.translation == CycleTranslation.RTR
+            self.trade_bias == "LONG"
+            or self.phase == CyclePhase.ACCUMULATION
+            or self.translation == CycleTranslation.RTR
         )
-    
+
     @property
     def suggests_short(self) -> bool:
         """Check if cycle context suggests looking for shorts."""
         return (
-            self.trade_bias == "SHORT" or
-            self.phase == CyclePhase.DISTRIBUTION or
-            self.translation == CycleTranslation.LTR
+            self.trade_bias == "SHORT"
+            or self.phase == CyclePhase.DISTRIBUTION
+            or self.translation == CycleTranslation.LTR
         )
 
 
@@ -640,61 +671,64 @@ class CycleContext:
 class ReversalContext:
     """
     Reversal detection context combining cycle timing with SMC signals.
-    
+
     Identifies high-probability reversal setups by combining:
     - Cycle extreme (DCL/WCL zone or distribution zone)
     - CHoCH (Change of Character) structural break
     - Volume displacement confirmation
     - Liquidity sweep (stop hunt before reversal)
-    
+
     Attributes:
         is_reversal_setup: Whether conditions meet reversal criteria
         direction: Reversal direction ('LONG' for bullish reversal, 'SHORT' for bearish)
-        
+
         cycle_aligned: Whether cycle context supports the reversal
         choch_detected: Whether CHoCH was detected
         volume_displacement: Whether volume spike confirmed the move
         liquidity_swept: Whether recent liquidity sweep occurred
-        
+
         htf_bypass_active: Whether to bypass HTF EMA alignment (cycle extreme + structure broken)
-        
+
         signals: List of component signals that formed the reversal context
         confidence: Overall reversal confidence (0-100)
         rationale: Human-readable explanation of reversal setup
     """
+
     is_reversal_setup: bool = False
     direction: Literal["LONG", "SHORT", "NONE"] = "NONE"
-    
+
     # Component signals
     cycle_aligned: bool = False
     choch_detected: bool = False
     volume_displacement: bool = False
     liquidity_swept: bool = False
-    
+
     # Bypass flag for HTF alignment
     htf_bypass_active: bool = False
-    
+
     # Details
     signals: List[str] = field(default_factory=list)
     confidence: float = 0.0
     rationale: str = ""
-    
+
     def __post_init__(self):
         """Validate and ensure signals list exists."""
         if self.signals is None:
             self.signals = []
         self.confidence = max(0.0, min(100.0, self.confidence))
-    
+
     @property
     def component_count(self) -> int:
         """Count how many reversal components are present."""
-        return sum([
-            self.cycle_aligned,
-            self.choch_detected,
-            self.volume_displacement,
-            self.liquidity_swept
-        ])
-    
+        return sum(
+            [
+                self.cycle_aligned,
+                self.choch_detected,
+                self.volume_displacement,
+                self.liquidity_swept,
+            ]
+        )
+
     @property
     def is_high_confidence(self) -> bool:
         """Check if reversal has high confidence (3+ components)."""
@@ -703,37 +737,35 @@ class ReversalContext:
 
 # --- Pattern Grading Helper ---
 
+
 def grade_pattern(
-    value: float,
-    atr: float,
-    a_threshold: float = 1.5,
-    b_threshold: float = 1.0
+    value: float, atr: float, a_threshold: float = 1.5, b_threshold: float = 1.0
 ) -> PatternGrade:
     """
     Grade a pattern based on its ATR-relative strength.
-    
+
     This replaces hard rejection with soft grading:
     - Grade A: Excellent pattern (value >= a_threshold * ATR)
-    - Grade B: Good pattern (value >= b_threshold * ATR)  
+    - Grade B: Good pattern (value >= b_threshold * ATR)
     - Grade C: Marginal pattern (below b_threshold)
-    
+
     Args:
         value: The pattern's characteristic value (displacement, gap size, etc.)
         atr: Current ATR for normalization
         a_threshold: ATR multiplier for Grade A (default 1.5)
         b_threshold: ATR multiplier for Grade B (default 1.0)
-        
+
     Returns:
         PatternGrade: 'A', 'B', or 'C'
     """
     if atr <= 0:
-        return 'B'  # Can't grade without ATR, default to B
-    
+        return "B"  # Can't grade without ATR, default to B
+
     atr_ratio = value / atr
-    
+
     if atr_ratio >= a_threshold:
-        return 'A'
+        return "A"
     elif atr_ratio >= b_threshold:
-        return 'B'
+        return "B"
     else:
-        return 'C'
+        return "C"

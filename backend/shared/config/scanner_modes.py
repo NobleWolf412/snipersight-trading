@@ -10,6 +10,7 @@ Each mode supplies:
 - min_confluence_score: baseline threshold (frontend may override upward)
 - profile: semantic profile tag reused by scoring/planner heuristics
 """
+
 from dataclasses import dataclass
 from typing import Tuple, Dict, List, Optional, Any
 
@@ -18,12 +19,12 @@ from typing import Tuple, Dict, List, Optional, Any
 class MACDModeConfig:
     """
     Mode-aware MACD scoring configuration.
-    
+
     Controls how MACD is interpreted per scanner mode:
     - HTF/Swing modes: MACD as primary directional bias (heavy weight)
     - Balanced modes: MACD as weighted confluence factor
     - Scalp/Surgical modes: MACD as HTF context + LTF veto only
-    
+
     Attributes:
         use_htf_bias: Whether to pull HTF MACD for directional context
         treat_as_primary: If True, MACD drives scoring; if False, it filters
@@ -35,6 +36,7 @@ class MACDModeConfig:
         macd_settings: Tuple of (fast, slow, signal) periods for this mode
         min_amplitude: Minimum |MACD - Signal| to count (filters chop)
     """
+
     use_htf_bias: bool = True
     treat_as_primary: bool = False
     min_persistence_bars: int = 2
@@ -140,14 +142,14 @@ class ScannerMode:
     allowed_trade_types: Tuple[str, ...] = ("swing", "intraday", "scalp")  # Default all allowed
     # Per-mode overrides (min_rr_ratio, atr_floor, gating thresholds, etc.)
     overrides: Optional[Dict[str, Any]] = None
-    
+
     # NEW: Top-down nested entry timeframe hierarchy
     # bias_timeframes: For direction bias (HH/HL/LH/LL analysis)
     # zone_timeframes: For entry zone OBs (where we want to trade from)
     # entry_trigger_timeframes: For refined entry OBs inside zones
     zone_timeframes: Tuple[str, ...] = ()  # TFs for entry zone (4H, 1H)
     entry_trigger_timeframes: Tuple[str, ...] = ()  # TFs for refined entry (15m, 5m)
-    
+
     @property
     def bias_timeframes(self) -> Tuple[str, ...]:
         """Alias for timeframes (bias + indicator TFs). For clarity in code."""
@@ -169,8 +171,13 @@ MODES: Dict[str, ScannerMode] = {
         max_pullback_atr=4.0,
         min_stop_atr=0.4,
         max_stop_atr=8.0,  # INCREASED: Allow wider stops for true swing invalidation
-
-        entry_timeframes=("1w", "1d", "4h", "1h", "15m"),  # TUNED: Allow entries on HTF structure (Overwatch requirement)
+        entry_timeframes=(
+            "1w",
+            "1d",
+            "4h",
+            "1h",
+            "15m",
+        ),  # TUNED: Allow entries on HTF structure (Overwatch requirement)
         structure_timeframes=("1w", "1d", "4h"),  # RESTORED: HTF structure for target clipping
         stop_timeframes=("1d", "4h", "1h"),  # UPDATED: Include 1d for swing invalidation stops
         target_timeframes=("1d", "4h"),
@@ -179,7 +186,12 @@ MODES: Dict[str, ScannerMode] = {
         expected_trade_type="swing",  # HTF macro positions
         allowed_trade_types=("swing",),  # STRICT: Only swing trades allowed
         volume_accel_lookback=8,  # Longer lookback for swing - filters noise, catches institutional accumulation
-        overrides={"min_rr_ratio": 2.0, "atr_floor": 0.0025, "bias_gate": 0.7, "htf_swing_allowed": ("1d", "4h", "1h")},  # UPDATED: Include 1h
+        overrides={
+            "min_rr_ratio": 2.0,
+            "atr_floor": 0.0025,
+            "bias_gate": 0.7,
+            "htf_swing_allowed": ("1d", "4h", "1h"),
+        },  # UPDATED: Include 1h
         # NEW: Nested OB entry hierarchy
         zone_timeframes=("4h", "1h"),  # Entry zone OBs
         entry_trigger_timeframes=("15m", "5m"),  # Refined entry OBs inside zone
@@ -194,8 +206,8 @@ MODES: Dict[str, ScannerMode] = {
         critical_timeframes=("15m",),  # 15m is essential for intraday entries
         primary_planning_timeframe="15m",
         max_pullback_atr=2.5,
-        min_stop_atr=0.2,   # TUNED: was 0.25 - allow tighter scalp stops
-        max_stop_atr=5.0,   # TUNED: was 3.5 - allow HTF structure stops
+        min_stop_atr=0.2,  # TUNED: was 0.25 - allow tighter scalp stops
+        max_stop_atr=5.0,  # TUNED: was 3.5 - allow HTF structure stops
         entry_timeframes=("15m", "5m"),  # Fast aggressive entries with LTF precision
         structure_timeframes=("4h", "1h", "15m"),  # RESTORED: 4h structure for target clipping
         stop_timeframes=("1h", "15m", "5m"),  # TUNED: added 1h for HTF structure stops
@@ -203,9 +215,20 @@ MODES: Dict[str, ScannerMode] = {
         min_target_move_pct=0.4,  # TUNED: was 0.5 - allow tighter scalp targets
         smc_preset="luxalgo_aggressive",  # Loose detection for max signals
         expected_trade_type="strike",  # FIXED: Changed from "intraday" to "strike" to enable trend continuation
-        allowed_trade_types=("swing", "intraday", "scalp"),  # Allow swing since 4h structure produces swing-sized targets
+        allowed_trade_types=(
+            "swing",
+            "intraday",
+            "scalp",
+        ),  # Allow swing since 4h structure produces swing-sized targets
         volume_accel_lookback=4,  # Balanced - faster detection for intraday but not as reactive as scalp
-        overrides={"min_rr_ratio": 1.2, "atr_floor": 0.0010, "bias_gate": 0.6, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True, "entry_zone_offset_atr": -0.05},
+        overrides={
+            "min_rr_ratio": 1.2,
+            "atr_floor": 0.0010,
+            "bias_gate": 0.6,
+            "htf_swing_allowed": ("1h", "15m"),
+            "emergency_atr_fallback": True,
+            "entry_zone_offset_atr": -0.05,
+        },
         # NEW: Nested OB entry hierarchy
         zone_timeframes=("15m", "5m"),  # Entry zone OBs (faster for intraday)
         entry_trigger_timeframes=("5m",),  # Refined entry OBs
@@ -220,9 +243,18 @@ MODES: Dict[str, ScannerMode] = {
         primary_planning_timeframe="15m",
         max_pullback_atr=2.0,
         min_stop_atr=0.25,  # TUNED: bumped from 0.15 to 0.25 for spread safety
-        max_stop_atr=6.0,   # TUNED: was 5.0 - allow HTF structure stops (6 ATR cap with hard ceiling 2x)
-        entry_timeframes=("4h", "1h", "15m", "5m"),  # TUNED: added 4h/1h - allows HTF OB entries when no LTF OBs exist
-        structure_timeframes=("4h", "1h", "15m"),  # Precision structure from 4h/1h/15m (added 4h for HTF awareness)
+        max_stop_atr=6.0,  # TUNED: was 5.0 - allow HTF structure stops (6 ATR cap with hard ceiling 2x)
+        entry_timeframes=(
+            "4h",
+            "1h",
+            "15m",
+            "5m",
+        ),  # TUNED: added 4h/1h - allows HTF OB entries when no LTF OBs exist
+        structure_timeframes=(
+            "4h",
+            "1h",
+            "15m",
+        ),  # Precision structure from 4h/1h/15m (added 4h for HTF awareness)
         stop_timeframes=("4h", "1h", "15m", "5m"),  # TUNED: added 4h for HTF structure stops
         target_timeframes=("4h", "1h", "15m"),  # TUNED: added 4h for major targets
         min_target_move_pct=0.4,  # TUNED: was 0.6 - allow tighter surgical precision
@@ -230,9 +262,21 @@ MODES: Dict[str, ScannerMode] = {
         expected_trade_type="precision",  # FIXED: Changed from "intraday" to "precision" to enable trend continuation
         allowed_trade_types=("intraday", "scalp"),  # Precision focus
         volume_accel_lookback=3,  # Shortest lookback - scalp/surgical needs fastest reaction to volume changes
-        overrides={"min_rr_ratio": 1.5, "atr_floor": 0.0008, "bias_gate": 0.7, "htf_swing_allowed": ("1h", "15m"), "emergency_atr_fallback": True, "entry_zone_offset_atr": 0.05},
+        overrides={
+            "min_rr_ratio": 1.5,
+            "atr_floor": 0.0008,
+            "bias_gate": 0.7,
+            "htf_swing_allowed": ("1h", "15m"),
+            "emergency_atr_fallback": True,
+            "entry_zone_offset_atr": 0.05,
+        },
         # NEW: Nested OB entry hierarchy
-        zone_timeframes=("4h", "1h", "15m", "5m"),  # Entry zone OBs - includes HTF for institutional context
+        zone_timeframes=(
+            "4h",
+            "1h",
+            "15m",
+            "5m",
+        ),  # Entry zone OBs - includes HTF for institutional context
         entry_trigger_timeframes=("5m",),  # Refined entry OBs
     ),
     # STEALTH replaces both RECON and GHOST (merged per SMC_PIPELINE_REFACTOR.md)
@@ -248,10 +292,20 @@ MODES: Dict[str, ScannerMode] = {
         max_pullback_atr=3.0,
         min_stop_atr=0.2,
         max_stop_atr=4.5,
-        entry_timeframes=("4h", "1h", "15m", "5m"),  # TUNED: added 4h for swing component (like Surgical)
+        entry_timeframes=(
+            "4h",
+            "1h",
+            "15m",
+            "5m",
+        ),  # TUNED: added 4h for swing component (like Surgical)
         structure_timeframes=("1d", "4h", "1h", "15m"),  # Added 15m to support 5m entries
         stop_timeframes=("4h", "1h", "15m"),  # TUNED: added 4h/1h for swing structure stops
-        target_timeframes=("1d", "4h", "1h", "15m"),  # FIXED: Added 4h and 1d (was missing, caused daily FVG targets to be ignored)
+        target_timeframes=(
+            "1d",
+            "4h",
+            "1h",
+            "15m",
+        ),  # FIXED: Added 4h and 1d (was missing, caused daily FVG targets to be ignored)
         min_target_move_pct=0.5,
         smc_preset="defaults",  # Balanced detection for swing trading
         expected_trade_type="stealth",  # FIXED: Changed from "intraday" to enable trend continuation (PlannerConfig.defaults_for_mode("stealth"))
@@ -301,7 +355,7 @@ def list_modes() -> List[Dict[str, object]]:
 # Profile to mode mapping (reverse lookup)
 PROFILE_TO_MODE: Dict[str, str] = {
     "macro_surveillance": "overwatch",
-    "intraday_aggressive": "strike", 
+    "intraday_aggressive": "strike",
     "precision": "surgical",
     "stealth_balanced": "stealth",
     "balanced": "stealth",  # Fallback
@@ -311,10 +365,10 @@ PROFILE_TO_MODE: Dict[str, str] = {
 def get_mode_by_profile(profile: str) -> ScannerMode:
     """
     Lookup a scanner mode by profile name.
-    
+
     Args:
         profile: Profile name (e.g., 'intraday_aggressive', 'precision')
-        
+
     Returns:
         ScannerMode corresponding to the profile
     """
@@ -325,13 +379,13 @@ def get_mode_by_profile(profile: str) -> ScannerMode:
 def get_mode(name: str) -> ScannerMode:
     """
     Lookup a scanner mode by name (case-insensitive).
-    
+
     Backward compatibility mappings:
     - 'recon' → 'stealth' (stealth_strict=False)
     - 'ghost' → 'stealth' (stealth_strict=True, higher min_confluence)
     """
     key = name.lower()
-    
+
     # Backward compatibility: map old mode names to stealth
     if key == "recon":
         # RECON → STEALTH with relaxed settings (default stealth behavior)
@@ -362,8 +416,7 @@ def get_mode(name: str) -> ScannerMode:
             expected_trade_type=base.expected_trade_type,
             overrides=new_overrides,
         )
-    
+
     if key not in MODES:
         raise ValueError(f"Unknown scanner mode: {name}")
     return MODES[key]
-

@@ -27,8 +27,8 @@ def test_select_symbols_basic_filters():
     proportional = max(1, int(len(symbols) * 0.2))
     # First chunk should come from majors slice; backfill may include others to reach limit
     proportional = max(1, int(len(symbols) * 0.2))
-    majors_first = symbols[:max(3, min(10, proportional))]
-    assert set(out[:len(majors_first)]).issubset(set(majors_first))
+    majors_first = symbols[: max(3, min(10, proportional))]
+    assert set(out[: len(majors_first)]).issubset(set(majors_first))
     assert len(out) >= len(majors_first)
     assert len(out) <= 10
 
@@ -41,7 +41,7 @@ def test_select_symbols_basic_filters():
     # Alts only (exclude majors & memes)
     out = select_symbols(adapter, limit=2, majors=False, altcoins=True, meme_mode=False)
     proportional = max(1, int(len(symbols) * 0.2))
-    majors_dyn = set(symbols[:max(3, min(10, proportional))])
+    majors_dyn = set(symbols[: max(3, min(10, proportional))])
     memes = {"DOGE/USDT", "SHIB/USDT", "PEPE/USDT"}
     assert all(s not in majors_dyn and s not in memes for s in out)
 

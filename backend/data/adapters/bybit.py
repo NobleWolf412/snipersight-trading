@@ -3,9 +3,7 @@ Bybit exchange adapter for fetching OHLCV data and market information.
 #1 Best overall for bot trading - fast APIs, clean data, no geo-blocking.
 """
 
-import time
 from typing import Optional, Dict, Any, List
-from functools import wraps
 import pandas as pd
 import ccxt
 from loguru import logger
@@ -26,12 +24,14 @@ class BybitAdapter:
         Args:
             testnet: If True, use Bybit testnet instead of production
         """
-        self.exchange = ccxt.bybit({
-            'enableRateLimit': True,
-            'options': {
-                'defaultType': 'swap',  # USDT perpetual contracts
+        self.exchange = ccxt.bybit(
+            {
+                "enableRateLimit": True,
+                "options": {
+                    "defaultType": "swap",  # USDT perpetual contracts
+                },
             }
-        })
+        )
 
         if testnet:
             self.exchange.set_sandbox_mode(True)
@@ -41,11 +41,7 @@ class BybitAdapter:
 
     @retry_on_rate_limit(max_retries=3)
     def fetch_ohlcv(
-        self,
-        symbol: str,
-        timeframe: str,
-        limit: int = 500,
-        since: Optional[int] = None
+        self, symbol: str, timeframe: str, limit: int = 500, since: Optional[int] = None
     ) -> pd.DataFrame:
         """
         Fetch OHLCV (candlestick) data from Bybit.
@@ -61,10 +57,7 @@ class BybitAdapter:
         """
         try:
             ohlcv = self.exchange.fetch_ohlcv(
-                symbol=symbol,
-                timeframe=timeframe,
-                limit=limit,
-                since=since
+                symbol=symbol, timeframe=timeframe, limit=limit, since=since
             )
 
             if not ohlcv:
@@ -72,11 +65,10 @@ class BybitAdapter:
                 return pd.DataFrame()
 
             df = pd.DataFrame(
-                ohlcv,
-                columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
+                ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"]
             )
 
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
             return df
 
         except ccxt.ExchangeError as e:
@@ -90,10 +82,10 @@ class BybitAdapter:
     def fetch_ticker(self, symbol: str) -> Dict[str, Any]:
         """
         Fetch current ticker data for a symbol.
-        
+
         Args:
             symbol: Trading pair symbol (e.g., 'BTC/USDT')
-            
+
         Returns:
             Ticker data dict with last, bid, ask, volume, etc.
         """
@@ -107,11 +99,7 @@ class BybitAdapter:
             raise
 
     @retry_on_rate_limit(max_retries=3)
-    def get_top_symbols(
-        self,
-        n: int = 50,
-        quote_currency: str = 'USDT'
-    ) -> List[str]:
+    def get_top_symbols(self, n: int = 50, quote_currency: str = "USDT") -> List[str]:
         """
         Get top N trading pairs by 24h volume.
 
@@ -130,18 +118,16 @@ class BybitAdapter:
             valid_symbols = []
             for symbol, market in markets.items():
                 if (
-                    market.get('active', False) and
-                    market.get('quote') == quote_currency and
-                    market.get('type') == 'swap' and
-                    symbol in tickers
+                    market.get("active", False)
+                    and market.get("quote") == quote_currency
+                    and market.get("type") == "swap"
+                    and symbol in tickers
                 ):
                     valid_symbols.append(symbol)
 
             # Sort by 24h volume
             sorted_symbols = sorted(
-                valid_symbols,
-                key=lambda s: tickers[s].get('quoteVolume', 0) or 0,
-                reverse=True
+                valid_symbols, key=lambda s: tickers[s].get("quoteVolume", 0) or 0, reverse=True
             )
 
             result = sorted_symbols[:n]
@@ -158,10 +144,10 @@ class BybitAdapter:
         Uses CCXT market metadata when available; falls back to conservative heuristics.
         """
         try:
-            if not getattr(self.exchange, 'markets', None):
+            if not getattr(self.exchange, "markets", None):
                 self.exchange.load_markets()
             info = self.exchange.markets.get(symbol)
-            if info and info.get('type') == 'swap':
+            if info and info.get("type") == "swap":
                 return True
         except Exception:
             pass
