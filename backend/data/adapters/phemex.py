@@ -249,15 +249,30 @@ class PhemexAdapter:
                 ):
                     valid_symbols.append(symbol)
 
-            # Sort by 24h quote volume (descending)
+            # Sort by volume * volatility (descending)
+            # Volatility = (24h high - low) / close, acts as range expansion multiplier
+            def calculate_score(symbol: str) -> float:
+                ticker = tickers[symbol]
+                volume = ticker.get('quoteVolume', 0) or 0
+                high = ticker.get('high', 0) or 0
+                low = ticker.get('low', 0) or 0
+                close = ticker.get('close', 0) or ticker.get('last', 0) or 1  # Avoid div by zero
+
+                # Volatility as normalized 24h range
+                volatility = (high - low) / close if close > 0 else 0
+
+                # Composite score: volume weighted by volatility
+                # Higher volatility = more likely to have active setups forming
+                return volume * (1 + volatility)
+
             sorted_symbols = sorted(
                 valid_symbols,
-                key=lambda s: tickers[s].get('quoteVolume', 0) or 0,
+                key=calculate_score,
                 reverse=True
             )
 
             result = sorted_symbols[:n]
-            logger.info(f"Retrieved top {len(result)} Phemex {mt} symbols by volume")
+            logger.info(f"Retrieved top {len(result)} Phemex {mt} symbols by volume * volatility")
             return result
 
         except Exception as e:

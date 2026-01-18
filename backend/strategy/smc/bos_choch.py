@@ -25,6 +25,28 @@ if TYPE_CHECKING:
 USE_4SWING_PATTERN = True
 
 
+# Mode-specific volume confirmation requirements
+MODE_VOLUME_REQUIREMENTS = {
+    "macro_surveillance": {  # OVERWATCH: Institutional breaks need strong volume
+        "require_volume": True,
+        "min_volume_ratio": 1.5,  # 50%+ above average
+        "apply_to": ["BOS"],      # Only BOS (continuation must be strong)
+    },
+    "stealth_balanced": {  # STEALTH: Balanced quality requirements
+        "require_volume": True,
+        "min_volume_ratio": 1.3,  # 30%+ above average
+        "apply_to": ["BOS", "CHoCH"],
+    },
+    "intraday_aggressive": {  # STRIKE: Speed over confirmation
+        "require_volume": False,
+    },
+    "precision": {  # SURGICAL: Reversals need conviction
+        "require_volume": True,
+        "min_volume_ratio": 1.4,  # 40%+ above average
+        "apply_to": ["CHoCH"],    # Only reversals
+    },
+}
+
 def _build_swing_sequence(
     swing_highs: pd.Series, 
     swing_lows: pd.Series
@@ -172,7 +194,8 @@ def detect_structural_breaks(
     config: SMCConfig | dict | None = None,
     htf_df: Optional[pd.DataFrame] = None,
     htf_trend: Optional[str] = None,
-    cycle_context: Optional["CycleContext"] = None
+    cycle_context: Optional["CycleContext"] = None,
+    mode_profile: Optional[str] = None  # NEW: Mode-specific volume filtering
 ) -> List[StructuralBreak]:
     """
     Detect Break of Structure (BOS) and Change of Character (CHoCH) patterns.
@@ -204,10 +227,13 @@ def detect_structural_breaks(
     missing_cols = [col for col in required_cols if col not in df.columns]
     if missing_cols:
         raise ValueError(f"DataFrame missing required columns: {missing_cols}")
-    
+
     if not isinstance(df.index, pd.DatetimeIndex):
         raise ValueError("DataFrame must have DatetimeIndex")
-    
+
+    # Check for volume column (optional but recommended)
+    has_volume = 'volume' in df.columns
+
     # Configuration
     if config is None:
         smc_cfg = SMCConfig.defaults()
@@ -220,18 +246,21 @@ def detect_structural_breaks(
         smc_cfg = SMCConfig.from_dict(mapped)
     else:
         smc_cfg = config
-    
+
     # Infer timeframe and apply scaling to lookback
     inferred_tf = _infer_timeframe(df)
     swing_lookback = scale_lookback(smc_cfg.structure_swing_lookback, inferred_tf)
     min_break_distance_atr = smc_cfg.structure_min_break_distance_atr
-    
+
     if len(df) < swing_lookback * 2 + 20:
         raise ValueError(f"DataFrame too short for structural break detection (need {swing_lookback * 2 + 20} rows, got {len(df)})")
-    
+
     # Calculate ATR for filtering
     from backend.indicators.volatility import compute_atr
     atr = compute_atr(df, period=14)
+
+    # Calculate average volume for confirmation (if volume column exists)
+    avg_volume = df['volume'].rolling(window=20).mean() if has_volume else None
     
     # Determine HTF trend for alignment checks
     # Priority: explicit htf_trend > calculated from htf_df > None
@@ -282,11 +311,19 @@ def detect_structural_breaks(
         
         # Calculate minimum break threshold (must break by at least this much)
         min_break = atr_value * min_break_distance_atr if atr_value > 0 else 0
-        
+
         # Calculate grading thresholds for structural breaks
         grade_a_threshold = smc_cfg.grade_a_threshold * min_break_distance_atr
         grade_b_threshold = smc_cfg.grade_b_threshold * min_break_distance_atr
-        
+
+        # Calculate volume confirmation (if volume data available)
+        volume_ratio = 1.0
+        volume_confirmed = False
+        if has_volume and avg_volume is not None and pd.notna(avg_volume.iloc[i]) and avg_volume.iloc[i] > 0:
+            current_volume = df['volume'].iloc[i]
+            volume_ratio = current_volume / avg_volume.iloc[i]
+            volume_confirmed = volume_ratio >= 1.5  # 1.5x average = confirmed
+
         # Check for breaks in uptrend
         if current_trend == "uptrend":
             # BOS: Break above previous swing high (continuation)
@@ -296,9 +333,24 @@ def detect_structural_breaks(
                 # Calculate break in ATR units for grading
                 break_atr = break_distance / atr_value if atr_value > 0 else 0.0
                 grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
-                
+
+                # Volume boost: Upgrade grade if volume confirmed (2x+ volume)
+                if volume_confirmed and volume_ratio >= 2.0:
+                    # Strong volume confirmation: upgrade B->A, C->B
+                    if grade == "B":
+                        grade = "A"
+                    elif grade == "C":
+                        grade = "B"
+
                 # HTF alignment: BOS in uptrend aligns if HTF is also uptrend or unknown
                 htf_aligned = _check_bos_htf_alignment("uptrend", computed_htf_trend)
+                
+                # NEW: Mode-specific volume filtering (Gap #4)
+                if mode_profile and mode_profile in MODE_VOLUME_REQUIREMENTS:
+                    vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
+                    if vol_req.get("require_volume") and "BOS" in vol_req.get("apply_to", []):
+                        if volume_ratio < vol_req["min_volume_ratio"]:
+                            continue  # Skip weak BOS without sufficient volume
                 
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),
@@ -322,10 +374,25 @@ def detect_structural_breaks(
                 # Calculate break in ATR units for grading
                 break_atr = break_distance / atr_value if atr_value > 0 else 0.0
                 grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
-                
+
+                # Volume boost: Upgrade grade if volume confirmed (2x+ volume)
+                if volume_confirmed and volume_ratio >= 2.0:
+                    # Strong volume confirmation: upgrade B->A, C->B
+                    if grade == "B":
+                        grade = "A"
+                    elif grade == "C":
+                        grade = "B"
+
                 # HTF alignment: CHoCH in uptrend aligns if HTF is downtrend
                 # Or bypassed if at cycle extreme (structure broken at cycle low/high)
                 htf_aligned = _check_choch_htf_alignment("uptrend", computed_htf_trend, cycle_context)
+                
+                # NEW: Mode-specific volume filtering (Gap #4)
+                if mode_profile and mode_profile in MODE_VOLUME_REQUIREMENTS:
+                    vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
+                    if vol_req.get("require_volume") and "CHoCH" in vol_req.get("apply_to", []):
+                        if volume_ratio < vol_req["min_volume_ratio"]:
+                            continue  # Skip weak CHoCH without sufficient volume
                 
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),
@@ -353,7 +420,15 @@ def detect_structural_breaks(
                 # Calculate break in ATR units for grading
                 break_atr = break_distance / atr_value if atr_value > 0 else 0.0
                 grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
-                
+
+                # Volume boost: Upgrade grade if volume confirmed (2x+ volume)
+                if volume_confirmed and volume_ratio >= 2.0:
+                    # Strong volume confirmation: upgrade B->A, C->B
+                    if grade == "B":
+                        grade = "A"
+                    elif grade == "C":
+                        grade = "B"
+
                 # HTF alignment: BOS in downtrend aligns if HTF is also downtrend or unknown
                 htf_aligned = _check_bos_htf_alignment("downtrend", computed_htf_trend)
                 
@@ -379,7 +454,15 @@ def detect_structural_breaks(
                 # Calculate break in ATR units for grading
                 break_atr = break_distance / atr_value if atr_value > 0 else 0.0
                 grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
-                
+
+                # Volume boost: Upgrade grade if volume confirmed (2x+ volume)
+                if volume_confirmed and volume_ratio >= 2.0:
+                    # Strong volume confirmation: upgrade B->A, C->B
+                    if grade == "B":
+                        grade = "A"
+                    elif grade == "C":
+                        grade = "B"
+
                 # HTF alignment: CHoCH in downtrend aligns if HTF is uptrend
                 # Or bypassed if at cycle extreme (structure broken at cycle low/high)
                 htf_aligned = _check_choch_htf_alignment("downtrend", computed_htf_trend, cycle_context)

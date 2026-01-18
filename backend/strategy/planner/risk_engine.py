@@ -23,6 +23,7 @@ from backend.shared.config.planner_config import PlannerConfig
 from backend.shared.config.smc_config import scale_lookback
 from backend.shared.config.rr_matrix import validate_rr, classify_conviction
 from backend.strategy.planner.regime_engine import get_atr_regime
+from backend.strategy.smc.volume_profile import VolumeProfile  # NEW: For target filtering
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,92 @@ def _filter_targets_by_opposing_structure(
     if len(valid_targets) < len(targets):
         logger.info("Filtered %d/%d targets due to opposing OB structures",
                    len(targets) - len(valid_targets), len(targets))
+    
+    return valid_targets
+
+
+def _filter_targets_by_volume_profile(
+    targets: List[Target],
+    volume_profile: Optional[VolumeProfile],
+    is_bullish: bool,
+    atr: float,
+    min_distance_atr: float = 0.3
+) -> List[Target]:
+    """
+    Filter targets to avoid High Volume Nodes (HVNs) and prefer Low Volume Nodes (LVNs).
+    
+    HVNs act as resistance shelves where price tends to stall or reverse.
+    LVNs are low-resistance zones where price moves easily.
+    
+    Args:
+        targets: List of calculated targets
+        volume_profile: Volume Profile analysis with HVNs/LVNs
+        is_bullish: True for longs (avoid HVNs above), False for shorts (avoid HVNs below)
+        atr: Average True Range for proximity threshold
+        min_distance_atr: Minimum ATR distance to consider "at" a node (default 0.3 = 30% of ATR)
+        
+    Returns:
+        Filtered targets (keeps at least 1 even if all blocked by HVNs)
+    """
+    if not volume_profile or not targets:
+        return targets
+    
+    valid_targets = []
+    tolerance = min_distance_atr * atr  # Convert ATR multiplier to absolute price distance
+    
+    for target in targets:
+        blocked_by_hvn = False
+        near_lvn = False
+        
+        # Check if target lands on/near any HVN (resistance shelf)
+        for hvn in volume_profile.high_volume_nodes:
+            if abs(target.level - hvn.price_level) <= tolerance:
+                blocked_by_hvn = True
+                logger.debug(
+                    f"Target {target.level:.2f} blocked by HVN @ {hvn.price_level:.2f} "
+                    f"({hvn.volume_pct:.1f}% volume)"
+                )
+                break
+        
+        # Also check POC (Point of Control = highest volume node)
+        if abs(target.level - volume_profile.poc.price_level) <= tolerance:
+            blocked_by_hvn = True
+            logger.debug(
+                f"Target {target.level:.2f} blocked by POC @ {volume_profile.poc.price_level:.2f} "
+                f"({volume_profile.poc.volume_pct:.1f}% volume)"
+            )
+        
+        # Check if target is near any LVN (low resistance zone = good)
+        lvn_tolerance = 0.5 * atr  # Slightly wider tolerance for LVN boost
+        for lvn in volume_profile.low_volume_nodes:
+            if abs(target.level - lvn.price_level) <= lvn_tolerance:
+                near_lvn = True
+                logger.debug(
+                    f"Target {target.level:.2f} near LVN @ {lvn.price_level:.2f} "
+                    f"({lvn.volume_pct:.1f}% volume) - low resistance zone"
+                )
+                break
+        
+        # Keep target if NOT blocked by HVN
+        if not blocked_by_hvn:
+            # Boost priority if near LVN (optional metadata for future use)
+            if near_lvn:
+                # Could add target.lvn_boosted = True here if Target model supports it
+                pass
+            valid_targets.append(target)
+    
+    # Always keep at least one target (closest/safest)
+    if not valid_targets and targets:
+        logger.warning(
+            "All targets blocked by HVNs - keeping first target as fallback"
+        )
+        return targets[:1]
+    
+    if len(valid_targets) < len(targets):
+        logger.info(
+            f"Volume Profile filtered {len(targets) - len(valid_targets)}/{len(targets)} "
+            f"targets (removed HVN conflicts)"
+        )
     
     return valid_targets
 
@@ -460,28 +547,169 @@ def _calculate_stop_loss(
     
     # === CONSOLIDATION-BASED STOP (for Trend Continuation entries) ===
     # Priority: If entry came from consolidation breakout, use consolidation for stop
+    # NEW: Add quality validation to reject weak/choppy consolidations
     if consolidation_for_stop:
-        if is_bullish:
-            # Long: Stop below consolidation low
-            stop_level = consolidation_for_stop.low - (stop_buffer * atr)
-            distance_atr = (entry_zone.far_entry - stop_level) / atr
+        # --- Consolidation Quality Validation ---
+        # Check if consolidation is tight/quality (declining volume, tightening range)
+        # This prevents using choppy/weak ranges for stop placement
+        is_quality_consolidation = True
+        rejection_reason = None
+        
+        # 1. Check if consolidation has enough touches (already in model, but verify)
+        if consolidation_for_stop.touches < 5:
+            is_quality_consolidation = False
+            rejection_reason = f"Insufficient touches ({consolidation_for_stop.touches} < 5)"
+        
+        # 2. Check strength score (should be >= 0.6 for quality)
+        elif consolidation_for_stop.strength_score < 0.6:
+            is_quality_consolidation = False
+            rejection_reason = f"Low strength score ({consolidation_for_stop.strength_score:.2f} < 0.6)"
+        
+        # 3. Validate volume decline during consolidation (if data available)
+        # Quality consolidations show declining volume (reduced interest) vs pre-consolidation baseline
+        if is_quality_consolidation and multi_tf_data:
+            try:
+                cons_tf = consolidation_for_stop.timeframe
+                cons_df = multi_tf_data.timeframes.get(cons_tf) or multi_tf_data.timeframes.get(cons_tf.upper())
+                
+                if cons_df is not None and 'volume' in cons_df.columns and len(cons_df) >= 20:
+                    # Find consolidation bars within timestamp range
+                    if hasattr(cons_df.index, 'to_pydatetime'):
+                        cons_bars = cons_df[
+                            (cons_df.index >= consolidation_for_stop.timestamp_start) &
+                            (cons_df.index <= consolidation_for_stop.timestamp_end)
+                        ]
+                    else:
+                        # Fallback: use last 10 bars as proxy for consolidation
+                        cons_bars = cons_df.tail(10)
+                    
+                    if len(cons_bars) >= 5:
+                        # A. Check if volume is declining WITHIN consolidation (early vs late)
+                        early_vol = cons_bars['volume'].iloc[:len(cons_bars)//2].mean()
+                        late_vol = cons_bars['volume'].iloc[len(cons_bars)//2:].mean()
+                        cons_avg_vol = cons_bars['volume'].mean()
+                        
+                        # Volume should NOT be rising within consolidation (choppy/noisy)
+                        if late_vol >= early_vol * 1.05:  # Volume rising 5%+ (choppy)
+                            vol_change_pct = ((late_vol - early_vol) / early_vol) * 100
+                            is_quality_consolidation = False
+                            rejection_reason = (
+                                f"Rising volume within consolidation "
+                                f"(early={early_vol:.0f} → late={late_vol:.0f}, +{vol_change_pct:.1f}%)"
+                            )
+                        else:
+                            # B. Check consolidation volume vs PRE-consolidation baseline
+                            # Get bars BEFORE consolidation for baseline comparison
+                            if hasattr(cons_df.index, 'to_pydatetime'):
+                                pre_cons_bars = cons_df[cons_df.index < consolidation_for_stop.timestamp_start].tail(15)
+                            else:
+                                # Fallback: use bars before the consolidation proxy
+                                pre_cons_bars = cons_df.iloc[:-len(cons_bars)].tail(15)
+                            
+                            if len(pre_cons_bars) >= 10:
+                                baseline_vol = pre_cons_bars['volume'].mean()
+                                vol_decline_pct = ((baseline_vol - cons_avg_vol) / baseline_vol) * 100
+                                
+                                # Require consolidation volume to be AT LEAST 15% lower than baseline
+                                if cons_avg_vol >= baseline_vol * 0.85:  # Less than 15% decline
+                                    is_quality_consolidation = False
+                                    rejection_reason = (
+                                        f"Insufficient volume decline vs baseline "
+                                        f"(baseline={baseline_vol:.0f}, cons={cons_avg_vol:.0f}, "
+                                        f"decline={vol_decline_pct:.1f}% < 15% required)"
+                                    )
+                                else:
+                                    logger.debug(
+                                        f"✅ Consolidation volume quality: "
+                                        f"baseline={baseline_vol:.0f} → cons={cons_avg_vol:.0f} "
+                                        f"(-{vol_decline_pct:.1f}% decline)"
+                                    )
+                            else:
+                                # Not enough pre-consolidation data, just check within-consolidation decline
+                                vol_change_pct = ((late_vol - early_vol) / early_vol) * 100
+                                logger.debug(
+                                    f"✅ Consolidation volume declining within range: "
+                                    f"early={early_vol:.0f} → late={late_vol:.0f} ({vol_change_pct:+.1f}%)"
+                                )
+            except Exception as e:
+                logger.debug(f"Could not validate consolidation volume: {e}")
+                # Don't reject on validation failure, just log
+        
+        # 4. Validate ATR tightening (range compression)
+        # Quality consolidations show range compression (declining volatility), not just stable ranges
+        if is_quality_consolidation and indicators_by_tf and consolidation_for_stop.timeframe:
+            try:
+                cons_tf = consolidation_for_stop.timeframe
+                cons_ind = indicators_by_tf.get(cons_tf) or indicators_by_tf.get(cons_tf.upper())
+                
+                if cons_ind and hasattr(cons_ind, 'atr'):
+                    cons_atr = cons_ind.atr
+                    if hasattr(cons_atr, 'iloc') and len(cons_atr) >= 10:
+                        # Compare early vs late ATR during consolidation
+                        early_atr = float(cons_atr.iloc[-10:-5].mean())
+                        late_atr = float(cons_atr.iloc[-5:].mean())
+                        atr_change_pct = ((late_atr - early_atr) / early_atr) * 100
+                        
+                        # ATR should be tightening (compressing), not expanding
+                        if late_atr >= early_atr * 1.10:  # ATR expanding 10%+ (not consolidating)
+                            is_quality_consolidation = False
+                            rejection_reason = (
+                                f"Expanding ATR - not consolidating "
+                                f"({early_atr:.2f} → {late_atr:.2f}, +{atr_change_pct:.1f}%)"
+                            )
+                        elif late_atr > early_atr * 0.95:  # ATR not compressing enough (< 5% decline)
+                            # Require at least 5% ATR decline for quality consolidation
+                            is_quality_consolidation = False
+                            rejection_reason = (
+                                f"Insufficient ATR compression "
+                                f"({early_atr:.2f} → {late_atr:.2f}, {atr_change_pct:+.1f}% < -5% required)"
+                            )
+                        else:
+                            # ATR is compressing nicely
+                            logger.debug(
+                                f"✅ Consolidation ATR compressing: "
+                                f"{early_atr:.2f} → {late_atr:.2f} ({atr_change_pct:.1f}% decline)"
+                            )
+            except Exception as e:
+                logger.debug(f"Could not validate consolidation ATR: {e}")
+                # Don't reject on validation failure
+        
+        # Use consolidation only if quality checks pass
+        if not is_quality_consolidation:
+            logger.warning(
+                f"⚠️ CONSOLIDATION REJECTED: {rejection_reason} | "
+                f"Touches={consolidation_for_stop.touches}, Strength={consolidation_for_stop.strength_score:.2f} | "
+                f"Falling back to structure-based stop"
+            )
+            # Don't use this consolidation, fall through to regular stop logic
+            consolidation_for_stop = None
         else:
-            # Short: Stop above consolidation high
-            stop_level = consolidation_for_stop.high + (stop_buffer * atr)
-            distance_atr = (stop_level - entry_zone.near_entry) / atr
-        
-        logger.info(
-            f"✅ CONSOLIDATION STOP: Using {consolidation_for_stop.timeframe} consolidation "
-            f"({consolidation_for_stop.touches} touches) -> stop={stop_level:.4f} ({distance_atr:.1f} ATR)"
-        )
-        
-        stop_loss = StopLoss(
-            level=stop_level,
-            distance_atr=distance_atr,
-            rationale=f"Stop beyond {consolidation_for_stop.timeframe} consolidation invalidation point"
-        )
-        stop_loss.structure_tf_used = consolidation_for_stop.timeframe  # type: ignore
-        return stop_loss, True  # used_structure = True
+            # Quality consolidation - use it for stop
+            if is_bullish:
+                # Long: Stop below consolidation low
+                stop_level = consolidation_for_stop.low - (stop_buffer * atr)
+                distance_atr = (entry_zone.far_entry - stop_level) / atr
+            else:
+                # Short: Stop above consolidation high
+                stop_level = consolidation_for_stop.high + (stop_buffer * atr)
+                distance_atr = (stop_level - entry_zone.near_entry) / atr
+            
+            logger.info(
+                f"✅ QUALITY CONSOLIDATION ACCEPTED: Using {consolidation_for_stop.timeframe} consolidation | "
+                f"Touches={consolidation_for_stop.touches}, Strength={consolidation_for_stop.strength_score:.2f} | "
+                f"Range: {consolidation_for_stop.low:.4f}-{consolidation_for_stop.high:.4f} | "
+                f"Stop={stop_level:.4f} ({distance_atr:.1f} ATR)"
+            )
+            
+            stop_loss = StopLoss(
+                level=stop_level,
+                distance_atr=distance_atr,
+                rationale=f"Stop beyond {consolidation_for_stop.timeframe} quality consolidation invalidation point"
+            )
+            stop_loss.structure_tf_used = consolidation_for_stop.timeframe  # type: ignore
+            return stop_loss, True  # used_structure = True
+    
+    # If consolidation was rejected or not available, continue to regular stop logic below
     
     # === SWING MODE: Use swing invalidation stops for TRUE swing trades ===
     # For Overwatch/macro_surveillance, prioritize swing structure over entry OB
@@ -1451,7 +1679,8 @@ def _calculate_targets(
     rr_scale: float = 1.0,
     confluence_breakdown: Optional[ConfluenceBreakdown] = None,
     multi_tf_data: Optional['MultiTimeframeData'] = None,  # For HTF swing detection
-    indicators: Optional['IndicatorSet'] = None  # NEW: For Bollinger Band targeting
+    indicators: Optional['IndicatorSet'] = None,  # NEW: For Bollinger Band targeting
+    volume_profile: Optional[VolumeProfile] = None  # NEW: For HVN/LVN target filtering
 ) -> List[Target]:
     """
     Calculate tiered targets based on structure and R:R multiples.
@@ -1566,6 +1795,22 @@ def _calculate_targets(
                 ))
                 
         if structural_targets:
+            # Volume Profile filtering (skip HVNs, prefer LVNs)
+            if volume_profile:
+                pre_filter_count = len(structural_targets)
+                structural_targets = _filter_targets_by_volume_profile(
+                    targets=structural_targets,
+                    volume_profile=volume_profile,
+                    is_bullish=is_bullish,
+                    atr=atr,
+                    min_distance_atr=0.3  # 30% of ATR tolerance
+                )
+                if len(structural_targets) < pre_filter_count:
+                    logger.info(
+                        f"📐 Volume Profile filtered {pre_filter_count - len(structural_targets)} "
+                        f"structural targets (HVN conflicts removed)"
+                    )
+            
             # Found structural targets! Use them.
             # Pick top 3-4 distinct levels
             targets = structural_targets[:4]
@@ -1581,6 +1826,23 @@ def _calculate_targets(
             swing_targets = _calculate_swing_structural_targets(
                 is_bullish, avg_entry, risk_distance, atr, smc_snapshot, multi_tf_data, target_tfs, planner_cfg
             )
+            
+            # Volume Profile filtering on swing targets
+            if volume_profile:
+                pre_filter_count = len(swing_targets)
+                swing_targets = _filter_targets_by_volume_profile(
+                    targets=swing_targets,
+                    volume_profile=volume_profile,
+                    is_bullish=is_bullish,
+                    atr=atr,
+                    min_distance_atr=0.3
+                )
+                if len(swing_targets) < pre_filter_count:
+                    logger.info(
+                        f"📐 Volume Profile filtered {pre_filter_count - len(swing_targets)} "
+                        f"swing targets (HVN conflicts removed)"
+                    )
+            
             # Filter targets blocked by opposing OB structures
             return _filter_targets_by_opposing_structure(swing_targets, smc_snapshot, is_bullish, atr)
 
@@ -1613,6 +1875,23 @@ def _calculate_targets(
             weight=1.0 - (i * 0.2),  # Decay weight for further targets
             rationale=f"Standard R:R target ({rr:.1f}R)"
         ))
+    
+    
+    # Volume Profile filtering for R:R targets
+    if volume_profile:
+        pre_filter_count = len(targets)
+        targets = _filter_targets_by_volume_profile(
+            targets=targets,
+            volume_profile=volume_profile,
+            is_bullish=is_bullish,
+            atr=atr,
+            min_distance_atr=0.3
+        )
+        if len(targets) < pre_filter_count:
+            logger.info(
+                f"📐 Volume Profile filtered {pre_filter_count - len(targets)} "
+                f"R:R targets (HVN conflicts removed)"
+            )
     
     # Filter targets blocked by opposing OB structures
     targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)

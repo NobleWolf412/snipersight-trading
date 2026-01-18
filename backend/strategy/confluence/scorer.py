@@ -32,6 +32,8 @@ from backend.analysis.premium_discount import detect_premium_discount
 from backend.analysis.pullback_detector import detect_pullback_setup, PullbackSetup
 from backend.strategy.smc.sessions import is_kill_zone_active, get_current_kill_zone
 from backend.analysis.macro_context import MacroContext, compute_macro_score
+from backend.indicators.divergence import detect_all_divergences, DivergenceResult
+from backend.analysis.fibonacci import calculate_fib_levels, find_nearest_fib, is_price_at_fib, get_fib_proximity_pct, FibLevel
 
 # === FILE LOGGING FOR CONFLUENCE BREAKDOWN ===
 # Automatically write detailed breakdowns to file for investigation
@@ -82,6 +84,8 @@ MODE_FACTOR_WEIGHTS = {
         'liquidity_sweep': 0.18,
         'kill_zone': 0.03,
         'momentum': 0.08,
+        'divergence': 0.15,
+        'fibonacci': 0.10,
         'volume': 0.10,
         'volatility': 0.08,
         'htf_alignment': 0.25,
@@ -107,6 +111,8 @@ MODE_FACTOR_WEIGHTS = {
         'liquidity_sweep': 0.12,
         'kill_zone': 0.08,
         'momentum': 0.15,
+        'divergence': 0.18,
+        'fibonacci': 0.10,
         'volume': 0.10,
         'volatility': 0.10,
         'htf_alignment': 0.12,
@@ -132,6 +138,8 @@ MODE_FACTOR_WEIGHTS = {
         'liquidity_sweep': 0.10,
         'kill_zone': 0.10,
         'momentum': 0.12,
+        'divergence': 0.16,
+        'fibonacci': 0.10,
         'volume': 0.08,
         'volatility': 0.12,
         'htf_alignment': 0.10,
@@ -157,6 +165,8 @@ MODE_FACTOR_WEIGHTS = {
         'liquidity_sweep': 0.15,
         'kill_zone': 0.05,
         'momentum': 0.10,
+        'divergence': 0.15,
+        'fibonacci': 0.10,
         'volume': 0.10,
         'volatility': 0.08,
         'htf_alignment': 0.18,
@@ -209,6 +219,7 @@ MODE_FACTOR_WEIGHTS = {
         'liquidity_sweep': 0.18,
         'kill_zone': 0.03,
         'momentum': 0.08,
+        'divergence': 0.15,
         'volume': 0.10,
         'volatility': 0.08,
         'htf_alignment': 0.25,
@@ -235,6 +246,7 @@ MODE_FACTOR_WEIGHTS = {
         'liquidity_sweep': 0.12,
         'kill_zone': 0.08,
         'momentum': 0.15,
+        'divergence': 0.18,
         'volume': 0.10,
         'volatility': 0.10,
         'htf_alignment': 0.12,
@@ -1215,8 +1227,9 @@ def _score_regime_alignment(
     # Normalize direction
     is_long = direction.lower() in ('bullish', 'long')
     
-    # Score multiplier based on regime confidence (0-100 score -> 0.5-1.0 multiplier)
-    confidence_mult = 0.5 + (regime_score / 200.0)  # 50 -> 0.75, 100 -> 1.0
+    # Calculate regime strength (0 to 1.0 scale)
+    # score=50 (neutral) → strength=0, score=100 (strong) → strength=1.0
+    regime_strength = max(0.0, min(1.0, (regime_score - 50) / 50))
     
     # Alignment logic
     bullish_trends = ('strong_up', 'up')
@@ -1227,36 +1240,49 @@ def _score_regime_alignment(
             # Aligned with bullish regime
             is_strong = trend == 'strong_up'
             base_bonus = max_bonus if is_strong else max_bonus * 0.7
-            result["adjustment"] = base_bonus * confidence_mult
+            
+            # NEW: Scale by regime strength (Gap #3)
+            # Weak regime (score=60) gets 50% of bonus, strong (score=90) gets 100%
+            strength_multiplier = 0.5 + (regime_strength * 0.5)
+            result["adjustment"] = base_bonus * strength_multiplier
             result["aligned"] = True
-            result["reason"] = f"LONG aligned with {trend} regime (score={regime_score:.0f})"
-            result["factor_score"] = min(100.0, 50.0 + result["adjustment"] * 3.33)
+            result["reason"] = f"LONG aligned with {trend} regime (score={regime_score:.0f}, strength={regime_strength:.1f})"
+            result["factor_score"] = max(0.0, min(100.0, 50.0 + result["adjustment"] * 3.33))
         else:
             # Shorting into bullish regime
             is_strong = trend == 'strong_up'
             base_penalty = max_penalty if is_strong else max_penalty * 0.7
-            result["adjustment"] = -base_penalty * confidence_mult
+            
+            # NEW: Scale penalty by regime strength
+            strength_multiplier = 0.5 + (regime_strength * 0.5)
+            result["adjustment"] = -base_penalty * strength_multiplier
             result["aligned"] = False
-            result["reason"] = f"SHORT opposes {trend} regime (score={regime_score:.0f})"
-            result["factor_score"] = max(0.0, 50.0 + result["adjustment"] * 5.0)
+            result["reason"] = f"SHORT opposes {trend} regime (score={regime_score:.0f}, strength={regime_strength:.1f})"
+            result["factor_score"] = max(0.0, min(100.0, 50.0 + result["adjustment"] * 5.0))
             
     elif trend in bearish_trends:
         if not is_long:
             # Aligned with bearish regime
             is_strong = trend == 'strong_down'
             base_bonus = max_bonus if is_strong else max_bonus * 0.7
-            result["adjustment"] = base_bonus * confidence_mult
+            
+            # NEW: Scale by regime strength
+            strength_multiplier = 0.5 + (regime_strength * 0.5)
+            result["adjustment"] = base_bonus * strength_multiplier
             result["aligned"] = True
-            result["reason"] = f"SHORT aligned with {trend} regime (score={regime_score:.0f})"
-            result["factor_score"] = min(100.0, 50.0 + result["adjustment"] * 3.33)
+            result["reason"] = f"SHORT aligned with {trend} regime (score={regime_score:.0f}, strength={regime_strength:.1f})"
+            result["factor_score"] = max(0.0, min(100.0, 50.0 + result["adjustment"] * 3.33))
         else:
             # Longing into bearish regime
             is_strong = trend == 'strong_down'
             base_penalty = max_penalty if is_strong else max_penalty * 0.7
-            result["adjustment"] = -base_penalty * confidence_mult
+            
+            # NEW: Scale penalty by regime strength
+            strength_multiplier = 0.5 + (regime_strength * 0.5)
+            result["adjustment"] = -base_penalty * strength_multiplier
             result["aligned"] = False
-            result["reason"] = f"LONG opposes {trend} regime (score={regime_score:.0f})"
-            result["factor_score"] = max(0.0, 50.0 + result["adjustment"] * 5.0)
+            result["reason"] = f"LONG opposes {trend} regime (score={regime_score:.0f}, strength={regime_strength:.1f})"
+            result["factor_score"] = max(0.0, min(100.0, 50.0 + result["adjustment"] * 5.0))
             
     else:  # sideways
         # Ranging market - small penalty for either direction unless volatility suggests opportunity
@@ -1476,7 +1502,60 @@ def calculate_confluence_score(
                 weight=get_w('momentum', 0.10),
                 rationale=momentum_rationale
             ))
-        
+
+        # Divergence Detection (RSI/MACD)
+        if hasattr(primary_indicators, 'dataframe') and primary_indicators.dataframe is not None:
+            df = primary_indicators.dataframe
+            if len(df) >= 50:  # Minimum data for divergence detection
+                try:
+                    divergences = detect_all_divergences(
+                        df=df,
+                        direction=direction,
+                        lookback=5,
+                        min_pivot_distance=10,
+                        max_lookback_bars=100
+                    )
+
+                    # Score divergences
+                    divergence_score = 0.0
+                    divergence_rationale = []
+
+                    # RSI divergences
+                    for div in divergences.get('rsi', []):
+                        if div.is_reversal():
+                            # Regular divergence = reversal signal (higher weight)
+                            divergence_score += div.strength * 0.8
+                            divergence_rationale.append(f"RSI {div.divergence_type.replace('_', ' ').title()} ({div.strength:.0f}%)")
+                        else:
+                            # Hidden divergence = continuation signal (lower weight)
+                            divergence_score += div.strength * 0.5
+                            divergence_rationale.append(f"RSI {div.divergence_type.replace('_', ' ').title()} ({div.strength:.0f}%)")
+
+                    # MACD divergences
+                    for div in divergences.get('macd', []):
+                        if div.is_reversal():
+                            divergence_score += div.strength * 0.7
+                            divergence_rationale.append(f"MACD {div.divergence_type.replace('_', ' ').title()} ({div.strength:.0f}%)")
+                        else:
+                            divergence_score += div.strength * 0.4
+                            divergence_rationale.append(f"MACD {div.divergence_type.replace('_', ' ').title()} ({div.strength:.0f}%)")
+
+                    # Cap divergence score at 100
+                    divergence_score = min(100.0, divergence_score)
+
+                    # Add divergence factor if any found
+                    if divergence_score > 0 and divergence_rationale:
+                        factors.append(ConfluenceFactor(
+                            name="Price-Indicator Divergence",
+                            score=divergence_score,
+                            weight=get_w('divergence', 0.15),  # 15% weight - high priority
+                            rationale=" | ".join(divergence_rationale[:2])  # Top 2 divergences
+                        ))
+                        logger.debug(f"🔄 Divergence detected: {divergence_rationale}")
+
+                except Exception as e:
+                    logger.warning(f"Divergence detection failed: {e}")
+
         # Volume confirmation
         volume_score = _score_volume(primary_indicators, direction)
         if volume_score > 0:
@@ -1584,6 +1663,83 @@ def calculate_confluence_score(
     # --- HTF Level Proximity (Redundant - handled by Gate 1 below) ---
     # Legacy block removed to prefer evaluate_htf_structural_proximity output
     pass
+    
+    # --- Fibonacci Proximity Scoring ---
+    # Check if entry price is near key Fibonacci retracement levels
+    # Uses HTF swing highs/lows (4H/1D) for institutional-grade Fib levels
+    if current_price and smc_snapshot.swing_structure:
+        try:
+            # Prioritize HTF timeframes for Fib calculation
+            fib_timeframes = ['1d', '1D', '4h', '4H']
+            fib_levels_calculated = False
+            
+            for fib_tf in fib_timeframes:
+                ss = smc_snapshot.swing_structure.get(fib_tf)
+                if not ss:
+                    ss = smc_snapshot.swing_structure.get(fib_tf.lower())
+                if not ss:
+                    continue
+                
+                # Get swing high/low from structure
+                swing_high = ss.get('last_hh') or ss.get('last_lh') if isinstance(ss, dict) else getattr(ss, 'last_hh', None) or getattr(ss, 'last_lh', None)
+                swing_low = ss.get('last_ll') or ss.get('last_hl') if isinstance(ss, dict) else getattr(ss, 'last_ll', None) or getattr(ss, 'last_hl', None)
+                
+                if swing_high and swing_low and swing_high > swing_low:
+                    # Determine trend direction from recent price action
+                    # For Fib calculations: bullish if price is below midpoint (retracing down), bearish otherwise
+                    midpoint = (swing_high + swing_low) / 2
+                    trend_dir = 'bullish' if current_price < midpoint else 'bearish'
+                    
+                    # Calculate Fib levels with required arguments
+                    fib_levels = calculate_fib_levels(swing_high, swing_low, trend_dir, fib_tf)
+                    
+                    # Find nearest Fib level to current price
+                    nearest_fib = find_nearest_fib(current_price, fib_levels)
+                    
+                    if nearest_fib:
+                        # Calculate proximity percentage
+                        proximity_pct = get_fib_proximity_pct(current_price, nearest_fib.price)
+                        
+                        # Score based on proximity to key levels (61.8%, 50%, 38.2%)
+                        key_levels = [0.618, 0.5, 0.382]
+                        is_key_level = nearest_fib.ratio in key_levels
+                        
+                        if proximity_pct <= 0.5 and is_key_level:
+                            # Very tight to key Fib level - strong confluence
+                            fib_score = 100.0
+                            fib_rationale = f"Price within {proximity_pct:.2f}% of {fib_tf} {nearest_fib.ratio*100:.1f}% Fib (${nearest_fib.price:.2f})"
+                        elif proximity_pct <= 1.0 and is_key_level:
+                            # Close to key Fib level - good confluence
+                            fib_score = 80.0
+                            fib_rationale = f"Price near {fib_tf} {nearest_fib.ratio*100:.1f}% Fib ({proximity_pct:.2f}% away)"
+                        elif proximity_pct <= 2.0:
+                            # Moderate proximity
+                            fib_score = 60.0
+                            fib_rationale = f"Price approaching {fib_tf} {nearest_fib.ratio*100:.1f}% Fib"
+                        else:
+                            # Too far from Fib - no score
+                            fib_score = 0.0
+                            fib_rationale = ""
+                        
+                        if fib_score > 0:
+                            factors.append(ConfluenceFactor(
+                                name="Fibonacci Proximity",
+                                score=fib_score,
+                                weight=get_w('fibonacci', 0.10),
+                                rationale=fib_rationale
+                            ))
+                            fib_levels_calculated = True
+                            logger.debug(f"📐 Fibonacci: {fib_rationale}")
+                            break  # Use first HTF with valid swings
+            
+            if not fib_levels_calculated:
+                logger.info(f"📐 Fibonacci DIAGNOSTIC [{symbol}]: No valid HTF swings found. Checked timeframes: {fib_timeframes}. "
+                           f"Swing structure keys available: {list(smc_snapshot.swing_structure.keys()) if smc_snapshot.swing_structure else 'None'}")
+                
+        except Exception as e:
+            error_type = type(e).__name__
+            logger.warning(f"📐 Fibonacci DIAGNOSTIC [{symbol}]: Scoring FAILED with {error_type}: {str(e)[:150]}")
+            logger.debug(f"📐 Fibonacci DIAGNOSTIC [{symbol}]: Full error", exc_info=True)
 
     # --- BTC Impulse Gate ---
     
@@ -1880,7 +2036,12 @@ def calculate_confluence_score(
                     rationale=pd_rationale
                 ))
     except Exception as e:
-        logger.debug("P/D zone scoring failed: %s", e)
+        error_type = type(e).__name__
+        has_pd_zones = smc_snapshot.premium_discount_zones is not None
+        zone_count = len(smc_snapshot.premium_discount_zones) if has_pd_zones else 0
+        logger.warning(f"📊 P/D Zone DIAGNOSTIC [{symbol}]: Scoring FAILED with {error_type}. "
+                      f"Has P/D zones: {has_pd_zones}, Zone count: {zone_count}. Error: {str(e)[:150]}")
+        logger.debug(f"📊 P/D Zone DIAGNOSTIC [{symbol}]: Full error", exc_info=True)
     
     # --- NEW: Symbol Regime Alignment Scoring ---
     # Rewards trades aligned with the local symbol regime (from RegimeDetector)
@@ -2484,51 +2645,47 @@ def calculate_confluence_score(
     raw_score = weighted_score + synergy_bonus - conflict_penalty
     
     # ===========================================================================
-    # === VARIANCE AMPLIFICATION CURVE ===
+    # === VARIANCE AMPLIFICATION CURVE - TEMPORARILY DISABLED ===
     # ===========================================================================
     # Problem: Scores cluster tightly (80% in 75-79 range) with only 8.7pt spread
     # Solution: Apply progressive curve that WIDENS gaps between good/mediocre setups
     #
-    # Curve design:
+    # DISABLED FOR DIAGNOSIS: The curve was calibrated for raw scores of 65-85,
+    # but current scoring produces raw scores of 40-65, causing excessive dampening.
+    # Temporarily disabled to observe raw score distribution.
+    #
+    # Original curve design:
     # - Excellent (75+): Boost by 3-8pts → push to 78-85 (reward quality)
     # - Good (70-75): Slight boost 0-3pts → keep at 70-78 (marginal pass/fail)
     # - Mediocre (65-70): Dampen 2-5pts → drop to 60-65 (filter out)
     # - Poor (<65): Heavy dampen → ensure failure
-    #
-    # Result: Spread increases from 8.7pt → 20-25pt while maintaining quality bar
     # ===========================================================================
     
-    if raw_score >= 75.0:
-        # EXCELLENT setups: Boost to reward true quality
-        # 75 → 76.5, 80 → 82, 85 → 87.5 (more conservative)
-        boost = (raw_score - 75.0) * 0.5  # Up to +7.5pts for 90+ raw
-        final_score = raw_score + min(6.0, boost + 1.5)  # REDUCED: was boost + 3.0
-        logger.debug("🚀 Excellence boost: %.1f → %.1f (+%.1f)",
-                    raw_score, final_score, final_score - raw_score)
+    # OPTION A: Disable dampening curve - show raw scores for diagnosis
+    final_score = raw_score
+    logger.warning("⚠️ VARIANCE CURVE DISABLED - Raw score: %.1f (diagnosing score distribution)", raw_score)
     
-    elif raw_score >= 70.0:
-        # GOOD setups: Slight boost or neutral (marginal pass zone)
-        # 70 → 70-72, 72 → 72-74, 75 → 75-78
-        boost = (raw_score - 70.0) * 0.4  # Up to +2pts
-        final_score = raw_score + boost
-        logger.debug("✓ Good score: %.1f → %.1f (+%.1f)", 
-                    raw_score, final_score, final_score - raw_score)
-    
-    elif raw_score >= 65.0:
-        # MEDIOCRE setups: Dampen to filter out
-        # 65 → 62, 67 → 64, 70 → 68
-        dampen = (70.0 - raw_score) * 0.6  # Up to -3pts
-        final_score = raw_score - dampen
-        logger.debug("📉 Mediocre dampen: %.1f → %.1f (-%.1f)", 
-                    raw_score, final_score, raw_score - final_score)
-    
-    else:
-        # POOR setups: Heavy dampen to ensure failure
-        # 60 → 54, 64 → 60
-        dampen = (65.0 - raw_score) * 0.8  # Up to -4pts
-        final_score = raw_score - dampen
-        logger.debug("❌ Poor dampen: %.1f → %.1f (-%.1f)", 
-                    raw_score, final_score, raw_score - final_score)
+    ## ORIGINAL CURVE (commented out for diagnosis):
+    # if raw_score >= 75.0:
+    #     boost = (raw_score - 75.0) * 0.5
+    #     final_score = raw_score + min(6.0, boost + 1.5)
+    #     logger.debug("🚀 Excellence boost: %.1f → %.1f (+%.1f)",
+    #                 raw_score, final_score, final_score - raw_score)
+    # elif raw_score >= 70.0:
+    #     boost = (raw_score - 70.0) * 0.4
+    #     final_score = raw_score + boost
+    #     logger.debug("✓ Good score: %.1f → %.1f (+%.1f)", 
+    #                 raw_score, final_score, final_score - raw_score)
+    # elif raw_score >= 65.0:
+    #     dampen = (70.0 - raw_score) * 0.6
+    #     final_score = raw_score - dampen
+    #     logger.debug("📉 Mediocre dampen: %.1f → %.1f (-%.1f)", 
+    #                 raw_score, final_score, raw_score - final_score)
+    # else:
+    #     dampen = (65.0 - raw_score) * 0.8
+    #     final_score = raw_score - dampen
+    #     logger.debug("❌ Poor dampen: %.1f → %.1f (-%.1f)", 
+    #                 raw_score, final_score, raw_score - final_score)
 
     final_score = max(0.0, min(100.0, final_score))  # Clamp to 0-100
     
@@ -3171,13 +3328,13 @@ def _score_momentum(
             timeframe=timeframe
         )
         macd_score_contrib = macd_analysis["score"]
-
-    # CRITICAL FIX: Include MACD in category cap BEFORE capping
-    # Otherwise MACD can add 50-80 points on top of the 25pt cap, defeating the purpose
-    raw_momentum_with_macd = raw_momentum + macd_score_contrib
-
-    # Apply category cap to prevent inflation (includes MACD now)
-    score = min(MOMENTUM_CATEGORY_CAP, raw_momentum_with_macd)
+        
+        # CRITICAL FIX: Include MACD in category cap BEFORE capping
+        # Otherwise MACD can add 50-80 points on top of the 25pt cap, defeating the purpose
+        raw_momentum_with_macd = raw_momentum + macd_score_contrib
+        
+        # Apply category cap to prevent inflation (includes MACD now)
+        score = min(MOMENTUM_CATEGORY_CAP, raw_momentum_with_macd)
     else:
         # Legacy MACD scoring (fallback for backward compatibility)
         macd_line = getattr(indicators, 'macd_line', None)
@@ -3195,6 +3352,9 @@ def _score_momentum(
                 elif macd_line < macd_signal:
                     score += 12.0
                 # Neutral MACD (opposing) gives 0 points - removed legacy +5 fallback
+        
+        # Apply category cap for legacy path too
+        score = min(MOMENTUM_CATEGORY_CAP, raw_momentum)
 
     # Stoch RSI K/D crossover enhancement (debounced by minimum separation)
     k = getattr(indicators, 'stoch_rsi_k', None)
@@ -3603,11 +3763,13 @@ def _calculate_conflict_penalty(factors: List[ConfluenceFactor], direction: str)
         logger.debug("BTC impulse gate conflict: score %.1f → +%.1f penalty", btc_factor.score, penalty)
 
     # Weak momentum in strong setup
+    # NOTE: Momentum is capped at MOMENTUM_CATEGORY_CAP (25pts), so threshold must be < 25
     momentum_factor = next((f for f in factors if f.name == "Momentum"), None)
     structure_factor = next((f for f in factors if f.name == "Market Structure"), None)
 
     if momentum_factor and structure_factor:
-        if momentum_factor.score < 30 and structure_factor.score > 70:
+        # Adjusted threshold: < 12 (half of 25pt cap) = truly weak momentum
+        if momentum_factor.score < 12 and structure_factor.score > 70:
             penalty += 10.0  # Structure says go, momentum says no
             logger.debug("Momentum/Structure conflict: Mom %.1f vs Struct %.1f → +10 penalty",
                         momentum_factor.score, structure_factor.score)
@@ -3787,34 +3949,156 @@ def _get_volatility_rationale(indicators: IndicatorSnapshot) -> str:
 
 
 def _score_mtf_indicator_confluence(indicators: IndicatorSet, direction: str) -> Tuple[float, str]:
-    """Check if indicators align across timeframes."""
+    """
+    Check if indicators align across timeframes.
+    
+    Enhanced to check:
+    - RSI/MACD alignment (original)
+    - MACD slope consistency across TFs
+    - Volume trend alignment
+    - ADX strength consistency
+    """
     norm_dir = _normalize_direction(direction)
     is_bullish = norm_dir == 'bullish'
-    aligned_count = 0
+    
+    # Track alignment across different indicator types
+    rsi_aligned_count = 0
+    macd_slope_aligned = 0
+    volume_trend_aligned = 0
+    adx_strong_count = 0
+    
     opposed_count = 0
+    total_tfs_checked = 0
     
-    for tf, ind in indicators.by_timeframe.items():
-        rsi = getattr(ind, 'rsi', None)
-        if rsi is None: continue
+    # Priority TFs for MTF alignment (focus on meaningful timeframes)
+    priority_tfs = ['1d', '4h', '1h', '15m', '5m']
+    
+    for tf in priority_tfs:
+        # Try both lowercase and current case
+        ind = indicators.by_timeframe.get(tf) or indicators.by_timeframe.get(tf.upper())
+        if not ind:
+            continue
             
-        if is_bullish:
-            # Bullish alignment: RSI < 45 (oversold/reversal) or > 50 (trend) depending on logic
-            # Using simple threshold for alignment
-            if rsi < 45 or (getattr(ind, 'macd_line', 0) > getattr(ind, 'macd_signal', 0)):
-                aligned_count += 1
-            elif rsi > 65:
-                # Bearish indication in bullish trade
-                opposed_count += 1
-        else: # Bearish
-            if rsi > 55 or (getattr(ind, 'macd_line', 0) < getattr(ind, 'macd_signal', 0)):
-                aligned_count += 1
-            elif rsi < 35:
-                # Bullish indication in bearish trade
-                opposed_count += 1
+        total_tfs_checked += 1
+        
+        # --- 1. RSI & MACD Crossover (Original Logic) ---
+        rsi = getattr(ind, 'rsi', None)
+        if rsi is not None:
+            if is_bullish:
+                # Bullish alignment: RSI < 45 (oversold/reversal) or > 50 (trend)
+                if rsi < 45 or (getattr(ind, 'macd_line', 0) > getattr(ind, 'macd_signal', 0)):
+                    rsi_aligned_count += 1
+                elif rsi > 65:
+                    # Bearish indication in bullish trade
+                    opposed_count += 1
+            else:  # Bearish
+                if rsi > 55 or (getattr(ind, 'macd_line', 0) < getattr(ind, 'macd_signal', 0)):
+                    rsi_aligned_count += 1
+                elif rsi < 35:
+                    # Bullish indication in bearish trade
+                    opposed_count += 1
+        
+        # --- 2. MACD Slope Alignment (NEW) ---
+        # Check if MACD histogram is sloping in trade direction
+        macd_hist = getattr(ind, 'macd_histogram', None)
+        if macd_hist is not None:
+            # Need at least 2 values to determine slope
+            # Assuming macd_histogram is a Series/array, get last 2 values
+            try:
+                if hasattr(macd_hist, 'iloc'):
+                    # It's a Series
+                    if len(macd_hist) >= 2:
+                        current_hist = float(macd_hist.iloc[-1])
+                        prev_hist = float(macd_hist.iloc[-2])
+                        slope_up = current_hist > prev_hist
+                    else:
+                        slope_up = None
+                else:
+                    # It's a scalar (current value only)
+                    current_hist = float(macd_hist)
+                    slope_up = current_hist > 0  # Positive histogram = bullish slope
+                
+                if slope_up is not None:
+                    if (is_bullish and slope_up) or (not is_bullish and not slope_up):
+                        macd_slope_aligned += 1
+            except Exception:
+                pass  # Skip if can't extract slope
+        
+        # --- 3. Volume Trend Alignment (NEW) ---
+        # Check if volume is rising (indicates conviction)
+        volume = getattr(ind, 'volume_sma', None)  # or 'volume_ema' if available
+        if volume is None:
+            volume = getattr(ind, 'volume', None)
+        
+        if volume is not None:
+            try:
+                if hasattr(volume, 'iloc'):
+                    # Series - compare last 5 bars for trend
+                    if len(volume) >= 5:
+                        recent_vol = float(volume.iloc[-1:].mean())
+                        older_vol = float(volume.iloc[-5:-1].mean())
+                        volume_rising = recent_vol > older_vol
+                    else:
+                        volume_rising = None
+                else:
+                    # Scalar - can't determine trend without history
+                    volume_rising = None
+                
+                if volume_rising:
+                    volume_trend_aligned += 1
+            except Exception:
+                pass
+        
+        # --- 4. ADX Strength Consistency (NEW) ---
+        # Check if ADX > 25 (strong trend)
+        adx = getattr(ind, 'adx', None)
+        if adx is not None:
+            try:
+                adx_val = float(adx.iloc[-1]) if hasattr(adx, 'iloc') else float(adx)
+                if adx_val > 25:
+                    adx_strong_count += 1
+            except Exception:
+                pass
     
-    if aligned_count >= 3 and opposed_count == 0:
-        return 15.0, "Strong MTF alignment"
+    if total_tfs_checked == 0:
+        return 0.0, ""
+    
+    # --- Scoring Logic ---
+    rationale_parts = []
+    score = 0.0
+    
+    # RSI/MACD alignment (original)
+    if rsi_aligned_count >= 3 and opposed_count == 0:
+        score += 15.0
+        rationale_parts.append(f"Strong MTF RSI/MACD alignment ({rsi_aligned_count} TFs)")
     elif opposed_count >= 2:
-        return -10.0, "MTF divergence warning"
+        score -= 10.0
+        rationale_parts.append(f"MTF divergence warning ({opposed_count} opposed)")
     
-    return 0.0, ""
+    # MACD slope alignment bonus
+    if macd_slope_aligned >= 3:
+        score += 8.0
+        rationale_parts.append(f"MACD slope aligned ({macd_slope_aligned} TFs)")
+    elif macd_slope_aligned >= 2:
+        score += 4.0
+        rationale_parts.append(f"MACD slope partial ({macd_slope_aligned} TFs)")
+    
+    # Volume trend bonus
+    if volume_trend_aligned >= 2:
+        score += 5.0
+        rationale_parts.append(f"Volume rising across TFs ({volume_trend_aligned})")
+    
+    # ADX strength bonus
+    if adx_strong_count >= 3:
+        score += 7.0
+        rationale_parts.append(f"Strong trend (ADX>25 on {adx_strong_count} TFs)")
+    elif adx_strong_count >= 2:
+        score += 3.0
+        rationale_parts.append(f"Moderate trend (ADX>25 on {adx_strong_count} TFs)")
+    
+    # Cap total MTF bonus to prevent inflation
+    score = min(score, 25.0)  # Max 25 points from MTF alignment
+    
+    rationale = " | ".join(rationale_parts) if rationale_parts else ""
+    return score, rationale
+

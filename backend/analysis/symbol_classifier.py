@@ -72,39 +72,87 @@ COINGECKO_CATEGORY_MAP: dict[str, SymbolCategory] = {
 
 # Heuristic fallback data
 HEURISTIC_MAJORS: set[str] = {
-    "BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "AVAX", "DOT",
-    "MATIC", "LINK", "ATOM", "LTC", "BCH", "TON", "TRX",
-    # New L1s with high volume
-    "SUI", "TIA", "INJ", "SEI", "WLD", "JUP", "APT", "NEAR",
+    # Top tier (BTC, ETH, major exchanges)
+    "BTC", "ETH", "BNB", "USDT", "USDC",
+    # Top L1s
+    "SOL", "ADA", "AVAX", "DOT", "ATOM", "TON", "TRX", "XLM",
+    # Popular alts with staying power
+    "XRP", "LTC", "BCH", "ETC", "XMR", "ALGO", "VET", "FIL",
+    # Major L2s (high volume, important infrastructure)
+    "MATIC", "ARB", "OP",
+    # Major DeFi blue chips
+    "LINK", "UNI", "AAVE", "CRV", "MKR", "SNX", "COMP",
+    # New L1s with high volume (2024-2025)
+    "SUI", "TIA", "INJ", "SEI", "APT", "NEAR", "FTM", "HBAR",
+    "WLD", "JUP", "RUNE", "KAVA", "OSMO", "ROSE", "FET"
 }
 
 HEURISTIC_MEME_HINTS: tuple[str, ...] = (
-    "DOGE", "SHIB", "PEPE", "FLOKI", "BONK", "WIF", "MEME",
-    "BOME", "MYRO", "MOG", "POPCAT", "MEW", "CAT", "GIGA",
-    "PNUT", "NEIRO", "GOAT", "ACT", "TURBO", "COQ", "BRETT",
-    "PONKE", "SLERF", "TRUMP", "WOJAK", "BOB", "TOSHI",
-    "INU", "ELON", "BABYDOGE", "SAMO", "SNEK",
+    # OG memes (2021-2022)
+    "DOGE", "SHIB", "FLOKI", "ELON", "BABYDOGE", "INU",
+    # Pepe era (2023)
+    "PEPE", "WOJAK", "TURBO", "MEME", "LADYS", "BOBO",
+    # Solana memes (2023-2024)
+    "BONK", "WIF", "BOME", "MYRO", "SAMO", "SLERF", "PONKE", "COQ",
+    "MEW", "POPCAT", "SNEK", "TOSHI", "BOB", "SMOG", "SILLY",
+    # Base chain memes (2024)
+    "BRETT", "DEGEN", "TOSHI", "NORMIE", "KEYCAT",
+    # Political/narrative memes (2024-2025)
+    "TRUMP", "BODEN", "TREMP", "MAGA", "KAMA",
+    # AI agent memes (2024-2025)
+    "GOAT", "ACT", "FARTCOIN", "ZEREBRO", "AI16Z", "VIRTUAL",
+    # Recent viral memes (2024-2025)
+    "PNUT", "NEIRO", "GIGA", "MOG", "CAT", "GROYPER", "RETARDIO",
+    "WEN", "MICHI", "BILLY", "HIGHER", "CHOMP", "FWOG", "MANEKI",
+    # Meme indicators (substring matches)
+    "PEPE", "INU", "DOGE", "SHIB", "FLOKI", "ELON", "MEME",
 )
 
 HEURISTIC_DEFI: set[str] = {
+    # Blue chip DeFi
     "AAVE", "UNI", "LINK", "MKR", "SNX", "COMP", "YFI",
-    "CRV", "SUSHI", "1INCH", "BAL", "LDO", "RPL", "FXS",
-    "PENDLE", "GMX", "DYDX", "JOE", "CAKE", "RAY",
+    "CRV", "SUSHI", "1INCH", "BAL",
+    # Liquid staking
+    "LDO", "RPL", "FXS", "RETH", "SFRXETH",
+    # Derivatives & perps
+    "GMX", "DYDX", "GNS", "KWENTA", "HMX",
+    # Yield & farming
+    "PENDLE", "JOE", "CAKE", "RAY", "BEEFY",
+    # Bridges & infra
+    "ACROSS", "SYN", "CELER", "HOP",
+    # RWA (Real World Assets)
+    "ONDO", "MKR", "TRU", "CFG",
 }
 
 HEURISTIC_AI: set[str] = {
-    "FET", "RNDR", "TAO", "AGIX", "OCEAN", "NMR", "GRT",
-    "ARKM", "CTXC", "AIOZ", "PRIME", "OLAS", "AI16Z",
+    # Infrastructure AI
+    "FET", "RNDR", "TAO", "AGIX", "OCEAN", "GRT", "NMR",
+    # AI agents & platforms
+    "AI16Z", "VIRTUAL", "ARKM", "OLAS", "SPEC", "PRIME",
+    # Compute & GPU
+    "AIOZ", "ICP", "CTXC", "AKT",
+    # Data & oracle AI
+    "ROSE", "ORAI", "DYDX",
 }
 
 HEURISTIC_GAMING: set[str] = {
-    "AXS", "SAND", "MANA", "ENJ", "GALA", "IMX", "ILV",
-    "MAGIC", "PRIME", "PIXELS", "BEAM", "PORTAL", "GODS",
+    # Metaverse OGs
+    "AXS", "SAND", "MANA", "ENJ", "GALA",
+    # Gaming infrastructure
+    "IMX", "BEAM", "PRIME", "MAGIC", "PORTAL", "RON",
+    # Play-to-earn
+    "ILV", "PIXELS", "GODS", "ALICE", "TLM", "YGG",
+    # NFT gaming
+    "FLOW", "WAX", "ULTRA", "JEWEL",
 }
 
 HEURISTIC_L2: set[str] = {
-    "ARB", "OP", "MATIC", "STRK", "ZK", "MANTA", "BLAST",
-    "SCROLL", "LINEA", "BASE", "MODE",
+    # Major L2s
+    "ARB", "OP", "MATIC", "STRK", "ZK",
+    # New L2s (2024)
+    "MANTA", "BLAST", "SCROLL", "LINEA", "MODE", "METIS",
+    # Alt-L1 L2s
+    "CELO", "MOVR", "GLMR",
 }
 
 

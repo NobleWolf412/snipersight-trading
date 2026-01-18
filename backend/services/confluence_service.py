@@ -280,11 +280,11 @@ class ConfluenceService:
                                     'bearish_structure': bearish_structure
                                 }
                                 
-                                raise ValueError(f"Confluence tie ({bullish_breakdown.total_score:.1f}) with neutral regime and tied structure")
+                                raise ValueError(f"Conflicting signals ({bullish_breakdown.total_score:.1f}%) - bullish and bearish setups equally strong with no regime bias")
                         
                         else:
                             # Scores not strong enough for structure override (<=70%)
-                            logger.info("🔄 %s TIE (%.1f) with neutral regime (scores ≤ 70%%): skipping",
+                            logger.info("🔄 %s Conflicting Signals (%.1f%%) - neutral regime, no clear edge",
                                        context.symbol, bullish_breakdown.total_score)
                             
                             context.metadata['chosen_direction'] = None
@@ -294,7 +294,7 @@ class ConfluenceService:
                                 'tie_break_used': 'skipped_no_edge'
                             }
                             
-                            raise ValueError(f"Confluence tie ({bullish_breakdown.total_score:.1f}) with neutral regime - no directional edge")
+                            raise ValueError(f"No directional edge ({bullish_breakdown.total_score:.1f}%) - bullish and bearish scores identical in neutral market")
             
             # CRITICAL: Store chosen direction in context for downstream use
             context.metadata['chosen_direction'] = chosen_direction

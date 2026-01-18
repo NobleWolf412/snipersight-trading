@@ -9,16 +9,32 @@ Fair Value Gaps are price inefficiencies where:
 - These gaps often act as support/resistance when revisited
 """
 
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 import pandas as pd
 import numpy as np
+import logging
 
 from backend.shared.models.smc import FVG, grade_pattern
 from backend.shared.config.smc_config import SMCConfig
 
+logger = logging.getLogger(__name__)
 
-def detect_fvgs(df: pd.DataFrame, config: SMCConfig | dict | None = None) -> List[FVG]:
+
+# Mode-specific FVG minimum sizes (in ATR units)
+MODE_FVG_MIN_SIZE = {
+    "macro_surveillance": 0.6,   # OVERWATCH: Large institutional gaps only
+    "stealth_balanced": 0.4,      # STEALTH: Balanced medium gaps
+    "intraday_aggressive": 0.25,  # STRIKE: Smaller for faster intraday moves
+    "precision": 0.15,            # SURGICAL: Micro-gaps for precision scalp entries
+}
+
+
+def detect_fvgs(
+    df: pd.DataFrame, 
+    config: SMCConfig | dict | None = None,
+    mode_profile: Optional[str] = None
+) -> List[FVG]:
     """
     Detect Fair Value Gaps in price data.
     
@@ -31,6 +47,7 @@ def detect_fvgs(df: pd.DataFrame, config: SMCConfig | dict | None = None) -> Lis
         config: Configuration dict with:
             - min_gap_atr: Minimum gap size in ATR units (default 0.3)
             - max_overlap: Maximum allowed overlap percentage (default 0.1)
+        mode_profile: Scanner mode profile for size filtering (optional)
             
     Returns:
         List[FVG]: Detected fair value gaps
@@ -61,7 +78,13 @@ def detect_fvgs(df: pd.DataFrame, config: SMCConfig | dict | None = None) -> Lis
         smc_cfg = SMCConfig.from_dict(mapped)
     else:
         smc_cfg = config
-    min_gap_atr = smc_cfg.fvg_min_gap_atr
+    
+    # Get mode-specific minimum size (if mode provided)
+    if mode_profile and mode_profile in MODE_FVG_MIN_SIZE:
+        min_gap_atr = MODE_FVG_MIN_SIZE[mode_profile]
+    else:
+        min_gap_atr = smc_cfg.fvg_min_gap_atr
+    
     max_overlap = smc_cfg.fvg_max_overlap
     
     # Calculate ATR for gap size filtering
@@ -69,6 +92,14 @@ def detect_fvgs(df: pd.DataFrame, config: SMCConfig | dict | None = None) -> Lis
     atr = compute_atr(df, period=14)
     
     fvgs = []
+    
+    # Diagnostic counters
+    potential_bullish_gaps = 0
+    bullish_overlap_fails = 0
+    bullish_size_fails = 0
+    potential_bearish_gaps = 0
+    bearish_overlap_fails = 0
+    bearish_size_fails = 0
     
     # Scan for FVGs (need at least 3 candles)
     for i in range(2, len(df)):
@@ -79,6 +110,7 @@ def detect_fvgs(df: pd.DataFrame, config: SMCConfig | dict | None = None) -> Lis
         # Check for bullish FVG
         # Gap exists if candle_0.high < candle_2.low
         if candle_0['high'] < candle_2['low']:
+            potential_bullish_gaps += 1
             gap_top = candle_2['low']
             gap_bottom = candle_0['high']
             gap_size = gap_top - gap_bottom
@@ -86,10 +118,24 @@ def detect_fvgs(df: pd.DataFrame, config: SMCConfig | dict | None = None) -> Lis
             # Check overlap with middle candle (should be minimal)
             overlap = _calculate_overlap_bullish(candle_1, gap_bottom, gap_top)
             
+            if overlap > max_overlap:
+                bullish_overlap_fails += 1
+                logger.debug("⚠️ %s Bullish FVG @ %.2f-%.2f: overlap=%.1f%% > %.1f%% max",
+                            _infer_timeframe(df), gap_bottom, gap_top,
+                            overlap * 100, max_overlap * 100)
+            
             if overlap <= max_overlap:
-                # Calculate gap size in ATR units for grading (not rejection)
+                # Calculate gap size in ATR units
                 atr_value = atr.iloc[i] if pd.notna(atr.iloc[i]) else 0
                 gap_atr = gap_size / atr_value if atr_value > 0 else 0.0
+                
+                # Mode-specific filtering: Skip FVGs below minimum size
+                if gap_atr < min_gap_atr:
+                    bullish_size_fails += 1
+                    logger.debug("⚠️ %s Bullish FVG rejected @ %.2f-%.2f: gap_atr=%.3f < %.3f required",
+                                _infer_timeframe(df), gap_bottom, gap_top,
+                                gap_atr, min_gap_atr)
+                    continue
                 
                 # Grade the FVG based on gap size (A = significant, B = moderate, C = small)
                 grade_a_threshold = smc_cfg.grade_a_threshold * min_gap_atr
@@ -120,9 +166,17 @@ def detect_fvgs(df: pd.DataFrame, config: SMCConfig | dict | None = None) -> Lis
             overlap = _calculate_overlap_bearish(candle_1, gap_bottom, gap_top)
             
             if overlap <= max_overlap:
-                # Calculate gap size in ATR units for grading (not rejection)
+                # Calculate gap size in ATR units
                 atr_value = atr.iloc[i] if pd.notna(atr.iloc[i]) else 0
                 gap_atr = gap_size / atr_value if atr_value > 0 else 0.0
+                
+                # Mode-specific filtering: Skip FVGs below minimum size
+                if gap_atr < min_gap_atr:
+                    bearish_size_fails += 1
+                    logger.debug("⚠️ %s Bearish FVG rejected @ %.2f-%.2f: gap_atr=%.3f < %.3f required",
+                                _infer_timeframe(df), gap_bottom, gap_top,
+                                gap_atr, min_gap_atr)
+                    continue
                 
                 # Grade the FVG based on gap size (A = significant, B = moderate, C = small)
                 grade_a_threshold = smc_cfg.grade_a_threshold * min_gap_atr
@@ -161,6 +215,17 @@ def detect_fvgs(df: pd.DataFrame, config: SMCConfig | dict | None = None) -> Lis
             # Update FVG (since dataclass is frozen, we need to replace)
             from dataclasses import replace
             fvgs[i] = replace(fvg, overlap_with_price=overlap, freshness_score=freshness)
+    
+    # Log diagnostic summary
+    if potential_bullish_gaps > 0 or potential_bearish_gaps > 0:
+        logger.info(
+            "🔍 %s FVG Detection: Found %d bullish gaps (%d overlap fails, %d size fails) | "
+            "%d bearish gaps (%d overlap fails, %d size fails) → %d FVGs passed",
+            _infer_timeframe(df),
+            potential_bullish_gaps, bullish_overlap_fails, bullish_size_fails,
+            potential_bearish_gaps, bearish_overlap_fails, bearish_size_fails,
+            len(fvgs)
+        )
     
     return fvgs
 

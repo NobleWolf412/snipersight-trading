@@ -15,9 +15,12 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
+import logging
 
 from backend.shared.models.smc import OrderBlock
 from backend.shared.config.smc_config import SMCConfig, scale_lookback
+
+logger = logging.getLogger(__name__)
 
 
 # --- Helper Functions for Enhanced OB Detection ---
@@ -215,6 +218,14 @@ def detect_order_blocks(
             displacement = _calculate_displacement_bullish(df, i, lookback_candles)
             displacement_atr = displacement / atr.iloc[i] if atr.iloc[i] > 0 else 0
             
+            # Check minimum displacement threshold
+            if displacement_atr < smc_cfg.min_displacement_atr:
+                logger.debug("⚠️ %s Bullish OB rejected @ %.2f: wick_ratio=%.2f OK | disp_atr=%.2f < %.2f required",
+                            _infer_timeframe(df), candle['low'],
+                            lower_wick/body if body > 0 else 0,
+                            displacement_atr, smc_cfg.min_displacement_atr)
+                continue
+            
             # Calculate base grade from displacement
             grade = smc_cfg.calculate_grade(displacement_atr)
             
@@ -222,6 +233,8 @@ def detect_order_blocks(
             # Grade C OBs must be at meaningful structure to qualify
             has_context, context_type = _has_structure_context(df, i, "bullish", atr.iloc[i])
             if not has_context and grade == 'C':
+                logger.debug("⚠️ %s Bullish OB rejected @ %.2f: grade=C but no structure context",
+                            _infer_timeframe(df), candle['low'])
                 continue  # Skip weak OBs without structure context
             
             # Volume confirmation
@@ -274,12 +287,22 @@ def detect_order_blocks(
             displacement = _calculate_displacement_bearish(df, i, lookback_candles)
             displacement_atr = displacement / atr.iloc[i] if atr.iloc[i] > 0 else 0
             
+            # Check minimum displacement threshold
+            if displacement_atr < smc_cfg.min_displacement_atr:
+                logger.debug("⚠️ %s Bearish OB rejected @ %.2f: wick_ratio=%.2f OK | disp_atr=%.2f < %.2f required",
+                            _infer_timeframe(df), candle['high'],
+                            upper_wick/body if body > 0 else 0,
+                            displacement_atr, smc_cfg.min_displacement_atr)
+                continue
+            
             # Calculate base grade from displacement
             grade = smc_cfg.calculate_grade(displacement_atr)
             
             # NEW: Structure context check
             has_context, context_type = _has_structure_context(df, i, "bearish", atr.iloc[i])
             if not has_context and grade == 'C':
+                logger.debug("⚠️ %s Bearish OB rejected @ %.2f: grade=C but no structure context",
+                            _infer_timeframe(df), candle['high'])
                 continue  # Skip weak OBs without structure context
             
             # Volume confirmation
@@ -722,6 +745,82 @@ def filter_overlapping_order_blocks(order_blocks: List[OrderBlock], max_overlap:
         
         if not overlaps:
             filtered.append(ob)
+    
+    return filtered
+
+
+def filter_obs_by_mode(
+    order_blocks: List[OrderBlock],
+    mode_profile: Optional[str] = None,
+    current_time: Optional[datetime] = None
+) -> List[OrderBlock]:
+    """
+    Filter order blocks based on scanner mode requirements.
+    
+    Different trading modes need different OB characteristics:
+    - OVERWATCH (macro_surveillance): HTF institutional zones only
+    - STEALTH (stealth_balanced): Balanced mix of TFs
+    - STRIKE (intraday_aggressive): Intraday momentum zones
+    - SURGICAL (precision): LTF precision entry zones
+    
+    Args:
+        order_blocks: List of detected order blocks
+        mode_profile: Scanner mode profile (or None for no filtering)
+        current_time: Current timestamp for freshness calculation (or None to skip)
+        
+    Returns:
+        List[OrderBlock]: Filtered order blocks matching mode criteria
+    """
+    if not mode_profile or not order_blocks:
+        return order_blocks  # Backward compatibility: no filtering
+    
+    # Mode-specific filtering criteria
+    MODE_CRITERIA = {
+        "macro_surveillance": {  # OVERWATCH: HTF institutional OBs
+            "timeframes": {"4h", "1d", "1w", "4H", "1D", "1W"},
+            "max_mitigation": 0.3,
+            "min_freshness": 40.0,
+        },
+        "stealth_balanced": {  # STEALTH: Balanced mix
+            "timeframes": {"1h", "4h", "15m", "1d", "1H", "4H", "15m", "1D"},
+            "max_mitigation": 0.4,
+            "min_freshness": 30.0,
+        },
+        "intraday_aggressive": {  # STRIKE: Intraday momentum
+            "timeframes": {"15m", "1h", "5m", "1H"},
+            "max_mitigation": 0.7,
+            "min_freshness": 20.0,
+        },
+        "precision": {  # SURGICAL: LTF precision
+            "timeframes": {"5m", "15m", "1h", "1H"},
+            "max_mitigation": 0.5,
+            "min_freshness": 60.0,
+        },
+    }
+    
+    criteria = MODE_CRITERIA.get(mode_profile)
+    if not criteria:
+        return order_blocks  # Unknown mode, no filtering
+    
+    filtered = []
+    for ob in order_blocks:
+        # Check timeframe filter
+        if ob.timeframe not in criteria["timeframes"]:
+            continue
+        
+        # Check mitigation threshold
+        if ob.mitigation_level >= criteria["max_mitigation"]:
+            continue
+        
+        # Check freshness threshold (recalculate if current_time provided)
+        if current_time:
+            freshness = calculate_freshness(ob, current_time)
+            if freshness < criteria["min_freshness"]:
+                continue
+        elif ob.freshness_score < criteria["min_freshness"]:
+            continue
+        
+        filtered.append(ob)
     
     return filtered
 

@@ -30,7 +30,8 @@ from backend.strategy.smc.order_blocks import (
     detect_obs_from_bos,
     update_ob_lifecycle,
     filter_to_active_obs,
-    filter_overlapping_order_blocks
+    filter_overlapping_order_blocks,
+    filter_obs_by_mode  # NEW: Mode-specific OB filtering
 )
 from backend.strategy.smc.fvg import detect_fvgs, merge_consecutive_fvgs
 from backend.strategy.smc.bos_choch import detect_structural_breaks, _detect_swing_highs, _detect_swing_lows
@@ -69,7 +70,17 @@ class SMCDetectionService:
         """
         self._smc_config = smc_config or SMCConfig()
         self._mode = mode.lower()
+        
+        # Map scanner mode to profile for SMC filtering
+        MODE_TO_PROFILE = {
+            'overwatch': 'macro_surveillance',
+            'stealth': 'stealth_balanced',
+            'strike': 'intraday_aggressive',
+            'surgical': 'precision',
+        }
+        self._mode_profile = MODE_TO_PROFILE.get(self._mode, 'stealth_balanced')
         self._diagnostics: Dict[str, list] = {'smc_rejections': []}
+        self._filter_stats: Dict[str, int] = {}  # Track filter statistics
     
     @property
     def diagnostics(self) -> Dict[str, list]:
@@ -134,6 +145,22 @@ class SMCDetectionService:
             SMCSnapshot with all detected patterns
         """
         self._diagnostics = {'smc_rejections': []}
+        self._filter_stats = {}  # Reset filter stats
+        
+        # Log SMC config for diagnostics
+        logger.info("🔧 SMC Detection Config: mode=%s | OB_wick=%.1f | OB_disp=%.1f ATR | FVG_gap=%.2f ATR | struct_lookback=%d",
+                   self._mode,
+                   self._smc_config.min_wick_ratio,
+                   self._smc_config.min_displacement_atr,
+                   self._smc_config.fvg_min_gap_atr,
+                   self._smc_config.structure_swing_lookback)
+        
+        # Log data quality
+        tf_data_summary = " | ".join([
+            f"{tf}={len(df)} candles" 
+            for tf, df in multi_tf_data.timeframes.items()
+        ])
+        logger.info("📊 Data Quality: %s", tf_data_summary)
         
         # Aggregate patterns across timeframes
         all_order_blocks = []
@@ -189,13 +216,25 @@ class SMCDetectionService:
                 if patterns['premium_discount']:
                     premium_discount_by_tf[timeframe] = patterns['premium_discount']
                 
-                # Log SMC detections per timeframe
-                logger.info("🎯 %s SMC: OB=%d | FVG=%d | BOS/CHoCH=%d | Sweeps=%d",
-                           timeframe,
-                           len(patterns['order_blocks']),
-                           len(patterns['fvgs']),
-                           len(patterns['structure_breaks']),
-                           len(patterns['liquidity_sweeps']))
+                # Log SMC detections per timeframe with grade breakdown
+                ob_by_grade = self._count_by_grade(patterns['order_blocks'])
+                fvg_by_grade = self._count_by_grade(patterns['fvgs'])
+                struct_by_grade = self._count_by_grade(patterns['structure_breaks'])
+                sweep_by_grade = self._count_by_grade(patterns['liquidity_sweeps'])
+                
+                logger.info("📦 %s OBs: %d total (A=%d B=%d C=%d)",
+                           timeframe, len(patterns['order_blocks']),
+                           ob_by_grade['A'], ob_by_grade['B'], ob_by_grade['C'])
+                logger.info("🔲 %s FVGs: %d total (A=%d B=%d C=%d)",
+                           timeframe, len(patterns['fvgs']),
+                           fvg_by_grade['A'], fvg_by_grade['B'], fvg_by_grade['C'])
+                logger.info("📐 %s Structure: %d total (BOS=%d CHoCH=%d)",
+                           timeframe, len(patterns['structure_breaks']),
+                           sum(1 for s in patterns['structure_breaks'] if s.break_type == 'BOS'),
+                           sum(1 for s in patterns['structure_breaks'] if s.break_type == 'CHoCH'))
+                logger.info("💧 %s Sweeps: %d total (A=%d B=%d C=%d)",
+                           timeframe, len(patterns['liquidity_sweeps']),
+                          sweep_by_grade['A'], sweep_by_grade['B'], sweep_by_grade['C'])
                 
             except Exception as e:
                 logger.warning("SMC detection failed for %s: %s", timeframe, e)
@@ -278,6 +317,39 @@ class SMCDetectionService:
             logger.info("💧 Liquidity pools: %d equal highs, %d equal lows",
                        len(unique_equal_highs), len(unique_equal_lows))
         
+        # Log final summary with filter statistics
+        total_obs = len(all_order_blocks)
+        total_fvgs = len(all_fvgs)
+        total_structs = len(all_structure_breaks)
+        total_sweeps = len(all_liquidity_sweeps)
+        
+        logger.info("=" * 60)
+        logger.info("📊 SMC DETECTION SUMMARY (ALL TIMEFRAMES)")
+        logger.info("=" * 60)
+        logger.info("📦 Order Blocks: %d total (A=%d B=%d C=%d)",
+                   total_obs, 
+                   sum(1 for ob in all_order_blocks if ob.grade == 'A'),
+                   sum(1 for ob in all_order_blocks if ob.grade == 'B'),
+                   sum(1 for ob in all_order_blocks if ob.grade == 'C'))
+        logger.info("🔲 FVGs: %d total (A=%d B=%d C=%d)",
+                   total_fvgs,
+                   sum(1 for fvg in all_fvgs if fvg.grade == 'A'),
+                   sum(1 for fvg in all_fvgs if fvg.grade == 'B'),
+                   sum(1 for fvg in all_fvgs if fvg.grade == 'C'))
+        logger.info("📐 Structure Breaks: %d total (BOS=%d CHoCH=%d)",
+                   total_structs,
+                   sum(1 for s in all_structure_breaks if s.break_type == 'BOS'),
+                   sum(1 for s in all_structure_breaks if s.break_type == 'CHoCH'))
+        logger.info("💧 Liquidity Sweeps: %d total", total_sweeps)
+        logger.info("💧 Liquidity Pools: %d total", len(all_liquidity_pools))
+        
+        # Log filter statistics if any filtering occurred
+        if self._filter_stats:
+            logger.info("🔍 FILTER STATS:")
+            for key, value in self._filter_stats.items():
+                logger.info("  - %s: %d", key, value)
+        logger.info("=" * 60)
+        
         # Log liquidity pools summary
         self._log_liquidity_pools_summary(all_liquidity_pools)
         
@@ -350,7 +422,16 @@ class SMCDetectionService:
         try:
             atr = compute_atr(df, period=14)
             atr_val = atr.iloc[-1] if len(atr) > 0 and pd.notna(atr.iloc[-1]) else 0
-        except:
+            
+            # Log market state for diagnostics
+            if atr_val > 0:
+                atr_pct = (atr_val / current_price) * 100 if current_price > 0 else 0
+                logger.info("📊 %s Market: ATR=%.4f | ATR%%=%.3f%% | Price=%.2f",
+                           timeframe, atr_val, atr_pct, current_price)
+            else:
+                logger.warning("⚠️ %s Market: ATR=0 (insufficient data for volatility calc)", timeframe)
+        except Exception as e:
+            logger.warning("⚠️ %s ATR calculation failed: %s", timeframe, e)
             atr_val = 0
         
         # Swing detection for structural OBs
@@ -389,26 +470,60 @@ class SMCDetectionService:
                     result['order_blocks'], 
                     max_overlap=0.7
                 )
+                 
+                 # NEW: Mode-specific filtering (Gap #1 - SMC Enhancements)
+                 # Filter OBs by mode requirements (TF, mitigation, freshness)
+                 from datetime import datetime
+                 pre_filter_count = len(result['order_blocks'])
+                 
+                 # Track for UI stats
+                 self._filter_stats['ob_detected'] = self._filter_stats.get('ob_detected', 0) + pre_filter_count
+                 
+                 result['order_blocks'] = filter_obs_by_mode(
+                     result['order_blocks'],
+                     mode_profile=self._mode_profile,
+                     current_time=datetime.now()
+                 )
+                 filtered_count = pre_filter_count - len(result['order_blocks'])
+                 if filtered_count > 0:
+                     logger.debug("📦 %s: Mode filter (%s) removed %d OBs",
+                                timeframe, self._mode_profile, filtered_count)
         else:
             logger.debug("📦 %s: OB detection SKIPPED (TF filter)", timeframe)
         
         # Fair value gaps (use TF-specific config for gap thresholds)
         if tf_config.get('detect_fvg', True):
-            fvgs = detect_fvgs(df, tf_smc_config)
+            # NEW: Pass mode_profile for size filtering (Gap #2)
+            fvgs_raw = detect_fvgs(df, tf_smc_config, mode_profile=None)  # Get unfiltered count
+            fvgs = detect_fvgs(df, tf_smc_config, mode_profile=self._mode_profile)
+            
+            # Track for UI stats
+            self._filter_stats['fvg_detected'] = self._filter_stats.get('fvg_detected', 0) + len(fvgs_raw)
+            
             if atr_val > 0:
                 fvgs = merge_consecutive_fvgs(fvgs, max_gap_atr=0.5, atr_value=atr_val)
             result['fvgs'] = fvgs
         
         # Structure breaks (use TF-specific config for break distance thresholds)
         if tf_config.get('detect_bos', True):
-            result['structure_breaks'] = detect_structural_breaks(df, tf_smc_config)
+            # NEW: Pass mode_profile for volume filtering (Gap #4)
+            result['structure_breaks'] = detect_structural_breaks(
+                df, 
+                tf_smc_config,
+                mode_profile=self._mode_profile
+            )
         else:
             logger.debug("📐 %s: BOS detection SKIPPED (TF filter)", timeframe)
         
         # Liquidity sweeps (use TF-specific config for sweep thresholds)
         if tf_config.get('detect_sweep', True):
             try:
-                sweeps = detect_liquidity_sweeps(df, tf_smc_config)
+                sweeps_raw = detect_liquidity_sweeps(df, tf_smc_config, mode_profile=None)
+                sweeps = detect_liquidity_sweeps(df, tf_smc_config, mode_profile=self._mode_profile)
+                
+                # Track for UI stats
+                self._filter_stats['sweep_detected'] = self._filter_stats.get('sweep_detected', 0) + len(sweeps_raw)
+                
                 # Set timeframe on each sweep for TF filtering and HTF context
                 from dataclasses import replace
                 result['liquidity_sweeps'] = [
@@ -615,6 +730,15 @@ class SMCDetectionService:
         grade_c = sum(1 for p in pools if p.grade == 'C')
         logger.info("🎯 Liquidity pools graded: A=%d B=%d C=%d (total=%d)",
                    grade_a, grade_b, grade_c, len(pools))
+    
+    def _count_by_grade(self, patterns: List) -> Dict[str, int]:
+        """Count patterns by grade (A/B/C)."""
+        counts = {'A': 0, 'B': 0, 'C': 0}
+        for pattern in patterns:
+            grade = getattr(pattern, 'grade', 'C')
+            if grade in counts:
+                counts[grade] += 1
+        return counts
     
     def _log_swing_structure_summary(self, swing_structure_by_tf: Dict):
         """Log HTF swing structure summary."""

@@ -951,8 +951,8 @@ class Orchestrator:
             logger.error(f"Confluence service failed for {symbol}: {error_msg}")
             logger.error(f"Full traceback:\n{traceback.format_exc()}")
             
-            # Categorize confluence tie errors properly for rejection display
-            if "Confluence tie" in error_msg and "neutral regime" in error_msg:
+            # Categorize conflicting signals errors properly for rejection display
+            if ("Conflicting signals" in error_msg or "No directional edge" in error_msg):
                 return None, {
                     "symbol": symbol, 
                     "reason": error_msg, 
@@ -1365,7 +1365,8 @@ class Orchestrator:
                 current_price=current_price,
                 missing_critical_timeframes=context.metadata.get('missing_critical_timeframes', []),
                 multi_tf_data=context.multi_tf_data,
-                expected_trade_type=self.scanner_mode.expected_trade_type
+                expected_trade_type=self.scanner_mode.expected_trade_type,
+                volume_profile=context.metadata.get('_volume_profile_obj')  # Use full VolumeProfile object, not dict
             )
             
             # Enrich plan metadata with SMC geometry for chart overlays
@@ -1991,6 +1992,34 @@ class Orchestrator:
             self.smc_service.update_config(new_cfg)
         logger.info("SMC configuration updated")
     
+    def _analyze_symbol(self, symbol: str):
+        """
+        Analyze a single symbol across all timeframes and modes.
+        
+        This is the main orchestration method that coordinates all analysis steps.
+        
+        Returns:
+            AnalysisResult: Complete analysis including confluence, trade plans, and diagnostics
+        """
+        logger.info("")
+        logger.info("╔" + "═" * 58 + "╗")
+        logger.info("║  📊 ANALYZING: %-42s  ║", symbol.upper())
+        logger.info("╚" + "═" * 58 + "╝")
+        logger.info("")
+        
+        result = AnalysisResult(
+            symbol=symbol,
+            status="pending",
+            timestamp=datetime.now(),
+            confluence_result=None,
+            trade_plans=[],
+            diagnostics={},
+            errors=[]
+        )
+        # Reset state for this analysis
+        self.context.reset()
+        self.context.symbol = symbol
+
     def get_pipeline_status(self) -> Dict[str, Any]:
         """
         Get status of all pipeline components.

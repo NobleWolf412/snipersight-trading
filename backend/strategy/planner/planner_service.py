@@ -87,7 +87,8 @@ def generate_trade_plan(
     current_price: float,
     missing_critical_timeframes: Optional[List[str]] = None,
     multi_tf_data: Optional[MultiTimeframeData] = None,
-    expected_trade_type: Optional[str] = None
+    expected_trade_type: Optional[str] = None,
+    volume_profile: Optional['VolumeProfile'] = None  # NEW: For HVN/LVN target filtering
 ) -> TradePlan:
     """
     Generate a complete, actionable trade plan.
@@ -286,7 +287,8 @@ def generate_trade_plan(
             rr_scale=1.0,
             confluence_breakdown=confluence_breakdown,
             multi_tf_data=multi_tf_data,
-            indicators=indicators
+            indicators=indicators,
+            volume_profile=volume_profile  # NEW: For HVN/LVN target filtering
         )
     except Exception as e:
         logger.error(f"Target calculation failed for {symbol}: {e}")

@@ -4,7 +4,7 @@ Market Regime Detector - Multi-dimensional analysis
 Detects market regime across multiple dimensions with hysteresis
 to prevent regime flip-flopping.
 """
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 import logging
 
@@ -20,9 +20,48 @@ logger = logging.getLogger(__name__)
 class RegimeDetector:
     """Detects market regime across multiple dimensions"""
     
-    def __init__(self):
+    def __init__(self, mode_profile: str = "stealth_balanced"):
         self.regime_history: List[MarketRegime] = []
         self.hysteresis_bars = 3  # Require N bars before flip
+        self.mode_profile = mode_profile
+        
+        # Cache for performance (Gap #4)
+        self._global_regime_cache = None
+        self._global_regime_cache_time = None
+        self._global_regime_ttl = 300  # 5 minutes for BTC global regime
+        
+        self._symbol_regime_cache = {}  # {symbol: (regime, timestamp)}
+        self._symbol_regime_ttl = 60  # 1 minute for individual symbols
+        
+        # Mode-specific regime detection thresholds
+        self.MODE_REGIME_THRESHOLDS = {
+            "macro_surveillance": {  # OVERWATCH: Stricter trend requirements
+                "min_trend_adx": 25,
+                "strong_trend_adx": 35,
+                "strong_momentum_slope": 3.0
+            },
+            "stealth_balanced": {  # STEALTH: Balanced (default)
+                "min_trend_adx": 20,
+                "strong_trend_adx": 30,
+                "strong_momentum_slope": 2.0
+            },
+            "intraday_aggressive": {  # STRIKE: More permissive for intraday
+                "min_trend_adx": 15,
+                "strong_trend_adx": 25,
+                "strong_momentum_slope": 1.5
+            },
+            "precision": {  # SURGICAL: Micro-trend detection
+                "min_trend_adx": 12,
+                "strong_trend_adx": 20,
+                "strong_momentum_slope": 1.0
+            }
+        }
+        
+        # Get mode-specific thresholds
+        self.thresholds = self.MODE_REGIME_THRESHOLDS.get(
+            mode_profile, 
+            self.MODE_REGIME_THRESHOLDS["stealth_balanced"]
+        )
         
     def detect_global_regime(
         self,
@@ -39,6 +78,13 @@ class RegimeDetector:
         Returns:
             MarketRegime with all dimensions analyzed
         """
+        
+        # Check cache (Gap #4)
+        if self._global_regime_cache is not None and self._global_regime_cache_time is not None:
+            age = (datetime.utcnow() - self._global_regime_cache_time).total_seconds()
+            if age < self._global_regime_ttl:
+                logger.debug(f"🗄️ Returning cached global regime (age={age:.1f}s)")
+                return self._global_regime_cache
         
         # 1. Trend Regime (HTF structure + MA slope)
         trend, trend_score = self._detect_trend(btc_data)
@@ -90,6 +136,10 @@ class RegimeDetector:
         # Apply hysteresis to prevent flip-flopping
         regime = self._apply_hysteresis(regime)
         
+        # Cache result (Gap #4)
+        self._global_regime_cache = regime
+        self._global_regime_cache_time = datetime.utcnow()
+        
         logger.info(
             "Global regime: %s (score=%.1f) - trend=%s, vol=%s, liq=%s, risk=%s",
             regime.composite, regime.score, trend, volatility, liquidity, risk_appetite
@@ -101,7 +151,8 @@ class RegimeDetector:
         self,
         symbol: str,
         data: MultiTimeframeData,
-        indicators: IndicatorSet
+        indicators: IndicatorSet,
+        cycle_context: Optional["CycleContext"] = None  # NEW: Cycle-aware override
     ) -> SymbolRegime:
         """
         Detect per-symbol local regime.
@@ -110,10 +161,19 @@ class RegimeDetector:
             symbol: Trading pair symbol
             data: Symbol multi-timeframe data
             indicators: Symbol indicators
+            cycle_context: Optional cycle context for extreme-zone overrides
             
         Returns:
             SymbolRegime with local trend/vol assessment
         """
+        
+        # Check cache (Gap #4)
+        if symbol in self._symbol_regime_cache:
+            cached_regime, cached_time = self._symbol_regime_cache[symbol]
+            age = (datetime.utcnow() - cached_time).total_seconds()
+            if age < self._symbol_regime_ttl:
+                logger.debug(f"🗄️ Returning cached regime for {symbol} (age={age:.1f}s)")
+                return cached_regime
         
         trend, _ = self._detect_trend(data)
         volatility, _ = self._detect_volatility(indicators)
@@ -121,12 +181,39 @@ class RegimeDetector:
         # Symbol score based on trend clarity + volatility quality
         score = self._score_symbol_regime(trend, volatility)
         
-        return SymbolRegime(
+        # === CYCLE-AWARE OVERRIDE (Gap #2) ===
+        # At cycle extremes, override regime to avoid penalizing valid reversal trades
+        if cycle_context:
+            from backend.shared.models.smc import CyclePhase, CycleTranslation
+            
+            # Override bearish regime at accumulation zones (DCL/WCL)
+            if trend in ("down", "strong_down"):
+                if (cycle_context.in_dcl_zone or 
+                    cycle_context.in_wcl_zone or 
+                    cycle_context.phase == CyclePhase.ACCUMULATION):
+                    logger.info(f"🔄 Regime override: {trend} → sideways at cycle low zone (allows longs)")
+                    trend = "sideways"
+                    score += 10  # Bonus for counter-trend at extreme
+            
+            # Override bullish regime at distribution with LTR
+            if trend in ("up", "strong_up"):
+                if (cycle_context.translation == CycleTranslation.LTR or
+                    cycle_context.phase == CyclePhase.DISTRIBUTION):
+                    logger.info(f"🔄 Regime override: {trend} → sideways at cycle high/LTR (allows shorts)")
+                    trend = "sideways"
+                    score += 10  # Bonus for counter-trend at extreme
+        
+        regime = SymbolRegime(
             symbol=symbol,
             trend=trend,
             volatility=volatility,
             score=score
         )
+        
+        # Cache result (Gap #4)
+        self._symbol_regime_cache[symbol] = (regime, datetime.utcnow())
+        
+        return regime
     
     def analyze_timeframe_trend(self, df, timeframe_label: str) -> tuple[str, float]:
         """
@@ -146,7 +233,20 @@ class RegimeDetector:
         
         # === 1. Calculate ADX for secondary confirmation ===
         adx_value = None
+        adx_diagnostic = {}  # Track WHY ADX might fail
+        
         try:
+            # Diagnostic: Check input data quality
+            df_len = len(df)
+            has_required_cols = all(col in df.columns for col in ['high', 'low', 'close'])
+            
+            if not has_required_cols:
+                logger.warning(f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: Missing required columns. Have: {df.columns.tolist()}")
+                adx_diagnostic['reason'] = 'missing_columns'
+                raise ValueError(f"Missing required columns for ADX calculation")
+            
+            logger.debug(f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: Starting calculation with {df_len} bars")
+            
             # Calculate ADX manually (14-period standard)
             df_copy = df.copy()
             
@@ -158,6 +258,10 @@ class RegimeDetector:
                     abs(row['low'] - df_copy['close'].shift(1).loc[row.name]) if row.name > df_copy.index[0] else row['high'] - row['low']
                 ), axis=1
             )
+            
+            # Diagnostic: Check TR calculation
+            tr_valid_count = df_copy['tr'].notna().sum()
+            logger.debug(f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: TR calculated, {tr_valid_count}/{df_len} valid values")
             
             # +DM and -DM
             df_copy['plus_dm'] = df_copy['high'].diff()
@@ -175,14 +279,35 @@ class RegimeDetector:
             df_copy['plus_di'] = 100 * (df_copy['plus_dm'].rolling(period).mean() / df_copy['atr14'])
             df_copy['minus_di'] = 100 * (df_copy['minus_dm'].rolling(period).mean() / df_copy['atr14'])
             
+            # Diagnostic: Check DI values
+            plus_di_final = df_copy['plus_di'].iloc[-1] if not df_copy['plus_di'].isna().all() else None
+            minus_di_final = df_copy['minus_di'].iloc[-1] if not df_copy['minus_di'].isna().all() else None
+            logger.debug(f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: +DI={plus_di_final:.1f if plus_di_final is not None else None}, -DI={minus_di_final:.1f if minus_di_final is not None else None}")
+            
             # DX and ADX
             df_copy['dx'] = 100 * abs(df_copy['plus_di'] - df_copy['minus_di']) / (df_copy['plus_di'] + df_copy['minus_di'] + 1e-10)
             df_copy['adx'] = df_copy['dx'].rolling(period).mean()
             
+            # Extract final ADX value
             adx_value = df_copy['adx'].iloc[-1]
-            logger.debug(f"ADX for {timeframe_label}: {adx_value:.1f}")
+            
+            # Diagnostic: Check if ADX is valid
+            if adx_value is None or (isinstance(adx_value, float) and (adx_value != adx_value)):  # NaN check
+                logger.warning(f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: Calculated ADX is None/NaN. DX series has {df_copy['dx'].notna().sum()} valid values")
+                adx_diagnostic['reason'] = 'nan_result'
+                adx_diagnostic['dx_valid_count'] = df_copy['dx'].notna().sum()
+                adx_value = None
+            else:
+                logger.info(f"✅ ADX [{timeframe_label}]: {adx_value:.1f} (valid calculation)")
+                adx_diagnostic['reason'] = 'success'
+                adx_diagnostic['value'] = adx_value
+                
         except Exception as e:
-            logger.debug(f"ADX calculation failed for {timeframe_label}: {e}")
+            error_type = type(e).__name__
+            logger.warning(f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: Calculation FAILED with {error_type}: {str(e)[:100]}")
+            logger.debug(f"🔍 ADX DIAGNOSTIC [{timeframe_label}]: Full error: {e}", exc_info=True)
+            adx_diagnostic['reason'] = f'exception_{error_type}'
+            adx_diagnostic['error'] = str(e)[:200]
             adx_value = None
         
         # === 2. Swing Structure Detection (50-bar lookback) ===
@@ -195,6 +320,15 @@ class RegimeDetector:
             swing_struct = detect_swing_structure(df, lookback=scaled_lookback)
             trend = swing_struct.trend
             
+            # Log swing points for debugging
+            if len(swing_struct.swing_points) > 0:
+                recent_5 = swing_struct.swing_points[-5:]
+                logger.info(f"📊 {timeframe_label} SWINGS (last 5): " + 
+                           " | ".join([f"{s.swing_type.upper()}@{s.price:.2f} (str={s.strength:.1f})" 
+                                       for s in recent_5]))
+            else:
+                logger.info(f"📊 {timeframe_label} SWINGS: No swings detected")
+            
             # Check momentum strength
             recent_swings = swing_struct.swing_points[-5:] if len(swing_struct.swing_points) >= 5 else []
             strong_swings = [s for s in recent_swings if s.strength > 1.5]
@@ -204,55 +338,77 @@ class RegimeDetector:
             df_copy = df.copy()
             df_copy['ma20'] = df_copy['close'].rolling(20).mean()
             
-            if not df_copy['ma20'].iloc[-20:].isna().all():
-                slope = (df_copy['ma20'].iloc[-1] - df_copy['ma20'].iloc[-20]) / df_copy['ma20'].iloc[-20] * 100
+            if not df_copy['ma20'].isna().all():
+                ma20_now = df_copy['ma20'].iloc[-1]
+                ma20_before = df_copy['ma20'].iloc[-20]
+                slope = (ma20_now - ma20_before) / ma20_before * 100
                 
                 atr = df_copy['high'].rolling(14).max() - df_copy['low'].rolling(14).min()
                 current_price = df_copy['close'].iloc[-1]
                 atr_pct = (atr.iloc[-1] / current_price * 100) if current_price > 0 else 1.0
                 normalized_slope = slope / max(atr_pct, 0.5)
+                
+                logger.info(f"📈 {timeframe_label} MA20: now={ma20_now:.2f} | 20bars_ago={ma20_before:.2f} | "
+                           f"slope={slope:.2f}% | norm_slope={normalized_slope:.2f} | price={current_price:.2f}")
             else:
                 normalized_slope = 0
+                logger.info(f"📈 {timeframe_label} MA20: Insufficient data for slope")
             
             # === 3. Classification with ADX Confirmation ===
             
+            # Get mode-specific thresholds
+            strong_slope_threshold = self.thresholds["strong_momentum_slope"]
+            
             # If swing structure found a trend
             if trend == 'bullish':
-                if has_strong_momentum and normalized_slope > 2.0:
-                    logger.info(f"Regime {timeframe_label}: STRONG_UP (swing=bullish, ADX={adx_value:.1f if adx_value else 0})")
+                if has_strong_momentum and normalized_slope > strong_slope_threshold:
+                    adx_str = f"{adx_value:.1f}" if adx_value is not None else "N/A"
+                    logger.info(f"Regime {timeframe_label}: STRONG_UP (swing=bullish, slope={normalized_slope:.1f}, ADX={adx_str})")
                     return "strong_up", 85.0, "Impulsive Buy Pressure"
                 else:
-                    logger.info(f"Regime {timeframe_label}: UP (swing=bullish, ADX={adx_value:.1f if adx_value else 0})")
+                    adx_str = f"{adx_value:.1f}" if adx_value is not None else "N/A"
+                    logger.info(f"Regime {timeframe_label}: UP (swing=bullish, ADX={adx_str})")
                     return "up", 70.0, "Higher Highs & Lows"
             
             elif trend == 'bearish':
-                if has_strong_momentum and normalized_slope < -2.0:
-                    logger.info(f"Regime {timeframe_label}: STRONG_DOWN (swing=bearish, ADX={adx_value:.1f if adx_value else 0})")
+                if has_strong_momentum and normalized_slope < -strong_slope_threshold:
+                    adx_str = f"{adx_value:.1f}" if adx_value is not None else "N/A"
+                    logger.info(f"Regime {timeframe_label}: STRONG_DOWN (swing=bearish, slope={normalized_slope:.1f}, ADX={adx_str})")
                     return "strong_down", 15.0, "Heavy Sell Pressure"
                 else:
-                    logger.info(f"Regime {timeframe_label}: DOWN (swing=bearish, ADX={adx_value:.1f if adx_value else 0})")
+                    adx_str = f"{adx_value:.1f}" if adx_value is not None else "N/A"
+                    logger.info(f"Regime {timeframe_label}: DOWN (swing=bearish, ADX={adx_str})")
                     return "down", 30.0, "Lower Highs & Lows"
             
             else:
                 # Swing structure returned neutral/sideways
-                # Use ADX to confirm: ADX < 20 = definitely ranging
+                # Use mode-specific ADX thresholds to confirm
+                min_adx = self.thresholds["min_trend_adx"]
+                
+                logger.info(f"🔄 {timeframe_label} SIDEWAYS: swing_trend={trend} | "
+                           f"strong_swings={len(strong_swings)}/5 | has_momentum={has_strong_momentum}")
+                
                 if adx_value is not None:
-                    if adx_value < 20:
-                        logger.info(f"Regime {timeframe_label}: SIDEWAYS (ADX={adx_value:.1f} < 20, confirmed ranging)")
+                    if adx_value < min_adx:
+                        logger.info(f"✅ {timeframe_label}: SIDEWAYS (ADX={adx_value:.1f} < {min_adx}, confirmed ranging)")
                         return "sideways", 50.0, f"Ranging (ADX={adx_value:.1f})"
-                    elif adx_value < 25:
-                        logger.info(f"Regime {timeframe_label}: SIDEWAYS (ADX={adx_value:.1f}, weak trend)")
+                    elif adx_value < min_adx + 5:
+                        logger.info(f"✅ {timeframe_label}: SIDEWAYS (ADX={adx_value:.1f}, weak trend)")
                         return "sideways", 50.0, f"Weak Trend (ADX={adx_value:.1f})"
                     else:
-                        # ADX > 25 but no swing pattern = choppy/transitional
-                        logger.info(f"Regime {timeframe_label}: SIDEWAYS (ADX={adx_value:.1f} but no clear swing pattern)")
+                        # ADX > threshold but no swing pattern = choppy/transitional
+                        logger.info(f"✅ {timeframe_label}: SIDEWAYS (ADX={adx_value:.1f} but no clear swing pattern)")
                         return "sideways", 50.0, "Choppy / Transitional"
                 else:
-                    logger.info(f"Regime {timeframe_label}: SIDEWAYS (no swing pattern, ADX unavailable)")
+                    logger.info(f"✅ {timeframe_label}: SIDEWAYS (no swing pattern, ADX unavailable)")
                     return "sideways", 50.0, "Choppy / No Trend"
         
         except Exception as e:
-            logger.warning(f"Swing structure detection failed for {timeframe_label}: {e}, using fallback")
+            error_type = type(e).__name__
+            df_len = len(df) if df is not None else 0
+            logger.warning(f"🔍 Swing Structure DIAGNOSTIC [{timeframe_label}]: Detection FAILED with {error_type}. "
+                          f"DataFrame length: {df_len}, Error: {str(e)[:150]}")
+            logger.debug(f"🔍 Swing Structure DIAGNOSTIC [{timeframe_label}]: Full error", exc_info=True)
             
             # Fallback to simple MA slope
             if df.empty or 'close' not in df:
@@ -583,8 +739,11 @@ class RegimeDetector:
 
 
 # Singleton instance
-_regime_detector = RegimeDetector()
+_regime_detector = None
 
-def get_regime_detector() -> RegimeDetector:
-    """Get singleton regime detector instance."""
+def get_regime_detector(mode_profile: str = "stealth_balanced") -> RegimeDetector:
+    """Get singleton regime detector instance with mode profile."""
+    global _regime_detector
+    if _regime_detector is None or _regime_detector.mode_profile != mode_profile:
+        _regime_detector = RegimeDetector(mode_profile)
     return _regime_detector

@@ -28,9 +28,19 @@ from backend.shared.config.smc_config import (
 )
 
 
+# Mode-specific reversal timing windows (candles to wait for reversal confirmation)
+MODE_REVERSAL_WINDOWS = {
+    "macro_surveillance": 12,   # OVERWATCH: Patient HTF reversals
+    "stealth_balanced": 6,       # STEALTH: Balanced  
+    "intraday_aggressive": 4,    # STRIKE: Fast intraday
+    "precision": 3,              # SURGICAL: Immediate micro-reversals
+}
+
+
 def detect_liquidity_sweeps(
     df: pd.DataFrame,
-    config: SMCConfig | dict | None = None
+    config: SMCConfig | dict | None = None,
+    mode_profile: Optional[str] = None  # NEW: Mode-specific reversal windows
 ) -> List[LiquiditySweep]:
     """
     Detect liquidity sweeps in price data.
@@ -84,7 +94,13 @@ def detect_liquidity_sweeps(
     from backend.strategy.smc.bos_choch import _infer_timeframe
     inferred_tf = _infer_timeframe(df)
     swing_lookback = scale_lookback(smc_cfg.sweep_swing_lookback, inferred_tf)
-    max_sweep_candles = smc_cfg.sweep_max_sweep_candles
+    
+    # Mode-specific reversal window (Gap #3)
+    if mode_profile and mode_profile in MODE_REVERSAL_WINDOWS:
+        max_sweep_candles = MODE_REVERSAL_WINDOWS[mode_profile]
+    else:
+        max_sweep_candles = smc_cfg.sweep_max_sweep_candles
+    
     min_reversal_atr = smc_cfg.sweep_min_reversal_atr
     min_penetration_atr = getattr(smc_cfg, 'sweep_min_penetration_atr', 0.3)
     min_wick_atr = getattr(smc_cfg, 'sweep_min_wick_atr', 0.15)  # NEW: Min wick size
@@ -165,32 +181,40 @@ def detect_liquidity_sweeps(
                     reversal_distance = _get_downside_reversal_distance(
                         df, i, max_sweep_candles, target_high
                     )
-                    
+
                     if reversal_distance > 0:  # Any reversal detected
-                        # Check volume if required
-                        volume_spike = current_candle['volume'] > (avg_volume.iloc[i] * 1.5) if pd.notna(avg_volume.iloc[i]) else False
-                        
-                        if not require_volume_spike or volume_spike:
+                        # Enhanced volume confirmation with multiple tiers
+                        volume_ratio = current_candle['volume'] / avg_volume.iloc[i] if pd.notna(avg_volume.iloc[i]) and avg_volume.iloc[i] > 0 else 1.0
+                        volume_spike_moderate = volume_ratio >= 1.5  # Moderate spike
+                        volume_spike_strong = volume_ratio >= 2.0     # Strong institutional
+                        volume_spike_climactic = volume_ratio >= 3.0  # Climactic
+
+                        # Basic check for require_volume_spike flag
+                        if not require_volume_spike or volume_spike_moderate:
                             # Grade the sweep based on reversal strength
                             reversal_atr = reversal_distance / atr_value if atr_value > 0 else 0.0
                             grade_a_threshold = smc_cfg.grade_a_threshold * min_reversal_atr
                             grade_b_threshold = smc_cfg.grade_b_threshold * min_reversal_atr
                             grade = grade_pattern(reversal_atr, grade_a_threshold, grade_b_threshold)
-                            
+
                             # Phase 3: Check for reversal pattern
                             has_pattern = _check_reversal_pattern(df, i, 'high', 3)
-                            
-                            # Calculate confirmation level
+
+                            # Enhanced confirmation level (0-3) based on volume tiers + pattern
                             conf_level = 0
-                            if volume_spike:
-                                conf_level = 2 if has_pattern else 1
+                            if volume_spike_climactic:
+                                conf_level = 3  # Climactic volume (3x+) = highest confidence
+                            elif volume_spike_strong:
+                                conf_level = 3 if has_pattern else 2  # Strong volume (2x+) with/without pattern
+                            elif volume_spike_moderate:
+                                conf_level = 2 if has_pattern else 1  # Moderate volume (1.5x+) with/without pattern
                             elif has_pattern:
-                                conf_level = 1  # Pattern without volume = level 1
-                            
+                                conf_level = 1  # Pattern only, no volume = minimal confidence
+
                             sweep = LiquiditySweep(
                                 level=target_high,
                                 sweep_type="high",
-                                confirmation=volume_spike,
+                                confirmation=volume_spike_strong,  # Now requires 2x for "confirmed"
                                 timestamp=current_candle.name.to_pydatetime(),
                                 grade=grade,
                                 has_reversal_pattern=has_pattern,
@@ -221,32 +245,40 @@ def detect_liquidity_sweeps(
                     reversal_distance = _get_upside_reversal_distance(
                         df, i, max_sweep_candles, target_low
                     )
-                    
+
                     if reversal_distance > 0:  # Any reversal detected
-                        # Check volume if required
-                        volume_spike = current_candle['volume'] > (avg_volume.iloc[i] * 1.5) if pd.notna(avg_volume.iloc[i]) else False
-                        
-                        if not require_volume_spike or volume_spike:
+                        # Enhanced volume confirmation with multiple tiers
+                        volume_ratio = current_candle['volume'] / avg_volume.iloc[i] if pd.notna(avg_volume.iloc[i]) and avg_volume.iloc[i] > 0 else 1.0
+                        volume_spike_moderate = volume_ratio >= 1.5  # Moderate spike
+                        volume_spike_strong = volume_ratio >= 2.0     # Strong institutional
+                        volume_spike_climactic = volume_ratio >= 3.0  # Climactic
+
+                        # Basic check for require_volume_spike flag
+                        if not require_volume_spike or volume_spike_moderate:
                             # Grade the sweep based on reversal strength
                             reversal_atr = reversal_distance / atr_value if atr_value > 0 else 0.0
                             grade_a_threshold = smc_cfg.grade_a_threshold * min_reversal_atr
                             grade_b_threshold = smc_cfg.grade_b_threshold * min_reversal_atr
                             grade = grade_pattern(reversal_atr, grade_a_threshold, grade_b_threshold)
-                            
+
                             # Phase 3: Check for reversal pattern
                             has_pattern = _check_reversal_pattern(df, i, 'low', 3)
-                            
-                            # Calculate confirmation level
+
+                            # Enhanced confirmation level (0-3) based on volume tiers + pattern
                             conf_level = 0
-                            if volume_spike:
-                                conf_level = 2 if has_pattern else 1
+                            if volume_spike_climactic:
+                                conf_level = 3  # Climactic volume (3x+) = highest confidence
+                            elif volume_spike_strong:
+                                conf_level = 3 if has_pattern else 2  # Strong volume (2x+) with/without pattern
+                            elif volume_spike_moderate:
+                                conf_level = 2 if has_pattern else 1  # Moderate volume (1.5x+) with/without pattern
                             elif has_pattern:
-                                conf_level = 1  # Pattern without volume = level 1
-                            
+                                conf_level = 1  # Pattern only, no volume = minimal confidence
+
                             sweep = LiquiditySweep(
                                 level=target_low,
                                 sweep_type="low",
-                                confirmation=volume_spike,
+                                confirmation=volume_spike_strong,  # Now requires 2x for "confirmed"
                                 timestamp=current_candle.name.to_pydatetime(),
                                 grade=grade,
                                 has_reversal_pattern=has_pattern,

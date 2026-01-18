@@ -390,6 +390,35 @@ class Consolidation:
 
 
 @dataclass
+class FilterStats:
+    """
+    Statistics for mode-specific pattern filtering.
+    
+    Tracks how many patterns were detected vs filtered by mode requirements.
+    """
+    detected: int
+    after_filter: int
+    
+    @property
+    def filtered_count(self) -> int:
+        """Calculate number of patterns filtered out."""
+        return self.detected - self.after_filter
+
+
+@dataclass
+class SMCFilterMetadata:
+    """
+    Complete filter statistics for all SMC pattern types.
+    
+    Shows user how mode-specific filtering affected pattern counts.
+    """
+    order_blocks: Optional[FilterStats] = None
+    fvgs: Optional[FilterStats] = None
+    sweeps: Optional[FilterStats] = None
+    structure_breaks: Optional[FilterStats] = None
+
+
+@dataclass
 class SMCSnapshot:
     """
     Complete SMC analysis snapshot for a symbol.
@@ -406,6 +435,7 @@ class SMCSnapshot:
         equal_highs: Price levels with clustered equal highs (DEPRECATED - use liquidity_pools)
         equal_lows: Price levels with clustered equal lows (DEPRECATED - use liquidity_pools)
         liquidity_pools: List of structured LiquidityPool objects (NEW)
+        filter_metadata: Filter statistics for UI display (NEW)
     """
     order_blocks: List[OrderBlock]
     fvgs: List[FVG]
@@ -420,6 +450,7 @@ class SMCSnapshot:
     key_levels: Optional[dict] = None  # KeyLevels.to_dict()
     htf_sweep_context: Optional[dict] = None  # HTF sweep context for LTF synergy bonus
     htf_levels: List[Any] = field(default_factory=list)  # Deduced HTF S/R and Fib levels from analysis
+    filter_metadata: Optional[SMCFilterMetadata] = None  # NEW: Mode filter statistics for UI
     
     def __post_init__(self):
         """Initialize empty lists if None provided."""
