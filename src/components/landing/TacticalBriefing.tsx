@@ -28,7 +28,8 @@ function getThreatLevel(score: number): { level: string; color: string; bgColor:
 // Get dominance signal
 function getDominanceSignal(btcD: number, stableD: number): { signal: string; color: string } {
   if (stableD > 10) return { signal: 'DEFENSIVE', color: 'text-destructive' };
-  if (btcD > 55) return { signal: 'BTC SEASON', color: 'text-blue-400' };
+  if (btcD >= 55) return { signal: 'BTC SEASON', color: 'text-blue-400' };
+  if (btcD >= 50) return { signal: 'NEUTRAL', color: 'text-warning' };
   return { signal: 'ALT SEASON', color: 'text-success' };
 }
 
@@ -326,13 +327,17 @@ export function TacticalBriefing() {
                 dominanceSignal.color === 'text-success' && 'border-success/30',
                 dominanceSignal.color === 'text-destructive' && 'border-destructive/30',
                 dominanceSignal.color === 'text-blue-400' && 'border-blue-400/30',
+                dominanceSignal.color === 'text-warning' && 'border-warning/30',
               )}>
                 <div className={cn('w-1.5 h-1.5 rounded-full animate-pulse',
                   dominanceSignal.color === 'text-success' && 'bg-success',
                   dominanceSignal.color === 'text-destructive' && 'bg-destructive',
                   dominanceSignal.color === 'text-blue-400' && 'bg-blue-400',
+                  dominanceSignal.color === 'text-warning' && 'bg-warning',
                 )} />
-                <span className={dominanceSignal.color}>{dominanceSignal.signal}</span>
+                <span className={dominanceSignal.color}>
+                  {dominanceSignal.signal} <span className="opacity-70">({btcD.toFixed(1)}%)</span>
+                </span>
               </div>
             </div>
           </div>

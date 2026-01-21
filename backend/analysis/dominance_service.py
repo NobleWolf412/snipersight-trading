@@ -28,7 +28,7 @@ CRYPTOCOMPARE_API_URL = "https://min-api.cryptocompare.com/data/top/mktcapfull"
 # Cache settings
 CACHE_DIR = Path("backend/cache/dominance")
 CACHE_FILE = CACHE_DIR / "dominance_cache.json"
-CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours
+CACHE_TTL_SECONDS = 60 * 60  # 1 hour (was 24h)
 
 # Coins to track for stablecoin dominance
 STABLECOINS = {"USDT", "USDC", "DAI", "BUSD", "TUSD", "USDP", "FRAX", "GUSD"}

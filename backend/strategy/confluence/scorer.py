@@ -39,7 +39,7 @@ from backend.analysis.fibonacci import (
 # === FILE LOGGING FOR CONFLUENCE BREAKDOWN ===
 # Automatically write detailed breakdowns to file for investigation
 
-BREAKDOWN_LOG_PATH = "/tmp/confluence_breakdown.log"
+BREAKDOWN_LOG_PATH = "logs/confluence_breakdown.log"
 try:
     BREAKDOWN_LOG_FILE = open(BREAKDOWN_LOG_PATH, "a", buffering=1)  # Line buffered
     logger.info(f"📝 Confluence breakdown logging to: {BREAKDOWN_LOG_PATH}")
@@ -104,6 +104,8 @@ MODE_FACTOR_WEIGHTS = {
         "institutional_sequence": 0.15,
         "timeframe_conflict": 0.10,
         "macd_veto": 0.05,
+        "close_momentum": 0.06,
+        "multi_close_confirm": 0.08,
     },
     "intraday_aggressive": {  # STRIKE
         "order_block": 0.18,
@@ -131,6 +133,8 @@ MODE_FACTOR_WEIGHTS = {
         "institutional_sequence": 0.12,
         "timeframe_conflict": 0.12,
         "macd_veto": 0.05,
+        "close_momentum": 0.08,
+        "multi_close_confirm": 0.07,
     },
     "precision": {  # SURGICAL
         "order_block": 0.15,
@@ -158,6 +162,8 @@ MODE_FACTOR_WEIGHTS = {
         "institutional_sequence": 0.10,
         "timeframe_conflict": 0.15,
         "macd_veto": 0.05,
+        "close_momentum": 0.09,
+        "multi_close_confirm": 0.06,
     },
     "stealth_balanced": {  # STEALTH
         "order_block": 0.20,
@@ -185,6 +191,8 @@ MODE_FACTOR_WEIGHTS = {
         "institutional_sequence": 0.12,
         "timeframe_conflict": 0.10,
         "macd_veto": 0.05,
+        "close_momentum": 0.07,
+        "multi_close_confirm": 0.08,
     },
     # Surgical alias
     "surgical": {  # Maps to precision
@@ -211,6 +219,8 @@ MODE_FACTOR_WEIGHTS = {
         "institutional_sequence": 0.10,
         "timeframe_conflict": 0.15,
         "macd_veto": 0.05,
+        "close_momentum": 0.09,
+        "multi_close_confirm": 0.06,
     },
     # Overwatch alias
     "overwatch": {  # Maps to macro_surveillance
@@ -238,6 +248,8 @@ MODE_FACTOR_WEIGHTS = {
         "institutional_sequence": 0.15,
         "timeframe_conflict": 0.10,
         "macd_veto": 0.05,
+        "close_momentum": 0.06,
+        "multi_close_confirm": 0.08,
     },
     # Strike alias
     "strike": {  # Maps to intraday_aggressive
@@ -265,6 +277,8 @@ MODE_FACTOR_WEIGHTS = {
         "institutional_sequence": 0.12,
         "timeframe_conflict": 0.12,
         "macd_veto": 0.05,
+        "close_momentum": 0.08,
+        "multi_close_confirm": 0.07,
     },
 }
 
@@ -1255,8 +1269,12 @@ def evaluate_weekly_stoch_rsi_gate(
 
 
 def _score_regime_alignment(
-    regime, direction: str, max_bonus: float = 15.0, max_penalty: float = 12.0  # SymbolRegime
-) -> Dict:
+    regime: Any,
+    direction: str,
+    max_bonus: float = 10.0,
+    max_penalty: float = 10.0,
+    scanner_profile: str = "balanced",
+) -> Dict[str, Any]:
     """
     Calculate regime alignment bonus/penalty for confluence scoring.
 
@@ -1364,19 +1382,68 @@ def _score_regime_alignment(
             result["factor_score"] = max(0.0, min(100.0, 50.0 + result["adjustment"] * 5.0))
 
     else:  # sideways
-        # Ranging market - small penalty for either direction unless volatility suggests opportunity
-        if volatility == "compressed":
-            # Compressed volatility in range = good for breakout anticipation (neutral)
-            result["adjustment"] = 0.0
-            result["aligned"] = True
-            result["reason"] = f"Sideways regime with {volatility} volatility (breakout potential)"
-            result["factor_score"] = 50.0
+        # Mode-aware scoring for ranging markets
+        profile = scanner_profile.lower()
+        is_scalp_mode = profile in ("precision", "surgical")
+        is_breakout_mode = profile in ("overwatch", "strike")
+        is_stealth_mode = "stealth" in profile or "balanced" in profile
+        
+        if is_scalp_mode:
+            # Scalp modes LOVE ranges (support/resistance bounces)
+            if volatility == "compressed":
+                 # Compressed = breakout soon (risky for scalp but good for direction if caught)
+                result["adjustment"] = 2.0
+                result["factor_score"] = 65.0
+                result["reason"] = f"Sideways/Compressed regime - coiled range (good for {profile} scalping)"
+            elif volatility == "normal":
+                # Normal volatility in range = Perfect for scalping levels
+                result["adjustment"] = 1.0
+                result["factor_score"] = 60.0
+                result["reason"] = f"Sideways regime - tradable range for {profile} mode"
+            else:
+                # High/Excessive = risky chop
+                result["adjustment"] = 0.0
+                result["factor_score"] = 50.0
+                result["reason"] = f"Sideways regime with {volatility} volatility - risky chop"
+        
+        elif is_stealth_mode:
+            # Stealth/Balanced mode: Opportunistic
+            # Likes compressed (accumulation/distributions) but cautious of undefined chop
+            if volatility == "compressed":
+                result["adjustment"] = 1.0
+                result["factor_score"] = 60.0
+                result["reason"] = f"Sideways/Compressed regime - accumulation potential (Stealth entry)"
+            elif volatility == "normal":
+                # Neutral - rely on other confluence factors
+                result["adjustment"] = -1.0
+                result["factor_score"] = 45.0
+                result["reason"] = f"Sideways regime - neutral structure (rely on SMC)"
+            else:
+                # High volatility in range = noise
+                result["adjustment"] = -5.0
+                result["factor_score"] = 35.0
+                result["reason"] = f"Sideways regime with {volatility} volatility - avoid noise"
+
+        elif is_breakout_mode and volatility == "compressed":
+            # Breakout modes like compressed ranges
+            result["adjustment"] = 1.0
+            result["factor_score"] = 60.0
+            result["reason"] = f"Sideways/Compressed regime - potential breakout setup for {profile}"
+            
         else:
-            # Normal/elevated volatility in range = penalize (chop)
-            result["adjustment"] = -3.0
-            result["aligned"] = True  # Not opposing, just unclear
-            result["reason"] = f"Sideways regime - no directional edge"
-            result["factor_score"] = 40.0
+            # Swing modes (macro, intraday) or breakout with wrong volatility
+            # Ranging market = bad for swing trading
+            if volatility == "compressed":
+                result["adjustment"] = 0.0
+                result["factor_score"] = 50.0
+                result["reason"] = f"Sideways regime with {volatility} volatility (breakout potential)"
+            else:
+                # Normal/elevated volatility in range = penalize (chop)
+                result["adjustment"] = -5.0
+                result["factor_score"] = 35.0 # Increased penalty from 40->35
+                result["reason"] = f"Sideways regime - no directional edge (bad for {profile})"
+        
+        result["aligned"] = True # Not opposing, just different quality levels
 
     return result
 
@@ -1735,6 +1802,46 @@ def calculate_confluence_score(
                     rationale=mtf_rationale,
                 )
             )
+
+        # --- Close Quality Confluence ---
+        # NEW: Reward strong closes that show conviction
+        
+        # Close Momentum: Position within candle range
+        close_momentum_score, close_momentum_rationale = _score_close_momentum(
+            indicators=indicators,
+            direction=direction,
+            primary_tf=primary_tf or "4h",
+        )
+        if close_momentum_score > 0:
+            factors.append(
+                ConfluenceFactor(
+                    name="Close Momentum",
+                    score=close_momentum_score,
+                    weight=get_w("close_momentum", 0.07),
+                    rationale=close_momentum_rationale,
+                )
+            )
+            logger.debug(f"📍 Close Momentum: {close_momentum_rationale}")
+        
+        # Multi-Candle Close Confirmation: Consecutive closes beyond levels
+        if current_price:  # Need price reference
+            multi_close_score, multi_close_rationale = _score_multi_close_confirmation(
+                indicators=indicators,
+                smc_snapshot=smc_snapshot,
+                direction=direction,
+                current_price=current_price,
+                primary_tf=primary_tf or "4h",
+            )
+            if multi_close_score > 0:
+                factors.append(
+                    ConfluenceFactor(
+                        name="Multi-Candle Confirmation",
+                        score=multi_close_score,
+                        weight=get_w("multi_close_confirm", 0.07),
+                        rationale=multi_close_rationale,
+                    )
+                )
+                logger.debug(f"📍 Multi-Candle Confirmation: {multi_close_rationale}")
 
     # --- Volume Profile (Institutional VAP Analysis) ---
     # Only if volume profile and current price are available
@@ -2252,7 +2359,11 @@ def calculate_confluence_score(
     if regime is not None:
         try:
             regime_result = _score_regime_alignment(
-                regime=regime, direction=direction, max_bonus=15.0, max_penalty=12.0
+                regime=regime,
+                direction=direction,
+                max_bonus=15.0,
+                max_penalty=12.0,
+                scanner_profile=getattr(config, "profile", "balanced"),
             )
 
             # Add as weighted factor (regime alignment is important for timing)
@@ -2928,6 +3039,10 @@ def calculate_confluence_score(
     # --- Final Score ---
 
     raw_score = weighted_score + synergy_bonus - conflict_penalty
+    
+    # CRITICAL: Cap raw_score immediately to prevent overflow
+    # Close-quality factors can push high-scoring setups over 100
+    raw_score = max(0.0, min(100.0, raw_score))
 
     # ===========================================================================
     # === VARIANCE AMPLIFICATION CURVE - TEMPORARILY DISABLED ===
@@ -2974,7 +3089,9 @@ def calculate_confluence_score(
     #     logger.debug("❌ Poor dampen: %.1f → %.1f (-%.1f)",
     #                 raw_score, final_score, raw_score - final_score)
 
-    final_score = max(0.0, min(100.0, final_score))  # Clamp to 0-100
+    # CRITICAL FIX: Clamp score to 0-100 BEFORE creating ConfluenceBreakdown
+    # This prevents validation errors when synergy bonuses push score > 100
+    final_score = max(0.0, min(100.0, final_score))
 
     breakdown = ConfluenceBreakdown(
         total_score=final_score,
@@ -3499,7 +3616,7 @@ def _score_liquidity_sweeps(sweeps: List[LiquiditySweep], direction: str) -> flo
         getattr(best_sweep, "timeframe", "?"),
     )
 
-    return score
+    return min(100.0, score)
 
 
 # --- Indicator Scoring Functions ---
@@ -4300,12 +4417,30 @@ def _get_sweep_rationale(sweeps: List[LiquiditySweep], direction: str) -> str:
 def _get_momentum_rationale(indicators: IndicatorSnapshot, direction: str) -> str:
     """Generate rationale for momentum factor."""
     parts = []
+    
+    # Determine actual momentum state based on indicator values
+    rsi_state = None
+    stoch_state = None
+    mfi_state = None
 
     if indicators.rsi is not None:
         parts.append(f"RSI {indicators.rsi:.1f}")
+        if indicators.rsi < 30:
+            rsi_state = "oversold"
+        elif indicators.rsi > 70:
+            rsi_state = "overbought"
+        else:
+            rsi_state = "neutral"
 
     if indicators.stoch_rsi is not None:
         parts.append(f"Stoch {indicators.stoch_rsi:.1f}")
+        if indicators.stoch_rsi < 20:
+            stoch_state = "oversold"
+        elif indicators.stoch_rsi > 80:
+            stoch_state = "overbought"
+        else:
+            stoch_state = "neutral"
+            
     # Include K/D relationship if available
     k = getattr(indicators, "stoch_rsi_k", None)
     d = getattr(indicators, "stoch_rsi_d", None)
@@ -4321,14 +4456,46 @@ def _get_momentum_rationale(indicators: IndicatorSnapshot, direction: str) -> st
 
     if indicators.mfi is not None:
         parts.append(f"MFI {indicators.mfi:.1f}")
+        if indicators.mfi < 20:
+            mfi_state = "oversold"
+        elif indicators.mfi > 80:
+            mfi_state = "overbought"
+        else:
+            mfi_state = "neutral"
+            
     if (
         getattr(indicators, "macd_line", None) is not None
         and getattr(indicators, "macd_signal", None) is not None
     ):
         parts.append(f"MACD {indicators.macd_line:.3f} vs signal {indicators.macd_signal:.3f}")
 
-    status = "oversold" if direction == "bullish" else "overbought"
-    return f"Momentum indicators show {status}: {', '.join(parts)}"
+    # Determine dominant state (prioritize RSI > Stoch > MFI)
+    states = [s for s in [rsi_state, stoch_state, mfi_state] if s is not None]
+    if not states:
+        status_text = "Momentum indicators"
+    else:
+        # Count occurrences
+        from collections import Counter
+        state_counts = Counter(states)
+        
+        # Determine most common state
+        if len(state_counts) == 1:
+            # All agree
+            dominant_state = states[0]
+            status_text = f"Momentum indicators show {dominant_state}"
+        else:
+            # Mixed - report what's actually happening
+            status_parts = []
+            if state_counts.get("overbought", 0) > 0:
+                status_parts.append(f"{state_counts['overbought']} overbought")
+            if state_counts.get("oversold", 0) > 0:
+                status_parts.append(f"{state_counts['oversold']} oversold")
+            if state_counts.get("neutral", 0) > 0:
+                status_parts.append(f"{state_counts['neutral']} neutral")
+            status_text = f"Mixed momentum: {', '.join(status_parts)}"
+    
+    return f"{status_text}: {', '.join(parts)}"
+
 
 
 def _get_volume_rationale(indicators: IndicatorSnapshot) -> str:
@@ -4509,3 +4676,222 @@ def _score_mtf_indicator_confluence(indicators: IndicatorSet, direction: str) ->
 
     rationale = " | ".join(rationale_parts) if rationale_parts else ""
     return score, rationale
+
+
+# ==============================================================================
+# CLOSE-QUALITY CONFLUENCE HELPERS
+# ==============================================================================
+
+
+def _calculate_close_strength(close: float, level: float, atr: float) -> float:
+    """
+    Calculate ATR-normalized close distance from a level.
+    
+    Used to measure how far a candle closed beyond a structural level,
+    normalized by ATR to make it comparable across different volatilities.
+    
+    Args:
+        close: Candle close price
+        level: Structural level (BOS level, sweep level, etc.)
+        atr: Average True Range for normalization
+        
+    Returns:
+        float: Close distance in ATR units (positive = bullish, negative = bearish)
+    """
+    if atr <= 0:
+        return 0.0
+    
+    return (close - level) / atr
+
+
+def _score_close_momentum(
+    indicators: IndicatorSet,
+    direction: str,
+    primary_tf: str = "4h",
+) -> tuple[float, str]:
+    """
+    Score candle close momentum based on position within candle range.
+    
+    Bullish setups reward closes near candle highs (top 15% of range).
+    Bearish setups reward closes near candle lows (bottom 15% of range).
+    
+    Args:
+        indicators: IndicatorSet with dataframe access
+        direction: 'bullish' or 'bearish'
+        primary_tf: Primary timeframe to check (default: '4h')
+        
+    Returns:
+        tuple: (score 0-100, rationale string)
+    """
+    try:
+        # Get dataframe for primary timeframe
+        if not indicators.has_timeframe(primary_tf):
+            return 0.0, ""
+        
+        ind = indicators.by_timeframe[primary_tf]
+        if not hasattr(ind, 'dataframe') or ind.dataframe is None or len(ind.dataframe) == 0:
+            return 0.0, ""
+        
+        df = ind.dataframe
+        latest = df.iloc[-1]
+        
+        high = latest['high']
+        low = latest['low']
+        close = latest['close']
+        
+        candle_range = high - low
+        if candle_range <= 0:
+            return 0.0, ""
+        
+        # Calculate close position (0 = low, 1 = high)
+        close_position = (close - low) / candle_range
+        
+        # Score based on direction
+        if direction in ('bullish', 'long'):
+            # Bullish: reward closes near highs  
+            if close_position >= 0.85:  # Top 15%
+                score = 100.0
+                rationale = f"Bullish close near highs ({close_position*100:.0f}% of range)"
+            elif close_position >= 0.70:  # Top 30%
+                score = 70.0
+                rationale = f"Strong bullish close ({close_position*100:.0f}% of range)"
+            elif close_position >= 0.50:  # Above midpoint
+                score = 40.0
+                rationale = f"Moderate bullish close ({close_position*100:.0f}% of range)"
+            else:
+                return 0.0, ""  # Weak close, no bonus
+                
+        else:  # bearish/short
+            # Bearish: reward closes near lows
+            if close_position <= 0.15:  # Bottom 15%
+                score = 100.0
+                rationale = f"Bearish close near lows ({(1-close_position)*100:.0f}% from high)"
+            elif close_position <= 0.30:  # Bottom 30%
+                score = 70.0
+                rationale = f"Strong bearish close ({(1-close_position)*100:.0f}% from high)"
+            elif close_position <= 0.50:  # Below midpoint
+                score = 40.0
+                rationale = f"Moderate bearish close ({(1-close_position)*100:.0f}% from high)"
+            else:
+                return 0.0, ""  # Weak close, no bonus
+        
+        return score, rationale
+        
+    except Exception as e:
+        logger.debug(f"Close momentum scoring failed: {e}")
+        return 0.0, ""
+
+
+def _score_multi_close_confirmation(
+    indicators: IndicatorSet,
+    smc_snapshot: SMCSnapshot,
+    direction: str,
+    current_price: float,
+    primary_tf: str = "4h",
+) -> tuple[float, str]:
+    """
+    Score multi-candle close confirmation beyond structural levels.
+    
+    Awards bonus when multiple consecutive closes stay beyond a key level,
+    showing sustained commitment rather than a brief spike.
+    
+    Args:
+        indicators: IndicatorSet with dataframe access
+        smc_snapshot: SMCSnapshot with structural levels
+        direction: 'bullish' or 'bearish'
+        current_price: Current market price
+        primary_tf: Primary timeframe to check (default: '4h')
+        
+    Returns:
+        tuple: (score 0-100, rationale string)
+    """
+    try:
+        # Get dataframe
+        if not indicators.has_timeframe(primary_tf):
+            return 0.0, ""
+        
+        ind = indicators.by_timeframe[primary_tf]
+        if not hasattr(ind, 'dataframe') or ind.dataframe is None or len(ind.dataframe) < 3:
+            return 0.0, ""
+        
+        df = ind.dataframe
+        recent_closes = df['close'].tail(3).values  # Last 3 closes
+        
+        # Find nearest structural level in our direction
+        nearest_level = None
+        level_type = ""
+        
+        if direction in ('bullish', 'long'):
+            # For longs, look for support levels we've closed above
+            candidates = []
+            
+            # Check BOS/CHoCH levels (bullish breaks)
+            for brk in smc_snapshot.structural_breaks:
+                if getattr(brk, 'direction', '') == 'bullish' and brk.level < current_price:
+                    candidates.append((brk.level, f"{brk.break_type} level"))
+            
+            # Check liquidity sweep lows
+            for sweep in smc_snapshot.liquidity_sweeps:
+                if sweep.sweep_type == 'low' and sweep.level < current_price:
+                    candidates.append((sweep.level, "sweep low"))
+            
+            # Get nearest below current price
+            if candidates:
+                nearest_level, level_type = max(candidates, key=lambda x: x[0])
+        
+        else:  # bearish/short
+            # For shorts, look for resistance levels we've closed below
+            candidates = []
+            
+            # Check BOS/CHoCH levels (bearish breaks)
+            for brk in smc_snapshot.structural_breaks:
+                if getattr(brk, 'direction', '') == 'bearish' and brk.level > current_price:
+                    candidates.append((brk.level, f"{brk.break_type} level"))
+            
+            # Check liquidity sweep highs
+            for sweep in smc_snapshot.liquidity_sweeps:
+                if sweep.sweep_type == 'high' and sweep.level > current_price:
+                    candidates.append((sweep.level, "sweep high"))
+            
+            # Get nearest above current price
+            if candidates:
+                nearest_level, level_type = min(candidates, key=lambda x: x[0])
+        
+        if nearest_level is None:
+            return 0.0, ""
+        
+        # Check how many consecutive closes are beyond the level
+        closes_beyond = 0
+        if direction in ('bullish', 'long'):
+            # Count closes above level
+            for close in recent_closes:
+                if close > nearest_level:
+                    closes_beyond += 1
+                else:
+                    break  # Stop at first close that's not beyond
+        else:
+            # Count closes below level
+            for close in recent_closes:
+                if close < nearest_level:
+                    closes_beyond += 1
+                else:
+                    break
+        
+        # Score based on number of confirmed closes
+        if closes_beyond >= 3:
+            score = 100.0
+            rationale = f"3 consecutive closes beyond {level_type} - strong confirmation"
+        elif closes_beyond == 2:
+            score = 70.0
+            rationale = f"2 consecutive closes beyond {level_type} - good confirmation"
+        elif closes_beyond == 1:
+            # Only 1 close beyond - minimal confirmation
+            return 0.0, ""
+        else:
+            return 0.0, ""
+        
+        return score, rationale
+        
+    except Exception as e:
+        logger.debug(f"Multi-close confirmation scoring failed: {e}")
+        return 0.0, ""

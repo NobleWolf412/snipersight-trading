@@ -35,6 +35,16 @@ from backend.shared.models.planner import TradePlan
 from backend.shared.models.regime import MarketRegime, SymbolRegime
 from backend.analysis.regime_detector import get_regime_detector
 from backend.analysis.regime_policies import get_regime_policy
+from backend.shared.utils.logging_utils import (
+    log_pipeline_stage,
+    log_rejection,
+    log_timing,
+    format_scan_summary,
+    log_data_quality,
+    log_pattern_detection_summary,
+    log_confluence_reference,
+    time_operation,
+)
 from backend.strategy.smc.volume_profile import calculate_volume_profile
 
 from backend.engine.context import SniperContext
@@ -49,7 +59,10 @@ from backend.engine.cooldown_manager import CooldownManager
 # Domain Services
 from backend.services.indicator_service import configure_indicator_service
 from backend.services.smc_service import configure_smc_service
-from backend.services.confluence_service import configure_confluence_service
+from backend.services.confluence_service import (
+    configure_confluence_service,
+    ConflictingDirectionsException,
+)
 from backend.bot.telemetry.logger import get_telemetry_logger
 from backend.strategy.smc.reversal_detector import (
     detect_reversal_context,
@@ -539,6 +552,16 @@ class Orchestrator:
                 len(symbols),
                 " | ".join(reason_parts),
             )
+
+        # Log comprehensive scan summary using helper
+        summary_str = format_scan_summary(
+            symbols_scanned=len(symbols),
+            signals_generated=len(signals),
+            signals_rejected=rejected_count,
+            duration_sec=duration,
+            rejection_breakdown=rejection_summary["by_reason"]
+        )
+        logger.info(summary_str)
 
         self._progress(
             "COMPLETE",
@@ -1075,7 +1098,48 @@ class Orchestrator:
             logger.error(f"Confluence service failed for {symbol}: {error_msg}")
             logger.error(f"Full traceback:\n{traceback.format_exc()}")
 
-            # Categorize conflicting signals errors properly for rejection display
+            # Special handling for conflicting directions - preserve both breakdowns
+            if isinstance(e, ConflictingDirectionsException):
+                bullish = e.bullish_breakdown
+                bearish = e.bearish_breakdown
+                gap = abs(bullish.total_score - bearish.total_score)
+                
+                return None, {
+                    "symbol": symbol,
+                    "reason": error_msg,
+                    "reason_type": "low_confluence",
+                    "detail": "Confluence scores tied with no clear directional edge",
+                    # Dual-direction data
+                    "bullish_score":bullish.total_score,
+                    "bearish_score": bearish.total_score,
+                    "gap": gap,
+                    "bullish_factors": [
+                        {
+                            "name": f.name,
+                            "score": f.score,
+                            "weight": f.weight,
+                            "weighted_contribution": f.score * f.weight,
+                            "rationale": f.rationale,
+                        }
+                        for f in bullish.factors
+                    ],
+                    "bearish_factors": [
+                        {
+                            "name": f.name,
+                            "score": f.score,
+                            "weight": f.weight,
+                            "weighted_contribution": f.score * f.weight,
+                            "rationale": f.rationale,
+                        }
+                        for f in bearish.factors
+                    ],
+                    "bullish_synergy": bullish.synergy_bonus,
+                    "bullish_conflict": bullish.conflict_penalty,
+                    "bearish_synergy": bearish.synergy_bonus,
+                    "bearish_conflict": bearish.conflict_penalty,
+                }
+
+            # Legacy error handling for other exceptions
             if "Conflicting signals" in error_msg or "No directional edge" in error_msg:
                 return None, {
                     "symbol": symbol,

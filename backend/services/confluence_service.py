@@ -17,6 +17,16 @@ from backend.strategy.confluence.scorer import calculate_confluence_score, Confl
 logger = logging.getLogger(__name__)
 
 
+class ConflictingDirectionsException(Exception):
+    """Raised when bullish and bearish scores are too close to call."""
+    
+    def __init__(self, message: str, bullish_breakdown: ConfluenceBreakdown, bearish_breakdown: ConfluenceBreakdown):
+        super().__init__(message)
+        self.bullish_breakdown = bullish_breakdown
+        self.bearish_breakdown = bearish_breakdown
+
+
+
 class ConfluenceService:
     """
     Service for computing confluence scores.
@@ -341,8 +351,10 @@ class ConfluenceService:
                                     "bearish_structure": bearish_structure,
                                 }
 
-                                raise ValueError(
-                                    f"Conflicting signals ({bullish_breakdown.total_score:.1f}%) - bullish and bearish scores too close to call (<8pt margin) in neutral market"
+                                raise ConflictingDirectionsException(
+                                    f"Conflicting signals ({bullish_breakdown.total_score:.1f}%) - bullish and bearish scores too close to call (<8pt margin) in neutral market",
+                                    bullish_breakdown=bullish_breakdown,
+                                    bearish_breakdown=bearish_breakdown
                                 )
 
                         else:
@@ -360,8 +372,10 @@ class ConfluenceService:
                                 "tie_break_used": "skipped_no_edge",
                             }
 
-                            raise ValueError(
-                                f"No directional edge ({bullish_breakdown.total_score:.1f}%) - bullish and bearish scores too close to call (<8pt margin) in neutral market"
+                            raise ConflictingDirectionsException(
+                                f"No directional edge ({bullish_breakdown.total_score:.1f}%) - bullish and bearish scores too close to call (<8pt margin) in neutral market",
+                                bullish_breakdown=bullish_breakdown,
+                                bearish_breakdown=bearish_breakdown
                             )
 
             # CRITICAL: Store chosen direction in context for downstream use

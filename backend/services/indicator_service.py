@@ -276,6 +276,10 @@ class IndicatorService:
 
         # Attach MACD values if available
         self._attach_macd_data(snapshot, macd_line, macd_signal, macd_hist, timeframe)
+        
+        # Attach raw dataframe for close-quality confluence analysis
+        # This enables close momentum and multi-candle confirmation factors
+        snapshot.dataframe = df
 
         return snapshot
 
