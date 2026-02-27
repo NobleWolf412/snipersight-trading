@@ -1,0 +1,498 @@
+/* HUD + 3D utility classes (opt-in) */
+
+/* HUD headings */
+.heading-hud {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 800;
+  text-shadow: 0 0 12px rgba(0, 255, 204, 0.15);
+}
+
+/* Subtle glow panel */
+.hud-panel {
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    0 8px 24px rgba(0,0,0,0.35),
+    0 0 24px rgba(0, 173, 255, 0.05);
+  backdrop-filter: blur(6px);
+}
+
+/* Depthy card with hover lift */
+.card-3d {
+  transform-style: preserve-3d;
+  will-change: transform, box-shadow;
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(20, 24, 28, 0.5);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.04) inset,
+    0 10px 30px rgba(0,0,0,0.35);
+}
+.card-3d:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.05) inset,
+    0 16px 40px rgba(0,0,0,0.45),
+    0 0 24px rgba(0, 173, 255, 0.08);
+  border-color: rgba(0, 173, 255, 0.35);
+}
+
+/* Stronger long shadow utility */
+.shadow-3d {
+  box-shadow:
+    0 14px 30px rgba(0,0,0,0.35),
+    0 24px 56px rgba(0,0,0,0.25);
+}
+
+/* 3D Tactical Button - Scanner (Accent color) */
+.btn-tactical-scanner {
+  position: relative;
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.65 0.10 180 / 0.6), 
+      oklch(0.65 0.10 180 / 0.3),
+      oklch(0.65 0.10 180 / 0.6)
+    ) border-box;
+  color: oklch(0.95 0.02 180);
+  text-shadow: 
+    0 0 10px oklch(0.65 0.10 180 / 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.8);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transform: translateY(0);
+  box-shadow:
+    0 0 20px oklch(0.65 0.10 180 / 0.3),
+    0 8px 16px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-tactical-scanner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, 
+    oklch(0.65 0.10 180 / 0.15) 0%, 
+    transparent 50%, 
+    oklch(0.65 0.10 180 / 0.15) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.btn-tactical-scanner:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 0 30px oklch(0.65 0.10 180 / 0.5),
+    0 12px 24px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.70 0.12 180 / 0.8), 
+      oklch(0.65 0.10 180 / 0.4),
+      oklch(0.70 0.12 180 / 0.8)
+    ) border-box;
+}
+
+.btn-tactical-scanner:hover::before {
+  opacity: 1;
+}
+
+.btn-tactical-scanner:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow:
+    0 0 15px oklch(0.65 0.10 180 / 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.8),
+    inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn-tactical-scanner::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      oklch(0.75 0.12 180 / 0.3) 50%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: scanner-sweep 3s ease-in-out infinite;
+  }
+}
+
+@keyframes scanner-sweep {
+  0%, 100% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+}
+
+/* 3D Tactical Button - Bot (Primary color) */
+.btn-tactical-bot {
+  position: relative;
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.60 0.18 145 / 0.6), 
+      oklch(0.60 0.18 145 / 0.3),
+      oklch(0.60 0.18 145 / 0.6)
+    ) border-box;
+  color: oklch(0.95 0.02 145);
+  text-shadow: 
+    0 0 10px oklch(0.60 0.18 145 / 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.8);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transform: translateY(0);
+  box-shadow:
+    0 0 20px oklch(0.60 0.18 145 / 0.3),
+    0 8px 16px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-tactical-bot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, 
+    oklch(0.60 0.18 145 / 0.15) 0%, 
+    transparent 50%, 
+    oklch(0.60 0.18 145 / 0.15) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.btn-tactical-bot:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 0 30px oklch(0.60 0.18 145 / 0.5),
+    0 12px 24px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.65 0.20 145 / 0.8), 
+      oklch(0.60 0.18 145 / 0.4),
+      oklch(0.65 0.20 145 / 0.8)
+    ) border-box;
+}
+
+.btn-tactical-bot:hover::before {
+  opacity: 1;
+}
+
+.btn-tactical-bot:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow:
+    0 0 15px oklch(0.60 0.18 145 / 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.8),
+    inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn-tactical-bot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      oklch(0.70 0.20 145 / 0.3) 50%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: bot-sweep 3s ease-in-out infinite;
+    animation-delay: 1.5s;
+  }
+}
+
+@keyframes bot-sweep {
+  0%, 100% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+}
+
+/* 3D Tactical Button - Training (Warning color) */
+.btn-tactical-training {
+  position: relative;
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.70 0.16 75 / 0.6), 
+      oklch(0.70 0.16 75 / 0.3),
+      oklch(0.70 0.16 75 / 0.6)
+    ) border-box;
+  color: oklch(0.95 0.02 75);
+  text-shadow: 
+    0 0 10px oklch(0.70 0.16 75 / 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.8);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transform: translateY(0);
+  box-shadow:
+    0 0 20px oklch(0.70 0.16 75 / 0.3),
+    0 8px 16px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-tactical-training::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, 
+    oklch(0.70 0.16 75 / 0.15) 0%, 
+    transparent 50%, 
+    oklch(0.70 0.16 75 / 0.15) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.btn-tactical-training:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 0 30px oklch(0.70 0.16 75 / 0.5),
+    0 12px 24px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.75 0.18 75 / 0.8), 
+      oklch(0.70 0.16 75 / 0.4),
+      oklch(0.75 0.18 75 / 0.8)
+    ) border-box;
+}
+
+.btn-tactical-training:hover::before {
+  opacity: 1;
+}
+
+.btn-tactical-training:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow:
+    0 0 15px oklch(0.70 0.16 75 / 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.8),
+    inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn-tactical-training::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      oklch(0.80 0.18 75 / 0.3) 50%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: training-sweep 3s ease-in-out infinite;
+    animation-delay: 0.75s;
+  }
+}
+
+@keyframes training-sweep {
+  0%, 100% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+}
+
+/* 3D Tactical Button - Intel (Blue color) */
+.btn-tactical-intel {
+  position: relative;
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.60 0.15 240 / 0.6), 
+      oklch(0.60 0.15 240 / 0.3),
+      oklch(0.60 0.15 240 / 0.6)
+    ) border-box;
+  color: oklch(0.95 0.02 240);
+  text-shadow: 
+    0 0 10px oklch(0.60 0.15 240 / 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.8);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transform: translateY(0);
+  box-shadow:
+    0 0 20px oklch(0.60 0.15 240 / 0.3),
+    0 8px 16px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-tactical-intel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, 
+    oklch(0.60 0.15 240 / 0.15) 0%, 
+    transparent 50%, 
+    oklch(0.60 0.15 240 / 0.15) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.btn-tactical-intel:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 0 30px oklch(0.60 0.15 240 / 0.5),
+    0 12px 24px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  background: 
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, 
+      oklch(0.65 0.18 240 / 0.8), 
+      oklch(0.60 0.15 240 / 0.4),
+      oklch(0.65 0.18 240 / 0.8)
+    ) border-box;
+}
+
+.btn-tactical-intel:hover::before {
+  opacity: 1;
+}
+
+.btn-tactical-intel:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow:
+    0 0 15px oklch(0.60 0.15 240 / 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.8),
+    inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn-tactical-intel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      oklch(0.70 0.18 240 / 0.3) 50%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: intel-sweep 3s ease-in-out infinite;
+    animation-delay: 2.25s;
+  }
+}
+
+@keyframes intel-sweep {
+  0%, 100% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+}
+
+/* Soft glow ring helper (apply to cards or panels) */
+.glow-soft {
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 0 30px rgba(0, 173, 255, 0.08);
+}
+
+/* Launch button (generic action button) */
+.btn-launch {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, 
+    oklch(0.60 0.18 145 / 0.8), 
+    oklch(0.65 0.10 180 / 0.8)
+  );
+  color: oklch(0.98 0 0);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transform: translateY(0);
+  box-shadow:
+    0 0 20px oklch(0.62 0.14 160 / 0.4),
+    0 8px 16px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-launch:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 30px oklch(0.62 0.14 160 / 0.6),
+    0 12px 24px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.btn-launch:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+  box-shadow:
+    0 0 15px oklch(0.62 0.14 160 / 0.5),
+    0 4px 12px rgba(0, 0, 0, 0.8),
+    inset 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn-launch::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.2) 50%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: launch-sweep 2.5s ease-in-out infinite;
+  }
+}
+
+@keyframes launch-sweep {
+  0%, 100% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+}

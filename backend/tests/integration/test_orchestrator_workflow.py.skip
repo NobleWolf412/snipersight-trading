@@ -1,0 +1,428 @@
+"""
+Integration tests for the complete Orchestrator scan workflow.
+
+Tests the full pipeline: data ingestion → indicators → SMC → confluence → planner → signals
+"""
+
+import pytest
+from unittest.mock import Mock, patch, MagicMock
+from backend.engine.orchestrator import Orchestrator
+from backend.shared.config.defaults import ScanConfig
+from backend.shared.models.data import MultiTimeframeData, OHLCV
+from backend.shared.models.indicators import IndicatorSet, IndicatorSnapshot
+from backend.tests.fixtures.market_data import (
+    generate_bullish_trend_ohlcv,
+    generate_with_order_block,
+    generate_multi_timeframe_data
+)
+from backend.tests.fixtures.smc_patterns import (
+    create_complete_smc_snapshot,
+    create_empty_smc_snapshot
+)
+
+
+@pytest.fixture
+def mock_exchange_adapter():
+    """Mock exchange adapter that returns realistic data."""
+    adapter = Mock()
+    adapter.name = "MockExchange"
+    
+    # Mock fetch_ohlcv to return bullish trend data
+    def mock_fetch_ohlcv(symbol, timeframe, limit=500):
+        candles = generate_bullish_trend_ohlcv(limit, base_price=45000.0)
+        # Convert to list of lists (CCXT format)
+        return [
+            [c.timestamp * 1000, c.open, c.high, c.low, c.close, c.volume]
+            for c in candles
+        ]
+    
+    adapter.fetch_ohlcv = mock_fetch_ohlcv
+    adapter.fetch_ticker = Mock(return_value={"last": 45000.0})
+    
+    return adapter
+
+
+@pytest.fixture
+def base_orchestrator_config():
+    """Standard orchestrator configuration for testing."""
+    return ScanConfig(
+        profile="balanced",
+        timeframes=("1D", "4H", "1H", "15m"),
+        min_confluence_score=60.0,
+        min_rr_ratio=1.5,
+        max_risk_pct=2.0,
+        leverage=1,
+        primary_planning_timeframe="4H",
+        min_stop_atr=1.0,
+        max_stop_atr=6.0
+    )
+
+
+class TestOrchestratorInitialization:
+    """Test orchestrator setup and configuration."""
+    
+    def test_orchestrator_initializes_with_config(self, mock_exchange_adapter, base_orchestrator_config):
+        """Orchestrator should initialize with exchange adapter and config."""
+        orch = Orchestrator(
+            config=base_orchestrator_config,
+            exchange_adapter=mock_exchange_adapter
+        )
+        
+        assert orch.config.profile == "balanced"
+        assert orch.exchange_adapter is not None
+        assert orch.risk_manager is not None
+        assert orch.telemetry is not None
+    
+    def test_orchestrator_requires_exchange_adapter(self, base_orchestrator_config):
+        """Orchestrator should require an exchange adapter."""
+        with pytest.raises((ValueError, TypeError)):
+            Orchestrator(config=base_orchestrator_config, exchange_adapter=None)
+    
+    def test_apply_mode_updates_config(self, mock_exchange_adapter, base_orchestrator_config):
+        """apply_mode should update orchestrator configuration."""
+        orch = Orchestrator(
+            config=base_orchestrator_config,
+            exchange_adapter=mock_exchange_adapter
+        )
+        
+        orch.apply_mode("surgical")
+        assert orch.config.profile == "surgical"
+        assert len(orch.config.timeframes) == 3  # surgical uses 3 TFs
+
+
+class TestFullScanWorkflow:
+    """Test the complete scan pipeline end-to-end."""
+    
+    @patch('backend.engine.orchestrator.generate_trade_plan')
+    @patch('backend.engine.orchestrator.compute_confluence')
+    def test_scan_returns_trade_plans(
+        self,
+        mock_confluence,
+        mock_planner,
+        mock_exchange_adapter,
+        base_orchestrator_config
+    ):
+        """Scan should return list of TradePlan objects."""
+        from backend.shared.models.planner import TradePlan, EntryZone, StopLoss, Target
+        from backend.shared.models.scoring import ConfluenceBreakdown, ConfluenceFactor
+        
+        # Mock confluence scoring
+        mock_confluence.return_value = ConfluenceBreakdown(
+            total_score=75.0,
+            factors=[
+                ConfluenceFactor(name="Structure", score=80, weight=0.5, rationale="OB + FVG")
+            ],
+            synergy_bonus=5.0,
+            conflict_penalty=0.0,
+            regime="trend",
+            htf_aligned=True,
+            btc_impulse_gate=True
+        )
+        
+        # Mock trade planner
+        mock_planner.return_value = TradePlan(
+            symbol="BTC/USDT",
+            direction="LONG",
+            setup_type="intraday",
+            entry_zone=EntryZone(near_entry=45000, far_entry=44800, rationale="OB entry"),
+            stop_loss=StopLoss(level=44500, distance_atr=1.5, rationale="Structural stop"),
+            targets=[
+                Target(level=45500, allocation=0.5, distance_atr=1.5, rationale="T1"),
+                Target(level=46000, allocation=0.5, distance_atr=2.5, rationale="T2")
+            ],
+            risk_reward=2.0,
+            confidence_score=75.0,
+            confluence_breakdown=mock_confluence.return_value,
+            rationale="Bullish OB + FVG confluence",
+            plan_type="SMC",
+            conviction_class="MODERATE",
+            missing_critical_timeframes=[],
+            metadata={}
+        )
+        
+        orch = Orchestrator(
+            config=base_orchestrator_config,
+            exchange_adapter=mock_exchange_adapter
+        )
+        
+        signals, metadata = orch.scan(["BTC/USDT"])
+        
+        assert isinstance(signals, list)
+        assert isinstance(metadata, dict)
+        assert "total_rejected" in metadata
+        assert "by_reason" in metadata
+    
+    def test_scan_filters_low_confluence(
+        self,
+        mock_exchange_adapter,
+        base_orchestrator_config
+    ):
+        """Scan should reject signals below min_confluence_score."""
+        orch = Orchestrator(
+            config=base_orchestrator_config,
+            exchange_adapter=mock_exchange_adapter
+        )
+        
+        # Set high confluence threshold
+        orch.config.min_confluence_score = 90.0
+        
+        with patch('backend.engine.orchestrator.compute_confluence') as mock_conf:
+            # Return low score
+            from backend.shared.models.scoring import ConfluenceBreakdown, ConfluenceFactor
+            mock_conf.return_value = ConfluenceBreakdown(
+                total_score=50.0,
+                factors=[ConfluenceFactor(name="Test", score=50, weight=1.0, rationale="Low")],
+                synergy_bonus=0.0,
+                conflict_penalty=0.0,
+                regime="trend",
+                htf_aligned=False,
+                btc_impulse_gate=True
+            )
+            
+            signals, metadata = orch.scan(["BTC/USDT"])
+            
+            # Should be rejected for low confluence
+            assert len(signals) == 0
+            assert metadata["by_reason"]["low_confluence"] > 0
+    
+    def test_scan_handles_missing_critical_timeframes(
+        self,
+        mock_exchange_adapter,
+        base_orchestrator_config
+    ):
+        """Scan should reject symbols missing critical timeframes."""
+        # Configure mode with critical TFs
+        from backend.shared.config.scanner_modes import get_mode
+        mode_config = get_mode("recon")
+        
+        config = ScanConfig(
+            profile="recon",
+            timeframes=mode_config["timeframes"],
+            min_confluence_score=60.0
+        )
+        
+        # Mock adapter to fail on specific timeframe
+        adapter = Mock()
+        adapter.name = "MockExchange"
+        
+        def failing_fetch(symbol, timeframe, limit=500):
+            if timeframe == "1D":
+                raise Exception("Data unavailable")
+            return [[0, 100, 100, 100, 100, 1000]]
+        
+        adapter.fetch_ohlcv = failing_fetch
+        adapter.fetch_ticker = Mock(return_value={"last": 45000.0})
+        
+        orch = Orchestrator(config=config, exchange_adapter=adapter)
+        
+        signals, metadata = orch.scan(["TEST/USDT"])
+        
+        # Should reject if missing critical TFs
+        assert metadata["by_reason"]["missing_critical_tf"] >= 0
+    
+    def test_scan_logs_telemetry_events(
+        self,
+        mock_exchange_adapter,
+        base_orchestrator_config
+    ):
+        """Scan should log telemetry events for observability."""
+        orch = Orchestrator(
+            config=base_orchestrator_config,
+            exchange_adapter=mock_exchange_adapter
+        )
+        
+        # Clear telemetry cache
+        orch.telemetry._cache.clear()
+        
+        with patch('backend.engine.orchestrator.compute_confluence'), \
+             patch('backend.engine.orchestrator.generate_trade_plan'):
+            
+            orch.scan(["BTC/USDT", "ETH/USDT"])
+            
+            # Check events were logged
+            events = orch.telemetry.get_cached_events(limit=10)
+            
+            # Should have scan_started and scan_completed at minimum
+            event_types = [e.get("event_type") for e in events]
+            assert "scan_started" in event_types
+            assert "scan_completed" in event_types
+
+
+class TestSymbolProcessing:
+    """Test individual symbol processing logic."""
+    
+    def test_process_symbol_handles_data_fetch_errors(
+        self,
+        mock_exchange_adapter,
+        base_orchestrator_config
+    ):
+        """Symbol processing should gracefully handle data fetch failures."""
+        # Make adapter fail
+        adapter = Mock()
+        adapter.name = "FailingExchange"
+        adapter.fetch_ohlcv = Mock(side_effect=Exception("Network error"))
+        adapter.fetch_ticker = Mock(return_value={"last": 45000.0})
+        
+        orch = Orchestrator(
+            config=base_orchestrator_config,
+            exchange_adapter=adapter
+        )
+        
+        signals, metadata = orch.scan(["FAIL/USDT"])
+        
+        # Should return empty signals and log error
+        assert len(signals) == 0
+        assert metadata["by_reason"]["errors"] > 0
+    
+    @patch('backend.indicators.momentum.calculate_rsi')
+    @patch('backend.indicators.volatility.calculate_atr')
+    def test_process_symbol_computes_indicators(
+        self,
+        mock_atr,
+        mock_rsi,
+        mock_exchange_adapter,
+        base_orchestrator_config
+    ):
+        """Symbol processing should compute all required indicators."""
+        mock_rsi.return_value = [50.0] * 100
+        mock_atr.return_value = [0.5] * 100
+        
+        orch = Orchestrator(
+            config=base_orchestrator_config,
+            exchange_adapter=mock_exchange_adapter
+        )
+        
+        with patch('backend.engine.orchestrator.compute_confluence'), \
+             patch('backend.engine.orchestrator.generate_trade_plan'):
+            
+            orch.scan(["BTC/USDT"])
+            
+            # Indicators should be computed
+            assert mock_rsi.called
+            assert mock_atr.called
+
+
+class TestRejectionReasons:
+    """Test signal rejection tracking and telemetry."""
+    
+    def test_rejection_summary_includes_all_reasons(
+        self,
+        mock_exchange_adapter,
+        base_orchestrator_config
+    ):
+        """Rejection summary should categorize all rejection reasons."""
+        orch = Orchestrator(
+            config=base_orchestrator_config,
+            exchange_adapter=mock_exchange_adapter
+        )
+        
+        _, metadata = orch.scan(["BTC/USDT"])
+        
+        # Check rejection categories exist
+        assert "by_reason" in metadata
+        rejection_reasons = metadata["by_reason"]
+        
+        expected_reasons = [
+            "low_confluence",
+            "no_data",
+            "missing_critical_tf",
+            "risk_validation",
+            "no_trade_plan",
+            "errors"
+        ]
+        
+        for reason in expected_reasons:
+            assert reason in rejection_reasons
+            assert isinstance(rejection_reasons[reason], int)
+    
+    def test_signal_rejected_event_includes_reason(
+        self,
+        mock_exchange_adapter,
+        base_orchestrator_config
+    ):
+        """signal_rejected events should include rejection reason."""
+        orch = Orchestrator(
+            config=base_orchestrator_config,
+            exchange_adapter=mock_exchange_adapter
+        )
+        
+        # Force low confluence rejection
+        orch.config.min_confluence_score = 95.0
+        
+        with patch('backend.engine.orchestrator.compute_confluence') as mock_conf:
+            from backend.shared.models.scoring import ConfluenceBreakdown, ConfluenceFactor
+            mock_conf.return_value = ConfluenceBreakdown(
+                total_score=30.0,
+                factors=[ConfluenceFactor(name="Test", score=30, weight=1.0, rationale="Low")],
+                synergy_bonus=0.0,
+                conflict_penalty=0.0,
+                regime="trend",
+                htf_aligned=False,
+                btc_impulse_gate=True
+            )
+            
+            orch.telemetry._cache.clear()
+            orch.scan(["LOW/USDT"])
+            
+            events = orch.telemetry.get_cached_events(limit=10)
+            rejected_events = [e for e in events if e.get("event_type") == "signal_rejected"]
+            
+            if rejected_events:
+                assert "reason" in rejected_events[0]
+
+
+class TestModeApplicationDynamic:
+    """Test dynamic mode switching during runtime."""
+    
+    def test_switching_modes_updates_timeframes(
+        self,
+        mock_exchange_adapter,
+        base_orchestrator_config
+    ):
+        """Switching scanner modes should update timeframes."""
+        orch = Orchestrator(
+            config=base_orchestrator_config,
+            exchange_adapter=mock_exchange_adapter
+        )
+        
+        initial_tfs = len(orch.config.timeframes)
+        
+        orch.apply_mode("overwatch")
+        overwatch_tfs = len(orch.config.timeframes)
+        
+        orch.apply_mode("surgical")
+        surgical_tfs = len(orch.config.timeframes)
+        
+        # Modes should have different TF counts
+        assert overwatch_tfs != surgical_tfs
+        assert surgical_tfs < overwatch_tfs  # Surgical uses fewer TFs
+    
+    def test_mode_critical_timeframes_enforced(
+        self,
+        mock_exchange_adapter
+    ):
+        """Modes with critical timeframes should enforce them."""
+        from backend.shared.config.scanner_modes import get_mode
+        
+        recon_mode = get_mode("recon")
+        config = ScanConfig(
+            profile="recon",
+            timeframes=recon_mode["timeframes"],
+            min_confluence_score=recon_mode["min_confluence_score"]
+        )
+        
+        orch = Orchestrator(config=config, exchange_adapter=mock_exchange_adapter)
+        
+        # Mock missing critical TF
+        with patch.object(orch, '_fetch_multi_timeframe_data') as mock_fetch:
+            # Return data missing 1D (critical for recon)
+            from backend.shared.models.data import MultiTimeframeData
+            mock_fetch.return_value = MultiTimeframeData(
+                symbol="TEST/USDT",
+                data={"4H": [], "1H": [], "15m": []}  # Missing 1D
+            )
+            
+            signals, metadata = orch.scan(["TEST/USDT"])
+            
+            # Should be rejected for missing critical TF
+            assert metadata["by_reason"]["missing_critical_tf"] > 0

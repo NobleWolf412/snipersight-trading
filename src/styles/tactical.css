@@ -1,0 +1,50 @@
+.metal-panel {
+  position: relative;
+  background-image:
+    linear-gradient(135deg, #050608, #15181d 40%, #050608 75%),
+    linear-gradient(90deg, rgba(255,255,255,0.12), transparent 20%, transparent 80%, rgba(255,255,255,0.12)),
+    url("/textures/metal-noise.svg");
+  background-blend-mode: normal, overlay, soft-light;
+  background-size: cover, 200% 100%, 180px 180px;
+  box-shadow:
+    0 18px 35px rgba(0,0,0,0.85),
+    inset 0 1px 0 rgba(255,255,255,0.15),
+    inset 0 -2px 4px rgba(0,0,0,0.8);
+  border: 1px solid rgba(148, 163, 184, 0.6);
+}
+
+.metal-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 20% 0%, rgba(255,255,255,0.18), transparent 55%),
+              radial-gradient(circle at 80% 100%, rgba(0,0,0,0.6), transparent 60%);
+  mix-blend-mode: screen;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.metal-rivet {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background-image: radial-gradient(circle at 30% 20%, #f9fafb, #9ca3af 45%, #020617 100%);
+  box-shadow:
+    0 0 4px rgba(0,0,0,0.9),
+    inset 0 1px 1px rgba(255,255,255,0.8),
+    inset 0 -1px 2px rgba(0,0,0,0.8);
+  border: 1px solid rgba(15,23,42,0.9);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .metal-panel {
+    transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+  }
+  .metal-panel:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 24px 50px rgba(0,0,0,0.9),
+      inset 0 1px 0 rgba(255,255,255,0.18),
+      inset 0 -2px 4px rgba(0,0,0,0.85);
+  }
+}

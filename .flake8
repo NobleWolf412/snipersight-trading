@@ -1,0 +1,22 @@
+[flake8]
+# Align with black's default line length from pyproject.toml
+max-line-length = 100
+
+# Ignore some checks that conflict with black
+extend-ignore = E203,W503,E501
+
+# Exclude common directories
+exclude = 
+    .git,
+    __pycache__,
+    build,
+    dist,
+    .venv,
+    venv,
+    *.egg-info,
+    .tox,
+    .pytest_cache
+
+# Per-file ignores
+per-file-ignores =
+    __init__.py:F401

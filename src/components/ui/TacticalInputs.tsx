@@ -1,0 +1,581 @@
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
+import { Check, Warning, Info, X } from '@phosphor-icons/react';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+
+// --- Tactical Selector Grid ---
+// --- Tactical Selector Grid ---
+interface TacticalSelectorProps {
+    label?: string;
+    subLabel?: string;
+    options: { value: string; label: string; subLabel?: string; icon?: React.ReactNode; color?: string }[];
+    value: string;
+    onChange: (value: string) => void;
+    className?: string;
+    gridCols?: number;
+    variant?: 'default' | '3d';
+    centeredLabel?: boolean;
+}
+
+export function TacticalSelector({
+    label,
+    subLabel,
+    options,
+    value,
+    onChange,
+    className,
+    gridCols = 2,
+    variant = 'default',
+    centeredLabel = false
+}: TacticalSelectorProps) {
+    return (
+        <div className={className}>
+            <div className={cn("mb-4", centeredLabel && "text-center")}>
+                {label && <label className="block text-base font-bold font-mono text-[#00ff88] tracking-widest uppercase mb-1">{label}</label>}
+                {subLabel && <p className="text-sm text-muted-foreground">{subLabel}</p>}
+            </div>
+            <div
+                className="grid gap-4"
+                style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+            >
+                {options.map((option) => {
+                    const isSelected = value === option.value;
+                    const activeColor = option.color || '#00ff88';
+
+                    if (variant === '3d') {
+                        return (
+                            <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => onChange(option.value)}
+                                className={cn(
+                                    "relative flex flex-col items-center justify-center gap-1.5 p-5 rounded-xl transition-all duration-150 group overflow-hidden h-full",
+                                    "border-2 border-b-[6px] active:border-b-2 active:translate-y-[4px]",
+                                    isSelected
+                                        ? "text-white shadow-lg"
+                                        : "border-white/10 bg-black/40 text-muted-foreground hover:bg-white/5 hover:border-white/20"
+                                )}
+                                style={isSelected ? {
+                                    backgroundColor: `${activeColor}20`,
+                                    borderColor: activeColor,
+                                    boxShadow: `0 0 30px ${activeColor}40`
+                                } : {}}
+                            >
+                                <span className="relative z-10 flex items-center gap-3 font-mono text-lg font-bold uppercase tracking-wide">
+                                    {option.icon && <span className={cn("transition-opacity", isSelected ? "text-white" : "opacity-70")}>{option.icon}</span>}
+                                    {option.label}
+                                </span>
+                                {option.subLabel && (
+                                    <span className={cn(
+                                        "relative z-10 text-xs font-mono uppercase tracking-wider font-semibold",
+                                        isSelected ? "text-white/80" : "text-muted-foreground/40"
+                                    )}>
+                                        {option.subLabel}
+                                    </span>
+                                )}
+                                {/* Glow effect background */}
+                                {isSelected && (
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/0 via-white/5 to-white/10 pointer-events-none" />
+                                )}
+                            </button>
+                        );
+                    }
+
+                    // Default Variant
+                    return (
+                        <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => onChange(option.value)}
+                            className={cn(
+                                "relative flex flex-col items-center justify-center gap-1.5 p-5 rounded-xl border-2 transition-all duration-200 group overflow-hidden h-full",
+                                isSelected
+                                    ? "bg-opacity-10 shadow-[0_0_20px_rgba(0,255,136,0.15)]"
+                                    : "border-white/5 bg-black/40 text-muted-foreground hover:border-white/20 hover:text-white hover:bg-white/5"
+                            )}
+                            style={isSelected ? {
+                                borderColor: activeColor,
+                                backgroundColor: `${activeColor}1a`, // 10% opacity
+                                color: activeColor
+                            } : {}}
+                        >
+                            {isSelected && (
+                                <motion.div
+                                    layoutId={`glow-${label}`}
+                                    className="absolute inset-0"
+                                    style={{ backgroundColor: `${activeColor}0d` }} // 5% opacity
+                                    transition={{ duration: 0.2 }}
+                                />
+                            )}
+
+                            {/* Corner accents for selected state */}
+                            {isSelected && (
+                                <>
+                                    <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2" style={{ borderColor: activeColor }} />
+                                    <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2" style={{ borderColor: activeColor }} />
+                                </>
+                            )}
+
+                            <span className="relative z-10 flex items-center gap-3 font-mono text-lg font-bold uppercase tracking-wide">
+                                {option.icon && <span className={cn("transition-opacity", isSelected ? "opacity-100" : "opacity-70")}>{option.icon}</span>}
+                                {option.label}
+                            </span>
+
+                            {option.subLabel && (
+                                <span className={cn(
+                                    "relative z-10 text-xs font-mono uppercase tracking-wider font-semibold",
+                                    isSelected ? "opacity-80" : "text-muted-foreground/40"
+                                )}
+                                    style={isSelected ? { color: activeColor } : {}}
+                                >
+                                    {option.subLabel}
+                                </span>
+                            )}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+// --- Tactical Slider ---
+interface TacticalSliderProps {
+    label: string;
+    subLabel?: string;
+    value: number;
+    min: number;
+    max: number;
+    step?: number;
+    onChange: (value: number) => void;
+    formatValue?: (val: number) => string;
+    zones?: { limit: number; color: string; label: string }[];
+    className?: string;
+}
+
+export function TacticalSlider({
+    label,
+    subLabel,
+    value,
+    min,
+    max,
+    step = 1,
+    onChange,
+    formatValue = (v) => v.toString(),
+    zones,
+    className
+}: TacticalSliderProps) {
+
+    const percentage = ((value - min) / (max - min)) * 100;
+
+    // Determine current zone color
+    const activeZone = zones?.find(z => value <= z.limit) || zones?.[zones.length - 1];
+    const color = activeZone?.color || '#00ff88';
+
+    return (
+        <div className={className}>
+            <div className="flex items-end justify-between mb-4">
+                <div>
+                    <label className="block text-base font-bold font-mono text-[#00ff88] tracking-widest uppercase mb-1">{label}</label>
+                    {subLabel && <p className="text-sm text-muted-foreground">{subLabel}</p>}
+                </div>
+                <div className="flex items-center gap-3 bg-black/40 border border-white/10 px-3 py-1.5 rounded-lg">
+                    {activeZone && (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-sm bg-black/60 border border-white/5 uppercase tracking-wider" style={{ color: color, borderColor: `${color}40` }}>
+                            {activeZone.label}
+                        </span>
+                    )}
+                    <span className="text-2xl font-bold font-mono tabular-nums leading-none" style={{ color }}>
+                        {formatValue(value)}
+                    </span>
+                </div>
+            </div>
+
+            <div className="relative h-16 flex items-center select-none touch-none group">
+                {/* Track Background */}
+                <div className="absolute inset-x-0 h-6 bg-black/80 rounded-full border-2 border-white/10 overflow-hidden shadow-[inset_0_4px_6px_rgba(0,0,0,0.6)]">
+                    {/* Zone Indicators (Background segments) */}
+                    {zones && (
+                        <div className="absolute inset-0 flex">
+                            {zones.map((zone, i) => {
+                                const prevLimit = i === 0 ? min : zones[i - 1].limit;
+                                const width = ((Math.min(zone.limit, max) - Math.max(prevLimit, min)) / (max - min)) * 100;
+                                return (
+                                    <div
+                                        key={i}
+                                        className="h-full border-r border-black/50 opacity-20 hover:opacity-30 transition-opacity"
+                                        style={{ width: `${width}%`, backgroundColor: zone.color }}
+                                    />
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Fill Bar */}
+                    <motion.div
+                        className="absolute top-0 left-0 h-full shadow-[0_0_15px_rgba(0,0,0,0.5)]"
+                        style={{ backgroundColor: color, width: `${percentage}%` }}
+                        animate={{ width: `${percentage}%`, backgroundColor: color }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                    />
+
+                    {/* Scanline texture overlay on track */}
+                    <div className="absolute inset-0 bg-[url('/scanlines.png')] opacity-25 pointer-events-none mix-blend-overlay" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-black/20 pointer-events-none" />
+                </div>
+
+                {/* Input (invisible but interactive) */}
+                <input
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={value}
+                    onChange={(e) => onChange(Number(e.target.value))}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-30"
+                />
+
+                {/* Thumb (Visual only) */}
+                <motion.div
+                    className="absolute top-1/2 -translate-y-1/2 w-10 h-14 z-20 pointer-events-none flex items-center justify-center filter drop-shadow-[0_6px_10px_rgba(0,0,0,0.8)]"
+                    style={{ left: `calc(${percentage}% - 20px)` }}
+                    animate={{ left: `calc(${percentage}% - 20px)` }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                >
+                    <div
+                        className="w-full h-full rounded-lg relative flex items-center justify-center transition-all duration-200 group-active:scale-95 transform"
+                        style={{
+                            background: `linear-gradient(180deg, #2a2a2a 0%, #151515 100%)`,
+                            border: `3px solid ${color}`,
+                            boxShadow: `0 0 20px ${color}60, inset 0 1px 0 rgba(255,255,255,0.1), 0 4px 8px rgba(0,0,0,0.5)`
+                        }}
+                    >
+                        {/* Grip Lines */}
+                        <div className="flex gap-2">
+                            <div className="w-1 h-7 bg-white/50 block rounded-full" />
+                            <div className="w-1 h-7 bg-white/50 block rounded-full" />
+                        </div>
+
+                        {/* Active Glow Center */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/5 to-white/10 rounded-lg pointer-events-none" />
+                    </div>
+                </motion.div>
+
+                {/* Ticks */}
+                <div className="absolute -bottom-3 w-full flex justify-between px-2 pointer-events-none">
+                    {Array.from({ length: 11 }).map((_, i) => (
+                        <div key={i} className="w-0.5 h-2 bg-white/20" />
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// --- Tactical Toggle Card ---
+interface TacticalToggleProps {
+    label: string;
+    sublabel?: string;
+    tooltip?: string; // Info tooltip explaining this option
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+    icon?: React.ReactNode;
+    isHazard?: boolean; // Special styling for Meme mode etc.
+    className?: string;
+}
+
+export function TacticalToggle({ label, sublabel, tooltip, checked, onChange, icon, isHazard, className }: TacticalToggleProps) {
+    const [infoOpen, setInfoOpen] = useState(false);
+
+    const toggleContent = (
+        <button
+            type="button"
+            onClick={() => onChange(!checked)}
+            className={cn(
+                "relative group flex flex-col items-start p-4 rounded-xl border-2 transition-all duration-200 w-full text-left overflow-hidden",
+                checked
+                    ? (isHazard
+                        ? "border-amber-500 bg-amber-500/10 shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+                        : "border-[#00ff88] bg-[#00ff88]/10 shadow-[0_0_20px_rgba(0,255,136,0.15)]")
+                    : "border-white/5 bg-black/40 hover:border-white/20 hover:bg-white/5",
+                className
+            )}
+        >
+            {/* Background Pulse for Hazard */}
+            {checked && isHazard && (
+                <div className="absolute inset-0 bg-amber-500/5 animate-pulse pointer-events-none" />
+            )}
+
+            {/* Active Indicator Dot */}
+            <div className="absolute top-3 right-3">
+                <div className={cn(
+                    "w-3 h-3 rounded-full border transition-all duration-300",
+                    checked
+                        ? (isHazard ? "bg-amber-500 border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.8)]" : "bg-[#00ff88] border-[#00ff88] shadow-[0_0_8px_rgba(0,255,136,0.8)]")
+                        : "bg-transparent border-white/20"
+                )} />
+            </div>
+
+            {/* Content */}
+            <div className="relative z-10">
+                <div className={cn(
+                    "mb-2 transition-colors duration-200",
+                    checked
+                        ? (isHazard ? "text-amber-400" : "text-[#00ff88]")
+                        : "text-white/40 group-hover:text-white/60"
+                )}>
+                    {icon || <Check size={24} />}
+                </div>
+
+                <div className={cn(
+                    "font-bold font-mono text-lg transition-colors",
+                    checked ? "text-white" : "text-muted-foreground group-hover:text-white"
+                )}>
+                    {label}
+                </div>
+
+                {sublabel && (
+                    <div className={cn(
+                        "text-xs mt-1 font-mono transition-colors",
+                        checked
+                            ? (isHazard ? "text-amber-400/70" : "text-[#00ff88]/70")
+                            : "text-muted-foreground/50"
+                    )}>
+                        {sublabel}
+                    </div>
+                )}
+
+                {/* Info tooltip trigger - using div to avoid button-in-button nesting */}
+                {tooltip && (
+                    <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setInfoOpen(true);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.stopPropagation();
+                                setInfoOpen(true);
+                            }
+                        }}
+                        className="absolute top-3 left-3 z-20 p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+                        aria-label={`Info about ${label}`}
+                    >
+                        <Info size={20} weight="fill" className={cn(
+                            "transition-colors",
+                            checked ? (isHazard ? "text-amber-400/60" : "text-[#00ff88]/60") : "text-white/30"
+                        )} />
+                    </div>
+                )}
+            </div>
+
+            {/* Hazard Warning */}
+            {isHazard && checked && (
+                <div className="absolute -bottom-6 -right-6 text-amber-500/10 transform -rotate-12 pointer-events-none">
+                    <Warning size={80} weight="fill" />
+                </div>
+            )}
+        </button>
+    );
+
+    // Wrap in tooltip if tooltip text is provided (for desktop hover)
+    // Also render Dialog for mobile tap
+    if (tooltip) {
+        return (
+            <>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        {toggleContent}
+                    </TooltipTrigger>
+                    <TooltipContent
+                        side="top"
+                        sideOffset={8}
+                        className="max-w-xs bg-black/95 border border-[#00ff88]/30 text-white text-sm p-3 rounded-lg shadow-[0_0_20px_rgba(0,255,136,0.2)] hidden sm:block"
+                    >
+                        <p className="leading-relaxed">{tooltip}</p>
+                    </TooltipContent>
+                </Tooltip>
+
+                {/* Mobile info dialog */}
+                <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
+                    <DialogContent className="glass-card glow-border-green max-w-sm">
+                        <DialogHeader>
+                            <DialogTitle className="hud-headline hud-text-green flex items-center gap-2">
+                                {icon}
+                                {label}
+                            </DialogTitle>
+                        </DialogHeader>
+                        <DialogDescription className="text-muted-foreground text-sm leading-relaxed">
+                            {tooltip}
+                        </DialogDescription>
+                    </DialogContent>
+                </Dialog>
+            </>
+        );
+    }
+
+    return toggleContent;
+}
+
+// --- Tactical Dropdown ---
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+
+interface TacticalDropdownProps {
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    options: { value: string; label: string; icon?: React.ReactNode; disabled?: boolean }[];
+    className?: string;
+}
+
+export function TacticalDropdown({ label, value, onChange, options, className }: TacticalDropdownProps) {
+    return (
+        <div className={className}>
+            <label className="block text-base font-bold font-mono text-[#00ff88] tracking-widest uppercase mb-1">{label}</label>
+            <Select value={value} onValueChange={onChange}>
+                <SelectTrigger className="w-full h-16 bg-black/40 border-2 border-white/5 data-[state=open]:border-[#00ff88] data-[state=open]:bg-[#00ff88]/5 rounded-xl text-lg font-mono font-bold tracking-wide text-white hover:border-white/20 transition-all focus:ring-0 focus:ring-offset-0 relative overflow-hidden group">
+                    <div className="flex items-center gap-3 relative z-10 w-full">
+                        {options.find(o => o.value === value)?.icon && (
+                            <span className="text-[#00ff88] group-hover:text-white transition-colors">
+                                {options.find(o => o.value === value)?.icon}
+                            </span>
+                        )}
+                        <SelectValue placeholder="SELECT OPTION" />
+                    </div>
+                    {/* Corner accents */}
+                    <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-white/10 group-data-[state=open]:border-[#00ff88]" />
+                    <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-white/10 group-data-[state=open]:border-[#00ff88]" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0a0a0a]/95 backdrop-blur-xl border border-[#00ff88]/30 rounded-xl shadow-[0_0_30px_rgba(0,255,136,0.1)] overflow-hidden">
+                    {options.map((option) => (
+                        <SelectItem
+                            key={option.value}
+                            value={option.value}
+                            disabled={option.disabled}
+                            className="text-base font-mono focus:bg-[#00ff88]/10 focus:text-[#00ff88] text-muted-foreground py-3 cursor-pointer data-[disabled]:opacity-50"
+                        >
+                            <div className="flex items-center gap-3">
+                                {option.icon}
+                                <span>{option.label}</span>
+                                {option.disabled && <span className="text-[10px] ml-2 px-1.5 py-0.5 rounded border border-white/10 text-muted-foreground uppercase">SOON</span>}
+                            </div>
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+    );
+}
+
+// --- Tactical Target Input ---
+import { Input } from "@/components/ui/input"
+import { MagnifyingGlass } from '@phosphor-icons/react';
+
+interface TacticalTargetInputProps {
+    label: string;
+    subLabel?: string;
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+    className?: string;
+    active?: boolean;
+}
+
+export function TacticalTargetInput({
+    label,
+    subLabel,
+    value,
+    onChange,
+    placeholder = "COIN NAME (e.g. LINK)",
+    className,
+    active = false
+}: TacticalTargetInputProps) {
+    // We split by slash if present to show the base asset part separately if desired,
+    // but for now let's keep it simple: one input for the symbol.
+    // The user mentioned a dropdown for USDT/USDC, so let's implement that.
+
+    const [symbol, base] = value.includes('/') ? value.split('/') : [value, 'USDT'];
+
+    const handleSymbolChange = (newSymbol: string) => {
+        const cleanSymbol = newSymbol.toUpperCase().trim();
+        onChange(base ? `${cleanSymbol}/${base}` : cleanSymbol);
+    };
+
+    const handleBaseChange = (newBase: string) => {
+        onChange(`${symbol}/${newBase}`);
+    };
+
+    return (
+        <div className={className}>
+            <div className="flex items-center justify-between mb-4">
+                <div>
+                    <label className="block text-base font-bold font-mono text-[#00ff88] tracking-widest uppercase mb-1">{label}</label>
+                    {subLabel && <p className="text-sm text-muted-foreground">{subLabel}</p>}
+                </div>
+                {active && (
+                    <div className="flex items-center gap-2 px-3 py-1 bg-accent/20 border border-accent/40 rounded-full">
+                        <div className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
+                        <span className="text-[10px] font-bold text-accent tracking-tighter uppercase font-mono">Target Lock Active</span>
+                    </div>
+                )}
+            </div>
+
+            <div className="flex gap-2">
+                <div className="relative flex-1 group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-[#00ff88] transition-colors">
+                        <MagnifyingGlass size={20} weight="bold" />
+                    </div>
+                    <Input
+                        value={symbol}
+                        onChange={(e) => handleSymbolChange(e.target.value)}
+                        placeholder={placeholder}
+                        className={cn(
+                            "h-16 pl-12 pr-12 bg-black/40 border-2 border-white/5 rounded-xl text-lg font-mono font-bold tracking-widest uppercase transition-all duration-300",
+                            "focus:border-[#00ff88] focus:bg-[#00ff88]/5 focus:ring-0 focus:ring-offset-0",
+                            active && "border-accent/40 bg-accent/5"
+                        )}
+                    />
+                    {symbol && (
+                        <button
+                            onClick={() => onChange('')}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition-all"
+                        >
+                            <X size={18} weight="bold" />
+                        </button>
+                    )}
+                    {/* Visual accents */}
+                    <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-white/10 group-focus-within:border-[#00ff88]" />
+                    <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-white/10 group-focus-within:border-[#00ff88]" />
+                </div>
+
+                <div className="w-32">
+                    <Select value={base} onValueChange={handleBaseChange}>
+                        <SelectTrigger className="h-16 bg-black/40 border-2 border-white/5 rounded-xl text-md font-mono font-bold tracking-widest text-[#00ff88] hover:border-white/20 transition-all focus:ring-0 focus:ring-offset-0">
+                            <SelectValue placeholder="BASE" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-black/95 border border-[#00ff88]/30 rounded-xl overflow-hidden font-mono">
+                            <SelectItem value="USDT" className="focus:bg-[#00ff88]/10 focus:text-[#00ff88] cursor-pointer">USDT</SelectItem>
+                            <SelectItem value="USDC" className="focus:bg-[#00ff88]/10 focus:text-[#00ff88] cursor-pointer">USDC</SelectItem>
+                            <SelectItem value="BTC" className="focus:bg-[#00ff88]/10 focus:text-[#00ff88] cursor-pointer" disabled>BTC</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+
+            <p className="mt-3 text-[10px] font-mono text-muted-foreground/60 uppercase tracking-[0.1em] flex items-center gap-2">
+                <Info size={14} />
+                Bypasses symbol pool to scan specific instrument across all mode timeframes
+            </p>
+        </div>
+    );
+}
