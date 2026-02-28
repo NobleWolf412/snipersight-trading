@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
@@ -65,20 +66,20 @@ function formatPct(value: number, decimals = 2): string {
   return `${sign}${value.toFixed(decimals)}%`;
 }
 
-// Default config
+// Default Phantom Spec Config
 const DEFAULT_CONFIG: PaperTradingConfigRequest = {
   exchange: 'phemex',
-  sniper_mode: 'stealth',
+  sniper_mode: 'stealth', // Underlying detection mode
   initial_balance: 10000,
-  risk_per_trade: 2,
-  max_positions: 3,
-  leverage: 1,
+  risk_per_trade: 2, // Total 2% per thesis
+  max_positions: 3, // 3 limits (L1, L2, L3)
+  leverage: 1, // Default 1x
   duration_hours: 24,
   scan_interval_minutes: 5,
   trailing_stop: true,
-  trailing_activation: 1.5,
+  trailing_activation: 0.5,
   breakeven_after_target: 1,
-  min_confluence: null,
+  min_confluence: 82, // Scaled entry requires 82 minimum
   symbols: [],
   exclude_symbols: [],
   slippage_bps: 5,
@@ -86,7 +87,6 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
 };
 
 export function TrainingGround() {
-  const [activeTab, setActiveTab] = useState<'config' | 'dashboard'>('config');
   const [config, setConfig] = useState<PaperTradingConfigRequest>(DEFAULT_CONFIG);
   const [status, setStatus] = useState<PaperTradingStatusResponse | null>(null);
   const [trades, setTrades] = useState<CompletedPaperTrade[]>([]);
@@ -101,15 +101,11 @@ export function TrainingGround() {
       const response = await api.getPaperTradingStatus();
       if (response.data) {
         setStatus(response.data);
-        // Auto-switch to dashboard when running
-        if (response.data.status === 'running' && activeTab === 'config') {
-          setActiveTab('dashboard');
-        }
       }
     } catch (err) {
       console.error('Failed to fetch status:', err);
     }
-  }, [activeTab]);
+  }, []);
 
   // Fetch trade history
   const fetchTrades = useCallback(async () => {
@@ -155,7 +151,6 @@ export function TrainingGround() {
         setError(response.error);
       } else {
         await fetchStatus();
-        setActiveTab('dashboard');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start paper trading');
@@ -196,7 +191,6 @@ export function TrainingGround() {
       } else {
         setStatus(null);
         setTrades([]);
-        setActiveTab('config');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset paper trading');
@@ -230,10 +224,15 @@ export function TrainingGround() {
           {/* Status Badge */}
           {status && (
             <Badge
-              variant={isRunning ? 'default' : isStopped ? 'secondary' : 'outline'}
-              className={`text-sm px-3 py-1 ${isRunning ? 'bg-green-500/20 text-green-400 border-green-500/30' : ''}`}
+              variant="outline"
+              className={cn(
+                "text-sm px-3 py-1 font-mono tracking-widest uppercase border",
+                isRunning ? 'bg-green-500/10 text-green-400 border-green-500/30' :
+                  isStopped ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                    'bg-muted/50 text-muted-foreground border-border'
+              )}
             >
-              {isRunning && <Pulse size={14} className="mr-1 animate-pulse" />}
+              {isRunning && <Pulse size={14} className="mr-2 animate-pulse" />}
               {status.status.toUpperCase()}
             </Badge>
           )}
@@ -257,59 +256,77 @@ export function TrainingGround() {
           </Alert>
         )}
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'config' | 'dashboard')}>
-          <TabsList className="grid grid-cols-2 w-full max-w-md">
-            <TabsTrigger value="config" className="flex items-center gap-2">
-              <Gear size={18} />
-              Configuration
-            </TabsTrigger>
-            <TabsTrigger value="dashboard" className="flex items-center gap-2">
-              <ChartLine size={18} />
-              Dashboard
-            </TabsTrigger>
-          </TabsList>
+        {/* Main Content Area */}
+        {isIdle ? (
+          <div className="space-y-6 mt-6">
+            <TacticalPanel>
+              <div className="p-6 md:p-8 flex flex-col items-center text-center space-y-6">
+                <Target size={64} className="text-accent opacity-50 mb-2" />
+                <div className="max-w-xl mx-auto space-y-2">
+                  <h2 className="text-2xl font-bold font-mono heading-hud text-foreground">PHANTOM INITIALIZATION</h2>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Phantom is an autonomous, regime-adaptive execution layer running strictly limit-only entries with a scaled ladder approach.
+                  </p>
+                </div>
 
-          {/* Config Tab */}
-          <TabsContent value="config" className="space-y-6 mt-6">
-            <PaperTradingConfig
-              config={config}
-              onChange={setConfig}
-              disabled={isRunning}
-            />
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+                  <div className="p-4 rounded-lg bg-background border border-border">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">Leverage</div>
+                    <div className="text-xl font-mono font-bold text-accent">{config.leverage}x</div>
+                    <div className="text-[10px] text-muted-foreground mt-1">Adjustable Below</div>
+                  </div>
+                  <div className="p-4 rounded-lg bg-background border border-border">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">Risk Profile</div>
+                    <div className="text-xl font-mono font-bold text-foreground">2% Max</div>
+                    <div className="text-[10px] text-muted-foreground mt-1">Split across 3 limits</div>
+                  </div>
+                  <div className="p-4 rounded-lg bg-background border border-border">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">Regime State</div>
+                    <div className="text-xl font-mono font-bold text-primary">Adaptive</div>
+                  </div>
+                  <div className="p-4 rounded-lg bg-background border border-border">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">Confluence Gate</div>
+                    <div className="text-xl font-mono font-bold text-yellow-400">≥ 82%</div>
+                  </div>
+                </div>
 
-            {/* Start Button */}
-            <div className="flex gap-4">
-              <Button
-                onClick={handleStart}
-                disabled={isLoading || isRunning}
-                className="flex-1 bg-accent hover:bg-accent/90 text-accent-foreground"
-                size="lg"
-              >
-                {isLoading ? (
-                  <ArrowsClockwise size={20} className="animate-spin mr-2" />
-                ) : (
-                  <PlayCircle size={20} weight="fill" className="mr-2" />
-                )}
-                {isLoading ? 'STARTING...' : 'START PAPER TRADING'}
-              </Button>
-
-              {isStopped && (
-                <Button
-                  onClick={handleReset}
-                  disabled={isLoading}
-                  variant="outline"
-                  size="lg"
-                >
-                  <ArrowsClockwise size={20} className="mr-2" />
-                  RESET
-                </Button>
-              )}
-            </div>
-          </TabsContent>
-
-          {/* Dashboard Tab */}
-          <TabsContent value="dashboard" className="space-y-6 mt-6">
+                <div className="w-full max-w-sm pt-4 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Starting Balance</label>
+                      <input
+                        type="number"
+                        value={config.initial_balance}
+                        onChange={e => setConfig({ ...config, initial_balance: Number(e.target.value) })}
+                        className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40"
+                      />
+                    </div>
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Leverage (x)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={config.leverage}
+                        onChange={e => setConfig({ ...config, leverage: Number(e.target.value) })}
+                        className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleStart}
+                    disabled={isLoading}
+                    className="w-full h-14 bg-accent hover:bg-accent/90 text-accent-foreground font-mono font-bold text-lg heading-hud tracking-widest"
+                  >
+                    {isLoading ? <ArrowsClockwise size={20} className="animate-spin mr-2" /> : <PlayCircle size={24} weight="fill" className="mr-2" />}
+                    {isLoading ? 'ARMING...' : 'ARM PHANTOM'}
+                  </Button>
+                </div>
+              </div>
+            </TacticalPanel>
+          </div>
+        ) : (
+          <div className="space-y-6 mt-6">
             {/* Control Bar */}
             <TacticalPanel>
               <div className="p-4 flex items-center justify-between">
@@ -350,11 +367,11 @@ export function TrainingGround() {
                     </div>
                   )}
 
-                  {/* Mode */}
+                  {/* Mode / Regime */}
                   <div>
-                    <div className="text-xs text-muted-foreground">MODE</div>
-                    <Badge variant="outline" className="font-mono text-xs">
-                      {status?.config?.sniper_mode?.toUpperCase() || 'STEALTH'}
+                    <div className="text-xs text-muted-foreground">REGIME</div>
+                    <Badge variant="outline" className="font-mono text-xs border-accent text-accent bg-accent/10">
+                      ADAPTIVE
                     </Badge>
                   </div>
                 </div>
@@ -413,8 +430,13 @@ export function TrainingGround() {
                   </div>
                   <div className="mt-2 flex items-center gap-2">
                     <Badge
-                      variant={status?.balance?.pnl && status.balance.pnl >= 0 ? 'default' : 'destructive'}
-                      className={status?.balance?.pnl && status.balance.pnl >= 0 ? 'bg-green-500/20 text-green-400' : ''}
+                      variant="outline"
+                      className={cn(
+                        "font-mono text-xs border",
+                        status?.balance?.pnl && status.balance.pnl >= 0
+                          ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                          : 'bg-red-500/10 text-red-400 border-red-500/30'
+                      )}
                     >
                       {formatPct(status?.balance?.pnl_pct || 0)}
                     </Badge>
@@ -426,7 +448,7 @@ export function TrainingGround() {
               </Card>
 
               {/* Win Rate Card */}
-              <Card>
+              <Card className="border-border">
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -435,7 +457,7 @@ export function TrainingGround() {
                         {(status?.statistics?.win_rate || 0).toFixed(1)}%
                       </div>
                     </div>
-                    <Trophy size={32} className="text-yellow-500" />
+                    <Trophy size={32} className="text-accent/50" />
                   </div>
                   <div className="mt-2 text-xs text-muted-foreground">
                     {status?.statistics?.winning_trades || 0}W / {status?.statistics?.losing_trades || 0}L
@@ -446,7 +468,7 @@ export function TrainingGround() {
               </Card>
 
               {/* Avg R:R Card */}
-              <Card>
+              <Card className="border-border">
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -455,7 +477,7 @@ export function TrainingGround() {
                         {(status?.statistics?.avg_rr || 0).toFixed(2)}
                       </div>
                     </div>
-                    <Crosshair size={32} className="text-primary" />
+                    <Crosshair size={32} className="text-accent/50" />
                   </div>
                   <div className="mt-2 text-xs text-muted-foreground">
                     Avg Win: {formatCurrency(status?.statistics?.avg_win || 0)}
@@ -466,7 +488,7 @@ export function TrainingGround() {
               </Card>
 
               {/* Scans Card */}
-              <Card>
+              <Card className="border-border">
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -475,7 +497,7 @@ export function TrainingGround() {
                         {status?.statistics?.scans_completed || 0}
                       </div>
                     </div>
-                    <Target size={32} className="text-muted-foreground" />
+                    <Target size={32} className="text-accent/50" />
                   </div>
                   <div className="mt-2 text-xs text-muted-foreground">
                     {status?.statistics?.signals_generated || 0} signals
@@ -570,32 +592,34 @@ export function TrainingGround() {
                 )}
               </div>
             </TacticalPanel>
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
 
         {/* Learning Resources (always visible at bottom) */}
-        <TacticalPanel>
-          <div className="p-4 md:p-6">
-            <div className="mb-6">
-              <h3 className="heading-hud text-xl text-foreground mb-2">Learning Resources</h3>
-              <p className="text-sm text-muted-foreground">Essential concepts for successful trading</p>
+        <div className="mt-8">
+          <TacticalPanel>
+            <div className="p-4 md:p-6">
+              <div className="mb-6">
+                <h3 className="heading-hud text-xl text-foreground mb-2">Learning Resources</h3>
+                <p className="text-sm text-muted-foreground">Essential concepts for successful trading</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-5 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors">
+                  <div className="font-bold mb-2 text-base heading-hud">Smart Money Concepts</div>
+                  <div className="text-muted-foreground text-sm">Learn order blocks, fair value gaps, and institutional analysis</div>
+                </div>
+                <div className="p-5 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors">
+                  <div className="font-bold mb-2 text-base heading-hud">Multi-Timeframe Analysis</div>
+                  <div className="text-muted-foreground text-sm">Understand confluence across different timeframes</div>
+                </div>
+                <div className="p-5 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors">
+                  <div className="font-bold mb-2 text-base heading-hud">Risk Management</div>
+                  <div className="text-muted-foreground text-sm">Position sizing, stop placement, and reward-to-risk ratios</div>
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-5 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors">
-                <div className="font-bold mb-2 text-base heading-hud">Smart Money Concepts</div>
-                <div className="text-muted-foreground text-sm">Learn order blocks, fair value gaps, and institutional analysis</div>
-              </div>
-              <div className="p-5 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors">
-                <div className="font-bold mb-2 text-base heading-hud">Multi-Timeframe Analysis</div>
-                <div className="text-muted-foreground text-sm">Understand confluence across different timeframes</div>
-              </div>
-              <div className="p-5 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors">
-                <div className="font-bold mb-2 text-base heading-hud">Risk Management</div>
-                <div className="text-muted-foreground text-sm">Position sizing, stop placement, and reward-to-risk ratios</div>
-              </div>
-            </div>
-          </div>
-        </TacticalPanel>
+          </TacticalPanel>
+        </div>
       </div>
     </PageContainer>
   );
@@ -611,13 +635,16 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Badge
-            variant={isLong ? 'default' : 'destructive'}
-            className={isLong ? 'bg-green-500/20 text-green-400' : ''}
+            variant="outline"
+            className={cn(
+              "font-mono text-[10px] tracking-widest uppercase border",
+              isLong ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30'
+            )}
           >
             {isLong ? <ArrowUp size={12} className="mr-1" /> : <ArrowDown size={12} className="mr-1" />}
             {position.direction}
           </Badge>
-          <span className="font-bold">{position.symbol}</span>
+          <span className="font-bold text-lg tracking-tight italic text-foreground">{position.symbol}</span>
         </div>
         <div className={`font-mono text-sm ${isProfitable ? 'text-green-400' : 'text-red-400'}`}>
           {formatPct(position.unrealized_pnl_pct)}
@@ -626,7 +653,7 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
 
       <div className="grid grid-cols-3 gap-2 text-xs">
         <div>
-          <div className="text-muted-foreground">Entry</div>
+          <div className="text-muted-foreground">Entry Avg</div>
           <div className="font-mono">${position.entry_price.toFixed(2)}</div>
         </div>
         <div>
@@ -634,23 +661,37 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
           <div className="font-mono">${position.current_price.toFixed(2)}</div>
         </div>
         <div>
-          <div className="text-muted-foreground">Stop</div>
+          <div className="text-muted-foreground">Stop Loss</div>
           <div className="font-mono text-red-400">${position.stop_loss.toFixed(2)}</div>
         </div>
       </div>
 
-      <div className="mt-2 flex items-center gap-2 text-xs">
+      {/* Phantom Scale-In Ladder */}
+      <div className="mt-4 pt-3 border-t border-border/50">
+        <div className="flex items-center justify-between text-[9px] uppercase font-bold text-muted-foreground mb-1.5 tracking-widest">
+          <span>Phantom Limit Ladder</span>
+          <span>Risk: 2% Max</span>
+        </div>
+        <div className="flex gap-1.5">
+          <div className={cn("h-1.5 flex-1 rounded-sm", isLong ? "bg-green-400" : "bg-red-400")} title="L1 (0.7%) Filled" />
+          <div className={cn("h-1.5 flex-1 rounded-sm", !isProfitable ? (isLong ? "bg-green-400/80" : "bg-red-400/80") : "bg-muted/30")} title="L2 (0.7%)" />
+          <div className={cn("h-1.5 flex-1 rounded-sm", (position.unrealized_pnl_pct < -0.5) ? (isLong ? "bg-green-400/60" : "bg-red-400/60") : "bg-muted/30")} title="L3 (0.6%)" />
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center gap-2 text-xs">
         {position.breakeven_active && (
-          <Badge variant="secondary" className="text-xs">BE Active</Badge>
+          <Badge variant="secondary" className="text-[10px] uppercase font-bold">BE Active</Badge>
         )}
         {position.trailing_active && (
-          <Badge variant="secondary" className="text-xs">Trailing</Badge>
+          <Badge variant="secondary" className="text-[10px] uppercase font-bold border-accent/30 text-accent">Trailing Mode</Badge>
         )}
-        <span className="text-muted-foreground ml-auto">
-          {position.targets_hit}/{position.targets_hit + position.targets_remaining} targets
+        <span className="text-muted-foreground ml-auto text-[10px] uppercase font-bold tracking-widest">
+          {position.targets_hit}/{position.targets_hit + position.targets_remaining} TP Hit
         </span>
       </div>
     </div>
+
   );
 }
 

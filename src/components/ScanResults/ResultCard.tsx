@@ -130,64 +130,71 @@ export function ResultCard({ result, onClick }: ResultCardProps) {
                     </div>
 
                     <div>
-                        <div className="flex items-center gap-3 mb-2">
-                            <span className="text-2xl font-bold tracking-tight text-zinc-100">{result.pair}</span>
-                            <span className={cn(
-                                "px-2 py-0.5 text-xs font-mono uppercase tracking-wider rounded border",
-                                isLong
-                                    ? "bg-green-500/10 border-green-500/20 text-green-400"
-                                    : "bg-red-500/10 border-red-500/20 text-red-400"
-                            )}>
-                                {isLong ? 'LONG' : 'SHORT'}
+                        <div className="flex flex-col group/pair cursor-pointer mb-2">
+                            <span className="text-4xl md:text-5xl font-black italic tracking-tighter text-white group-hover:text-[#00ff88] transition-all duration-300 drop-shadow-[0_0_20px_rgba(0,255,136,0.2)] leading-none">
+                                {result.pair}
                             </span>
 
-                            {/* Trade Type Badge */}
-                            <span className={cn(
-                                "px-2 py-0.5 text-xs font-mono uppercase tracking-wider rounded border",
-                                tradeType === 'SWING'
-                                    ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
-                                    : tradeType === 'INTRADAY'
-                                        ? "bg-orange-500/10 border-orange-500/20 text-orange-400"
-                                        : "bg-purple-500/10 border-purple-500/20 text-purple-400"
-                            )}>
-                                {tradeType}
-                            </span>
-
-                            {/* HTF Alignment Badge */}
-                            {htfAligned !== null && (
+                            <div className="flex flex-wrap items-center gap-2 mt-3">
                                 <span className={cn(
-                                    "px-2 py-0.5 text-xs font-mono uppercase tracking-wider rounded border flex items-center gap-1",
-                                    htfAligned
-                                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                                        : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                                    "px-2 py-0.5 text-[10px] font-black font-mono uppercase tracking-widest rounded border",
+                                    isLong
+                                        ? "bg-green-500/10 border-green-500/20 text-green-400"
+                                        : "bg-red-500/10 border-red-500/20 text-red-400"
                                 )}>
-                                    <Stack size={12} weight="bold" />
-                                    {htfAligned ? 'HTF ALIGNED' : 'HTF NEUTRAL'}
+                                    {isLong ? 'LONG' : 'SHORT'}
                                 </span>
-                            )}
 
-                            {/* Macro Bonus Badge */}
-                            {(() => {
-                                const macroFactor = result.confluence_breakdown?.factors.find(f => f.name === "Macro Overlay");
-                                const bonus = macroFactor ? macroFactor.score - 50 : 0;
-                                if (bonus > 0) return (
-                                    <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-bold font-mono tracking-wider rounded border border-blue-400/30 bg-blue-500/10 text-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.3)] animate-pulse">
-                                        +{bonus.toFixed(0)} MACRO
+                                {/* Trade Type Badge */}
+                                <span className={cn(
+                                    "px-2 py-0.5 text-xs font-mono uppercase tracking-wider rounded border",
+                                    tradeType === 'SWING'
+                                        ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
+                                        : tradeType === 'INTRADAY'
+                                            ? "bg-orange-500/10 border-orange-500/20 text-orange-400"
+                                            : "bg-purple-500/10 border-purple-500/20 text-purple-400"
+                                )}>
+                                    {tradeType}
+                                </span>
+
+                                {/* HTF Alignment Badge */}
+                                {htfAligned !== null && (
+                                    <span className={cn(
+                                        "px-2 py-0.5 text-xs font-mono uppercase tracking-wider rounded border flex items-center gap-1",
+                                        htfAligned
+                                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                                            : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                                    )}>
+                                        <Stack size={12} weight="bold" />
+                                        {htfAligned ? 'HTF ALIGNED' : 'HTF NEUTRAL'}
                                     </span>
-                                );
-                                return null;
-                            })()}
+                                )}
 
-                            {/* Proximity Badge (HOT/WARM/READY) */}
-                            {proximityBadge && (
-                                <span className={cn(
-                                    "flex items-center gap-1 px-2 py-0.5 text-xs font-bold font-mono uppercase tracking-wider rounded border",
-                                    proximityBadge.color
-                                )}>
-                                    <span>{proximityBadge.icon}</span>
-                                    {proximityBadge.label}
-                                </span>
-                            )}
+                                {/* Macro Bonus Badge */}
+                                {(() => {
+                                    const macroFactor = result.confluence_breakdown?.factors.find(f => f.name === "Macro Overlay");
+                                    const bonus = macroFactor ? macroFactor.score - 50 : 0;
+                                    if (bonus > 0) return (
+                                        <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-bold font-mono tracking-wider rounded border border-blue-400/30 bg-blue-500/10 text-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.3)] animate-pulse">
+                                            +{bonus.toFixed(0)} MACRO
+                                        </span>
+                                    );
+                                    return null;
+                                })()}
+
+                                {/* Proximity Badge (HOT/WARM/READY) */}
+                                {proximityBadge && (
+                                    <span className={cn(
+                                        "flex items-center gap-1 px-2 py-0.5 text-xs font-bold font-mono uppercase tracking-wider rounded border",
+                                        proximityBadge.color
+                                    )}>
+                                        <span>{proximityBadge.icon}</span>
+                                        {proximityBadge.label}
+                                    </span>
+                                )}
+
+                                <span className="text-[9px] font-black text-[#00ff88] uppercase tracking-[0.2em] opacity-0 group-hover/pair:opacity-100 transition-opacity ml-1">◈ OPEN INTEL Dossier</span>
+                            </div>
                         </div>
 
                         {/* Setup Archetype */}

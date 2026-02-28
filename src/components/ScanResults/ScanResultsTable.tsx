@@ -17,12 +17,12 @@ export function ScanResultsTable({ results, onResultClick, selectedId }: ScanRes
             <table className="w-full border-collapse text-left text-sm font-mono">
                 <thead>
                     <tr className="border-b border-zinc-800 bg-zinc-900/50">
-                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Pair</th>
-                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Direction</th>
-                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Score</th>
-                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-zinc-500">R:R</th>
-                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Rationale</th>
-                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-zinc-500 text-right">Action</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">Sector ◈ Pair</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">Direction</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">Score</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">R:R Alpha</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">Mission Rationale</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 text-right">Action</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
@@ -41,13 +41,20 @@ export function ScanResultsTable({ results, onResultClick, selectedId }: ScanRes
                                         isExpanded && "bg-zinc-800/20"
                                     )}
                                 >
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
+                                    <td className="px-6 py-5">
+                                        <div className="flex items-center gap-4">
                                             <div className={cn(
-                                                "w-2 h-2 rounded-full",
-                                                isLong ? "bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.5)]" : "bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.5)]"
-                                            )} />
-                                            <span className="text-lg font-bold text-zinc-100">{result.pair}</span>
+                                                "w-4 h-4 rounded-md flex items-center justify-center",
+                                                isLong ? "text-green-400 bg-green-400/10 border border-green-500/20" : "text-red-400 bg-red-400/10 border border-red-500/20"
+                                            )}>
+                                                {isLong ? <ArrowUpRight size={10} weight="bold" /> : <ArrowDownRight size={10} weight="bold" />}
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-xl font-black text-white group-hover:text-[#00ff88] transition-all duration-200 tracking-tighter drop-shadow-[0_0_10px_rgba(0,255,136,0.1)]">
+                                                    {result.pair}
+                                                </span>
+                                                <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mt-0.5 group-hover:text-zinc-400 transition-colors">Open Tactical Chart</span>
+                                            </div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
@@ -104,9 +111,9 @@ export function ScanResultsTable({ results, onResultClick, selectedId }: ScanRes
 
                                                     {/* Left: Mission Thesis (bullet-point rationale) */}
                                                     <div className="space-y-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-1 h-4 bg-[#00ff88] rounded-full shadow-[0_0_8px_#00ff88]" />
-                                                            <h4 className="text-sm font-black uppercase tracking-[0.2em] text-zinc-100">Mission Thesis</h4>
+                                                        <div className="flex items-center gap-3 py-2 px-1 border-b border-zinc-800/40 mb-2">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-[#00ff88] shadow-[0_0_10px_#00ff88]" />
+                                                            <h4 className="text-xs font-black uppercase tracking-[0.25em] text-zinc-100">◈ Mission Thesis</h4>
                                                         </div>
                                                         <div className="space-y-3">
                                                             {result.rationale
@@ -137,9 +144,9 @@ export function ScanResultsTable({ results, onResultClick, selectedId }: ScanRes
 
                                                     {/* Right: Technical Specs 2x2 grid + Deployment Checklist */}
                                                     <div className="space-y-5">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-1 h-4 bg-zinc-500 rounded-full" />
-                                                            <h4 className="text-sm font-black uppercase tracking-[0.2em] text-zinc-100">Technical Specs</h4>
+                                                        <div className="flex items-center gap-3 py-2 px-1 border-b border-zinc-800/40 mb-2">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
+                                                            <h4 className="text-xs font-black uppercase tracking-[0.25em] text-zinc-100">◈ Technical Specs</h4>
                                                         </div>
                                                         <div className="grid grid-cols-2 gap-3">
                                                             <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800/50 group/stat">
@@ -189,11 +196,11 @@ export function ScanResultsTable({ results, onResultClick, selectedId }: ScanRes
 
                                                 {/* ── ZONE 2: Full-Width Confluence Grid ── */}
                                                 {result.confluence_breakdown?.factors && result.confluence_breakdown.factors.length > 0 && (
-                                                    <div className="space-y-3 pt-6 border-t border-zinc-800/50">
-                                                        <div className="flex items-center justify-between">
+                                                    <div className="space-y-4 pt-8 border-t border-zinc-800/50">
+                                                        <div className="flex items-center justify-between py-2 px-1 border-b border-zinc-800/40 mb-2">
                                                             <div className="flex items-center gap-3">
-                                                                <div className="w-1 h-4 bg-zinc-500 rounded-full" />
-                                                                <h4 className="text-sm font-black uppercase tracking-[0.2em] text-zinc-100">Confluence Breakdown</h4>
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
+                                                                <h4 className="text-xs font-black uppercase tracking-[0.25em] text-zinc-100">◈ Confluence Breakdown</h4>
                                                             </div>
                                                             <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">
                                                                 {result.confluence_breakdown.factors.length} layers • Total {result.confidenceScore.toFixed(0)}%
@@ -202,7 +209,7 @@ export function ScanResultsTable({ results, onResultClick, selectedId }: ScanRes
                                                         {/* Compact horizontal grid — 3 columns, each row is one factor */}
                                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                                             {result.confluence_breakdown.factors
-                                                                .sort((a, b) => (b.score * b.weight) - (a.score * a.weight))
+                                                                .sort((a, b) => (b.score * (b.weight || 1)) - (a.score * (a.weight || 1)))
                                                                 .map((factor, idx) => (
                                                                     <div
                                                                         key={idx}
