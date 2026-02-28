@@ -416,11 +416,44 @@ def generate_trade_plan(
     )
     
     if allowed_types and trade_type not in allowed_types:
-        rejection_msg = (
-            f"Trade type mismatch: Derived '{trade_type}' not allowed in {mode_name} mode "
-            f"(allowed: {allowed_types}). TP1 move: {tp1_move_pct:.1f}%, Stop: {stop_loss.distance_atr:.1f} ATR"
+        # Build a human-readable, mode-aware rejection message
+        geometry_summary = f"TP1 move: {tp1_move_pct:.1f}% · Stop: {stop_loss.distance_atr:.1f} ATR"
+        
+        mode_messages = {
+            "macro_surveillance": (
+                f"Setup geometry is {trade_type}-sized ({geometry_summary}), "
+                f"but Overwatch only accepts swing trades anchored to 4H/1D structure. "
+                f"This setup lacks the HTF alignment required for macro-level positioning."
+            ),
+            "precision": (
+                f"Structure on this pair is {trade_type}-sized ({geometry_summary}). "
+                f"Surgical requires intraday or scalp entries — tight stops under 3 ATR and TP1 under ~5%. "
+                f"No low-timeframe entry zone with suitable geometry was found. "
+                f"Try Overwatch or Stealth for this setup."
+            ),
+            "strike": (
+                f"Derived a {trade_type} setup ({geometry_summary}), "
+                f"but Strike mode targets momentum-driven intraday and scalp plays. "
+                f"This move is too large for Strike's risk parameters. "
+                f"Try Overwatch for swing-sized setups."
+            ),
+            "tactical": (
+                f"Derived trade type '{trade_type}' ({geometry_summary}) "
+                f"is not supported in Stealth mode. "
+                f"Stealth accepts swing and intraday setups — scalp-only geometry was found."
+            ),
+        }
+        
+        rejection_msg = mode_messages.get(
+            mode_name,
+            (
+                f"Trade type mismatch: market structure produced a '{trade_type}' setup "
+                f"({geometry_summary}), which is not compatible with {mode_name} mode. "
+                f"Allowed types: {', '.join(allowed_types)}."
+            )
         )
-        logger.warning(f"❌ {symbol} REJECTED | {rejection_msg}")
+        
+        logger.warning(f"❌ {symbol} REJECTED ({mode_name}) | {trade_type} setup not allowed | {geometry_summary}")
         
         telemetry.log_event(
             create_signal_rejected_event(
@@ -438,6 +471,7 @@ def generate_trade_plan(
         )
         raise ValueError(rejection_msg)
 
+
     # DEBUG: Log final values before TradePlan validation
     try:
         targets_levels = [f"{t.level:.4f}" for t in targets[:3]] if targets else []
@@ -452,7 +486,11 @@ def generate_trade_plan(
             entry_zone=entry_zone,
             stop_loss=stop_loss,
             targets=targets,
-            risk_reward_ratio=targets[-1].rr_ratio if targets else 0.0,
+            # Use TP1 R:R for display (first realistic exit).
+            # Using targets[-1] inflates R:R with extreme extension targets (37R+).
+            # TP1 is the conservative, industry-standard reference for R:R evaluation.
+            risk_reward_ratio=targets[0].rr_ratio if targets else 0.0,
+
             setup_type={
                 "scalp": "Scalp Trade",
                 "intraday": "Day Trade",

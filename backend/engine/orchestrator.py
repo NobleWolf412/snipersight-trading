@@ -1369,12 +1369,29 @@ class Orchestrator:
                 },
             )
 
+            # Build a readable rejection message with score context
+            score = context.confluence_breakdown.total_score
+            threshold = self.config.min_confluence_score
+            gap = threshold - score
+            # Find the top factors that scored lowest (biggest drag)
+            weak_factors = sorted(
+                context.confluence_breakdown.factors, key=lambda f: f.score * f.weight
+            )[:3]
+            weak_str = ", ".join(
+                [f"{f.name.replace('_',' ')} ({f.score:.0f}%)" for f in weak_factors]
+            )
+            readable_reason = (
+                f"Score {score:.1f}% is {gap:.1f} points below the {threshold:.0f}% gate. "
+                f"Weakest signals: {weak_str}. "
+                f"Strengthen these factors or lower the confluence gate."
+            )
+
             return None, {
                 "symbol": symbol,
                 "reason_type": "low_confluence",
-                "reason": f"Confluence score too low ({context.confluence_breakdown.total_score:.1f} < {self.config.min_confluence_score:.1f})",
-                "score": context.confluence_breakdown.total_score,
-                "threshold": self.config.min_confluence_score,
+                "reason": readable_reason,
+                "score": score,
+                "threshold": threshold,
                 "top_factors": [
                     f"{f.name}: {f.score:.1f}" for f in context.confluence_breakdown.factors[:3]
                 ],

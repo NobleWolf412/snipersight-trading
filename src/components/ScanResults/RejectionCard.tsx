@@ -68,6 +68,8 @@ export function RejectionCard({ rejection }: RejectionCardProps) {
     const config = REASON_CONFIG[rejection.reason_type] || REASON_CONFIG.errors;
     const Icon = config.icon;
 
+    const isConflicted = !!(rejection.bullish_score !== undefined && rejection.bearish_score !== undefined);
+
     // DEBUG: Log rejection data to console to verify factors
     console.log('[RejectionCard] Rejection data:', {
         symbol: rejection.symbol,
@@ -136,8 +138,13 @@ export function RejectionCard({ rejection }: RejectionCardProps) {
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xl font-bold tracking-tight text-zinc-200">{rejection.symbol}</span>
                         <div className="flex items-center gap-2">
-                            <span className={cn("text-xs font-mono uppercase px-2 py-1 rounded border", config.bg, config.border, config.color)}>
-                                {rejection.reason_type.replace(/_/g, ' ')}
+                            <span className={cn(
+                                "text-xs font-mono uppercase px-2 py-1 rounded border",
+                                isConflicted
+                                    ? "bg-orange-500/10 border-orange-500/30 text-orange-400"
+                                    : cn(config.bg, config.border, config.color)
+                            )}>
+                                {isConflicted ? 'CONFLICTED' : rejection.reason_type.replace(/_/g, ' ')}
                             </span>
                             {hasDetails && (
                                 <CaretDown
@@ -425,16 +432,22 @@ function DualDirectionBreakdown({ rejection, config }: { rejection: RejectionInf
     return (
         <div className="space-y-4">
             {/* Header: Gap Warning */}
-            <div className="flex items-center justify-between p-4 bg-amber-500/5 border border-amber-500/30 rounded-lg">
-                <div>
-                    <div className="text-sm font-mono text-amber-400 font-bold uppercase tracking-wider">Conflicted Market</div>
-                    <div className="text-xs text-amber-400/70 mt-1">Bullish and bearish scores too close to call</div>
+            <div className="flex items-center justify-between p-4 bg-orange-500/5 border border-orange-500/30 rounded-lg">
+                <div className="flex-1">
+                    <div className="text-sm font-mono text-orange-400 font-bold uppercase tracking-wider">Conflicted Market</div>
+                    <div className="text-xs text-orange-400/70 mt-1">
+                        Both directions are within the minimum margin — no decisive directional edge detected.
+                    </div>
+                    <div className="text-xs text-orange-300/50 mt-1.5 italic">
+                        Wait for a sweep, BOS confirmation, or volume catalyst to break the tie before re-scanning.
+                    </div>
                 </div>
-                <div className="text-right">
-                    <div className="text-2xl font-mono font-bold text-amber-400">{gap.toFixed(1)}pts</div>
-                    <div className="text-xs text-amber-400/70">gap (need 8pts)</div>
+                <div className="text-right flex-shrink-0 ml-4">
+                    <div className="text-2xl font-mono font-bold text-orange-400">{gap.toFixed(1)}pts</div>
+                    <div className="text-xs text-orange-400/70">gap (need 8pts)</div>
                 </div>
             </div>
+
 
             {/* Side-by-Side Score Comparison */}
             <div className="grid grid-cols-2 gap-4">

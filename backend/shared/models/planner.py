@@ -225,19 +225,24 @@ class TradePlan:
 
     @property
     def risk_amount(self) -> float:
-        """Calculate risk amount (entry to stop distance)."""
-        return abs(self.entry_zone.near_entry - self.stop_loss.level)
+        """Calculate risk amount using midpoint of entry zone.
+        
+        Using near_entry causes distorted R:R when it is capped at current price
+        or is very close to the stop (e.g., near_entry = OB bottom, stop = just below OB).
+        The midpoint of the entry zone gives a realistic average fill price.
+        """
+        return abs(self.entry_zone.midpoint - self.stop_loss.level)
 
     @property
     def reward_amount(self) -> float:
-        """Calculate weighted average reward (entry to targets)."""
+        """Calculate weighted average reward (midpoint to targets)."""
         total_reward = sum(
-            abs(t.level - self.entry_zone.near_entry) * (t.percentage / 100) for t in self.targets
+            abs(t.level - self.entry_zone.midpoint) * (t.percentage / 100) for t in self.targets
         )
         return total_reward
 
     def calculate_rr(self) -> float:
-        """Recalculate risk:reward ratio."""
+        """Recalculate risk:reward ratio using midpoint."""
         if self.risk_amount == 0:
             return 0
         return self.reward_amount / self.risk_amount

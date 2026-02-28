@@ -12,6 +12,7 @@ import {
 import { convertSignalToScanResult, generateDemoScanResults } from '@/utils/mockData';
 import { TacticalSelector, TacticalSlider, TacticalToggle, TacticalDropdown, TacticalTargetInput } from '@/components/ui/TacticalInputs';
 import { Slider } from '@/components/ui/slider';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScannerModeTabs } from '@/components/scanner/ScannerModeTabs';
 import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
@@ -19,6 +20,27 @@ import { scanHistoryService } from '@/services/scanHistoryService';
 import { ScannerConsole } from '@/components/ScannerConsole';
 import { debugLogger } from '@/utils/debugLogger';
 import { validateScannerConfig, hasBlockingErrors, getSeverityColor, getSeverityIcon } from '@/utils/scannerValidation';
+
+const getTrendContextDescription = (context: string) => {
+  const text = context.toLowerCase();
+
+  // Bullish
+  if (text.includes("explosive")) return "Aggressive, high-velocity uptrend with steep uncorrected momentum.";
+  if (text.includes("strong momentum")) return "Healthy, well-defined uptrend with consistent structural progress.";
+  if (text.includes("steady uptrend") || text.includes("steady up")) return "Orderly bullish structure moving at a sustainable pace.";
+  if (text.includes("recovery")) return "Previous bearish structure invalidated by strong upward momentum.";
+
+  // Bearish
+  if (text.includes("breakdown") || text.includes("fatigue") || text.includes("aggressive sell")) return "Violent structural shift downwards, breaking critical support/momentum.";
+  if (text.includes("steady downtrend") || text.includes("steady down")) return "Orderly bearish structure with consistent lower highs/lows.";
+
+  // Neutral/Mixed
+  if (text.includes("divergence")) return "Price is moving but underlying indicators show momentum is slowing (caution).";
+  if (text.includes("choppy") || text.includes("transitional")) return "High volatility erratic movement without back-to-back structural progression. Difficult environment.";
+  if (text.includes("range") || text.includes("ranging") || text.includes("flat") || text.includes("weak")) return "Consolidating or stagnant market with no clear directional advantage.";
+
+  return "Algorithm's analysis of structural trend and moving average velocity for this timeframe.";
+};
 
 export function ScannerSetup() {
   const navigate = useNavigate();
@@ -456,15 +478,23 @@ export function ScannerSetup() {
 
                   return (
                     <div key={tf} className={`glass-card p-4 rounded-xl border ${colorClass} flex items-center justify-between`}>
-                      <div>
-                        <div className="text-xs text-muted-foreground font-mono uppercase tracking-widest mb-1.5 opacity-80">
-                          {tf === '1w' ? 'WEEKLY' : tf === '1d' ? 'DAILY' : '4-HOUR'}
-                        </div>
-                        <div className="font-bold text-lg lg:text-xl tracking-tight leading-none flex items-center gap-2">
-                          {/* Use backend description if available, else fallback */}
-                          {data.context || data.trend.toUpperCase()}
-                        </div>
-                      </div>
+                      <TooltipProvider delayDuration={100}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="text-left cursor-help group transition-all duration-300">
+                              <div className="text-xs text-muted-foreground font-mono uppercase tracking-widest mb-1.5 opacity-80 group-hover:text-white transition-colors">
+                                {tf === '1w' ? 'WEEKLY' : tf === '1d' ? 'DAILY' : '4-HOUR'}
+                              </div>
+                              <div className="font-bold text-lg lg:text-xl tracking-tight leading-none flex items-center gap-2 underline decoration-white/20 underline-offset-4 decoration-dashed group-hover:decoration-current transition-colors">
+                                {data.context || data.trend.toUpperCase()}
+                              </div>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="bg-black/95 border-white/10 text-zinc-300 font-mono text-sm max-w-xs p-4 shadow-2xl">
+                            {getTrendContextDescription(data.context || data.trend.toUpperCase())}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                       <div className={`p-3 rounded-full ${isUp ? 'bg-green-500/20' : isDown ? 'bg-red-500/20' : 'bg-yellow-500/20'}`}>
                         {isUp ? <CaretUp size={24} weight="bold" /> :
                           isDown ? <CaretDown size={24} weight="bold" /> :
@@ -681,7 +711,7 @@ export function ScannerSetup() {
 
                     <TacticalToggle
                       label="MACRO OVERLAY"
-                      sublabel="Adjust scores based on BTC.D"
+                      sublabel="Adjust scores by capital flow & breadth"
                       tooltip="When enabled, trade scores are adjusted based on the overall market regime. If BTC Dominance is rising (Risk-Off), altcoin longs get penalized. If capital is flowing into alts (Risk-On), altcoin longs get boosted. Helps you avoid swimming upstream."
                       checked={scanConfig.macroOverlay}
                       onChange={(checked) => {

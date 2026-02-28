@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import * as Tabs from '@radix-ui/react-tabs';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ModeVisuals } from './ModeVisuals';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // Mode display configurations
 const MODE_CONFIG = {
@@ -169,18 +170,46 @@ export function ScannerModeTabs({ recommendation: propRecommendation }: ScannerM
         return 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10';
     };
 
+    const getRegimeDescription = (label: string) => {
+        const text = label.toLowerCase();
+        if (text.includes("choppy_risk_off")) return "Market is trading sideways while capital rotates out of risk assets into stables. Avoid aggressive momentum longs.";
+        if (text.includes("bullish_risk_on")) return "Clear structural uptrend with capital actively rotating into risk assets. Favorable for momentum trading.";
+        if (text.includes("bearish_risk_off")) return "Market distribution phase with capital fleeing to safety. High risk for long positions.";
+        if (text.includes("chaotic")) return "Wild, erratic price swings with elevated ATR. Directional advantage is zero. Caution advised.";
+        if (text.includes("coiling")) return "Volatility is heavily compressed. Market is preparing for an explosive breakout move.";
+        return "Global analysis of trend and volatility across the market.";
+    };
+
+    const getCapitalFlowDescription = (value: { btc: number, alt: number, stable: number }) => {
+        if (value.btc > 60) return "Bitcoin is heavily dominant. Altcoins will likely bleed or underperform significantly.";
+        if (value.btc > 52) return "Bitcoin is commanding liquidity. Altcoins are generally lagging BTC's movements.";
+        if (value.alt > 40) return "Capital is aggressively rotating out of Bitcoin into Altcoins (Risk-On).";
+        if (value.alt > 35) return "Altcoins are showing relative strength and performing well against Bitcoin.";
+        if (value.stable > 10) return "Capital is heavily rotating into stables (Risk-Off). Extreme caution.";
+        return "Capital is evenly distributed with no clear sector advantage.";
+    };
+
     return (
         <Tabs.Root value={currentModeName} onValueChange={handleModeChange} className="w-full">
             {/* Market regime indicator */}
             {marketRegime && (
                 <div className="mb-6 flex flex-col items-center gap-2">
                     <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest pl-1">Global Market Context</span>
-                    <div className={`inline-flex items-center gap-3 px-4 py-2 rounded-lg border backdrop-blur-sm ${getRegimeColor(marketRegime)}`}>
-                        <div className="w-2 h-2 rounded-full bg-current animate-pulse" />
-                        <span className="text-lg lg:text-xl font-black italic tracking-tighter">
-                            {formatRegimeLabel(marketRegime)}
-                        </span>
-                    </div>
+                    <TooltipProvider delayDuration={100}>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <div className={`inline-flex items-center gap-3 px-4 py-2 rounded-lg border backdrop-blur-sm cursor-help hover:scale-[1.02] transition-transform ${getRegimeColor(marketRegime)}`}>
+                                    <div className="w-2 h-2 rounded-full bg-current animate-pulse" />
+                                    <span className="text-lg lg:text-xl font-black italic tracking-tighter underline decoration-white/20 underline-offset-4 decoration-dashed">
+                                        {formatRegimeLabel(marketRegime)}
+                                    </span>
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="bg-black/95 border-white/10 text-zinc-300 font-mono text-sm max-w-xs p-4 shadow-2xl">
+                                {getRegimeDescription(marketRegime)}
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
 
                     {propRecommendation?.dominance && (
                         <div className="w-full mt-6 bg-black/20 rounded-2xl p-6 border border-white/5 shadow-2xl relative overflow-hidden group">
@@ -193,16 +222,27 @@ export function ScannerModeTabs({ recommendation: propRecommendation }: ScannerM
                                     <div className="h-px w-8 bg-gradient-to-r from-transparent to-white/10" />
                                     <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.3em] opacity-80">Capital Flow</span>
                                     <span className="text-muted-foreground/30">—</span>
-                                    {propRecommendation.dominance.btc > 60 ?
-                                        <span className="text-xs text-orange-500 font-extrabold tracking-[0.2em] animate-pulse">BTC DOMINANT</span> :
-                                        propRecommendation.dominance.btc > 52 ?
-                                            <span className="text-xs text-orange-400 font-extrabold tracking-[0.2em]">BTC LEAD</span> :
-                                            propRecommendation.dominance.alt > 40 ?
-                                                <span className="text-xs text-purple-400 font-extrabold tracking-[0.2em] animate-pulse">ALT SEASON</span> :
-                                                propRecommendation.dominance.alt > 35 ?
-                                                    <span className="text-xs text-purple-300 font-extrabold tracking-[0.2em]">ALT STRENGTH</span> :
-                                                    <span className="text-xs text-emerald-400 font-extrabold tracking-[0.2em]">RISK NEUTRAL</span>
-                                    }
+                                    <TooltipProvider delayDuration={100}>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div className="cursor-help hover:scale-[1.05] transition-transform">
+                                                    {propRecommendation.dominance.btc > 60 ?
+                                                        <span className="text-xs text-orange-500 font-extrabold tracking-[0.2em] animate-pulse underline decoration-white/20 underline-offset-4 decoration-dashed">BTC DOMINANT</span> :
+                                                        propRecommendation.dominance.btc > 52 ?
+                                                            <span className="text-xs text-orange-400 font-extrabold tracking-[0.2em] underline decoration-white/20 underline-offset-4 decoration-dashed">BTC LEAD</span> :
+                                                            propRecommendation.dominance.alt > 40 ?
+                                                                <span className="text-xs text-purple-400 font-extrabold tracking-[0.2em] animate-pulse underline decoration-white/20 underline-offset-4 decoration-dashed">ALT SEASON</span> :
+                                                                propRecommendation.dominance.alt > 35 ?
+                                                                    <span className="text-xs text-purple-300 font-extrabold tracking-[0.2em] underline decoration-white/20 underline-offset-4 decoration-dashed">ALT STRENGTH</span> :
+                                                                    <span className="text-xs text-emerald-400 font-extrabold tracking-[0.2em] underline decoration-white/20 underline-offset-4 decoration-dashed">RISK NEUTRAL</span>
+                                                    }
+                                                </div>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="bg-black/95 border-white/10 text-zinc-300 font-mono text-sm max-w-[280px] p-4 shadow-2xl">
+                                                {getCapitalFlowDescription(propRecommendation.dominance)}
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
                                     <div className="h-px w-8 bg-gradient-to-l from-transparent to-white/10" />
                                 </div>
 

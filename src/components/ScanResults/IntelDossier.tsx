@@ -140,10 +140,18 @@ export function IntelDossier({ result, onClose }: IntelDossierProps) {
                             {/* Divider */}
                             <div className="h-px bg-gradient-to-r from-transparent via-zinc-800 to-transparent" />
 
-                            {/* Bottom: Narrative Mission Rationale (bullet points) */}
-                            <div className="space-y-1">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-[#00ff88]/60">Mission Rationale</span>
-                            </div>
+                            {/* Fallback Entry Warning */}
+                            {result.plan_type === 'ATR_FALLBACK' && (
+                                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/8 border border-amber-500/30">
+                                    <ShieldWarning size={16} weight="fill" className="text-amber-400 mt-0.5 flex-shrink-0" />
+                                    <div>
+                                        <div className="text-[10px] font-black uppercase tracking-widest text-amber-400">⚠ Fallback Entry — No SMC Anchor</div>
+                                        <div className="text-xs text-amber-400/70 mt-0.5 leading-relaxed">
+                                            No valid OB, FVG, or sweep was found at the entry zone. Entry is price-based (ATR fallback). Lower structural conviction — treat as lower priority.
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                             <div className="space-y-3">
                                 {result.rationale
                                     ? result.rationale.split('\n\n').map((line, i) => {
@@ -154,6 +162,7 @@ export function IntelDossier({ result, onClose }: IntelDossierProps) {
                                         const pipeIdx = rest.indexOf(' | ');
                                         const desc = pipeIdx !== -1 ? rest.substring(0, pipeIdx).trim() : rest;
                                         const stats = pipeIdx !== -1 ? rest.substring(pipeIdx + 3).trim() : null;
+                                        const isEntryLogic = label.toUpperCase().includes('ENTRY');
                                         return (
                                             <div key={i} className="flex flex-col gap-1 pl-3 border-l-2 border-zinc-800 hover:border-[#00ff88]/40 transition-colors group/bullet">
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-[#00ff88]/70 group-hover/bullet:text-[#00ff88] transition-colors">{label}</span>
@@ -167,6 +176,7 @@ export function IntelDossier({ result, onClose }: IntelDossierProps) {
                                     : <p className="text-zinc-400 text-sm pl-3 border-l-2 border-zinc-800">{`Price action indicates a strong ${isLong ? 'demand' : 'supply'} imbalance on the ${chartTimeframe.toUpperCase()} timeframe.${result.riskReward && result.riskReward > 3 ? ' High R:R opportunity detected.' : ''}`}</p>
                                 }
                             </div>
+
                         </div>
 
                         {/* 3. SECTOR 2: THE PLAN (Execution) */}

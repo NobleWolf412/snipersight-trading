@@ -299,7 +299,9 @@ export function TacticalToggle({ label, sublabel, tooltip, checked, onChange, ic
                     ? (isHazard
                         ? "border-amber-500 bg-amber-500/10 shadow-[0_0_20px_rgba(245,158,11,0.2)]"
                         : "border-[#00ff88] bg-[#00ff88]/10 shadow-[0_0_20px_rgba(0,255,136,0.15)]")
-                    : "border-white/5 bg-black/40 hover:border-white/20 hover:bg-white/5",
+                    : (isHazard
+                        ? "border-amber-500/30 bg-black/40 hover:border-amber-500/60 hover:bg-amber-500/5"
+                        : "border-white/5 bg-black/40 hover:border-white/20 hover:bg-white/5"),
                 className
             )}
         >
@@ -324,14 +326,14 @@ export function TacticalToggle({ label, sublabel, tooltip, checked, onChange, ic
                     "mb-2 transition-colors duration-200",
                     checked
                         ? (isHazard ? "text-amber-400" : "text-[#00ff88]")
-                        : "text-white/40 group-hover:text-white/60"
+                        : (isHazard ? "text-amber-500/40 group-hover:text-amber-500/60" : "text-white/40 group-hover:text-white/60")
                 )}>
                     {icon || <Check size={24} />}
                 </div>
 
                 <div className={cn(
                     "font-bold font-mono text-lg transition-colors",
-                    checked ? "text-white" : "text-muted-foreground group-hover:text-white"
+                    checked ? "text-white" : (isHazard ? "text-amber-500/70 group-hover:text-amber-400" : "text-muted-foreground group-hover:text-white")
                 )}>
                     {label}
                 </div>
@@ -340,8 +342,8 @@ export function TacticalToggle({ label, sublabel, tooltip, checked, onChange, ic
                     <div className={cn(
                         "text-xs mt-1 font-mono transition-colors",
                         checked
-                            ? (isHazard ? "text-amber-400/70" : "text-[#00ff88]/70")
-                            : "text-muted-foreground/50"
+                            ? (isHazard ? "text-amber-400" : "text-[#00ff88]/70")
+                            : (isHazard ? "text-amber-500/50 group-hover:text-amber-500/70" : "text-muted-foreground/50")
                     )}>
                         {sublabel}
                     </div>
@@ -541,7 +543,7 @@ export function TacticalTargetInput({
                         placeholder={placeholder}
                         className={cn(
                             "h-16 pl-12 pr-12 bg-black/40 border-2 border-white/5 rounded-xl text-lg font-mono font-bold tracking-widest uppercase transition-all duration-300",
-                            "focus:border-[#00ff88] focus:bg-[#00ff88]/5 focus:ring-0 focus:ring-offset-0",
+                            "focus:border-[#00ff88] focus:bg-[#00ff88]/5 focus:ring-0 focus:ring-offset-0 placeholder:text-[#00ff88]/30",
                             active && "border-accent/40 bg-accent/5"
                         )}
                     />
@@ -572,7 +574,7 @@ export function TacticalTargetInput({
                 </div>
             </div>
 
-            <p className="mt-3 text-[10px] font-mono text-muted-foreground/60 uppercase tracking-[0.1em] flex items-center gap-2">
+            <p className="mt-3 text-[10px] font-mono text-zinc-400 uppercase tracking-[0.1em] flex items-center gap-2">
                 <Info size={14} />
                 Bypasses symbol pool to scan specific instrument across all mode timeframes
             </p>
