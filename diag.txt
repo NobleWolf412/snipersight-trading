@@ -1,0 +1,53 @@
+{
+  "diagnostics": {
+    "data_failures": {
+      "count": 0,
+      "samples": []
+    },
+    "indicator_failures": {
+      "count": 0,
+      "samples": []
+    },
+    "smc_rejections": {
+      "count": 0,
+      "samples": []
+    },
+    "confluence_rejections": {
+      "count": 2,
+      "samples": [
+        {
+          "symbol": "LINK/USDT",
+          "trace_id": "77a9b370_LINK_USDT_1772236442",
+          "score": 63.78113289547921,
+          "threshold": 72.0
+        },
+        {
+          "symbol": "LINK/USDT",
+          "trace_id": "56370e9b_LINK_USDT_1772237456",
+          "score": 65.79988610202977,
+          "threshold": 68.0
+        }
+      ]
+    },
+    "planner_rejections": {
+      "count": 1,
+      "samples": [
+        {
+          "symbol": "LINK/USDT",
+          "trace_id": "9cb56e81_LINK_USDT_1772236482",
+          "reason": "Trade type mismatch: Derived 'swing' not allowed in precision mode (allowed: ('intraday', 'scalp')). TP1 move: 11.6%, Stop: 8.6 ATR"
+        }
+      ]
+    },
+    "risk_rejections": {
+      "count": 0,
+      "samples": []
+    }
+  },
+  "current_mode": {
+    "name": "overwatch",
+    "profile": "macro_surveillance",
+    "min_score": 78.0
+  },
+  "timestamp": "2026-02-28T22:01:04.817844+00:00"
+}

@@ -354,7 +354,27 @@ class ApiClient {
           // Try JSON error first; fall back to text or generic message.
           try {
             const errJson = await response.json();
-            const errMsg = (errJson && (errJson.detail || errJson.error)) || `${response.status} ${response.statusText}`;
+            let errMsg = `${response.status} ${response.statusText}`;
+            if (errJson) {
+              if (typeof errJson.detail === 'string') {
+                errMsg = errJson.detail;
+              } else if (Array.isArray(errJson.detail)) {
+                errMsg = errJson.detail.map((e: any) => {
+                  const loc = e.loc ? e.loc.join('.') + ': ' : '';
+                  return `${loc}${e.msg}`;
+                }).join(', ');
+              } else if (typeof errJson.error === 'string') {
+                errMsg = errJson.error;
+              } else if (errJson.detail) {
+                errMsg = JSON.stringify(errJson.detail);
+              } else if (errJson.error) {
+                errMsg = JSON.stringify(errJson.error);
+              } else if (typeof errJson.message === 'string') {
+                errMsg = errJson.message;
+              } else {
+                errMsg = JSON.stringify(errJson);
+              }
+            }
             if (!silent) debugLogger.error(`API Error: ${errMsg}`, 'api');
             return { error: errMsg };
           } catch {
@@ -951,6 +971,20 @@ export interface PaperTradingStatusResponse {
   recent_activity: PaperTradingActivity[];
   last_scan_at: string | null;
   next_scan_in_seconds: number | null;
+  current_scan?: {
+    status: 'running' | 'completed';
+    completed: number;
+    total: number;
+    current_symbol: string | null;
+    progress_pct: number;
+    passed: number;
+    rejected: number;
+    recent_symbols: Array<{
+      symbol: string;
+      passed: boolean;
+      reason: string | null;
+    }>;
+  } | null;
   cache_stats?: {
     hit_rate_pct: number;
     entries: number;

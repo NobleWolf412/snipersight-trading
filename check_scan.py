@@ -1,0 +1,1 @@
+import urllib.request, json; req=urllib.request.Request('http://localhost:8001/api/scanner/scan', data=json.dumps({'exchange':'phemex', 'symbols':['BTC/USDT'], 'timeframes':['1D','4H','1H','15m'], 'min_score':65, 'indicators':{}}).encode('utf-8'), headers={'Content-Type':'application/json'}); print(urllib.request.urlopen(req).read().decode('utf-8'))

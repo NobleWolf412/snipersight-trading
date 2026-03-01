@@ -235,6 +235,7 @@ class PaperTradingService:
         self.started_at: Optional[datetime] = None
         self.stopped_at: Optional[datetime] = None
         self.last_scan_at: Optional[datetime] = None
+        self.current_scan: Optional[Dict[str, Any]] = None
 
         # Background task
         self._scan_task: Optional[asyncio.Task] = None
@@ -433,6 +434,7 @@ class PaperTradingService:
             "config": self.config.to_dict() if self.config else None,
             "last_scan_at": self.last_scan_at.isoformat() if self.last_scan_at else None,
             "next_scan_in_seconds": next_scan_in,
+            "current_scan": self.current_scan,
         }
 
         # Balance info
@@ -570,12 +572,50 @@ class PaperTradingService:
                 symbols = [s for s in symbols if s not in self.config.exclude_symbols]
 
             logger.info(f"Starting scan: {len(symbols)} symbols, mode={self.config.sniper_mode}")
+            
+            self.current_scan = {
+                "status": "running",
+                "completed": 0,
+                "total": len(symbols),
+                "current_symbol": None,
+                "progress_pct": 0,
+                "passed": 0,
+                "rejected": 0,
+                "recent_symbols": []
+            }
+            
+            def _progress_callback(completed: int, total: int, sym: str, passed: bool, rejection_info: Optional[Dict[str, Any]]):
+                if not self.current_scan:
+                    return
+                self.current_scan["completed"] = completed
+                self.current_scan["total"] = total
+                self.current_scan["current_symbol"] = sym
+                self.current_scan["progress_pct"] = int((completed / total) * 100) if total > 0 else 0
+                if passed:
+                    self.current_scan["passed"] += 1
+                else:
+                    self.current_scan["rejected"] += 1
+                
+                # Keep last 5 symbols for the UI ticker
+                status_obj = {
+                    "symbol": sym,
+                    "passed": passed,
+                    "reason": rejection_info.get("reason", "Unknown") if rejection_info else None
+                }
+                self.current_scan["recent_symbols"].insert(0, status_obj)
+                self.current_scan["recent_symbols"] = self.current_scan["recent_symbols"][:5]
 
             # Run scanner - use self.mode (ScannerMode object), not config.sniper_mode (string)
             self.orchestrator.apply_mode(self.mode)
-            trade_plans, rejections = self.orchestrator.scan(symbols=symbols)
+            trade_plans, rejections = self.orchestrator.scan(
+                symbols=symbols,
+                progress_callback=_progress_callback
+            )
 
             self.stats.signals_generated += len(trade_plans)
+            
+            if self.current_scan:
+                self.current_scan["status"] = "completed"
 
             self._log_activity(
                 "scan_completed",
@@ -660,14 +700,34 @@ class PaperTradingService:
         position_size = self._calculate_position_size(plan)
         if position_size <= 0:
             logger.debug(f"Invalid position size for {plan.symbol}")
+            self._log_activity(
+                "signal_filtered",
+                {
+                    "symbol": plan.symbol,
+                    "direction": plan.direction,
+                    "confluence": plan.confidence_score,
+                    "reason": "Invalid position size calculated",
+                },
+            )
             return
 
         # Get current price
         try:
             current_price = await self._fetch_price(plan.symbol)
             self._price_cache[plan.symbol] = current_price
+            if current_price <= 0:
+                raise ValueError("Price is zero or negative")
         except Exception as e:
             logger.error(f"Failed to get price for {plan.symbol}: {e}")
+            self._log_activity(
+                "signal_filtered",
+                {
+                    "symbol": plan.symbol,
+                    "direction": plan.direction,
+                    "confluence": plan.confidence_score,
+                    "reason": f"Failed to get price: {e}",
+                },
+            )
             return
 
         # Execute entry
@@ -941,7 +1001,7 @@ class PaperTradingService:
             raise ValueError("No exchange adapter available")
 
         try:
-            ticker = self.orchestrator.adapter.get_ticker(symbol)
+            ticker = self.orchestrator.adapter.fetch_ticker(symbol)
             return ticker.get("last", ticker.get("close", 0.0))
         except Exception as e:
             logger.error(f"Failed to fetch price for {symbol}: {e}")

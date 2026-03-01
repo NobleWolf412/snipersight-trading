@@ -1,0 +1,1 @@
+import json, urllib.request; data = json.loads(urllib.request.urlopen('http://localhost:8001/api/paper-trading/status').read().decode('utf-8')); print('Status:', data.get('status')); print('Positions:', len(data.get('positions', []))); print('Trades:', len(data.get('trades', [])) if 'trades' in data else 'N/A'); print('Stats:', data.get('statistics'))

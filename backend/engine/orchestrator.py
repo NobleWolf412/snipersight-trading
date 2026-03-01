@@ -254,7 +254,7 @@ class Orchestrator:
     def scan(
         self,
         symbols: List[str],
-        progress_callback: Optional[Callable[[int, int, str], None]] = None,
+        progress_callback: Optional[Callable[[int, int, str, bool, Optional[Dict[str, Any]]], None]] = None,
     ) -> tuple[List[TradePlan], Dict[str, Any]]:
         """
         Scan a list of symbols and return high-conviction trade plans.
@@ -447,7 +447,7 @@ class Orchestrator:
                     # Call progress callback if provided
                     if progress_callback:
                         try:
-                            progress_callback(completed, len(symbols), sym)
+                            progress_callback(completed, len(symbols), sym, result is not None, rejection_info)
                         except Exception as e:
                             logger.debug("Progress callback error: %s", e)
 
@@ -463,7 +463,7 @@ class Orchestrator:
 
                     if progress_callback:
                         try:
-                            progress_callback(completed, len(symbols), sym)
+                            progress_callback(completed, len(symbols), sym, False, rejection_info)
                         except Exception as e:
                             logger.debug("Progress callback error: %s", e)
 

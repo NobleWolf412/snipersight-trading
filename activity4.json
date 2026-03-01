@@ -1,0 +1,85 @@
+{
+  "activity": [
+    {
+      "timestamp": "2026-02-28T23:52:43.216835+00:00",
+      "event_type": "scan_completed",
+      "data": {
+        "signals_found": 5,
+        "symbols_scanned": 5,
+        "rejections": 5
+      }
+    },
+    {
+      "timestamp": "2026-02-28T23:51:53.784481+00:00",
+      "event_type": "scan_started",
+      "data": {
+        "mode": "stealth"
+      }
+    },
+    {
+      "timestamp": "2026-02-28T23:46:53.781911+00:00",
+      "event_type": "scan_completed",
+      "data": {
+        "signals_found": 5,
+        "symbols_scanned": 5,
+        "rejections": 5
+      }
+    },
+    {
+      "timestamp": "2026-02-28T23:46:05.080001+00:00",
+      "event_type": "scan_started",
+      "data": {
+        "mode": "stealth"
+      }
+    },
+    {
+      "timestamp": "2026-02-28T23:41:05.062023+00:00",
+      "event_type": "scan_completed",
+      "data": {
+        "signals_found": 4,
+        "symbols_scanned": 5,
+        "rejections": 5
+      }
+    },
+    {
+      "timestamp": "2026-02-28T23:40:11.368093+00:00",
+      "event_type": "scan_started",
+      "data": {
+        "mode": "stealth"
+      }
+    },
+    {
+      "timestamp": "2026-02-28T23:35:11.348969+00:00",
+      "event_type": "scan_completed",
+      "data": {
+        "signals_found": 5,
+        "symbols_scanned": 5,
+        "rejections": 5
+      }
+    },
+    {
+      "timestamp": "2026-02-28T23:34:16.603194+00:00",
+      "event_type": "scan_started",
+      "data": {
+        "mode": "stealth"
+      }
+    },
+    {
+      "timestamp": "2026-02-28T23:29:16.590581+00:00",
+      "event_type": "scan_completed",
+      "data": {
+        "signals_found": 5,
+        "symbols_scanned": 5,
+        "rejections": 5
+      }
+    },
+    {
+      "timestamp": "2026-02-28T23:28:21.494744+00:00",
+      "event_type": "scan_started",
+      "data": {
+        "mode": "stealth"
+      }
+    }
+  ],
+  "total": 10
+}
