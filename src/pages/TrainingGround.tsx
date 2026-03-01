@@ -125,6 +125,7 @@ export function TrainingGround() {
   // Poll status when running
   useEffect(() => {
     fetchStatus();
+    fetchTrades();
 
     // Set up polling - use longer interval (15s) to avoid overwhelming backend during heavy scans
     // Backend can take 10-20s to respond when scanner is actively processing
