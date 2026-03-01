@@ -230,6 +230,7 @@ class PaperTradingService:
         self.completed_trades: List[CompletedTrade] = []
         self.activity_log: List[Dict[str, Any]] = []
         self.stats: PaperTradingStats = PaperTradingStats()
+        self._peak_equity: float = 0.0
 
         # Session timing
         self.started_at: Optional[datetime] = None
@@ -314,6 +315,7 @@ class PaperTradingService:
         self.activity_log = []
         self.stats = PaperTradingStats()
         self._price_cache = {}
+        self._peak_equity = config.initial_balance
 
         # Start session
         self.started_at = datetime.now(timezone.utc)
@@ -528,7 +530,7 @@ class PaperTradingService:
                 elapsed = self._get_uptime_seconds()
                 if elapsed >= self.config.duration_hours * 3600:
                     logger.info("Duration limit reached, stopping")
-                    await self.stop()
+                    asyncio.create_task(self.stop())
                     break
 
             # Wait for next interval
@@ -539,6 +541,9 @@ class PaperTradingService:
         while self._running:
             try:
                 if self.position_manager:
+                    # Refresh prices for all open positions before monitoring
+                    await self._refresh_price_cache()
+
                     await self.position_manager.monitor_all_positions()
 
                     # Check for closed positions
@@ -548,6 +553,22 @@ class PaperTradingService:
                 logger.error(f"Monitor error: {e}")
 
             await asyncio.sleep(1)  # Check every second
+
+    async def _refresh_price_cache(self):
+        """Fetch current prices for all open positions and update the cache."""
+        if not self.position_manager:
+            return
+
+        open_positions = self.position_manager.get_open_positions()
+        symbols = {pos.symbol for pos in open_positions}
+
+        for symbol in symbols:
+            try:
+                price = await self._fetch_price(symbol)
+                if price > 0:
+                    self._price_cache[symbol] = price
+            except Exception as e:
+                logger.debug(f"Price refresh failed for {symbol}: {e}")
 
     async def _run_scan(self):
         """Run a single scanner iteration."""
@@ -969,6 +990,16 @@ class PaperTradingService:
         if self.stats.avg_loss != 0:
             self.stats.avg_rr = abs(self.stats.avg_win / self.stats.avg_loss)
 
+        # Update max drawdown
+        if self.executor and self.config:
+            current_equity = self.executor.get_equity(self._price_cache)
+            if current_equity > self._peak_equity:
+                self._peak_equity = current_equity
+            elif self._peak_equity > 0:
+                drawdown = (self._peak_equity - current_equity) / self._peak_equity * 100
+                if drawdown > self.stats.max_drawdown:
+                    self.stats.max_drawdown = drawdown
+
     def _log_activity(self, event_type: str, data: Dict[str, Any]):
         """Add event to activity log."""
         self.activity_log.append(
@@ -1001,7 +1032,10 @@ class PaperTradingService:
             raise ValueError("No exchange adapter available")
 
         try:
-            ticker = self.orchestrator.adapter.fetch_ticker(symbol)
+            loop = asyncio.get_event_loop()
+            ticker = await loop.run_in_executor(
+                None, self.orchestrator.adapter.fetch_ticker, symbol
+            )
             return ticker.get("last", ticker.get("close", 0.0))
         except Exception as e:
             logger.error(f"Failed to fetch price for {symbol}: {e}")

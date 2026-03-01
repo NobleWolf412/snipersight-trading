@@ -232,7 +232,7 @@ class PositionManager:
             position = self.positions[position_id]
 
             # Calculate final P&L if price provided
-            if current_price:
+            if current_price is not None:
                 position.update_unrealized_pnl(current_price)
                 position.realized_pnl += position.unrealized_pnl
                 position.unrealized_pnl = 0.0
@@ -469,7 +469,7 @@ class PositionManager:
                 symbol=position.symbol,
                 side=order_side,
                 quantity=position.remaining_quantity,
-                order_type="MARKET",
+                price=price,
             )
             logger.info(
                 f"Exit executed: {position.position_id} | {reason} | "
@@ -487,7 +487,7 @@ class PositionManager:
         try:
             order_side = "SELL" if position.direction == "LONG" else "BUY"
             await self.order_executor(
-                symbol=position.symbol, side=order_side, quantity=quantity, order_type="MARKET"
+                symbol=position.symbol, side=order_side, quantity=quantity, price=price
             )
             logger.info(
                 f"Partial exit executed: {position.position_id} | " f"Qty: {quantity} @ {price}"

@@ -373,7 +373,7 @@ export function PaperTradingConfig({ config, onChange, disabled }: PaperTradingC
                     max={1}
                     step={0.01}
                     value={(config.fee_rate ?? 0.001) * 100}
-                    onChange={(e) => updateConfig({ fee_rate: (parseFloat(e.target.value) || 0.1) / 100 })}
+                    onChange={(e) => { const v = parseFloat(e.target.value); updateConfig({ fee_rate: (isNaN(v) ? 0.1 : v) / 100 }); }}
                     disabled={disabled}
                     className="font-mono w-24"
                   />
