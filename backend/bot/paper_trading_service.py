@@ -442,8 +442,27 @@ class PaperTradingService:
         # Balance info
         if self.executor:
             initial = self.config.initial_balance if self.config else 0
-            current = self.executor.get_balance()
-            equity = self.executor.get_equity(self._price_cache)
+            
+            # Pure cash balance starts with executor balance (initial - fees)
+            current = self.executor.get_balance() + self.stats.total_pnl
+            
+            # Add realized PnL from currently open positions (partial target hits)
+            if self.position_manager:
+                current += sum(
+                    pos.realized_pnl 
+                    for pos in self.position_manager.positions.values() 
+                    if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
+                )
+            
+            # Calculate equity using PositionManager for futures P&L
+            unrealized_pnl = 0.0
+            if self.position_manager:
+                unrealized_pnl = sum(
+                    pos.unrealized_pnl 
+                    for pos in self.position_manager.positions.values() 
+                    if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
+                )
+            equity = current + unrealized_pnl
 
             result["balance"] = {
                 "initial": initial,
@@ -788,6 +807,21 @@ class PaperTradingService:
                 )
 
                 logger.info(f"Trade opened: {plan.symbol} {plan.direction} @ {fill.price}")
+            else:
+                reason = "Order execution rejected by simulated broker"
+                if order.status == OrderStatus.REJECTED:
+                    reason = "Insufficient margin/balance for paper trade execution"
+                
+                logger.warning(f"Trade execution failed for {plan.symbol}: {reason}")
+                self._log_activity(
+                    "signal_filtered", 
+                    {
+                        "symbol": plan.symbol, 
+                        "direction": plan.direction,
+                        "confluence": plan.confidence_score,
+                        "reason": reason
+                    }
+                )
 
         except Exception as e:
             logger.error(f"Failed to execute trade for {plan.symbol}: {e}")
@@ -992,7 +1026,14 @@ class PaperTradingService:
 
         # Update max drawdown
         if self.executor and self.config:
-            current_equity = self.executor.get_equity(self._price_cache)
+            # Current equity includes all realized and unrealized PnL
+            current_equity = self.executor.get_balance() + self.stats.total_pnl
+            if self.position_manager:
+                current_equity += sum(
+                    pos.realized_pnl + pos.unrealized_pnl 
+                    for pos in self.position_manager.positions.values() 
+                    if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
+                )
             if current_equity > self._peak_equity:
                 self._peak_equity = current_equity
             elif self._peak_equity > 0:
@@ -1028,14 +1069,11 @@ class PaperTradingService:
 
     async def _fetch_price(self, symbol: str) -> float:
         """Fetch current price from exchange adapter."""
-        if not self.orchestrator or not self.orchestrator.adapter:
+        if not self.orchestrator or not hasattr(self.orchestrator, 'exchange_adapter'):
             raise ValueError("No exchange adapter available")
 
         try:
-            loop = asyncio.get_event_loop()
-            ticker = await loop.run_in_executor(
-                None, self.orchestrator.adapter.fetch_ticker, symbol
-            )
+            ticker = self.orchestrator.exchange_adapter.fetch_ticker(symbol)
             return ticker.get("last", ticker.get("close", 0.0))
         except Exception as e:
             logger.error(f"Failed to fetch price for {symbol}: {e}")

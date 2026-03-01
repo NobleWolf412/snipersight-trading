@@ -305,28 +305,12 @@ class PaperExecutor:
         # Calculate fee
         fee = self._calculate_fee(fill_qty, fill_price)
 
-        # Check if we have enough balance (for BUY orders)
-        if order.side == OrderSide.BUY:
-            cost = fill_qty * fill_price + fee
-            if cost > self.balance:
-                order.status = OrderStatus.REJECTED
-                order.updated_at = datetime.now(timezone.utc)
-                logger.warning(f"Order {order_id} rejected: insufficient balance")
-                return None
-
-            # Deduct balance
-            self.balance -= cost
-        else:  # SELL
-            # Check if we have enough position
-            current_position = self.positions.get(order.symbol, 0.0)
-            if fill_qty > current_position:
-                order.status = OrderStatus.REJECTED
-                order.updated_at = datetime.now(timezone.utc)
-                logger.warning(f"Order {order_id} rejected: insufficient position")
-                return None
-
-            # Add to balance (subtract fee)
-            self.balance += fill_qty * fill_price - fee
+        # For margin/futures paper trading, we don't strictly reject based on spot balance
+        # or require existing positions for SELL orders (since we can short).
+        # We just deduct the fee from the cash balance.
+        # Position sizing and margin requirements are handled by PaperTradingService.
+        
+        self.balance -= fee
 
         # Create fill record
         fill = Fill(order_id=order_id, quantity=fill_qty, price=fill_price, fee=fee)
