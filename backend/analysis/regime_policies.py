@@ -106,6 +106,31 @@ REGIME_POLICIES: Dict[str, RegimePolicy] = {
             "compressed": 1.3,
         },
     ),
+    # Stealth was missing — added for the default bot mode (balanced swing+intraday)
+    "stealth": RegimePolicy(
+        mode_name="stealth",
+        min_regime_score=40.0,  # Balanced — more permissive than overwatch, tighter than surgical
+        allow_in_risk_off=True,  # Can trade both directions
+        position_size_adjustment={
+            "strong_up": 1.2,
+            "up": 1.1,
+            "sideways": 0.8,  # Reduce in chop
+            "down": 1.0,  # Can short
+            "strong_down": 1.1,  # Lean into strong shorts
+        },
+        confluence_adjustment={
+            "bullish_risk_on": 3.0,
+            "bearish_risk_off": 3.0,  # Reward both trends
+            "choppy_risk_off": -5.0,
+            "chaotic_volatile": -10.0,
+        },
+        rr_adjustment={
+            "sideways": 0.9,
+            "strong_up": 1.2,
+            "strong_down": 1.2,
+            "chaotic_volatile": 0.8,
+        },
+    ),
 }
 
 

@@ -4885,60 +4885,65 @@ def _calculate_synergy_bonus(
 
             # ── GATE 1: WCL FAILURE ─────────────────────────────────────────
             # When weekly cycle is broken, LONGs face mode-scaled penalties and
-            # SHORTs get an active boost. Surgical/Strike can bypass via htf_bypass.
+            # SHORTs get a mild contextual boost. Surgical/Strike can bypass via htf_bypass.
             #
-            # Penalty table — calibrated by mode risk tolerance:
-            #   Overwatch:       hard veto (macro-surveillance, no counter-trend)
-            #   Stealth/Strike:  heavy penalty (can still pass with strong SMC stack)
-            #   Surgical:        soft penalty (counter-trend scalps are its wheelhouse)
+            # SOFTENED: Cycle failures are informational signals, not hard directional
+            # overrides. Previous penalties (-30, -999) caused massive SHORT bias
+            # that destroyed win rate. Now penalties are soft nudges that let
+            # confluence scoring drive direction based on the full signal picture.
+            #
+            # Penalty table — softened for balanced directional exposure:
+            #   Overwatch:       moderate penalty (no more hard veto)
+            #   Stealth/Strike:  soft penalty (confluence still decides)
+            #   Surgical:        minimal penalty (counter-trend scalps are its wheelhouse)
             WCL_FAIL_LONG_PENALTY = {
-                "macro_surveillance": -999, "overwatch": -999,
-                "stealth_balanced":    -30,  "stealth":   -30,
-                "intraday_aggressive": -20,  "strike":    -20,
-                "precision":           -10,  "surgical":  -10,
+                "macro_surveillance": -12, "overwatch": -12,
+                "stealth_balanced":    -8,  "stealth":   -8,
+                "intraday_aggressive": -5,  "strike":    -5,
+                "precision":           -3,  "surgical":  -3,
             }
-            WCL_FAIL_SHORT_BOOST = 20  # applied to all modes
+            WCL_FAIL_SHORT_BOOST = 5  # Softened from 20 → 5 (informational, not directional override)
 
             wcl_failed = getattr(cycle_context, "wcl_failed", False)
             dcl_failed = getattr(cycle_context, "dcl_failed", False)
 
             if wcl_failed:
                 if direction_upper == "LONG" and not htf_bypass:
-                    penalty_val = WCL_FAIL_LONG_PENALTY.get(profile, -20)
-                    if penalty_val <= -999:
-                        logger.debug("WCL FAILED — hard LONG veto for %s", profile)
-                        return -999  # Hard veto: skip all other scoring
+                    penalty_val = WCL_FAIL_LONG_PENALTY.get(profile, -5)
+                    # No more hard veto (-999) — let confluence decide
                     bonus += penalty_val
-                    logger.debug("WCL FAILED — LONG penalty %.1f for %s", penalty_val, profile)
+                    logger.debug("WCL FAILED — LONG soft penalty %.1f for %s", penalty_val, profile)
                 elif direction_upper == "SHORT":
                     bonus += WCL_FAIL_SHORT_BOOST
-                    logger.debug("WCL FAILED — SHORT boost +%d", WCL_FAIL_SHORT_BOOST)
+                    logger.debug("WCL FAILED — SHORT soft boost +%d", WCL_FAIL_SHORT_BOOST)
 
             elif dcl_failed and not wcl_failed:
-                # DCL failure only (shorter-term bearish signal, softer than WCL)
+                # DCL failure only (shorter-term bearish signal, softened)
                 DCL_FAIL_LONG_PENALTY = {
-                    "macro_surveillance": -20, "overwatch": -20,
-                    "stealth_balanced":   -15,  "stealth":  -15,
-                    "intraday_aggressive": -10, "strike":   -10,
-                    "precision":            -5,  "surgical":  -5,
+                    "macro_surveillance": -8, "overwatch": -8,
+                    "stealth_balanced":   -5,  "stealth":  -5,
+                    "intraday_aggressive": -3, "strike":   -3,
+                    "precision":           -2,  "surgical": -2,
                 }
                 if direction_upper == "LONG" and not htf_bypass:
-                    pen = DCL_FAIL_LONG_PENALTY.get(profile, -10)
+                    pen = DCL_FAIL_LONG_PENALTY.get(profile, -3)
                     bonus += pen
-                    logger.debug("DCL FAILED — LONG penalty %.1f for %s", pen, profile)
+                    logger.debug("DCL FAILED — LONG soft penalty %.1f for %s", pen, profile)
                 elif direction_upper == "SHORT":
-                    bonus += 8  # Moderate short boost on DCL failure
-                    logger.debug("DCL FAILED — SHORT boost +8")
+                    bonus += 3  # Softened from 8 → 3 (informational, not directional override)
+                    logger.debug("DCL FAILED — SHORT soft boost +3")
 
             # ── GATE 2: MARKDOWN + LTR PHASE GATE ───────────────────────────
             # Penalise LONG signals in a left-translated markdown market.
             # Only active after Gate 1 (if WCL didn't already veto).
             # Surgical/Strike bypass via htf_bypass_active applies here too.
+            # SOFTENED: Markdown+LTR penalties reduced to soft nudges
+            # Previous values (-40, -25) were too aggressive and killed long setups
             MARKDOWN_LTR_LONG_PENALTY = {
-                "macro_surveillance": -40, "overwatch": -40,
-                "stealth_balanced":   -25,  "stealth":  -25,
-                "intraday_aggressive": -15, "strike":   -15,
-                "precision":            -8,  "surgical":  -8,
+                "macro_surveillance": -15, "overwatch": -15,
+                "stealth_balanced":   -10,  "stealth":  -10,
+                "intraday_aggressive":  -6, "strike":    -6,
+                "precision":            -3,  "surgical":  -3,
             }
             if (
                 direction_upper == "LONG"

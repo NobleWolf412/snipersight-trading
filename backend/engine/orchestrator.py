@@ -1042,7 +1042,8 @@ class Orchestrator:
                     # detect_symbol_cycles has more reliable failure tracking
                     # (buffer logic, proper window constraints) than cycle_detector's
                     # raw price comparison. Merge its is_failed flags into CycleContext
-                    # so the scorer can use them for hard gates.
+                    # as INFORMATIONAL metadata only — do NOT force directional bias.
+                    # Let confluence scoring drive direction based on full signal picture.
                     try:
                         from backend.strategy.smc.symbol_cycle_detector import detect_symbol_cycles
                         sym_cycles = detect_symbol_cycles(
@@ -1057,14 +1058,15 @@ class Orchestrator:
                             dcl_failed=sym_cycles.dcl.is_failed,
                             wcl_failed=sym_cycles.wcl.is_failed,
                         )
+                        # Log cycle failures as informational context (not directional override)
                         if sym_cycles.wcl.is_failed:
                             logger.info(
-                                "%s: WCL FAILED — weekly cycle broken, SHORT bias active",
+                                "%s: WCL FAILED — weekly cycle broken (informational, not forcing direction)",
                                 symbol,
                             )
                         elif sym_cycles.dcl.is_failed:
                             logger.info(
-                                "%s: DCL FAILED — daily cycle broken, SHORT bias elevated",
+                                "%s: DCL FAILED — daily cycle broken (informational, not forcing direction)",
                                 symbol,
                             )
                     except Exception as e:
