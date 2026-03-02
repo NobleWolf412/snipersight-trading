@@ -39,6 +39,7 @@ import {
   PaperTradingPosition,
   CompletedPaperTrade,
   PaperTradingActivity,
+  SignalLogEntry,
 } from '@/utils/api';
 
 // Format time duration
@@ -701,6 +702,10 @@ export function TrainingGround() {
                 )}
               </div>
             </section>
+            {/* Signal Intelligence Panel */}
+            {status?.signal_log && status.signal_log.length > 0 && (
+              <SignalIntelligencePanel signals={status.signal_log} />
+            )}
           </div>
         )}
 
@@ -896,6 +901,171 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
           {formatPct(trade.pnl_pct)}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Signal Intelligence Panel - shows every signal's processing result
+function SignalIntelligencePanel({ signals }: { signals: SignalLogEntry[] }) {
+  const [expanded, setExpanded] = useState(true);
+
+  const executed = signals.filter(s => s.result === 'executed');
+  const filtered = signals.filter(s => s.result === 'filtered');
+  const errors = signals.filter(s => s.result === 'error');
+
+  // Group filter reasons
+  const reasonCounts: Record<string, number> = {};
+  for (const s of filtered) {
+    const key = s.reason.split(':')[0].split('(')[0].trim();
+    reasonCounts[key] = (reasonCounts[key] || 0) + 1;
+  }
+
+  return (
+    <section className="glass-card p-5 rounded-2xl relative overflow-hidden group border border-purple-500/20">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-purple-500/5 via-transparent to-transparent opacity-40 pointer-events-none" />
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-purple-400/50 to-transparent opacity-50" />
+
+      <div
+        className="flex items-center justify-between mb-4 relative z-10 cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <h2 className="text-xl lg:text-2xl font-semibold hud-headline tracking-wide flex items-center gap-3 text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.5)]">
+          <Crosshair size={24} className="text-purple-400" />
+          SIGNAL INTELLIGENCE
+        </h2>
+        <div className="flex items-center gap-3">
+          <Badge variant="outline" className="font-mono text-[10px] bg-green-500/10 text-green-400 border-green-500/30">
+            {executed.length} EXEC
+          </Badge>
+          <Badge variant="outline" className="font-mono text-[10px] bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
+            {filtered.length} FILT
+          </Badge>
+          {errors.length > 0 && (
+            <Badge variant="outline" className="font-mono text-[10px] bg-red-500/10 text-red-400 border-red-500/30">
+              {errors.length} ERR
+            </Badge>
+          )}
+          <Badge variant="outline" className="font-mono text-xs bg-black/60 px-3 border-purple-500/40 text-purple-400">
+            {signals.length} TOTAL
+          </Badge>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="relative z-10 space-y-4">
+          {/* Filter reason summary */}
+          {Object.keys(reasonCounts).length > 0 && (
+            <div className="p-3 rounded-lg bg-background/80 border border-yellow-500/20">
+              <div className="text-[10px] uppercase tracking-widest text-yellow-400/80 font-bold mb-2">Filter Reason Breakdown</div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]).map(([reason, count]) => (
+                  <span key={reason} className="text-xs font-mono px-2 py-1 rounded bg-yellow-500/10 text-yellow-300/80 border border-yellow-500/20">
+                    {reason}: {count}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Signal table */}
+          <div className="max-h-96 overflow-y-auto space-y-1">
+            {[...signals].reverse().map((sig, idx) => (
+              <SignalLogRow key={idx} signal={sig} />
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// Individual signal log row
+function SignalLogRow({ signal }: { signal: SignalLogEntry }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = signal.direction === 'LONG';
+
+  const resultColor = signal.result === 'executed'
+    ? 'text-green-400 bg-green-500/10 border-green-500/30'
+    : signal.result === 'error'
+    ? 'text-red-400 bg-red-500/10 border-red-500/30'
+    : 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30';
+
+  const resultLabel = signal.result === 'executed' ? 'EXEC' : signal.result === 'error' ? 'ERR' : 'FILT';
+
+  return (
+    <div
+      className="p-2 rounded-lg bg-background/60 border border-border/50 hover:border-purple-500/30 transition-colors cursor-pointer"
+      onClick={() => setExpanded(!expanded)}
+    >
+      <div className="flex items-center gap-2 text-xs font-mono">
+        {/* Result badge */}
+        <Badge variant="outline" className={cn("text-[9px] tracking-widest uppercase border px-1.5 py-0 min-w-[38px] text-center", resultColor)}>
+          {resultLabel}
+        </Badge>
+
+        {/* Direction */}
+        <span className={cn("font-bold w-10", isLong ? 'text-green-400' : 'text-red-400')}>
+          {isLong ? <ArrowUp size={12} className="inline mr-0.5" /> : <ArrowDown size={12} className="inline mr-0.5" />}
+          {signal.direction.slice(0, 1)}
+        </span>
+
+        {/* Symbol */}
+        <span className="font-bold text-foreground w-24 truncate">{signal.symbol.replace('/USDT', '')}</span>
+
+        {/* Confluence */}
+        <span className={cn("w-12 text-right", signal.confluence >= 82 ? 'text-green-400' : 'text-yellow-400')}>
+          {signal.confluence.toFixed(0)}%
+        </span>
+
+        {/* Entry / Stop / R:R */}
+        <span className="text-muted-foreground w-20 text-right">${signal.entry_zone.toFixed(2)}</span>
+        <span className="text-red-400/60 w-20 text-right">${signal.stop_loss.toFixed(2)}</span>
+        {signal.rr && <span className="text-muted-foreground w-10 text-right">{signal.rr.toFixed(1)}R</span>}
+
+        {/* Reason (truncated) */}
+        <span className="flex-1 truncate text-muted-foreground/80 pl-2">{signal.reason}</span>
+
+        {/* Time */}
+        <span className="text-muted-foreground/50 w-16 text-right">
+          {new Date(signal.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        </span>
+      </div>
+
+      {/* Expanded details */}
+      {expanded && (
+        <div className="mt-2 pt-2 border-t border-border/30 text-xs font-mono text-muted-foreground grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div>
+            <span className="text-muted-foreground/50">Setup: </span>
+            <span>{signal.setup_type}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground/50">Scan #: </span>
+            <span>{signal.scan_number}</span>
+          </div>
+          {signal.fill_price && (
+            <div>
+              <span className="text-muted-foreground/50">Fill: </span>
+              <span className="text-green-400">${signal.fill_price.toFixed(2)}</span>
+            </div>
+          )}
+          {signal.fill_qty && (
+            <div>
+              <span className="text-muted-foreground/50">Qty: </span>
+              <span>{signal.fill_qty.toFixed(6)}</span>
+            </div>
+          )}
+          {signal.balance !== undefined && (
+            <div>
+              <span className="text-muted-foreground/50">Balance: </span>
+              <span>${signal.balance.toFixed(2)}</span>
+            </div>
+          )}
+          <div className="col-span-full">
+            <span className="text-muted-foreground/50">Reason: </span>
+            <span className="text-yellow-300/80">{signal.reason}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
