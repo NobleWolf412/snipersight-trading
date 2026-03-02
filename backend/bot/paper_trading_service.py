@@ -647,9 +647,15 @@ class PaperTradingService:
 
             # Run scanner - use self.mode (ScannerMode object), not config.sniper_mode (string)
             self.orchestrator.apply_mode(self.mode)
-            trade_plans, rejections = self.orchestrator.scan(
-                symbols=symbols,
-                progress_callback=_progress_callback
+            # Run the blocking scan in a thread executor so it doesn't freeze the asyncio
+            # event loop (and thus the API server + monitor loop) during long scans
+            loop = asyncio.get_running_loop()
+            trade_plans, rejections = await loop.run_in_executor(
+                None,
+                lambda: self.orchestrator.scan(
+                    symbols=symbols,
+                    progress_callback=_progress_callback,
+                ),
             )
 
             self.stats.signals_generated += len(trade_plans)
@@ -717,11 +723,11 @@ class PaperTradingService:
             )
             return
 
-        # Check confluence threshold
+        # Check confluence threshold - use same rounding as scanner to avoid asymmetry
         min_score = self.config.min_confluence or (
             self.mode.min_confluence_score if self.mode else 60
         )
-        if plan.confidence_score < min_score:
+        if round(plan.confidence_score, 1) < round(min_score, 1):
             logger.debug(
                 f"Confluence {plan.confidence_score} below min {min_score}, skipping {plan.symbol}"
             )
@@ -1068,16 +1074,34 @@ class PaperTradingService:
         return self._price_cache.get(symbol, 0.0)
 
     async def _fetch_price(self, symbol: str) -> float:
-        """Fetch current price from exchange adapter."""
+        """Fetch current price from exchange adapter, falling back to OHLCV cache."""
         if not self.orchestrator or not hasattr(self.orchestrator, 'exchange_adapter'):
             raise ValueError("No exchange adapter available")
 
+        # Primary: live ticker from exchange
         try:
             ticker = self.orchestrator.exchange_adapter.fetch_ticker(symbol)
-            return ticker.get("last", ticker.get("close", 0.0))
+            price = ticker.get("last", ticker.get("close", 0.0))
+            if price and price > 0:
+                return float(price)
         except Exception as e:
-            logger.error(f"Failed to fetch price for {symbol}: {e}")
-            raise
+            logger.warning(f"Live ticker failed for {symbol}, trying OHLCV cache: {e}")
+
+        # Fallback: use latest close from the OHLCV cache populated during scan
+        try:
+            from backend.data.ohlcv_cache import get_ohlcv_cache
+            cache = get_ohlcv_cache()
+            for tf in ("1m", "5m", "15m", "1h"):
+                df = cache.get(symbol, tf)
+                if df is not None and not df.empty:
+                    price = float(df["close"].iloc[-1])
+                    if price > 0:
+                        logger.info(f"Using OHLCV cache price for {symbol} ({tf}): {price:.4f}")
+                        return price
+        except Exception as e:
+            logger.warning(f"OHLCV cache fallback failed for {symbol}: {e}")
+
+        raise ValueError(f"Could not get price for {symbol} from ticker or OHLCV cache")
 
     async def _execute_exit_order(self, symbol: str, side: str, quantity: float, price: float):
         """Execute exit order (called by position manager)."""
