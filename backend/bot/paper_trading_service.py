@@ -26,6 +26,7 @@ from backend.shared.config.scanner_modes import get_mode, ScannerMode
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.models.planner import TradePlan
 from backend.data.adapters.phemex import PhemexAdapter
+from backend.analysis.regime_policies import get_regime_policy
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +66,9 @@ class PaperTradingConfig:
     """
 
     exchange: str = "phemex"
-    sniper_mode: str = "stealth"
+    sniper_mode: str = "strike"  # Changed from "stealth": strike mode is better for bots (faster signals, 1.2 R:R)
     initial_balance: float = 10000.0
-    risk_per_trade: float = 2.0
+    risk_per_trade: float = 1.0  # Reduced from 2.0%: safer for automated trading (3 positions * 1% = 3% max risk)
     max_positions: int = 3
     leverage: int = 1
     duration_hours: int = 24
@@ -251,6 +252,11 @@ class PaperTradingService:
 
         # Detailed signal processing log (every signal, not just recent activity)
         self.signal_log: List[Dict[str, Any]] = []
+
+        # Regime state (updated each scan cycle for position sizing adjustments)
+        self._current_regime_composite: str = "unknown"
+        self._current_regime_score: float = 50.0
+        self._current_regime_policy = None
 
         logger.info("PaperTradingService initialized")
 
@@ -610,31 +616,47 @@ class PaperTradingService:
         self.stats.scans_completed += 1
 
         try:
-            # Build symbol list - use config symbols or default top pairs
+            # Build symbol list — single code path (fixes dual-path bug)
+            # Priority: user-specified symbols > category selection > defaults
             if self.config.symbols:
-                symbols = self.config.symbols
+                # User specified exact pairs to trade (pair-of-choice feature)
+                scan_symbols = list(self.config.symbols)
+                logger.info(f"Using user-specified pairs: {scan_symbols}")
             else:
-                # Default to fewer pairs for faster scanning
-                # Full list available but reduces to 5 for performance
-                symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]
+                # Auto-select from exchange using category toggles
+                try:
+                    from backend.analysis.pair_selection import select_symbols
+                    limit = self.config.max_positions * 4  # Scan 4x max positions
+                    scan_symbols = select_symbols(
+                        adapter=self.orchestrator.exchange_adapter,
+                        limit=limit,
+                        majors=getattr(self.config, "majors", True),
+                        altcoins=getattr(self.config, "altcoins", False),
+                        meme_mode=getattr(self.config, "meme_mode", False),
+                        leverage=self.config.leverage,
+                        market_type=self.orchestrator.config.market_type if hasattr(self.orchestrator.config, "market_type") else "perp"
+                    )
+                except Exception as e:
+                    logger.warning(f"Pair selection failed ({e}), using default majors")
+                    scan_symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]
 
             # Filter out excluded symbols
             if self.config.exclude_symbols:
-                symbols = [s for s in symbols if s not in self.config.exclude_symbols]
+                scan_symbols = [s for s in scan_symbols if s not in self.config.exclude_symbols]
 
-            logger.info(f"Starting scan: {len(symbols)} symbols, mode={self.config.sniper_mode}")
-            
+            logger.info(f"Starting scan: {len(scan_symbols)} symbols, mode={self.config.sniper_mode}")
+
             self.current_scan = {
                 "status": "running",
                 "completed": 0,
-                "total": len(symbols),
+                "total": len(scan_symbols),
                 "current_symbol": None,
                 "progress_pct": 0,
                 "passed": 0,
                 "rejected": 0,
                 "recent_symbols": []
             }
-            
+
             def _progress_callback(completed: int, total: int, sym: str, passed: bool, rejection_info: Optional[Dict[str, Any]]):
                 if not self.current_scan:
                     return
@@ -646,7 +668,7 @@ class PaperTradingService:
                     self.current_scan["passed"] += 1
                 else:
                     self.current_scan["rejected"] += 1
-                
+
                 # Keep last 5 symbols for the UI ticker
                 status_obj = {
                     "symbol": sym,
@@ -655,28 +677,6 @@ class PaperTradingService:
                 }
                 self.current_scan["recent_symbols"].insert(0, status_obj)
                 self.current_scan["recent_symbols"] = self.current_scan["recent_symbols"][:5]
-
-            # Resolve symbols using category toggles if symbols list is empty
-            if self.config.symbols:
-                scan_symbols = self.config.symbols
-            else:
-                from backend.analysis.pair_selection import select_symbols
-                # Use default limits if not specified
-                limit = self.config.max_positions * 4  # Scan 4x the max positions by default
-                
-                # Default to Majors if no categories specified (to maintain safety)
-                # But allow empty selectors to use fallback
-                scan_symbols = select_symbols(
-                    adapter=self.orchestrator.exchange_adapter,
-                    limit=limit,
-                    majors=getattr(self.config, "majors", True),
-                    altcoins=getattr(self.config, "altcoins", False),
-                    meme_mode=getattr(self.config, "meme_mode", False),
-                    leverage=self.config.leverage,
-                    market_type=self.orchestrator.config.market_type if hasattr(self.orchestrator.config, "market_type") else "perp"
-                )
-
-            logger.info(f"Starting scan: {len(scan_symbols)} symbols, mode={self.config.sniper_mode}")
             
             # Reset current scan stats for this run
             self.current_scan["total"] = len(scan_symbols)
@@ -695,28 +695,46 @@ class PaperTradingService:
                 ),
             )
 
-            # Check for regime veto
+            # Graduated regime filtering using RegimePolicy system
+            # Instead of a nuclear veto that kills ALL signals, apply per-mode
+            # policies that adjust position sizing and filter only truly chaotic regimes.
             regime = rejection_summary.get("regime", {}) if isinstance(rejection_summary, dict) else {}
             regime_composite = regime.get("composite", "unknown")
             regime_score = regime.get("score", 0)
-            
-            # If the market is too stable or choppy, we veto all plans to prevent 'getting chopped up'
+
             try:
                 score_val = float(regime_score)
             except (ValueError, TypeError):
                 score_val = 0.0
-                
-            is_choppy = regime_composite in ["neutral", "sideways", "choppy"] or score_val < 40
-            
-            if is_choppy and len(trade_plans) > 0:
-                logger.info(f"REGIME VETO: Market is {regime_composite} (Score: {regime_score}). Vetoing {len(trade_plans)} signals.")
-                # We move the signals to rejections instead
-                veto_reason = f"Regime Veto: {regime_composite} ({regime_score}/100)"
-                
+
+            # Get the regime policy for current mode (defines min_score, adjustments)
+            regime_policy = get_regime_policy(self.config.sniper_mode)
+
+            # Only veto in truly extreme conditions (chaotic + very low score)
+            is_extreme = regime_composite in ["chaotic_volatile"] and score_val < 20
+
+            if is_extreme and len(trade_plans) > 0:
+                logger.info(
+                    f"REGIME VETO (extreme only): Market is {regime_composite} "
+                    f"(Score: {regime_score}). Vetoing {len(trade_plans)} signals."
+                )
+                veto_reason = f"Extreme Regime Veto: {regime_composite} ({regime_score}/100)"
                 for plan in trade_plans:
                     self._log_signal(plan, result="filtered", reason=veto_reason)
-                
-                trade_plans = [] # No trades today!
+                trade_plans = []
+            elif score_val < regime_policy.min_regime_score and len(trade_plans) > 0:
+                # Below mode's minimum: log warning but DON'T veto — let position
+                # sizing adjustments handle the risk reduction instead
+                logger.info(
+                    f"REGIME WARNING: Score {score_val:.0f} below mode min "
+                    f"{regime_policy.min_regime_score:.0f} for {self.config.sniper_mode}. "
+                    f"Position sizes will be reduced. Keeping {len(trade_plans)} signals."
+                )
+
+            # Store regime context for position sizing adjustments in _process_signal
+            self._current_regime_composite = regime_composite
+            self._current_regime_score = score_val
+            self._current_regime_policy = regime_policy
             
             self.stats.signals_generated += len(trade_plans)
             
@@ -935,7 +953,13 @@ class PaperTradingService:
 
     def _calculate_position_size(self, plan: TradePlan) -> float:
         """
-        Calculate position size based on risk parameters.
+        Calculate position size based on risk parameters with regime-aware adjustment.
+
+        Risk is calculated correctly for leveraged positions:
+        - risk_amount = balance * risk_pct (e.g., 1% of $10,000 = $100)
+        - position_size = risk_amount / risk_per_unit (how many units to risk $100)
+        - Leverage only affects MARGIN required, NOT risk amount
+        - Regime policy adjusts position size up/down based on market conditions
 
         Args:
             plan: Trade plan with stop loss
@@ -947,11 +971,12 @@ class PaperTradingService:
             return 0.0
 
         balance = self.executor.get_balance()
-        risk_amount = balance * (self.config.risk_per_trade / 100)
+
+        # Apply streak-based risk adaptation
+        effective_risk_pct = self._get_adapted_risk_pct()
+        risk_amount = balance * (effective_risk_pct / 100)
 
         # Calculate risk per unit
-        # EntryZone is a dataclass with near_entry and far_entry attributes
-        # Use near_entry as the primary entry price (aggressive entry)
         entry = plan.entry_zone.near_entry
         stop = plan.stop_loss.level
 
@@ -962,17 +987,115 @@ class PaperTradingService:
         if risk_per_unit == 0:
             return 0.0
 
-        # Base position size
+        # Base position size from risk calculation
         position_size = risk_amount / risk_per_unit
 
-        # Apply leverage
-        position_size *= self.config.leverage
+        # FIX: Leverage affects MARGIN required, not position size.
+        # With 5x leverage, you need 1/5th margin but risk stays the same.
+        # Do NOT multiply position_size by leverage — that was causing
+        # actual risk to be leverage * intended_risk (e.g., 5x * 2% = 10%).
+        # The position_size already represents the correct number of units
+        # to risk exactly risk_amount dollars.
 
-        # Ensure we don't exceed available balance
-        max_position_value = balance * 0.5  # Max 50% of balance per position
+        # Apply regime-aware position size adjustment (Fix #7)
+        regime_multiplier = self._get_regime_size_multiplier()
+        position_size *= regime_multiplier
+
+        # Ensure we don't exceed available balance (accounting for leverage on margin)
+        # With leverage, margin required = position_value / leverage
+        margin_factor = max(1, self.config.leverage)
+        max_position_value = balance * 0.5 * margin_factor  # 50% of balance * leverage
         max_size = max_position_value / entry if entry > 0 else 0
 
-        return min(position_size, max_size)
+        final_size = min(position_size, max_size)
+
+        if regime_multiplier != 1.0:
+            logger.info(
+                f"Position sized: {plan.symbol} | risk={effective_risk_pct:.1f}% "
+                f"| regime_mult={regime_multiplier:.2f} | size={final_size:.6f}"
+            )
+
+        return final_size
+
+    def _get_adapted_risk_pct(self) -> float:
+        """
+        Get risk percentage adapted by recent win/loss streak.
+
+        Reduces risk after consecutive losses, increases slightly after wins.
+        This prevents the bot from bleeding out during drawdowns.
+
+        Returns:
+            Adjusted risk percentage
+        """
+        if not self.config:
+            return 1.0
+
+        base_risk = self.config.risk_per_trade
+        streak = self.stats.current_streak
+
+        if streak <= -3:
+            # 3+ consecutive losses: cut risk to 50%
+            adapted = base_risk * 0.5
+            logger.info(f"RISK ADAPTED: Losing streak {streak}, risk reduced {base_risk:.1f}% → {adapted:.1f}%")
+            return adapted
+        elif streak <= -2:
+            # 2 consecutive losses: cut risk to 75%
+            adapted = base_risk * 0.75
+            return adapted
+        elif streak >= 3:
+            # 3+ consecutive wins: slight increase (max 25% boost)
+            adapted = min(base_risk * 1.25, base_risk + 0.5)
+            return adapted
+
+        return base_risk
+
+    def _get_regime_size_multiplier(self) -> float:
+        """
+        Get position size multiplier based on current regime and mode policy.
+
+        Uses the RegimePolicy system to adjust position sizes:
+        - Strong trends aligned with trade: size up
+        - Choppy/sideways: size down
+        - Chaotic: minimal size
+
+        Returns:
+            Multiplier (0.3 to 1.3, where 1.0 = no adjustment)
+        """
+        policy = getattr(self, '_current_regime_policy', None)
+        composite = getattr(self, '_current_regime_composite', 'unknown')
+        score = getattr(self, '_current_regime_score', 50.0)
+
+        if not policy or not policy.position_size_adjustment:
+            return 1.0
+
+        # Try exact composite match first
+        multiplier = policy.position_size_adjustment.get(composite)
+
+        if multiplier is None:
+            # Try trend-level match (extract trend from composite like "bullish_risk_on" → "up")
+            trend_map = {
+                "strong_up": "strong_up", "bullish": "up", "up": "up",
+                "sideways": "sideways", "neutral": "sideways", "range": "sideways",
+                "bearish": "down", "down": "down",
+                "strong_down": "strong_down", "chaotic": "sideways",
+            }
+            for key, trend_key in trend_map.items():
+                if key in composite.lower():
+                    multiplier = policy.position_size_adjustment.get(trend_key)
+                    if multiplier is not None:
+                        break
+
+        if multiplier is None:
+            # Low score fallback: reduce size proportionally
+            if score < 40:
+                multiplier = 0.5
+            elif score < 50:
+                multiplier = 0.75
+            else:
+                multiplier = 1.0
+
+        # Clamp to safe range
+        return max(0.3, min(1.3, multiplier))
 
     def _has_position(self, symbol: str) -> bool:
         """Check if already in position for symbol."""
