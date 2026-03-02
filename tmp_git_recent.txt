@@ -1,0 +1,10 @@
+﻿2026-03-02 01:08:13 +0000 - origin/claude/fix-paper-trader-signals-YuiGU
+2026-03-01 19:20:31 -0500 - origin
+2026-03-01 19:20:31 -0500 - origin/main
+2026-03-01 01:24:34 +0000 - origin/claude/review-paper-trading-bugs-xATii
+2025-12-23 00:53:18 +0000 - origin/claude/debug-candle-data-fetch-YNaqv
+2025-12-16 01:15:07 +0000 - origin/claude/trend-reversal-detection-Lk9dM
+2025-12-16 00:59:56 +0000 - origin/claude/fix-scanner-pipeline-gap-1WBx5
+2025-12-12 03:39:47 +0000 - origin/claude/refactor-complex-mj2b9ij5iglleruw-01XaYN5KYLArzTrXMJNr4nGo
+2025-12-04 23:04:39 +0000 - origin/claude/claude-md-mis1esx1n990f53c-015cqQ7o1CNHHL3JySgYSQug
+2025-11-22 16:02:03 -0500 - origin/codex/refactor-landing.tsx-for-semantic-structure

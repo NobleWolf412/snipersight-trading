@@ -885,6 +885,9 @@ export interface PaperTradingConfigRequest {
   min_confluence?: number | null;
   symbols?: string[];
   exclude_symbols?: string[];
+  majors?: boolean;
+  altcoins?: boolean;
+  meme_mode?: boolean;
   slippage_bps?: number;
   fee_rate?: number;
 }
@@ -898,6 +901,8 @@ export interface PaperTradingPosition {
   quantity: number;
   remaining_quantity: number;
   stop_loss: number;
+  tp1?: number;
+  tp_final?: number;
   targets_remaining: number;
   targets_hit: number;
   unrealized_pnl: number;

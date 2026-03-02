@@ -78,6 +78,9 @@ class PaperTradingConfig:
     min_confluence: Optional[float] = None
     symbols: List[str] = field(default_factory=list)
     exclude_symbols: List[str] = field(default_factory=list)
+    majors: bool = True
+    altcoins: bool = False
+    meme_mode: bool = False
     slippage_bps: float = 5.0
     fee_rate: float = 0.001
 
@@ -287,7 +290,7 @@ class PaperTradingService:
             check_interval=1.0,
             breakeven_after_target=config.breakeven_after_target,
             trailing_stop_activation=config.trailing_activation,
-            trailing_stop_distance=0.5,
+            trailing_stop_distance=0.75,  # WAS 0.5 - increased to 0.75 to give trade more room to breathe
         )
 
         # Initialize orchestrator with exchange adapter
@@ -653,34 +656,107 @@ class PaperTradingService:
                 self.current_scan["recent_symbols"].insert(0, status_obj)
                 self.current_scan["recent_symbols"] = self.current_scan["recent_symbols"][:5]
 
-            # Run scanner - use self.mode (ScannerMode object), not config.sniper_mode (string)
+            # Resolve symbols using category toggles if symbols list is empty
+            if self.config.symbols:
+                scan_symbols = self.config.symbols
+            else:
+                from backend.analysis.pair_selection import select_symbols
+                # Use default limits if not specified
+                limit = self.config.max_positions * 4  # Scan 4x the max positions by default
+                
+                # Default to Majors if no categories specified (to maintain safety)
+                # But allow empty selectors to use fallback
+                scan_symbols = select_symbols(
+                    adapter=self.orchestrator.exchange_adapter,
+                    limit=limit,
+                    majors=getattr(self.config, "majors", True),
+                    altcoins=getattr(self.config, "altcoins", False),
+                    meme_mode=getattr(self.config, "meme_mode", False),
+                    leverage=self.config.leverage,
+                    market_type=self.orchestrator.config.market_type if hasattr(self.orchestrator.config, "market_type") else "perp"
+                )
+
+            logger.info(f"Starting scan: {len(scan_symbols)} symbols, mode={self.config.sniper_mode}")
+            
+            # Reset current scan stats for this run
+            self.current_scan["total"] = len(scan_symbols)
+            self.current_scan["completed"] = 0
+            self.current_scan["passed"] = 0
+            self.current_scan["rejected"] = 0
+
+            # Run scanner
             self.orchestrator.apply_mode(self.mode)
-            # Run the blocking scan in a thread executor so it doesn't freeze the asyncio
-            # event loop (and thus the API server + monitor loop) during long scans
             loop = asyncio.get_running_loop()
-            trade_plans, rejections = await loop.run_in_executor(
+            trade_plans, rejection_summary = await loop.run_in_executor(
                 None,
                 lambda: self.orchestrator.scan(
-                    symbols=symbols,
+                    symbols=scan_symbols,
                     progress_callback=_progress_callback,
                 ),
             )
 
+            # Check for regime veto
+            regime = rejection_summary.get("regime", {}) if isinstance(rejection_summary, dict) else {}
+            regime_composite = regime.get("composite", "unknown")
+            regime_score = regime.get("score", 0)
+            
+            # If the market is too stable or choppy, we veto all plans to prevent 'getting chopped up'
+            try:
+                score_val = float(regime_score)
+            except (ValueError, TypeError):
+                score_val = 0.0
+                
+            is_choppy = regime_composite in ["neutral", "sideways", "choppy"] or score_val < 40
+            
+            if is_choppy and len(trade_plans) > 0:
+                logger.info(f"REGIME VETO: Market is {regime_composite} (Score: {regime_score}). Vetoing {len(trade_plans)} signals.")
+                # We move the signals to rejections instead
+                veto_reason = f"Regime Veto: {regime_composite} ({regime_score}/100)"
+                
+                for plan in trade_plans:
+                    self._log_signal(plan, result="filtered", reason=veto_reason)
+                
+                trade_plans = [] # No trades today!
+            
             self.stats.signals_generated += len(trade_plans)
             
             if self.current_scan:
                 self.current_scan["status"] = "completed"
 
+            # Log rejections
+            rejections_details = rejection_summary.get("details", {}) if isinstance(rejection_summary, dict) else {}
+            for reason_type, items in rejections_details.items():
+                for item in items:
+                    # Convert rejection_info to a format _log_signal understands
+                    mock_plan = type('obj', (object,), {
+                        'symbol': item.get('symbol', 'Unknown'),
+                        'direction': item.get('direction', 'LONG'),
+                        'confidence_score': item.get('score', 0.0),
+                        'setup_type': 'filtered',
+                        'entry_zone': type('obj', (object,), {'near_entry': 0.0, 'far_entry': 0.0}),
+                        'stop_loss': type('obj', (object,), {'level': 0.0}),
+                        'risk_reward': 0.0
+                    })
+                    # Add some safety for nested objects
+                    mock_plan.entry_zone.near_entry = item.get('entry_price', 0.0) or item.get('current_price', 0.0)
+                    mock_plan.stop_loss.level = item.get('stop_loss', 0.0)
+                    
+                    self._log_signal(
+                        mock_plan, 
+                        result="filtered", 
+                        reason=item.get('reason', f"Scanner Filter: {reason_type}")
+                    )
+
             self._log_activity(
                 "scan_completed",
                 {
                     "signals_found": len(trade_plans),
-                    "symbols_scanned": len(symbols),
-                    "rejections": len(rejections) if isinstance(rejections, dict) else 0,
+                    "symbols_scanned": len(scan_symbols),
+                    "rejections": len(rejections_details),
                 },
             )
 
-            # Process each signal
+            # Process valid signal plans
             for plan in trade_plans:
                 await self._process_signal(plan)
 
@@ -939,6 +1015,8 @@ class PaperTradingService:
                     "breakeven_active": pos.breakeven_active,
                     "trailing_active": pos.trailing_active,
                     "opened_at": pos.created_at.isoformat(),
+                    "tp1": pos.targets[0].level if pos.targets else (pos.targets_hit[-1].level if pos.targets_hit else 0.0),
+                    "tp_final": pos.targets[-1].level if pos.targets else (pos.targets_hit[-1].level if pos.targets_hit else 0.0),
                 }
             )
 

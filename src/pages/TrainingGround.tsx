@@ -78,11 +78,14 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
   duration_hours: 24,
   scan_interval_minutes: 5,
   trailing_stop: true,
-  trailing_activation: 1,
-  breakeven_after_target: 1,
-  min_confluence: 82, // Scaled entry requires 82 minimum
+  trailing_activation: 2.0, // WAS 1.0 - changed to 2.0 to give trade room to breathe
+  breakeven_after_target: 1, // Move to BE after TP1 is hit
+  min_confluence: 82,
   symbols: [],
   exclude_symbols: [],
+  majors: true,
+  altcoins: false,
+  meme_mode: false,
   slippage_bps: 5,
   fee_rate: 0.001,
 };
@@ -321,7 +324,7 @@ export function TrainingGround() {
                         type="number"
                         value={config.initial_balance}
                         onChange={e => setConfig({ ...config, initial_balance: Number(e.target.value) })}
-                        className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40"
+                        className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
                       />
                     </div>
                     <div className="space-y-2 text-left">
@@ -332,7 +335,7 @@ export function TrainingGround() {
                         max="100"
                         value={config.leverage}
                         onChange={e => setConfig({ ...config, leverage: Number(e.target.value) })}
-                        className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40"
+                        className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
                       />
                     </div>
                     <div className="space-y-2 text-left">
@@ -343,7 +346,64 @@ export function TrainingGround() {
                         max="100"
                         value={config.min_confluence ?? 0}
                         onChange={e => setConfig({ ...config, min_confluence: Number(e.target.value) })}
-                        className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40"
+                        className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Symbol Selection UI */}
+                  <div className="bg-background/40 border border-border/50 rounded-xl p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Target Asset Buckets</label>
+                      <span className="text-[9px] text-muted-foreground font-mono italic">Hunting logic utilizes top-volume adapters</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      <div
+                        onClick={() => setConfig({ ...config, majors: !config.majors })}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all",
+                          config.majors ? "bg-accent/10 border-accent text-accent shadow-[0_0_10px_rgba(0,255,170,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
+                        )}
+                      >
+                        <Trophy size={16} weight={config.majors ? "fill" : "regular"} />
+                        <span className="text-xs font-mono font-bold tracking-tighter">MAJORS</span>
+                      </div>
+
+                      <div
+                        onClick={() => setConfig({ ...config, altcoins: !config.altcoins })}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all",
+                          config.altcoins ? "bg-primary/10 border-primary text-primary shadow-[0_0_10px_rgba(59,130,246,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
+                        )}
+                      >
+                        <ChartLine size={16} weight={config.altcoins ? "fill" : "regular"} />
+                        <span className="text-xs font-mono font-bold tracking-tighter">TOP VOL ALTS</span>
+                      </div>
+
+                      <div
+                        onClick={() => setConfig({ ...config, meme_mode: !config.meme_mode })}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all",
+                          config.meme_mode ? "bg-purple-500/10 border-purple-500 text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
+                        )}
+                      >
+                        <Crosshair size={16} weight={config.meme_mode ? "fill" : "regular"} />
+                        <span className="text-xs font-mono font-bold tracking-tighter">MEME HUNTER</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-border/30">
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2 block font-mono">Custom symbols (comma separated)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. BTC/USDT, ETH/USDT, LINK/USDT"
+                        value={config.symbols?.join(', ') || ''}
+                        onChange={(e) => {
+                          const syms = e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
+                          setConfig({ ...config, symbols: syms });
+                        }}
+                        className="w-full h-10 bg-black/40 border border-border rounded-md px-3 font-mono text-xs focus:outline-none focus:border-accent/40 placeholder:text-muted-foreground/30 text-foreground"
                       />
                     </div>
                   </div>
@@ -744,9 +804,46 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
   const isLong = position.direction === 'LONG';
   const isProfitable = position.unrealized_pnl >= 0;
 
+  // Flash effect logic
+  const prevPriceRef = useRef(position.current_price);
+  const [flashClass, setFlashClass] = useState('');
+
+  useEffect(() => {
+    if (position.current_price > prevPriceRef.current) {
+      setFlashClass('animate-flash-green');
+      const timer = setTimeout(() => setFlashClass(''), 1000);
+      prevPriceRef.current = position.current_price;
+      return () => clearTimeout(timer);
+    } else if (position.current_price < prevPriceRef.current) {
+      setFlashClass('animate-flash-red');
+      const timer = setTimeout(() => setFlashClass(''), 1000);
+      prevPriceRef.current = position.current_price;
+      return () => clearTimeout(timer);
+    }
+  }, [position.current_price]);
+
+  // Progress Calculation
+  // We want to show where we are relative to SL and TP1
+  const sl = position.stop_loss;
+  const entry = position.entry_price;
+  const tp1 = position.tp1 || (isLong ? entry * 1.01 : entry * 0.99); // Fallback
+  const current = position.current_price;
+
+  let progressPct = 0;
+  if (isLong) {
+    // SL < Current < TP1
+    const range = tp1 - sl;
+    progressPct = range !== 0 ? ((current - sl) / range) * 100 : 50;
+  } else {
+    // TP1 < Current < SL
+    const range = sl - tp1;
+    progressPct = range !== 0 ? ((sl - current) / range) * 100 : 50;
+  }
+  progressPct = Math.max(0, Math.min(100, progressPct));
+
   return (
-    <div className="p-3 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors">
-      <div className="flex items-center justify-between mb-2">
+    <div className={cn("p-3 bg-background rounded-lg border border-border hover:border-accent/30 transition-all duration-300 relative overflow-hidden", flashClass)}>
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Badge
             variant="outline"
@@ -760,52 +857,75 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
           </Badge>
           <span className="font-bold text-lg tracking-tight italic text-foreground">{position.symbol}</span>
         </div>
-        <div className={`font-mono text-sm ${isProfitable ? 'text-green-400' : 'text-red-400'}`}>
+        <div className={cn(
+          "font-mono text-sm font-bold px-2 py-0.5 rounded transition-colors",
+          isProfitable ? 'text-green-400' : 'text-red-400'
+        )}>
           {formatPct(position.unrealized_pnl_pct)}
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-xs">
+      <div className="grid grid-cols-4 gap-2 text-[10px] sm:text-xs mb-4">
         <div>
-          <div className="text-muted-foreground">Entry Avg</div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Value</div>
+          <div className="font-mono text-accent font-bold">{formatCurrency(position.quantity * position.entry_price)}</div>
+        </div>
+        <div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Entry</div>
           <div className="font-mono">${position.entry_price.toFixed(2)}</div>
         </div>
         <div>
-          <div className="text-muted-foreground">Current</div>
-          <div className="font-mono">${position.current_price.toFixed(2)}</div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Current</div>
+          <div className="font-mono font-bold">${position.current_price.toFixed(2)}</div>
         </div>
         <div>
-          <div className="text-muted-foreground">Stop Loss</div>
-          <div className="font-mono text-red-400">${position.stop_loss.toFixed(2)}</div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Stop</div>
+          <div className="font-mono text-red-400/80">${position.stop_loss.toFixed(2)}</div>
+        </div>
+      </div>
+
+      {/* Progress tracking */}
+      <div className="space-y-1.5 mb-4">
+        <div className="flex justify-between text-[9px] font-mono text-muted-foreground uppercase tracking-tighter">
+          <span>{isLong ? 'STOP' : 'TARGET'}</span>
+          <span>ENTRY</span>
+          <span>{isLong ? 'TARGET' : 'STOP'}</span>
+        </div>
+        <div className="hud-progress-bg">
+          <div
+            className="hud-progress-indicator transition-all duration-500 ease-out"
+            style={{ left: `${progressPct}%` }}
+          />
         </div>
       </div>
 
       {/* Phantom Scale-In Ladder */}
-      <div className="mt-4 pt-3 border-t border-border/50">
+      <div className="mt-2 pt-3 border-t border-border/50">
         <div className="flex items-center justify-between text-[9px] uppercase font-bold text-muted-foreground mb-1.5 tracking-widest">
-          <span>Phantom Limit Ladder</span>
-          <span>Risk: 2% Max</span>
+          <span className="flex items-center gap-1"><Gear size={10} className="animate-spin-slow" /> Phantom Scale Ladder</span>
+          <span className="text-accent/80 font-mono">Fill: 100% (L1)</span>
         </div>
         <div className="flex gap-1.5">
-          <div className={cn("h-1.5 flex-1 rounded-sm", isLong ? "bg-green-400" : "bg-red-400")} title="L1 (0.7%) Filled" />
-          <div className={cn("h-1.5 flex-1 rounded-sm", !isProfitable ? (isLong ? "bg-green-400/80" : "bg-red-400/80") : "bg-muted/30")} title="L2 (0.7%)" />
-          <div className={cn("h-1.5 flex-1 rounded-sm", (position.unrealized_pnl_pct < -0.5) ? (isLong ? "bg-green-400/60" : "bg-red-400/60") : "bg-muted/30")} title="L3 (0.6%)" />
+          <div className={cn("h-1.5 flex-1 rounded-sm relative overflow-hidden", isLong ? "bg-green-400/50" : "bg-red-400/50")} title="L1 (100%) Filled">
+            <div className="absolute inset-0 bg-white/20 animate-pulse" />
+          </div>
+          <div className={cn("h-1.5 flex-1 rounded-sm bg-muted/20 border border-border/30")} title="L2 (Adaptive)" />
+          <div className={cn("h-1.5 flex-1 rounded-sm bg-muted/20 border border-border/30")} title="L3 (Adaptive)" />
         </div>
       </div>
 
       <div className="mt-3 flex items-center gap-2 text-xs">
         {position.breakeven_active && (
-          <Badge variant="secondary" className="text-[10px] uppercase font-bold">BE Active</Badge>
+          <Badge variant="secondary" className="text-[9px] uppercase font-bold bg-blue-500/10 text-blue-400 border-blue-500/30">BE Active</Badge>
         )}
         {position.trailing_active && (
-          <Badge variant="secondary" className="text-[10px] uppercase font-bold border-accent/30 text-accent">Trailing Mode</Badge>
+          <Badge variant="secondary" className="text-[9px] uppercase font-bold border-accent/30 text-accent bg-accent/10">Trailing</Badge>
         )}
-        <span className="text-muted-foreground ml-auto text-[10px] uppercase font-bold tracking-widest">
-          {position.targets_hit}/{position.targets_hit + position.targets_remaining} TP Hit
+        <span className="text-muted-foreground ml-auto text-[9px] uppercase font-bold tracking-widest opacity-60">
+          Targets: {position.targets_hit}/{position.targets_hit + position.targets_remaining}
         </span>
       </div>
     </div>
-
   );
 }
 
@@ -987,8 +1107,8 @@ function SignalLogRow({ signal }: { signal: SignalLogEntry }) {
   const resultColor = signal.result === 'executed'
     ? 'text-green-400 bg-green-500/10 border-green-500/30'
     : signal.result === 'error'
-    ? 'text-red-400 bg-red-500/10 border-red-500/30'
-    : 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30';
+      ? 'text-red-400 bg-red-500/10 border-red-500/30'
+      : 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30';
 
   const resultLabel = signal.result === 'executed' ? 'EXEC' : signal.result === 'error' ? 'ERR' : 'FILT';
 
