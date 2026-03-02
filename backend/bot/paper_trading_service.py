@@ -246,6 +246,9 @@ class PaperTradingService:
         # Price cache for P&L calculations
         self._price_cache: Dict[str, float] = {}
 
+        # Detailed signal processing log (every signal, not just recent activity)
+        self.signal_log: List[Dict[str, Any]] = []
+
         logger.info("PaperTradingService initialized")
 
     async def start(self, config: PaperTradingConfig) -> Dict[str, Any]:
@@ -313,6 +316,7 @@ class PaperTradingService:
         # Reset tracking
         self.completed_trades = []
         self.activity_log = []
+        self.signal_log = []
         self.stats = PaperTradingStats()
         self._price_cache = {}
         self._peak_equity = config.initial_balance
@@ -401,6 +405,7 @@ class PaperTradingService:
 
         self.completed_trades = []
         self.activity_log = []
+        self.signal_log = []
         self.stats = PaperTradingStats()
         self._price_cache = {}
 
@@ -480,8 +485,11 @@ class PaperTradingService:
         # Statistics
         result["statistics"] = self.stats.to_dict()
 
-        # Recent activity (last 20)
-        result["recent_activity"] = self.activity_log[-20:]
+        # Recent activity (last 50 for better visibility)
+        result["recent_activity"] = self.activity_log[-50:]
+
+        # Signal processing log (every signal with full details)
+        result["signal_log"] = self.signal_log[-100:]
 
         # OHLCV cache stats (for monitoring efficiency)
         try:
@@ -684,6 +692,27 @@ class PaperTradingService:
             logger.error(f"Traceback: {traceback.format_exc()}")
             self._log_activity("scan_error", {"error": error_details})
 
+    def _log_signal(self, plan: TradePlan, result: str, reason: str, **extra):
+        """Record every signal's processing result for the Signal Intelligence panel."""
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "scan_number": self.stats.scans_completed,
+            "symbol": plan.symbol,
+            "direction": plan.direction,
+            "confluence": round(plan.confidence_score, 1),
+            "setup_type": getattr(plan, "setup_type", "unknown"),
+            "entry_zone": round(plan.entry_zone.near_entry, 2),
+            "stop_loss": round(plan.stop_loss.level, 2),
+            "rr": round(plan.risk_reward, 2) if hasattr(plan, "risk_reward") else None,
+            "result": result,  # "executed", "filtered", "error"
+            "reason": reason,
+        }
+        entry.update(extra)
+        self.signal_log.append(entry)
+        # Keep last 200 entries
+        if len(self.signal_log) > 200:
+            self.signal_log = self.signal_log[-200:]
+
     async def _process_signal(self, plan: TradePlan):
         """
         Process a trade signal and potentially execute it.
@@ -697,30 +726,24 @@ class PaperTradingService:
         # Check if we can take more positions
         active_count = len(self._get_active_positions())
         if active_count >= self.config.max_positions:
-            logger.debug(f"Max positions reached ({active_count}), skipping {plan.symbol}")
-            self._log_activity(
-                "signal_filtered",
-                {
-                    "symbol": plan.symbol,
-                    "direction": plan.direction,
-                    "confluence": plan.confidence_score,
-                    "reason": f"Max positions reached ({active_count}/{self.config.max_positions})",
-                },
-            )
+            reason = f"Max positions reached ({active_count}/{self.config.max_positions})"
+            logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
+            self._log_signal(plan, "filtered", reason)
+            self._log_activity("signal_filtered", {
+                "symbol": plan.symbol, "direction": plan.direction,
+                "confluence": plan.confidence_score, "reason": reason,
+            })
             return
 
         # Check if already in position for this symbol
         if self._has_position(plan.symbol):
-            logger.debug(f"Already in position for {plan.symbol}, skipping")
-            self._log_activity(
-                "signal_filtered",
-                {
-                    "symbol": plan.symbol,
-                    "direction": plan.direction,
-                    "confluence": plan.confidence_score,
-                    "reason": "Already in position for symbol",
-                },
-            )
+            reason = "Already in position for symbol"
+            logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
+            self._log_signal(plan, "filtered", reason)
+            self._log_activity("signal_filtered", {
+                "symbol": plan.symbol, "direction": plan.direction,
+                "confluence": plan.confidence_score, "reason": reason,
+            })
             return
 
         # Check confluence threshold - use same rounding as scanner to avoid asymmetry
@@ -728,33 +751,30 @@ class PaperTradingService:
             self.mode.min_confluence_score if self.mode else 60
         )
         if round(plan.confidence_score, 1) < round(min_score, 1):
-            logger.debug(
-                f"Confluence {plan.confidence_score} below min {min_score}, skipping {plan.symbol}"
-            )
-            self._log_activity(
-                "signal_filtered",
-                {
-                    "symbol": plan.symbol,
-                    "direction": plan.direction,
-                    "confluence": plan.confidence_score,
-                    "reason": f"Confluence {plan.confidence_score:.0f}% below min {min_score:.0f}%",
-                },
-            )
+            reason = f"Confluence {plan.confidence_score:.1f}% below min {min_score:.0f}%"
+            logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
+            self._log_signal(plan, "filtered", reason)
+            self._log_activity("signal_filtered", {
+                "symbol": plan.symbol, "direction": plan.direction,
+                "confluence": plan.confidence_score, "reason": reason,
+            })
             return
 
         # Calculate position size
+        balance = self.executor.get_balance()
         position_size = self._calculate_position_size(plan)
         if position_size <= 0:
-            logger.debug(f"Invalid position size for {plan.symbol}")
-            self._log_activity(
-                "signal_filtered",
-                {
-                    "symbol": plan.symbol,
-                    "direction": plan.direction,
-                    "confluence": plan.confidence_score,
-                    "reason": "Invalid position size calculated",
-                },
+            reason = (
+                f"Invalid position size (balance={balance:.2f}, "
+                f"entry={plan.entry_zone.near_entry:.2f}, "
+                f"stop={plan.stop_loss.level:.2f})"
             )
+            logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
+            self._log_signal(plan, "filtered", reason, balance=balance)
+            self._log_activity("signal_filtered", {
+                "symbol": plan.symbol, "direction": plan.direction,
+                "confluence": plan.confidence_score, "reason": reason,
+            })
             return
 
         # Get current price
@@ -764,16 +784,13 @@ class PaperTradingService:
             if current_price <= 0:
                 raise ValueError("Price is zero or negative")
         except Exception as e:
-            logger.error(f"Failed to get price for {plan.symbol}: {e}")
-            self._log_activity(
-                "signal_filtered",
-                {
-                    "symbol": plan.symbol,
-                    "direction": plan.direction,
-                    "confluence": plan.confidence_score,
-                    "reason": f"Failed to get price: {e}",
-                },
-            )
+            reason = f"Price fetch failed: {e}"
+            logger.error(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
+            self._log_signal(plan, "filtered", reason)
+            self._log_activity("signal_filtered", {
+                "symbol": plan.symbol, "direction": plan.direction,
+                "confluence": plan.confidence_score, "reason": reason,
+            })
             return
 
         # Execute entry
@@ -798,39 +815,46 @@ class PaperTradingService:
 
                 self.stats.signals_taken += 1
 
-                self._log_activity(
-                    "trade_opened",
-                    {
-                        "position_id": position_id,
-                        "symbol": plan.symbol,
-                        "direction": plan.direction,
-                        "entry_price": fill.price,
-                        "quantity": fill.quantity,
-                        "stop_loss": plan.stop_loss.level,
-                        "targets": [t.level for t in plan.targets],
-                        "confluence": plan.confidence_score,
-                    },
+                logger.info(
+                    f"TRADE OPENED: {plan.symbol} {plan.direction} @ {fill.price:.2f} "
+                    f"| qty={fill.quantity:.6f} | SL={plan.stop_loss.level:.2f} "
+                    f"| confluence={plan.confidence_score:.1f}%"
                 )
-
-                logger.info(f"Trade opened: {plan.symbol} {plan.direction} @ {fill.price}")
+                self._log_signal(
+                    plan, "executed", "Trade opened successfully",
+                    fill_price=fill.price, fill_qty=fill.quantity,
+                    position_id=position_id,
+                )
+                self._log_activity("trade_opened", {
+                    "position_id": position_id,
+                    "symbol": plan.symbol,
+                    "direction": plan.direction,
+                    "entry_price": fill.price,
+                    "quantity": fill.quantity,
+                    "stop_loss": plan.stop_loss.level,
+                    "targets": [t.level for t in plan.targets],
+                    "confluence": plan.confidence_score,
+                })
             else:
-                reason = "Order execution rejected by simulated broker"
-                if order.status == OrderStatus.REJECTED:
-                    reason = "Insufficient margin/balance for paper trade execution"
-                
-                logger.warning(f"Trade execution failed for {plan.symbol}: {reason}")
-                self._log_activity(
-                    "signal_filtered", 
-                    {
-                        "symbol": plan.symbol, 
-                        "direction": plan.direction,
-                        "confluence": plan.confidence_score,
-                        "reason": reason
-                    }
+                order_status = order.status.value if order.status else "unknown"
+                reason = (
+                    f"Order not filled (status={order_status}, "
+                    f"fill={'yes' if fill else 'no'}, "
+                    f"filled_qty={order.filled_quantity:.6f}/{order.quantity:.6f})"
                 )
+                logger.warning(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
+                self._log_signal(plan, "filtered", reason, order_status=order_status)
+                self._log_activity("signal_filtered", {
+                    "symbol": plan.symbol, "direction": plan.direction,
+                    "confluence": plan.confidence_score, "reason": reason,
+                })
 
         except Exception as e:
-            logger.error(f"Failed to execute trade for {plan.symbol}: {e}")
+            import traceback
+            reason = f"Execution error: {type(e).__name__}: {e}"
+            logger.error(f"SIGNAL ERROR: {plan.symbol} {plan.direction} | {reason}")
+            logger.error(traceback.format_exc())
+            self._log_signal(plan, "error", reason)
             self._log_activity("trade_error", {"symbol": plan.symbol, "error": str(e)})
 
     def _calculate_position_size(self, plan: TradePlan) -> float:

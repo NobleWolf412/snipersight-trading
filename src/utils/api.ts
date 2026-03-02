@@ -990,6 +990,26 @@ export interface PaperTradingStatusResponse {
     entries: number;
     candles_cached: number;
   } | null;
+  signal_log?: SignalLogEntry[];
+}
+
+export interface SignalLogEntry {
+  timestamp: string;
+  scan_number: number;
+  symbol: string;
+  direction: string;
+  confluence: number;
+  setup_type: string;
+  entry_zone: number;
+  stop_loss: number;
+  rr: number | null;
+  result: 'executed' | 'filtered' | 'error';
+  reason: string;
+  fill_price?: number;
+  fill_qty?: number;
+  position_id?: string;
+  balance?: number;
+  order_status?: string;
 }
 
 export interface PaperTradingStartResponse {
