@@ -40,6 +40,8 @@ def _calculate_pullback_probability(
     atr: float,
     indicators: Optional[IndicatorSet] = None,
     htf_trend: Optional[str] = None,
+    smc_snapshot: Optional[SMCSnapshot] = None,
+    confluence_breakdown: Optional[ConfluenceBreakdown] = None,
 ) -> float:
     """
     Calculate probability that price will pull back to reach entry zone.
@@ -56,6 +58,8 @@ def _calculate_pullback_probability(
         atr: Average true range
         indicators: Technical indicators for momentum analysis
         htf_trend: Higher timeframe trend direction
+        smc_snapshot: SMC snapshot for liquidity sweep detection
+        confluence_breakdown: Confluence results for HTF alignment
 
     Returns:
         Probability score 0.0-1.0 (0 = unlikely, 1 = very likely)
@@ -107,8 +111,8 @@ def _calculate_pullback_probability(
 
             if ind:
                 rsi = getattr(ind, "rsi", 50)
-                stoch_k = getattr(ind, "stoch_rsi_k", None)
-                stoch_d = getattr(ind, "stoch_rsi_d", None)
+                stoch_k = getattr(ind, "stoch_rsi_k", None) or getattr(ind, "stoch_k", None)
+                stoch_d = getattr(ind, "stoch_rsi_d", None) or getattr(ind, "stoch_d", None)
 
                 momentum_score = 0.5  # Neutral default
 
@@ -119,6 +123,18 @@ def _calculate_pullback_probability(
                         if rsi < 30:
                             # Already oversold - less room to pull back
                             momentum_score = 0.3
+                            
+                            # BYPASS: If sweeping liquidity OR HTF structure is aligned, soften the penalty
+                            sweeps = getattr(smc_snapshot, "liquidity_sweeps", []) if smc_snapshot else []
+                            has_sweep = any(s.sweep_type == "low" for s in sweeps)
+                            htf_aligned = getattr(confluence_breakdown, "htf_aligned", False) if confluence_breakdown else False
+                            
+                            # NEW: Check for bullish momentum cross
+                            stoch_cross_up = stoch_k is not None and stoch_d is not None and stoch_k > stoch_d
+                            
+                            if has_sweep or htf_aligned or stoch_cross_up:
+                                logger.info(f"🔄 Pullback Bypass (Long): Oversold RSI {rsi:.1f} but sweep/alignment/momentum-cross detected. Neutralizing penalty.")
+                                momentum_score = 0.6 # Soften penalty if structure favors the move
                         elif rsi < 45:
                             # Mildly bearish - good for pullback
                             momentum_score = 0.7
@@ -133,6 +149,18 @@ def _calculate_pullback_probability(
                         if rsi > 70:
                             # Already overbought - less room to push up
                             momentum_score = 0.3
+                            
+                            # BYPASS: If sweeping liquidity OR HTF structure is aligned, soften the penalty
+                            sweeps = getattr(smc_snapshot, "liquidity_sweeps", []) if smc_snapshot else []
+                            has_sweep = any(s.sweep_type == "high" for s in sweeps)
+                            htf_aligned = getattr(confluence_breakdown, "htf_aligned", False) if confluence_breakdown else False
+                            
+                            # NEW: Check for bearish momentum cross
+                            stoch_cross_down = stoch_k is not None and stoch_d is not None and stoch_k < stoch_d
+                            
+                            if has_sweep or htf_aligned or stoch_cross_down:
+                                logger.info(f"🔄 Pullback Bypass (Short): Overbought RSI {rsi:.1f} but sweep/alignment/momentum-cross detected. Neutralizing penalty.")
+                                momentum_score = 0.6 # Soften penalty if structure favors the move
                         elif rsi > 55:
                             # Mildly bullish - good for push into short zone
                             momentum_score = 0.7
@@ -763,6 +791,7 @@ def _calculate_entry_zone(
                     price_inside_ob,
                 )
                 near_entry = current_price  # Allow entry at current price
+                far_entry = min(far_entry, near_entry)  # FIX: Prevent inversion
 
             logger.info(
                 "📦 ENTRY ZONE CALC: OB=[%.2f-%.2f] | offset=%.2f (base=%.2f * htf=%.2f * atr=%.2f) | near=%.2f, far=%.2f | price=%.2f",
@@ -793,6 +822,8 @@ def _calculate_entry_zone(
                 entry_zone_mid=entry_zone.midpoint,
                 atr=atr,
                 indicators=indicators,
+                smc_snapshot=smc_snapshot,
+                confluence_breakdown=confluence_breakdown,
             )
             return entry_zone, used_structure
 
@@ -848,6 +879,7 @@ def _calculate_entry_zone(
                     current_price,
                 )
                 near_entry = current_price
+                far_entry = min(far_entry, near_entry)  # FIX: Prevent inversion
 
             rationale = f"Entry zone based on {best_fvg.timeframe} bullish FVG"
             used_structure = True
@@ -861,6 +893,8 @@ def _calculate_entry_zone(
                 entry_zone_mid=entry_zone.midpoint,
                 atr=atr,
                 indicators=indicators,
+                smc_snapshot=smc_snapshot,
+                confluence_breakdown=confluence_breakdown,
             )
             return entry_zone, used_structure
 
@@ -1076,6 +1110,7 @@ def _calculate_entry_zone(
                     price_inside_ob,
                 )
                 near_entry = current_price
+                far_entry = max(far_entry, near_entry)  # FIX: Prevent inversion for shorts
 
             logger.info(
                 "📦 ENTRY ZONE CALC: OB=[%.2f-%.2f] | offset=%.2f (base=%.2f * htf=%.2f * atr=%.2f) | near=%.2f, far=%.2f | price=%.2f",
@@ -1105,6 +1140,8 @@ def _calculate_entry_zone(
                 entry_zone_mid=entry_zone.midpoint,
                 atr=atr,
                 indicators=indicators,
+                smc_snapshot=smc_snapshot,
+                confluence_breakdown=confluence_breakdown,
             )
             return entry_zone, used_structure
 
@@ -1156,6 +1193,7 @@ def _calculate_entry_zone(
                     current_price,
                 )
                 near_entry = current_price
+                far_entry = max(far_entry, near_entry)  # FIX: Prevent inversion for shorts
 
             rationale = f"Entry zone based on {best_fvg.timeframe} bearish FVG"
             used_structure = True
@@ -1169,6 +1207,8 @@ def _calculate_entry_zone(
                 entry_zone_mid=entry_zone.midpoint,
                 atr=atr,
                 indicators=indicators,
+                smc_snapshot=smc_snapshot,
+                confluence_breakdown=confluence_breakdown,
             )
             return entry_zone, used_structure
 
@@ -1218,6 +1258,8 @@ def _calculate_entry_zone(
         atr=atr,
         indicators=indicators,
         htf_trend=None,  # Caller can provide via confluence_breakdown if needed
+        smc_snapshot=smc_snapshot,
+        confluence_breakdown=confluence_breakdown,
     )
     entry_zone.pullback_probability = pullback_prob  # type: ignore
 

@@ -19,7 +19,7 @@ import asyncio
 import logging
 import uuid
 
-from backend.bot.executor.paper_executor import PaperExecutor, OrderStatus
+from backend.bot.executor.paper_executor import PaperExecutor, OrderStatus, OrderType
 from backend.bot.executor.position_manager import PositionManager, PositionStatus
 from backend.engine.orchestrator import Orchestrator
 from backend.shared.config.scanner_modes import get_mode, ScannerMode
@@ -286,7 +286,10 @@ class PaperTradingService:
             initial_balance=config.initial_balance,
             fee_rate=config.fee_rate,
             slippage_bps=config.slippage_bps,
-            enable_partial_fills=False,  # Simplify for paper trading
+            enable_partial_fills=True,  # Step 5: Enable realistic partial fills
+            partial_fill_prob=0.3,      # 30% chance of a partial fill
+            min_fill_pct=0.3,           # Min 30% fill
+            max_fill_pct=0.7,           # Max 70% fill
         )
 
         # Initialize position manager
@@ -457,18 +460,10 @@ class PaperTradingService:
         if self.executor:
             initial = self.config.initial_balance if self.config else 0
             
-            # Pure cash balance starts with executor balance (initial - fees)
-            current = self.executor.get_balance() + self.stats.total_pnl
+            # Pure cash balance (executor now handles fees and ALL realized PnL internally)
+            current = self.executor.get_balance() 
             
-            # Add realized PnL from currently open positions (partial target hits)
-            if self.position_manager:
-                current += sum(
-                    pos.realized_pnl 
-                    for pos in self.position_manager.positions.values() 
-                    if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
-                )
-            
-            # Calculate equity using PositionManager for futures P&L
+            # Calculate ONLY unrealized PnL from the PositionManager
             unrealized_pnl = 0.0
             if self.position_manager:
                 unrealized_pnl = sum(
@@ -476,6 +471,7 @@ class PaperTradingService:
                     for pos in self.position_manager.positions.values() 
                     if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
                 )
+            
             equity = current + unrealized_pnl
 
             result["balance"] = {
@@ -579,6 +575,21 @@ class PaperTradingService:
                 if self.position_manager:
                     # Refresh prices for all open positions before monitoring
                     await self._refresh_price_cache()
+
+                    # Process open limit orders
+                    executor = self.executor
+                    if executor:
+                        open_orders = executor.get_open_orders()
+                        for order in open_orders:
+                            if order.order_type == OrderType.LIMIT:
+                                current_price = self._price_cache.get(order.symbol)
+                                if current_price:
+                                    fill = executor.execute_limit_order(order.order_id, current_price)
+                                    if fill and order.is_filled:
+                                        # If it's an entry order, open the position
+                                        if not self._has_position(order.symbol):
+                                            # Logic would go here to link this fill to a trade plan
+                                            pass
 
                     await self.position_manager.monitor_all_positions()
 
@@ -889,20 +900,26 @@ class PaperTradingService:
 
         # Execute entry
         try:
+            executor = self.executor
+            if not executor:
+                return
+
             side = "BUY" if plan.direction == "LONG" else "SELL"
 
-            order = self.executor.place_order(
+            # Use LIMIT to allow the executor to simulate realistic partial fills
+            order = executor.place_order(
                 symbol=plan.symbol,
                 side=side,
-                order_type="MARKET",
+                order_type="LIMIT",
                 quantity=position_size,
-                price=current_price,
+                price=plan.entry_zone.near_entry,
             )
 
-            fill = self.executor.execute_market_order(order.order_id, current_price)
+            # Because the EntryEngine caps near_entry to current_price, this will immediately evaluate
+            fill = executor.execute_limit_order(order.order_id, current_price)
 
-            if fill and order.status == OrderStatus.FILLED:
-                # Open position in manager
+            if fill and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
+                # Open position in manager using the ACTUALLY filled quantity
                 position_id = self.position_manager.open_position(
                     trade_plan=plan, entry_price=fill.price, quantity=fill.quantity
                 )
@@ -911,7 +928,7 @@ class PaperTradingService:
 
                 logger.info(
                     f"TRADE OPENED: {plan.symbol} {plan.direction} @ {fill.price:.2f} "
-                    f"| qty={fill.quantity:.6f} | SL={plan.stop_loss.level:.2f} "
+                    f"| qty={fill.quantity:.6f} (Requested: {position_size:.6f}) | SL={plan.stop_loss.level:.2f} "
                     f"| confluence={plan.confidence_score:.1f}%"
                 )
                 self._log_signal(
@@ -932,9 +949,8 @@ class PaperTradingService:
             else:
                 order_status = order.status.value if order.status else "unknown"
                 reason = (
-                    f"Order not filled (status={order_status}, "
-                    f"fill={'yes' if fill else 'no'}, "
-                    f"filled_qty={order.filled_quantity:.6f}/{order.quantity:.6f})"
+                    f"Limit order missed/not filled (status={order_status}, "
+                    f"price={current_price:.2f}, limit={plan.entry_zone.near_entry:.2f})"
                 )
                 logger.warning(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
                 self._log_signal(plan, "filtered", reason, order_status=order_status)

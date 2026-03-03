@@ -138,7 +138,9 @@ class PaperExecutor:
         fee_rate: float = 0.001,  # 0.1% default fee
         slippage_bps: float = 5.0,  # 5 basis points default slippage
         enable_partial_fills: bool = True,
-        max_fill_pct: float = 0.3,  # Max 30% of order per tick
+        partial_fill_prob: float = 0.5,  # 50% chance of a partial fill if enabled
+        min_fill_pct: float = 0.3,       # Min 30% fill
+        max_fill_pct: float = 0.7,       # Max 70% fill
     ):
         """
         Initialize paper executor.
@@ -167,11 +169,14 @@ class PaperExecutor:
         self.fee_rate = fee_rate
         self.slippage_bps = slippage_bps
         self.enable_partial_fills = enable_partial_fills
+        self.partial_fill_prob = partial_fill_prob
+        self.min_fill_pct = min_fill_pct
         self.max_fill_pct = max_fill_pct
 
         self.orders: Dict[str, Order] = {}
         self.fills: List[Fill] = []
         self.positions: Dict[str, float] = {}  # symbol -> quantity
+        self.position_avg_price: Dict[str, float] = {}  # Tracks entry prices for PnL
         self.order_counter = 0
 
         logger.info(f"Paper executor initialized with ${initial_balance:.2f}")
@@ -235,9 +240,9 @@ class PaperExecutor:
             raise ValueError("Quantity must be positive")
 
         try:
-            order_side = OrderSide[side.upper()]
-            order_type_enum = OrderType[order_type.upper()]
-        except KeyError:
+            order_side = OrderSide(side.upper())
+            order_type_enum = OrderType(order_type.upper())
+        except ValueError:
             raise ValueError(f"Invalid order side '{side}' or type '{order_type}'")
 
         # Validate price requirements
@@ -269,46 +274,21 @@ class PaperExecutor:
     def execute_market_order(self, order_id: str, current_price: float) -> Optional[Fill]:
         """
         Execute a market order immediately.
-
-        Args:
-            order_id: Order to execute
-            current_price: Current market price
-
-        Returns:
-            Fill record if executed, None otherwise
-
-        Raises:
-            ValueError: If order doesn't exist or isn't a market order
+        Note: Market orders always fill 100%. The penalty is slippage.
         """
         if order_id not in self.orders:
             raise ValueError(f"Order {order_id} not found")
 
         order = self.orders[order_id]
-
         if order.order_type != OrderType.MARKET:
             raise ValueError(f"Order {order_id} is not a market order")
-
         if order.status == OrderStatus.FILLED:
-            logger.warning(f"Order {order_id} already filled")
             return None
 
-        # Calculate fill quantity (partial or full)
+        # Market orders ALWAYS fill 100%
         fill_qty = order.remaining_quantity
-        if self.enable_partial_fills and fill_qty > 0:
-            # Randomly fill between max_fill_pct and 100%
-            fill_pct = random.uniform(self.max_fill_pct, 1.0)
-            fill_qty = order.remaining_quantity * fill_pct
-
-        # Apply slippage
         fill_price = self._calculate_slippage(current_price, order.side)
-
-        # Calculate fee
         fee = self._calculate_fee(fill_qty, fill_price)
-
-        # For margin/futures paper trading, we don't strictly reject based on spot balance
-        # or require existing positions for SELL orders (since we can short).
-        # We just deduct the fee from the cash balance.
-        # Position sizing and margin requirements are handled by PaperTradingService.
         
         self.balance -= fee
 
@@ -316,28 +296,124 @@ class PaperExecutor:
         fill = Fill(order_id=order_id, quantity=fill_qty, price=fill_price, fee=fee)
         self.fills.append(fill)
 
-        # Update order
         order.filled_quantity += fill_qty
-        order.average_fill_price = (
-            order.average_fill_price * (order.filled_quantity - fill_qty) + fill_price * fill_qty
-        ) / order.filled_quantity
+        order.average_fill_price = fill_price
+        order.status = OrderStatus.FILLED
+        order.updated_at = datetime.now(timezone.utc)
 
+        # --- MARGIN ACCOUNTING LOGIC ---
+        current_pos = self.positions.get(order.symbol, 0.0)
+        current_avg = self.position_avg_price.get(order.symbol, 0.0)
+        is_buy = order.side == OrderSide.BUY
+        trade_qty = fill_qty if is_buy else -fill_qty
+
+        # Are we opening/adding to a position?
+        if (current_pos == 0) or (current_pos > 0 and is_buy) or (current_pos < 0 and not is_buy):
+            new_pos = current_pos + trade_qty
+            # Update average entry price
+            total_cost = abs(current_pos) * current_avg + fill_qty * fill_price
+            self.position_avg_price[order.symbol] = total_cost / abs(new_pos)
+            self.positions[order.symbol] = new_pos
+        # We are closing/reducing a position
+        else:
+            if current_pos > 0 and not is_buy:  # Closing a Long
+                realized_pnl = (fill_price - current_avg) * fill_qty
+            else:  # Closing a Short
+                realized_pnl = (current_avg - fill_price) * fill_qty
+                
+            self.balance += realized_pnl
+            new_pos = current_pos + trade_qty
+            
+            # Flipped direction (e.g. Long 1, Sold 2 -> Short 1)
+            if (current_pos > 0 and new_pos < 0) or (current_pos < 0 and new_pos > 0):
+                self.position_avg_price[order.symbol] = fill_price
+            
+            self.positions[order.symbol] = new_pos
+            if abs(self.positions[order.symbol]) < 1e-9:
+                self.positions[order.symbol] = 0.0
+                self.position_avg_price[order.symbol] = 0.0
+
+        logger.info(
+            f"Market Order {order_id} filled: {fill_qty:.6f} @ ${fill_price:.2f} " 
+            f"(fee: ${fee:.2f}, balance: ${self.balance:.2f})"
+        )
+        return fill
+
+    def execute_limit_order(self, order_id: str, current_price: float) -> Optional[Fill]:
+        """
+        Execute limit orders with partial fill simulation and zero slippage.
+        """
+        if order_id not in self.orders:
+            return None
+
+        order = self.orders[order_id]
+        if order.order_type != OrderType.LIMIT or order.status == OrderStatus.FILLED:
+            return None
+
+        limit_price = order.price
+        if limit_price is None:
+            return None
+
+        # Ensure price actually hit the limit
+        if order.side == OrderSide.BUY and current_price > limit_price:
+            return None
+        if order.side == OrderSide.SELL and current_price < limit_price:
+            return None
+
+        # Calculate partial fill
+        fill_qty = order.remaining_quantity
+        if self.enable_partial_fills and fill_qty > 0:
+            if random.random() < self.partial_fill_prob:
+                fill_pct = random.uniform(self.min_fill_pct, self.max_fill_pct)
+                fill_qty = order.remaining_quantity * fill_pct
+                logger.info(f"LIMIT PARTIAL FILL: Order {order_id} filled {fill_pct*100:.1f}% ({fill_qty:.6f})")
+
+        fill_price = limit_price  # Limit orders execute exactly at the limit price
+        fee = self._calculate_fee(fill_qty, fill_price)
+        
+        self.balance -= fee
+        
+        # Create fill record
+        fill = Fill(order_id=order_id, quantity=fill_qty, price=fill_price, fee=fee)
+        self.fills.append(fill)
+
+        # Update order state
+        total_filled = order.filled_quantity + fill_qty
+        order.average_fill_price = (
+            order.average_fill_price * order.filled_quantity + fill_price * fill_qty
+        ) / total_filled
+        order.filled_quantity = total_filled
+        
         if order.is_filled:
             order.status = OrderStatus.FILLED
         else:
             order.status = OrderStatus.PARTIALLY_FILLED
-
+            
         order.updated_at = datetime.now(timezone.utc)
 
-        # Update position
-        if order.side == OrderSide.BUY:
-            self.positions[order.symbol] = self.positions.get(order.symbol, 0.0) + fill_qty
-        else:
-            self.positions[order.symbol] = self.positions.get(order.symbol, 0.0) - fill_qty
+        # --- MARGIN ACCOUNTING LOGIC (Identical to market order) ---
+        current_pos = self.positions.get(order.symbol, 0.0)
+        current_avg = self.position_avg_price.get(order.symbol, 0.0)
+        is_buy = order.side == OrderSide.BUY
+        trade_qty = fill_qty if is_buy else -fill_qty
 
-        logger.info(
-            f"Order {order_id} filled: {fill_qty:.6f} @ ${fill_price:.2f} " f"(fee: ${fee:.2f})"
-        )
+        if (current_pos == 0) or (current_pos > 0 and is_buy) or (current_pos < 0 and not is_buy):
+            new_pos = current_pos + trade_qty
+            total_cost = abs(current_pos) * current_avg + fill_qty * fill_price
+            self.position_avg_price[order.symbol] = total_cost / abs(new_pos)
+            self.positions[order.symbol] = new_pos
+        else:
+            realized_pnl = (fill_price - current_avg) * fill_qty if current_pos > 0 else (current_avg - fill_price) * fill_qty
+            self.balance += realized_pnl
+            new_pos = current_pos + trade_qty
+            
+            if (current_pos > 0 and new_pos < 0) or (current_pos < 0 and new_pos > 0):
+                self.position_avg_price[order.symbol] = fill_price
+            
+            self.positions[order.symbol] = new_pos
+            if abs(self.positions[order.symbol]) < 1e-9:
+                self.positions[order.symbol] = 0.0
+                self.position_avg_price[order.symbol] = 0.0
 
         return fill
 
@@ -401,19 +477,23 @@ class PaperExecutor:
 
     def get_equity(self, market_prices: Dict[str, float]) -> float:
         """
-        Calculate total equity (balance + position values).
-
-        Args:
-            market_prices: Current market prices for each symbol
-
-        Returns:
-            Total equity value
+        Calculate total equity using margin-based unrealized PnL.
+        Equity = Balance + Unrealized PnL
         """
-        position_value = sum(
-            qty * market_prices.get(symbol, 0.0) for symbol, qty in self.positions.items()
-        )
-
-        return self.balance + position_value
+        unrealized_pnl = 0.0
+        for symbol, qty in self.positions.items():
+            if abs(qty) < 1e-9:
+                continue
+                
+            current_price = market_prices.get(symbol, 0.0)
+            avg_price = self.position_avg_price.get(symbol, 0.0)
+            
+            if qty > 0:  # Long
+                unrealized_pnl += (current_price - avg_price) * qty
+            else:  # Short
+                unrealized_pnl += (avg_price - current_price) * abs(qty)
+                
+        return self.balance + unrealized_pnl
 
     def get_pnl(self, market_prices: Dict[str, float]) -> float:
         """

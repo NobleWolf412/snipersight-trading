@@ -86,13 +86,18 @@ class PositionState:
     trailing_active: bool = False
     highest_price: Optional[float] = None
     lowest_price: Optional[float] = None
+    initial_stop_loss: float = 0.0
 
     def __post_init__(self):
-        """Initialize price tracking."""
+        """Initialize price tracking and anchor initial stop loss."""
         if self.direction == "LONG":
             self.highest_price = self.entry_price
         else:
             self.lowest_price = self.entry_price
+        
+        # Anchor the original stop loss forever to ensure risk calculations 
+        # (trailing, breakeven) remain based on the initial thesis.
+        self.initial_stop_loss = self.stop_loss
 
     def update_unrealized_pnl(self, current_price: float):
         """Calculate unrealized P&L based on current price."""
@@ -150,6 +155,7 @@ class PositionManager:
         breakeven_after_target: int = 1,
         trailing_stop_activation: float = 1.5,  # Activate after 1.5R profit
         trailing_stop_distance: float = 0.5,  # Trail 0.5R behind
+        max_hours_open: float = 6.0,  # Max hours to keep stagnant position
     ):
         """
         Initialize Position Manager.
@@ -168,6 +174,7 @@ class PositionManager:
         self.breakeven_after_target = breakeven_after_target
         self.trailing_stop_activation = trailing_stop_activation
         self.trailing_stop_distance = trailing_stop_distance
+        self.max_hours_open = max_hours_open
 
         self.positions: Dict[str, PositionState] = {}
         self._lock = Lock()
@@ -296,6 +303,19 @@ class PositionManager:
         position.update_unrealized_pnl(current_price)
         position.update_price_extremes(current_price)
 
+        # --- Check Time Stagnation ---
+        hours_open = (datetime.now(timezone.utc) - position.created_at).total_seconds() / 3600.0
+        if hours_open >= self.max_hours_open and position.status == PositionStatus.OPEN:
+            # If it hasn't hit TP1 yet and PnL is stagnant or negative, cut it
+            if position.pnl_percentage <= 0.5:
+                logger.warning(f"STAGNATION EXIT: {position.position_id} open for {hours_open:.1f}h. Cutting trade.")
+                if self.order_executor:
+                    await self._execute_exit(position, current_price, "TIME_STAGNATION")
+                with self._lock:
+                    position.status = PositionStatus.CLOSED
+                    position.remaining_quantity = 0.0
+                return
+
         # --- Check Stop Loss ---
         if self._check_stop_hit(position, current_price):
             logger.warning(
@@ -385,16 +405,25 @@ class PositionManager:
         return None
 
     def _move_to_breakeven(self, position: PositionState):
-        """Move stop loss to breakeven (entry price)."""
+        """Move stop loss to soft breakeven (50% of risk distance)."""
         if position.breakeven_active:
             return  # Already at breakeven
 
         old_stop = position.stop_loss
-        position.stop_loss = position.entry_price
+        
+        # FIX: Use initial_stop_loss to ensure 50% jump is calculated 
+        # from the original risk distance, not the current trailing level.
+        risk_distance = abs(position.entry_price - position.initial_stop_loss)
+
+        if position.direction == "LONG":
+            position.stop_loss = position.initial_stop_loss + (risk_distance * 0.5)
+        else:
+            position.stop_loss = position.initial_stop_loss - (risk_distance * 0.5)
+
         position.breakeven_active = True
 
         logger.info(
-            f"BREAKEVEN: {position.position_id} | {position.symbol} | "
+            f"SOFT BREAKEVEN: {position.position_id} | {position.symbol} | "
             f"Stop moved: {old_stop} -> {position.stop_loss}"
         )
 
@@ -404,7 +433,8 @@ class PositionManager:
             return
 
         # Calculate profit in R multiples
-        risk = abs(position.entry_price - position.stop_loss)
+        # FIX: Anchor risk to initial_stop_loss
+        risk = abs(position.entry_price - position.initial_stop_loss)
         if risk == 0:
             return
 
@@ -428,9 +458,12 @@ class PositionManager:
         if not position.trailing_active:
             return
 
-        risk = abs(position.entry_price - position.stop_loss)
-        trail_distance = self.trailing_stop_distance * risk
-
+        # Calculate initial risk for the trail distance
+        # FIX: Use initial_stop_loss so the trailing distance doesn't shrink
+        # as the stop loss moves closer to entry/profit.
+        risk = abs(position.entry_price - position.initial_stop_loss)
+        trail_distance = risk * 1.5
+        
         if position.direction == "LONG":
             if position.highest_price is None:
                 return
