@@ -1033,8 +1033,13 @@ function ActivityItem({ event }: { event: PaperTradingActivity }) {
         return `${d.symbol} ${d.direction} (${d.confluence?.toFixed(0)}%) - ${d.reason}`;
       case 'trade_opened':
         return `Opened ${d.direction} ${d.symbol} @ ${d.entry_price?.toFixed(2)}`;
-      case 'trade_closed':
-        return `Closed ${d.symbol}: ${d.pnl >= 0 ? '+' : ''}${d.pnl?.toFixed(2)} (${d.exit_reason})`;
+      case 'trade_closed': {
+        const tradeTypeLabel = d.trade_type ? ` [${d.trade_type}]` : '';
+        const regimeLabel = d.regime_at_close?.trend && d.exit_reason === 'stagnation'
+          ? ` | regime: ${d.regime_at_close.trend}/${d.regime_at_close.volatility}`
+          : '';
+        return `Closed ${d.symbol}${tradeTypeLabel}: ${d.pnl >= 0 ? '+' : ''}${d.pnl?.toFixed(2)} (${d.exit_reason}${regimeLabel})`;
+      }
       case 'scan_error':
         return `⚠️ Scan error: ${d.error || 'Unknown error'}`;
       case 'trade_error':
@@ -1075,6 +1080,11 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
             <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-border/50">
               {trade.exit_reason || 'unknown'}
             </span>
+            {(trade as any).trade_type && (
+              <span className="text-[9px] font-mono text-blue-400/60 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-blue-400/20">
+                {(trade as any).trade_type}
+              </span>
+            )}
           </div>
           <div className="text-xs text-muted-foreground">
             ${trade.entry_price.toFixed(2)} → ${trade.exit_price.toFixed(2)}
