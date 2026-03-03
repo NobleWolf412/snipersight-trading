@@ -66,6 +66,7 @@ class PositionState:
         trailing_active: Whether trailing stop is active
         highest_price: Highest price seen (for trailing longs)
         lowest_price: Lowest price seen (for trailing shorts)
+        entry_order_id: The order ID that opened this position (optional)
     """
 
     position_id: str
@@ -87,6 +88,7 @@ class PositionState:
     highest_price: Optional[float] = None
     lowest_price: Optional[float] = None
     initial_stop_loss: float = 0.0
+    entry_order_id: Optional[str] = None
 
     def __post_init__(self):
         """Initialize price tracking and anchor initial stop loss."""
@@ -112,10 +114,12 @@ class PositionState:
     def update_price_extremes(self, current_price: float):
         """Track highest/lowest prices for trailing stops."""
         if self.direction == "LONG":
-            if self.highest_price is None or current_price > self.highest_price:
+            highest = self.highest_price
+            if highest is None or current_price > highest:
                 self.highest_price = current_price
         else:  # SHORT
-            if self.lowest_price is None or current_price < self.lowest_price:
+            lowest = self.lowest_price
+            if lowest is None or current_price < lowest:
                 self.lowest_price = current_price
 
     @property
@@ -186,7 +190,13 @@ class PositionManager:
             f"trailing_activation={trailing_stop_activation}R"
         )
 
-    def open_position(self, trade_plan: TradePlan, entry_price: float, quantity: float) -> str:
+    def open_position(
+        self, 
+        trade_plan: TradePlan, 
+        entry_price: float, 
+        quantity: float, 
+        entry_order_id: Optional[str] = None
+    ) -> str:
         """
         Open new position from trade plan.
 
@@ -194,6 +204,7 @@ class PositionManager:
             trade_plan: Trade plan with stops/targets
             entry_price: Actual entry fill price
             quantity: Position size
+            entry_order_id: Unique identifier for the order that opened the position
 
         Returns:
             position_id: Unique position identifier
@@ -210,6 +221,7 @@ class PositionManager:
             stop_loss=trade_plan.stop_loss.level,
             targets=trade_plan.targets.copy(),
             status=PositionStatus.OPEN,
+            entry_order_id=entry_order_id,
         )
 
         with self._lock:
@@ -221,6 +233,38 @@ class PositionManager:
         )
 
         return position_id
+
+    def add_position_volume(self, position_id: str, fill_price: float, fill_qty: float):
+        """
+        Add volume to an existing position (for subsequent entry fills).
+        Updates average entry price and total quantity.
+        """
+        with self._lock:
+            if position_id not in self.positions:
+                logger.warning(f"Position {position_id} not found for volume update")
+                return
+
+            pos = self.positions[position_id]
+            
+            # Recalculate average entry price
+            total_qty = pos.quantity + fill_qty
+            new_avg = (pos.entry_price * pos.quantity + fill_price * fill_qty) / total_qty
+            
+            pos.entry_price = new_avg
+            pos.quantity = total_qty
+            pos.remaining_quantity += fill_qty
+            pos.updated_at = datetime.now(timezone.utc)
+            
+            # Re-init price tracking for new average
+            if pos.direction == "LONG":
+                pos.highest_price = max(pos.highest_price or 0, new_avg)
+            else:
+                pos.lowest_price = min(pos.lowest_price or 999999, new_avg)
+
+        logger.info(
+            f"Position volume added: {position_id} | Added: {fill_qty} @ {fill_price} "
+            f"| New Size: {pos.quantity} | Avg: {pos.entry_price:.2f}"
+        )
 
     def close_position(self, position_id: str, reason: str, current_price: Optional[float] = None):
         """
@@ -459,15 +503,14 @@ class PositionManager:
             return
 
         # Calculate initial risk for the trail distance
-        # FIX: Use initial_stop_loss so the trailing distance doesn't shrink
-        # as the stop loss moves closer to entry/profit.
         risk = abs(position.entry_price - position.initial_stop_loss)
         trail_distance = risk * 1.5
         
         if position.direction == "LONG":
-            if position.highest_price is None:
+            highest = position.highest_price
+            if highest is None:
                 return
-            new_stop = position.highest_price - trail_distance
+            new_stop = highest - trail_distance
             # Only trail up, never down
             if new_stop > position.stop_loss:
                 old_stop = position.stop_loss
@@ -477,9 +520,10 @@ class PositionManager:
                     f"Stop: {old_stop:.2f} -> {new_stop:.2f}"
                 )
         else:  # SHORT
-            if position.lowest_price is None:
+            lowest = position.lowest_price
+            if lowest is None:
                 return
-            new_stop = position.lowest_price + trail_distance
+            new_stop = lowest + trail_distance
             # Only trail down, never up
             if new_stop < position.stop_loss:
                 old_stop = position.stop_loss
@@ -491,14 +535,15 @@ class PositionManager:
 
     async def _execute_exit(self, position: PositionState, price: float, reason: str):
         """Execute full position exit."""
-        if not self.order_executor:
+        executor = self.order_executor
+        if not executor:
             logger.warning("No order executor configured - simulating exit")
             return
 
         try:
             # Execute market order to close
             order_side = "SELL" if position.direction == "LONG" else "BUY"
-            await self.order_executor(
+            await executor(
                 symbol=position.symbol,
                 side=order_side,
                 quantity=position.remaining_quantity,
@@ -513,13 +558,14 @@ class PositionManager:
 
     async def _execute_partial_exit(self, position: PositionState, price: float, quantity: float):
         """Execute partial position exit at target."""
-        if not self.order_executor:
+        executor = self.order_executor
+        if not executor:
             logger.warning("No order executor configured - simulating partial exit")
             return
 
         try:
             order_side = "SELL" if position.direction == "LONG" else "BUY"
-            await self.order_executor(
+            await executor(
                 symbol=position.symbol, side=order_side, quantity=quantity, price=price
             )
             logger.info(
@@ -567,6 +613,17 @@ class PositionManager:
                     position.status = PositionStatus.EMERGENCY_EXIT
             except Exception as e:
                 logger.error(f"Failed to emergency close {position.position_id}: {e}")
+
+    def find_position_by_order_id(self, order_id: str) -> Optional[PositionState]:
+        """Find an open/partial position linked to a specific entry order ID."""
+        with self._lock:
+            for pos in self.positions.values():
+                if pos.entry_order_id == order_id and pos.status in [
+                    PositionStatus.OPEN,
+                    PositionStatus.PARTIAL,
+                ]:
+                    return pos
+        return None
 
     async def start_monitoring(self):
         """

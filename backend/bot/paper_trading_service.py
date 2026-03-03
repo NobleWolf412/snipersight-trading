@@ -585,10 +585,21 @@ class PaperTradingService:
                                 current_price = self._price_cache.get(order.symbol)
                                 if current_price:
                                     fill = executor.execute_limit_order(order.order_id, current_price)
-                                    if fill and order.is_filled:
-                                        # If it's an entry order, open the position
-                                        if not self._has_position(order.symbol):
-                                            # Logic would go here to link this fill to a trade plan
+                                    if fill:
+                                        # Check if this order is linked to an existing position
+                                        position = self.position_manager.find_position_by_order_id(order.order_id)
+                                        if position:
+                                            # Add volume to existing position
+                                            self.position_manager.add_position_volume(
+                                                position.position_id, fill.price, fill.quantity
+                                            )
+                                            logger.info(
+                                                f"PARTIAL FILL SYNCED: {position.symbol} +{fill.quantity:.6f} "
+                                                f"| New Size: {position.quantity:.6f}"
+                                            )
+                                        elif not self._has_position(order.symbol) and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
+                                            # This case handles orders that filled but haven't opened a position yet 
+                                            # (though _process_signal should handle most of these)
                                             pass
 
                     await self.position_manager.monitor_all_positions()
@@ -921,7 +932,10 @@ class PaperTradingService:
             if fill and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
                 # Open position in manager using the ACTUALLY filled quantity
                 position_id = self.position_manager.open_position(
-                    trade_plan=plan, entry_price=fill.price, quantity=fill.quantity
+                    trade_plan=plan, 
+                    entry_price=fill.price, 
+                    quantity=fill.quantity,
+                    entry_order_id=order.order_id
                 )
 
                 self.stats.signals_taken += 1
