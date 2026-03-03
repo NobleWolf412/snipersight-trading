@@ -890,6 +890,7 @@ export interface PaperTradingConfigRequest {
   meme_mode?: boolean;
   slippage_bps?: number;
   fee_rate?: number;
+  max_hours_open?: number;
 }
 
 export interface PaperTradingPosition {
@@ -907,6 +908,8 @@ export interface PaperTradingPosition {
   targets_hit: number;
   unrealized_pnl: number;
   unrealized_pnl_pct: number;
+  target_pnl: number;
+  risk_pnl: number;
   breakeven_active: boolean;
   trailing_active: boolean;
   opened_at: string;

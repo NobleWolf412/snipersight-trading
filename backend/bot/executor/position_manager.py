@@ -91,6 +91,7 @@ class PositionState:
     lowest_price: Optional[float] = None
     initial_stop_loss: float = 0.0
     entry_order_id: Optional[str] = None
+    exit_reason: Optional[str] = None
 
     def __post_init__(self):
         """Initialize price tracking and anchor initial stop loss."""
@@ -136,6 +137,28 @@ class PositionState:
         if entry_value == 0:
             return 0.0
         return (self.total_pnl / entry_value) * 100
+
+    @property
+    def target_pnl(self) -> float:
+        """Calculate total estimated P&L if all remaining targets are hit."""
+        potential_total = self.realized_pnl
+        for target in self.targets:
+            qty_at_level = (target.percentage / 100) * self.quantity
+            if self.direction == "LONG":
+                target_profit = (target.level - self.entry_price) * qty_at_level
+            else:
+                target_profit = (self.entry_price - target.level) * qty_at_level
+            potential_total += target_profit
+        return potential_total
+
+    @property
+    def risk_pnl(self) -> float:
+        """Calculate P&L if stopped out at CURRENT stop loss level."""
+        if self.direction == "LONG":
+            stop_profit = (self.stop_loss - self.entry_price) * self.remaining_quantity
+        else:
+            stop_profit = (self.entry_price - self.stop_loss) * self.remaining_quantity
+        return self.realized_pnl + stop_profit
 
 
 class PositionManager:
@@ -292,6 +315,7 @@ class PositionManager:
 
             position.remaining_quantity = 0.0
             position.status = PositionStatus.CLOSED
+            position.exit_reason = reason
             position.updated_at = datetime.now(timezone.utc)
 
         logger.info(
@@ -359,6 +383,7 @@ class PositionManager:
                     await self._execute_exit(position, current_price, "TIME_STAGNATION")
                 with self._lock:
                     position.status = PositionStatus.CLOSED
+                    position.exit_reason = "stagnation"
                     position.remaining_quantity = 0.0
                 return
 
@@ -376,6 +401,7 @@ class PositionManager:
 
             with self._lock:
                 position.status = PositionStatus.STOPPED_OUT
+                position.exit_reason = "stop_loss"
                 position.remaining_quantity = 0.0
 
             return  # Position closed, no further checks
@@ -410,6 +436,7 @@ class PositionManager:
                 # Update status
                 if position.remaining_quantity < 1e-9:  # All targets hit
                     position.status = PositionStatus.CLOSED
+                    position.exit_reason = "target"
                 else:
                     position.status = PositionStatus.PARTIAL
 

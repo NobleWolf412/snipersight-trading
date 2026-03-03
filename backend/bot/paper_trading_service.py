@@ -84,6 +84,7 @@ class PaperTradingConfig:
     meme_mode: bool = False
     slippage_bps: float = 5.0
     fee_rate: float = 0.001
+    max_hours_open: float = 72.0
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -300,6 +301,7 @@ class PaperTradingService:
             breakeven_after_target=config.breakeven_after_target,
             trailing_stop_activation=config.trailing_activation,
             trailing_stop_distance=0.75,  # WAS 0.5 - increased to 0.75 to give trade more room to breathe
+            max_hours_open=config.max_hours_open,
         )
 
         # Initialize orchestrator with exchange adapter
@@ -1165,6 +1167,8 @@ class PaperTradingService:
                     "targets_hit": len(pos.targets_hit),
                     "unrealized_pnl": pos.unrealized_pnl,
                     "unrealized_pnl_pct": pos.pnl_percentage,
+                    "target_pnl": pos.target_pnl,
+                    "risk_pnl": pos.risk_pnl,
                     "breakeven_active": pos.breakeven_active,
                     "trailing_active": pos.trailing_active,
                     "opened_at": pos.created_at.isoformat(),
@@ -1192,7 +1196,7 @@ class PaperTradingService:
                     continue
 
                 # Record completed trade
-                exit_reason = "target" if pos.status == PositionStatus.CLOSED else "stop_loss"
+                exit_reason = pos.exit_reason or ("target" if pos.status == PositionStatus.CLOSED else "stop_loss")
                 if pos.status == PositionStatus.EMERGENCY_EXIT:
                     exit_reason = "emergency"
 

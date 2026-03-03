@@ -88,6 +88,7 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
   meme_mode: false,
   slippage_bps: 5,
   fee_rate: 0.001,
+  max_hours_open: 72,
 };
 
 export function TrainingGround() {
@@ -316,7 +317,34 @@ export function TrainingGround() {
                   </div>
                 </div>
 
-                <div className="w-full max-w-2xl pt-4 space-y-4">
+                <div className="w-full max-w-2xl pt-4 space-y-6">
+                  {/* Sniper Mode Selector */}
+                  <div className="space-y-3">
+                    <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Tactical Mode (Scanner Profile)</label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { id: 'strike', label: 'STRIKE', desc: 'Aggressive / Intraday', color: 'text-red-400' },
+                        { id: 'surgical', label: 'SURGICAL', desc: 'Precision / 15m', color: 'text-blue-400' },
+                        { id: 'stealth', label: 'STEALTH', desc: 'Balanced / 1H', color: 'text-purple-400' },
+                        { id: 'overwatch', label: 'OVERWATCH', desc: 'Swing / 4H+', color: 'text-yellow-400' }
+                      ].map((m) => (
+                        <div
+                          key={m.id}
+                          onClick={() => setConfig({ ...config, sniper_mode: m.id })}
+                          className={cn(
+                            "flex flex-col items-center justify-center p-3 rounded-xl border cursor-pointer transition-all duration-300",
+                            config.sniper_mode === m.id
+                              ? "bg-accent/10 border-accent shadow-[0_0_15px_rgba(0,255,170,0.1)] scale-105"
+                              : "bg-black/40 border-border/50 opacity-60 hover:opacity-100"
+                          )}
+                        >
+                          <span className={cn("text-xs font-black tracking-widest", m.color)}>{m.label}</span>
+                          <span className="text-[8px] font-mono opacity-60 mt-1 uppercase text-center leading-tight">{m.desc}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2 text-left">
                       <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Starting Balance</label>
@@ -348,6 +376,17 @@ export function TrainingGround() {
                         onChange={e => setConfig({ ...config, min_confluence: Number(e.target.value) })}
                         className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
                       />
+                      <div className="space-y-2 text-left">
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Stagnation Cut (h)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="720"
+                          value={config.max_hours_open}
+                          onChange={e => setConfig({ ...config, max_hours_open: Number(e.target.value) })}
+                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -430,7 +469,12 @@ export function TrainingGround() {
                   {/* Session Info */}
                   <div>
                     <div className="text-xs text-[#00ff88] uppercase tracking-widest font-mono font-bold">SESSION</div>
-                    <div className="mt-1 font-mono text-sm tracking-widest glow-border-green px-2 py-0.5 rounded bg-black/40">{status?.session_id || '—'}</div>
+                    <div className="mt-1 font-mono text-sm tracking-widest glow-border-green px-2 py-0.5 rounded bg-black/40 flex items-center gap-2">
+                      {status?.session_id || '—'}
+                      <Badge variant="outline" className="text-[9px] h-4 border-accent/30 text-accent/80 font-black">
+                        {status?.config?.sniper_mode?.toUpperCase() || 'STEALTH'}
+                      </Badge>
+                    </div>
                   </div>
 
                   {/* Uptime */}
@@ -578,13 +622,21 @@ export function TrainingGround() {
                 <div className="absolute top-0 right-0 w-32 h-32 bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-accent/5 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none -mr-16 -mt-16" />
                 <div className="relative z-10 pt-2">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-muted-foreground font-mono font-bold tracking-widest uppercase">EQUITY</div>
-                      <div className="text-2xl font-bold font-mono tracking-tight mt-1">
-                        {formatCurrency(status?.balance?.equity || config.initial_balance || 10000)}
+                    <div className="flex flex-col gap-1 items-start">
+                      <div>
+                        <div className="text-[9px] text-muted-foreground font-mono font-bold tracking-widest uppercase opacity-70">EQUITY</div>
+                        <div className="text-xl font-bold font-mono tracking-tight glow-text-accent">
+                          {formatCurrency(status?.balance?.equity || config.initial_balance || 10000)}
+                        </div>
+                      </div>
+                      <div className="mt-1">
+                        <div className="text-[9px] text-muted-foreground font-mono font-bold tracking-widest uppercase opacity-60">AVAILABLE CASH (W/ P&L)</div>
+                        <div className="text-sm font-bold font-mono tracking-tight opacity-80">
+                          {formatCurrency(status?.balance?.current || config.initial_balance || 10000)}
+                        </div>
                       </div>
                     </div>
-                    <Wallet size={32} className="text-accent" />
+                    <Wallet size={32} className="text-accent/50" />
                   </div>
                   <div className="mt-2 flex items-center gap-2">
                     <Badge
@@ -865,10 +917,10 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-2 text-[10px] sm:text-xs mb-4">
+      <div className="grid grid-cols-3 gap-y-3 gap-x-2 text-[10px] sm:text-xs mb-4">
         <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Value</div>
-          <div className="font-mono text-accent font-bold">{formatCurrency(position.quantity * position.entry_price)}</div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Size</div>
+          <div className="font-mono text-accent font-bold" title="Notional Position Value">{formatCurrency(position.quantity * position.entry_price)}</div>
         </div>
         <div>
           <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Entry</div>
@@ -878,18 +930,29 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
           <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Current</div>
           <div className="font-mono font-bold">${position.current_price.toFixed(2)}</div>
         </div>
+
         <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Stop</div>
-          <div className="font-mono text-red-400/80">${position.stop_loss.toFixed(2)}</div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Est. Profit</div>
+          <div className="font-mono text-green-400 font-bold" title="Total Realized + Potential PnL">{formatCurrency(position.target_pnl)}</div>
+        </div>
+        <div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Risk Profile</div>
+          <div className="font-mono text-red-400 font-bold" title="Total Realized + Stop Loss PnL">{formatCurrency(position.risk_pnl)}</div>
+        </div>
+        <div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">TP / SL</div>
+          <div className="font-mono text-[10px] opacity-80" title="Target price and Stop Loss price">
+            <span className="text-green-500/80">${tp1.toFixed(2)}</span> / <span className="text-red-500/80">${position.stop_loss.toFixed(2)}</span>
+          </div>
         </div>
       </div>
 
       {/* Progress tracking */}
-      <div className="space-y-1.5 mb-4">
+      <div className="space-y-1.5 mb-2">
         <div className="flex justify-between text-[9px] font-mono text-muted-foreground uppercase tracking-tighter">
-          <span>{isLong ? 'STOP' : 'TARGET'}</span>
+          <span className="text-red-400/70">STOP ({formatCurrency(position.risk_pnl)})</span>
           <span>ENTRY</span>
-          <span>{isLong ? 'TARGET' : 'STOP'}</span>
+          <span className="text-green-400/70">TARGET ({formatCurrency(position.target_pnl)})</span>
         </div>
         <div className="hud-progress-bg">
           <div
@@ -1006,8 +1069,13 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
         >
           {trade.direction}
         </Badge>
-        <div>
-          <div className="font-bold">{trade.symbol}</div>
+        <div className="flex flex-col">
+          <div className="font-bold flex items-center gap-2">
+            {trade.symbol}
+            <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-border/50">
+              {trade.exit_reason || 'unknown'}
+            </span>
+          </div>
           <div className="text-xs text-muted-foreground">
             ${trade.entry_price.toFixed(2)} → ${trade.exit_price.toFixed(2)}
           </div>
