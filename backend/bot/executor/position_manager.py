@@ -24,7 +24,9 @@ import asyncio
 import logging
 from threading import Lock
 
-from backend.shared.models.planner import TradePlan, Target
+import backend.shared.models.planner as planner
+TradePlan = planner.TradePlan
+Target = planner.Target
 
 logger = logging.getLogger(__name__)
 
