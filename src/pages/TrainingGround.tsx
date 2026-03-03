@@ -874,6 +874,13 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
     }
   }, [position.current_price]);
 
+  // R-multiple: how many risk units of profit (or loss) the trade has
+  const initialRisk = Math.abs(position.entry_price - (position.initial_stop_loss || position.stop_loss));
+  const currentProfit = isLong
+    ? position.current_price - position.entry_price
+    : position.entry_price - position.current_price;
+  const rMultiple = initialRisk > 0 ? currentProfit / initialRisk : 0;
+
   // Progress Calculation
   // We want to show where we are relative to SL and TP1
   const sl = position.stop_loss;
@@ -908,12 +915,30 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
             {position.direction}
           </Badge>
           <span className="font-bold text-lg tracking-tight italic text-foreground">{position.symbol}</span>
+          {position.trade_type && (
+            <span className={cn(
+              "text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded-full border",
+              position.trade_type === 'scalp' ? 'text-yellow-400/70 border-yellow-400/20' :
+              position.trade_type === 'swing' ? 'text-purple-400/70 border-purple-400/20' :
+              'text-blue-400/70 border-blue-400/20'
+            )}>
+              {position.trade_type}
+            </span>
+          )}
         </div>
-        <div className={cn(
-          "font-mono text-sm font-bold px-2 py-0.5 rounded transition-colors",
-          isProfitable ? 'text-green-400' : 'text-red-400'
-        )}>
-          {formatPct(position.unrealized_pnl_pct)}
+        <div className="flex items-center gap-2">
+          <span className={cn(
+            "font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border",
+            rMultiple >= 0 ? 'text-green-400/80 border-green-400/20' : 'text-red-400/80 border-red-400/20'
+          )}>
+            {rMultiple >= 0 ? '+' : ''}{rMultiple.toFixed(1)}R
+          </span>
+          <span className={cn(
+            "font-mono text-sm font-bold px-2 py-0.5 rounded transition-colors",
+            isProfitable ? 'text-green-400' : 'text-red-400'
+          )}>
+            {formatPct(position.unrealized_pnl_pct)}
+          </span>
         </div>
       </div>
 
@@ -1031,8 +1056,10 @@ function ActivityItem({ event }: { event: PaperTradingActivity }) {
         return `Scan: ${d.signals_found} signals from ${d.symbols_scanned} symbols`;
       case 'signal_filtered':
         return `${d.symbol} ${d.direction} (${d.confluence?.toFixed(0)}%) - ${d.reason}`;
-      case 'trade_opened':
-        return `Opened ${d.direction} ${d.symbol} @ ${d.entry_price?.toFixed(2)}`;
+      case 'trade_opened': {
+        const typeLabel = d.trade_type ? ` [${d.trade_type}]` : '';
+        return `Opened ${d.direction} ${d.symbol}${typeLabel} @ ${d.entry_price?.toFixed(2)}`;
+      }
       case 'trade_closed': {
         const tradeTypeLabel = d.trade_type ? ` [${d.trade_type}]` : '';
         const regimeLabel = d.regime_at_close?.trend && d.exit_reason === 'stagnation'

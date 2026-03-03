@@ -445,14 +445,20 @@ class PositionManager:
         adaptive_hours = self._get_adaptive_stagnation_hours(position)
         adaptive_pnl = self._get_adaptive_stagnation_pnl(position)
 
-        if hours_open >= adaptive_hours and position.status == PositionStatus.OPEN:
-            # Check if price is making progress toward TP1 despite low P&L
+        # For PARTIAL positions (TP1 already hit), use 2x the adaptive timer.
+        # They've already locked in profit, so give the runner more room.
+        is_partial = position.status == PositionStatus.PARTIAL
+        stagnation_hours = adaptive_hours * 2.0 if is_partial else adaptive_hours
+
+        if hours_open >= stagnation_hours and position.status in (PositionStatus.OPEN, PositionStatus.PARTIAL):
+            # Check if price is making progress toward next target
             making_progress = self._is_making_progress(position, current_price)
 
             if position.pnl_percentage <= adaptive_pnl and not making_progress:
+                stagnation_label = "PARTIAL_STAGNATION" if is_partial else "STAGNATION"
                 logger.warning(
-                    f"STAGNATION EXIT: {position.position_id} | {position.symbol} "
-                    f"open {hours_open:.1f}h (limit: {adaptive_hours:.1f}h) | "
+                    f"{stagnation_label} EXIT: {position.position_id} | {position.symbol} "
+                    f"open {hours_open:.1f}h (limit: {stagnation_hours:.1f}h) | "
                     f"P&L: {position.pnl_percentage:.2f}% (threshold: {adaptive_pnl:.2f}%) | "
                     f"Type: {position.trade_type} | Progress: {making_progress} | "
                     f"Regime: trend={position.regime_trend}, vol={position.regime_volatility}"
@@ -467,7 +473,7 @@ class PositionManager:
             elif making_progress:
                 logger.info(
                     f"STAGNATION SPARED: {position.position_id} | {position.symbol} "
-                    f"past {adaptive_hours:.1f}h limit but making progress toward TP1 | "
+                    f"past {stagnation_hours:.1f}h limit but making progress toward target | "
                     f"P&L: {position.pnl_percentage:.2f}%"
                 )
 
@@ -729,9 +735,9 @@ class PositionManager:
         if not position.trailing_active:
             return
 
-        # Calculate initial risk for the trail distance
+        # Calculate trail distance as a multiple of initial risk
         risk = abs(position.entry_price - position.initial_stop_loss)
-        trail_distance = risk * 1.5
+        trail_distance = risk * self.trailing_stop_distance
         
         if position.direction == "LONG":
             highest = position.highest_price
