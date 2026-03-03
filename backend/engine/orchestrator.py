@@ -540,6 +540,8 @@ class Orchestrator:
                     ),
                     "score": self.current_regime.score if self.current_regime else 0,
                     "policy_min_score": self.regime_policy.min_regime_score,
+                    "trend": self.current_regime.dimensions.trend if self.current_regime else "sideways",
+                    "volatility": self.current_regime.dimensions.volatility if self.current_regime else "normal",
                 }
                 if self.current_regime
                 else None

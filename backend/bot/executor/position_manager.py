@@ -93,6 +93,15 @@ class PositionState:
     entry_order_id: Optional[str] = None
     exit_reason: Optional[str] = None
 
+    # Trade-type and regime context for adaptive stagnation
+    trade_type: str = "intraday"  # "scalp", "intraday", "swing" — from TradePlan
+    regime_volatility: str = "normal"  # "compressed", "normal", "elevated", "chaotic"
+    regime_trend: str = "sideways"  # "strong_up", "up", "sideways", "down", "strong_down"
+
+    # Price history for progress detection (sampled hourly)
+    _price_samples: List[float] = field(default_factory=list)
+    _last_sample_time: Optional[datetime] = field(default=None)
+
     def __post_init__(self):
         """Initialize price tracking and anchor initial stop loss."""
         if self.direction == "LONG":
@@ -176,6 +185,40 @@ class PositionManager:
         await manager.monitor_all_positions()
     """
 
+    # --- Adaptive Stagnation Configuration ---
+    # Base hold times by trade type (hours). These represent how long a trade
+    # should be allowed to develop before we start checking for stagnation.
+    TRADE_TYPE_BASE_HOURS = {
+        "scalp": 3.0,       # Scalps should resolve within a few hours
+        "intraday": 10.0,   # Intraday trades need a full session
+        "swing": 48.0,      # Swing trades need days to develop
+    }
+
+    # Minimum P&L threshold (%) before stagnation exit is considered.
+    # Below this AND past the time limit = stagnation exit.
+    TRADE_TYPE_STAGNATION_PNL = {
+        "scalp": 0.2,       # Scalps: tight threshold
+        "intraday": 0.5,    # Intraday: moderate
+        "swing": 1.5,       # Swings: need room to breathe
+    }
+
+    # Regime-based multipliers on the base hold time.
+    # Trending markets deserve more patience; choppy markets less.
+    REGIME_TREND_MULTIPLIER = {
+        "strong_up": 1.5,   # Strong trend = let it ride
+        "up": 1.3,
+        "sideways": 0.8,    # Ranging = cut sooner
+        "down": 1.3,        # Downtrend (for shorts) = let it ride
+        "strong_down": 1.5,
+    }
+
+    REGIME_VOLATILITY_MULTIPLIER = {
+        "compressed": 0.7,  # Nothing moving = close sooner
+        "normal": 1.0,
+        "elevated": 1.2,    # Big swings need time to resolve
+        "chaotic": 1.0,     # Chaotic = neutral (stop loss handles the risk)
+    }
+
     def __init__(
         self,
         price_fetcher: Callable[[str], float],
@@ -184,7 +227,7 @@ class PositionManager:
         breakeven_after_target: int = 1,
         trailing_stop_activation: float = 1.5,  # Activate after 1.5R profit
         trailing_stop_distance: float = 0.5,  # Trail 0.5R behind
-        max_hours_open: float = 6.0,  # Max hours to keep stagnant position
+        max_hours_open: float = 6.0,  # Legacy fallback — used only if trade_type unknown
     ):
         """
         Initialize Position Manager.
@@ -196,6 +239,7 @@ class PositionManager:
             breakeven_after_target: Move to breakeven after Nth target
             trailing_stop_activation: R multiple to activate trailing
             trailing_stop_distance: R multiple to trail behind
+            max_hours_open: Fallback max hours (overridden by adaptive logic per position)
         """
         self.price_fetcher = price_fetcher
         self.order_executor = order_executor
@@ -203,7 +247,7 @@ class PositionManager:
         self.breakeven_after_target = breakeven_after_target
         self.trailing_stop_activation = trailing_stop_activation
         self.trailing_stop_distance = trailing_stop_distance
-        self.max_hours_open = max_hours_open
+        self.max_hours_open = max_hours_open  # Legacy fallback
 
         self.positions: Dict[str, PositionState] = {}
         self._lock = Lock()
@@ -216,10 +260,10 @@ class PositionManager:
         )
 
     def open_position(
-        self, 
-        trade_plan: TradePlan, 
-        entry_price: float, 
-        quantity: float, 
+        self,
+        trade_plan: TradePlan,
+        entry_price: float,
+        quantity: float,
         entry_order_id: Optional[str] = None
     ) -> str:
         """
@@ -236,6 +280,14 @@ class PositionManager:
         """
         position_id = f"{trade_plan.symbol}_{datetime.now(timezone.utc).timestamp()}"
 
+        # Extract regime context from the trade plan metadata
+        global_regime = getattr(trade_plan, "metadata", {}).get("global_regime", {}) if hasattr(trade_plan, "metadata") else {}
+        regime_volatility = global_regime.get("volatility", "normal")
+        regime_trend = global_regime.get("trend", "sideways")
+
+        # Extract trade type from the planner's derivation
+        trade_type = getattr(trade_plan, "trade_type", "intraday") or "intraday"
+
         position = PositionState(
             position_id=position_id,
             symbol=trade_plan.symbol,
@@ -247,14 +299,23 @@ class PositionManager:
             targets=trade_plan.targets.copy(),
             status=PositionStatus.OPEN,
             entry_order_id=entry_order_id,
+            trade_type=trade_type,
+            regime_volatility=regime_volatility,
+            regime_trend=regime_trend,
         )
+
+        # Calculate the adaptive stagnation deadline for logging
+        adaptive_hours = self._get_adaptive_stagnation_hours(position)
+        adaptive_pnl = self._get_adaptive_stagnation_pnl(position)
 
         with self._lock:
             self.positions[position_id] = position
 
         logger.info(
             f"Position opened: {position_id} | {trade_plan.symbol} {trade_plan.direction} "
-            f"| Entry: {entry_price} | Qty: {quantity} | SL: {trade_plan.stop_loss.level}"
+            f"| Entry: {entry_price} | Qty: {quantity} | SL: {trade_plan.stop_loss.level} "
+            f"| Type: {trade_type} | Stagnation: {adaptive_hours:.1f}h / {adaptive_pnl:.2f}% "
+            f"(regime: trend={regime_trend}, vol={regime_volatility})"
         )
 
         return position_id
@@ -373,12 +434,29 @@ class PositionManager:
         position.update_unrealized_pnl(current_price)
         position.update_price_extremes(current_price)
 
-        # --- Check Time Stagnation ---
+        # --- Adaptive Stagnation Check ---
+        # Uses trade type + regime to determine how long to hold before cutting.
+        # Also checks whether price is making progress toward targets.
         hours_open = (datetime.now(timezone.utc) - position.created_at).total_seconds() / 3600.0
-        if hours_open >= self.max_hours_open and position.status == PositionStatus.OPEN:
-            # If it hasn't hit TP1 yet and PnL is stagnant or negative, cut it
-            if position.pnl_percentage <= 0.5:
-                logger.warning(f"STAGNATION EXIT: {position.position_id} open for {hours_open:.1f}h. Cutting trade.")
+
+        # Sample price hourly for progress detection
+        self._record_price_sample(position, current_price)
+
+        adaptive_hours = self._get_adaptive_stagnation_hours(position)
+        adaptive_pnl = self._get_adaptive_stagnation_pnl(position)
+
+        if hours_open >= adaptive_hours and position.status == PositionStatus.OPEN:
+            # Check if price is making progress toward TP1 despite low P&L
+            making_progress = self._is_making_progress(position, current_price)
+
+            if position.pnl_percentage <= adaptive_pnl and not making_progress:
+                logger.warning(
+                    f"STAGNATION EXIT: {position.position_id} | {position.symbol} "
+                    f"open {hours_open:.1f}h (limit: {adaptive_hours:.1f}h) | "
+                    f"P&L: {position.pnl_percentage:.2f}% (threshold: {adaptive_pnl:.2f}%) | "
+                    f"Type: {position.trade_type} | Progress: {making_progress} | "
+                    f"Regime: trend={position.regime_trend}, vol={position.regime_volatility}"
+                )
                 if self.order_executor:
                     await self._execute_exit(position, current_price, "TIME_STAGNATION")
                 with self._lock:
@@ -386,6 +464,12 @@ class PositionManager:
                     position.exit_reason = "stagnation"
                     position.remaining_quantity = 0.0
                 return
+            elif making_progress:
+                logger.info(
+                    f"STAGNATION SPARED: {position.position_id} | {position.symbol} "
+                    f"past {adaptive_hours:.1f}h limit but making progress toward TP1 | "
+                    f"P&L: {position.pnl_percentage:.2f}%"
+                )
 
         # --- Check Stop Loss ---
         if self._check_stop_hit(position, current_price):
@@ -450,6 +534,120 @@ class PositionManager:
         else:
             # Check if should activate trailing
             self._check_trailing_activation(position, current_price)
+
+    # --- Adaptive Stagnation Helpers ---
+
+    def _get_adaptive_stagnation_hours(self, position: PositionState) -> float:
+        """
+        Calculate adaptive stagnation time limit based on trade type and regime.
+
+        Instead of a flat timer, this scales the hold time:
+        - Trade type sets the base (scalp=3h, intraday=10h, swing=48h)
+        - Trending regimes extend the timer (price is moving, give it room)
+        - Compressed volatility shortens it (nothing's happening)
+
+        Falls back to self.max_hours_open if trade type is unknown.
+        """
+        base_hours = self.TRADE_TYPE_BASE_HOURS.get(position.trade_type)
+
+        if base_hours is None:
+            # Unknown trade type — use legacy flat timer
+            return self.max_hours_open
+
+        # Apply regime multipliers
+        trend_mult = self.REGIME_TREND_MULTIPLIER.get(position.regime_trend, 1.0)
+
+        # For trend multiplier, check directional alignment:
+        # A LONG in a downtrend shouldn't get extra patience, nor a SHORT in an uptrend.
+        if position.direction == "LONG" and position.regime_trend in ("down", "strong_down"):
+            trend_mult = 0.7  # Counter-trend long — cut sooner
+        elif position.direction == "SHORT" and position.regime_trend in ("up", "strong_up"):
+            trend_mult = 0.7  # Counter-trend short — cut sooner
+
+        vol_mult = self.REGIME_VOLATILITY_MULTIPLIER.get(position.regime_volatility, 1.0)
+
+        adaptive = base_hours * trend_mult * vol_mult
+
+        # Clamp to reasonable bounds
+        return max(1.0, min(adaptive, 120.0))
+
+    def _get_adaptive_stagnation_pnl(self, position: PositionState) -> float:
+        """
+        Get the minimum P&L threshold for stagnation exit based on trade type.
+
+        Scalps use tight thresholds (0.2%), swings use wide ones (1.5%).
+        """
+        return self.TRADE_TYPE_STAGNATION_PNL.get(position.trade_type, 0.5)
+
+    def _record_price_sample(self, position: PositionState, current_price: float):
+        """Record hourly price samples for progress detection."""
+        now = datetime.now(timezone.utc)
+
+        if position._last_sample_time is None:
+            # First sample
+            position._price_samples.append(current_price)
+            position._last_sample_time = now
+            return
+
+        elapsed = (now - position._last_sample_time).total_seconds()
+        if elapsed >= 1800:  # Sample every 30 minutes
+            position._price_samples.append(current_price)
+            position._last_sample_time = now
+
+            # Keep last 24 samples (12 hours of data)
+            if len(position._price_samples) > 24:
+                position._price_samples = position._price_samples[-24:]
+
+    def _is_making_progress(self, position: PositionState, current_price: float) -> bool:
+        """
+        Determine if price is trending toward TP1, even if P&L is still low.
+
+        Checks if the recent price samples show a directional trend toward
+        the first target. This prevents killing trades that are slowly but
+        steadily moving in the right direction.
+
+        Uses simple higher-lows (for longs) / lower-highs (for shorts) detection
+        over the last several samples.
+        """
+        samples = position._price_samples
+        if len(samples) < 4:
+            return False  # Not enough data to judge
+
+        # Get the first unfilled target
+        if not position.targets:
+            return False
+
+        tp1 = position.targets[0].level
+
+        # Use last 6 samples (or all if fewer)
+        recent = samples[-6:]
+
+        if position.direction == "LONG":
+            # For longs, check if price is making higher lows toward TP1
+            # Split recent samples into two halves and compare
+            mid = len(recent) // 2
+            first_half_min = min(recent[:mid])
+            second_half_min = min(recent[mid:])
+            latest = recent[-1]
+
+            # Progress = recent lows are higher than earlier lows
+            # AND latest price is closer to target than entry
+            lows_rising = second_half_min > first_half_min
+            closer_to_target = abs(tp1 - latest) < abs(tp1 - position.entry_price)
+
+            return lows_rising and closer_to_target
+
+        else:  # SHORT
+            # For shorts, check if price is making lower highs toward TP1
+            mid = len(recent) // 2
+            first_half_max = max(recent[:mid])
+            second_half_max = max(recent[mid:])
+            latest = recent[-1]
+
+            highs_falling = second_half_max < first_half_max
+            closer_to_target = abs(tp1 - latest) < abs(tp1 - position.entry_price)
+
+            return highs_falling and closer_to_target
 
     def _check_stop_hit(self, position: PositionState, current_price: float) -> bool:
         """Check if stop loss was hit."""

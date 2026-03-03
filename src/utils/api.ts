@@ -926,10 +926,11 @@ export interface CompletedPaperTrade {
   exit_time: string | null;
   pnl: number;
   pnl_pct: number;
-  exit_reason: 'target' | 'stop_loss' | 'emergency' | 'session_stopped' | string;
+  exit_reason: 'target' | 'stop_loss' | 'stagnation' | 'emergency' | 'session_stopped' | string;
   targets_hit: number[];
   max_favorable: number;
   max_adverse: number;
+  trade_type?: 'scalp' | 'intraday' | 'swing';
 }
 
 export interface PaperTradingStats {

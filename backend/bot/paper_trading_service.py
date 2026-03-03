@@ -132,6 +132,7 @@ class CompletedTrade:
     targets_hit: List[int] = field(default_factory=list)
     max_favorable: float = 0.0
     max_adverse: float = 0.0
+    trade_type: str = "intraday"  # "scalp", "intraday", "swing"
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API response."""
@@ -150,6 +151,7 @@ class CompletedTrade:
             "targets_hit": self.targets_hit,
             "max_favorable": self.max_favorable,
             "max_adverse": self.max_adverse,
+            "trade_type": self.trade_type,
         }
 
 
@@ -258,6 +260,8 @@ class PaperTradingService:
         self._current_regime_composite: str = "unknown"
         self._current_regime_score: float = 50.0
         self._current_regime_policy = None
+        self._current_regime_trend: str = "sideways"
+        self._current_regime_volatility: str = "normal"
 
         logger.info("PaperTradingService initialized")
 
@@ -759,6 +763,12 @@ class PaperTradingService:
             self._current_regime_composite = regime_composite
             self._current_regime_score = score_val
             self._current_regime_policy = regime_policy
+            self._current_regime_trend = regime.get("trend", "sideways") if regime else "sideways"
+            self._current_regime_volatility = regime.get("volatility", "normal") if regime else "normal"
+
+            # Update open positions with latest regime data so adaptive
+            # stagnation adjusts to current market conditions, not just entry-time
+            self._update_position_regimes()
             
             self.stats.signals_generated += len(trade_plans)
             
@@ -982,6 +992,22 @@ class PaperTradingService:
             logger.error(traceback.format_exc())
             self._log_signal(plan, "error", reason)
             self._log_activity("trade_error", {"symbol": plan.symbol, "error": str(e)})
+
+    def _update_position_regimes(self):
+        """
+        Update open positions with the latest regime data.
+
+        This ensures adaptive stagnation uses current market conditions,
+        not just the regime at position entry time. A trade entered during
+        a trend that later becomes choppy should have its patience reduced.
+        """
+        if not self.position_manager:
+            return
+
+        open_positions = self.position_manager.get_open_positions()
+        for pos in open_positions:
+            pos.regime_trend = self._current_regime_trend
+            pos.regime_volatility = self._current_regime_volatility
 
     def _calculate_position_size(self, plan: TradePlan) -> float:
         """
@@ -1215,6 +1241,7 @@ class PaperTradingService:
                     targets_hit=[i for i, _ in enumerate(pos.targets_hit)],
                     max_favorable=0.0,  # Would track during position
                     max_adverse=0.0,
+                    trade_type=getattr(pos, "trade_type", "intraday"),
                 )
 
                 self.completed_trades.append(trade)
@@ -1231,6 +1258,11 @@ class PaperTradingService:
                         "pnl": trade.pnl,
                         "pnl_pct": trade.pnl_pct,
                         "exit_reason": exit_reason,
+                        "trade_type": getattr(pos, "trade_type", "unknown"),
+                        "regime_at_close": {
+                            "trend": getattr(pos, "regime_trend", "unknown"),
+                            "volatility": getattr(pos, "regime_volatility", "unknown"),
+                        },
                     },
                 )
 
