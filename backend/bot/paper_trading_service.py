@@ -85,6 +85,7 @@ class PaperTradingConfig:
     slippage_bps: float = 5.0
     fee_rate: float = 0.001
     max_hours_open: float = 72.0
+    max_pending_scans: int = 2  # Cancel pending limit orders after this many scan cycles
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -264,6 +265,7 @@ class PaperTradingService:
 
         # Track limit orders that are waiting to fill
         self._pending_plans: Dict[str, TradePlan] = {}
+        self._pending_placed_at: Dict[str, datetime] = {}
 
         logger.info("PaperTradingService initialized")
 
@@ -339,6 +341,7 @@ class PaperTradingService:
         self.signal_log = []
         self.stats = PaperTradingStats()
         self._pending_plans = {}
+        self._pending_placed_at = {}
         self._price_cache = {}
         self._peak_equity = config.initial_balance
 
@@ -430,6 +433,7 @@ class PaperTradingService:
         self.stats = PaperTradingStats()
         self._price_cache = {}
         self._pending_plans = {}
+        self._pending_placed_at = {}
 
         self.started_at = None
         self.stopped_at = None
@@ -641,10 +645,10 @@ class PaperTradingService:
                                                     f"| Opening position {position_id}"
                                                 )
                                                 
-                                                # Once a position is opened, it's no longer "pending" in this service's sense
-                                                # (Any further fills will be caught by find_position_by_order_id above)
+                                                # Position opened — remove from pending tracking
                                                 self._pending_plans.pop(order.order_id, None)
-                                                
+                                                self._pending_placed_at.pop(order.order_id, None)
+
                                                 self._log_activity("trade_opened", {
                                                     "position_id": position_id,
                                                     "symbol": plan.symbol,
@@ -653,14 +657,36 @@ class PaperTradingService:
                                                     "quantity": fill.quantity,
                                                     "status": "pending_filled"
                                                 })
-                                                
-                                                # If fully filled, remove from pending
-                                                if order.status == OrderStatus.FILLED:
-                                                    self._pending_plans.pop(order.order_id, None)
                                         elif not self._has_position(order.symbol) and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
-                                            # This case handles orders that filled but haven't opened a position yet 
+                                            # This case handles orders that filled but haven't opened a position yet
                                             # (though _process_signal should handle most of these)
                                             pass
+
+                        # Expire stale pending orders that have outlived their TTL
+                        if self._pending_plans and self.config:
+                            max_age = timedelta(
+                                minutes=self.config.scan_interval_minutes * self.config.max_pending_scans
+                            )
+                            now = datetime.now(timezone.utc)
+                            for order_id in list(self._pending_plans.keys()):
+                                placed_at = self._pending_placed_at.get(order_id)
+                                if placed_at and (now - placed_at) > max_age:
+                                    plan = self._pending_plans[order_id]
+                                    executor.cancel_order(order_id)
+                                    self._pending_plans.pop(order_id, None)
+                                    self._pending_placed_at.pop(order_id, None)
+                                    logger.info(
+                                        f"PENDING ORDER EXPIRED: {plan.symbol} | "
+                                        f"age={(now - placed_at).total_seconds() / 60:.1f}min "
+                                        f"(max={max_age.total_seconds() / 60:.0f}min)"
+                                    )
+                                    self._log_activity("pending_order_expired", {
+                                        "order_id": order_id,
+                                        "symbol": plan.symbol,
+                                        "direction": plan.direction,
+                                        "confluence": plan.confidence_score,
+                                        "age_minutes": (now - placed_at).total_seconds() / 60,
+                                    })
 
                     await self.position_manager.monitor_all_positions()
 
@@ -673,12 +699,13 @@ class PaperTradingService:
             await asyncio.sleep(1)  # Check every second
 
     async def _refresh_price_cache(self):
-        """Fetch current prices for all open positions and update the cache."""
+        """Fetch current prices for all open positions and pending orders, update the cache."""
         if not self.position_manager:
             return
 
         open_positions = self.position_manager.get_open_positions()
-        symbols = {pos.symbol for pos in open_positions}
+        pending_symbols = {plan.symbol for plan in self._pending_plans.values()}
+        symbols = {pos.symbol for pos in open_positions} | pending_symbols
 
         for symbol in symbols:
             try:
@@ -905,8 +932,8 @@ class PaperTradingService:
         if not self.config or not self.executor or not self.position_manager:
             return
 
-        # Check if we can take more positions
-        active_count = len(self._get_active_positions())
+        # Check if we can take more positions (count open + pending toward cap)
+        active_count = len(self._get_active_positions()) + len(self._pending_plans)
         if active_count >= self.config.max_positions:
             reason = f"Max positions reached ({active_count}/{self.config.max_positions})"
             logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
@@ -929,16 +956,33 @@ class PaperTradingService:
             return
 
         # Check for existing pending orders for this symbol
-        for p_plan in self._pending_plans.values():
-            if p_plan.symbol == plan.symbol:
-                reason = "Already have a pending limit order for symbol"
+        existing_order_id = next(
+            (oid for oid, p in self._pending_plans.items() if p.symbol == plan.symbol), None
+        )
+        if existing_order_id:
+            existing_plan = self._pending_plans[existing_order_id]
+            if plan.confidence_score <= existing_plan.confidence_score:
+                reason = (
+                    f"Pending order already exists with equal/higher confluence "
+                    f"({existing_plan.confidence_score:.1f}% >= {plan.confidence_score:.1f}%)"
+                )
                 logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
                 self._log_signal(plan, "filtered", reason)
-                self._log_activity("signal_filtered", {
-                    "symbol": plan.symbol, "direction": plan.direction,
-                    "confluence": plan.confidence_score, "reason": reason,
-                })
                 return
+            # New signal has better confluence — cancel old order and replace it
+            logger.info(
+                f"REPLACING PENDING ORDER: {plan.symbol} | "
+                f"old confluence={existing_plan.confidence_score:.1f}% → "
+                f"new confluence={plan.confidence_score:.1f}%"
+            )
+            self.executor.cancel_order(existing_order_id)
+            self._pending_plans.pop(existing_order_id, None)
+            self._pending_placed_at.pop(existing_order_id, None)
+            self._log_activity("pending_order_replaced", {
+                "symbol": plan.symbol,
+                "old_confluence": existing_plan.confidence_score,
+                "new_confluence": plan.confidence_score,
+            })
 
         # Check confluence threshold - use same rounding as scanner to avoid asymmetry
         min_score = self.config.min_confluence or (
@@ -1043,18 +1087,25 @@ class PaperTradingService:
             else:
                 order_status = order.status.value if order.status else "unknown"
                 reason = (
-                    f"Limit order missed/not filled (status={order_status}, "
-                    f"price={current_price:.2f}, limit={plan.entry_zone.near_entry:.2f})"
+                    f"Waiting for limit fill (price={current_price:.2f}, "
+                    f"limit={plan.entry_zone.near_entry:.2f})"
                 )
-                logger.warning(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
-                self._log_signal(plan, "filtered", reason, order_status=order_status)
-                self._log_activity("signal_filtered", {
-                    "symbol": plan.symbol, "direction": plan.direction,
-                    "confluence": plan.confidence_score, "reason": reason,
+                logger.info(
+                    f"PENDING ORDER: {plan.symbol} {plan.direction} | {reason}"
+                )
+                self._log_signal(plan, "pending", reason, order_status=order_status)
+                self._log_activity("pending_order_placed", {
+                    "order_id": order.order_id,
+                    "symbol": plan.symbol,
+                    "direction": plan.direction,
+                    "confluence": plan.confidence_score,
+                    "limit_price": plan.entry_zone.near_entry,
+                    "current_price": current_price,
                 })
-                
+
                 # Keep the plan so _monitor_loop can pick it up if it fills later
                 self._pending_plans[order.order_id] = plan
+                self._pending_placed_at[order.order_id] = datetime.now(timezone.utc)
 
         except Exception as e:
             import traceback
