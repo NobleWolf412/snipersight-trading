@@ -891,6 +891,7 @@ export interface PaperTradingConfigRequest {
   slippage_bps?: number;
   fee_rate?: number;
   max_hours_open?: number;
+  max_pending_scans?: number;
 }
 
 export interface PaperTradingPosition {
@@ -955,7 +956,9 @@ export interface PaperTradingStats {
 export interface PaperTradingActivity {
   timestamp: string;
   event_type: 'session_started' | 'session_stopped' | 'scan_started' | 'scan_completed' |
-  'scan_error' | 'trade_opened' | 'trade_closed' | 'trade_error' | string;
+  'scan_error' | 'trade_opened' | 'trade_closed' | 'trade_error' |
+  'pending_order_placed' | 'pending_order_replaced' | 'pending_order_expired' |
+  'signal_filtered' | string;
   data: Record<string, any>;
 }
 
