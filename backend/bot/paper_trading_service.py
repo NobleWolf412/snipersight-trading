@@ -252,7 +252,6 @@ class PaperTradingService:
 
         # Price cache for P&L calculations
         self._price_cache: Dict[str, float] = {}
-
         # Detailed signal processing log (every signal, not just recent activity)
         self.signal_log: List[Dict[str, Any]] = []
 
@@ -262,6 +261,9 @@ class PaperTradingService:
         self._current_regime_policy = None
         self._current_regime_trend: str = "sideways"
         self._current_regime_volatility: str = "normal"
+
+        # Track limit orders that are waiting to fill
+        self._pending_plans: Dict[str, TradePlan] = {}
 
         logger.info("PaperTradingService initialized")
 
@@ -336,6 +338,7 @@ class PaperTradingService:
         self.activity_log = []
         self.signal_log = []
         self.stats = PaperTradingStats()
+        self._pending_plans = {}
         self._price_cache = {}
         self._peak_equity = config.initial_balance
 
@@ -426,6 +429,7 @@ class PaperTradingService:
         self.signal_log = []
         self.stats = PaperTradingStats()
         self._price_cache = {}
+        self._pending_plans = {}
 
         self.started_at = None
         self.stopped_at = None
@@ -498,6 +502,23 @@ class PaperTradingService:
 
         # Recent activity (last 50 for better visibility)
         result["recent_activity"] = self.activity_log[-50:]
+
+        # Pending limit orders
+        result["pending_orders"] = []
+        if self.executor:
+            for order_id, plan in self._pending_plans.items():
+                order = self.executor.get_order(order_id)
+                if order and order.status in [OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED]:
+                    result["pending_orders"].append({
+                        "order_id": order_id,
+                        "symbol": order.symbol,
+                        "direction": plan.direction,
+                        "limit_price": order.price,
+                        "quantity": order.quantity,
+                        "filled_qty": order.filled_quantity,
+                        "status": order.status.value,
+                        "confluence": plan.confidence_score,
+                    })
 
         # Signal processing log (every signal with full details)
         result["signal_log"] = self.signal_log[-100:]
@@ -603,6 +624,39 @@ class PaperTradingService:
                                                 f"PARTIAL FILL SYNCED: {position.symbol} +{fill.quantity:.6f} "
                                                 f"| New Size: {position.quantity:.6f}"
                                             )
+                                        # Handle filled orders that were waiting in _pending_plans
+                                        elif order.order_id in self._pending_plans and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
+                                            plan = self._pending_plans.get(order.order_id)
+                                            if plan:
+                                                position_id = self.position_manager.open_position(
+                                                    trade_plan=plan,
+                                                    entry_price=fill.price,
+                                                    quantity=fill.quantity,
+                                                    entry_order_id=order.order_id
+                                                )
+                                                
+                                                self.stats.signals_taken += 1
+                                                logger.info(
+                                                    f"PENDING ORDER FILLED: {plan.symbol} @ {fill.price:.2f} "
+                                                    f"| Opening position {position_id}"
+                                                )
+                                                
+                                                # Once a position is opened, it's no longer "pending" in this service's sense
+                                                # (Any further fills will be caught by find_position_by_order_id above)
+                                                self._pending_plans.pop(order.order_id, None)
+                                                
+                                                self._log_activity("trade_opened", {
+                                                    "position_id": position_id,
+                                                    "symbol": plan.symbol,
+                                                    "direction": plan.direction,
+                                                    "entry_price": fill.price,
+                                                    "quantity": fill.quantity,
+                                                    "status": "pending_filled"
+                                                })
+                                                
+                                                # If fully filled, remove from pending
+                                                if order.status == OrderStatus.FILLED:
+                                                    self._pending_plans.pop(order.order_id, None)
                                         elif not self._has_position(order.symbol) and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
                                             # This case handles orders that filled but haven't opened a position yet 
                                             # (though _process_signal should handle most of these)
@@ -874,6 +928,18 @@ class PaperTradingService:
             })
             return
 
+        # Check for existing pending orders for this symbol
+        for p_plan in self._pending_plans.values():
+            if p_plan.symbol == plan.symbol:
+                reason = "Already have a pending limit order for symbol"
+                logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
+                self._log_signal(plan, "filtered", reason)
+                self._log_activity("signal_filtered", {
+                    "symbol": plan.symbol, "direction": plan.direction,
+                    "confluence": plan.confidence_score, "reason": reason,
+                })
+                return
+
         # Check confluence threshold - use same rounding as scanner to avoid asymmetry
         min_score = self.config.min_confluence or (
             self.mode.min_confluence_score if self.mode else 60
@@ -951,6 +1017,8 @@ class PaperTradingService:
                 )
 
                 self.stats.signals_taken += 1
+                
+                # ... already handled by immediate fill logic ...
 
                 logger.info(
                     f"TRADE OPENED: {plan.symbol} {plan.direction} @ {fill.price:.2f} "
@@ -984,6 +1052,9 @@ class PaperTradingService:
                     "symbol": plan.symbol, "direction": plan.direction,
                     "confluence": plan.confidence_score, "reason": reason,
                 })
+                
+                # Keep the plan so _monitor_loop can pick it up if it fills later
+                self._pending_plans[order.order_id] = plan
 
         except Exception as e:
             import traceback

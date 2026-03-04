@@ -737,11 +737,30 @@ export function TrainingGround() {
                 </div>
 
                 <div className="relative z-10">
-                  {status?.positions && status.positions.length > 0 ? (
-                    <div className="space-y-3">
-                      {status.positions.map((pos) => (
-                        <PositionCard key={pos.position_id} position={pos} />
-                      ))}
+                  {((status?.positions && status.positions.length > 0) || (status?.pending_orders && status.pending_orders.length > 0)) ? (
+                    <div className="space-y-4">
+                      {/* Active Positions */}
+                      {status?.positions && status.positions.length > 0 && (
+                        <div className="space-y-3">
+                          {status.positions.map((pos) => (
+                            <PositionCard key={pos.position_id} position={pos} />
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Pending Limit Orders */}
+                      {status?.pending_orders && status.pending_orders.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 mb-1 px-1">
+                            <Clock size={14} className="text-amber-400" />
+                            <span className="text-[10px] font-mono font-bold tracking-tighter uppercase text-amber-400/80">Pending Limit Orders</span>
+                            <div className="h-px flex-1 bg-amber-400/20" />
+                          </div>
+                          {status.pending_orders.map((order) => (
+                            <PendingOrderCard key={order.order_id} order={order} />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="text-center py-12 border border-border border-dashed rounded-lg bg-background/50">
@@ -987,6 +1006,45 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
         <span className="text-muted-foreground ml-auto text-[9px] uppercase font-bold tracking-widest opacity-60">
           Targets: {position.targets_hit}/{position.targets_hit + position.targets_remaining}
         </span>
+      </div>
+    </div>
+  );
+}
+
+// Pending Order Card Component
+function PendingOrderCard({ order }: { order: any }) {
+  const isLong = order.direction === 'LONG';
+
+  return (
+    <div className="p-3 bg-background/40 rounded-lg border border-amber-500/20 border-dashed hover:border-amber-500/40 transition-all duration-300 group">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Badge
+            variant="outline"
+            className={cn(
+              "font-mono text-[9px] px-1.5 py-0 border-none",
+              isLong ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
+            )}
+          >
+            {order.direction}
+          </Badge>
+          <span className="font-bold text-sm tracking-tight">{order.symbol}</span>
+          <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest bg-amber-500/10 px-1 py-0 rounded">Waiting Fill</span>
+        </div>
+        <div className="text-xs font-bold font-mono text-amber-400/80">
+          ${order.limit_price.toFixed(2)}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between text-[10px]">
+        <div className="flex items-center gap-3">
+          <span className="text-muted-foreground opacity-60">Qty: {order.quantity.toFixed(4)}</span>
+          <span className="text-muted-foreground opacity-60">Conf: {order.confluence.toFixed(0)}%</span>
+        </div>
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/40 border border-border/30">
+          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+          <span className="text-[9px] font-mono tracking-tighter opacity-70 uppercase">Market Monitoring Active</span>
+        </div>
       </div>
     </div>
   );

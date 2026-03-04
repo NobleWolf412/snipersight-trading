@@ -978,6 +978,16 @@ export interface PaperTradingStatusResponse {
   positions: PaperTradingPosition[];
   statistics: PaperTradingStats;
   recent_activity: PaperTradingActivity[];
+  pending_orders: Array<{
+    order_id: string;
+    symbol: string;
+    direction: 'LONG' | 'SHORT';
+    limit_price: number;
+    quantity: number;
+    filled_qty: number;
+    status: string;
+    confluence: number;
+  }>;
   last_scan_at: string | null;
   next_scan_in_seconds: number | null;
   current_scan?: {
