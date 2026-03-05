@@ -4857,7 +4857,15 @@ def _calculate_synergy_bonus(
 
     # Resolve profile and direction once, used by all cycle logic below
     profile = getattr(mode_config, "profile", "balanced").lower() if mode_config else "balanced"
-    direction_upper = direction.upper() if direction else ""
+    # FIX: _normalize_direction converts to "bullish"/"bearish", but cycle gates
+    # compare against "LONG"/"SHORT". Map correctly so cycle context actually fires.
+    _dir_lower = direction.lower() if direction else ""
+    if _dir_lower in ("long", "bullish"):
+        direction_upper = "LONG"
+    elif _dir_lower in ("short", "bearish"):
+        direction_upper = "SHORT"
+    else:
+        direction_upper = direction.upper() if direction else ""
 
     # Check if reversal_context qualifies for Surgical/Strike bypass of cycle gates
     htf_bypass = bool(
@@ -4935,28 +4943,51 @@ def _calculate_synergy_bonus(
 
             # ── GATE 2: MARKDOWN + LTR PHASE GATE ───────────────────────────
             # Penalise LONG signals in a left-translated markdown market.
-            # Only active after Gate 1 (if WCL didn't already veto).
-            # Surgical/Strike bypass via htf_bypass_active applies here too.
-            # SOFTENED: Markdown+LTR penalties reduced to soft nudges
-            # Previous values (-40, -25) were too aggressive and killed long setups
+            # FIX: Only fire when WCL/DCL did NOT already apply a penalty.
+            # Previously this was a separate `if` that stacked with Gate 1,
+            # creating up to -18 combined penalty for LONG (vs +5 for SHORT)
+            # which overwhelmed the 8-point DIRECTION_MARGIN and forced
+            # all trades to SHORT.
             MARKDOWN_LTR_LONG_PENALTY = {
-                "macro_surveillance": -15, "overwatch": -15,
-                "stealth_balanced":   -10,  "stealth":  -10,
-                "intraday_aggressive":  -6, "strike":    -6,
-                "precision":            -3,  "surgical":  -3,
+                "macro_surveillance": -10, "overwatch": -10,
+                "stealth_balanced":    -6,  "stealth":   -6,
+                "intraday_aggressive": -4,  "strike":    -4,
+                "precision":           -2,  "surgical":  -2,
             }
-            if (
-                direction_upper == "LONG"
-                and not htf_bypass
-                and cycle_context.phase in [CyclePhase.DISTRIBUTION, CyclePhase.MARKDOWN]
-                and cycle_context.translation == CycleTranslation.LTR
-            ):
-                pen = MARKDOWN_LTR_LONG_PENALTY.get(profile, -15)
-                bonus += pen
-                logger.debug(
-                    "%s + LTR phase gate — LONG penalty %.1f for %s",
-                    cycle_context.phase.value, pen, profile,
-                )
+            # FIX: Symmetric SHORT penalty in bullish accumulation/markup
+            ACCUMULATION_RTR_SHORT_PENALTY = {
+                "macro_surveillance": -10, "overwatch": -10,
+                "stealth_balanced":    -6,  "stealth":   -6,
+                "intraday_aggressive": -4,  "strike":    -4,
+                "precision":           -2,  "surgical":  -2,
+            }
+            if not wcl_failed and not dcl_failed:
+                # Only apply phase gate when cycle failures haven't already penalized
+                if (
+                    direction_upper == "LONG"
+                    and not htf_bypass
+                    and cycle_context.phase in [CyclePhase.DISTRIBUTION, CyclePhase.MARKDOWN]
+                    and cycle_context.translation == CycleTranslation.LTR
+                ):
+                    pen = MARKDOWN_LTR_LONG_PENALTY.get(profile, -10)
+                    bonus += pen
+                    logger.debug(
+                        "%s + LTR phase gate — LONG penalty %.1f for %s",
+                        cycle_context.phase.value, pen, profile,
+                    )
+                # FIX: Symmetric — penalize SHORT in bullish accumulation/markup + RTR
+                elif (
+                    direction_upper == "SHORT"
+                    and not htf_bypass
+                    and cycle_context.phase in [CyclePhase.ACCUMULATION, CyclePhase.MARKUP]
+                    and cycle_context.translation == CycleTranslation.RTR
+                ):
+                    pen = ACCUMULATION_RTR_SHORT_PENALTY.get(profile, -10)
+                    bonus += pen
+                    logger.debug(
+                        "%s + RTR phase gate — SHORT penalty %.1f for %s",
+                        cycle_context.phase.value, pen, profile,
+                    )
 
             # ── BONUS: Standard cycle bonuses (only when no failure) ─────────
             if not wcl_failed and not dcl_failed:
@@ -5017,15 +5048,19 @@ def _calculate_synergy_bonus(
         except ImportError:
             pass  # Cycle models not available
 
-    # Apply diminishing returns after 8 points
+    # Apply diminishing returns after ±8 points (symmetric for both directions)
     if bonus > 8.0:
         excess = bonus - 8.0
         bonus = 8.0 + (excess * 0.4)
-        logger.debug("Synergy diminishing applied: excess %.1f -> %.1f", excess, excess * 0.4)
+        logger.debug("Synergy diminishing applied (positive): excess %.1f -> %.1f", excess, excess * 0.4)
+    elif bonus < -8.0:
+        excess = abs(bonus) - 8.0
+        bonus = -8.0 - (excess * 0.4)
+        logger.debug("Synergy diminishing applied (negative): excess %.1f -> %.1f", excess, excess * 0.4)
 
-    # Mode-aware synergy cap
+    # Mode-aware synergy cap (symmetric: clamp both positive and negative)
     cap = MODE_SYNERGY_CAPS.get(profile, 12.0)
-    result = min(bonus, cap)
+    result = max(-cap, min(bonus, cap))
     logger.debug("Synergy bonus: %.1f (cap=%.1f for %s mode)", result, cap, profile)
     return result
 
