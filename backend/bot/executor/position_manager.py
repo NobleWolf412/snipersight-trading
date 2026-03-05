@@ -731,7 +731,7 @@ class PositionManager:
 
         # Calculate initial risk for the trail distance
         risk = abs(position.entry_price - position.initial_stop_loss)
-        trail_distance = risk * 1.5
+        trail_distance = risk * self.trailing_stop_distance
         
         if position.direction == "LONG":
             highest = position.highest_price
