@@ -34,30 +34,7 @@ REGIME_POLICIES: Dict[str, RegimePolicy] = {
             "chaotic_volatile": 0.7,
         },
     ),
-    "recon": RegimePolicy(
-        mode_name="recon",
-        min_regime_score=45.0,  # Adjusted to 45 (was 50) to capture 'normal' 47.0 regimes
-        allow_in_risk_off=True,  # Can trade both directions
-        position_size_adjustment={
-            "strong_up": 1.1,
-            "up": 1.0,
-            "sideways": 0.9,
-            "down": 1.0,  # Can short
-            "strong_down": 1.1,  # Bigger size in strong shorts
-        },
-        confluence_adjustment={
-            "bullish_risk_on": 3.0,
-            "bearish_risk_off": 3.0,  # Reward both trends
-            "choppy_risk_off": -5.0,
-            "chaotic_volatile": -10.0,
-        },
-        rr_adjustment={
-            "sideways": 0.9,
-            "strong_up": 1.2,
-            "strong_down": 1.2,
-            "chaotic_volatile": 0.8,
-        },
-    ),
+    # NOTE: 'recon' and 'ghost' modes removed — only strike, surgical, stealth, overwatch exist
     "strike": RegimePolicy(
         mode_name="strike",
         min_regime_score=40.0,  # Aggressive - can trade most conditions

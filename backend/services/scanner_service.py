@@ -150,7 +150,7 @@ class ScannerService:
         self,
         limit: int = 10,
         min_score: float = 0,
-        sniper_mode: str = "recon",
+        sniper_mode: str = "stealth",
         majors: bool = True,
         altcoins: bool = True,
         meme_mode: bool = False,

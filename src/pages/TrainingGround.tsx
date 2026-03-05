@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +27,9 @@ import {
   ArrowDown,
   ListBullets,
   Gear,
+  Lightning,
+  ShieldCheck,
+  Fire,
 } from '@phosphor-icons/react';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { HomeButton } from '@/components/layout/HomeButton';
@@ -67,10 +70,78 @@ function formatPct(value: number, decimals = 2): string {
   return `${sign}${value.toFixed(decimals)}%`;
 }
 
-// Default Phantom Spec Config
+// Mini Equity Sparkline Component
+function EquitySparkline({ trades, initialBalance }: { trades: CompletedPaperTrade[]; initialBalance: number }) {
+  const points = useMemo(() => {
+    if (!trades || trades.length === 0) return [];
+    // Build cumulative equity curve from trades (oldest first)
+    const sorted = [...trades].reverse();
+    let equity = initialBalance;
+    const pts = [{ x: 0, y: equity }];
+    sorted.forEach((t, i) => {
+      equity += t.pnl;
+      pts.push({ x: i + 1, y: equity });
+    });
+    return pts;
+  }, [trades, initialBalance]);
+
+  if (points.length < 2) {
+    return (
+      <div className="h-16 flex items-center justify-center text-[10px] text-muted-foreground/40 font-mono uppercase tracking-widest">
+        Awaiting trades...
+      </div>
+    );
+  }
+
+  const minY = Math.min(...points.map(p => p.y));
+  const maxY = Math.max(...points.map(p => p.y));
+  const rangeY = maxY - minY || 1;
+  const w = 280;
+  const h = 56;
+  const pad = 2;
+
+  const pathD = points.map((p, i) => {
+    const x = pad + (p.x / (points.length - 1)) * (w - 2 * pad);
+    const y = h - pad - ((p.y - minY) / rangeY) * (h - 2 * pad);
+    return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ');
+
+  const lastPt = points[points.length - 1];
+  const isUp = lastPt.y >= initialBalance;
+  const strokeColor = isUp ? '#00ff88' : '#ff4444';
+  const fillGradId = 'eq-grad';
+
+  // Area fill path
+  const lastX = pad + (1) * (w - 2 * pad);
+  const firstX = pad;
+  const areaD = pathD + ` L ${lastX.toFixed(1)} ${h} L ${firstX.toFixed(1)} ${h} Z`;
+
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="w-full h-16">
+      <defs>
+        <linearGradient id={fillGradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={strokeColor} stopOpacity="0.15" />
+          <stop offset="100%" stopColor={strokeColor} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={areaD} fill={`url(#${fillGradId})`} />
+      <path d={pathD} fill="none" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Current point dot */}
+      <circle
+        cx={pad + (1) * (w - 2 * pad)}
+        cy={h - pad - ((lastPt.y - minY) / rangeY) * (h - 2 * pad)}
+        r="3"
+        fill={strokeColor}
+        className="animate-pulse"
+      />
+    </svg>
+  );
+}
+
+// Default Phantom Spec Config — mode is always stealth (hardcoded backend)
 const DEFAULT_CONFIG: PaperTradingConfigRequest = {
   exchange: 'phemex',
-  sniper_mode: 'stealth', // Underlying detection mode
+  sniper_mode: 'stealth', // Fixed: optimal balance for paper trading (adaptive scalp/swing)
   initial_balance: 10000,
   risk_per_trade: 2, // Total 2% per thesis
   max_positions: 3, // 3 limits (L1, L2, L3)
@@ -318,30 +389,40 @@ export function TrainingGround() {
                 </div>
 
                 <div className="w-full max-w-2xl pt-4 space-y-6">
-                  {/* Sniper Mode Selector */}
+                  {/* Engine Mode — Fixed to Stealth */}
                   <div className="space-y-3">
-                    <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Tactical Mode (Scanner Profile)</label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {[
-                        { id: 'strike', label: 'STRIKE', desc: 'Aggressive / Intraday', color: 'text-red-400' },
-                        { id: 'surgical', label: 'SURGICAL', desc: 'Precision / 15m', color: 'text-blue-400' },
-                        { id: 'stealth', label: 'STEALTH', desc: 'Balanced / 1H', color: 'text-purple-400' },
-                        { id: 'overwatch', label: 'OVERWATCH', desc: 'Swing / 4H+', color: 'text-yellow-400' }
-                      ].map((m) => (
-                        <div
-                          key={m.id}
-                          onClick={() => setConfig({ ...config, sniper_mode: m.id })}
-                          className={cn(
-                            "flex flex-col items-center justify-center p-3 rounded-xl border cursor-pointer transition-all duration-300",
-                            config.sniper_mode === m.id
-                              ? "bg-accent/10 border-accent shadow-[0_0_15px_rgba(0,255,170,0.1)] scale-105"
-                              : "bg-black/40 border-border/50 opacity-60 hover:opacity-100"
-                          )}
-                        >
-                          <span className={cn("text-xs font-black tracking-widest", m.color)}>{m.label}</span>
-                          <span className="text-[8px] font-mono opacity-60 mt-1 uppercase text-center leading-tight">{m.desc}</span>
+                    <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Engine Mode</label>
+                    <div className="bg-gradient-to-r from-purple-500/10 via-accent/5 to-blue-500/10 border border-purple-500/30 rounded-xl p-4 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-purple-400/50 to-transparent" />
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Lightning size={18} weight="fill" className="text-purple-400" />
+                          <span className="text-sm font-black tracking-widest text-purple-400">STEALTH</span>
+                          <Badge variant="outline" className="text-[8px] border-purple-500/30 text-purple-300/80 bg-purple-500/10 px-1.5 py-0">LOCKED</Badge>
                         </div>
-                      ))}
+                        <ShieldCheck size={18} className="text-accent/40" />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground/80 leading-relaxed mb-3">
+                        Stealth is the optimal paper trading engine — it covers the full timeframe range (D→5m) and adaptively selects between scalp, intraday, and swing setups based on what the market structure dictates.
+                      </p>
+                      <div className="grid grid-cols-4 gap-2">
+                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
+                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">R:R Min</div>
+                          <div className="text-sm font-mono font-bold text-accent">1.8</div>
+                        </div>
+                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
+                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Range</div>
+                          <div className="text-sm font-mono font-bold text-foreground">D→5m</div>
+                        </div>
+                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
+                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Direction</div>
+                          <div className="text-sm font-mono font-bold text-foreground">L + S</div>
+                        </div>
+                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
+                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Types</div>
+                          <div className="text-sm font-mono font-bold text-foreground">All</div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -471,8 +552,8 @@ export function TrainingGround() {
                     <div className="text-xs text-[#00ff88] uppercase tracking-widest font-mono font-bold">SESSION</div>
                     <div className="mt-1 font-mono text-sm tracking-widest glow-border-green px-2 py-0.5 rounded bg-black/40 flex items-center gap-2">
                       {status?.session_id || '—'}
-                      <Badge variant="outline" className="text-[9px] h-4 border-accent/30 text-accent/80 font-black">
-                        {status?.config?.sniper_mode?.toUpperCase() || 'STEALTH'}
+                      <Badge variant="outline" className="text-[9px] h-4 border-purple-500/30 text-purple-400 font-black bg-purple-500/10">
+                        STEALTH
                       </Badge>
                     </div>
                   </div>
@@ -615,13 +696,13 @@ export function TrainingGround() {
               </section>
             )}
 
-            {/* Balance & Stats Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Balance Card */}
-              <div className="glass-card p-5 rounded-2xl border-accent/30 relative overflow-hidden group">
+            {/* Equity Curve + Stats Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Equity Curve Card (spans 2 cols) */}
+              <div className="lg:col-span-2 glass-card p-5 rounded-2xl border-accent/30 relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-accent/5 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none -mr-16 -mt-16" />
-                <div className="relative z-10 pt-2">
-                  <div className="flex items-center justify-between">
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-3">
                     <div className="flex flex-col gap-1 items-start">
                       <div>
                         <div className="text-[9px] text-muted-foreground font-mono font-bold tracking-widest uppercase opacity-70">EQUITY</div>
@@ -629,92 +710,198 @@ export function TrainingGround() {
                           {formatCurrency(status?.balance?.equity || config.initial_balance || 10000)}
                         </div>
                       </div>
-                      <div className="mt-1">
+                      <div>
                         <div className="text-[9px] text-muted-foreground font-mono font-bold tracking-widest uppercase opacity-60">AVAILABLE CASH (W/ P&L)</div>
                         <div className="text-sm font-bold font-mono tracking-tight opacity-80">
                           {formatCurrency(status?.balance?.current || config.initial_balance || 10000)}
                         </div>
                       </div>
                     </div>
-                    <Wallet size={32} className="text-accent/50" />
+                    <div className="flex items-center gap-3">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "font-mono text-xs border tracking-widest",
+                          status?.balance?.pnl && status.balance.pnl >= 0
+                            ? 'bg-green-500/10 text-green-400 border-green-500/30 glow-border-green'
+                            : 'bg-red-500/10 text-red-400 border-red-500/30'
+                        )}
+                      >
+                        {formatPct(status?.balance?.pnl_pct || 0)}
+                      </Badge>
+                      <Wallet size={28} className="text-accent/40" />
+                    </div>
                   </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "font-mono text-xs border tracking-widest",
-                        status?.balance?.pnl && status.balance.pnl >= 0
-                          ? 'bg-green-500/10 text-green-400 border-green-500/30 glow-border-green'
-                          : 'bg-red-500/10 text-red-400 border-red-500/30'
-                      )}
-                    >
-                      {formatPct(status?.balance?.pnl_pct || 0)}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground opacity-60">
-                      from {formatCurrency(status?.balance?.initial || config.initial_balance || 10000)}
-                    </span>
+                  {/* Equity Sparkline */}
+                  <div className="mt-2 p-2 rounded-lg bg-black/30 border border-border/30">
+                    <EquitySparkline
+                      trades={trades}
+                      initialBalance={status?.balance?.initial || config.initial_balance || 10000}
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground/50 font-mono">
+                    <span>from {formatCurrency(status?.balance?.initial || config.initial_balance || 10000)}</span>
+                    <span className="opacity-30">•</span>
+                    <span>{trades.length} trades</span>
                   </div>
                 </div>
               </div>
 
-              {/* Win Rate Card */}
-              <div className="glass-card p-5 rounded-2xl border-border/50 relative overflow-hidden group">
-                <div className="relative z-10 pt-2">
+              {/* Right column — stacked stats */}
+              <div className="flex flex-col gap-4">
+                {/* Win Rate Card */}
+                <div className="glass-card p-4 rounded-2xl border-border/50 relative overflow-hidden group flex-1">
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-widest uppercase">WIN RATE</div>
+                        <div className="text-2xl font-bold font-mono tracking-tight mt-0.5">
+                          {(status?.statistics?.win_rate || 0).toFixed(1)}%
+                        </div>
+                      </div>
+                      <Trophy size={28} className="text-accent/20 transition-colors group-hover:text-accent/50" />
+                    </div>
+                    <div className="mt-1.5 text-xs text-muted-foreground font-mono opacity-80 flex items-center gap-2">
+                      <span className="text-green-400">{status?.statistics?.winning_trades || 0}W</span>
+                      <span className="text-white/20">/</span>
+                      <span className="text-red-400">{status?.statistics?.losing_trades || 0}L</span>
+                      <span className="mx-1 opacity-20">•</span>
+                      {status?.statistics?.total_trades || 0} total
+                    </div>
+                  </div>
+                </div>
+
+                {/* Avg R:R Card */}
+                <div className="glass-card p-4 rounded-2xl border-border/50 relative overflow-hidden group flex-1">
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-widest uppercase">AVG R:R</div>
+                        <div className="text-2xl font-bold font-mono tracking-tight mt-0.5">
+                          {(status?.statistics?.avg_rr || 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <Crosshair size={28} className="text-accent/20 transition-colors group-hover:text-amber-400/50" />
+                    </div>
+                    <div className="mt-1.5 text-xs text-muted-foreground font-mono opacity-80 flex items-center flex-wrap gap-x-2">
+                      <span className="text-green-400/80">AvgW: {formatCurrency(status?.statistics?.avg_win || 0)}</span>
+                      <span className="opacity-20">•</span>
+                      <span className="text-red-400/80">AvgL: {formatCurrency(status?.statistics?.avg_loss || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Secondary Stats Row — Max Drawdown, Profit Factor, Scans, Streak */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Max Drawdown */}
+              <div className="glass-card p-4 rounded-2xl border-border/50 relative overflow-hidden group">
+                <div className="relative z-10">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-xs text-muted-foreground font-mono font-bold tracking-widest uppercase">WIN RATE</div>
-                      <div className="text-2xl font-bold font-mono tracking-tight mt-1">
-                        {(status?.statistics?.win_rate || 0).toFixed(1)}%
+                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-widest uppercase">MAX DRAWDOWN</div>
+                      <div className={cn(
+                        "text-xl font-bold font-mono tracking-tight mt-0.5",
+                        (status?.statistics as any)?.max_drawdown_pct ? 'text-red-400' : 'text-muted-foreground'
+                      )}>
+                        {((status?.statistics as any)?.max_drawdown_pct || 0).toFixed(2)}%
                       </div>
                     </div>
-                    <Trophy size={32} className="text-accent/20 transition-colors group-hover:text-accent/50" />
+                    <TrendDown size={24} className="text-red-400/20 transition-colors group-hover:text-red-400/50" />
                   </div>
-                  <div className="mt-2 text-xs text-muted-foreground font-mono opacity-80 flex items-center gap-2">
-                    <span className="text-green-400">{status?.statistics?.winning_trades || 0}W</span>
-                    <span className="text-white/20">/</span>
-                    <span className="text-red-400">{status?.statistics?.losing_trades || 0}L</span>
-                    <span className="mx-1 opacity-20">•</span>
-                    {status?.statistics?.total_trades || 0} total
+                  <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">
+                    Peak-to-trough
                   </div>
                 </div>
               </div>
 
-              {/* Avg R:R Card */}
-              <div className="glass-card p-5 rounded-2xl border-border/50 relative overflow-hidden group">
-                <div className="relative z-10 pt-2">
+              {/* Profit Factor */}
+              <div className="glass-card p-4 rounded-2xl border-border/50 relative overflow-hidden group">
+                <div className="relative z-10">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-xs text-muted-foreground font-mono font-bold tracking-widest uppercase">AVG R:R</div>
-                      <div className="text-2xl font-bold font-mono tracking-tight mt-1">
-                        {(status?.statistics?.avg_rr || 0).toFixed(2)}
-                      </div>
+                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-widest uppercase">PROFIT FACTOR</div>
+                      {(() => {
+                        const avgWin = status?.statistics?.avg_win || 0;
+                        const avgLoss = Math.abs(status?.statistics?.avg_loss || 1);
+                        const wins = status?.statistics?.winning_trades || 0;
+                        const losses = status?.statistics?.losing_trades || 0;
+                        const totalWins = avgWin * wins;
+                        const totalLosses = avgLoss * losses;
+                        const pf = totalLosses > 0 ? totalWins / totalLosses : wins > 0 ? Infinity : 0;
+                        return (
+                          <div className={cn(
+                            "text-xl font-bold font-mono tracking-tight mt-0.5",
+                            pf >= 2 ? 'text-green-400' : pf >= 1 ? 'text-yellow-400' : 'text-red-400'
+                          )}>
+                            {pf === Infinity ? '∞' : pf.toFixed(2)}
+                          </div>
+                        );
+                      })()}
                     </div>
-                    <Crosshair size={32} className="text-accent/20 transition-colors group-hover:text-amber-400/50" />
+                    <Fire size={24} className="text-amber-400/20 transition-colors group-hover:text-amber-400/50" />
                   </div>
-                  <div className="mt-2 text-xs text-muted-foreground font-mono opacity-80 flex items-center flex-wrap gap-x-2">
-                    <span className="text-green-400/80">AvgW: {formatCurrency(status?.statistics?.avg_win || 0)}</span>
-                    <span className="opacity-20">•</span>
-                    <span className="text-red-400/80">AvgL: {formatCurrency(status?.statistics?.avg_loss || 0)}</span>
+                  <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">
+                    Gross profit / gross loss
                   </div>
                 </div>
               </div>
 
               {/* Scans Card */}
-              <div className="glass-card p-5 rounded-2xl border-border/50 relative overflow-hidden group">
-                <div className="relative z-10 pt-2">
+              <div className="glass-card p-4 rounded-2xl border-border/50 relative overflow-hidden group">
+                <div className="relative z-10">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-xs text-muted-foreground font-mono font-bold tracking-widest uppercase">SCANS</div>
-                      <div className="text-2xl font-bold font-mono tracking-tight mt-1">
+                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-widest uppercase">SCANS</div>
+                      <div className="text-xl font-bold font-mono tracking-tight mt-0.5">
                         {status?.statistics?.scans_completed || 0}
                       </div>
                     </div>
-                    <Target size={32} className="text-accent/20 transition-colors group-hover:text-blue-400/50" />
+                    <Target size={24} className="text-accent/20 transition-colors group-hover:text-blue-400/50" />
                   </div>
-                  <div className="mt-2 text-xs text-muted-foreground font-mono opacity-80">
+                  <div className="mt-1.5 text-[10px] text-muted-foreground font-mono opacity-80">
                     <span className="text-blue-400/80">{status?.statistics?.signals_generated || 0} sigs</span>
-                    <span className="mx-2 opacity-20">→</span>
+                    <span className="mx-1.5 opacity-20">→</span>
                     <span className="text-green-400/80">{status?.statistics?.signals_taken || 0} tk</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Current Streak */}
+              <div className="glass-card p-4 rounded-2xl border-border/50 relative overflow-hidden group">
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-widest uppercase">STREAK</div>
+                      {(() => {
+                        // Calculate current streak from trade history
+                        let streak = 0;
+                        let streakType: 'win' | 'loss' | 'none' = 'none';
+                        if (trades.length > 0) {
+                          streakType = trades[0].pnl >= 0 ? 'win' : 'loss';
+                          for (const t of trades) {
+                            if ((t.pnl >= 0 && streakType === 'win') || (t.pnl < 0 && streakType === 'loss')) {
+                              streak++;
+                            } else break;
+                          }
+                        }
+                        return (
+                          <div className={cn(
+                            "text-xl font-bold font-mono tracking-tight mt-0.5 flex items-center gap-1.5",
+                            streakType === 'win' ? 'text-green-400' : streakType === 'loss' ? 'text-red-400' : 'text-muted-foreground'
+                          )}>
+                            {streak > 0 && streakType === 'win' && <TrendUp size={18} />}
+                            {streak > 0 && streakType === 'loss' && <TrendDown size={18} />}
+                            {streak === 0 ? '—' : `${streak}${streakType === 'win' ? 'W' : 'L'}`}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    <Lightning size={24} className="text-purple-400/20 transition-colors group-hover:text-purple-400/50" />
+                  </div>
+                  <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">
+                    Current streak
                   </div>
                 </div>
               </div>
@@ -840,26 +1027,41 @@ export function TrainingGround() {
           </div>
         )}
 
-        {/* Learning Resources (always visible at bottom) */}
+        {/* System Capabilities Panel (always visible at bottom) */}
         <div className="mt-8">
           <TacticalPanel>
             <div className="p-4 md:p-6">
               <div className="mb-6">
-                <h3 className="heading-hud text-xl text-foreground mb-2">Learning Resources</h3>
-                <p className="text-sm text-muted-foreground">Essential concepts for successful trading</p>
+                <h3 className="heading-hud text-xl text-foreground mb-2">Phantom Engine Specs</h3>
+                <p className="text-sm text-muted-foreground">How the Stealth engine processes and executes trades</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-5 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors">
-                  <div className="font-bold mb-2 text-base heading-hud">Smart Money Concepts</div>
-                  <div className="text-muted-foreground text-sm">Learn order blocks, fair value gaps, and institutional analysis</div>
+                <div className="p-5 bg-background rounded-lg border border-border hover:border-purple-500/30 transition-colors group">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Lightning size={18} weight="fill" className="text-purple-400 group-hover:animate-pulse" />
+                    <div className="font-bold text-base heading-hud text-purple-400">Regime Adaptive</div>
+                  </div>
+                  <div className="text-muted-foreground text-sm leading-relaxed">
+                    Position sizing automatically adjusts based on market regime — scales up in strong trends, reduces in choppy conditions
+                  </div>
                 </div>
-                <div className="p-5 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors">
-                  <div className="font-bold mb-2 text-base heading-hud">Multi-Timeframe Analysis</div>
-                  <div className="text-muted-foreground text-sm">Understand confluence across different timeframes</div>
+                <div className="p-5 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors group">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Crosshair size={18} className="text-accent group-hover:animate-pulse" />
+                    <div className="font-bold text-base heading-hud">SMC Detection</div>
+                  </div>
+                  <div className="text-muted-foreground text-sm leading-relaxed">
+                    Multi-timeframe Smart Money analysis — order blocks, FVGs, structural breaks, and liquidity sweeps across D→5m
+                  </div>
                 </div>
-                <div className="p-5 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors">
-                  <div className="font-bold mb-2 text-base heading-hud">Risk Management</div>
-                  <div className="text-muted-foreground text-sm">Position sizing, stop placement, and reward-to-risk ratios</div>
+                <div className="p-5 bg-background rounded-lg border border-border hover:border-amber-500/30 transition-colors group">
+                  <div className="flex items-center gap-2 mb-3">
+                    <ShieldCheck size={18} className="text-amber-400 group-hover:animate-pulse" />
+                    <div className="font-bold text-base heading-hud text-amber-400">Risk Management</div>
+                  </div>
+                  <div className="text-muted-foreground text-sm leading-relaxed">
+                    Scale-in ladder (L1→L3), trailing stops, breakeven protection, and stagnation timeout — fully automated risk control
+                  </div>
                 </div>
               </div>
             </div>

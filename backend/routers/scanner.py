@@ -499,7 +499,7 @@ async def stop_scanner(config_id: str):
 async def create_scan_run(
     limit: int = Query(default=10, ge=1, le=100),
     min_score: float = Query(default=0, ge=0, le=100),
-    sniper_mode: str = Query(default="recon"),
+    sniper_mode: str = Query(default="stealth"),
     majors: bool = Query(default=True),
     altcoins: bool = Query(default=True),
     meme_mode: bool = Query(default=False),
@@ -584,7 +584,7 @@ def get_scanner_service_fallback():
 async def get_signals(
     limit: int = Query(default=10, ge=1, le=100),
     min_score: float = Query(default=0, ge=0, le=100),
-    sniper_mode: str = Query(default="recon"),
+    sniper_mode: str = Query(default="stealth"),
     majors: bool = Query(default=True),
     altcoins: bool = Query(default=True),
     meme_mode: bool = Query(default=False),

@@ -66,7 +66,7 @@ class PaperTradingConfig:
     """
 
     exchange: str = "phemex"
-    sniper_mode: str = "strike"  # Changed from "stealth": strike mode is better for bots (faster signals, 1.2 R:R)
+    sniper_mode: str = "stealth"  # Fixed: stealth mode is the optimal balance for paper trading (adaptive scalp/swing)
     initial_balance: float = 10000.0
     risk_per_trade: float = 1.0  # Reduced from 2.0%: safer for automated trading (3 positions * 1% = 3% max risk)
     max_positions: int = 3
@@ -236,6 +236,7 @@ class PaperTradingService:
 
         # Tracking
         self.completed_trades: List[CompletedTrade] = []
+        self._completed_trade_ids: set = set()  # O(1) dedup for _sync_closed_positions
         self.activity_log: List[Dict[str, Any]] = []
         self.stats: PaperTradingStats = PaperTradingStats()
         self._peak_equity: float = 0.0
@@ -285,10 +286,15 @@ class PaperTradingService:
         self.config = config
         self.session_id = str(uuid.uuid4())[:8]
 
-        # Load scanner mode
-        self.mode = get_mode(config.sniper_mode)
+        # Force stealth mode for paper trading — it's the optimal balance:
+        # - Covers D→5m timeframes (full range)
+        # - Allows all trade types (scalp, intraday, swing) adaptively
+        # - Requires solid 1.8 R:R minimum
+        # - Can trade both directions (long + short)
+        config.sniper_mode = "stealth"
+        self.mode = get_mode("stealth")
         if not self.mode:
-            raise ValueError(f"Invalid sniper mode: {config.sniper_mode}")
+            raise ValueError("Failed to load stealth mode")
 
         # Initialize paper executor
         self.executor = PaperExecutor(
@@ -337,6 +343,7 @@ class PaperTradingService:
 
         # Reset tracking
         self.completed_trades = []
+        self._completed_trade_ids = set()
         self.activity_log = []
         self.signal_log = []
         self.stats = PaperTradingStats()
@@ -428,6 +435,7 @@ class PaperTradingService:
         self.mode = None
 
         self.completed_trades = []
+        self._completed_trade_ids = set()
         self.activity_log = []
         self.signal_log = []
         self.stats = PaperTradingStats()
@@ -579,9 +587,15 @@ class PaperTradingService:
 
     async def _scan_loop(self):
         """Background loop for running scanner at intervals."""
-        interval = (self.config.scan_interval_minutes or 5) * 60
-
         while self._running:
+            # Re-read config each iteration so mid-session changes take effect
+            config = self.config
+            if not config:
+                await asyncio.sleep(5)
+                continue
+
+            interval = (config.scan_interval_minutes or 5) * 60
+
             try:
                 await self._run_scan()
             except Exception as e:
@@ -589,9 +603,9 @@ class PaperTradingService:
                 self._log_activity("scan_error", {"error": str(e)})
 
             # Check duration limit
-            if self.config and self.config.duration_hours > 0:
+            if config.duration_hours > 0:
                 elapsed = self._get_uptime_seconds()
-                if elapsed >= self.config.duration_hours * 3600:
+                if elapsed >= config.duration_hours * 3600:
                     logger.info("Duration limit reached, stopping")
                     asyncio.create_task(self.stop())
                     break
@@ -861,18 +875,23 @@ class PaperTradingService:
             for reason_type, items in rejections_details.items():
                 for item in items:
                     # Convert rejection_info to a format _log_signal understands
+                    # Create unique nested objects per item to avoid shared-state corruption
+                    entry_zone = type('obj', (object,), {
+                        'near_entry': item.get('entry_price', 0.0) or item.get('current_price', 0.0),
+                        'far_entry': 0.0,
+                    })()
+                    stop_loss = type('obj', (object,), {
+                        'level': item.get('stop_loss', 0.0),
+                    })()
                     mock_plan = type('obj', (object,), {
                         'symbol': item.get('symbol', 'Unknown'),
                         'direction': item.get('direction', 'LONG'),
                         'confidence_score': item.get('score', 0.0),
                         'setup_type': 'filtered',
-                        'entry_zone': type('obj', (object,), {'near_entry': 0.0, 'far_entry': 0.0}),
-                        'stop_loss': type('obj', (object,), {'level': 0.0}),
-                        'risk_reward': 0.0
-                    })
-                    # Add some safety for nested objects
-                    mock_plan.entry_zone.near_entry = item.get('entry_price', 0.0) or item.get('current_price', 0.0)
-                    mock_plan.stop_loss.level = item.get('stop_loss', 0.0)
+                        'entry_zone': entry_zone,
+                        'stop_loss': stop_loss,
+                        'risk_reward': 0.0,
+                    })()
                     
                     self._log_signal(
                         mock_plan, 
@@ -929,13 +948,25 @@ class PaperTradingService:
         Args:
             plan: Trade plan from scanner
         """
-        if not self.config or not self.executor or not self.position_manager:
+        # Capture core components locally for the duration of this method to prevent
+        # AttributeErrors if the session is stopped/reset while processing.
+        config = self.config
+        executor = self.executor
+        position_manager = self.position_manager
+
+        if not config or not executor or not position_manager:
             return
+
+        # Explicitly assert for the linter (though None-check above already covers it)
+        assert executor is not None
+        assert config is not None
+        assert position_manager is not None
+
 
         # Check if we can take more positions (count open + pending toward cap)
         active_count = len(self._get_active_positions()) + len(self._pending_plans)
-        if active_count >= self.config.max_positions:
-            reason = f"Max positions reached ({active_count}/{self.config.max_positions})"
+        if active_count >= config.max_positions:
+            reason = f"Max positions reached ({active_count}/{config.max_positions})"
             logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
             self._log_signal(plan, "filtered", reason)
             self._log_activity("signal_filtered", {
@@ -975,7 +1006,7 @@ class PaperTradingService:
                 f"old confluence={existing_plan.confidence_score:.1f}% → "
                 f"new confluence={plan.confidence_score:.1f}%"
             )
-            self.executor.cancel_order(existing_order_id)
+            executor.cancel_order(existing_order_id)
             self._pending_plans.pop(existing_order_id, None)
             self._pending_placed_at.pop(existing_order_id, None)
             self._log_activity("pending_order_replaced", {
@@ -985,7 +1016,7 @@ class PaperTradingService:
             })
 
         # Check confluence threshold - use same rounding as scanner to avoid asymmetry
-        min_score = self.config.min_confluence or (
+        min_score = config.min_confluence or (
             self.mode.min_confluence_score if self.mode else 60
         )
         if round(plan.confidence_score, 1) < round(min_score, 1):
@@ -999,7 +1030,7 @@ class PaperTradingService:
             return
 
         # Calculate position size
-        balance = self.executor.get_balance()
+        balance = executor.get_balance()
         position_size = self._calculate_position_size(plan)
         if position_size <= 0:
             reason = (
@@ -1014,6 +1045,7 @@ class PaperTradingService:
                 "confluence": plan.confidence_score, "reason": reason,
             })
             return
+
 
         # Get current price
         try:
@@ -1033,10 +1065,6 @@ class PaperTradingService:
 
         # Execute entry
         try:
-            executor = self.executor
-            if not executor:
-                return
-
             side = "BUY" if plan.direction == "LONG" else "SELL"
 
             # Use LIMIT to allow the executor to simulate realistic partial fills
@@ -1048,17 +1076,19 @@ class PaperTradingService:
                 price=plan.entry_zone.near_entry,
             )
 
+
             # Because the EntryEngine caps near_entry to current_price, this will immediately evaluate
             fill = executor.execute_limit_order(order.order_id, current_price)
 
             if fill and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
                 # Open position in manager using the ACTUALLY filled quantity
-                position_id = self.position_manager.open_position(
+                position_id = position_manager.open_position(
                     trade_plan=plan, 
                     entry_price=fill.price, 
                     quantity=fill.quantity,
                     entry_order_id=order.order_id
                 )
+
 
                 self.stats.signals_taken += 1
                 
@@ -1147,10 +1177,13 @@ class PaperTradingService:
         Returns:
             Position size in base currency
         """
-        if not self.config or not self.executor:
+        config = self.config
+        executor = self.executor
+        if not config or not executor:
             return 0.0
 
-        balance = self.executor.get_balance()
+        balance = executor.get_balance()
+
 
         # Apply streak-based risk adaptation
         effective_risk_pct = self._get_adapted_risk_pct()
@@ -1183,7 +1216,8 @@ class PaperTradingService:
 
         # Ensure we don't exceed available balance (accounting for leverage on margin)
         # With leverage, margin required = position_value / leverage
-        margin_factor = max(1, self.config.leverage)
+        margin_factor = max(1, config.leverage)
+
         max_position_value = balance * 0.5 * margin_factor  # 50% of balance * leverage
         max_size = max_position_value / entry if entry > 0 else 0
 
@@ -1338,9 +1372,8 @@ class PaperTradingService:
                 PositionStatus.STOPPED_OUT,
                 PositionStatus.EMERGENCY_EXIT,
             ]:
-                # Check if already recorded
-                existing = [t for t in self.completed_trades if t.trade_id == pos.position_id]
-                if existing:
+                # Check if already recorded (O(1) set lookup)
+                if pos.position_id in self._completed_trade_ids:
                     continue
 
                 # Record completed trade
@@ -1367,6 +1400,7 @@ class PaperTradingService:
                 )
 
                 self.completed_trades.append(trade)
+                self._completed_trade_ids.add(trade.trade_id)
                 self._update_stats(trade)
 
                 self._log_activity(
@@ -1445,11 +1479,13 @@ class PaperTradingService:
 
         # Update max drawdown
         if self.executor and self.config:
-            # Current equity includes all realized and unrealized PnL
-            current_equity = self.executor.get_balance() + self.stats.total_pnl
+            # Equity = cash balance + unrealized PnL of open positions.
+            # executor.get_balance() already includes all realized PnL (fees + closed trades),
+            # so we must NOT add stats.total_pnl again (that was double-counting).
+            current_equity = self.executor.get_balance()
             if self.position_manager:
                 current_equity += sum(
-                    pos.realized_pnl + pos.unrealized_pnl 
+                    pos.unrealized_pnl
                     for pos in self.position_manager.positions.values() 
                     if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
                 )

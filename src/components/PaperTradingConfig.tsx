@@ -35,13 +35,6 @@ interface PaperTradingConfigProps {
   disabled?: boolean;
 }
 
-const SNIPER_MODES = [
-  { value: 'stealth', label: 'Stealth', description: 'Balanced swing trading' },
-  { value: 'surgical', label: 'Surgical', description: 'Precision scalping' },
-  { value: 'strike', label: 'Strike', description: 'Intraday aggressive' },
-  { value: 'overwatch', label: 'Overwatch', description: 'Macro surveillance' },
-];
-
 const EXCHANGES = [
   { value: 'phemex', label: 'Phemex' },
   { value: 'bybit', label: 'Bybit' },
@@ -127,28 +120,15 @@ export function PaperTradingConfig({ config, onChange, disabled }: PaperTradingC
               </div>
             </div>
 
-            {/* Sniper Mode */}
+            {/* Engine Mode — Fixed to Stealth */}
             <div className="space-y-2">
-              <Label>Sniper Mode</Label>
-              <Select
-                value={config.sniper_mode ?? 'stealth'}
-                onValueChange={(value) => updateConfig({ sniper_mode: value })}
-                disabled={disabled}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SNIPER_MODES.map((mode) => (
-                    <SelectItem key={mode.value} value={mode.value}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{mode.label}</span>
-                        <span className="text-xs text-muted-foreground">{mode.description}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Engine Mode</Label>
+              <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-purple-500/30 bg-purple-500/5">
+                <Target size={16} className="text-purple-400" />
+                <span className="font-mono font-bold text-sm text-purple-400 tracking-wider">STEALTH</span>
+                <Badge variant="outline" className="text-[8px] ml-auto border-purple-500/30 text-purple-300/70 bg-purple-500/10 px-1.5 py-0">OPTIMAL</Badge>
+              </div>
+              <p className="text-[10px] text-muted-foreground/60">Adaptive engine — auto-selects scalp/intraday/swing</p>
             </div>
           </div>
         </CardContent>
@@ -318,8 +298,8 @@ export function PaperTradingConfig({ config, onChange, disabled }: PaperTradingC
                       max={100}
                       value={config.min_confluence ?? ''}
                       placeholder="Auto (from mode)"
-                      onChange={(e) => updateConfig({ 
-                        min_confluence: e.target.value ? parseFloat(e.target.value) : null 
+                      onChange={(e) => updateConfig({
+                        min_confluence: e.target.value ? parseFloat(e.target.value) : null
                       })}
                       disabled={disabled}
                       className="font-mono"

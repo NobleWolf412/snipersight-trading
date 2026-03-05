@@ -392,7 +392,7 @@ exchange_adapter = PhemexAdapter(testnet=False)
 
 # Initialize orchestrator with default config
 default_config = ScanConfig(
-    profile="recon",  # Valid mode from scanner_modes.py
+    profile="stealth",  # Default scanner mode
     timeframes=("1h", "4h", "1d"),
     min_confluence_score=70.0,
     max_risk_pct=2.0,
@@ -726,7 +726,7 @@ async def update_smc_config(update: SMCConfigUpdate):
 @app.get("/api/debug/signals_schema")
 async def debug_signals_schema(
     limit: int = Query(default=3, ge=1, le=10),
-    sniper_mode: str = Query(default="recon"),
+    sniper_mode: str = Query(default="stealth"),
     exchange: str = Query(default="phemex"),
 ):
     """
@@ -1020,7 +1020,7 @@ class PaperTradingConfigRequest(BaseModel):
     """Request model for paper trading configuration."""
 
     exchange: str = "phemex"
-    sniper_mode: str = "stealth"
+    sniper_mode: str = "strike"  # Match service default (strike is better for bots)
     initial_balance: float = Field(default=10000.0, ge=100, le=1000000)
     risk_per_trade: float = Field(default=2.0, ge=0.1, le=10)
     max_positions: int = Field(default=3, ge=1, le=10)
@@ -1033,6 +1033,9 @@ class PaperTradingConfigRequest(BaseModel):
     min_confluence: Optional[float] = Field(default=None, ge=0, le=100)
     symbols: List[str] = []
     exclude_symbols: List[str] = []
+    majors: bool = True
+    altcoins: bool = False
+    meme_mode: bool = False
     slippage_bps: float = Field(default=5.0, ge=0, le=50)
     fee_rate: float = Field(default=0.001, ge=0, le=0.01)
 
@@ -1066,6 +1069,9 @@ async def start_paper_trading(config: PaperTradingConfigRequest):
             min_confluence=config.min_confluence,
             symbols=config.symbols,
             exclude_symbols=config.exclude_symbols,
+            majors=config.majors,
+            altcoins=config.altcoins,
+            meme_mode=config.meme_mode,
             slippage_bps=config.slippage_bps,
             fee_rate=config.fee_rate,
         )

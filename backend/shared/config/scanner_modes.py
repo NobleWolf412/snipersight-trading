@@ -196,7 +196,6 @@ MODES: Dict[str, ScannerMode] = {
         zone_timeframes=("4h", "1h"),  # Entry zone OBs
         entry_trigger_timeframes=("15m", "5m"),  # Refined entry OBs inside zone
     ),
-    # NOTE: "recon" removed from MODES - use get_mode('recon') which maps to 'stealth'
     "strike": ScannerMode(
         name="strike",
         description="INTRADAY TRADES (Hours) • Aggressive momentum plays • More signals, faster entries • Best for: Active traders comfortable with quick decision-making and 1.2:1+ R:R",
@@ -380,43 +379,11 @@ def get_mode(name: str) -> ScannerMode:
     """
     Lookup a scanner mode by name (case-insensitive).
 
-    Backward compatibility mappings:
-    - 'recon' → 'stealth' (stealth_strict=False)
-    - 'ghost' → 'stealth' (stealth_strict=True, higher min_confluence)
+    Valid modes: strike, surgical, stealth, overwatch
     """
     key = name.lower()
-
-    # Backward compatibility: map old mode names to stealth
-    if key == "recon":
-        # RECON → STEALTH with relaxed settings (default stealth behavior)
-        return MODES["stealth"]
-    elif key == "ghost":
-        # GHOST → STEALTH with strict settings
-        # Create new instance with modified values (dataclass is frozen)
-        base = MODES["stealth"]
-        new_overrides = dict(base.overrides or {})
-        new_overrides["stealth_strict"] = True
-        return ScannerMode(
-            name=base.name,
-            description="Stealth mode (strict): higher conviction threshold for quality setups.",
-            timeframes=base.timeframes,
-            min_confluence_score=70.0,  # Higher conviction
-            profile=base.profile,
-            critical_timeframes=base.critical_timeframes,
-            primary_planning_timeframe=base.primary_planning_timeframe,
-            max_pullback_atr=base.max_pullback_atr,
-            min_stop_atr=base.min_stop_atr,
-            max_stop_atr=base.max_stop_atr,
-            entry_timeframes=base.entry_timeframes,
-            structure_timeframes=base.structure_timeframes,
-            stop_timeframes=base.stop_timeframes,
-            target_timeframes=base.target_timeframes,
-            min_target_move_pct=base.min_target_move_pct,
-            smc_preset=base.smc_preset,
-            expected_trade_type=base.expected_trade_type,
-            overrides=new_overrides,
-        )
 
     if key not in MODES:
         raise ValueError(f"Unknown scanner mode: {name}")
     return MODES[key]
+

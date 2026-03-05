@@ -184,7 +184,7 @@ class Orchestrator:
 
         # Regime detection
         self.regime_detector = get_regime_detector()
-        self.regime_policy = get_regime_policy(self.config.profile)
+        self.regime_policy = get_regime_policy(self.scanner_mode.name)
         self.current_regime: Optional[MarketRegime] = None
         # Macro context (dominance/flows); compute once per scan when available
         self.macro_context: Optional[MacroContext] = None
@@ -1029,6 +1029,9 @@ class Orchestrator:
         logger.info("%s [%s]: 📊 Starting confluence scoring", symbol, trace_id)
         try:
             # --- Inline Context Detection ---
+            # Get current price once for all context detectors below
+            current_price_val = context.multi_tf_data.get_current_price() or 0.0
+
             # 1. Cycle Context
             cycle_context = None
             try:
@@ -1081,7 +1084,6 @@ class Orchestrator:
             # 2. Reversal Context
             rev_ctx_long = None
             rev_ctx_short = None
-            current_price_val = context.multi_tf_data.get_current_price() or 0.0
             try:
                 # Use smc_snapshot, cycle_context, and indicators for reversal detection
                 rev_ctx_long = detect_reversal_context(
@@ -2394,7 +2396,7 @@ class Orchestrator:
             self.scanner_mode = mode
             from backend.analysis.regime_policies import get_regime_policy
 
-            self.regime_policy = get_regime_policy(mode.profile)
+            self.regime_policy = get_regime_policy(mode.name)
 
             # Update services with new mode
             if self.indicator_service:

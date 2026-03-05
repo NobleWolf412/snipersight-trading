@@ -57,7 +57,7 @@ class LevelOpportunity:
     symbol: str
     level: HTFLevel
     current_price: float
-    recommended_mode: str  # 'overwatch', 'surgical', 'recon'
+    recommended_mode: str  # 'overwatch', 'surgical', 'stealth'
     rationale: str
     confluence_factors: List[str]
     expected_move_pct: float  # Estimated % move if level holds
@@ -422,11 +422,11 @@ class HTFLevelDetector:
                 recommended_mode = "surgical"  # Precision 4H setup
                 rationale = "4H level with solid confluence - precision swing entry"
             elif len(confluence) >= 2:
-                recommended_mode = "recon"  # Moderate setup
+                recommended_mode = "stealth"  # Moderate setup
                 rationale = f"{level.timeframe.upper()} level - balanced approach recommended"
             elif level.is_fib_level and len(confluence) >= 1:
                 # Fib levels are lower priority - generate opportunity but with lower confidence
-                recommended_mode = "recon"
+                recommended_mode = "stealth"
                 rationale = (
                     f"{level.timeframe.upper()} Fib level - monitored zone (crowd psychology)"
                 )

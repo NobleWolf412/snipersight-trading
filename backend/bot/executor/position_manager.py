@@ -443,7 +443,7 @@ class PositionManager:
         adaptive_hours = self._get_adaptive_stagnation_hours(position)
         adaptive_pnl = self._get_adaptive_stagnation_pnl(position)
 
-        if hours_open >= adaptive_hours and position.status == PositionStatus.OPEN:
+        if hours_open >= adaptive_hours and position.status in (PositionStatus.OPEN, PositionStatus.PARTIAL):
             # Check if price is making progress toward TP1 despite low P&L
             making_progress = self._is_making_progress(position, current_price)
 
@@ -458,6 +458,10 @@ class PositionManager:
                 if self.order_executor:
                     await self._execute_exit(position, current_price, "TIME_STAGNATION")
                 with self._lock:
+                    # Settle P&L before zeroing remaining_quantity
+                    position.update_unrealized_pnl(current_price)
+                    position.realized_pnl += position.unrealized_pnl
+                    position.unrealized_pnl = 0.0
                     position.status = PositionStatus.CLOSED
                     position.exit_reason = "stagnation"
                     position.remaining_quantity = 0.0
@@ -482,6 +486,10 @@ class PositionManager:
                 await self._execute_exit(position, current_price, "STOP_LOSS")
 
             with self._lock:
+                # Settle P&L before zeroing remaining_quantity
+                position.update_unrealized_pnl(current_price)
+                position.realized_pnl += position.unrealized_pnl
+                position.unrealized_pnl = 0.0
                 position.status = PositionStatus.STOPPED_OUT
                 position.exit_reason = "stop_loss"
                 position.remaining_quantity = 0.0
@@ -744,7 +752,7 @@ class PositionManager:
 
         # Calculate initial risk for the trail distance
         risk = abs(position.entry_price - position.initial_stop_loss)
-        trail_distance = risk * 1.5
+        trail_distance = risk * self.trailing_stop_distance
         
         if position.direction == "LONG":
             highest = position.highest_price
@@ -846,11 +854,24 @@ class PositionManager:
         for position in open_positions:
             try:
                 current_price = self.price_fetcher(position.symbol)
-                self.close_position(position.position_id, f"EMERGENCY: {reason}", current_price)
-
-                # Mark as emergency exit
+                # Set EMERGENCY_EXIT status BEFORE close_position so the status
+                # isn't temporarily CLOSED (which _sync_closed_positions could see).
                 with self._lock:
                     position.status = PositionStatus.EMERGENCY_EXIT
+                    position.exit_reason = f"EMERGENCY: {reason}"
+
+                # Calculate final P&L and zero out remaining quantity
+                if current_price is not None:
+                    position.update_unrealized_pnl(current_price)
+                    position.realized_pnl += position.unrealized_pnl
+                    position.unrealized_pnl = 0.0
+                position.remaining_quantity = 0.0
+                position.updated_at = datetime.now(timezone.utc)
+
+                logger.info(
+                    f"Emergency closed: {position.position_id} | "
+                    f"Total P&L: {position.total_pnl:.2f} ({position.pnl_percentage:.2f}%)"
+                )
             except Exception as e:
                 logger.error(f"Failed to emergency close {position.position_id}: {e}")
 

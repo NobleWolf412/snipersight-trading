@@ -38,10 +38,6 @@ class TestScannerModeTradeTypes:
         mode = get_mode("stealth")
         assert mode.expected_trade_type == "intraday"
 
-    def test_ghost_backward_compat_inherits_intraday(self):
-        """Ghost mode (backward compat) should inherit stealth's intraday type."""
-        mode = get_mode("ghost")
-        assert mode.expected_trade_type == "intraday"
 
     def test_all_modes_have_valid_trade_type(self):
         """All modes should have a valid expected_trade_type."""
