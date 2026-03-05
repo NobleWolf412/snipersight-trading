@@ -901,16 +901,20 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
   const current = position.current_price;
 
   let progressPct = 0;
+  let entryPct = 50;
   if (isLong) {
     // SL < Current < TP1
     const range = tp1 - sl;
     progressPct = range !== 0 ? ((current - sl) / range) * 100 : 50;
+    entryPct = range !== 0 ? ((entry - sl) / range) * 100 : 50;
   } else {
     // TP1 < Current < SL
     const range = sl - tp1;
     progressPct = range !== 0 ? ((sl - current) / range) * 100 : 50;
+    entryPct = range !== 0 ? ((sl - entry) / range) * 100 : 50;
   }
   progressPct = Math.max(0, Math.min(100, progressPct));
+  entryPct = Math.max(0, Math.min(100, entryPct));
 
   return (
     <div className={cn("p-3 bg-background rounded-lg border border-border hover:border-accent/30 transition-all duration-300 relative overflow-hidden", flashClass)}>
@@ -968,12 +972,20 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
 
       {/* Progress tracking */}
       <div className="space-y-1.5 mb-2">
-        <div className="flex justify-between text-[9px] font-mono text-muted-foreground uppercase tracking-tighter">
-          <span className="text-red-400/70">STOP ({formatCurrency(position.risk_pnl)})</span>
-          <span>ENTRY</span>
-          <span className="text-green-400/70">TARGET ({formatCurrency(position.target_pnl)})</span>
+        <div className="relative h-4 text-[9px] font-mono text-muted-foreground uppercase tracking-tighter">
+          <span className="absolute left-0 text-red-400/70">STOP ({formatCurrency(position.risk_pnl)})</span>
+          <span
+            className="absolute -translate-x-1/2 text-muted-foreground/80"
+            style={{ left: `${entryPct}%` }}
+          >ENTRY</span>
+          <span className="absolute right-0 text-green-400/70">TARGET ({formatCurrency(position.target_pnl)})</span>
         </div>
         <div className="hud-progress-bg">
+          {/* Entry price tick mark */}
+          <div
+            className="absolute top-0 bottom-0 w-px bg-white/40"
+            style={{ left: `${entryPct}%` }}
+          />
           <div
             className="hud-progress-indicator transition-all duration-500 ease-out"
             style={{ left: `${progressPct}%` }}
