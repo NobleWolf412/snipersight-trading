@@ -24,9 +24,7 @@ import asyncio
 import logging
 from threading import Lock
 
-import backend.shared.models.planner as planner
-TradePlan = planner.TradePlan
-Target = planner.Target
+from backend.shared.models.planner import TradePlan, Target
 
 logger = logging.getLogger(__name__)
 
@@ -583,20 +581,26 @@ class PositionManager:
         """Record hourly price samples for progress detection."""
         now = datetime.now(timezone.utc)
 
-        if position._last_sample_time is None:
+        last_time = position._last_sample_time
+        if last_time is None:
             # First sample
             position._price_samples.append(current_price)
             position._last_sample_time = now
             return
 
-        elapsed = (now - position._last_sample_time).total_seconds()
+        # Explicitly ensure last_time is not None for the linter
+        assert last_time is not None
+        elapsed = (now - last_time).total_seconds()
+        
         if elapsed >= 1800:  # Sample every 30 minutes
             position._price_samples.append(current_price)
             position._last_sample_time = now
 
             # Keep last 24 samples (12 hours of data)
             if len(position._price_samples) > 24:
-                position._price_samples = position._price_samples[-24:]
+                # Use list comprehension as a workaround for linter slice issues
+                n = len(position._price_samples)
+                position._price_samples = [position._price_samples[i] for i in range(n - 24, n)]
 
     def _is_making_progress(self, position: PositionState, current_price: float) -> bool:
         """
@@ -620,14 +624,20 @@ class PositionManager:
         tp1 = position.targets[0].level
 
         # Use last 6 samples (or all if fewer)
-        recent = samples[-6:]
+        # Using list comprehension workaround for linter slice issues
+        n_samples = len(samples)
+        n_to_take = min(6, n_samples)
+        recent = [samples[i] for i in range(n_samples - n_to_take, n_samples)]
 
         if position.direction == "LONG":
             # For longs, check if price is making higher lows toward TP1
             # Split recent samples into two halves and compare
             mid = len(recent) // 2
-            first_half_min = min(recent[:mid])
-            second_half_min = min(recent[mid:])
+            first_half = [recent[i] for i in range(0, mid)]
+            second_half = [recent[i] for i in range(mid, len(recent))]
+            
+            first_half_min = min(first_half)
+            second_half_min = min(second_half)
             latest = recent[-1]
 
             # Progress = recent lows are higher than earlier lows
@@ -638,10 +648,13 @@ class PositionManager:
             return lows_rising and closer_to_target
 
         else:  # SHORT
-            # For shorts, check if price is making lower highs toward TP1
+            # Split recent samples into two halves and compare
             mid = len(recent) // 2
-            first_half_max = max(recent[:mid])
-            second_half_max = max(recent[mid:])
+            first_half = [recent[i] for i in range(0, mid)]
+            second_half = [recent[i] for i in range(mid, len(recent))]
+            
+            first_half_max = max(first_half)
+            second_half_max = max(second_half)
             latest = recent[-1]
 
             highs_falling = second_half_max < first_half_max
