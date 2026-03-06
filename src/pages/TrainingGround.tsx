@@ -699,19 +699,19 @@ export function TrainingGround() {
             {/* Equity Curve + Stats Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {/* Equity Curve Card (spans 2 cols) */}
-              <div className="lg:col-span-2 glass-card p-5 rounded-2xl border-accent/30 relative overflow-hidden group">
+              <div className="lg:col-span-2 glass-card p-5 rounded-2xl border-accent/30 relative group">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-accent/5 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none -mr-16 -mt-16" />
                 <div className="relative z-10">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex flex-col gap-1 items-start">
                       <div>
-                        <div className="text-[9px] text-muted-foreground font-mono font-bold tracking-widest uppercase opacity-70">EQUITY</div>
+                        <div className="text-[9px] text-muted-foreground font-mono font-bold tracking-wider uppercase opacity-70">EQUITY</div>
                         <div className="text-xl font-bold font-mono tracking-tight glow-text-accent">
                           {formatCurrency(status?.balance?.equity || config.initial_balance || 10000)}
                         </div>
                       </div>
                       <div>
-                        <div className="text-[9px] text-muted-foreground font-mono font-bold tracking-widest uppercase opacity-60">AVAILABLE CASH (W/ P&L)</div>
+                        <div className="text-[9px] text-muted-foreground font-mono font-bold tracking-wider uppercase opacity-60">AVAILABLE CASH (W/ P&L)</div>
                         <div className="text-sm font-bold font-mono tracking-tight opacity-80">
                           {formatCurrency(status?.balance?.current || config.initial_balance || 10000)}
                         </div>
@@ -748,45 +748,44 @@ export function TrainingGround() {
               </div>
 
               {/* Right column — stacked stats */}
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 min-w-0">
                 {/* Win Rate Card */}
-                <div className="glass-card p-4 rounded-2xl border-border/50 relative overflow-hidden group flex-1">
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-widest uppercase">WIN RATE</div>
+                <div className="glass-card p-4 rounded-2xl border-border/50 relative group flex-1 min-w-0">
+                  <div className="relative z-10 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">WIN RATE</div>
                         <div className="text-2xl font-bold font-mono tracking-tight mt-0.5">
                           {(status?.statistics?.win_rate || 0).toFixed(1)}%
                         </div>
                       </div>
-                      <Trophy size={28} className="text-accent/20 transition-colors group-hover:text-accent/50" />
+                      <Trophy size={24} className="text-accent/20 transition-colors group-hover:text-accent/50 shrink-0" />
                     </div>
-                    <div className="mt-1.5 text-xs text-muted-foreground font-mono opacity-80 flex items-center gap-2">
+                    <div className="mt-1.5 text-xs text-muted-foreground opacity-80 flex items-center gap-1.5 flex-wrap">
                       <span className="text-green-400">{status?.statistics?.winning_trades || 0}W</span>
                       <span className="text-white/20">/</span>
                       <span className="text-red-400">{status?.statistics?.losing_trades || 0}L</span>
-                      <span className="mx-1 opacity-20">•</span>
-                      {status?.statistics?.total_trades || 0} total
+                      <span className="opacity-20">•</span>
+                      <span>{status?.statistics?.total_trades || 0} total</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Avg R:R Card */}
-                <div className="glass-card p-4 rounded-2xl border-border/50 relative overflow-hidden group flex-1">
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-widest uppercase">AVG R:R</div>
+                <div className="glass-card p-4 rounded-2xl border-border/50 relative group flex-1 min-w-0">
+                  <div className="relative z-10 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">AVG R:R</div>
                         <div className="text-2xl font-bold font-mono tracking-tight mt-0.5">
                           {(status?.statistics?.avg_rr || 0).toFixed(2)}
                         </div>
                       </div>
-                      <Crosshair size={28} className="text-accent/20 transition-colors group-hover:text-amber-400/50" />
+                      <Crosshair size={24} className="text-accent/20 transition-colors group-hover:text-amber-400/50 shrink-0" />
                     </div>
-                    <div className="mt-1.5 text-xs text-muted-foreground font-mono opacity-80 flex items-center flex-wrap gap-x-2">
-                      <span className="text-green-400/80">AvgW: {formatCurrency(status?.statistics?.avg_win || 0)}</span>
-                      <span className="opacity-20">•</span>
-                      <span className="text-red-400/80">AvgL: {formatCurrency(status?.statistics?.avg_loss || 0)}</span>
+                    <div className="mt-1.5 text-xs text-muted-foreground opacity-80 flex flex-col gap-0.5">
+                      <span className="text-green-400/80">W: {formatCurrency(status?.statistics?.avg_win || 0)}</span>
+                      <span className="text-red-400/80">L: {formatCurrency(status?.statistics?.avg_loss || 0)}</span>
                     </div>
                   </div>
                 </div>
@@ -796,11 +795,11 @@ export function TrainingGround() {
             {/* Secondary Stats Row — Max Drawdown, Profit Factor, Scans, Streak */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Max Drawdown */}
-              <div className="glass-card p-4 rounded-2xl border-border/50 relative overflow-hidden group">
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-widest uppercase">MAX DRAWDOWN</div>
+              <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
+                <div className="relative z-10 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">MAX DRAWDOWN</div>
                       <div className={cn(
                         "text-xl font-bold font-mono tracking-tight mt-0.5",
                         (status?.statistics as any)?.max_drawdown_pct ? 'text-red-400' : 'text-muted-foreground'
@@ -808,7 +807,7 @@ export function TrainingGround() {
                         {((status?.statistics as any)?.max_drawdown_pct || 0).toFixed(2)}%
                       </div>
                     </div>
-                    <TrendDown size={24} className="text-red-400/20 transition-colors group-hover:text-red-400/50" />
+                    <TrendDown size={24} className="text-red-400/20 transition-colors group-hover:text-red-400/50 shrink-0" />
                   </div>
                   <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">
                     Peak-to-trough
@@ -817,11 +816,11 @@ export function TrainingGround() {
               </div>
 
               {/* Profit Factor */}
-              <div className="glass-card p-4 rounded-2xl border-border/50 relative overflow-hidden group">
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-widest uppercase">PROFIT FACTOR</div>
+              <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
+                <div className="relative z-10 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">PROFIT FACTOR</div>
                       {(() => {
                         const avgWin = status?.statistics?.avg_win || 0;
                         const avgLoss = Math.abs(status?.statistics?.avg_loss || 1);
@@ -840,7 +839,7 @@ export function TrainingGround() {
                         );
                       })()}
                     </div>
-                    <Fire size={24} className="text-amber-400/20 transition-colors group-hover:text-amber-400/50" />
+                    <Fire size={24} className="text-amber-400/20 transition-colors group-hover:text-amber-400/50 shrink-0" />
                   </div>
                   <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">
                     Gross profit / gross loss
@@ -849,16 +848,16 @@ export function TrainingGround() {
               </div>
 
               {/* Scans Card */}
-              <div className="glass-card p-4 rounded-2xl border-border/50 relative overflow-hidden group">
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-widest uppercase">SCANS</div>
+              <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
+                <div className="relative z-10 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">SCANS</div>
                       <div className="text-xl font-bold font-mono tracking-tight mt-0.5">
                         {status?.statistics?.scans_completed || 0}
                       </div>
                     </div>
-                    <Target size={24} className="text-accent/20 transition-colors group-hover:text-blue-400/50" />
+                    <Target size={24} className="text-accent/20 transition-colors group-hover:text-blue-400/50 shrink-0" />
                   </div>
                   <div className="mt-1.5 text-[10px] text-muted-foreground font-mono opacity-80">
                     <span className="text-blue-400/80">{status?.statistics?.signals_generated || 0} sigs</span>
@@ -869,11 +868,11 @@ export function TrainingGround() {
               </div>
 
               {/* Current Streak */}
-              <div className="glass-card p-4 rounded-2xl border-border/50 relative overflow-hidden group">
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-widest uppercase">STREAK</div>
+              <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
+                <div className="relative z-10 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">STREAK</div>
                       {(() => {
                         // Calculate current streak from trade history
                         let streak = 0;
@@ -898,7 +897,7 @@ export function TrainingGround() {
                         );
                       })()}
                     </div>
-                    <Lightning size={24} className="text-purple-400/20 transition-colors group-hover:text-purple-400/50" />
+                    <Lightning size={24} className="text-purple-400/20 transition-colors group-hover:text-purple-400/50 shrink-0" />
                   </div>
                   <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">
                     Current streak
