@@ -123,18 +123,25 @@ def _calculate_pullback_probability(
                         if rsi < 30:
                             # Already oversold - less room to pull back
                             momentum_score = 0.3
-                            
-                            # BYPASS: If sweeping liquidity OR HTF structure is aligned, soften the penalty
+
+                            # BYPASS: Require a sweep that is within 3 ATR of the entry zone AND
+                            # at least one other confirming factor (htf_aligned or stoch cross).
+                            # A distant/stale sweep alone is not sufficient.
                             sweeps = getattr(smc_snapshot, "liquidity_sweeps", []) if smc_snapshot else []
-                            has_sweep = any(s.sweep_type == "low" for s in sweeps)
+                            has_nearby_sweep = any(
+                                s.sweep_type == "low"
+                                and atr > 0
+                                and abs(getattr(s, "level", entry_zone_mid) - entry_zone_mid) <= 3.0 * atr
+                                for s in sweeps
+                            )
                             htf_aligned = getattr(confluence_breakdown, "htf_aligned", False) if confluence_breakdown else False
-                            
-                            # NEW: Check for bullish momentum cross
                             stoch_cross_up = stoch_k is not None and stoch_d is not None and stoch_k > stoch_d
-                            
-                            if has_sweep or htf_aligned or stoch_cross_up:
-                                logger.info(f"🔄 Pullback Bypass (Long): Oversold RSI {rsi:.1f} but sweep/alignment/momentum-cross detected. Neutralizing penalty.")
-                                momentum_score = 0.6 # Soften penalty if structure favors the move
+
+                            if has_nearby_sweep and (htf_aligned or stoch_cross_up):
+                                logger.info(
+                                    f"🔄 Pullback Bypass (Long): Oversold RSI {rsi:.1f} with nearby sweep + confirmation. Neutralizing penalty."
+                                )
+                                momentum_score = 0.6
                         elif rsi < 45:
                             # Mildly bearish - good for pullback
                             momentum_score = 0.7
@@ -149,18 +156,24 @@ def _calculate_pullback_probability(
                         if rsi > 70:
                             # Already overbought - less room to push up
                             momentum_score = 0.3
-                            
-                            # BYPASS: If sweeping liquidity OR HTF structure is aligned, soften the penalty
+
+                            # BYPASS: Require a sweep that is within 3 ATR of the entry zone AND
+                            # at least one other confirming factor.
                             sweeps = getattr(smc_snapshot, "liquidity_sweeps", []) if smc_snapshot else []
-                            has_sweep = any(s.sweep_type == "high" for s in sweeps)
+                            has_nearby_sweep = any(
+                                s.sweep_type == "high"
+                                and atr > 0
+                                and abs(getattr(s, "level", entry_zone_mid) - entry_zone_mid) <= 3.0 * atr
+                                for s in sweeps
+                            )
                             htf_aligned = getattr(confluence_breakdown, "htf_aligned", False) if confluence_breakdown else False
-                            
-                            # NEW: Check for bearish momentum cross
                             stoch_cross_down = stoch_k is not None and stoch_d is not None and stoch_k < stoch_d
-                            
-                            if has_sweep or htf_aligned or stoch_cross_down:
-                                logger.info(f"🔄 Pullback Bypass (Short): Overbought RSI {rsi:.1f} but sweep/alignment/momentum-cross detected. Neutralizing penalty.")
-                                momentum_score = 0.6 # Soften penalty if structure favors the move
+
+                            if has_nearby_sweep and (htf_aligned or stoch_cross_down):
+                                logger.info(
+                                    f"🔄 Pullback Bypass (Short): Overbought RSI {rsi:.1f} with nearby sweep + confirmation. Neutralizing penalty."
+                                )
+                                momentum_score = 0.6
                         elif rsi > 55:
                             # Mildly bullish - good for push into short zone
                             momentum_score = 0.7
@@ -223,7 +236,9 @@ def _is_in_correct_pd_zone(
 ) -> bool:
     """Check if price is in the correct Premium/Discount zone with tolerance."""
     if not smc_snapshot.premium_discount:
-        return True
+        # No P/D data at all — fail closed when compliance is required via caller check
+        logger.debug("P/D compliance check: no premium_discount data available (fail closed)")
+        return False
 
     # Try specific timeframe, then fallback
     pd_data = smc_snapshot.premium_discount.get(timeframe)
@@ -235,7 +250,8 @@ def _is_in_correct_pd_zone(
                 break
 
     if not pd_data or "equilibrium" not in pd_data:
-        return True
+        logger.debug("P/D compliance check: equilibrium data missing for %s (fail closed)", timeframe)
+        return False
 
     equilibrium = pd_data["equilibrium"]
 
@@ -256,9 +272,9 @@ def _is_in_correct_pd_zone(
 
 
 def _has_sweep_backing(
-    ob: OrderBlock, sweeps: List[LiquiditySweep], lookback_candles: int = 5
+    ob: OrderBlock, sweeps: List[LiquiditySweep], lookback_candles: int = 5, atr: float = 0.0
 ) -> bool:
-    """Check if Order Block was immediately preceded by a liquidity sweep."""
+    """Check if Order Block was immediately preceded by a liquidity sweep at a nearby price level."""
     if not sweeps:
         return False
 
@@ -269,14 +285,6 @@ def _has_sweep_backing(
     if not valid_sweeps:
         return False
 
-    # Get separate timeframe parsing helper if needed, or estimate duration
-    # Simple heuristic: scan recently preceding sweeps
-    # Assuming standard candle durations for timestamp delta check would be robust,
-    # but for now, we'll check if any sweep constitutes a "setup" for this OB.
-    # A Turtle Soup setup implies the OB *formed* from the reversal of the sweep.
-    # So the sweep timestamp should be very close to OB timestamp.
-
-    # Let's use a robust proximity check based on timeframe
     timeframe_minutes = {"1m": 1, "5m": 5, "15m": 15, "1h": 60, "4h": 240, "1d": 1440, "1w": 10080}
     tf_min = timeframe_minutes.get(ob.timeframe.lower(), 60)
     max_delta_sec = tf_min * 60 * lookback_candles
@@ -285,13 +293,22 @@ def _has_sweep_backing(
     gap = (ob_ts - nearest_sweep.timestamp).total_seconds()
 
     if gap <= max_delta_sec:
-        # Also check levels: sweep level should be close to OB
-        # For bullish, sweep low should be near/below OB low
-        # For bearish, sweep high should be near/above OB high
-        if ob.direction == "bullish" and nearest_sweep.sweep_type == "low":
-            return True
-        elif ob.direction == "bearish" and nearest_sweep.sweep_type == "high":
-            return True
+        # Check direction match
+        direction_match = (
+            (ob.direction == "bullish" and nearest_sweep.sweep_type == "low")
+            or (ob.direction == "bearish" and nearest_sweep.sweep_type == "high")
+        )
+        if not direction_match:
+            return False
+
+        # Check price proximity: sweep level should be within 3 ATR of the OB
+        sweep_level = getattr(nearest_sweep, "level", None)
+        if sweep_level is not None and atr > 0:
+            ob_reference = ob.low if ob.direction == "bullish" else ob.high
+            if abs(sweep_level - ob_reference) > 3.0 * atr:
+                return False  # Sweep too far away to be causally related to this OB
+
+        return True
 
     return False
 
@@ -416,11 +433,20 @@ def _find_nested_entry_ob(
 
         for trigger_ob in trigger_obs:
             # Check if trigger is INSIDE the zone (nested)
-            is_nested = trigger_ob.low >= zone_ob.low - (
-                0.1 * atr
-            ) and trigger_ob.high <= zone_ob.high + (  # Small tolerance
-                0.1 * atr
-            )
+            # Tolerance is directional: for longs (bullish) allow trigger low to spill slightly
+            # below zone low, but NOT above zone high (entry must stay within the zone).
+            # For shorts (bearish) allow trigger high to spill slightly above zone high, but
+            # NOT below zone low.
+            if is_bullish:
+                is_nested = (
+                    trigger_ob.low >= zone_ob.low - 0.1 * atr  # small spill below allowed
+                    and trigger_ob.high <= zone_ob.high         # must not exceed zone top
+                )
+            else:
+                is_nested = (
+                    trigger_ob.low >= zone_ob.low               # must not go below zone bottom
+                    and trigger_ob.high <= zone_ob.high + 0.1 * atr  # small spill above allowed
+                )
 
             if not is_nested:
                 continue
@@ -504,12 +530,12 @@ def _calculate_entry_zone(
     Returns:
         Tuple of (EntryZone, used_structure_flag)
     """
-    logger.critical(
+    logger.debug(
         f"_calculate_entry_zone CALLED: is_bullish={is_bullish}, current_price={current_price}, atr={atr}, num_obs={len(smc_snapshot.order_blocks)}, num_fvgs={len(smc_snapshot.fvgs)}"
     )
     # DEBUG: Log all OB details before filtering
     for ob in smc_snapshot.order_blocks:
-        logger.critical(
+        logger.debug(
             f"  OB: dir={ob.direction} tf={ob.timeframe} low={ob.low:.2f} high={ob.high:.2f}"
         )
 
@@ -610,17 +636,16 @@ def _calculate_entry_zone(
         obs = [ob for ob in obs if (max(0.0, current_price - ob.high) / atr) <= max_pullback_atr]
         # Filter out heavily mitigated OBs
         obs = [ob for ob in obs if ob.mitigation_level <= planner_cfg.ob_mitigation_max]
-        # Validate OB integrity (not broken / not currently tapped)
+        # Validate OB integrity using full breach + in-zone test
         if multi_tf_data and primary_tf in getattr(multi_tf_data, "timeframes", {}):
             df_primary = multi_tf_data.timeframes[primary_tf]
             validated = []
             for ob in obs:
-                # Ensure price hasn't broken the OB
-                if current_price >= ob.low:
+                if _is_order_block_valid(ob, df_primary, current_price):
                     validated.append(ob)
                 else:
                     logger.debug(
-                        f"Filtered invalid bullish OB (broken or tapped): low={ob.low} high={ob.high} ts={ob.timestamp}"
+                        f"Filtered invalid bullish OB (broken or currently tapped): low={ob.low} high={ob.high} ts={ob.timestamp}"
                     )
             obs = validated
 
@@ -647,12 +672,17 @@ def _calculate_entry_zone(
             for ob in obs:
                 if ob.timeframe in ltf_tfs:
                     # Check for overlapping HTF structure (OB or FVG)
+                    # HTF structure must itself be fresh and unmitigated to count as valid backing
                     has_backing = False
 
-                    # Check OBs
+                    # Check OBs — require freshness > 0.4 and mitigation < 0.5
                     for htf_ob in smc_snapshot.order_blocks:
-                        if htf_ob.timeframe in htf_tfs and htf_ob.direction == "bullish":
-                            # Check overlap: LTF OB inside or touching HTF OB
+                        if (
+                            htf_ob.timeframe in htf_tfs
+                            and htf_ob.direction == "bullish"
+                            and getattr(htf_ob, "freshness_score", 1.0) > 0.4
+                            and getattr(htf_ob, "mitigation_level", 0.0) < 0.5
+                        ):
                             if htf_ob.low <= ob.high and htf_ob.high >= ob.low:
                                 has_backing = True
                                 break
@@ -671,15 +701,17 @@ def _calculate_entry_zone(
                         validated_backing.append(ob)
                     else:
                         logger.debug(
-                            f"Filtered isolated LTF OB (no HTF backing): {ob.timeframe} at {ob.low}"
+                            f"Filtered isolated LTF OB (no valid HTF backing): {ob.timeframe} at {ob.low}"
                         )
                 else:
                     # MTF/HTF OBs are self-validating or handled by structure scoring
                     validated_backing.append(ob)
             obs = validated_backing
 
-        # Prefer higher timeframe / freshness / displacement / low mitigation
+        # Prefer higher timeframe / freshness / displacement / low mitigation / recency
         tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
+        # Max expected age per TF before applying staleness penalty (hours)
+        tf_max_age_hours = {"1m": 2, "5m": 8, "15m": 24, "1h": 72, "4h": 168, "1d": 720}
 
         def _ob_score(ob: OrderBlock) -> float:
             base_score = ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
@@ -688,14 +720,24 @@ def _calculate_entry_zone(
             )
             mitigation_penalty = 1.0 - min(ob.mitigation_level, 1.0)
 
+            # Age penalty: reduce score for OBs not recently touched
+            _df = (
+                multi_tf_data.timeframes.get(ob.timeframe)
+                if multi_tf_data and hasattr(multi_tf_data, "timeframes")
+                else None
+            )
+            hours_since_touch = _time_since_last_touch(ob, _df) if _df is not None else 0.0
+            max_age = tf_max_age_hours.get(ob.timeframe, 168)
+            age_factor = max(0.5, 1.0 - (hours_since_touch / max_age) * 0.5) if hours_since_touch != float("inf") else 0.5
+
             # Smart Entry: Sweep Boost
             sweep_boost = 1.0
             if _has_sweep_backing(
-                ob, smc_snapshot.liquidity_sweeps, planner_cfg.sweep_lookback_candles
+                ob, smc_snapshot.liquidity_sweeps, planner_cfg.sweep_lookback_candles, atr=atr
             ):
                 sweep_boost = planner_cfg.sweep_backing_boost
 
-            return base_score * displacement_factor * mitigation_penalty * sweep_boost
+            return base_score * displacement_factor * mitigation_penalty * age_factor * sweep_boost
 
         fvgs = [
             fvg
@@ -723,7 +765,7 @@ def _calculate_entry_zone(
                     f"PD Gate (Long): Filtered {pre_pd_count - len(fvgs)} Bullish FVGs in Premium"
                 )
 
-        logger.critical(
+        logger.debug(
             f"Bullish entry zone: found {len(obs)} OBs and {len(fvgs)} FVGs below current price"
         )
 
@@ -733,13 +775,13 @@ def _calculate_entry_zone(
 
             # Log sweep boost if active
             if _has_sweep_backing(
-                best_ob, smc_snapshot.liquidity_sweeps, planner_cfg.sweep_lookback_candles
+                best_ob, smc_snapshot.liquidity_sweeps, planner_cfg.sweep_lookback_candles, atr=atr
             ):
                 logger.info(
                     f"🐢 TURTLE SOUP: Bullish Entry OB {best_ob.timeframe} backed by liquidity sweep (Score Boosted {planner_cfg.sweep_backing_boost}x)"
                 )
             entry_tf_used = best_ob.timeframe  # Track for metadata
-            logger.critical(
+            logger.debug(
                 f"ENTRY ZONE: Using bullish OB - high={best_ob.high}, low={best_ob.low}, ATR={atr}, TF={entry_tf_used}"
             )
 
@@ -791,7 +833,10 @@ def _calculate_entry_zone(
                     price_inside_ob,
                 )
                 near_entry = current_price  # Allow entry at current price
-                far_entry = min(far_entry, near_entry)  # FIX: Prevent inversion
+                # Preserve far_entry depth into the OB — do NOT clamp it to near_entry.
+                # far_entry is the deeper limit order level; collapsing it to near_entry
+                # would make the zone a single point and break split-order logic.
+                far_entry = min(far_entry, current_price)  # Only prevent far > near (inversion)
 
             logger.info(
                 "📦 ENTRY ZONE CALC: OB=[%.2f-%.2f] | offset=%.2f (base=%.2f * htf=%.2f * atr=%.2f) | near=%.2f, far=%.2f | price=%.2f",
@@ -825,15 +870,33 @@ def _calculate_entry_zone(
                 smc_snapshot=smc_snapshot,
                 confluence_breakdown=confluence_breakdown,
             )
-            return entry_zone, used_structure
+            if entry_zone.pullback_probability < planner_cfg.min_pullback_probability:  # type: ignore
+                logger.info(
+                    "❌ ENTRY REJECTED: Pullback probability %.2f below minimum %.2f (bullish OB %s @ %.2f-%.2f)",
+                    entry_zone.pullback_probability,  # type: ignore
+                    planner_cfg.min_pullback_probability,
+                    best_ob.timeframe,
+                    best_ob.low,
+                    best_ob.high,
+                )
+                obs = []  # Fall through to FVG or fallback
+            else:
+                return entry_zone, used_structure
 
         elif fvgs:
-            # Use nearest unfilled FVG (filter by overlap threshold)
-            best_fvg = min(
-                [fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max],
-                key=lambda fvg: abs(fvg.top - current_price),
-                default=fvgs[0],
-            )
+            # Score FVGs by freshness × TF weight (mirrors OB scoring).
+            # Fallback to least-overlapped if all exceed threshold — never use fvgs[0] blindly.
+            _fvg_tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
+            _valid_fvgs = [fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max]
+            if _valid_fvgs:
+                best_fvg = max(
+                    _valid_fvgs,
+                    key=lambda fvg: getattr(fvg, "freshness_score", 0.5) * _fvg_tf_weight.get(fvg.timeframe, 1.0),
+                )
+            else:
+                # All FVGs exceed overlap threshold — pick least-overlapped as last resort
+                logger.debug("Bullish FVG: all candidates exceed overlap threshold, using least-overlapped")
+                best_fvg = min(fvgs, key=lambda fvg: fvg.overlap_with_price)
             entry_tf_used = best_fvg.timeframe  # Track for metadata
 
             if indicators:
@@ -879,7 +942,7 @@ def _calculate_entry_zone(
                     current_price,
                 )
                 near_entry = current_price
-                far_entry = min(far_entry, near_entry)  # FIX: Prevent inversion
+                far_entry = min(far_entry, current_price)  # Preserve depth; only prevent far > near
 
             rationale = f"Entry zone based on {best_fvg.timeframe} bullish FVG"
             used_structure = True
@@ -896,7 +959,15 @@ def _calculate_entry_zone(
                 smc_snapshot=smc_snapshot,
                 confluence_breakdown=confluence_breakdown,
             )
-            return entry_zone, used_structure
+            if entry_zone.pullback_probability < planner_cfg.min_pullback_probability:  # type: ignore
+                logger.info(
+                    "❌ ENTRY REJECTED: Pullback probability %.2f below minimum %.2f (bullish FVG %s)",
+                    entry_zone.pullback_probability,  # type: ignore
+                    planner_cfg.min_pullback_probability,
+                    best_fvg.timeframe,
+                )
+            else:
+                return entry_zone, used_structure
 
         # NEW: Check for trend continuation entry (consolidation breakout)
         if planner_cfg.enable_trend_continuation:
@@ -959,12 +1030,11 @@ def _calculate_entry_zone(
             df_primary = multi_tf_data.timeframes[primary_tf]
             validated = []
             for ob in obs:
-                # Ensure price hasn't broken the OB
-                if current_price <= ob.high:
+                if _is_order_block_valid(ob, df_primary, current_price):
                     validated.append(ob)
                 else:
                     logger.debug(
-                        f"Filtered invalid bearish OB (broken): low={ob.low} high={ob.high}"
+                        f"Filtered invalid bearish OB (broken or currently tapped): low={ob.low} high={ob.high}"
                     )
             obs = validated
 
@@ -981,10 +1051,16 @@ def _calculate_entry_zone(
             for ob in obs:
                 if ob.timeframe in ltf_tfs:
                     # Check for overlapping HTF structure (OB or FVG)
+                    # HTF structure must itself be fresh and unmitigated to count as valid backing
                     has_backing = False
-                    # Check OBs
+                    # Check OBs — require freshness > 0.4 and mitigation < 0.5
                     for htf_ob in smc_snapshot.order_blocks:
-                        if htf_ob.timeframe in htf_tfs and htf_ob.direction == "bearish":
+                        if (
+                            htf_ob.timeframe in htf_tfs
+                            and htf_ob.direction == "bearish"
+                            and getattr(htf_ob, "freshness_score", 1.0) > 0.4
+                            and getattr(htf_ob, "mitigation_level", 0.0) < 0.5
+                        ):
                             if htf_ob.low <= ob.high and htf_ob.high >= ob.low:
                                 has_backing = True
                                 break
@@ -999,11 +1075,16 @@ def _calculate_entry_zone(
                                     break
                     if has_backing:
                         validated_backing.append(ob)
+                    else:
+                        logger.debug(
+                            f"Filtered isolated LTF OB (no valid HTF backing): {ob.timeframe} at {ob.high}"
+                        )
                 else:
                     validated_backing.append(ob)
             obs = validated_backing
 
         tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
+        tf_max_age_hours = {"1m": 2, "5m": 8, "15m": 24, "1h": 72, "4h": 168, "1d": 720}
 
         def _ob_score_bearish(ob: OrderBlock) -> float:
             base_score = ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
@@ -1012,14 +1093,24 @@ def _calculate_entry_zone(
             )
             mitigation_penalty = 1.0 - min(ob.mitigation_level, 1.0)
 
+            # Age penalty: reduce score for OBs not recently touched
+            _df = (
+                multi_tf_data.timeframes.get(ob.timeframe)
+                if multi_tf_data and hasattr(multi_tf_data, "timeframes")
+                else None
+            )
+            hours_since_touch = _time_since_last_touch(ob, _df) if _df is not None else 0.0
+            max_age = tf_max_age_hours.get(ob.timeframe, 168)
+            age_factor = max(0.5, 1.0 - (hours_since_touch / max_age) * 0.5) if hours_since_touch != float("inf") else 0.5
+
             # Smart Entry: Sweep Boost
             sweep_boost = 1.0
             if _has_sweep_backing(
-                ob, smc_snapshot.liquidity_sweeps, planner_cfg.sweep_lookback_candles
+                ob, smc_snapshot.liquidity_sweeps, planner_cfg.sweep_lookback_candles, atr=atr
             ):
                 sweep_boost = planner_cfg.sweep_backing_boost
 
-            return base_score * displacement_factor * mitigation_penalty * sweep_boost
+            return base_score * displacement_factor * mitigation_penalty * age_factor * sweep_boost
 
         fvgs = [
             fvg
@@ -1046,7 +1137,7 @@ def _calculate_entry_zone(
                     f"PD Gate (Short): Filtered {pre_pd_count - len(fvgs)} Bearish FVGs in Discount"
                 )
 
-        logger.critical(
+        logger.debug(
             f"Bearish entry zone: found {len(obs)} OBs and {len(fvgs)} FVGs above current price"
         )
 
@@ -1055,13 +1146,13 @@ def _calculate_entry_zone(
 
             # Log sweep boost
             if _has_sweep_backing(
-                best_ob, smc_snapshot.liquidity_sweeps, planner_cfg.sweep_lookback_candles
+                best_ob, smc_snapshot.liquidity_sweeps, planner_cfg.sweep_lookback_candles, atr=atr
             ):
                 logger.info(
                     f"🐢 TURTLE SOUP: Bearish Entry OB {best_ob.timeframe} backed by liquidity sweep (Score Boosted {planner_cfg.sweep_backing_boost}x)"
                 )
             entry_tf_used = best_ob.timeframe  # Track for metadata
-            logger.critical(
+            logger.debug(
                 f"ENTRY ZONE: Using bearish OB - high={best_ob.high}, low={best_ob.low}, ATR={atr}, TF={entry_tf_used}"
             )
             # Calculate regime-aware base offset
@@ -1110,7 +1201,7 @@ def _calculate_entry_zone(
                     price_inside_ob,
                 )
                 near_entry = current_price
-                far_entry = max(far_entry, near_entry)  # FIX: Prevent inversion for shorts
+                far_entry = max(far_entry, current_price)  # Preserve depth; only prevent far < near
 
             logger.info(
                 "📦 ENTRY ZONE CALC: OB=[%.2f-%.2f] | offset=%.2f (base=%.2f * htf=%.2f * atr=%.2f) | near=%.2f, far=%.2f | price=%.2f",
@@ -1143,14 +1234,31 @@ def _calculate_entry_zone(
                 smc_snapshot=smc_snapshot,
                 confluence_breakdown=confluence_breakdown,
             )
-            return entry_zone, used_structure
+            if entry_zone.pullback_probability < planner_cfg.min_pullback_probability:  # type: ignore
+                logger.info(
+                    "❌ ENTRY REJECTED: Pullback probability %.2f below minimum %.2f (bearish OB %s @ %.2f-%.2f)",
+                    entry_zone.pullback_probability,  # type: ignore
+                    planner_cfg.min_pullback_probability,
+                    best_ob.timeframe,
+                    best_ob.low,
+                    best_ob.high,
+                )
+                obs = []  # Fall through to FVG or fallback
+            else:
+                return entry_zone, used_structure
 
         elif fvgs:
-            best_fvg = min(
-                [fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max],
-                key=lambda fvg: abs(fvg.bottom - current_price),
-                default=fvgs[0],
-            )
+            # Score FVGs by freshness × TF weight — never use fvgs[0] blindly
+            _fvg_tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
+            _valid_fvgs = [fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max]
+            if _valid_fvgs:
+                best_fvg = max(
+                    _valid_fvgs,
+                    key=lambda fvg: getattr(fvg, "freshness_score", 0.5) * _fvg_tf_weight.get(fvg.timeframe, 1.0),
+                )
+            else:
+                logger.debug("Bearish FVG: all candidates exceed overlap threshold, using least-overlapped")
+                best_fvg = min(fvgs, key=lambda fvg: fvg.overlap_with_price)
             entry_tf_used = best_fvg.timeframe  # Track for metadata
 
             if indicators:
@@ -1193,7 +1301,7 @@ def _calculate_entry_zone(
                     current_price,
                 )
                 near_entry = current_price
-                far_entry = max(far_entry, near_entry)  # FIX: Prevent inversion for shorts
+                far_entry = max(far_entry, current_price)  # Preserve depth; only prevent far < near
 
             rationale = f"Entry zone based on {best_fvg.timeframe} bearish FVG"
             used_structure = True
@@ -1210,7 +1318,15 @@ def _calculate_entry_zone(
                 smc_snapshot=smc_snapshot,
                 confluence_breakdown=confluence_breakdown,
             )
-            return entry_zone, used_structure
+            if entry_zone.pullback_probability < planner_cfg.min_pullback_probability:  # type: ignore
+                logger.info(
+                    "❌ ENTRY REJECTED: Pullback probability %.2f below minimum %.2f (bearish FVG %s)",
+                    entry_zone.pullback_probability,  # type: ignore
+                    planner_cfg.min_pullback_probability,
+                    best_fvg.timeframe,
+                )
+            else:
+                return entry_zone, used_structure
 
         # NEW: Check for trend continuation entry (consolidation breakout)
         if planner_cfg.enable_trend_continuation:

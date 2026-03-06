@@ -347,6 +347,7 @@ class Orchestrator:
         )
 
         # Detect global market regime from pre-fetched BTC data (no duplicate API call)
+        self._regime_blocked = False
         try:
             btc_data = prefetched_data.get("BTC/USDT")
             self.current_regime = self._detect_global_regime(prefetched_btc_data=btc_data)
@@ -372,10 +373,11 @@ class Orchestrator:
                 # Check regime gate for mode
                 if self.current_regime.score < self.regime_policy.min_regime_score:
                     logger.warning(
-                        "⚠️ Regime score %.1f below mode minimum %.1f - signals may be limited",
+                        "🚫 Regime score %.1f below mode minimum %.1f - scanning BLOCKED",
                         self.current_regime.score,
                         self.regime_policy.min_regime_score,
                     )
+                    self._regime_blocked = True
         except Exception as e:
             logger.warning("Regime detection failed: %s - continuing without regime context", e)
             self.current_regime = None
@@ -430,6 +432,14 @@ class Orchestrator:
 
         # This list will store the results (TradePlan or None, and rejection_info)
         processed_symbol_results = []
+
+        if self._regime_blocked:
+            logger.warning(
+                "🚫 Regime gate BLOCKED all symbol processing (%d symbols skipped)",
+                len(symbols),
+            )
+            self._progress("REGIME_BLOCKED", {"symbols_skipped": len(symbols)})
+            symbols = []  # Skip all symbol processing
 
         with ThreadPoolExecutor(max_workers=self.concurrency_workers) as executor:
             # Submit all tasks
@@ -2890,7 +2900,7 @@ class Orchestrator:
         Returns:
             None if no cooldown active, or rejection dict with reason
         """
-        if not (cooldown_info := self.cooldown_manager.is_active(symbol, proposed_direction)):
+        if not (cooldown_info := self.cooldown_manager.is_active(symbol, proposed_direction, current_price=current_price)):
             return None
 
         expires_at = cooldown_info["expires_at"]

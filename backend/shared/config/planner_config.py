@@ -66,6 +66,9 @@ class PlannerConfig:
         0.3  # Minimum factor when right on HTF level (0.3 = 30% of base offset)
     )
 
+    # Pullback probability gate
+    min_pullback_probability: float = 0.35  # Reject entry zones unlikely to be reached
+
     # FVG filtering
     fvg_overlap_max: float = 0.5  # Discard FVGs with overlap >= 50%
 

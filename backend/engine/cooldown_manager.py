@@ -105,12 +105,24 @@ class CooldownManager:
         except Exception as e:
             logger.error("Failed to save cooldowns: %s", e)
 
-    def is_active(self, symbol: str, direction: str) -> Optional[Dict[str, Any]]:
+    def is_active(
+        self,
+        symbol: str,
+        direction: str,
+        current_price: float = 0.0,
+        price_move_pct_threshold: float = 0.08,
+    ) -> Optional[Dict[str, Any]]:
         """
         Check if cooldown is active.
 
+        Supports early release when price has moved far enough from the stop-out price
+        to represent a genuinely new setup. A cooldown is lifted early if current price
+        has moved more than `price_move_pct_threshold` (default 8%) away from the stop price
+        in the favorable direction (i.e., price dropped 8%+ for a LONG cooldown after a stop,
+        indicating a structurally different entry level now exists).
+
         Returns:
-            Dict with cooldown info if active, None otherwise.
+            Dict with cooldown info if still active, None if expired or early-released.
         """
         with self._lock:
             if symbol not in self._cooldowns:
@@ -120,15 +132,33 @@ class CooldownManager:
             if not info:
                 return None
 
-            if info["expires_at"] > datetime.now(timezone.utc):
-                return info
-            else:
-                # Expired - clean up immediately
+            if info["expires_at"] <= datetime.now(timezone.utc):
+                # Time-expired - clean up immediately
                 del self._cooldowns[symbol][direction]
                 if not self._cooldowns[symbol]:
                     del self._cooldowns[symbol]
-                # We don't save immediately on read to avoid excessive IO
                 return None
+
+            # Price-distance early release check
+            stop_price = info.get("price", 0.0)
+            if current_price > 0 and stop_price > 0 and price_move_pct_threshold > 0:
+                pct_move = abs(current_price - stop_price) / stop_price
+                if pct_move >= price_move_pct_threshold:
+                    # Price has moved far enough — the setup is structurally different now
+                    logger.info(
+                        "🔓 Cooldown EARLY RELEASE: %s %s | Price moved %.1f%% from stop %.4f (threshold %.0f%%)",
+                        symbol,
+                        direction,
+                        pct_move * 100,
+                        stop_price,
+                        price_move_pct_threshold * 100,
+                    )
+                    del self._cooldowns[symbol][direction]
+                    if not self._cooldowns[symbol]:
+                        del self._cooldowns[symbol]
+                    return None
+
+            return info
 
     def add_cooldown(
         self,
