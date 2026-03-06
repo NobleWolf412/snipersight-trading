@@ -196,14 +196,12 @@ class ConfluenceService:
                 )
 
             else:
-                # Gap is within margin - but check THRESHOLD-BASED tiebreaker first
-                # If one direction passes threshold and the other fails, accept the passing one
+                # Gap is within margin — but check THRESHOLD-BASED tiebreaker first
                 min_threshold = getattr(self._config, "min_confluence_score", 70.0)
                 bullish_passes = bullish_breakdown.total_score >= min_threshold
                 bearish_passes = bearish_breakdown.total_score >= min_threshold
-                
+
                 if bullish_passes and not bearish_passes:
-                    # Bullish passes threshold, bearish fails - clear winner
                     chosen = bullish_breakdown
                     chosen_direction = "LONG"
                     tie_break_used = "threshold_pass"
@@ -215,7 +213,6 @@ class ConfluenceService:
                         bearish_breakdown.total_score,
                     )
                 elif bearish_passes and not bullish_passes:
-                    # Bearish passes threshold, bullish fails - clear winner
                     chosen = bearish_breakdown
                     chosen_direction = "SHORT"
                     tie_break_used = "threshold_pass"
@@ -227,11 +224,34 @@ class ConfluenceService:
                         bullish_breakdown.total_score,
                     )
                 else:
-                    # Both pass or both fail - use regime trend as tie-breaker
+                    # Both pass or both fail — check volatility before using regime trend
                     symbol_regime = context.metadata.get("symbol_regime")
+                    volatility = (
+                        getattr(symbol_regime, "volatility", "normal") if symbol_regime else "normal"
+                    )
                     regime_trend = (
                         getattr(symbol_regime, "trend", "neutral") if symbol_regime else "neutral"
                     )
+
+                    # Bug Fix: In compressed volatility, regime trend tie-breaker is
+                    # unreliable — the spring hasn't released yet. Skip instead of
+                    # forcing directional bias into a coil market.
+                    if volatility == "compressed":
+                        logger.info(
+                            "🚧 %s Compressed volatility tie — skipping (no directional edge in coil market)",
+                            context.symbol,
+                        )
+                        context.metadata["chosen_direction"] = None
+                        context.metadata["alt_confluence"] = {
+                            "long": bullish_breakdown.total_score,
+                            "short": bearish_breakdown.total_score,
+                            "tie_break_used": "skipped_compressed_volatility",
+                        }
+                        raise ConflictingDirectionsException(
+                            f"Compressed volatility tie ({bullish_breakdown.total_score:.1f}%): no directional edge in coiling market",
+                            bullish_breakdown=bullish_breakdown,
+                            bearish_breakdown=bearish_breakdown,
+                        )
 
                     if regime_trend == "bearish":
                         chosen = bearish_breakdown
@@ -436,6 +456,66 @@ class ConfluenceService:
 
             # CRITICAL: Store chosen direction in context for downstream use
             context.metadata["chosen_direction"] = chosen_direction
+
+            # === COUNTER-HTF GATE (Bug Fix) ===
+            # If the winning direction is NOT aligned with the HTF trend, require a
+            # confirmed Institutional Sequence (Sweep → CHoCH → OB) before allowing
+            # the trade through. Without confirmation, the setup has too high a failure
+            # probability to trade as a full swing.
+            #
+            # With confirmation: tag as counter_htf_scalp so the planner downgrades
+            # the trade to a single-target scalp to the nearest HTF S/R level.
+            if not chosen.htf_aligned:
+                smc = context.smc_snapshot
+                direction_normalized = chosen_direction.upper()
+                is_long = direction_normalized == "LONG"
+
+                # Check sweep of correct liquidity (lows for LONG, highs for SHORT)
+                target_sweep_type = "low" if is_long else "high"
+                has_confirmed_sweep = any(
+                    getattr(s, "confirmation_level", 1 if s.confirmation else 0) >= 1
+                    for s in smc.liquidity_sweeps
+                    if s.sweep_type == target_sweep_type
+                )
+
+                # Check structural break in trade direction post-sweep
+                target_break_dir = "bullish" if is_long else "bearish"
+                has_structure_shift = any(
+                    b.break_type in ("CHoCH", "BOS")
+                    and getattr(b, "direction", "") == target_break_dir
+                    for b in smc.structural_breaks
+                )
+
+                # Check order block with meaningful score
+                ob_factor = next((f for f in chosen.factors if f.name == "Order Block"), None)
+                has_ob = ob_factor is not None and ob_factor.score >= 50
+
+                inst_seq_confirmed = has_confirmed_sweep and has_structure_shift and has_ob
+
+                if not inst_seq_confirmed:
+                    logger.info(
+                        "🚫 %s Counter-HTF REJECTED — no Institutional Sequence "
+                        "(Sweep=%s, CHoCH/BOS=%s, OB=%s). "
+                        "Trade is against HTF trend without reversal confirmation.",
+                        context.symbol, has_confirmed_sweep, has_structure_shift, has_ob,
+                    )
+                    context.metadata["chosen_direction"] = None
+                    raise ConflictingDirectionsException(
+                        f"{context.symbol}: Counter-HTF trade blocked — "
+                        f"no confirmed Sweep→CHoCH/BOS→OB sequence "
+                        f"(Sweep={has_confirmed_sweep}, Shift={has_structure_shift}, OB={has_ob})",
+                        bullish_breakdown=bullish_breakdown,
+                        bearish_breakdown=bearish_breakdown,
+                    )
+                else:
+                    # Institutional sequence confirmed but still counter-HTF.
+                    # Downgrade to a quick scalp targeting the nearest HTF S/R.
+                    context.metadata["counter_htf_scalp"] = True
+                    logger.info(
+                        "🔀 %s Counter-HTF scalp approved — Inst. sequence confirmed "
+                        "(Sweep→CHoCH/BOS→OB). Downgrading to HTF-level scalp.",
+                        context.symbol,
+                    )
 
             # Store alt scores for analytics/debugging
             context.metadata["alt_confluence"] = {

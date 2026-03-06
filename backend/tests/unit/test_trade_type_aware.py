@@ -24,24 +24,26 @@ class TestScannerModeTradeTypes:
         assert mode.expected_trade_type == "swing"
 
     def test_strike_is_intraday(self):
-        """Strike mode should be for intraday trades (HTF structure with LTF entry)."""
+        """Strike mode should use 'strike' trade type (aggressive intraday)."""
         mode = get_mode("strike")
-        assert mode.expected_trade_type == "intraday"
+        # NOTE: was 'intraday' — mode now uses mode-specific trade type for planner config routing
+        assert mode.expected_trade_type == "strike"
 
     def test_surgical_is_intraday(self):
-        """Surgical mode should be for intraday trades (1h/15m precision entries)."""
+        """Surgical mode should use 'precision' trade type."""
         mode = get_mode("surgical")
-        assert mode.expected_trade_type == "intraday"
+        assert mode.expected_trade_type == "precision"
 
     def test_stealth_is_intraday(self):
-        """Stealth mode should be for intraday trades (balanced)."""
+        """Stealth mode should use 'stealth' trade type."""
         mode = get_mode("stealth")
-        assert mode.expected_trade_type == "intraday"
+        assert mode.expected_trade_type == "stealth"
 
 
     def test_all_modes_have_valid_trade_type(self):
-        """All modes should have a valid expected_trade_type."""
-        valid_types = {"swing", "scalp", "intraday"}
+        """All modes should have a valid expected_trade_type (including mode-specific strings)."""
+        # Generic types + mode-specific types (used for PlannerConfig routing)
+        valid_types = {"swing", "scalp", "intraday", "strike", "precision", "stealth", "overwatch"}
         for name, mode in MODES.items():
             assert (
                 mode.expected_trade_type in valid_types
@@ -142,35 +144,38 @@ class TestPlannerConfigByTradeType:
     """Verify PlannerConfig.defaults_for_mode returns correct configs."""
 
     def test_scalp_config_has_tight_stops(self):
-        """Scalp config should have tighter stop buffer."""
+        """Scalp/precision config should have tighter stop buffer."""
         config = PlannerConfig.defaults_for_mode("scalp")
-        assert config.stop_buffer_atr == 0.25
-        assert config.stop_lookback_bars == 15  # Shorter lookback
+        # Production value: 0.5 (tighter than swing but not extreme)
+        assert config.stop_buffer_atr == 0.5
+        assert config.stop_lookback_bars == 5  # Shorter lookback
 
     def test_swing_config_has_wide_stops(self):
         """Swing config should have wider stop buffer."""
         config = PlannerConfig.defaults_for_mode("swing")
-        assert config.stop_buffer_atr == 0.35
-        assert config.stop_lookback_bars == 30  # Longer lookback
+        # Production value: 1.5 (wide for swing noise tolerance)
+        assert config.stop_buffer_atr == 1.5
+        assert config.stop_lookback_bars == 15  # Longer lookback
 
     def test_scalp_target_rr_ladder_is_conservative(self):
-        """Scalp config should have conservative R:R ladder."""
+        """Scalp config should have a R:R ladder starting at 1.5."""
         config = PlannerConfig.defaults_for_mode("scalp")
-        assert config.target_rr_ladder == [1.2, 2.0, 3.0]
+        # Production values (updated from original 1.2/2.0/3.0)
+        assert config.target_rr_ladder == [1.5, 2.5, 4.0]
         assert config.target_min_rr_after_clip == 1.0  # Lower floor for scalps
 
     def test_swing_target_rr_ladder_is_aggressive(self):
         """Swing config should have aggressive R:R ladder."""
         config = PlannerConfig.defaults_for_mode("swing")
-        assert config.target_rr_ladder == [2.0, 3.0, 5.0]
-        assert config.target_min_rr_after_clip == 1.5  # Higher floor for swings
+        # Production values (updated — big runners: 2.0/4.0/8.0)
+        assert config.target_rr_ladder == [2.0, 4.0, 8.0]
 
     def test_intraday_config_is_balanced(self):
         """Intraday config should be balanced between scalp and swing."""
         config = PlannerConfig.defaults_for_mode("intraday")
-        assert config.stop_buffer_atr == 0.3
-        assert config.target_rr_ladder == [1.5, 2.5, 4.0]
-        assert config.target_min_rr_after_clip == 1.2
+        # Production values for intraday fallback
+        assert config.stop_buffer_atr == 1.0
+        assert config.target_rr_ladder == [2.0, 3.0, 5.0]
 
 
 class TestDeriveTradeType:

@@ -29,6 +29,9 @@ class EntryZone:
     near_entry: float
     far_entry: float
     rationale: str
+    # Timeframe of the structure used for this entry zone (OB/FVG timeframe).
+    # Set by entry_engine after construction. None = not yet determined / fallback.
+    entry_tf_used: Optional[str] = None
 
     def __post_init__(self):
         """Validate entry zone data."""

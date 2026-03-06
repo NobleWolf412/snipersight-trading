@@ -22,7 +22,7 @@ from backend.shared.models.scoring import ConfluenceBreakdown
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.planner_config import PlannerConfig
 from backend.bot.telemetry.logger import get_telemetry_logger
-from backend.bot.telemetry.events import create_signal_rejected_event
+from backend.bot.telemetry.events import create_signal_rejected_event, create_alt_stop_suggested_event
 
 # Engine Imports
 from backend.strategy.planner.entry_engine import _calculate_entry_zone, _map_setup_to_archetype
@@ -70,6 +70,64 @@ def get_trade_label_for_mode(mode: str) -> str:
     """Get trader-friendly trade label based on scanner mode or profile."""
     mode_lower = (mode or "stealth").lower()
     return MODE_TO_TRADE_LABEL.get(mode_lower, "Swing Trade")  # Default to Swing
+
+
+def _calculate_liquidation_metadata(
+    is_bullish: bool,
+    near_entry: float,
+    stop_level: float,
+    leverage: float,
+    mmr: float = 0.004,
+) -> dict:
+    """
+    Estimate approximate liquidation price and cushion from entry.
+
+    Used to identify high-liquidation-risk plans and suggest alternative stops.
+
+    Args:
+        is_bullish: Trade direction
+        near_entry: Entry price
+        stop_level: Planned stop loss level
+        leverage: Position leverage (e.g., 5.0 for 5x)
+        mmr: Maintenance Margin Rate (default 0.4%)
+
+    Returns:
+        dict with approx_liq_price, cushion_pct, risk_band, etc.
+    """
+    try:
+        if leverage <= 0:
+            leverage = 1.0
+        # Simplified liq price: entry ± (1/leverage - mmr) * entry
+        margin_buffer = (1.0 / leverage) - mmr
+        if is_bullish:
+            liq_price = near_entry * (1.0 - margin_buffer)
+            cushion_pct = ((stop_level - liq_price) / near_entry) * 100
+        else:
+            liq_price = near_entry * (1.0 + margin_buffer)
+            cushion_pct = ((liq_price - stop_level) / near_entry) * 100
+
+        if cushion_pct >= 50:
+            risk_band = "comfortable"
+        elif cushion_pct >= 30:
+            risk_band = "moderate"
+        else:
+            risk_band = "high"
+
+        return {
+            "assumed_mmr": mmr,
+            "approx_liq_price": round(liq_price, 6),
+            "cushion_pct": round(cushion_pct, 2),
+            "risk_band": risk_band,
+            "direction": "long" if is_bullish else "short",
+        }
+    except Exception:
+        return {
+            "assumed_mmr": mmr,
+            "approx_liq_price": near_entry * (0.85 if is_bullish else 1.15),
+            "cushion_pct": 50.0,
+            "risk_band": "comfortable",
+            "direction": "long" if is_bullish else "short",
+        }
 
 
 def generate_trade_plan(
@@ -607,7 +665,7 @@ def generate_trade_plan(
         # Attach metadata
         plan.metadata = {
             "archetype": archetype,
-            "atr_regime": regime_label,
+            "atr_regime": {"label": regime_label},
             "leverage": leverage,
             "leverage_stop_adjustment": liq_meta if was_liq_adjusted else scale_meta if scale_meta else None,
             "target_adjustment": target_adj_meta,
@@ -632,6 +690,56 @@ def generate_trade_plan(
                 "ob_mitigation": getattr(entry_zone, "ob_mitigation", 0.0),  # 0.0-1.0
             },
         }
+
+        # === LIQUIDATION RISK ASSESSMENT ===
+        # Check if stop is dangerously close to liquidation price and suggest alternative
+        try:
+            liq_data = _calculate_liquidation_metadata(
+                is_bullish=is_bullish,
+                near_entry=entry_zone.near_entry,
+                stop_level=stop_loss.level,
+                leverage=leverage,
+            )
+            plan.metadata["liquidation_meta"] = liq_data
+
+            if liq_data.get("risk_band") == "high":
+                # Suggest a wider stop that gives more cushion from liquidation
+                # Extended by 1x ATR beyond current stop
+                if is_bullish:
+                    alt_stop_level = stop_loss.level - atr  # Pull stop further below
+                else:
+                    alt_stop_level = stop_loss.level + atr  # Push stop further above
+
+                alt_stop_data = {
+                    "level": alt_stop_level,
+                    "reason": "high_liquidation_risk",
+                    "cushion_pct": liq_data["cushion_pct"],
+                    "risk_band": liq_data["risk_band"],
+                    "atr_extension": atr,
+                }
+                plan.metadata["alt_stop"] = alt_stop_data
+
+                # Log telemetry event
+                telemetry.log_event(
+                    create_alt_stop_suggested_event(
+                        run_id=run_id,
+                        symbol=symbol,
+                        direction=direction,
+                        cushion_pct=liq_data["cushion_pct"],
+                        risk_band=liq_data["risk_band"],
+                        suggested_level=alt_stop_level,
+                        current_stop=stop_loss.level,
+                        leverage=int(leverage),
+                        regime_label=regime_label,
+                        recommended_buffer_atr=atr,
+                    )
+                )
+                logger.warning(
+                    f"⚠️ HIGH LIQ RISK | {symbol} | cushion={liq_data['cushion_pct']:.1f}% "
+                    f"| Alt stop suggested: {alt_stop_level:.4f} (current: {stop_loss.level:.4f})"
+                )
+        except Exception as liq_err:
+            logger.debug(f"Liquidation risk check failed (non-critical): {liq_err}")
 
         # Calculate R:R best/worst after targets are finalized
         if targets:

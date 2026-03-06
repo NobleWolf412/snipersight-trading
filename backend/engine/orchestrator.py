@@ -1832,6 +1832,37 @@ class Orchestrator:
                 ),  # Use full VolumeProfile object, not dict
             )
 
+            # === POST-PLAN ADJUSTMENTS ===
+            # Apply modifications based on metadata set during confluence scoring.
+            if plan:
+                # Counter-HTF Scalp: clip to TP1, tag for frontend
+                if context.metadata.get("counter_htf_scalp"):
+                    if plan.targets and len(plan.targets) > 1:
+                        plan.targets = plan.targets[:1]
+                    plan.metadata["counter_htf_scalp"] = True
+                    plan.metadata["setup_label"] = "Counter-HTF Scalp"
+                    plan.setup_type = (
+                        (plan.setup_type or "") + " [Counter-HTF Scalp]"
+                    ).strip()
+                    logger.info(
+                        "🔀 %s Plan adjusted: Counter-HTF scalp → TP1 only.",
+                        context.symbol,
+                    )
+
+                # APEX Signal: tag for frontend visual treatment
+                bd_metadata = getattr(context.confluence_breakdown, "metadata", {}) or {}
+                signal_tier = bd_metadata.get("signal_tier", "B")
+                plan.metadata["signal_tier"] = signal_tier
+                if signal_tier == "APEX":
+                    plan.metadata["apex_signal"] = True
+                    plan.metadata["effective_min_rr"] = max(
+                        1.5, float(getattr(self.config, "min_rr_ratio", 1.8)) - 0.3
+                    )
+                    logger.info(
+                        "⭐ %s APEX signal tagged — 7+ strong factors.",
+                        context.symbol,
+                    )
+
             # Enrich plan metadata with SMC geometry for chart overlays
             if plan and context.smc_snapshot:
                 plan.metadata["order_blocks_list"] = [

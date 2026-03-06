@@ -1182,8 +1182,8 @@ def _calculate_entry_zone(
             if offset > max_offset:
                 offset = max(max_offset, 0.0)
 
-            near_entry = best_fvg.bottom + offset
-            far_entry = best_fvg.top - offset
+            near_entry = best_fvg.top - offset   # Close to FVG top (resistance approach from above)
+            far_entry = best_fvg.bottom + offset  # Deeper into FVG
 
             # FIX
             if near_entry < current_price:
@@ -1239,13 +1239,14 @@ def _calculate_entry_zone(
         entry_zone = EntryZone(
             near_entry=current_price,
             far_entry=current_price - fallback_offset,
-            rationale="No valid SMC structure found in entry zone (fallback)",
+            rationale=f"ATR fallback entry zone (no SMC structure found): offset={fallback_offset:.4f}",
         )
     else:
+        # Bearish fallback: near_entry is ABOVE price (resistance side), far is BELOW near, but ABOVE current price
         entry_zone = EntryZone(
-            near_entry=current_price,
-            far_entry=current_price + fallback_offset,
-            rationale="No valid SMC structure found in entry zone (fallback)",
+            near_entry=current_price + fallback_offset,
+            far_entry=current_price + fallback_offset * 0.5,
+            rationale=f"ATR fallback entry zone (no SMC structure found): offset={fallback_offset:.4f}",
         )
     entry_zone.entry_tf_used = "N/A"  # type: ignore
 

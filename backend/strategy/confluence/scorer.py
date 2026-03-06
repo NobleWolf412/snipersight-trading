@@ -204,7 +204,7 @@ MODE_FACTOR_WEIGHTS = {
         "fvg": 0.15,
         "market_structure": 0.25,
         "liquidity_sweep": 0.15,
-        "kill_zone": 0.05,
+        "kill_zone": 0.10,  # RAISED: 0.05→0.10 — timing matters for quality entries
         "momentum": 0.10,
         "divergence": 0.15,
         "fibonacci": 0.10,
@@ -817,7 +817,7 @@ def evaluate_htf_momentum_gate(
             momentum_state = "weak"
     else:
         # Fallback to ATR Slope
-        atr_series = getattr(ind, "atr_series", [])
+        atr_series = getattr(ind, "atr_series", None) or []
         if len(atr_series) >= 5:
             slope = (atr_series[-1] - atr_series[0]) / atr_series[0] if atr_series[0] > 0 else 0
             if slope > 0.10:
@@ -1112,7 +1112,7 @@ def evaluate_macd_for_mode(
     Returns:
         Dict with score, reasons, role, and veto_active flag
     """
-    score = 50.0  # Start at Neutral (50) instead of 0
+    score = 0.0  # Start at 0 (neutral). Veto must push below 0 to be meaningful.
     reasons = []
     veto_active = False
     role = "PRIMARY" if macd_config.treat_as_primary else "FILTER"
@@ -1364,11 +1364,11 @@ def evaluate_macd_for_mode(
                 score -= 5.0 * macd_config.weight
                 reasons.append(f"{timeframe} histogram contracting against bearish")
 
-    # Clamp score
-    # Clamp score
-    # Scale: -30..50 was raw. Now 50 + adj.
-    # Max theoretical with defaults: 50 + 25 + 10 = 85.
-    score = max(0.0, min(100.0, score))
+    # Clamp score: allow negative values if veto is active, otherwise clamp to 0
+    if veto_active:
+        score = max(-50.0, min(100.0, score))
+    else:
+        score = max(0.0, min(100.0, score))
 
     return {
         "score": score,
@@ -2221,9 +2221,29 @@ def calculate_confluence_score(
                 )
             )
 
-    # --- HTF Level Proximity (Redundant - handled by Gate 1 below) ---
-    # Legacy block removed to prefer evaluate_htf_structural_proximity output
-
+    # --- HTF Level Proximity ---
+    htf_proximity_result = None
+    if getattr(config, "htf_proximity_enabled", False) and htf_context:
+        htf_proximity_result = htf_context
+        atr_dist = htf_context.get("within_atr", 999.0)
+        
+        prox_score = 0.0
+        if atr_dist <= 0.5:
+            prox_score = 100.0
+        elif atr_dist <= 1.0:
+            prox_score = 75.0
+        elif atr_dist <= 2.0:
+            prox_score = 40.0
+            
+        if prox_score > 0.0:
+            factors.append(
+                ConfluenceFactor(
+                    name="HTF Level Proximity",
+                    score=prox_score,
+                    weight=get_w("htf_proximity", getattr(config, "htf_proximity_weight", 0.15)),
+                    rationale=f"Near {htf_context.get('timeframe', 'HTF')} {htf_context.get('type', 'level')} (dist: {atr_dist:.1f} ATR)",
+                )
+            )
     # --- Fibonacci Proximity Scoring ---
     # Check if entry price is near key Fibonacci retracement levels
     # Uses HTF swing highs/lows (4H/1D) for institutional-grade Fib levels
@@ -3425,6 +3445,28 @@ def calculate_confluence_score(
             else (htf_context or {}).get("type")
         ),
         macro_score=macro_score_val,
+    )
+
+    # === SIGNAL QUALITY TIER ===
+    # Count factors that scored strongly (>=65). APEX (7+) gets a lower R:R bar and
+    # a special visual label in the frontend. Tier flows through breakdown.metadata.
+    strong_factor_count = sum(1 for f in factors if f.score >= 65)
+    if strong_factor_count >= 7:
+        signal_tier = "APEX"
+    elif strong_factor_count >= 5:
+        signal_tier = "A"
+    elif strong_factor_count >= 3:
+        signal_tier = "B"
+    else:
+        signal_tier = "C"
+
+    if not hasattr(breakdown, "metadata") or breakdown.metadata is None:
+        breakdown.metadata = {}
+    breakdown.metadata["signal_tier"] = signal_tier
+    breakdown.metadata["strong_factor_count"] = strong_factor_count
+    logger.info(
+        "⭐ %s Signal Tier: %s (%d strong factors >=65)",
+        symbol, signal_tier, strong_factor_count,
     )
 
     # TRACING: Log detailed score breakdown for analysis
@@ -4812,18 +4854,30 @@ def _calculate_synergy_bonus(
     factor_names = [f.name for f in factors]
 
     # --- EXISTING SYNERGIES ---
+    # Bug Fix: Previously awarded bonuses on name-presence only (no score check).
+    # Now requires score >= 60 on each contributing factor — prevents C-grade
+    # setups inflating past the confluence threshold via unearned synergy points.
 
-    # Order Block + FVG + Structure = strong setup
-    if (
-        "Order Block" in factor_names
-        and "Fair Value Gap" in factor_names
-        and "Market Structure" in factor_names
-    ):
-        bonus += 5.0  # REDUCED: was 10.0 - too generous for basic SMC confluence
+    def _factor_score(name: str) -> float:
+        """Get score for a named factor, 0 if not present."""
+        f = next((x for x in factors if x.name == name), None)
+        return f.score if f else 0.0
+
+    # Order Block + FVG + Structure = strong institutional setup
+    ob_score = _factor_score("Order Block")
+    fvg_score = _factor_score("Fair Value Gap")
+    struct_score = _factor_score("Market Structure")
+    if ob_score >= 60 and fvg_score >= 60 and struct_score >= 60:
+        bonus += 5.0
+    elif ob_score > 0 and fvg_score > 0 and struct_score > 0:
+        bonus += 2.0  # Partial: factors exist but below quality threshold
 
     # Liquidity Sweep + Structure = institutional trap reversal
-    if "Liquidity Sweep" in factor_names and "Market Structure" in factor_names:
-        bonus += 4.0  # REDUCED: was 8.0 - still significant but not excessive
+    sweep_score = _factor_score("Liquidity Sweep")
+    if sweep_score >= 60 and struct_score >= 60:
+        bonus += 4.0
+    elif sweep_score > 0 and struct_score > 0:
+        bonus += 2.0  # Partial: weak sweep or weak structure
 
     # --- HTF SWEEP → LTF ENTRY SYNERGY ---
     # When HTF sweep detected, LTF entries in expected direction get bonus

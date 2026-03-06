@@ -285,8 +285,14 @@ class PaperExecutor:
         if order.status == OrderStatus.FILLED:
             return None
 
-        # Market orders ALWAYS fill 100%
+        # Market orders support partial fills if enabled
         fill_qty = order.remaining_quantity
+        if self.enable_partial_fills and fill_qty > 0 and not order.is_filled:
+            import random
+            if random.random() < self.partial_fill_prob:
+                fill_pct = random.uniform(self.min_fill_pct, self.max_fill_pct)
+                fill_qty = order.remaining_quantity * fill_pct
+
         fill_price = self._calculate_slippage(current_price, order.side)
         fee = self._calculate_fee(fill_qty, fill_price)
         
@@ -297,8 +303,20 @@ class PaperExecutor:
         self.fills.append(fill)
 
         order.filled_quantity += fill_qty
-        order.average_fill_price = fill_price
-        order.status = OrderStatus.FILLED
+        # Update average fill price using weighted average
+        if order.average_fill_price == 0:
+            order.average_fill_price = fill_price
+        else:
+            total_filled = order.filled_quantity
+            prev_filled = total_filled - fill_qty
+            order.average_fill_price = (
+                (prev_filled * order.average_fill_price + fill_qty * fill_price) / total_filled
+            )
+
+        if order.is_filled:
+            order.status = OrderStatus.FILLED
+        else:
+            order.status = OrderStatus.PARTIALLY_FILLED
         order.updated_at = datetime.now(timezone.utc)
 
         # --- MARGIN ACCOUNTING LOGIC ---
