@@ -562,21 +562,25 @@ def generate_trade_plan(
         # Enforce mode-specific R:R requirements (e.g., Overwatch = 2.0R minimum)
         min_rr = getattr(config, "min_rr_ratio", 0.0)
         actual_rr = plan.risk_reward_ratio
-        
+
+        # Use a small epsilon to avoid floating point false rejections.
+        # e.g. 1.80R being computed as 1.7999999... and failing a 1.8R threshold.
+        RR_EPSILON = 0.001
+
         # === DEBUG: Log R:R validation for all symbols ===
         logger.info(
-            f"🔍 R:R VALIDATION | {symbol} | Actual: {actual_rr:.2f}R | "
+            f"🔍 R:R VALIDATION | {symbol} | Actual: {actual_rr:.4f}R | "
             f"Required: {min_rr:.1f}R | Mode: {getattr(config, 'profile', 'unknown')} | "
-            f"PASS: {actual_rr >= min_rr if min_rr > 0 else True}"
+            f"PASS: {actual_rr >= (min_rr - RR_EPSILON) if min_rr > 0 else True}"
         )
-        
-        if min_rr > 0 and actual_rr < min_rr:
+
+        if min_rr > 0 and actual_rr < (min_rr - RR_EPSILON):
             rejection_msg = (
                 f"Insufficient R:R: {actual_rr:.2f}R < {min_rr:.1f}R minimum for "
                 f"{getattr(config, 'profile', 'unknown')} mode"
             )
             logger.warning(f"❌ {symbol} REJECTED | {rejection_msg}")
-            
+
             telemetry.log_event(
                 create_signal_rejected_event(
                     run_id=run_id,
