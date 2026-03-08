@@ -1321,43 +1321,142 @@ function ActivityItem({ event }: { event: PaperTradingActivity }) {
 
 // Trade History Item Component
 function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
+  const [expanded, setExpanded] = useState(false);
   const isLong = trade.direction === 'LONG';
   const isProfitable = trade.pnl >= 0;
 
+  const duration = useMemo(() => {
+    if (!trade.entry_time || !trade.exit_time) return null;
+    const enter = new Date(trade.entry_time);
+    const exit = new Date(trade.exit_time);
+    const ms = exit.getTime() - enter.getTime();
+    return formatDuration(Math.floor(ms / 1000));
+  }, [trade.entry_time, trade.exit_time]);
+
   return (
-    <div className="flex items-center justify-between p-3 bg-background rounded-lg border border-border">
-      <div className="flex items-center gap-3">
-        <Badge
-          variant={isLong ? 'default' : 'destructive'}
-          className={`text-xs ${isLong ? 'bg-green-500/20 text-green-400' : ''}`}
-        >
-          {trade.direction}
-        </Badge>
-        <div className="flex flex-col">
-          <div className="font-bold flex items-center gap-2">
-            {trade.symbol}
-            <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-border/50">
-              {trade.exit_reason || 'unknown'}
-            </span>
-            {(trade as any).trade_type && (
-              <span className="text-[9px] font-mono text-blue-400/60 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-blue-400/20">
-                {(trade as any).trade_type}
-              </span>
+    <div
+      className={cn(
+        "rounded-lg border transition-all cursor-pointer overflow-hidden",
+        expanded ? "bg-background/80 border-accent/40 shadow-[0_0_15px_rgba(0,255,170,0.05)]" : "bg-background border-border hover:border-border/80"
+      )}
+      onClick={() => setExpanded(!expanded)}
+    >
+      <div className="flex items-center justify-between p-3">
+        <div className="flex items-center gap-3">
+          <Badge
+            variant={isLong ? 'default' : 'destructive'}
+            className={cn(
+              "text-xs px-2 py-0.5 border-none",
+              isLong ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
             )}
+          >
+            {trade.direction}
+          </Badge>
+          <div className="flex flex-col">
+            <div className="font-bold flex items-center gap-2">
+              {trade.symbol}
+              <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-border/50">
+                {trade.exit_reason || 'unknown'}
+              </span>
+              {trade.trade_type && (
+                <span className="text-[9px] font-mono text-blue-400/60 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-blue-400/20">
+                  {trade.trade_type}
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground flex items-center gap-2">
+              <span>${trade.entry_price.toFixed(4)} <span className="text-muted-foreground/30 mx-1">→</span> ${trade.exit_price.toFixed(4)}</span>
+            </div>
           </div>
-          <div className="text-xs text-muted-foreground">
-            ${trade.entry_price.toFixed(2)} → ${trade.exit_price.toFixed(2)}
+        </div>
+        <div className="text-right">
+          <div className={cn("font-mono font-bold text-sm", isProfitable ? 'text-green-400' : 'text-red-400')}>
+            {formatCurrency(trade.pnl)}
+          </div>
+          <div className={cn("text-[10px] font-mono", isProfitable ? 'text-green-400/70' : 'text-red-400/70')}>
+            {formatPct(trade.pnl_pct)}
           </div>
         </div>
       </div>
-      <div className="text-right">
-        <div className={`font-mono font-bold ${isProfitable ? 'text-green-400' : 'text-red-400'}`}>
-          {formatCurrency(trade.pnl)}
+
+      {expanded && (
+        <div className="px-4 pb-4 pt-1 border-t border-border/30 bg-black/20">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
+            {/* Times */}
+            <div className="space-y-1">
+              <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">Timing</div>
+              <div className="text-xs font-mono text-foreground/80 flex flex-col gap-0.5">
+                <span className="flex justify-between">
+                  <span className="text-muted-foreground/50">In:</span>
+                  {new Date(trade.entry_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+                {trade.exit_time && (
+                  <span className="flex justify-between">
+                    <span className="text-muted-foreground/50">Out:</span>
+                    {new Date(trade.exit_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                )}
+                {duration && (
+                  <span className="flex justify-between text-accent/80 mt-0.5 pt-0.5 border-t border-border/30">
+                    <span className="text-muted-foreground/50">Dur:</span>
+                    {duration}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Excursion */}
+            <div className="space-y-1">
+              <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">Excursion</div>
+              <div className="text-xs font-mono flex flex-col gap-0.5">
+                <span className="flex justify-between">
+                  <span className="text-muted-foreground/50">MFE:</span>
+                  <span className="text-green-400/80">+{formatPct(trade.max_favorable)}</span>
+                </span>
+                <span className="flex justify-between">
+                  <span className="text-muted-foreground/50">MAE:</span>
+                  <span className="text-red-400/80">{formatPct(trade.max_adverse)}</span>
+                </span>
+                <span className="flex justify-between mt-0.5 pt-0.5 border-t border-border/30">
+                  <span className="text-muted-foreground/50">Qty:</span>
+                  <span className="text-foreground/80">{trade.quantity.toFixed(4)}</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Execution */}
+            <div className="space-y-1">
+              <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">Execution</div>
+              <div className="text-xs font-mono flex flex-col gap-0.5">
+                <span className="flex justify-between">
+                  <span className="text-muted-foreground/50">Targets Hit:</span>
+                  <span className="text-amber-400/80">{trade.targets_hit?.length || 0}</span>
+                </span>
+                {trade.targets_hit && trade.targets_hit.length > 0 && (
+                  <span className="text-[9px] text-muted-foreground/50 text-right truncate">
+                    ({trade.targets_hit.map((_, i) => `TP${i + 1}`).join(', ')})
+                  </span>
+                )}
+                <span className="flex justify-between mt-0.5 pt-0.5 border-t border-border/30">
+                  <span className="text-muted-foreground/50">Type:</span>
+                  <span className="text-foreground/80">{trade.trade_type || 'Unknown'}</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Results breakdown */}
+            <div className="space-y-1 flex flex-col items-end justify-center bg-background/40 p-2 rounded border border-border/50">
+              <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest mb-1">Final Result</div>
+              <div className={cn("text-lg font-mono font-bold tracking-tight", isProfitable ? 'text-green-400' : 'text-red-400')}>
+                {formatCurrency(trade.pnl)}
+              </div>
+              <div className={cn("text-xs font-mono", isProfitable ? 'text-green-400/70' : 'text-red-400/70')}>
+                {formatPct(trade.pnl_pct)}
+              </div>
+            </div>
+          </div>
         </div>
-        <div className={`text-xs ${isProfitable ? 'text-green-400/70' : 'text-red-400/70'}`}>
-          {formatPct(trade.pnl_pct)}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
