@@ -1399,6 +1399,7 @@ class PaperTradingService:
                     "opened_at": pos.created_at.isoformat(),
                     "tp1": pos.targets[0].level if pos.targets else (pos.targets_hit[-1].level if pos.targets_hit else 0.0),
                     "tp_final": pos.targets[-1].level if pos.targets else (pos.targets_hit[-1].level if pos.targets_hit else 0.0),
+                    "trade_type": getattr(pos, "trade_type", "intraday"),
                 }
             )
 

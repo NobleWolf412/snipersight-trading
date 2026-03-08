@@ -21,6 +21,7 @@ interface Position {
   pnl: number;
   pnl_pct: number;
   opened_at: string;
+  trade_type?: string;
 }
 
 export function PositionsPanel() {
@@ -32,7 +33,7 @@ export function PositionsPanel() {
     const fetchPositions = async () => {
       try {
         const response = await api.getPositions();
-        
+
         if (response.error) {
           setError(response.error);
           setLoading(false);
@@ -51,7 +52,7 @@ export function PositionsPanel() {
 
     fetchPositions();
     const interval = setInterval(fetchPositions, 5000); // Refresh every 5s
-    
+
     return () => clearInterval(interval);
   }, []);
 
@@ -144,6 +145,11 @@ export function PositionsPanel() {
                       <DirectionIcon size={12} weight="bold" className="mr-1" />
                       {position.direction}
                     </Badge>
+                    {position.trade_type && (
+                      <Badge variant="outline" className="border-slate-600 text-slate-400 text-[10px] uppercase tracking-wider bg-black/40">
+                        {position.trade_type}
+                      </Badge>
+                    )}
                   </div>
                   <div className="text-right">
                     <div className={`text-lg font-bold ${pnlColor}`}>
@@ -198,9 +204,8 @@ export function PositionsPanel() {
             </div>
             <div className="text-center">
               <div className="text-xs text-slate-300 mb-1">Combined P&L</div>
-              <div className={`font-bold text-lg ${
-                positions.reduce((sum, p) => sum + p.pnl, 0) >= 0 ? 'text-success' : 'text-destructive'
-              }`}>
+              <div className={`font-bold text-lg ${positions.reduce((sum, p) => sum + p.pnl, 0) >= 0 ? 'text-success' : 'text-destructive'
+                }`}>
                 {positions.reduce((sum, p) => sum + p.pnl, 0) >= 0 ? '+' : ''}
                 {positions.reduce((sum, p) => sum + p.pnl, 0).toFixed(2)} USDT
               </div>

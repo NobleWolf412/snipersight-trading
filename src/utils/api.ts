@@ -914,6 +914,7 @@ export interface PaperTradingPosition {
   breakeven_active: boolean;
   trailing_active: boolean;
   opened_at: string;
+  trade_type?: 'scalp' | 'intraday' | 'swing';
 }
 
 export interface CompletedPaperTrade {

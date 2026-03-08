@@ -1147,6 +1147,11 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
             {position.direction}
           </Badge>
           <span className="font-bold text-lg tracking-tight italic text-foreground">{position.symbol}</span>
+          {position.trade_type && (
+            <Badge variant="secondary" className="font-mono text-[9px] tracking-widest uppercase ml-1 opacity-80 bg-accent/10 text-accent border-accent/20">
+              {position.trade_type}
+            </Badge>
+          )}
         </div>
         <div className={cn(
           "font-mono text-sm font-bold px-2 py-0.5 rounded transition-colors",
