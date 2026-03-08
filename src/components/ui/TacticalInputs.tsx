@@ -510,7 +510,11 @@ export function TacticalTargetInput({
 
     const handleSymbolChange = (newSymbol: string) => {
         const cleanSymbol = newSymbol.toUpperCase().trim();
-        onChange(base ? `${cleanSymbol}/${base}` : cleanSymbol);
+        if (!cleanSymbol) {
+            onChange('');
+        } else {
+            onChange(base ? `${cleanSymbol}/${base}` : cleanSymbol);
+        }
     };
 
     const handleBaseChange = (newBase: string) => {

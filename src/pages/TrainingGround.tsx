@@ -593,9 +593,16 @@ export function TrainingGround() {
 
                   {/* Mode / Regime */}
                   <div>
-                    <div className="text-xs text-muted-foreground uppercase tracking-widest font-mono">REGIME</div>
-                    <Badge variant="outline" className="font-mono text-xs border-accent text-accent bg-accent/10 tracking-widest mt-1">
-                      ADAPTIVE
+                    <div className="text-xs text-muted-foreground uppercase tracking-widest font-mono">
+                      {status?.config?.sniper_mode === 'stealth' ? 'ADAPTIVE MODE' : 'MODE'}
+                    </div>
+                    <Badge variant="outline" className={cn(
+                      "font-mono text-xs tracking-widest mt-1",
+                      status?.current_scan?.actual_mode && status.current_scan.actual_mode !== status?.config?.sniper_mode
+                        ? "border-purple-500 text-purple-400 bg-purple-500/10"
+                        : "border-accent text-accent bg-accent/10"
+                    )}>
+                      {(status?.current_scan?.actual_mode || status?.config?.sniper_mode || 'ADAPTIVE').toUpperCase()}
                     </Badge>
                   </div>
                 </div>
@@ -1101,15 +1108,27 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
   const tp1 = position.tp1 || (isLong ? entry * 1.01 : entry * 0.99); // Fallback
   const current = position.current_price;
 
-  let progressPct = 0;
+  let progressPct = 50; // Default center
   if (isLong) {
-    // SL < Current < TP1
-    const range = tp1 - sl;
-    progressPct = range !== 0 ? ((current - sl) / range) * 100 : 50;
-  } else {
-    // TP1 < Current < SL
-    const range = sl - tp1;
-    progressPct = range !== 0 ? ((sl - current) / range) * 100 : 50;
+    if (current >= entry) {
+      // Profit side: Entry -> TP1 (50% to 100%)
+      const range = tp1 - entry;
+      progressPct = range > 0 ? 50 + ((current - entry) / range) * 50 : 50;
+    } else {
+      // Loss side: SL -> Entry (0% to 50%)
+      const range = entry - sl;
+      progressPct = range > 0 ? ((current - sl) / range) * 50 : 50;
+    }
+  } else { // SHORT
+    if (current <= entry) {
+      // Profit side: Entry -> TP1 (price dropping) (50% to 100%)
+      const range = entry - tp1;
+      progressPct = range > 0 ? 50 + ((entry - current) / range) * 50 : 50;
+    } else {
+      // Loss side: SL -> Entry (price rising) (0% to 50%)
+      const range = sl - entry;
+      progressPct = range > 0 ? ((sl - current) / range) * 50 : 50;
+    }
   }
   progressPct = Math.max(0, Math.min(100, progressPct));
 
@@ -1294,10 +1313,19 @@ function ActivityItem({ event }: { event: PaperTradingActivity }) {
         return `Opened ${d.direction} ${d.symbol} @ ${d.entry_price?.toFixed(2)}`;
       case 'trade_closed': {
         const tradeTypeLabel = d.trade_type ? ` [${d.trade_type}]` : '';
+
+        // Use smart stop loss labels
+        let displayReason = d.exit_reason || 'unknown';
+        if (d.exit_reason === 'stop_loss') {
+          if (d.pnl > 0) displayReason = 'trailing_stop';
+          else if (Math.abs(d.pnl) < 1) displayReason = 'breakeven_stop';
+        }
+        displayReason = displayReason.replace(/_/g, ' ');
+
         const regimeLabel = d.regime_at_close?.trend && d.exit_reason === 'stagnation'
           ? ` | regime: ${d.regime_at_close.trend}/${d.regime_at_close.volatility}`
           : '';
-        return `Closed ${d.symbol}${tradeTypeLabel}: ${d.pnl >= 0 ? '+' : ''}${d.pnl?.toFixed(2)} (${d.exit_reason}${regimeLabel})`;
+        return `Closed ${d.symbol}${tradeTypeLabel}: ${d.pnl >= 0 ? '+' : ''}${d.pnl?.toFixed(2)} (${displayReason}${regimeLabel})`;
       }
       case 'scan_error':
         return `⚠️ Scan error: ${d.error || 'Unknown error'}`;
@@ -1333,6 +1361,15 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
     return formatDuration(Math.floor(ms / 1000));
   }, [trade.entry_time, trade.exit_time]);
 
+  const displayReason = useMemo(() => {
+    let reason = trade.exit_reason || 'unknown';
+    if (trade.exit_reason === 'stop_loss') {
+      if (trade.pnl > 0) reason = 'trailing_stop';
+      else if (Math.abs(trade.pnl) < 1) reason = 'breakeven_stop';
+    }
+    return reason.replace(/_/g, ' ');
+  }, [trade.exit_reason, trade.pnl]);
+
   return (
     <div
       className={cn(
@@ -1356,7 +1393,7 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
             <div className="font-bold flex items-center gap-2">
               {trade.symbol}
               <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-border/50">
-                {trade.exit_reason || 'unknown'}
+                {displayReason}
               </span>
               {trade.trade_type && (
                 <span className="text-[9px] font-mono text-blue-400/60 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-blue-400/20">

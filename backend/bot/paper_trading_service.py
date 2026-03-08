@@ -734,8 +734,48 @@ class PaperTradingService:
         if not self.orchestrator or not self.config or not self.mode:
             return
 
+        conf = self.config
+        assert conf is not None  # For type checker
+        
         self.last_scan_at = datetime.now(timezone.utc)
-        self._log_activity("scan_started", {"mode": self.config.sniper_mode})
+        
+        # Check for dynamic mode adaptation if base mode is "stealth"
+        actual_scan_mode = getattr(conf, "sniper_mode", "stealth")
+        if actual_scan_mode == "stealth":
+            try:
+                from backend.analysis.regime_detector import get_regime_detector  # type: ignore
+                from backend.strategy.planner.regime_engine import get_mode_recommendation  # type: ignore
+                from backend.shared.config.scanner_modes import get_mode_config  # type: ignore
+                
+                detector = get_regime_detector("stealth_balanced")
+                # Try to get existing confirmed regime, or fallback to whatever last computed
+                global_regime = detector._confirmed_regime
+                
+                if global_regime and global_regime.composite != "unknown":
+                    rec = get_mode_recommendation(
+                        global_regime.trend, 
+                        global_regime.volatility, 
+                        global_regime.risk_appetite
+                    )
+                    recommended_mode = rec.get("mode", "stealth")
+                    if recommended_mode != "stealth":
+                        logger.info(
+                            f"🧠 ADAPTIVE MODE: Regime is {global_regime.composite}. "
+                            f"Adapting scan mode from stealth → {recommended_mode} ({rec.get('reason')})"
+                        )
+                        # Switch the working mode for this scan cycle
+                        self.mode = get_mode_config(recommended_mode)
+                        actual_scan_mode = recommended_mode
+                        
+                        # Log the adaptation to the UI Activity Feed
+                        self._log_activity("system_update", {
+                            "message": f"Adaptive Shift: Now scanning in {recommended_mode.upper()} mode.",
+                            "details": rec.get("reason", "")
+                        })
+            except Exception as e:
+                logger.error(f"Failed to calculate adaptive regime mode: {e}")
+
+        self._log_activity("scan_started", {"mode": actual_scan_mode})
         self.stats.scans_completed += 1
 
         try:
@@ -771,6 +811,8 @@ class PaperTradingService:
 
             self.current_scan = {
                 "status": "running",
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "actual_mode": actual_scan_mode,
                 "completed": 0,
                 "total": len(scan_symbols),
                 "current_symbol": None,
@@ -781,16 +823,18 @@ class PaperTradingService:
             }
 
             def _progress_callback(completed: int, total: int, sym: str, passed: bool, rejection_info: Optional[Dict[str, Any]]):
-                if not self.current_scan:
+                if self.current_scan is None:
                     return
-                self.current_scan["completed"] = completed
-                self.current_scan["total"] = total
-                self.current_scan["current_symbol"] = sym
-                self.current_scan["progress_pct"] = int((completed / total) * 100) if total > 0 else 0
+                from typing import cast
+                cs = cast(Dict[str, Any], self.current_scan)
+                cs["completed"] = completed
+                cs["total"] = total
+                cs["current_symbol"] = sym
+                cs["progress_pct"] = int((completed / total) * 100) if total > 0 else 0
                 if passed:
-                    self.current_scan["passed"] += 1
+                    cs["passed"] += 1
                 else:
-                    self.current_scan["rejected"] += 1
+                    cs["rejected"] += 1
 
                 # Keep last 5 symbols for the UI ticker
                 status_obj = {
@@ -798,14 +842,9 @@ class PaperTradingService:
                     "passed": passed,
                     "reason": rejection_info.get("reason", "Unknown") if rejection_info else None
                 }
-                self.current_scan["recent_symbols"].insert(0, status_obj)
-                self.current_scan["recent_symbols"] = self.current_scan["recent_symbols"][:5]
-            
-            # Reset current scan stats for this run
-            self.current_scan["total"] = len(scan_symbols)
-            self.current_scan["completed"] = 0
-            self.current_scan["passed"] = 0
-            self.current_scan["rejected"] = 0
+                recent = cs.setdefault("recent_symbols", [])  # pyre-ignore
+                recent.insert(0, status_obj)
+                cs["recent_symbols"] = recent[:5]  # pyre-ignore
 
             # Run scanner
             self.orchestrator.apply_mode(self.mode)
@@ -876,22 +915,26 @@ class PaperTradingService:
                 for item in items:
                     # Convert rejection_info to a format _log_signal understands
                     # Create unique nested objects per item to avoid shared-state corruption
-                    entry_zone = type('obj', (object,), {
-                        'near_entry': item.get('entry_price', 0.0) or item.get('current_price', 0.0),
-                        'far_entry': 0.0,
-                    })()
-                    stop_loss = type('obj', (object,), {
-                        'level': item.get('stop_loss', 0.0),
-                    })()
-                    mock_plan = type('obj', (object,), {
-                        'symbol': item.get('symbol', 'Unknown'),
-                        'direction': item.get('direction', 'LONG'),
-                        'confidence_score': item.get('score', 0.0),
-                        'setup_type': 'filtered',
-                        'entry_zone': entry_zone,
-                        'stop_loss': stop_loss,
-                        'risk_reward': 0.0,
-                    })()
+                    from types import SimpleNamespace
+                    
+                    entry_zone = SimpleNamespace(
+                        near_entry=item.get('entry_price', 0.0) or item.get('current_price', 0.0),
+                        far_entry=0.0
+                    )
+                    
+                    stop_loss = SimpleNamespace(
+                        level=item.get('stop_loss', 0.0)
+                    )
+                    
+                    mock_plan = SimpleNamespace(
+                        symbol=item.get('symbol', 'Unknown'),
+                        direction=item.get('direction', 'LONG'),
+                        confidence_score=item.get('score', 0.0),
+                        setup_type='filtered',
+                        entry_zone=entry_zone,
+                        stop_loss=stop_loss,
+                        risk_reward=0.0
+                    )
                     
                     self._log_signal(
                         mock_plan, 

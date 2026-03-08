@@ -759,27 +759,27 @@ class RegimeDetector:
             )
 
             # 1. Check USDT.D (flight to stables = risk off)
-            # USDT.D normal range: 3-7%
-            # USDT.D risk-off: 8-12%
-            # USDT.D extreme risk-off: >12%
+            # USDT.D normal range in 2025/2026: 3.5-4.5%
+            # USDT.D risk-off: 5.0-6.0%
+            # USDT.D extreme risk-off: >6.0%
 
-            if stable_dom > 12.0:
+            if stable_dom > 6.0:
                 # Extreme risk-off: money fleeing to stables
                 logger.info("Risk: extreme_risk_off (high stable dominance)")
                 return "extreme_risk_off", 15.0
 
-            elif stable_dom > 9.0:
+            elif stable_dom > 5.0:
                 # Risk-off: significant stable allocation
                 logger.info("Risk: risk_off (elevated stable dominance)")
                 return "risk_off", 30.0
 
-            elif stable_dom > 7.5:
+            elif stable_dom > 4.5:
                 # Cautious: moderate stable allocation
                 logger.info("Risk: cautious (moderate stable dominance)")
                 return "cautious", 45.0
 
             # 2. Check BTC.D level for capital flow direction
-            if btc_dom > 60.0:
+            if btc_dom > 58.0:
                 # BTC.D high = capital flight to BTC (alt weakness)
                 logger.info("Risk: btc_flight (BTC.D high)")
                 return "btc_flight", 40.0
@@ -789,19 +789,19 @@ class RegimeDetector:
                 logger.info("Risk: btc_dominant (BTC.D moderately high)")
                 return "btc_dominant", 50.0
 
-            elif btc_dom < 48.0:
+            elif btc_dom < 52.0:
                 # BTC.D low = alt season brewing
                 logger.info("Risk: alt_season (BTC.D low)")
                 return "alt_season", 85.0
 
-            elif btc_dom < 52.0:
+            elif btc_dom < 54.0:
                 # BTC.D lowish = some alt strength
                 logger.info("Risk: risk_on (BTC.D low, alt strength)")
                 return "risk_on", 75.0
 
             else:
-                # BTC.D stable in normal range (52-55%)
-                if stable_dom < 5.0:
+                # BTC.D stable in normal range (54-55%)
+                if stable_dom < 4.0:
                     # Low stable allocation = healthy risk-on
                     logger.info("Risk: risk_on (low stable allocation)")
                     return "risk_on", 80.0

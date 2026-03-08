@@ -2188,7 +2188,7 @@ def calculate_confluence_score(
             ConfluenceFactor(
                 name="MACD Veto",
                 score=0.0,
-                weight=get_w("macd_veto", 0.05),
+                weight=get_w("macd_veto", 0.10),
                 rationale=f"MACD opposing direction with veto active: {'; '.join(macd_analysis.get('reasons', []))}",
             )
         )
@@ -2866,7 +2866,7 @@ def calculate_confluence_score(
                             dist = (ob_low - current_price) / atr_val
                             if dist <= opposing_atr_threshold:
                                 tf = getattr(ob, "timeframe", "unknown")
-                                penalty_score = max(20.0, 50.0 - (dist * 15))  # Closer = worse
+                                penalty_score = min(50.0, dist * 25.0)  # max penalty (0) when distance is 0
                                 factors.append(
                                     ConfluenceFactor(
                                         name="Opposing Structure",
@@ -2883,7 +2883,7 @@ def calculate_confluence_score(
                             dist = (current_price - ob_high) / atr_val
                             if dist <= opposing_atr_threshold:
                                 tf = getattr(ob, "timeframe", "unknown")
-                                penalty_score = max(20.0, 50.0 - (dist * 15))  # Closer = worse
+                                penalty_score = min(50.0, dist * 25.0)  # max penalty (0) when distance is 0
                                 factors.append(
                                     ConfluenceFactor(
                                         name="Opposing Structure",
@@ -5136,12 +5136,12 @@ def _calculate_conflict_penalty(
 
     # BTC impulse gate failure is major conflict
     btc_factor = next((f for f in factors if f.name == "BTC Impulse Gate"), None)
-    if btc_factor and btc_factor.score < 20.0:  # FIXED: was == 0.0 (too strict)
+    if btc_factor and btc_factor.score < 50.0:  # FIXED: was < 20.0 (too strict, missed conflict threshold)
         # Progressive penalty based on how weak BTC alignment is
         if btc_factor.score == 0.0:
             penalty += 20.0  # Complete opposition
         else:
-            penalty += 10.0  # Weak alignment (0-20)
+            penalty += 10.0  # Weak alignment (0-50)
         logger.debug(
             "BTC impulse gate conflict: score %.1f → +%.1f penalty", btc_factor.score, penalty
         )

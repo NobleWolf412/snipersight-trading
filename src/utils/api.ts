@@ -1001,6 +1001,7 @@ export interface PaperTradingStatusResponse {
     progress_pct: number;
     passed: number;
     rejected: number;
+    actual_mode?: string;
     recent_symbols: Array<{
       symbol: string;
       passed: boolean;

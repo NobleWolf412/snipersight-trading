@@ -92,7 +92,7 @@ REGIME_POLICIES: Dict[str, RegimePolicy] = {
             "strong_up": 1.2,
             "up": 1.1,
             "sideways": 0.8,  # Reduce in chop
-            "down": 1.0,  # Can short
+            "down": 1.1,  # Can short, lean into it
             "strong_down": 1.1,  # Lean into strong shorts
         },
         confluence_adjustment={
