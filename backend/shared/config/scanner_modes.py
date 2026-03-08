@@ -311,7 +311,7 @@ MODES: Dict[str, ScannerMode] = {
         allowed_trade_types=("swing", "intraday", "scalp"),  # Balanced mix of all types
         volume_accel_lookback=5,  # Default balanced - good for mixed swing/intraday
         overrides={
-            "min_rr_ratio": 1.8,
+            "min_rr_ratio": 1.5,  # was 1.8 — more achievable with 4h/1h structure stops
             "atr_floor": 0.0015,
             "bias_gate": 0.65,
             "htf_swing_allowed": ("4h", "1h"),
