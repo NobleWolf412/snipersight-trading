@@ -194,7 +194,7 @@ class PlannerConfig:
                 min_rr=2.0,
                 target_rr_ladder=[2.0, 3.0, 6.0],
                 entry_zone_offset_atr=0.2,
-                stop_buffer_atr=1.0,
+                stop_buffer_atr=0.75,
                 stop_lookback_bars=10,
                 stop_use_htf_swings=True,
                 pd_compliance_required=True,  # Smart money doesn't chase price
