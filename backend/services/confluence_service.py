@@ -164,7 +164,7 @@ class ConfluenceService:
 
             # NEW: Require minimum margin for directional confidence
             # Close scores (within margin) are treated as indeterminate
-            DIRECTION_MARGIN = 5.0  # Minimum score edge required
+            DIRECTION_MARGIN = 5.0  # Minimum score edge required (was 8.0 — too aggressive, caused excessive compressed vol ties)
             score_diff = bullish_breakdown.total_score - bearish_breakdown.total_score
 
             # Determine winner - use STRICT greater-than to avoid long bias on ties
@@ -233,9 +233,15 @@ class ConfluenceService:
                         getattr(symbol_regime, "trend", "neutral") if symbol_regime else "neutral"
                     )
 
-                    # Bug Fix: In compressed volatility, regime trend tie-breaker is
-                    # unreliable — the spring hasn't released yet. Skip instead of
-                    # forcing directional bias into a coil market.
+                    # In compressed volatility, regime trend tie-breaker can be unreliable
+                    # — the spring hasn't released yet.
+                    #
+                    # OLD behaviour: hard-block ALL compressed-vol ties.
+                    # NEW behaviour: only hard-block when BOTH scores fail the minimum threshold
+                    # (weak signals in a coiling market → genuinely skip).
+                    # When one or both scores still PASS the threshold (e.g. 76% vs 72%),
+                    # the stronger direction is still a valid trade; compressed vol means
+                    # reduce size, not zero trades.
                     if volatility == "compressed":
                         # Both fail threshold -> unreliable, skip
                         if not bullish_passes and not bearish_passes:
@@ -264,6 +270,18 @@ class ConfluenceService:
                         logger.info(
                             "⚠️ %s Compressed volatility tie but both scores pass threshold (%.1f vs %.1f) "
                             "— proceeding with regime tiebreaker at reduced conviction",
+                            context.symbol,
+                            bullish_breakdown.total_score,
+                            bearish_breakdown.total_score,
+                        )
+
+                    if volatility == "compressed" and (bullish_passes or bearish_passes):
+                        # Both pass (or mixed) — note compressed vol for reduced sizing,
+                        # but still let the regime/structural tiebreaker choose direction.
+                        context.metadata["compressed_vol_tiebreak"] = True
+                        logger.info(
+                            "⚠️ %s Compressed volatility tie — both scores near threshold "
+                            "(%.1f vs %.1f), proceeding with regime tiebreaker at reduced conviction",
                             context.symbol,
                             bullish_breakdown.total_score,
                             bearish_breakdown.total_score,
