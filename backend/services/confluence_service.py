@@ -470,21 +470,32 @@ class ConfluenceService:
                 direction_normalized = chosen_direction.upper()
                 is_long = direction_normalized == "LONG"
 
+                # Counter-trend setups must be confirmed on meaningful timeframes (not just 5m noise)
+                allowed_tfs = getattr(self._config, "structure_timeframes", ("1d", "4h", "1h"))
+                primary_tf = getattr(self._config, "primary_planning_timeframe", "1h")
+                if primary_tf not in allowed_tfs:
+                    allowed_tfs = tuple(list(allowed_tfs) + [primary_tf])
+
                 # Check sweep of correct liquidity (lows for LONG, highs for SHORT)
                 target_sweep_type = "low" if is_long else "high"
                 has_confirmed_sweep = any(
                     getattr(s, "confirmation_level", 1 if s.confirmation else 0) >= 1
+                    and getattr(s, "timeframe", "1h") in allowed_tfs
                     for s in smc.liquidity_sweeps
                     if s.sweep_type == target_sweep_type
                 )
 
                 # Check structural break in trade direction post-sweep
                 target_break_dir = "bullish" if is_long else "bearish"
-                has_structure_shift = any(
-                    b.break_type in ("CHoCH", "BOS")
+                
+                # Keep track of the confirming shifts to determine timeframe
+                confirming_shifts = [
+                    b for b in smc.structural_breaks
+                    if b.break_type in ("CHoCH", "BOS")
                     and getattr(b, "direction", "") == target_break_dir
-                    for b in smc.structural_breaks
-                )
+                    and getattr(b, "timeframe", "1h") in allowed_tfs
+                ]
+                has_structure_shift = len(confirming_shifts) > 0
 
                 # Check order block with meaningful score
                 ob_factor = next((f for f in chosen.factors if f.name == "Order Block"), None)
@@ -509,13 +520,37 @@ class ConfluenceService:
                     )
                 else:
                     # Institutional sequence confirmed but still counter-HTF.
-                    # Downgrade to a quick scalp targeting the nearest HTF S/R.
-                    context.metadata["counter_htf_scalp"] = True
-                    logger.info(
-                        "🔀 %s Counter-HTF scalp approved — Inst. sequence confirmed "
-                        "(Sweep→CHoCH/BOS→OB). Downgrading to HTF-level scalp.",
-                        context.symbol,
-                    )
+                    # Determine the strength of the reversal based on the timeframe of the shift.
+                    highest_tf = "1h" # Default
+                    tf_weights = {"1w": 6, "1d": 5, "4h": 4, "1h": 3, "15m": 2, "5m": 1}
+                    
+                    if confirming_shifts:
+                        # Find the shift with the highest timeframe weight
+                        best_shift = max(confirming_shifts, key=lambda x: tf_weights.get(getattr(x, "timeframe", "1h"), 0))
+                        highest_tf = getattr(best_shift, "timeframe", "1h")
+                    
+                    if highest_tf in ("1w", "1d", "4h"):
+                        counter_htf_type = "swing"
+                        logger.info(
+                            "🔀 %s Counter-HTF macro reversal approved — (%s %s). Classifying as SWING.",
+                            context.symbol, highest_tf, target_break_dir.upper()
+                        )
+                    elif highest_tf in ("1h", "15m"):
+                        counter_htf_type = "intraday"
+                        logger.info(
+                            "🔀 %s Counter-HTF intraday reversal approved — (%s %s). Classifying as INTRADAY.",
+                            context.symbol, highest_tf, target_break_dir.upper()
+                        )
+                    else:
+                        counter_htf_type = "scalp"
+                        logger.info(
+                            "🔀 %s Counter-HTF scalp approved — (%s %s). Classifying as SCALP.",
+                            context.symbol, highest_tf, target_break_dir.upper()
+                        )
+
+                    context.metadata["counter_htf_scalp"] = True # Keep for backwards compat if needed elsewhere
+                    context.metadata["counter_htf_type"] = counter_htf_type
+                    context.metadata["counter_htf_tf"] = highest_tf
 
             # Store alt scores for analytics/debugging
             context.metadata["alt_confluence"] = {

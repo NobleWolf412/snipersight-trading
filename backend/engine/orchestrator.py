@@ -1826,28 +1826,31 @@ class Orchestrator:
                 current_price=current_price,
                 missing_critical_timeframes=context.metadata.get("missing_critical_timeframes", []),
                 multi_tf_data=context.multi_tf_data,
-                expected_trade_type=self.scanner_mode.expected_trade_type,
-                volume_profile=context.metadata.get(
-                    "_volume_profile_obj"
-                ),  # Use full VolumeProfile object, not dict
+                expected_trade_type=context.metadata.get("counter_htf_type") or self.scanner_mode.expected_trade_type,
+                volume_profile=context.metadata.get("_volume_profile_obj"),
             )
 
             # === POST-PLAN ADJUSTMENTS ===
             # Apply modifications based on metadata set during confluence scoring.
             if plan:
-                # Counter-HTF Scalp: clip to TP1, tag for frontend
-                if context.metadata.get("counter_htf_scalp"):
-                    if plan.targets and len(plan.targets) > 1:
-                        plan.targets = plan.targets[:1]
-                    plan.metadata["counter_htf_scalp"] = True
-                    plan.metadata["setup_label"] = "Counter-HTF Scalp"
-                    plan.setup_type = (
-                        (plan.setup_type or "") + " [Counter-HTF Scalp]"
-                    ).strip()
-                    logger.info(
-                        "🔀 %s Plan adjusted: Counter-HTF scalp → TP1 only.",
-                        context.symbol,
-                    )
+                # Dynamic Counter-HTF Classification:
+                counter_type = context.metadata.get("counter_htf_type")
+                if counter_type:
+                    # If it's a scalp or intraday counter-trend bounce, clip greed and target the immediate TP1 S/R level only.
+                    if counter_type in ("scalp", "intraday"):
+                        if plan.targets and len(plan.targets) > 1:
+                            plan.targets = plan.targets[:1]
+                        logger.info(
+                            "🔀 %s Plan adjusted: Counter-HTF %s → TP1 only.",
+                            context.symbol, counter_type
+                        )
+                    
+                    # Update label and frontend tags
+                    plan.metadata["counter_htf_scalp"] = True # Keep for backwards compat
+                    plan.metadata["counter_htf_type"] = counter_type
+                    label_suffix = f" [Counter-HTF {counter_type.capitalize()}]"
+                    plan.metadata["setup_label"] = f"Counter-HTF {counter_type.capitalize()}"
+                    plan.setup_type = ((plan.setup_type or "") + label_suffix).strip()
 
                 # APEX Signal: tag for frontend visual treatment
                 bd_metadata = getattr(context.confluence_breakdown, "metadata", {}) or {}
