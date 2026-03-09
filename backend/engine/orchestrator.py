@@ -2397,11 +2397,10 @@ class Orchestrator:
                     ),
                 )
             )
-            # Keep existing min_confluence_score if caller intentionally raised it; otherwise adopt baseline
+            # Honor the existing min_confluence_score if explicitly set by caller (>0), otherwise adopt baseline
             if hasattr(self.config, "min_confluence_score"):
-                self.config.min_confluence_score = max(
-                    self.config.min_confluence_score, mode.min_confluence_score
-                )
+                if getattr(self.config, "min_confluence_score", 0) <= 0:
+                    self.config.min_confluence_score = mode.min_confluence_score
 
             # Wire planner-specific knobs from mode into config
             self.config.primary_planning_timeframe = mode.primary_planning_timeframe

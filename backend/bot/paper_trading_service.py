@@ -847,7 +847,14 @@ class PaperTradingService:
                 cs["recent_symbols"] = recent[:5]  # pyre-ignore
 
             # Run scanner
-            self.orchestrator.apply_mode(self.mode)
+            orch = self.orchestrator
+            assert orch is not None
+            orch.apply_mode(self.mode)
+            
+            # Apply user's custom min confluence override if specified
+            if getattr(conf, "min_confluence", None) is not None:
+                orch.config.min_confluence_score = conf.min_confluence
+                
             loop = asyncio.get_running_loop()
             trade_plans, rejection_summary = await loop.run_in_executor(
                 None,

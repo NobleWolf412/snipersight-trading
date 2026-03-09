@@ -1193,10 +1193,10 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
 
       {/* Progress tracking */}
       <div className="space-y-1.5 mb-2">
-        <div className="flex justify-between text-[9px] font-mono text-muted-foreground uppercase tracking-tighter">
-          <span className="text-red-400/70">STOP ({formatCurrency(position.risk_pnl)})</span>
-          <span>ENTRY</span>
-          <span className="text-green-400/70">TARGET ({formatCurrency(position.target_pnl)})</span>
+        <div className="relative h-4 mt-1 text-[9px] font-mono text-muted-foreground uppercase tracking-tighter">
+          <span className="absolute left-0 text-red-400/70">STOP ({formatCurrency(position.risk_pnl)})</span>
+          <span className="absolute left-1/2 -translate-x-1/2">ENTRY</span>
+          <span className="absolute right-0 text-green-400/70">TARGET ({formatCurrency(position.target_pnl)})</span>
         </div>
         <div className="hud-progress-bg">
           <div
