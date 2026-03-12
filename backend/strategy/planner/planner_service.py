@@ -418,16 +418,26 @@ def generate_trade_plan(
             targets[0].percentage = 50.0
             targets[1].percentage = 30.0
             targets[2].percentage = 20.0
-        elif n >= 4:
-            # 40%, 30%, 20%, 10% for first 4, then split remainder
-            percentages = [40.0, 30.0, 20.0, 10.0]
-            for i, pct in enumerate(percentages):
-                if i < n:
-                    targets[i].percentage = pct
-            # If more than 4 targets, split remaining 0% (shouldn't happen often)
-            # The first 4 already sum to 100%
+        else:
+            # For 4+ targets, use a decaying distribution
+            # TP1: 40%, TP2: 30%, TP3: 20%, others: split remaining 10%
+            targets[0].percentage = 40.0
+            targets[1].percentage = 30.0
+            targets[2].percentage = 20.0
+            
+            remaining_pct = 10.0
+            others_count = n - 3
+            pct_per_other = remaining_pct / others_count
+            for i in range(3, n):
+                targets[i].percentage = round(pct_per_other, 1)
 
-        logger.debug(f"Target percentages assigned: {[t.percentage for t in targets]}")
+        # Ensure absolute sum is 100.0 by adjusting the last target for floating point residue
+        current_sum = sum(t.percentage for t in targets)
+        if current_sum != 100.0:
+            targets[-1].percentage += (100.0 - current_sum)
+            targets[-1].percentage = round(targets[-1].percentage, 1)
+
+        logger.debug(f"Target percentages assigned: {[t.percentage for t in targets]} (Sum: {sum(t.percentage for t in targets)}%)")
 
     # === 6. Determine Trade Type (Delegate to Risk Engine) ===
     # Collect structure TFs used

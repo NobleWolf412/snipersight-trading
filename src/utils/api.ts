@@ -991,6 +991,7 @@ export interface PaperTradingStatusResponse {
     filled_qty: number;
     status: string;
     confluence: number;
+    trade_type?: "scalp" | "intraday" | "swing" | string;
   }>;
   last_scan_at: string | null;
   next_scan_in_seconds: number | null;

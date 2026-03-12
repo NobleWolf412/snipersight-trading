@@ -2167,6 +2167,7 @@ def _adjust_targets_for_leverage(
             label=target.label,
             rr_ratio=target.rr_ratio,  # FIXED: R:R stays same when both scale proportionally
             weight=target.weight,
+            percentage=target.percentage,  # FIXED: Copy percentage
             rationale=f"{target.rationale} [Adjusted {scale_factor:.0%} for {leverage}x leverage]",
         )
         adjusted_targets.append(adjusted_target)

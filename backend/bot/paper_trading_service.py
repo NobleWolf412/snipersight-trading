@@ -530,6 +530,7 @@ class PaperTradingService:
                         "filled_qty": order.filled_quantity,
                         "status": order.status.value,
                         "confluence": plan.confidence_score,
+                        "trade_type": getattr(plan, "trade_type", "intraday"),
                     })
 
         # Signal processing log (every signal with full details)
@@ -1452,6 +1453,11 @@ class PaperTradingService:
 
                 self.completed_trades.append(trade)
                 self._completed_trade_ids.add(trade.trade_id)
+                
+                # CRITICAL: Remove from position manager to prevent "Zombie" active positions
+                # and memory leaks. The trade is now in completed_trades.
+                self.position_manager.positions.pop(pos.position_id, None)
+                logger.info(f"💾 Trade {pos.position_id} archived and removed from active tracking")
                 self._update_stats(trade)
 
                 self._log_activity(

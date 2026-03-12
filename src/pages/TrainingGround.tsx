@@ -1161,42 +1161,42 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-y-3 gap-x-2 text-[10px] sm:text-xs mb-4">
+      <div className="grid grid-cols-3 gap-y-4 gap-x-2 text-[10px] sm:text-xs mb-4 leading-tight">
         <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Size</div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Size</div>
           <div className="font-mono text-accent font-bold" title="Notional Position Value">{formatCurrency(position.quantity * position.entry_price)}</div>
         </div>
         <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Entry</div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Entry</div>
           <div className="font-mono">${position.entry_price.toFixed(2)}</div>
         </div>
         <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Current</div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Current</div>
           <div className="font-mono font-bold">${position.current_price.toFixed(2)}</div>
         </div>
 
         <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Est. Profit</div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Est. Profit</div>
           <div className="font-mono text-green-400 font-bold" title="Total Realized + Potential PnL">{formatCurrency(position.target_pnl)}</div>
         </div>
         <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">Risk Profile</div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Risk Profile</div>
           <div className="font-mono text-red-400 font-bold" title="Total Realized + Stop Loss PnL">{formatCurrency(position.risk_pnl)}</div>
         </div>
         <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px]">TP / SL</div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">TP / SL</div>
           <div className="font-mono text-[10px] opacity-80" title="Target price and Stop Loss price">
-            <span className="text-green-500/80">${tp1.toFixed(2)}</span> / <span className="text-red-500/80">${position.stop_loss.toFixed(2)}</span>
+            <span className="text-green-500/80">${tp1.toFixed(2)}</span><span className="mx-1 opacity-30">/</span><span className="text-red-500/80">${position.stop_loss.toFixed(2)}</span>
           </div>
         </div>
       </div>
 
       {/* Progress tracking */}
-      <div className="space-y-1.5 mb-2">
-        <div className="relative h-4 mt-1 text-[9px] font-mono text-muted-foreground uppercase tracking-tighter">
-          <span className="absolute left-0 text-red-400/70">STOP ({formatCurrency(position.risk_pnl)})</span>
-          <span className="absolute left-1/2 -translate-x-1/2">ENTRY</span>
-          <span className="absolute right-0 text-green-400/70">TARGET ({formatCurrency(position.target_pnl)})</span>
+      <div className="space-y-2 mb-2">
+        <div className="grid grid-cols-3 mt-1 text-[9px] font-mono text-muted-foreground uppercase tracking-tight">
+          <span className="text-red-400/70 text-left truncate">STOP ({formatCurrency(position.risk_pnl)})</span>
+          <span className="text-center opacity-50">ENTRY</span>
+          <span className="text-green-400/70 text-right truncate">TARGET ({formatCurrency(position.target_pnl)})</span>
         </div>
         <div className="hud-progress-bg">
           <div
@@ -1254,6 +1254,11 @@ function PendingOrderCard({ order }: { order: any }) {
             {order.direction}
           </Badge>
           <span className="font-bold text-sm tracking-tight">{order.symbol}</span>
+          {order.trade_type && (
+            <Badge variant="secondary" className="font-mono text-[9px] tracking-widest uppercase ml-1 opacity-80 bg-accent/10 text-accent border-accent/20">
+              {order.trade_type}
+            </Badge>
+          )}
           <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest bg-amber-500/10 px-1 py-0 rounded">Waiting Fill</span>
         </div>
         <div className="text-xs font-bold font-mono text-amber-400/80">
@@ -1342,11 +1347,11 @@ function ActivityItem({ event }: { event: PaperTradingActivity }) {
   };
 
   return (
-    <div className="flex items-center gap-2 text-sm py-1 px-2 rounded hover:bg-muted/30">
-      {getIcon()}
-      <span className="flex-1 truncate">{getMessage()}</span>
-      <span className="text-xs text-muted-foreground">
-        {new Date(event.timestamp).toLocaleTimeString()}
+    <div className="flex items-center gap-3 text-sm py-2 px-2 rounded hover:bg-muted/30 border-b border-border/10 last:border-0 border-dashed">
+      <div className="shrink-0">{getIcon()}</div>
+      <span className="flex-1 truncate leading-relaxed">{getMessage()}</span>
+      <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0">
+        {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </span>
     </div>
   );
@@ -1566,7 +1571,7 @@ function SignalIntelligencePanel({ signals }: { signals: SignalLogEntry[] }) {
           )}
 
           {/* Signal table */}
-          <div className="max-h-96 overflow-y-auto space-y-1">
+          <div className="max-h-96 overflow-y-auto space-y-2 pr-2">
             {[...signals].reverse().map((sig, idx) => (
               <SignalLogRow key={idx} signal={sig} />
             ))}
@@ -1595,36 +1600,39 @@ function SignalLogRow({ signal }: { signal: SignalLogEntry }) {
       className="p-2 rounded-lg bg-background/60 border border-border/50 hover:border-purple-500/30 transition-colors cursor-pointer"
       onClick={() => setExpanded(!expanded)}
     >
-      <div className="flex items-center gap-2 text-xs font-mono">
+      <div className="flex items-center gap-4 text-[10px] sm:text-xs font-mono py-1">
         {/* Result badge */}
-        <Badge variant="outline" className={cn("text-[9px] tracking-widest uppercase border px-1.5 py-0 min-w-[38px] text-center", resultColor)}>
+        <Badge variant="outline" className={cn("text-[9px] tracking-widest uppercase border px-2 py-0 min-w-[45px] text-center shrink-0", resultColor)}>
           {resultLabel}
         </Badge>
 
-        {/* Direction */}
-        <span className={cn("font-bold w-10", isLong ? 'text-green-400' : 'text-red-400')}>
-          {isLong ? <ArrowUp size={12} className="inline mr-0.5" /> : <ArrowDown size={12} className="inline mr-0.5" />}
-          {signal.direction.slice(0, 1)}
-        </span>
-
-        {/* Symbol */}
-        <span className="font-bold text-foreground w-24 truncate">{signal.symbol.replace('/USDT', '')}</span>
+        {/* Direction & Symbol */}
+        <div className="flex items-center gap-2 w-32 shrink-0">
+          <span className={cn("font-bold", isLong ? 'text-green-400' : 'text-red-400')}>
+            {isLong ? <ArrowUp size={12} className="inline" /> : <ArrowDown size={12} className="inline" />}
+            {signal.direction.slice(0, 1)}
+          </span>
+          <span className="font-bold text-foreground truncate">{signal.symbol.replace('/USDT', '')}</span>
+        </div>
 
         {/* Confluence */}
-        <span className={cn("w-12 text-right", signal.confluence >= 82 ? 'text-green-400' : 'text-yellow-400')}>
+        <span className={cn("w-12 text-right shrink-0", signal.confluence >= 82 ? 'text-green-400' : 'text-yellow-400')}>
           {signal.confluence.toFixed(0)}%
         </span>
 
         {/* Entry / Stop / R:R */}
-        <span className="text-muted-foreground w-20 text-right">${signal.entry_zone.toFixed(2)}</span>
-        <span className="text-red-400/60 w-20 text-right">${signal.stop_loss.toFixed(2)}</span>
-        {signal.rr && <span className="text-muted-foreground w-10 text-right">{signal.rr.toFixed(1)}R</span>}
+        <div className="flex items-center gap-3 w-40 justify-end shrink-0">
+          <span className="text-muted-foreground">${signal.entry_zone.toFixed(2)}</span>
+          <span className="text-red-400/60">${signal.stop_loss.toFixed(2)}</span>
+        </div>
 
         {/* Reason (truncated) */}
-        <span className="flex-1 truncate text-muted-foreground/80 pl-2">{signal.reason}</span>
+        <span className="flex-1 truncate text-muted-foreground/80 pl-4 border-l border-border/30 italic">
+          {signal.reason}
+        </span>
 
         {/* Time */}
-        <span className="text-muted-foreground/50 w-16 text-right">
+        <span className="text-muted-foreground/40 w-20 text-right shrink-0">
           {new Date(signal.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
         </span>
       </div>

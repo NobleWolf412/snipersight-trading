@@ -535,16 +535,18 @@ def evaluate_htf_structural_proximity(
     swing_structure: Optional[Dict] = None,
 ) -> Dict:
     """
-    MANDATORY HTF Structural Proximity Gate.
+    DIRECTION-AWARE HTF Structural Proximity Gate.
 
-    Validates that entry occurs at a meaningful HTF structural level:
-    - HTF Order Block (4H/1D)
-    - HTF FVG (4H/1D)
-    - HTF Key Level (support/resistance)
-    - HTF Swing Point (last HH/HL/LH/LL)
-    - Premium/Discount Zone boundary
+    Validates that entry occurs at a meaningful HTF structural level aligned
+    with the trade direction. Penalizes trades that enter into opposing structure.
 
-    If entry is >2 ATR from ANY HTF structure, apply HEAVY penalty or reject.
+    Aligned (bonus):
+    - LONG: Bullish OB/FVG, Support levels, HL/LL swing points, discount zone
+    - SHORT: Bearish OB/FVG, Resistance levels, HH/LH swing points, premium zone
+
+    Opposing (penalty/block):
+    - LONG entering into bearish supply OB/resistance = wall above
+    - SHORT entering into bullish demand OB/support = floor below
     """
     # Get HTF timeframes from mode config
     structure_tfs = getattr(mode_config, "structure_timeframes", ("4h", "1d"))
@@ -563,14 +565,27 @@ def evaluate_htf_structural_proximity(
         }
 
     atr = primary_ind.atr
-    # FIXED: Allow per-mode configuration instead of hardcoded 5 ATR
     max_distance_atr = getattr(mode_config, "htf_proximity_atr", 5.0)
 
-    min_distance = float("inf")
-    nearest_structure = None
-    structure_type = None
+    # Normalize direction
+    direction_lower = direction.lower()
+    is_bullish = direction_lower in ("long", "bullish")
 
-    # 1. Check HTF Order Blocks
+    # Track aligned structures (support our direction) and opposing structures (walls we'd enter into)
+    min_aligned_distance = float("inf")
+    nearest_aligned = None
+    aligned_type = None
+
+    min_opposing_distance = float("inf")
+    nearest_opposing = None
+    opposing_type = None
+
+    def _is_aligned_ob(ob_direction: str) -> bool:
+        """Bullish OB = demand zone = aligned with long. Bearish OB = supply zone = aligned with short."""
+        ob_dir_lower = ob_direction.lower()
+        return (is_bullish and ob_dir_lower == "bullish") or (not is_bullish and ob_dir_lower == "bearish")
+
+    # 1. Check HTF Order Blocks (direction-aware)
     for ob in smc.order_blocks:
         if ob.timeframe not in structure_tfs:
             continue
@@ -580,17 +595,25 @@ def evaluate_htf_structural_proximity(
         if ob.freshness_score < 0.5:
             continue
 
-        # OrderBlock uses 'high' and 'low', not 'top' and 'bottom'
         ob_center = (ob.high + ob.low) / 2
-        distance = abs(entry_price - ob_center)
-        distance_atr = distance / atr
+        # If price is inside the OB, distance is 0
+        if ob.low <= entry_price <= ob.high:
+            distance_atr = 0.0
+        else:
+            distance_atr = abs(entry_price - ob_center) / atr
 
-        if distance_atr < min_distance:
-            min_distance = distance_atr
-            nearest_structure = f"{ob.timeframe} {ob.direction} OB @ {ob_center:.5f}"
-            structure_type = "OrderBlock"
+        if _is_aligned_ob(ob.direction):
+            if distance_atr < min_aligned_distance:
+                min_aligned_distance = distance_atr
+                nearest_aligned = f"{ob.timeframe} {ob.direction} OB @ {ob_center:.5f}"
+                aligned_type = "OrderBlock"
+        else:
+            if distance_atr < min_opposing_distance:
+                min_opposing_distance = distance_atr
+                nearest_opposing = f"{ob.timeframe} {ob.direction} OB @ {ob_center:.5f} (opposing)"
+                opposing_type = "OrderBlock_OPPOSING"
 
-    # 2. Check HTF FVGs
+    # 2. Check HTF FVGs (direction-aware)
     for fvg in smc.fvgs:
         if fvg.timeframe not in structure_tfs:
             continue
@@ -599,58 +622,84 @@ def evaluate_htf_structural_proximity(
         if fvg.overlap_with_price > 0.5:
             continue
 
+        fvg_dir_lower = fvg.direction.lower()
+        is_aligned_fvg = (is_bullish and fvg_dir_lower == "bullish") or (not is_bullish and fvg_dir_lower == "bearish")
+
         if fvg.bottom <= entry_price <= fvg.top:
-            min_distance = 0.0
-            nearest_structure = f"{fvg.timeframe} FVG {fvg.bottom:.5f}-{fvg.top:.5f}"
-            structure_type = "FVG"
-            break
+            distance_atr = 0.0
+        else:
+            distance = min(abs(entry_price - fvg.top), abs(entry_price - fvg.bottom))
+            distance_atr = distance / atr
 
-        distance = min(abs(entry_price - fvg.top), abs(entry_price - fvg.bottom))
-        distance_atr = distance / atr
+        if is_aligned_fvg:
+            if distance_atr < min_aligned_distance:
+                min_aligned_distance = distance_atr
+                nearest_aligned = f"{fvg.timeframe} {fvg.direction} FVG"
+                aligned_type = "FVG"
+        else:
+            if distance_atr < min_opposing_distance:
+                min_opposing_distance = distance_atr
+                nearest_opposing = f"{fvg.timeframe} {fvg.direction} FVG (opposing)"
+                opposing_type = "FVG_OPPOSING"
 
-        if distance_atr < min_distance:
-            min_distance = distance_atr
-            nearest_structure = f"{fvg.timeframe} FVG boundary"
-            structure_type = "FVG"
-
-    # 3. Check Pre-Calculated HTF Levels (HTFLevelDetector) - PRIORITY
-    # These are high-quality clustering results
+    # 3. Check Pre-Calculated HTF Levels (direction-aware)
     if hasattr(smc, "htf_levels") and smc.htf_levels:
         for level in smc.htf_levels:
             if not hasattr(level, "price") or not hasattr(level, "level_type"):
                 continue
-
-            # Filter by timeframe
             if level.timeframe not in structure_tfs:
                 continue
 
             distance = abs(entry_price - level.price)
             distance_atr = distance / atr
+            lt = level.level_type.lower()
 
-            if distance_atr < min_distance:
-                min_distance = distance_atr
-                nearest_structure = (
-                    f"{level.timeframe} {level.level_type.title()} @ {level.price:.5f}"
-                )
-                structure_type = "HTF_Level"
+            # Support aligned for longs; resistance aligned for shorts; fib neutral (aligned)
+            is_aligned_level = (is_bullish and ("support" in lt or "fib" in lt)) or \
+                                (not is_bullish and ("resistance" in lt or "fib" in lt))
 
-    # 3. Check HTF Swing Points
+            if is_aligned_level:
+                if distance_atr < min_aligned_distance:
+                    min_aligned_distance = distance_atr
+                    nearest_aligned = f"{level.timeframe} {level.level_type.title()} @ {level.price:.5f}"
+                    aligned_type = "HTF_Level"
+            else:
+                if distance_atr < min_opposing_distance:
+                    min_opposing_distance = distance_atr
+                    nearest_opposing = f"{level.timeframe} {level.level_type.title()} @ {level.price:.5f} (opposing)"
+                    opposing_type = "HTF_Level_OPPOSING"
+
+    # 4. Check HTF Swing Points (direction-aware)
+    # Longs: HL/LL = support (aligned); HH/LH = resistance (opposing)
+    # Shorts: HH/LH = resistance (aligned); HL/LL = support (opposing)
     if swing_structure:
+        aligned_swings = ["last_hl", "last_ll"] if is_bullish else ["last_hh", "last_lh"]
+        opposing_swings = ["last_hh", "last_lh"] if is_bullish else ["last_hl", "last_ll"]
+
         for tf in structure_tfs:
             if tf not in swing_structure:
                 continue
             ss = swing_structure[tf]
-            for swing_type in ["last_hh", "last_hl", "last_lh", "last_ll"]:
+
+            for swing_type in aligned_swings:
                 swing_price = ss.get(swing_type)
                 if swing_price:
-                    distance = abs(entry_price - swing_price)
-                    distance_atr = distance / atr
-                    if distance_atr < min_distance:
-                        min_distance = distance_atr
-                        nearest_structure = f"{tf} {swing_type.upper()} @ {swing_price:.5f}"
-                        structure_type = "SwingPoint"
+                    distance_atr = abs(entry_price - swing_price) / atr
+                    if distance_atr < min_aligned_distance:
+                        min_aligned_distance = distance_atr
+                        nearest_aligned = f"{tf} {swing_type.upper()} @ {swing_price:.5f}"
+                        aligned_type = "SwingPoint"
 
-    # 4. Check Premium/Discount Zone Boundaries
+            for swing_type in opposing_swings:
+                swing_price = ss.get(swing_type)
+                if swing_price:
+                    distance_atr = abs(entry_price - swing_price) / atr
+                    if distance_atr < min_opposing_distance:
+                        min_opposing_distance = distance_atr
+                        nearest_opposing = f"{tf} {swing_type.upper()} @ {swing_price:.5f} (opposing)"
+                        opposing_type = "SwingPoint_OPPOSING"
+
+    # 5. Check Premium/Discount Zone Boundaries
     htf = max(
         structure_tfs,
         key=lambda x: {"5m": 0, "15m": 1, "1h": 2, "4h": 3, "1d": 4, "1w": 5}.get(x, 0),
@@ -665,65 +714,99 @@ def evaluate_htf_structural_proximity(
             eq_distance = abs(entry_price - pd_zone.equilibrium)
             eq_distance_atr = eq_distance / atr
 
-            if eq_distance_atr < min_distance:
-                min_distance = eq_distance_atr
-                nearest_structure = f"{htf} Equilibrium @ {pd_zone.equilibrium:.5f}"
-                structure_type = "PremiumDiscount"
-
-            # Check if in optimal zone for direction
-            in_optimal_zone = (direction == "bullish" and entry_price <= pd_zone.equilibrium) or (
-                direction == "bearish" and entry_price >= pd_zone.equilibrium
+            # Equilibrium is an aligned structure if in correct zone
+            in_optimal_zone = (is_bullish and entry_price <= pd_zone.equilibrium) or (
+                not is_bullish and entry_price >= pd_zone.equilibrium
             )
 
-            if not in_optimal_zone and min_distance > 1.0:
+            if in_optimal_zone and eq_distance_atr < min_aligned_distance:
+                min_aligned_distance = eq_distance_atr
+                nearest_aligned = f"{htf} Equilibrium @ {pd_zone.equilibrium:.5f}"
+                aligned_type = "PremiumDiscount"
+            elif not in_optimal_zone and min_aligned_distance > 1.0:
                 return {
                     "valid": False,
                     "score_adjustment": -40.0,
-                    "proximity_atr": min_distance,
+                    "proximity_atr": min_aligned_distance if min_aligned_distance != float("inf") else eq_distance_atr,
                     "nearest_structure": f"Entry in {pd_zone.current_zone} zone (wrong for {direction})",
                     "structure_type": "PremiumDiscount_VIOLATION",
                 }
         except Exception:
             pass
 
-    # DECISION LOGIC
-    if min_distance <= max_distance_atr:
+    # ==========================================================================
+    # DIRECTION-AWARE DECISION LOGIC
+    # Priority 1: Penalize/block entries into opposing structure (the core fix)
+    # ==========================================================================
+
+    if min_opposing_distance <= 0.5:
+        # Hard block: entering directly into a wall
+        logger.warning(
+            "🚫 HTF OPPOSING STRUCTURE BLOCK: %s trade entering into %s (%.2f ATR away)",
+            direction,
+            nearest_opposing,
+            min_opposing_distance,
+        )
+        return {
+            "valid": False,
+            "score_adjustment": -25.0,
+            "proximity_atr": min_opposing_distance,
+            "nearest_structure": nearest_opposing or "Opposing HTF structure",
+            "structure_type": opposing_type or "OPPOSING_BLOCK",
+        }
+
+    if min_opposing_distance <= 1.5 and min_aligned_distance > 2.0:
+        # Soft penalty: approaching an opposing structure without aligned structure nearby
+        logger.debug(
+            "⚠️ HTF OPPOSING STRUCTURE caution: %.2f ATR from %s",
+            min_opposing_distance,
+            nearest_opposing,
+        )
+        return {
+            "valid": False,
+            "score_adjustment": -10.0,
+            "proximity_atr": min_opposing_distance,
+            "nearest_structure": nearest_opposing or "Approaching opposing structure",
+            "structure_type": opposing_type or "OPPOSING_CAUTION",
+        }
+
+    # Priority 2: Reward proximity to aligned structure
+    if min_aligned_distance <= max_distance_atr:
         bonus = 0.0
-        if min_distance < 0.5:
+        if min_aligned_distance < 0.5:
             bonus = 15.0
-        elif min_distance < 1.0:
+        elif min_aligned_distance < 1.0:
             bonus = 10.0
-        elif min_distance < 1.5:
+        elif min_aligned_distance < 1.5:
             bonus = 5.0
+
+        # Reduce bonus if opposing structure is also close (conflicted zone)
+        if min_opposing_distance <= 3.0:
+            bonus = max(0.0, bonus - 5.0)
 
         return {
             "valid": True,
             "score_adjustment": bonus,
-            "proximity_atr": min_distance,
-            "nearest_structure": nearest_structure or "HTF structure present",
-            "structure_type": structure_type or "unknown",
+            "proximity_atr": min_aligned_distance,
+            "nearest_structure": nearest_aligned or "HTF aligned structure present",
+            "structure_type": aligned_type or "unknown",
         }
     else:
-        # Handle case where no HTF structure was found at all
-        if min_distance == float("inf"):
-            # No structure found - return neutral result, don't penalize harshly
-            # This can happen if OBs/FVGs only exist on LTF, not HTF
+        if min_aligned_distance == float("inf"):
             return {
-                "valid": True,  # Don't block, just don't give bonus
-                "score_adjustment": -5.0,  # Small penalty for lack of HTF structure
+                "valid": True,
+                "score_adjustment": -5.0,
                 "proximity_atr": None,
-                "nearest_structure": "No HTF structure detected on structure timeframes",
+                "nearest_structure": "No aligned HTF structure detected",
                 "structure_type": "NONE_FOUND",
             }
 
-        # Structure exists but is too far away - apply graduated penalty
-        # -5 penalty per ATR beyond max_distance, capped at -20
-        penalty = max(-20.0, -5.0 * (min_distance - max_distance_atr))
+        penalty = max(-20.0, -5.0 * (min_aligned_distance - max_distance_atr))
         return {
             "valid": False,
             "score_adjustment": penalty,
-            "proximity_atr": min_distance,
-            "nearest_structure": nearest_structure or "No HTF structure nearby",
+            "proximity_atr": min_aligned_distance,
+            "nearest_structure": nearest_aligned or "No aligned HTF structure nearby",
             "structure_type": "NONE_NEARBY",
         }
 
@@ -1791,6 +1874,79 @@ def _score_regime_alignment(
     return result
 
 
+def _score_ob_rejection_quality(df: Any, direction: str) -> Dict:
+    """
+    Checks if recent price action shows active rejection at a structural level.
+    Used to confirm if an Order Block/FVG is actually holding.
+    """
+    if df is None or len(df) < 3:
+        return {"score": 50.0, "reason": "Insufficient data for rejection check"}
+    
+    # Look at last 3 candles
+    recent = df.iloc[-3:]
+    score = 50.0
+    reason = "Neutral/No clear rejection"
+    rejection_found = False
+
+    # Normalize direction
+    direction_lower = direction.lower()
+    is_bullish = direction_lower in ("long", "bullish")
+
+    for idx, row in recent.iterrows():
+        try:
+            body_size = abs(row['close'] - row['open'])
+            candle_range = row['high'] - row['low']
+            if candle_range <= 0:
+                continue
+                
+            if is_bullish:
+                lower_wick = min(row['open'], row['close']) - row['low']
+                # Bullish pinbar/rejection definition: lower wick > 1.5x body AND > 40% of candle range
+                if lower_wick > body_size * 1.5 and (lower_wick / candle_range) > 0.4:
+                    rejection_found = True
+                    score = max(score, 75.0)
+                    reason = "Bullish rejection wick detected"
+                    if lower_wick > body_size * 2.5:
+                        score = 100.0
+                        reason = "Strong bullish pinbar rejection"
+            else:
+                upper_wick = row['high'] - max(row['open'], row['close'])
+                # Bearish pinbar/rejection definition: upper wick > 1.5x body AND > 40% of candle range
+                if upper_wick > body_size * 1.5 and (upper_wick / candle_range) > 0.4:
+                    rejection_found = True
+                    score = max(score, 75.0)
+                    reason = "Bearish rejection wick detected"
+                    if upper_wick > body_size * 2.5:
+                        score = 100.0
+                        reason = "Strong bearish pinbar rejection"
+        except Exception:
+            pass
+                    
+    if not rejection_found:
+        # Fallback: Check for engulfing momentum in our direction
+        try:
+            last_candle = df.iloc[-1]
+            prev_candle = df.iloc[-2]
+            if is_bullish:
+                if last_candle['close'] > last_candle['open'] and last_candle['close'] > prev_candle['high']:
+                    score = 80.0
+                    reason = "Bullish engulfing momentum off level"
+                else:
+                    score = 15.0  # HEAVY penalty for lack of rejection at OB
+                    reason = "No bullish rejection or momentum at OB"
+            else:
+                if last_candle['close'] < last_candle['open'] and last_candle['close'] < prev_candle['low']:
+                    score = 80.0
+                    reason = "Bearish engulfing momentum off level"
+                else:
+                    score = 15.0  # HEAVY penalty for lack of rejection at OB
+                    reason = "No bearish rejection or momentum at OB"
+        except Exception:
+            pass
+                
+    return {"score": score, "reason": reason}
+
+
 def calculate_confluence_score(
     smc_snapshot: SMCSnapshot,
     indicators: IndicatorSet,
@@ -2055,6 +2211,27 @@ def calculate_confluence_score(
                     score=volume_score,
                     weight=get_w("volume", 0.10),
                     rationale=_get_volume_rationale(primary_indicators),
+                )
+            )
+
+        # VOLUME CONVICTION GATE (Soft Block)
+        # Prevents trades with zero volume confirmation from passing if other scores are borderline
+        if volume_score < 30.0:
+            factors.append(
+                ConfluenceFactor(
+                    name="Low Volume Penalty",
+                    score=20.0,
+                    weight=0.15,  # Heavier weight to act as a drag
+                    rationale=f"Trade lacks volume confirmation (Score: {volume_score:.1f}) - low conviction",
+                )
+            )
+        elif profile in ("macro_surveillance", "stealth_balanced") and volume_score < 40.0:
+            factors.append(
+                ConfluenceFactor(
+                    name="Swing Volume Penalty",
+                    score=30.0,
+                    weight=0.10,
+                    rationale=f"Swing setups require solid volume backing (Score: {volume_score:.1f})",
                 )
             )
 
@@ -2671,8 +2848,8 @@ def calculate_confluence_score(
         except Exception as e:
             logger.debug("Regime alignment scoring failed: %s", e)
 
-    # --- NEW: Inside Order Block Bonus ---
-    # Extra confluence when price is inside a valid aligned OB
+    # --- NEW: Inside Order Block Bonus WITH REJECTION CONFIRMATION ---
+    # Evaluates price action when inside an aligned OB to ensure it is holding
     try:
         if current_price is not None:
             for ob in smc_snapshot.order_blocks:
@@ -2687,20 +2864,56 @@ def calculate_confluence_score(
                         direction in ("bearish", "short") and ob_direction == "bearish"
                     ):
                         tf = getattr(ob, "timeframe", "unknown")
-                        # TIGHTENED: Score based on OB quality instead of flat 100
                         mitigation = getattr(ob, "mitigation_level", 0.0)
                         freshness = getattr(ob, "freshness_score", 0.8)
-                        # Start at 70, add up to 15 for freshness/mitigation
-                        inside_score = 70.0 + (freshness * 10) + ((1.0 - mitigation) * 5)
-                        factors.append(
-                            ConfluenceFactor(
-                                name="Inside Order Block",
-                                score=min(85.0, inside_score),  # Cap at 85 (was 100)
-                                weight=get_w("inside_ob", 0.10),
-                                rationale=f"Price inside {tf} {ob_direction} OB (${ob_low:.2f}-${ob_high:.2f}) - immediate entry zone",
+                        
+                        # Structural base quality (max 30)
+                        base_quality = (freshness * 20) + ((1.0 - mitigation) * 10)
+                        
+                        # Rejection Quality check
+                        rejection_score = 50.0
+                        rejection_reason = "No price action data"
+                        
+                        # Try to get timeframe data for the OB's timeframe or primary tf
+                        df_to_check = None
+                        if indicators.by_timeframe.get(tf):
+                            df_to_check = getattr(indicators.by_timeframe[tf], "dataframe", None)
+                        elif primary_tf and indicators.by_timeframe.get(primary_tf):
+                            df_to_check = getattr(indicators.by_timeframe[primary_tf], "dataframe", None)
+                            
+                        if df_to_check is not None:
+                            rej_result = _score_ob_rejection_quality(df_to_check, direction)
+                            rejection_score = rej_result["score"]
+                            rejection_reason = rej_result["reason"]
+                            
+                        # If rejection score is extremely low (<30), price is bleeding through the OB
+                        if rejection_score < 30.0:
+                            factors.append(
+                                ConfluenceFactor(
+                                    name="Failed Rejection Block",
+                                    score=rejection_score,  # Huge penalty
+                                    weight=get_w("inside_ob", 0.15), # Increased weight for veto
+                                    rationale=f"At {tf} {ob_direction} OB but failing to hold: {rejection_reason}",
+                                )
                             )
-                        )
-                        break  # Only count once
+                            # Log severe warning for bleeding OB
+                            logger.warning(
+                                "🚫 Order Block Bleed: %s trade at %s OB failing rejection check (%s)",
+                                direction, tf, rejection_reason
+                            )
+                        else:
+                            # Healthy rejection -> give bonus
+                            inside_score = base_quality + (rejection_score * 0.7) # 30 max base + 70 max rej = 100 max
+                            factors.append(
+                                ConfluenceFactor(
+                                    name="Inside Order Block",
+                                    score=min(100.0, inside_score),
+                                    weight=get_w("inside_ob", 0.12),
+                                    rationale=f"Inside {tf} {ob_direction} OB: {rejection_reason}",
+                                )
+                            )
+                        break  # Only evaluate the first aligned enclosing OB
+
     except Exception as e:
         logger.debug("Inside OB bonus failed: %s", e)
 
