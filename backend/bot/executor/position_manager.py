@@ -428,6 +428,13 @@ class PositionManager:
             logger.error(f"Failed to fetch price for {position.symbol}: {e}")
             return
 
+        if current_price <= 0:
+            logger.warning(
+                f"Skipping monitor cycle for {position.symbol}: "
+                f"invalid price {current_price} (cache miss or feed error)"
+            )
+            return
+
         # Update P&L and price extremes
         position.update_unrealized_pnl(current_price)
         position.update_price_extremes(current_price)
@@ -506,6 +513,18 @@ class PositionManager:
 
             # Calculate quantity to close
             close_qty = (target_hit.percentage / 100) * position.quantity
+
+            if close_qty <= 0:
+                logger.error(
+                    f"TARGET HIT but close_qty=0 for {position.position_id} | "
+                    f"{position.symbol} | target.percentage={target_hit.percentage} | "
+                    f"quantity={position.quantity} — skipping partial exit, "
+                    f"removing broken target to prevent infinite loop"
+                )
+                with self._lock:
+                    position.targets.remove(target_hit)
+                    position.targets_hit.append(target_hit)
+                return
 
             if self.order_executor:
                 await self._execute_partial_exit(position, current_price, close_qty)

@@ -424,7 +424,7 @@ def generate_trade_plan(
             targets[0].percentage = 40.0
             targets[1].percentage = 30.0
             targets[2].percentage = 20.0
-            
+
             remaining_pct = 10.0
             others_count = n - 3
             pct_per_other = remaining_pct / others_count
