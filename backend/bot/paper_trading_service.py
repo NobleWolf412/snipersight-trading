@@ -18,6 +18,7 @@ from enum import Enum
 import asyncio
 import logging
 import uuid
+from pathlib import Path
 
 from backend.bot.executor.paper_executor import PaperExecutor, OrderStatus, OrderType
 from backend.bot.executor.position_manager import PositionManager, PositionStatus
@@ -27,6 +28,8 @@ from backend.shared.config.defaults import ScanConfig
 from backend.shared.models.planner import TradePlan
 from backend.data.adapters.phemex import PhemexAdapter
 from backend.analysis.regime_policies import get_regime_policy
+from backend.diagnostics.logger import DiagnosticLogger, ProbeCategory, Severity
+from backend.diagnostics.report import ReportGenerator, ModeStats
 
 logger = logging.getLogger(__name__)
 
@@ -268,6 +271,9 @@ class PaperTradingService:
         self._pending_plans: Dict[str, TradePlan] = {}
         self._pending_placed_at: Dict[str, datetime] = {}
 
+        # Diagnostics
+        self.diagnostic_logger: Optional[DiagnosticLogger] = None
+
         logger.info("PaperTradingService initialized")
 
     async def start(self, config: PaperTradingConfig) -> Dict[str, Any]:
@@ -358,6 +364,15 @@ class PaperTradingService:
         self.status = PaperBotStatus.RUNNING
         self._running = True
 
+        # Initialize diagnostics
+        try:
+            diagnostic_path = Path("logs/paper_trading") / f"session_{self.session_id}"
+            self.diagnostic_logger = DiagnosticLogger(output_dir=diagnostic_path)
+            self.diagnostic_logger.set_context(mode=config.sniper_mode)
+            logger.info(f"Diagnostic logging initialized at {diagnostic_path}")
+        except Exception as e:
+            logger.error(f"Failed to initialize diagnostic logger: {e}")
+
         # Log activity
         self._log_activity(
             "session_started", {"session_id": self.session_id, "config": config.to_dict()}
@@ -407,6 +422,45 @@ class PaperTradingService:
 
         # Close all open positions
         await self._close_all_positions("session_stopped")
+
+        # Generate diagnostic report
+        if self.diagnostic_logger:
+            try:
+                diag_stats = self.diagnostic_logger.get_stats()
+                mode_name = self.config.sniper_mode if self.config else "unknown"
+                
+                mode_stats = {
+                    mode_name: ModeStats(
+                        mode=mode_name,
+                        trades=self.stats.total_trades,
+                        wins=self.stats.winning_trades,
+                        losses=self.stats.losing_trades,
+                        win_rate=self.stats.win_rate,
+                        avg_rr=self.stats.avg_rr,
+                        total_pnl_pct=self.stats.total_pnl_pct,
+                        issues_found=diag_stats["counts"]["total"],
+                        critical_issues=diag_stats["counts"]["critical"],
+                        warnings=diag_stats["counts"]["warning"]
+                    )
+                }
+                
+                report_gen = ReportGenerator(
+                    output_dir=self.diagnostic_logger.output_dir,
+                    logger=self.diagnostic_logger
+                )
+                
+                report_path = report_gen.generate(
+                    mode_stats=mode_stats,
+                    regime_stats={},
+                    config=self.config.to_dict() if self.config else {},
+                    start_time=self.started_at or self.stopped_at,
+                    end_time=self.stopped_at
+                )
+                
+                logger.info(f"Diagnostic report generated at: {report_path}")
+                self._log_activity("diagnostic_report_generated", {"path": str(report_path)})
+            except Exception as e:
+                logger.error(f"Failed to generate diagnostic report: {e}")
 
         # Log activity
         self._log_activity(
@@ -843,6 +897,34 @@ class PaperTradingService:
                     "passed": passed,
                     "reason": rejection_info.get("reason", "Unknown") if rejection_info else None
                 }
+                
+                # Log to diagnostics
+                if self.diagnostic_logger:
+                    category = ProbeCategory.CONF_BREAKDOWN_MISMATCH
+                    if rejection_info:
+                        rtype = rejection_info.get("reason_type")
+                        if rtype == "low_confluence":
+                            category = ProbeCategory.CONF_BREAKDOWN_MISMATCH
+                        elif rtype == "risk_validation":
+                            category = ProbeCategory.RISK_REJECTION_UNCLEAR
+                        elif rtype == "no_data":
+                            category = ProbeCategory.DATA_MISSING
+                        elif rtype == "missing_critical_tf":
+                            category = ProbeCategory.MTF_MISSING_CRITICAL
+                    
+                    if passed:
+                        # Only log passed if you want verbose logs, info level
+                        pass
+                    else:
+                        reason = rejection_info.get("reason", "Unknown") if rejection_info else "Unknown"
+                        self.diagnostic_logger.warning(
+                            "SCAN_002", 
+                            category, 
+                            f"Rejected: {sym} | {reason}", 
+                            context=rejection_info,
+                            symbol=sym
+                        )
+
                 recent = cs.setdefault("recent_symbols", [])  # pyre-ignore
                 recent.insert(0, status_obj)
                 cs["recent_symbols"] = recent[:5]  # pyre-ignore
@@ -991,6 +1073,20 @@ class PaperTradingService:
         # Keep last 200 entries
         if len(self.signal_log) > 200:
             self.signal_log = self.signal_log[-200:]
+
+        # Log to diagnostics
+        if self.diagnostic_logger:
+            diag_sev = Severity.INFO if result == "executed" else Severity.WARNING
+            diag_cat = ProbeCategory.EXEC_NO_FILL if result == "executed" else ProbeCategory.PLAN_RR_LOW
+            
+            self.diagnostic_logger.log(
+                probe_id="SIG_001",
+                category=diag_cat,
+                severity=diag_sev,
+                message=f"Signal {result}: {plan.symbol} ({plan.direction}) | Reason: {reason}",
+                context={"plan": str(plan), "result": result, "reason": reason},
+                symbol=plan.symbol
+            )
 
     async def _process_signal(self, plan: TradePlan):
         """
