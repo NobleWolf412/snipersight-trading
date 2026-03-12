@@ -253,7 +253,10 @@ PROBES: Dict[str, ProbeConfig] = {
     "CONF_003": ProbeConfig(
         "CONF_003",
         ProbeCategory.CONF_BREAKDOWN_MISMATCH,
-        "Synergy bonus in range 0-25",
+        # synergy_bonus is a net adjustment (bonuses - cycle gate penalties).
+        # Real range: roughly -15 (heavy LONG penalty) to +40 (multiple synergies).
+        # Only flag extreme outliers that indicate a scorer bug.
+        "Synergy net adjustment in valid range (-20 to 50)",
         Severity.WARNING,
     ),
     "CONF_004": ProbeConfig(
@@ -688,6 +691,33 @@ class ProbeRunner:
                 ProbeCategory.REGIME_UNKNOWN,
                 "Regime is UNKNOWN - insufficient data or calculation error",
                 context={"regime": regime},
+            )
+            return ProbeResult.FAIL
+        return ProbeResult.PASS
+
+    # -------------------------------------------------------------------------
+    # Confluence Probes
+    # -------------------------------------------------------------------------
+
+    def check_conf_breakdown_mismatch(self, synergy_bonus: float) -> ProbeResult:
+        """
+        Check the synergy net adjustment is within plausible bounds.
+
+        The scorer's synergy_bonus variable is a NET adjustment that includes both
+        positive synergy rewards and cycle gate penalties (which are added as negative
+        values). Valid range is approximately -20 to +50.  Values outside this window
+        indicate a scorer accumulation bug (e.g. unbounded stacking).
+        """
+        MIN_EXPECTED = -20.0
+        MAX_EXPECTED = 50.0
+
+        if not (MIN_EXPECTED <= synergy_bonus <= MAX_EXPECTED):
+            self.logger.warning(
+                "CONF_003",
+                ProbeCategory.CONF_BREAKDOWN_MISMATCH,
+                f"Synergy net adjustment {synergy_bonus:.1f} outside expected range "
+                f"[{MIN_EXPECTED}, {MAX_EXPECTED}] — possible scorer accumulation bug",
+                context={"synergy_bonus": synergy_bonus, "min": MIN_EXPECTED, "max": MAX_EXPECTED},
             )
             return ProbeResult.FAIL
         return ProbeResult.PASS
