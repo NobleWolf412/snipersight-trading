@@ -93,7 +93,7 @@ class ReportGenerator:
         lines.append(f"```json\n{json.dumps(config, indent=2)}\n```\n")
 
         # Write report
-        with open(report_path, "w") as f:
+        with open(report_path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
         return report_path
