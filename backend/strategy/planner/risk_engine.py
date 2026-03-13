@@ -983,15 +983,20 @@ def _calculate_stop_loss(
                     # This is preferable to rejecting the trade entirely
                     mode_profile = getattr(config, "profile", "balanced")
                     overrides = getattr(config, "overrides", None) or {}
-                    
+
                     # Mode-appropriate ATR multiplier (scalp modes tighter, swing modes wider)
                     if mode_profile in ("precision", "intraday_aggressive"):
                         fallback_atr_mult = 1.5  # Tight for scalp
                     elif mode_profile in ("macro_surveillance", "overwatch"):
                         fallback_atr_mult = 3.0  # Wide for swing
+                    elif mode_profile in ("stealth_balanced", "stealth"):
+                        # Stealth modes target swing/intraday setups — a 2.0x ATR stop in
+                        # compressed volatility puts the stop inside normal candle noise.
+                        # Use 2.5x so the stop survives intraday fluctuation.
+                        fallback_atr_mult = 2.5
                     else:
                         fallback_atr_mult = 2.0  # Standard for balanced modes
-                    
+
                     stop_level = max(entry_zone.far_entry * 0.001, entry_zone.far_entry - (fallback_atr_mult * atr))
                     rationale = f"ATR-based stop ({fallback_atr_mult}x ATR) - no swing/structure found"
                     distance_atr = fallback_atr_mult
@@ -1156,15 +1161,20 @@ def _calculate_stop_loss(
                     # ATR-based fallback when no swing/structure found
                     # This is preferable to rejecting the trade entirely
                     mode_profile = getattr(config, "profile", "balanced")
-                    
+
                     # Mode-appropriate ATR multiplier (scalp modes tighter, swing modes wider)
                     if mode_profile in ("precision", "intraday_aggressive"):
                         fallback_atr_mult = 1.5  # Tight for scalp
                     elif mode_profile in ("macro_surveillance", "overwatch"):
                         fallback_atr_mult = 3.0  # Wide for swing
+                    elif mode_profile in ("stealth_balanced", "stealth"):
+                        # Stealth modes target swing/intraday setups — a 2.0x ATR stop in
+                        # compressed volatility puts the stop inside normal candle noise.
+                        # Use 2.5x so the stop survives intraday fluctuation.
+                        fallback_atr_mult = 2.5
                     else:
                         fallback_atr_mult = 2.0  # Standard for balanced modes
-                    
+
                     stop_level = entry_zone.far_entry + (fallback_atr_mult * atr)  # Above for shorts
                     rationale = f"ATR-based stop ({fallback_atr_mult}x ATR) - no swing/structure found"
                     distance_atr = fallback_atr_mult
@@ -2249,6 +2259,12 @@ def _derive_trade_type(
     swing_target_threshold = 8.0 if is_scalp_mode else 3.5
     swing_stop_atr_threshold = 6.0 if is_scalp_mode else 3.5
 
+    # Minimum stop width for a trade to carry the "swing" label.
+    # A tight stop in a compressed/choppy market lives inside normal candle noise —
+    # the trade will stop out in minutes regardless of target size.
+    # Intraday noise on most crypto pairs is 1-2%, which requires at least ~1.5 ATR clearance.
+    MIN_SWING_STOP_ATR = 1.5
+
     # === DEBUG LOGGING ===
     logger.info(
         f"🔍 TRADE TYPE DERIVATION: expected={expected_trade_type}, is_scalp_mode={is_scalp_mode} | "
@@ -2257,30 +2273,51 @@ def _derive_trade_type(
         f"swing_target_threshold={swing_target_threshold:.1f}%, swing_stop_threshold={swing_stop_atr_threshold:.1f}ATR"
     )
 
-    # Very large target moves are swing regardless of structure
+    # Very large target moves are swing regardless of structure — but only if the stop
+    # is wide enough to survive intraday noise. A tight OB stop in compressed volatility
+    # will fire on a normal candle before the swing can develop.
     if target_move_pct >= swing_target_threshold:
+        if stop_distance_atr < MIN_SWING_STOP_ATR:
+            logger.info(
+                f"⚠️ INTRADAY (large target {target_move_pct:.2f}% qualifies for swing, "
+                f"but stop {stop_distance_atr:.2f} ATR < {MIN_SWING_STOP_ATR} minimum — "
+                f"stop is in noise territory, reclassifying as intraday)"
+            )
+            return "intraday"
         logger.info(
             f"✅ SWING (large target: {target_move_pct:.2f}% >= {swing_target_threshold:.1f}%)"
         )
         return "swing"
 
-    # Large target moves with HTF structure = swing
+    # Large target moves with HTF structure = swing (same minimum stop check)
     if target_move_pct >= (swing_target_threshold * 0.7) and htf_structure:
+        if stop_distance_atr < MIN_SWING_STOP_ATR:
+            logger.info(
+                f"⚠️ INTRADAY (target {target_move_pct:.2f}% + HTF structure qualifies for swing, "
+                f"but stop {stop_distance_atr:.2f} ATR < {MIN_SWING_STOP_ATR} minimum — reclassifying)"
+            )
+            return "intraday"
         logger.info(
             f"✅ SWING (target {target_move_pct:.2f}% >= {swing_target_threshold * 0.7:.1f}% + HTF structure)"
         )
         return "swing"
 
-    # Wide stops from HTF structure indicate swing trades
+    # Wide stops from HTF structure indicate swing trades (stop already validates itself here)
     if stop_distance_atr >= swing_stop_atr_threshold and htf_structure:
         logger.info(
             f"✅ SWING (wide stop: {stop_distance_atr:.2f}ATR >= {swing_stop_atr_threshold:.1f}ATR + HTF structure)"
         )
         return "swing"
 
-    # HTF primary timeframe with moderate targets = swing
+    # HTF primary timeframe with moderate targets = swing (same minimum stop check)
     # But only if NOT in scalp mode (sometimes 4H is used for bias in scalp modes, but planning is LTF)
     if not is_scalp_mode and target_move_pct >= 1.5 and primary_tf in ("4h", "1d"):
+        if stop_distance_atr < MIN_SWING_STOP_ATR:
+            logger.info(
+                f"⚠️ INTRADAY (HTF tf={primary_tf} + target {target_move_pct:.2f}% qualifies for swing, "
+                f"but stop {stop_distance_atr:.2f} ATR < {MIN_SWING_STOP_ATR} minimum — reclassifying)"
+            )
+            return "intraday"
         logger.info(
             f"✅ SWING (HTF primary_tf={primary_tf} + target {target_move_pct:.2f}% >= 1.5%)"
         )
