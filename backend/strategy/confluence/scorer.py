@@ -124,6 +124,8 @@ MODE_FACTOR_WEIGHTS = {
         "volume": 0.10,
         "volatility": 0.08,
         "htf_alignment": 0.25,
+        "htf_momentum_gate": 0.10,
+        "regime_alignment": 0.10,
         "htf_proximity": 0.15,
         "btc_impulse": 0.12,
         "weekly_stoch_rsi": 0.12,
@@ -154,6 +156,8 @@ MODE_FACTOR_WEIGHTS = {
         "volume": 0.10,
         "volatility": 0.10,
         "htf_alignment": 0.12,
+        "htf_momentum_gate": 0.07,
+        "regime_alignment": 0.07,
         "htf_proximity": 0.10,
         "btc_impulse": 0.08,
         "weekly_stoch_rsi": 0.06,
@@ -184,6 +188,8 @@ MODE_FACTOR_WEIGHTS = {
         "volume": 0.08,
         "volatility": 0.12,
         "htf_alignment": 0.10,
+        "htf_momentum_gate": 0.05,
+        "regime_alignment": 0.05,
         "htf_proximity": 0.08,
         "btc_impulse": 0.05,
         "weekly_stoch_rsi": 0.05,
@@ -214,6 +220,8 @@ MODE_FACTOR_WEIGHTS = {
         "volume": 0.10,
         "volatility": 0.08,
         "htf_alignment": 0.18,
+        "htf_momentum_gate": 0.08,
+        "regime_alignment": 0.08,
         "htf_proximity": 0.12,
         "btc_impulse": 0.10,
         "weekly_stoch_rsi": 0.10,
@@ -243,6 +251,8 @@ MODE_FACTOR_WEIGHTS = {
         "volume": 0.08,
         "volatility": 0.12,
         "htf_alignment": 0.10,
+        "htf_momentum_gate": 0.05,
+        "regime_alignment": 0.05,
         "htf_proximity": 0.08,
         "btc_impulse": 0.05,
         "weekly_stoch_rsi": 0.05,
@@ -273,6 +283,8 @@ MODE_FACTOR_WEIGHTS = {
         "volume": 0.10,
         "volatility": 0.08,
         "htf_alignment": 0.25,
+        "htf_momentum_gate": 0.10,
+        "regime_alignment": 0.10,
         "htf_proximity": 0.15,
         "btc_impulse": 0.12,
         "weekly_stoch_rsi": 0.12,
@@ -303,6 +315,8 @@ MODE_FACTOR_WEIGHTS = {
         "volume": 0.10,
         "volatility": 0.10,
         "htf_alignment": 0.12,
+        "htf_momentum_gate": 0.07,
+        "regime_alignment": 0.07,
         "htf_proximity": 0.10,
         "btc_impulse": 0.08,
         "weekly_stoch_rsi": 0.06,
@@ -2703,7 +2717,7 @@ def calculate_confluence_score(
                 ConfluenceFactor(
                     name="HTF_Momentum_Gate",
                     score=factor_score,
-                    weight=get_w("htf_alignment", 0.12),
+                    weight=get_w("htf_momentum_gate", 0.08),
                     rationale=momentum_gate["reason"],
                 )
             )
@@ -2835,7 +2849,7 @@ def calculate_confluence_score(
                 ConfluenceFactor(
                     name="Regime Alignment",
                     score=factor_score,
-                    weight=get_w("htf_alignment", 0.12),  # Use htf_alignment weight as proxy
+                    weight=get_w("regime_alignment", 0.08),
                     rationale=regime_result["reason"],
                 )
             )
