@@ -916,6 +916,7 @@ export interface PaperTradingPosition {
   trailing_active: boolean;
   opened_at: string;
   trade_type?: 'scalp' | 'intraday' | 'swing';
+  initial_stop_loss?: number;
 }
 
 export interface CompletedPaperTrade {

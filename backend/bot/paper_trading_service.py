@@ -1083,6 +1083,7 @@ class PaperTradingService:
             "direction": plan.direction,
             "confluence": round(plan.confidence_score, 1),
             "setup_type": getattr(plan, "setup_type", "unknown"),
+            "trade_type": getattr(plan, "trade_type", "unknown"),
             "entry_zone": round(plan.entry_zone.near_entry, 2),
             "stop_loss": round(plan.stop_loss.level, 2),
             "rr": round(plan.risk_reward, 2) if hasattr(plan, "risk_reward") else None,
@@ -1288,6 +1289,7 @@ class PaperTradingService:
                     "stop_loss": plan.stop_loss.level,
                     "targets": [t.level for t in plan.targets],
                     "confluence": plan.confidence_score,
+                    "trade_type": getattr(plan, "trade_type", "unknown"),
                 })
             else:
                 order_status = order.status.value if order.status else "unknown"
@@ -1532,6 +1534,7 @@ class PaperTradingService:
                     "tp1": pos.targets[0].level if pos.targets else (pos.targets_hit[-1].level if pos.targets_hit else 0.0),
                     "tp_final": pos.targets[-1].level if pos.targets else (pos.targets_hit[-1].level if pos.targets_hit else 0.0),
                     "trade_type": getattr(pos, "trade_type", "intraday"),
+                    "initial_stop_loss": getattr(pos, "initial_stop_loss", pos.stop_loss),
                 }
             )
 
