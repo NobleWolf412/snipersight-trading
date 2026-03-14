@@ -334,10 +334,11 @@ class PaperExecutor:
             self.positions[order.symbol] = new_pos
         # We are closing/reducing a position
         else:
+            close_qty = min(fill_qty, abs(current_pos))
             if current_pos > 0 and not is_buy:  # Closing a Long
-                realized_pnl = (fill_price - current_avg) * fill_qty
+                realized_pnl = (fill_price - current_avg) * close_qty
             else:  # Closing a Short
-                realized_pnl = (current_avg - fill_price) * fill_qty
+                realized_pnl = (current_avg - fill_price) * close_qty
                 
             self.balance += realized_pnl
             new_pos = current_pos + trade_qty
@@ -421,7 +422,8 @@ class PaperExecutor:
             self.position_avg_price[order.symbol] = total_cost / abs(new_pos)
             self.positions[order.symbol] = new_pos
         else:
-            realized_pnl = (fill_price - current_avg) * fill_qty if current_pos > 0 else (current_avg - fill_price) * fill_qty
+            close_qty = min(fill_qty, abs(current_pos))
+            realized_pnl = (fill_price - current_avg) * close_qty if current_pos > 0 else (current_avg - fill_price) * close_qty
             self.balance += realized_pnl
             new_pos = current_pos + trade_qty
             

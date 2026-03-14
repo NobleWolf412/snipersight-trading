@@ -1570,7 +1570,7 @@ class PaperTradingService:
                     symbol=pos.symbol,
                     direction=pos.direction,
                     entry_price=pos.entry_price,
-                    exit_price=self._price_cache.get(pos.symbol, pos.entry_price),
+                    exit_price=pos.exit_price or self._price_cache.get(pos.symbol, pos.entry_price),
                     quantity=pos.quantity,
                     entry_time=pos.created_at,
                     exit_time=pos.updated_at,

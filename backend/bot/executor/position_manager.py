@@ -88,8 +88,10 @@ class PositionState:
     highest_price: Optional[float] = None
     lowest_price: Optional[float] = None
     initial_stop_loss: float = 0.0
+    initial_entry_price: float = 0.0
     entry_order_id: Optional[str] = None
     exit_reason: Optional[str] = None
+    exit_price: Optional[float] = None
 
     # Trade-type and regime context for adaptive stagnation
     trade_type: str = "intraday"  # "scalp", "intraday", "swing" — from TradePlan
@@ -107,9 +109,10 @@ class PositionState:
         else:
             self.lowest_price = self.entry_price
         
-        # Anchor the original stop loss forever to ensure risk calculations 
-        # (trailing, breakeven) remain based on the initial thesis.
+        # Anchor the original stop loss and entry price forever to ensure 
+        # risk and stagnation calculations remain based on the initial thesis.
         self.initial_stop_loss = self.stop_loss
+        self.initial_entry_price = self.entry_price
 
     def update_unrealized_pnl(self, current_price: float):
         """Calculate unrealized P&L based on current price."""
@@ -186,6 +189,8 @@ class PositionManager:
     # --- Adaptive Stagnation Configuration ---
     # Base hold times by trade type (hours). These represent how long a trade
     # should be allowed to develop before we start checking for stagnation.
+    # PARTIAL trades (where at least one target has been hit) get a 2x bonus
+    # to the timer to allow the "runner" portion of the trade to develop.
     TRADE_TYPE_BASE_HOURS = {
         "scalp": 3.0,       # Scalps should resolve within a few hours
         "intraday": 10.0,   # Intraday trades need a full session
@@ -294,7 +299,10 @@ class PositionManager:
             quantity=quantity,
             remaining_quantity=quantity,
             stop_loss=trade_plan.stop_loss.level,
-            targets=trade_plan.targets.copy(),
+            targets=sorted(
+                trade_plan.targets.copy(),
+                key=lambda t: t.level if trade_plan.direction == "LONG" else -t.level,
+            ),
             status=PositionStatus.OPEN,
             entry_order_id=entry_order_id,
             trade_type=trade_type,
@@ -375,6 +383,7 @@ class PositionManager:
             position.remaining_quantity = 0.0
             position.status = PositionStatus.CLOSED
             position.exit_reason = reason
+            position.exit_price = current_price
             position.updated_at = datetime.now(timezone.utc)
 
         logger.info(
@@ -455,7 +464,10 @@ class PositionManager:
         is_partial = position.status == PositionStatus.PARTIAL
         stagnation_hours = adaptive_hours * 2.0 if is_partial else adaptive_hours
 
-        if hours_open >= stagnation_hours and position.status in (PositionStatus.OPEN, PositionStatus.PARTIAL):
+        if hours_open >= stagnation_hours and position.status in (
+            PositionStatus.OPEN,
+            PositionStatus.PARTIAL,
+        ):
             # Check if price is making progress toward next target
             making_progress = self._is_making_progress(position, current_price)
 
@@ -469,7 +481,10 @@ class PositionManager:
                     f"Regime: trend={position.regime_trend}, vol={position.regime_volatility}"
                 )
                 if self.order_executor:
-                    await self._execute_exit(position, current_price, "TIME_STAGNATION")
+                    success = await self._execute_exit(position, current_price, "TIME_STAGNATION")
+                    if not success:
+                        return  # Persistent retry on next monitor cycle
+
                 with self._lock:
                     # Settle P&L before zeroing remaining_quantity
                     position.update_unrealized_pnl(current_price)
@@ -477,6 +492,7 @@ class PositionManager:
                     position.unrealized_pnl = 0.0
                     position.status = PositionStatus.CLOSED
                     position.exit_reason = "stagnation"
+                    position.exit_price = current_price
                     position.remaining_quantity = 0.0
                 return
             elif making_progress:
@@ -496,7 +512,9 @@ class PositionManager:
 
             if self.order_executor:
                 # Execute market close
-                await self._execute_exit(position, current_price, "STOP_LOSS")
+                success = await self._execute_exit(position, current_price, "STOP_LOSS")
+                if not success:
+                    return  # Critical: don't settle position if order failed
 
             with self._lock:
                 # Settle P&L before zeroing remaining_quantity
@@ -505,6 +523,7 @@ class PositionManager:
                 position.unrealized_pnl = 0.0
                 position.status = PositionStatus.STOPPED_OUT
                 position.exit_reason = "stop_loss"
+                position.exit_price = current_price
                 position.remaining_quantity = 0.0
 
             return  # Position closed, no further checks
@@ -533,7 +552,9 @@ class PositionManager:
                 return
 
             if self.order_executor:
-                await self._execute_partial_exit(position, current_price, close_qty)
+                success = await self._execute_partial_exit(position, current_price, close_qty)
+                if not success:
+                    return  # Target stays active for next cycle
 
             with self._lock:
                 # Update position state
@@ -577,6 +598,7 @@ class PositionManager:
         - Trade type sets the base (scalp=3h, intraday=10h, swing=48h)
         - Trending regimes extend the timer (price is moving, give it room)
         - Compressed volatility shortens it (nothing's happening)
+        - PARTIAL status (runners) doubles the final result (applied in caller)
 
         Falls back to self.max_hours_open if trade type is unknown.
         """
@@ -675,9 +697,9 @@ class PositionManager:
             latest = recent[-1]
 
             # Progress = recent lows are higher than earlier lows
-            # AND latest price is closer to target than entry
+            # AND latest price is closer to target than the ORIGINAL entry
             lows_rising = second_half_min > first_half_min
-            closer_to_target = abs(tp1 - latest) < abs(tp1 - position.entry_price)
+            closer_to_target = abs(tp1 - latest) < abs(tp1 - position.initial_entry_price)
 
             return lows_rising and closer_to_target
 
@@ -692,7 +714,7 @@ class PositionManager:
             latest = recent[-1]
 
             highs_falling = second_half_max < first_half_max
-            closer_to_target = abs(tp1 - latest) < abs(tp1 - position.entry_price)
+            closer_to_target = abs(tp1 - latest) < abs(tp1 - position.initial_entry_price)
 
             return highs_falling and closer_to_target
 
@@ -807,12 +829,12 @@ class PositionManager:
                     f"Stop: {old_stop:.2f} -> {new_stop:.2f}"
                 )
 
-    async def _execute_exit(self, position: PositionState, price: float, reason: str):
+    async def _execute_exit(self, position: PositionState, price: float, reason: str) -> bool:
         """Execute full position exit."""
         executor = self.order_executor
         if not executor:
             logger.warning("No order executor configured - simulating exit")
-            return
+            return True
 
         try:
             # Execute market order to close
@@ -827,15 +849,17 @@ class PositionManager:
                 f"Exit executed: {position.position_id} | {reason} | "
                 f"Qty: {position.remaining_quantity} @ {price}"
             )
+            return True
         except Exception as e:
             logger.error(f"Failed to execute exit for {position.position_id}: {e}")
+            return False
 
-    async def _execute_partial_exit(self, position: PositionState, price: float, quantity: float):
+    async def _execute_partial_exit(self, position: PositionState, price: float, quantity: float) -> bool:
         """Execute partial position exit at target."""
         executor = self.order_executor
         if not executor:
             logger.warning("No order executor configured - simulating partial exit")
-            return
+            return True
 
         try:
             order_side = "SELL" if position.direction == "LONG" else "BUY"
@@ -845,8 +869,10 @@ class PositionManager:
             logger.info(
                 f"Partial exit executed: {position.position_id} | " f"Qty: {quantity} @ {price}"
             )
+            return True
         except Exception as e:
             logger.error(f"Failed to execute partial exit for {position.position_id}: {e}")
+            return False
 
     def get_position(self, position_id: str) -> Optional[PositionState]:
         """Get position state by ID."""

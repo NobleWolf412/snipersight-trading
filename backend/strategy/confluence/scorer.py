@@ -19,6 +19,7 @@ from typing import List, Dict, Optional, Tuple, TYPE_CHECKING, Any
 import json
 from datetime import datetime, timezone
 from loguru import logger
+import threading
 
 from backend.shared.models.smc import SMCSnapshot, OrderBlock, FVG, StructuralBreak, LiquiditySweep
 from backend.shared.models.indicators import IndicatorSet, IndicatorSnapshot
@@ -41,6 +42,7 @@ from backend.analysis.fibonacci import (
 # Automatically write detailed breakdowns to file for investigation
 
 BREAKDOWN_LOG_PATH = "logs/confluence_breakdown.log"
+BREAKDOWN_LOG_LOCK = threading.Lock()
 try:
     BREAKDOWN_LOG_FILE = open(BREAKDOWN_LOG_PATH, "a", buffering=1)  # Line buffered
     logger.info(f"📝 Confluence breakdown logging to: {BREAKDOWN_LOG_PATH}")
@@ -3554,11 +3556,14 @@ def calculate_confluence_score(
         cycle_context=cycle_context,
         reversal_context=reversal_context,
         direction=direction,
+        mode_config=config,
     )
 
     # --- Conflict Penalties ---
 
-    conflict_penalty = _calculate_conflict_penalty(factors, direction)
+    conflict_penalty = _calculate_conflict_penalty(
+        factors, direction, smc=smc_snapshot, mode_config=config
+    )
 
     # --- Macro Overlay (if enabled) ---
     macro_score_val = 0.0
@@ -3762,22 +3767,23 @@ def calculate_confluence_score(
         # === WRITE TO FILE LOG ===
         if BREAKDOWN_LOG_FILE:
             try:
-                BREAKDOWN_LOG_FILE.write(f"\n{'='*80}\n")
-                BREAKDOWN_LOG_FILE.write(f"CONFLUENCE BREAKDOWN | {symbol} {direction.upper()}\n")
-                BREAKDOWN_LOG_FILE.write(f"Final Score: {final_score:.2f} (Raw: {raw_score:.2f})\n")
-                BREAKDOWN_LOG_FILE.write(f"Components:\n")
-                BREAKDOWN_LOG_FILE.write(f"  - Weighted Base: {weighted_score:.2f}\n")
-                BREAKDOWN_LOG_FILE.write(f"  - Synergy Bonus: +{synergy_bonus:.2f}\n")
-                BREAKDOWN_LOG_FILE.write(f"  - Conflict Penalty: -{conflict_penalty:.2f}\n")
-                BREAKDOWN_LOG_FILE.write(f"  - Macro Score: {macro_score_val:.2f}\n")
-                BREAKDOWN_LOG_FILE.write(f"Top Factors:\n")
-                for i, f in enumerate(sorted_factors[:5], 1):
-                    contribution = f.score * f.weight
-                    BREAKDOWN_LOG_FILE.write(
-                        f"  {i}. {f.name}: {f.score:.1f} × {f.weight:.2f} = {contribution:.2f}pts\n"
-                    )
-                BREAKDOWN_LOG_FILE.write(f"{'='*80}\n")
-                BREAKDOWN_LOG_FILE.flush()
+                with BREAKDOWN_LOG_LOCK:
+                    BREAKDOWN_LOG_FILE.write(f"\n{'='*80}\n")
+                    BREAKDOWN_LOG_FILE.write(f"CONFLUENCE BREAKDOWN | {symbol} {direction.upper()}\n")
+                    BREAKDOWN_LOG_FILE.write(f"Final Score: {final_score:.2f} (Raw: {raw_score:.2f})\n")
+                    BREAKDOWN_LOG_FILE.write(f"Components:\n")
+                    BREAKDOWN_LOG_FILE.write(f"  - Weighted Base: {weighted_score:.2f}\n")
+                    BREAKDOWN_LOG_FILE.write(f"  - Synergy Bonus: +{synergy_bonus:.2f}\n")
+                    BREAKDOWN_LOG_FILE.write(f"  - Conflict Penalty: -{conflict_penalty:.2f}\n")
+                    BREAKDOWN_LOG_FILE.write(f"  - Macro Score: {macro_score_val:.2f}\n")
+                    BREAKDOWN_LOG_FILE.write(f"Top Factors:\n")
+                    for i, f in enumerate(sorted_factors[:5], 1):
+                        contribution = f.score * f.weight
+                        BREAKDOWN_LOG_FILE.write(
+                            f"  {i}. {f.name}: {f.score:.1f} × {f.weight:.2f} = {contribution:.2f}pts\n"
+                        )
+                    BREAKDOWN_LOG_FILE.write(f"{'='*80}\n")
+                    BREAKDOWN_LOG_FILE.flush()
             except Exception as e:
                 logger.warning(f"Failed to write breakdown to file: {e}")
 
