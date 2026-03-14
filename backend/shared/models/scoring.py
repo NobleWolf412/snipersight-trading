@@ -129,7 +129,6 @@ class ConfluenceBreakdown:
         """Check if this is a high-quality setup (score >= 75)."""
         return self.total_score >= 75
 
-    @property
     def passes_quality_gate(self, min_score: float = 65.0) -> bool:
         """Check if setup passes minimum quality threshold."""
         return self.total_score >= min_score
