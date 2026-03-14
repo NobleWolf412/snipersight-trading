@@ -21,7 +21,7 @@ class ScanConfig:
     profile: str = "balanced"
     timeframes: Tuple[str, ...] = ("1W", "1D", "4H", "1H", "15m", "5m")
     min_confluence_score: float = 65.0
-    min_rr_ratio: float = 0.8  # Temporarily lowered for testing
+    min_rr_ratio: float = 1.5  # Default minimum R:R; overridden per-mode via scanner_modes.py
     btc_impulse_gate_enabled: bool = True
     # Weekly StochRSI gate - universal directional filter
     weekly_stoch_rsi_gate_enabled: bool = True

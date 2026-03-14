@@ -491,14 +491,54 @@ class ConfluenceService:
             # CRITICAL: Store chosen direction in context for downstream use
             context.metadata["chosen_direction"] = chosen_direction
 
-            # === COUNTER-HTF GATE (Bug Fix) ===
-            # If the winning direction is NOT aligned with the HTF trend, require a
-            # confirmed Institutional Sequence (Sweep → CHoCH → OB) before allowing
-            # the trade through. Without confirmation, the setup has too high a failure
-            # probability to trade as a full swing.
+            # === HTF ALIGNMENT BONUS ===
+            # When global (daily) and local (symbol/4H) regimes both agree with the trade
+            # direction, amplify the confluence score to reward high-conviction setups.
+            global_regime = context.metadata.get("global_regime")
+            symbol_regime = context.metadata.get("symbol_regime")
+            if global_regime and symbol_regime:
+                global_trend = getattr(global_regime, "trend", "sideways")
+                symbol_trend = getattr(symbol_regime, "trend", "sideways")
+                direction_lower = chosen_direction.lower()
+
+                macro_aligned = (
+                    (direction_lower in ("bullish", "long") and global_trend in ("up", "strong_up"))
+                    or (direction_lower in ("bearish", "short") and global_trend in ("down", "strong_down"))
+                )
+                local_aligned = (
+                    (direction_lower in ("bullish", "long") and symbol_trend in ("up", "strong_up"))
+                    or (direction_lower in ("bearish", "short") and symbol_trend in ("down", "strong_down"))
+                )
+
+                if macro_aligned and local_aligned:
+                    alignment_bonus = 5.0
+                    chosen.total_score = min(100.0, chosen.total_score + alignment_bonus)
+                    context.metadata["htf_alignment_bonus"] = alignment_bonus
+                    logger.debug(
+                        "%s: Full HTF alignment bonus +%.1f (global=%s, local=%s, dir=%s)",
+                        context.symbol, alignment_bonus, global_trend, symbol_trend, chosen_direction,
+                    )
+                elif local_aligned and not macro_aligned:
+                    local_bonus = 2.0
+                    chosen.total_score = min(100.0, chosen.total_score + local_bonus)
+                    context.metadata["htf_alignment_bonus"] = local_bonus
+                    logger.debug(
+                        "%s: Local HTF alignment bonus +%.1f (local=%s aligns, global=%s opposes)",
+                        context.symbol, local_bonus, symbol_trend, global_trend,
+                    )
+
+            # === COUNTER-HTF EVALUATION ===
+            # When the trade is NOT aligned with the effective HTF trend (from symbol_regime,
+            # which is 4H-based for scalp modes), apply a score penalty instead of a hard block.
+            # A hard block is only used as a last resort when there is zero supporting evidence.
             #
-            # With confirmation: tag as counter_htf_scalp so the planner downgrades
-            # the trade to a single-target scalp to the nearest HTF S/R level.
+            # Penalty tiers (applied to chosen.total_score):
+            #   confirmed   (full inst_seq)  → −5
+            #   partial     (CHoCH + OB)     → −10
+            #   soft        (sweep or diverg) → −15
+            #   minimal     (ranging market) → −20
+            #
+            # The mode's min_confluence_score then acts as the natural gate.
             if not chosen.htf_aligned:
                 smc = context.smc_snapshot
                 direction_normalized = chosen_direction.upper()
@@ -510,8 +550,15 @@ class ConfluenceService:
                 if primary_tf not in allowed_tfs:
                     allowed_tfs = tuple(list(allowed_tfs) + [primary_tf])
 
-                # Check sweep of correct liquidity (lows for LONG, highs for SHORT)
                 target_sweep_type = "low" if is_long else "high"
+
+                # Any sweep (confirmation_level >= 0) is a soft condition
+                has_any_sweep = any(
+                    getattr(s, "timeframe", "1h") in allowed_tfs
+                    for s in smc.liquidity_sweeps
+                    if s.sweep_type == target_sweep_type
+                )
+                # Confirmed sweep (confirmation_level >= 1) used for full inst_seq check
                 has_confirmed_sweep = any(
                     getattr(s, "confirmation_level", 1 if s.confirmation else 0) >= 1
                     and getattr(s, "timeframe", "1h") in allowed_tfs
@@ -519,10 +566,7 @@ class ConfluenceService:
                     if s.sweep_type == target_sweep_type
                 )
 
-                # Check structural break in trade direction post-sweep
                 target_break_dir = "bullish" if is_long else "bearish"
-                
-                # Keep track of the confirming shifts to determine timeframe
                 confirming_shifts = [
                     b for b in smc.structural_breaks
                     if b.break_type in ("CHoCH", "BOS")
@@ -531,60 +575,89 @@ class ConfluenceService:
                 ]
                 has_structure_shift = len(confirming_shifts) > 0
 
-                # Check order block with meaningful score
                 ob_factor = next((f for f in chosen.factors if f.name == "Order Block"), None)
                 has_ob = ob_factor is not None and ob_factor.score >= 50
 
+                # Soft conditions from metadata (divergence, pullback patterns)
+                has_divergence = bool(
+                    context.metadata.get("divergence_direction") == chosen_direction.lower()
+                )
+                has_pullback = bool(context.metadata.get("pullback_entry"))
+
+                soft_conditions_met = has_any_sweep or has_structure_shift or has_divergence or has_pullback
+
                 inst_seq_confirmed = has_confirmed_sweep and has_structure_shift and has_ob
 
-                if not inst_seq_confirmed:
+                # Check global regime volatility — ranging markets require less confirmation
+                _global_regime = context.metadata.get("global_regime")
+                global_volatility = (
+                    getattr(_global_regime, "volatility", "normal") if _global_regime else "normal"
+                )
+                is_ranging = global_volatility in ("compressed", "coiling", "low", "sideways")
+
+                if not soft_conditions_met and not is_ranging:
+                    # Hard block: no evidence whatsoever + actively trending against us
                     logger.info(
-                        "🚫 %s Counter-HTF REJECTED — no Institutional Sequence "
-                        "(Sweep=%s, CHoCH/BOS=%s, OB=%s). "
-                        "Trade is against HTF trend without reversal confirmation.",
-                        context.symbol, has_confirmed_sweep, has_structure_shift, has_ob,
+                        "🚫 %s Counter-HTF BLOCKED — no supporting evidence "
+                        "(sweep=%s, choch=%s, ob=%s, divergence=%s, pullback=%s, ranging=%s)",
+                        context.symbol, has_any_sweep, has_structure_shift, has_ob,
+                        has_divergence, has_pullback, is_ranging,
                     )
                     context.metadata["chosen_direction"] = None
                     raise ConflictingDirectionsException(
-                        f"{context.symbol}: Counter-HTF trade blocked — "
-                        f"no confirmed Sweep→CHoCH/BOS→OB sequence "
-                        f"(Sweep={has_confirmed_sweep}, Shift={has_structure_shift}, OB={has_ob})",
+                        f"{context.symbol}: Counter-HTF blocked — "
+                        f"no sweep, CHoCH, divergence, or pullback evidence "
+                        f"(sweep={has_any_sweep}, choch={has_structure_shift}, ob={has_ob})",
                         bullish_breakdown=bullish_breakdown,
                         bearish_breakdown=bearish_breakdown,
                     )
-                else:
-                    # Institutional sequence confirmed but still counter-HTF.
-                    # Determine the strength of the reversal based on the timeframe of the shift.
-                    highest_tf = "1h" # Default
-                    tf_weights = {"1w": 6, "1d": 5, "4h": 4, "1h": 3, "15m": 2, "5m": 1}
-                    
-                    if confirming_shifts:
-                        # Find the shift with the highest timeframe weight
-                        best_shift = max(confirming_shifts, key=lambda x: tf_weights.get(getattr(x, "timeframe", "1h"), 0))
-                        highest_tf = getattr(best_shift, "timeframe", "1h")
-                    
-                    if highest_tf in ("1w", "1d", "4h"):
-                        counter_htf_type = "swing"
-                        logger.info(
-                            "🔀 %s Counter-HTF macro reversal approved — (%s %s). Classifying as SWING.",
-                            context.symbol, highest_tf, target_break_dir.upper()
-                        )
-                    elif highest_tf in ("1h", "15m"):
-                        counter_htf_type = "intraday"
-                        logger.info(
-                            "🔀 %s Counter-HTF intraday reversal approved — (%s %s). Classifying as INTRADAY.",
-                            context.symbol, highest_tf, target_break_dir.upper()
-                        )
-                    else:
-                        counter_htf_type = "scalp"
-                        logger.info(
-                            "🔀 %s Counter-HTF scalp approved — (%s %s). Classifying as SCALP.",
-                            context.symbol, highest_tf, target_break_dir.upper()
-                        )
 
-                    context.metadata["counter_htf_scalp"] = True # Keep for backwards compat if needed elsewhere
-                    context.metadata["counter_htf_type"] = counter_htf_type
-                    context.metadata["counter_htf_tf"] = highest_tf
+                # Apply score penalty based on how well-confirmed the counter-HTF setup is
+                if inst_seq_confirmed:
+                    htf_penalty = -5.0
+                    counter_htf_quality = "confirmed"
+                elif has_structure_shift and has_ob:
+                    htf_penalty = -10.0
+                    counter_htf_quality = "partial"
+                elif has_any_sweep or has_divergence or has_pullback:
+                    htf_penalty = -15.0
+                    counter_htf_quality = "soft"
+                else:
+                    htf_penalty = -20.0
+                    counter_htf_quality = "minimal"
+
+                chosen.total_score = max(0.0, chosen.total_score + htf_penalty)
+                context.metadata["counter_htf_penalty"] = htf_penalty
+                context.metadata["counter_htf_quality"] = counter_htf_quality
+
+                # Determine trade type classification by confirmation timeframe
+                highest_tf = "1h"
+                tf_weights = {"1w": 6, "1d": 5, "4h": 4, "1h": 3, "15m": 2, "5m": 1}
+                if confirming_shifts:
+                    best_shift = max(
+                        confirming_shifts,
+                        key=lambda x: tf_weights.get(getattr(x, "timeframe", "1h"), 0),
+                    )
+                    highest_tf = getattr(best_shift, "timeframe", "1h")
+
+                if highest_tf in ("1w", "1d", "4h"):
+                    counter_htf_type = "swing"
+                elif highest_tf in ("1h", "15m"):
+                    counter_htf_type = "intraday"
+                else:
+                    counter_htf_type = "scalp"
+
+                context.metadata["counter_htf_scalp"] = True
+                context.metadata["counter_htf_type"] = counter_htf_type
+                context.metadata["counter_htf_tf"] = highest_tf
+
+                logger.info(
+                    "🔀 %s Counter-HTF allowed — quality=%s, penalty=%.1f, type=%s "
+                    "(sweep=%s, choch=%s, ob=%s, divergence=%s, pullback=%s, ranging=%s)",
+                    context.symbol, counter_htf_quality, htf_penalty, counter_htf_type,
+                    has_any_sweep, has_structure_shift, has_ob,
+                    has_divergence, has_pullback, is_ranging,
+                )
 
             # Store alt scores for analytics/debugging
             context.metadata["alt_confluence"] = {

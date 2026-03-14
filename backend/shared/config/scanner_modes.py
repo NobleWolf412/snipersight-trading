@@ -149,6 +149,9 @@ class ScannerMode:
     # entry_trigger_timeframes: For refined entry OBs inside zones
     zone_timeframes: Tuple[str, ...] = ()  # TFs for entry zone (4H, 1H)
     entry_trigger_timeframes: Tuple[str, ...] = ()  # TFs for refined entry (15m, 5m)
+    # Regime reference for HTF bias: "global" = daily-based, "intermediate" = 4H-based
+    # Scalp/intraday modes use "intermediate" so 4H structure drives alignment, not the daily
+    regime_reference: str = "global"
 
     @property
     def bias_timeframes(self) -> Tuple[str, ...]:
@@ -231,6 +234,7 @@ MODES: Dict[str, ScannerMode] = {
         # NEW: Nested OB entry hierarchy
         zone_timeframes=("15m", "5m"),  # Entry zone OBs (faster for intraday)
         entry_trigger_timeframes=("5m",),  # Refined entry OBs
+        regime_reference="intermediate",  # Use 4H regime so 4H bullish structure aligns scalp longs
     ),
     "surgical": ScannerMode(
         name="surgical",
@@ -277,6 +281,7 @@ MODES: Dict[str, ScannerMode] = {
             "5m",
         ),  # Entry zone OBs - includes HTF for institutional context
         entry_trigger_timeframes=("5m",),  # Refined entry OBs
+        regime_reference="intermediate",  # Use 4H regime so 4H bullish structure aligns scalp longs
     ),
     # STEALTH replaces both RECON and GHOST (merged per SMC_PIPELINE_REFACTOR.md)
     # Use stealth_strict=False for balanced (was RECON), stealth_strict=True for higher conviction (was GHOST)

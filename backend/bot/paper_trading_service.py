@@ -15,7 +15,9 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone, timedelta
 from enum import Enum
+from pathlib import Path
 import asyncio
+import json
 import logging
 import uuid
 from pathlib import Path
@@ -267,6 +269,9 @@ class PaperTradingService:
         self._current_regime_trend: str = "sideways"
         self._current_regime_volatility: str = "normal"
 
+        # Session log directory for persistent diagnostic output
+        self._session_log_dir: Optional[Path] = None
+
         # Track limit orders that are waiting to fill
         self._pending_plans: Dict[str, TradePlan] = {}
         self._pending_placed_at: Dict[str, datetime] = {}
@@ -357,6 +362,11 @@ class PaperTradingService:
         self._pending_placed_at = {}
         self._price_cache = {}
         self._peak_equity = config.initial_balance
+
+        # Create session log directory for persistent output
+        project_root = Path(__file__).parent.parent.parent
+        self._session_log_dir = project_root / "logs" / "paper_trading" / f"session_{self.session_id}"
+        self._session_log_dir.mkdir(parents=True, exist_ok=True)
 
         # Start session
         self.started_at = datetime.now(timezone.utc)
@@ -467,9 +477,17 @@ class PaperTradingService:
             "session_stopped", {"session_id": self.session_id, "final_stats": self.stats.to_dict()}
         )
 
+        # Generate comprehensive session report on disk
+        report_path = self._generate_session_report()
+        if report_path:
+            logger.info(f"Session report: {report_path}")
+
         logger.info(f"Paper trading stopped: session={self.session_id}")
 
-        return self.get_status()
+        status = self.get_status()
+        if report_path:
+            status["report_path"] = str(report_path)
+        return status
 
     def reset(self) -> Dict[str, Any]:
         """
@@ -1073,9 +1091,16 @@ class PaperTradingService:
         }
         entry.update(extra)
         self.signal_log.append(entry)
-        # Keep last 200 entries
+        # Keep last 200 entries in memory for UI
         if len(self.signal_log) > 200:
             self.signal_log = self.signal_log[-200:]
+        # Persist every signal to disk so nothing is lost on long runs
+        if self._session_log_dir:
+            try:
+                with open(self._session_log_dir / "signals.jsonl", "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry) + "\n")
+            except Exception:
+                pass  # Don't let logging failure crash the bot
 
         # Log to diagnostics
         if self.diagnostic_logger:
@@ -1654,17 +1679,288 @@ class PaperTradingService:
 
     def _log_activity(self, event_type: str, data: Dict[str, Any]):
         """Add event to activity log."""
-        self.activity_log.append(
-            {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "event_type": event_type,
-                "data": data,
-            }
-        )
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event_type": event_type,
+            "data": data,
+        }
+        self.activity_log.append(entry)
 
-        # Keep log manageable
+        # Keep log manageable in memory
         if len(self.activity_log) > 1000:
             self.activity_log = self.activity_log[-500:]
+
+        # Persist to disk so nothing is lost
+        if self._session_log_dir:
+            try:
+                with open(self._session_log_dir / "activity.jsonl", "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, default=str) + "\n")
+            except Exception:
+                pass
+
+    def _generate_session_report(self) -> Optional[Path]:
+        """
+        Generate a comprehensive diagnostic report from the live session data.
+
+        Writes a markdown report + raw JSONL data to the session log directory.
+        Designed to be AI-readable for automated investigation and fixes.
+        """
+        if not self._session_log_dir:
+            return None
+
+        log_dir = self._session_log_dir
+        report_path = log_dir / "diagnostic_report.md"
+
+        # --- Persist raw data files ---
+        try:
+            # Completed trades
+            with open(log_dir / "trades.jsonl", "w", encoding="utf-8") as f:
+                for trade in self.completed_trades:
+                    f.write(json.dumps(trade.to_dict(), default=str) + "\n")
+
+            # Full signal log from disk (already written incrementally)
+            # signals.jsonl is already populated by _log_signal
+
+            # Stats snapshot
+            with open(log_dir / "stats.json", "w", encoding="utf-8") as f:
+                json.dump(self.stats.to_dict(), f, indent=2)
+
+            # Config
+            if self.config:
+                with open(log_dir / "config.json", "w", encoding="utf-8") as f:
+                    json.dump(self.config.to_dict(), f, indent=2, default=str)
+        except Exception as e:
+            logger.error(f"Failed to persist raw session data: {e}")
+
+        # --- Build the markdown report ---
+        try:
+            lines = []
+            now = datetime.now(timezone.utc)
+            started = self.started_at or now
+            stopped = self.stopped_at or now
+            duration_h = (stopped - started).total_seconds() / 3600
+
+            lines.append("# SniperSight Paper Trading Session Report\n")
+            lines.append(f"*Session:* `{self.session_id}`  ")
+            lines.append(f"*Generated:* {now.isoformat()}Z  ")
+            lines.append(f"*Duration:* {duration_h:.1f} hours  ")
+            lines.append(f"*Mode:* {self.config.sniper_mode if self.config else 'unknown'}\n")
+
+            # --- Executive Summary ---
+            lines.append("\n## Executive Summary\n")
+            s = self.stats
+            initial = self.config.initial_balance if self.config else 0
+            final_equity = initial  # fallback
+            if self.executor:
+                unrealized = 0.0
+                if self.position_manager:
+                    unrealized = sum(
+                        p.unrealized_pnl for p in self.position_manager.positions.values()
+                        if p.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
+                    )
+                final_equity = self.executor.get_balance() + unrealized
+
+            pnl = final_equity - initial
+            pnl_pct = (pnl / initial * 100) if initial > 0 else 0
+
+            lines.append("| Metric | Value |")
+            lines.append("|--------|-------|")
+            lines.append(f"| Starting Balance | ${initial:,.2f} |")
+            lines.append(f"| Final Equity | ${final_equity:,.2f} |")
+            lines.append(f"| Net P&L | ${pnl:,.2f} ({pnl_pct:+.2f}%) |")
+            lines.append(f"| Total Trades | {s.total_trades} |")
+            lines.append(f"| Win Rate | {s.win_rate:.1f}% ({s.winning_trades}W / {s.losing_trades}L) |")
+            lines.append(f"| Avg R:R | {s.avg_rr:.2f} |")
+            lines.append(f"| Best Trade | ${s.best_trade:,.2f} |")
+            lines.append(f"| Worst Trade | ${s.worst_trade:,.2f} |")
+            lines.append(f"| Max Drawdown | {s.max_drawdown:.2f}% |")
+            lines.append(f"| Scans Completed | {s.scans_completed} |")
+            lines.append(f"| Signals Generated | {s.signals_generated} |")
+            lines.append(f"| Signals Taken | {s.signals_taken} |")
+            lines.append(f"| Signal Pass Rate | {(s.signals_taken / s.signals_generated * 100) if s.signals_generated > 0 else 0:.1f}% |")
+            lines.append("")
+
+            # --- Trade Log ---
+            lines.append("\n## Completed Trades\n")
+            if self.completed_trades:
+                lines.append("| # | Symbol | Dir | Entry | Exit | P&L % | Exit Reason | Type | Duration |")
+                lines.append("|---|--------|-----|-------|------|-------|-------------|------|----------|")
+                for i, t in enumerate(self.completed_trades, 1):
+                    dur = ""
+                    if t.entry_time and t.exit_time:
+                        dur_h = (t.exit_time - t.entry_time).total_seconds() / 3600
+                        dur = f"{dur_h:.1f}h"
+                    icon = "+" if t.pnl >= 0 else ""
+                    lines.append(
+                        f"| {i} | {t.symbol} | {t.direction} | "
+                        f"${t.entry_price:.2f} | ${t.exit_price:.2f} | "
+                        f"{icon}{t.pnl_pct:.2f}% | {t.exit_reason} | {t.trade_type} | {dur} |"
+                    )
+                lines.append("")
+            else:
+                lines.append("*No completed trades this session.*\n")
+
+            # --- Signal Rejection Analysis ---
+            lines.append("\n## Signal Rejection Analysis\n")
+            # Read the full signal log from disk (not the truncated in-memory version)
+            all_signals = []
+            signals_file = log_dir / "signals.jsonl"
+            if signals_file.exists():
+                with open(signals_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        try:
+                            all_signals.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
+
+            if all_signals:
+                total_signals = len(all_signals)
+                executed = [s for s in all_signals if s.get("result") == "executed"]
+                filtered = [s for s in all_signals if s.get("result") == "filtered"]
+                pending = [s for s in all_signals if s.get("result") == "pending"]
+
+                lines.append(f"**Total signals processed:** {total_signals}  ")
+                lines.append(f"**Executed:** {len(executed)} | **Filtered:** {len(filtered)} | **Pending:** {len(pending)}\n")
+
+                # Rejection reasons breakdown
+                reason_counts: Dict[str, int] = {}
+                for sig in filtered:
+                    reason = sig.get("reason", "unknown")
+                    reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+                if reason_counts:
+                    lines.append("### Filter Reasons\n")
+                    lines.append("| Reason | Count | % of Filtered |")
+                    lines.append("|--------|-------|---------------|")
+                    for reason, count in sorted(reason_counts.items(), key=lambda x: -x[1]):
+                        pct = count / len(filtered) * 100 if filtered else 0
+                        lines.append(f"| {reason} | {count} | {pct:.1f}% |")
+                    lines.append("")
+
+                # Rejected signals by symbol
+                symbol_rejected: Dict[str, int] = {}
+                for sig in filtered:
+                    sym = sig.get("symbol", "?")
+                    symbol_rejected[sym] = symbol_rejected.get(sym, 0) + 1
+                if symbol_rejected:
+                    lines.append("### Rejections by Symbol\n")
+                    lines.append("| Symbol | Rejected | Executed |")
+                    lines.append("|--------|----------|----------|")
+                    all_symbols = set(s.get("symbol") for s in all_signals)
+                    for sym in sorted(all_symbols):
+                        rej = symbol_rejected.get(sym, 0)
+                        exe = len([s for s in executed if s.get("symbol") == sym])
+                        lines.append(f"| {sym} | {rej} | {exe} |")
+                    lines.append("")
+            else:
+                lines.append("*No signal data recorded.*\n")
+
+            # --- Issues & Anomalies ---
+            lines.append("\n## Issues Detected During Session\n")
+            # Scan activity log for errors/warnings
+            activity_file = log_dir / "activity.jsonl"
+            errors = []
+            if activity_file.exists():
+                with open(activity_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        try:
+                            evt = json.loads(line)
+                            if evt.get("event_type") in ("scan_error", "monitor_error"):
+                                errors.append(evt)
+                        except json.JSONDecodeError:
+                            pass
+
+            if errors:
+                lines.append(f"**{len(errors)} error events recorded:**\n")
+                for err in errors[:20]:
+                    ts = err.get("timestamp", "?")
+                    msg = err.get("data", {}).get("error", str(err.get("data", "")))
+                    lines.append(f"- `{ts}` {msg}")
+                if len(errors) > 20:
+                    lines.append(f"\n*... and {len(errors) - 20} more in `activity.jsonl`*")
+                lines.append("")
+            else:
+                lines.append("No errors detected during this session.\n")
+
+            # --- Positions Still Open at Stop ---
+            lines.append("\n## Positions at Session End\n")
+            if self.position_manager:
+                still_open = [
+                    p for p in self.position_manager.positions.values()
+                    if p.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
+                ]
+                if still_open:
+                    lines.append(f"**{len(still_open)} positions were force-closed on stop:**\n")
+                    for p in still_open:
+                        lines.append(
+                            f"- {p.symbol} {p.direction} | Entry: ${p.entry_price:.2f} | "
+                            f"P&L: {p.pnl_percentage:.2f}% | Status: {p.status.value}"
+                        )
+                    lines.append("")
+                else:
+                    lines.append("All positions were closed before session end.\n")
+
+            # --- AI Recommendations Section ---
+            lines.append("\n## Recommendations for AI Investigation\n")
+            lines.append(
+                "Use the raw data files alongside this report for deeper analysis:\n"
+            )
+            lines.append(f"- `{log_dir / 'signals.jsonl'}` — Every signal processed (full history, not truncated)")
+            lines.append(f"- `{log_dir / 'activity.jsonl'}` — Every lifecycle event (scans, fills, closes, errors)")
+            lines.append(f"- `{log_dir / 'trades.jsonl'}` — Completed trade details with P&L")
+            lines.append(f"- `{log_dir / 'stats.json'}` — Final session statistics")
+            lines.append(f"- `{log_dir / 'config.json'}` — Configuration used\n")
+
+            recs = []
+            if s.total_trades == 0 and s.signals_generated > 0:
+                recs.append(
+                    "**Zero trades executed despite signals** — Check confluence thresholds, "
+                    "risk sizing, and position limit gates. Review `signals.jsonl` for "
+                    "the `reason` field on filtered signals."
+                )
+            if s.win_rate < 40 and s.total_trades >= 5:
+                recs.append(
+                    f"**Low win rate ({s.win_rate:.1f}%)** — Review entry zone quality, "
+                    "stop placement, and whether trades are being opened against the trend."
+                )
+            if s.max_drawdown > 10:
+                recs.append(
+                    f"**High drawdown ({s.max_drawdown:.1f}%)** — Consider reducing risk_per_trade "
+                    "or tightening position limits."
+                )
+            if s.signals_generated > 0 and s.signals_taken / s.signals_generated < 0.05:
+                recs.append(
+                    f"**Very low signal pass rate ({s.signals_taken}/{s.signals_generated})** — "
+                    "Filters may be too aggressive. Check confluence gate, R:R minimum, and "
+                    "trade type restrictions in `signals.jsonl`."
+                )
+
+            # Check for specific rejection patterns
+            if all_signals:
+                confluence_fails = len([s for s in all_signals if "confluence" in s.get("reason", "").lower()])
+                if confluence_fails > len(all_signals) * 0.5:
+                    recs.append(
+                        f"**{confluence_fails}/{len(all_signals)} signals failed confluence** — "
+                        "The min_confluence_score threshold may be too high for current market conditions."
+                    )
+
+            if recs:
+                for i, rec in enumerate(recs, 1):
+                    lines.append(f"{i}. {rec}")
+            else:
+                lines.append("No critical recommendations — session performed within expected parameters.")
+            lines.append("")
+
+            # --- Write report ---
+            with open(report_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+
+            logger.info(f"Session report saved: {report_path}")
+            return report_path
+
+        except Exception as e:
+            logger.error(f"Failed to generate session report: {e}")
+            return None
 
     def _get_uptime_seconds(self) -> int:
         """Get session uptime in seconds."""

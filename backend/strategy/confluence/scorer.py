@@ -140,6 +140,7 @@ MODE_FACTOR_WEIGHTS = {
         "macd_veto": 0.05,
         "close_momentum": 0.06,
         "multi_close_confirm": 0.08,
+        "liquidity_draw": 0.08,
     },
     "intraday_aggressive": {  # STRIKE
         "order_block": 0.18,
@@ -169,6 +170,7 @@ MODE_FACTOR_WEIGHTS = {
         "macd_veto": 0.05,
         "close_momentum": 0.08,
         "multi_close_confirm": 0.07,
+        "liquidity_draw": 0.12,
     },
     "precision": {  # SURGICAL
         "order_block": 0.15,
@@ -198,6 +200,7 @@ MODE_FACTOR_WEIGHTS = {
         "macd_veto": 0.05,
         "close_momentum": 0.09,
         "multi_close_confirm": 0.06,
+        "liquidity_draw": 0.15,
     },
     "stealth_balanced": {  # STEALTH
         "order_block": 0.20,
@@ -227,6 +230,7 @@ MODE_FACTOR_WEIGHTS = {
         "macd_veto": 0.05,
         "close_momentum": 0.07,
         "multi_close_confirm": 0.08,
+        "liquidity_draw": 0.10,
     },
     # Surgical alias
     "surgical": {  # Maps to precision
@@ -255,6 +259,7 @@ MODE_FACTOR_WEIGHTS = {
         "macd_veto": 0.05,
         "close_momentum": 0.09,
         "multi_close_confirm": 0.06,
+        "liquidity_draw": 0.15,
     },
     # Overwatch alias
     "overwatch": {  # Maps to macro_surveillance
@@ -284,6 +289,7 @@ MODE_FACTOR_WEIGHTS = {
         "macd_veto": 0.05,
         "close_momentum": 0.06,
         "multi_close_confirm": 0.08,
+        "liquidity_draw": 0.08,
     },
     # Strike alias
     "strike": {  # Maps to intraday_aggressive
@@ -313,6 +319,7 @@ MODE_FACTOR_WEIGHTS = {
         "macd_veto": 0.05,
         "close_momentum": 0.08,
         "multi_close_confirm": 0.07,
+        "liquidity_draw": 0.12,
     },
 }
 
@@ -3485,6 +3492,41 @@ def calculate_confluence_score(
             "Factor coverage penalty [%s]: %d active factors (min %d, -%g/missing) => -%.1f",
             _coverage_profile, active_factor_count, _min_factors, _penalty_per, factor_coverage_penalty,
         )
+
+    # --- Liquidity Draw Factor ---
+    # Score based on whether a clear unswept liquidity pool exists in the trade direction.
+    # Higher score when: pool is Grade A/B, 2-5 ATR away, and a sweep confirms the origin.
+    try:
+        from backend.strategy.confluence.liquidity_map_scorer import score_liquidity_draw as _score_liq_draw
+        _liq_prim_ind = indicators.by_timeframe.get(primary_tf) if primary_tf else None
+        _liq_atr = getattr(_liq_prim_ind, "atr", None) or (
+            (entry_price * 0.01) if entry_price else 0.0
+        )
+        if _liq_atr and _liq_atr > 0 and entry_price:
+            _liq_result = _score_liq_draw(
+                direction=direction,
+                current_price=entry_price,
+                smc=smc_snapshot,
+                atr=_liq_atr,
+                max_target_atr=15.0,
+            )
+            if _liq_result["score"] > 0:
+                _liq_weight = get_w("liquidity_draw", 0.10)
+                factors.append(
+                    ConfluenceFactor(
+                        name="Liquidity Draw",
+                        score=_liq_result["score"],
+                        weight=_liq_weight,
+                        rationale="; ".join(f[2] for f in _liq_result["factors"]) if _liq_result["factors"] else "Liquidity target identified",
+                    )
+                )
+                logger.debug(
+                    "Liquidity Draw factor: score=%.1f, weight=%.2f, target_dist=%.1f ATR",
+                    _liq_result["score"], _liq_weight,
+                    _liq_result["target_distance_atr"] or 0.0,
+                )
+    except Exception as _liq_err:
+        logger.debug("Liquidity draw scoring skipped: %s", _liq_err)
 
     # --- Calculate Weighted Score ---
 

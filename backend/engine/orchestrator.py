@@ -911,6 +911,30 @@ class Orchestrator:
             except Exception as e:
                 logger.debug("%s: Symbol regime detection skipped: %s", symbol, e)
 
+        # Store global regime in context so confluence service can check macro conditions
+        context.metadata["global_regime"] = self.current_regime
+
+        # For scalp/intraday modes (regime_reference="intermediate"), override symbol_regime
+        # with an explicit 4H-based regime so HTF alignment is checked against 4H, not daily.
+        # This ensures that when 4H is bullish (HH/HL forming), scalp longs are aligned.
+        mode_regime_ref = getattr(self.scanner_mode, "regime_reference", "global")
+        if mode_regime_ref == "intermediate" and self.regime_detector and context.multi_tf_data and context.multi_tf_indicators:
+            try:
+                intermediate_regime = self.regime_detector.detect_intermediate_regime(
+                    data=context.multi_tf_data,
+                    indicators=context.multi_tf_indicators,
+                )
+                if intermediate_regime:
+                    context.metadata["symbol_regime"] = intermediate_regime
+                    logger.debug(
+                        "%s: Intermediate regime override (4H): %s (score=%.1f)",
+                        symbol,
+                        intermediate_regime.trend,
+                        intermediate_regime.score,
+                    )
+            except Exception as e:
+                logger.debug("%s: Intermediate regime detection skipped: %s", symbol, e)
+
         # Stage 4: SMC detection
         logger.info("%s [%s]: 🔍 Starting SMC detection", symbol, trace_id)
         try:

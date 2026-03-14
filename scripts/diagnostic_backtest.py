@@ -345,10 +345,14 @@ class DiagnosticBacktestRunner:
         scan_start = time.time()
         
         # Create scan config from ScannerMode dataclass
+        # Pull per-mode overrides (min_rr_ratio etc.) so the planner enforces
+        # the same R:R floor that the probe checks against.
+        mode_overrides = getattr(mode_config, "overrides", None) or {}
         scan_config = ScanConfig(
             profile=mode_config.profile,
             timeframes=list(mode_config.timeframes),
-            min_confluence_score=mode_config.min_confluence_score
+            min_confluence_score=mode_config.min_confluence_score,
+            min_rr_ratio=mode_overrides.get("min_rr_ratio", 1.5),
         )
         
         # Initialize orchestrator
