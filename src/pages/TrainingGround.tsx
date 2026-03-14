@@ -169,6 +169,7 @@ export function TrainingGround() {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [recommendation, setRecommendation] = useState<{mode: string, reason: string, warning: string | null, confidence: string, recommended_confluence?: number, regime?: any} | null>(null);
 
   const pollRef = useRef<number | null>(null);
 
@@ -198,10 +199,23 @@ export function TrainingGround() {
     }
   }, []);
 
+  // Fetch recommendation
+  const fetchRecommendation = useCallback(async () => {
+    try {
+      const response = await api.getScannerRecommendation();
+      if (response.data) {
+        setRecommendation(response.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch recommendation:', err);
+    }
+  }, []);
+
   // Poll status when running
   useEffect(() => {
     fetchStatus();
     fetchTrades();
+    fetchRecommendation();
 
     // Set up polling - use longer interval (15s) to avoid overwhelming backend during heavy scans
     // Backend can take 10-20s to respond when scanner is actively processing
@@ -380,7 +394,12 @@ export function TrainingGround() {
                   </div>
                   <div className="p-4 rounded-lg bg-background border border-border">
                     <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">Regime State</div>
-                    <div className="text-xl font-mono font-bold text-primary">Adaptive</div>
+                    <div className="text-xl font-mono font-bold text-primary capitalize">{recommendation?.regime?.composite || 'Adaptive'}</div>
+                    {recommendation?.reason && (
+                      <div className="text-[9px] text-muted-foreground mt-1 leading-tight border-t border-border/30 pt-1.5">
+                        {recommendation.reason}
+                      </div>
+                    )}
                   </div>
                   <div className="p-4 rounded-lg bg-background border border-border">
                     <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">Confluence Gate</div>
@@ -398,7 +417,13 @@ export function TrainingGround() {
                         <div className="flex items-center gap-2">
                           <Lightning size={18} weight="fill" className="text-purple-400" />
                           <span className="text-sm font-black tracking-widest text-purple-400">STEALTH</span>
-                          <Badge variant="outline" className="text-[8px] border-purple-500/30 text-purple-300/80 bg-purple-500/10 px-1.5 py-0">LOCKED</Badge>
+                          {recommendation?.mode && recommendation.mode !== 'stealth' ? (
+                            <Badge variant="outline" className="text-[8px] border-accent/40 text-accent bg-accent/10 px-1.5 py-0 capitalize">
+                              ADAPTING TO {recommendation.mode} PROFILE
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[8px] border-purple-500/30 text-purple-300/80 bg-purple-500/10 px-1.5 py-0">LOCKED</Badge>
+                          )}
                         </div>
                         <ShieldCheck size={18} className="text-accent/40" />
                       </div>
@@ -448,7 +473,18 @@ export function TrainingGround() {
                       />
                     </div>
                     <div className="space-y-2 text-left">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Min Confluence %</label>
+                      <div className="flex justify-between items-end">
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Min Confluence %</label>
+                        {recommendation?.recommended_confluence && (
+                          <div 
+                            className="text-[9px] text-accent/80 hover:text-accent cursor-pointer border border-accent/20 bg-accent/5 px-1.5 py-0.5 rounded transition-colors"
+                            onClick={() => setConfig({ ...config, min_confluence: recommendation.recommended_confluence ?? 82 })}
+                            title="Click to apply recommended confluence"
+                          >
+                            Suggested: {recommendation.recommended_confluence}%
+                          </div>
+                        )}
+                      </div>
                       <input
                         type="number"
                         min="0"

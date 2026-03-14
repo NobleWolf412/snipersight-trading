@@ -487,6 +487,7 @@ class ApiClient {
       reason: string;
       warning: string | null;
       confidence: string;
+      recommended_confluence?: number;
       regime?: any;
     }>('/scanner/recommendation');
   }

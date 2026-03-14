@@ -917,13 +917,16 @@ class PaperTradingService:
                         pass
                     else:
                         reason = rejection_info.get("reason", "Unknown") if rejection_info else "Unknown"
-                        self.diagnostic_logger.warning(
-                            "SCAN_002", 
-                            category, 
-                            f"Rejected: {sym} | {reason}", 
-                            context=rejection_info,
-                            symbol=sym
-                        )
+                        if self.diagnostic_logger:
+                            from backend.diagnostics.logger import Severity
+                            self.diagnostic_logger.log(
+                                probe_id="SCAN_002", 
+                                category=category, 
+                                severity=Severity.WARNING,
+                                message=f"Rejected: {sym} | {reason}", 
+                                context=rejection_info,
+                                symbol=sym
+                            )
 
                 recent = cs.setdefault("recent_symbols", [])  # pyre-ignore
                 recent.insert(0, status_obj)
@@ -972,7 +975,7 @@ class PaperTradingService:
                 )
                 veto_reason = f"Extreme Regime Veto: {regime_composite} ({regime_score}/100)"
                 for plan in trade_plans:
-                    self._log_signal(plan, result="filtered", reason=veto_reason)
+                    self._log_signal(plan, "filtered", veto_reason)
                 trade_plans = []
             elif score_val < regime_policy.min_regime_score and len(trade_plans) > 0:
                 # Below mode's minimum: log warning but DON'T veto — let position
@@ -1077,7 +1080,7 @@ class PaperTradingService:
         # Log to diagnostics
         if self.diagnostic_logger:
             diag_sev = Severity.INFO if result == "executed" else Severity.WARNING
-            diag_cat = ProbeCategory.EXEC_NO_FILL if result == "executed" else ProbeCategory.PLAN_RR_LOW
+            diag_cat = ProbeCategory.EXEC_SUCCESS if result == "executed" else ProbeCategory.PLAN_RR_LOW
             
             self.diagnostic_logger.log(
                 probe_id="SIG_001",

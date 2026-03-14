@@ -84,6 +84,7 @@ class ProbeCategory(Enum):
     # Execution
     EXEC_NO_FILL = "exec_no_fill"
     EXEC_SLIPPAGE = "exec_slippage"
+    EXEC_SUCCESS = "exec_success"
 
     # Generic
     LOGIC_ERROR = "logic_error"

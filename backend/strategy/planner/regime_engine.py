@@ -224,6 +224,7 @@ def get_mode_recommendation(
         "reason": "Balanced market conditions detected.",
         "warning": None,
         "confidence": "neutral",
+        "recommended_confluence": 75,
     }
 
     # 1. RISK-OFF SCENARIOS (Safety First)
@@ -231,32 +232,36 @@ def get_mode_recommendation(
         if btc_trend in ("strong_down", "down"):
             rec = {
                 "mode": "surgical",
-                "reason": "Market is Risk-Off and Trending Down. Use Surgical mode for quick scalps or shorts.",
+                "reason": "Market is Risk-Off and Trending Down. Strategy: Prioritizing capital preservation and quick shorts/scalps.",
                 "confidence": "high",
                 "warning": "Reduced position sizing recommended.",
+                "recommended_confluence": 72,
             }
         else:
             rec = {
                 "mode": "overwatch",
-                "reason": "Market is Risk-Off. Use Overwatch to filter for A+ high-timeframe setups only.",
+                "reason": "Market is Risk-Off. Strategy: Conservative stance, only filtering for high-conviction macro level setups.",
                 "confidence": "high",
                 "warning": "Avoid alts unless stronger than BTC.",
+                "recommended_confluence": 80,
             }
 
     # 2. VOLATILITY EXTREMES
     elif btc_volatility == "chaotic":
         rec = {
             "mode": "stealth",
-            "reason": "Volatility is CHAOTIC (>4% ATR). Use Stealth (Balanced) mode to avoid fakeouts.",
+            "reason": "Volatility is CHAOTIC (>4% ATR). Strategy: Balanced/Safety-first approach to avoid stop-hunts.",
             "confidence": "medium",
             "warning": "Stops will be wide. Reduce leverage.",
+            "recommended_confluence": 68,
         }
     elif btc_volatility == "compressed":
         rec = {
             "mode": "strike",
-            "reason": "Volatility is COMPRESSED. Use Strike mode to catch breakout expansions.",
+            "reason": "Volatility is COMPRESSED. Strategy: Momentum-focused setup detection to catch breakout expansions.",
             "confidence": "high",
             "warning": None,
+            "recommended_confluence": 68,
         }
 
     # 3. TREND OPPORTUNITIES (Risk-On / Balanced)
@@ -264,25 +269,28 @@ def get_mode_recommendation(
         if btc_volatility in ("normal", "elevated"):
             rec = {
                 "mode": "strike",
-                "reason": "Strong Uptrend + Healthy Volatility. Strike mode optimal for momentum.",
+                "reason": "Strong Uptrend + Healthy Volatility. Strategy: Aggressive trend following and breakout momentum.",
                 "confidence": "high",
                 "warning": None,
+                "recommended_confluence": 78,
             }
         else:
             rec = {
                 "mode": "overwatch",
-                "reason": "Uptrend detected. Overwatch mode best for riding swing positions.",
+                "reason": "Uptrend detected. Strategy: Position building on macro pullbacks for steady gains.",
                 "confidence": "medium",
                 "warning": None,
+                "recommended_confluence": 75,
             }
 
     # 4. CHOP/SIDEWAYS
     elif btc_trend == "sideways":
         rec = {
             "mode": "surgical",
-            "reason": "Market is Ranging/Sideways. Surgical mode best for range-bound scalping.",
+            "reason": "Market is Ranging/Sideways. Strategy: Precision mean-reversion between range boundaries.",
             "confidence": "high",
             "warning": "Avoid breakout setups in range.",
+            "recommended_confluence": 67,
         }
 
     return rec
