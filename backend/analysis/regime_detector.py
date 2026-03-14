@@ -246,6 +246,39 @@ class RegimeDetector:
 
         return regime
 
+    def detect_intermediate_regime(
+        self,
+        data: MultiTimeframeData,
+        indicators: IndicatorSet,
+    ) -> Optional[SymbolRegime]:
+        """
+        Detect intermediate (4H) regime for scalp/intraday mode gating.
+
+        Unlike detect_symbol_regime() which uses the highest available TF,
+        this explicitly anchors to 4H so scalp modes (Surgical/Strike) check
+        alignment against the 4H structure rather than the daily macro regime.
+
+        Returns None if 4H data is not available.
+        """
+        if "4h" not in data.timeframes:
+            return None
+
+        df = data.timeframes["4h"]
+        trend, score, _ = self.analyze_timeframe_trend(df, "4h")
+        volatility, _ = self._detect_volatility(indicators)
+        regime_score = self._score_symbol_regime(trend, volatility)
+
+        logger.debug(
+            "Intermediate regime (4H): trend=%s, vol=%s, score=%.1f",
+            trend, volatility, regime_score,
+        )
+        return SymbolRegime(
+            symbol="intermediate",
+            trend=trend,
+            volatility=volatility,
+            score=regime_score,
+        )
+
     def analyze_timeframe_trend(self, df, timeframe_label: str) -> tuple[str, float]:
         """
         Analyze trend for a specific single timeframe dataframe.
