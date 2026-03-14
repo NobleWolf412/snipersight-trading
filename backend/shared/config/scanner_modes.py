@@ -15,6 +15,33 @@ from dataclasses import dataclass
 from typing import Tuple, Dict, List, Optional, Any
 
 
+# Multi-Timeframe Alignment Map
+# exec: Entry Trigger | plan: Market Structure | context: Macro Trend
+RELATIVITY_MAP = {
+    "scalp": {
+        "exec": "1m",
+        "plan": "5m", 
+        "context": "15m",
+        "vol_profile_lookback": 24, # hours
+        "label": "High Frequency"
+    },
+    "intraday": {
+        "exec": "5m",
+        "plan": "15m",
+        "context": "1h",
+        "vol_profile_lookback": 72, # hours
+        "label": "Day Trading"
+    },
+    "swing": {
+        "exec": "1h",
+        "plan": "4h",
+        "context": "1d",
+        "vol_profile_lookback": 240, # hours
+        "label": "Structural Swing"
+    }
+}
+
+
 @dataclass(frozen=True)
 class MACDModeConfig:
     """
@@ -364,6 +391,17 @@ PROFILE_TO_MODE: Dict[str, str] = {
     "stealth_balanced": "stealth",
     "balanced": "stealth",  # Fallback
 }
+
+
+def map_profile_to_relativity(profile: str) -> str:
+    """Map a profile name to its relativity category (scalp, intraday, swing)."""
+    p = (profile or "stealth").lower()
+    if p in ("surgical", "precision"):
+        return "scalp"
+    if p in ("strike", "intraday_aggressive"):
+        return "intraday"
+    return "swing" # Overwatch, Stealth, Balanced all map to swing
+
 
 
 def get_mode_by_profile(profile: str) -> ScannerMode:

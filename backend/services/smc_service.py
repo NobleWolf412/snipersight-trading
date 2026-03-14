@@ -180,6 +180,7 @@ class SMCDetectionService:
         premium_discount_by_tf = {}
 
         for timeframe, df in multi_tf_data.timeframes.items():
+            timeframe = timeframe.lower()
             if df.empty or len(df) < 20:
                 continue
 

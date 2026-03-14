@@ -64,6 +64,15 @@ class ScanConfig:
     # Planner configuration (optional - will use defaults_for_mode if not set)
     planner: Optional["PlannerConfig"] = None
 
+    def __post_init__(self):
+        """Standardize all timeframe strings to lowercase."""
+        if self.timeframes:
+            self.timeframes = tuple(str(tf).lower() for tf in self.timeframes)
+        if self.primary_planning_timeframe:
+            self.primary_planning_timeframe = self.primary_planning_timeframe.lower()
+        if self.htf_timeframes:
+            self.htf_timeframes = tuple(str(tf).lower() for tf in self.htf_timeframes)
+
 
 @dataclass
 class GlobalThresholds:

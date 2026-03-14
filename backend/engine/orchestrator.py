@@ -22,10 +22,12 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Callable
 import logging
 import time
+import copy
+import pandas as pd
 
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.config.smc_config import SMCConfig
-from backend.shared.config.scanner_modes import get_mode
+from backend.shared.config.scanner_modes import get_mode, RELATIVITY_MAP
 from backend.shared.models.data import MultiTimeframeData
 from backend.data.ingestion_pipeline import IngestionPipeline
 from backend.shared.models.indicators import IndicatorSet
@@ -35,6 +37,7 @@ from backend.shared.models.planner import TradePlan
 from backend.shared.models.regime import MarketRegime, SymbolRegime
 from backend.analysis.regime_detector import get_regime_detector
 from backend.analysis.regime_policies import get_regime_policy
+from backend.strategy.planner.regime_engine import select_market_regime
 from backend.shared.utils.logging_utils import (
     log_pipeline_stage,
     log_rejection,
@@ -273,6 +276,7 @@ class Orchestrator:
             Exception: If critical pipeline stage fails
         """
         run_id = str(uuid.uuid4())[:8]
+        self.diagnostics = {"data_failures": [], "indicator_failures": [], "smc_rejections": [], "confluence_rejections": [], "planner_rejections": [], "risk_rejections": []}
         timestamp = datetime.now(timezone.utc)
         start_time = time.time()
 
@@ -408,32 +412,33 @@ class Orchestrator:
             "tie_breaks_neutral_default": 0,
         }
 
-        # Parallel per-symbol processing (using pre-fetched data)
-        def _safe_process(sym: str) -> tuple[Optional[TradePlan], Optional[Dict[str, Any]]]:
-            try:
-                # Pass pre-fetched data to avoid duplicate API calls
-                prefetched = prefetched_data.get(sym)
-                return self._process_symbol(sym, run_id, timestamp, prefetched_data=prefetched)
-            except Exception as e:  # pyright: ignore - intentional broad catch for robustness
-                import traceback
+        # Prepare inputs for child processes
+        # We pass minimal serializable data to avoid pickling the main Orchestrator object's locks
+        worker_args = []
+        for sym in symbols:
+            worker_args.append((
+                sym, 
+                run_id, 
+                timestamp, 
+                prefetched_data.get(sym),
+                self.config,
+                self.macro_context,
+                self.scanner_mode
+            ))
 
-                tb = traceback.format_exc()
-                logger.error("❌ %s: Pipeline error - %s\n%s", sym, e, tb)
-                self.telemetry.log_event(
-                    create_error_event(
-                        error_message=str(e), error_type=type(e).__name__, symbol=sym, run_id=run_id
-                    )
-                )
-
-        # Process symbols with ThreadPoolExecutor for parallelism while calling callback
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        # Process symbols with ProcessPoolExecutor for true CPU parallelism
+        # This bypasses the GIL for indicator and SMC math
+        from concurrent.futures import ProcessPoolExecutor, as_completed
 
         # This list will store the results (TradePlan or None, and rejection_info)
         processed_symbol_results = []
+        
+        # Max workers from config if specified
+        max_workers = getattr(self.config, "max_parallel_symbols", self.concurrency_workers)
 
-        with ThreadPoolExecutor(max_workers=self.concurrency_workers) as executor:
-            # Submit all tasks
-            future_to_symbol = {executor.submit(_safe_process, sym): sym for sym in symbols}
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks using the module-level worker
+            future_to_symbol = {executor.submit(_parallel_process_symbol_worker, arg): arg[0] for arg in worker_args}
 
             # Process results as they complete
             completed = 0
@@ -619,148 +624,138 @@ class Orchestrator:
             - timeframe: Timeframe of nearest structure
             - type: Type of nearest structure (OrderBlock, FVG, SwingPoint)
         """
-        if not smc_snapshot:
-            return None, None
+        try:
+            if not smc_snapshot:
+                return None, None
 
-        # Get ATR for normalization (default to 1% of price if missing)
-        atr = current_price * 0.01
-        if indicators:
-            primary_tf = self.config.primary_planning_timeframe
-            if primary_tf in indicators.by_timeframe:
-                ind_atr = indicators.by_timeframe[primary_tf].atr
-                if ind_atr:
-                    atr = ind_atr
+            # Get ATR for normalization (default to 1% of price if missing)
+            atr = current_price * 0.01
+            if indicators:
+                primary_tf = self.config.primary_planning_timeframe
+                if primary_tf in indicators.by_timeframe:
+                    ind_atr = indicators.by_timeframe[primary_tf].atr
+                    if ind_atr:
+                        atr = ind_atr
 
-        # Define HTF timeframes to check
-        htf_tfs = self.config.structure_timeframes or ("4h", "1d")
+            # Define HTF timeframes to check
+            htf_tfs = self.config.structure_timeframes or ("4h", "1d")
 
-        def find_nearest_structure(target_type: str) -> Optional[Dict[str, Any]]:
-            """
-            Find nearest structure of target type.
-            target_type: 'support' (for LONG) or 'resistance' (for SHORT)
-            """
-            min_dist = float("inf")
-            nearest = None
+            def find_nearest_structure(target_type: str) -> Optional[Dict[str, Any]]:
+                """
+                Find nearest structure of target type.
+                target_type: 'support' (for LONG) or 'resistance' (for SHORT)
+                """
+                min_dist = float("inf")
+                nearest = None
 
-            # 1. Order Blocks
-            for ob in smc_snapshot.order_blocks:
-                if ob.timeframe not in htf_tfs:
-                    continue
-
-                # For LONG (support), we want Bullish OBs below price
-                # For SHORT (resistance), we want Bearish OBs above price
-                # BUT Scorer logic generally checks proximity to *any* relevant structure
-                # Let's match Scorer's evaluate_htf_structural_proximity logic which is directional?
-                # Actually Scorer checks specific OB direction usually.
-                # Here we filter by direction to match intent.
-
-                is_support = ob.direction == "bullish"
-                is_resistance = ob.direction == "bearish"
-
-                if target_type == "support" and not is_support:
-                    continue
-                if target_type == "resistance" and not is_resistance:
-                    continue
-
-                # Calculate distance
-                ob_center = (ob.high + ob.low) / 2
-                dist = abs(current_price - ob_center)
-
-                if dist < min_dist:
-                    min_dist = dist
-                    nearest = {
-                        "type": "OrderBlock",
-                        "timeframe": ob.timeframe,
-                        "price": ob_center,
-                        "distance": dist,
-                    }
-
-            # 2. FVGs
-            for fvg in smc_snapshot.fvgs:
-                if fvg.timeframe not in htf_tfs:
-                    continue
-
-                # FVG logic:
-                # Longs want to enter at FVG support (price above FVG or inside)
-                # Shorts want to enter at FVG resistance (price below FVG or inside)
-
-                # Simple proximity: distance to nearest boundary
-                dist = min(abs(current_price - fvg.top), abs(current_price - fvg.bottom))
-
-                # If inside FVG, distance is 0
-                if fvg.bottom <= current_price <= fvg.top:
-                    dist = 0.0
-
-                if dist < min_dist:
-                    min_dist = dist
-                    nearest = {
-                        "type": "FVG",
-                        "timeframe": fvg.timeframe,
-                        "price": (
-                            current_price
-                            if dist == 0
-                            else (fvg.top if current_price > fvg.top else fvg.bottom)
-                        ),
-                        "distance": dist,
-                    }
-
-            # 3. Swing Points (if available)
-            if smc_snapshot.swing_structure:
-                for tf in htf_tfs:
-                    ss = smc_snapshot.swing_structure.get(tf)
-                    if not ss:
+                # 1. Order Blocks
+                for ob in smc_snapshot.order_blocks:
+                    if ob.timeframe not in htf_tfs:
                         continue
 
-                    # For Support: Higher Low (HL) or Low Low (LL) acting as support?
-                    # Usually previous HH acts as support too (S/R flip)
-                    # For simplicity, check all swing points
-                    points = [
-                        ss.get("last_hh"),
-                        ss.get("last_hl"),
-                        ss.get("last_lh"),
-                        ss.get("last_ll"),
-                    ]
-                    for p in points:
-                        if p:
-                            dist = abs(current_price - p)
-                            if dist < min_dist:
-                                min_dist = dist
-                                nearest = {
-                                    "type": "SwingPoint",
-                                    "timeframe": tf,
-                                    "price": p,
-                                    "distance": dist,
-                                }
+                    is_support = ob.direction == "bullish"
+                    is_resistance = ob.direction == "bearish"
 
-            return nearest
+                    if target_type == "support" and not is_support:
+                        continue
+                    if target_type == "resistance" and not is_resistance:
+                        continue
 
-        # Build context for Longs (needs Support)
-        support_struct = find_nearest_structure("support")
-        htf_ctx_long = None
-        if support_struct:
-            dist = support_struct["distance"]
-            htf_ctx_long = {
-                "within_atr": dist / atr if atr > 0 else 999.0,
-                "within_pct": (dist / current_price) * 100.0,
-                "timeframe": support_struct["timeframe"],
-                "type": support_struct["type"],
-                "nearest_price": support_struct["price"],
-            }
+                    # Calculate distance
+                    ob_center = (ob.high + ob.low) / 2
+                    dist = abs(current_price - ob_center)
 
-        # Build context for Shorts (needs Resistance)
-        resistance_struct = find_nearest_structure("resistance")
-        htf_ctx_short = None
-        if resistance_struct:
-            dist = resistance_struct["distance"]
-            htf_ctx_short = {
-                "within_atr": dist / atr if atr > 0 else 999.0,
-                "within_pct": (dist / current_price) * 100.0,
-                "timeframe": resistance_struct["timeframe"],
-                "type": resistance_struct["type"],
-                "nearest_price": resistance_struct["price"],
-            }
+                    if dist < min_dist:
+                        min_dist = dist
+                        nearest = {
+                            "type": "OrderBlock",
+                            "timeframe": ob.timeframe,
+                            "price": ob_center,
+                            "distance": dist,
+                        }
 
-        return htf_ctx_long, htf_ctx_short
+                # 2. FVGs
+                for fvg in smc_snapshot.fvgs:
+                    if fvg.timeframe not in htf_tfs:
+                        continue
+
+                    # Simple proximity: distance to nearest boundary
+                    dist = min(abs(current_price - fvg.top), abs(current_price - fvg.bottom))
+
+                    # If inside FVG, distance is 0
+                    if fvg.bottom <= current_price <= fvg.top:
+                        dist = 0.0
+
+                    if dist < min_dist:
+                        min_dist = dist
+                        nearest = {
+                            "type": "FVG",
+                            "timeframe": fvg.timeframe,
+                            "price": (
+                                current_price
+                                if dist == 0
+                                else (fvg.top if current_price > fvg.top else fvg.bottom)
+                            ),
+                            "distance": dist,
+                        }
+
+                # 3. Swing Points (if available)
+                if smc_snapshot.swing_structure:
+                    for tf in htf_tfs:
+                        ss = smc_snapshot.swing_structure.get(tf)
+                        if not ss:
+                            continue
+
+                        points = [
+                            ss.get("last_hh"),
+                            ss.get("last_hl"),
+                            ss.get("last_lh"),
+                            ss.get("last_ll"),
+                        ]
+                        for p in points:
+                            if p:
+                                dist = abs(current_price - p)
+                                if dist < min_dist:
+                                    min_dist = dist
+                                    nearest = {
+                                        "type": "SwingPoint",
+                                        "timeframe": tf,
+                                        "price": p,
+                                        "distance": dist,
+                                    }
+
+                return nearest
+
+            # Build context for Longs (needs Support)
+            support_struct = find_nearest_structure("support")
+            htf_ctx_long = None
+            if support_struct:
+                dist = support_struct["distance"]
+                htf_ctx_long = {
+                    "within_atr": dist / atr if atr > 0 else 999.0,
+                    "within_pct": (dist / current_price) * 100.0,
+                    "timeframe": support_struct["timeframe"],
+                    "type": support_struct["type"],
+                    "nearest_price": support_struct["price"],
+                }
+
+            # Build context for Shorts (needs Resistance)
+            resistance_struct = find_nearest_structure("resistance")
+            htf_ctx_short = None
+            if resistance_struct:
+                dist = resistance_struct["distance"]
+                htf_ctx_short = {
+                    "within_atr": dist / atr if atr > 0 else 999.0,
+                    "within_pct": (dist / current_price) * 100.0,
+                    "timeframe": resistance_struct["timeframe"],
+                    "type": resistance_struct["type"],
+                    "nearest_price": resistance_struct["price"],
+                }
+
+            return htf_ctx_long, htf_ctx_short
+        except Exception as e:
+            logger.warning(f"HTF context extraction failed for {getattr(multi_tf_data, 'symbol', 'unknown')}: {e}")
+            return None, None
 
     def _process_symbol(
         self,
@@ -869,6 +864,31 @@ class Orchestrator:
                 "required_timeframes": list(self.scanner_mode.critical_timeframes),
             }
 
+        # Stage 2.6: Early cooldown check (Save resources if symbol is blocked)
+        current_price = self._get_current_price(context.multi_tf_data)
+        # Check both directions - if any are blocked, we save heavy indicator/SMC compute
+        # This assumes a cooldown-blocked symbol shouldn't be processed further in either direction
+        for direction in ["LONG", "SHORT"]:
+            cooldown_rejection = self._check_cooldown(symbol, direction, current_price)
+            if cooldown_rejection:
+                logger.info(
+                    "%s [%s]: ❌ GATE FAIL (early_cooldown) | %s",
+                    symbol,
+                    trace_id,
+                    cooldown_rejection["reason"],
+                )
+                self._progress(
+                    "GATE_FAIL",
+                    {
+                        "symbol": symbol,
+                        "gate": "early_cooldown",
+                        "direction": direction,
+                        "hours_remaining": cooldown_rejection.get("cooldown_hours_remaining", 0),
+                    },
+                )
+                cooldown_rejection["trace_id"] = trace_id
+                return None, cooldown_rejection
+
         # Store missing TFs for plan metadata (even if empty)
         context.metadata["missing_critical_timeframes"] = missing_critical_tfs
 
@@ -910,6 +930,26 @@ class Orchestrator:
                 )
             except Exception as e:
                 logger.debug("%s: Symbol regime detection skipped: %s", symbol, e)
+
+        # NEW: Dynamic Selection of Trading Mode (Scalp, Intraday, Swing)
+        # Uses ADX and ATR% from daily (fallback 4H) to auto-tune scanner behavior
+        if context.multi_tf_indicators:
+            try:
+                inds = context.multi_tf_indicators
+                ref_tf = "1d" if inds.has_timeframe("1d") else "4h"
+                if inds.has_timeframe(ref_tf):
+                    indicator_set = inds.get_indicator(ref_tf)
+                    adx_val = getattr(indicator_set, "adx", 0.0)
+                    atr_val = getattr(indicator_set, "atr", 0.0)
+                    curr_price = context.multi_tf_data.get_current_price() or 1.0
+                    atr_pct = (atr_val / curr_price) * 100.0 if curr_price > 0 else 0.0
+                    
+                    auto_mode = select_market_regime(adx_val, atr_pct)
+                    context.metadata["auto_regime_mode"] = auto_mode.lower()
+                    logger.info("🎯 %s: Auto-selected %s mode | ADX=%.1f ATR%%=%.1f", 
+                               symbol, auto_mode.upper(), adx_val, atr_pct)
+            except Exception as e:
+                logger.debug(f"{symbol}: Auto-regime selection failed: {e}")
 
         # Store global regime in context so confluence service can check macro conditions
         context.metadata["global_regime"] = self.current_regime
@@ -1015,37 +1055,45 @@ class Orchestrator:
         # Stage 4b: Volume Profile calculation (institutional-grade VAP analysis)
         logger.debug("%s [%s]: 🔎 Stage 4b: Volume Profile", symbol, trace_id)
         try:
-            # FIXED: Use mode's primary TF instead of hardcoded 4H
-            vp_tf = getattr(self.config, "primary_planning_timeframe", "4h")
+            # Use RELATIVITY_MAP for dynamic timeframe and lookback
+            auto_mode = context.metadata.get("auto_regime_mode", "swing").lower()
+            rel_config = RELATIVITY_MAP.get(auto_mode, RELATIVITY_MAP["swing"])
+            vp_tf = rel_config["plan"].lower()
+            lookback_hours = rel_config.get("vol_profile_lookback", 240)
+            
             vp_df = context.multi_tf_data.timeframes.get(vp_tf)
-            if vp_df is None or len(vp_df) < 50:
-                # Fallback to 1H if 4H not available
-                vp_tf = "1h"
-                vp_df = context.multi_tf_data.timeframes.get(vp_tf)
+            if vp_df is not None:
+                # Trim data to lookback period
+                if not vp_df.empty:
+                    last_time = vp_df.index[-1]
+                    start_time = last_time - pd.Timedelta(hours=lookback_hours)
+                    vp_df = vp_df.loc[start_time:]
 
-            if vp_df is not None and len(vp_df) >= 50:
-                volume_profile = calculate_volume_profile(vp_df, num_bins=40)
-                context.metadata["volume_profile"] = {
-                    "poc": volume_profile.poc.price_level,
-                    "poc_volume_pct": volume_profile.poc.volume_pct,
-                    "value_area_high": volume_profile.value_area_high,
-                    "value_area_low": volume_profile.value_area_low,
-                    "hvn_count": len(volume_profile.high_volume_nodes),
-                    "lvn_count": len(volume_profile.low_volume_nodes),
-                    "timeframe": vp_tf,
-                }
-                # Store full profile object for confluence scoring
-                context.metadata["_volume_profile_obj"] = volume_profile
-                logger.info(
-                    "📊 Volume Profile (%s): POC=%.4f (%.1f%%), VA=%.4f-%.4f, %d HVN, %d LVN",
-                    vp_tf,
-                    volume_profile.poc.price_level,
-                    volume_profile.poc.volume_pct,
-                    volume_profile.value_area_low,
-                    volume_profile.value_area_high,
-                    len(volume_profile.high_volume_nodes),
-                    len(volume_profile.low_volume_nodes),
-                )
+                if len(vp_df) >= 10: # Minimum bars for meaningful profile
+                    volume_profile = calculate_volume_profile(vp_df, num_bins=40)
+                    context.metadata["volume_profile"] = {
+                        "poc": volume_profile.poc.price_level,
+                        "poc_volume_pct": volume_profile.poc.volume_pct,
+                        "value_area_high": volume_profile.value_area_high,
+                        "value_area_low": volume_profile.value_area_low,
+                        "hvn_count": len(volume_profile.high_volume_nodes),
+                        "lvn_count": len(volume_profile.low_volume_nodes),
+                        "timeframe": vp_tf,
+                        "lookback_hours": lookback_hours
+                    }
+                    # Store full profile object for confluence scoring
+                    context.metadata["_volume_profile_obj"] = volume_profile
+                    logger.info(
+                        "📊 Volume Profile (%s, %dh): POC=%.4f (%.1f%%), VA=%.4f-%.4f, %d HVN, %d LVN",
+                        vp_tf,
+                        lookback_hours,
+                        volume_profile.poc.price_level,
+                        volume_profile.poc.volume_pct,
+                        volume_profile.value_area_low,
+                        volume_profile.value_area_high,
+                        len(volume_profile.high_volume_nodes),
+                        len(volume_profile.low_volume_nodes),
+                    )
         except Exception as e:
             logger.debug("Volume profile calculation skipped: %s", e)
 
@@ -1450,45 +1498,7 @@ class Orchestrator:
             context.metadata.get("chosen_direction", "LONG"),
         )
 
-        # Stage 5.5: Check cooldown before trade planning
-        proposed_direction = context.metadata.get("chosen_direction", "LONG")
-        current_price = self._get_current_price(context.multi_tf_data)
 
-        cooldown_rejection = self._check_cooldown(symbol, proposed_direction, current_price)
-        if cooldown_rejection:
-            logger.info(
-                "%s [%s]: ❌ GATE FAIL (cooldown) | Direction=%s | %s",
-                symbol,
-                trace_id,
-                proposed_direction,
-                cooldown_rejection["reason"],
-            )
-
-            self._progress(
-                "GATE_FAIL",
-                {
-                    "symbol": symbol,
-                    "gate": "cooldown",
-                    "direction": proposed_direction,
-                    "hours_remaining": cooldown_rejection.get("cooldown_hours_remaining", 0),
-                    "stop_price": cooldown_rejection.get("stop_price", 0),
-                },
-            )
-
-            # Log telemetry event
-            self.telemetry.log_event(
-                create_signal_rejected_event(
-                    run_id=run_id,
-                    symbol=symbol,
-                    reason=cooldown_rejection["reason"],
-                    gate_name="cooldown",
-                    score=context.confluence_breakdown.total_score,
-                    threshold=0,
-                )
-            )
-
-            cooldown_rejection["trace_id"] = trace_id
-            return None, cooldown_rejection
 
         # Stage 6: Trade planning
         logger.debug("%s [%s]: Generating trade plan", symbol, trace_id)
@@ -1713,6 +1723,11 @@ class Orchestrator:
             self.diagnostics["data_failures"].append({"symbol": symbol, "error": str(e)})
             return None
 
+    def _progress(self, stage: str, data: Dict[str, Any]):
+        """Pass progress up to orchestrator level (to be hooked by service)."""
+        # This is a stub - real implementer is in scanner_service.py
+        pass
+
     def _compute_indicators(self, multi_tf_data: MultiTimeframeData) -> IndicatorSet:
         """
         Compute technical indicators across all timeframes.
@@ -1839,6 +1854,16 @@ class Orchestrator:
                 ],  # NEW: Pass consolidations
             )
 
+            # NEW: Dynamic Regime Selection - Override mode if auto-detected
+            auto_mode = context.metadata.get("auto_regime_mode")
+            current_trade_type = auto_mode or context.metadata.get("counter_htf_type") or self.scanner_mode.expected_trade_type
+            
+            # Localize config to ensure engines use correct mode-specific relativity
+            planner_config = self.config
+            if auto_mode:
+                planner_config = copy.copy(self.config)
+                planner_config.profile = auto_mode
+
             plan = generate_trade_plan(
                 symbol=context.symbol,
                 direction=direction,
@@ -1846,11 +1871,11 @@ class Orchestrator:
                 smc_snapshot=filtered_snapshot,
                 indicators=context.multi_tf_indicators,
                 confluence_breakdown=context.confluence_breakdown,
-                config=self.config,
+                config=planner_config,
                 current_price=current_price,
                 missing_critical_timeframes=context.metadata.get("missing_critical_timeframes", []),
                 multi_tf_data=context.multi_tf_data,
-                expected_trade_type=context.metadata.get("counter_htf_type") or self.scanner_mode.expected_trade_type,
+                expected_trade_type=current_trade_type,
                 volume_profile=context.metadata.get("_volume_profile_obj"),
             )
 
@@ -2499,13 +2524,9 @@ class Orchestrator:
         # Minimum candle counts for reliable pattern detection
         MIN_CANDLES = {
             "1w": 50,  # ~1 year
-            "1W": 50,
             "1d": 100,  # ~3.5 months
-            "1D": 100,
             "4h": 150,  # ~25 days
-            "4H": 150,
             "1h": 200,  # ~8 days
-            "1H": 200,
             "15m": 300,  # ~3 days
             "5m": 500,  # ~1.7 days
             "1m": 500,  # ~8 hours
@@ -2517,14 +2538,14 @@ class Orchestrator:
         # Check both presence AND sufficient candle count
         issues = []
         for tf in critical_tfs:
-            if tf not in available_tfs:
-                # OVERWATCH RESILIENCE: Fallback if 1W missing but 1D present logic
+            tf_lower = tf.lower()
+            if tf_lower not in available_tfs:
+                # OVERWATCH RESILIENCE: Fallback if 1w missing but 1d present logic
                 fallback_active = False
-                if self.scanner_mode.name == "overwatch" and tf in ("1w", "1W"):
+                if self.scanner_mode.name == "overwatch" and tf_lower == "1w":
                     # Check if we have solid 1D data to compensate
-                    d1_key = "1d" if "1d" in available_tfs else "1D"
-                    if d1_key in available_tfs:
-                        d1_count = len(multi_tf_data.timeframes[d1_key])
+                    if "1d" in available_tfs:
+                        d1_count = len(multi_tf_data.timeframes["1d"])
                         if d1_count >= 100:
                             logger.warning(
                                 "⚠️ OVERWATCH FALLBACK: Missing 1W data, but sufficient 1D data (%d candles). Proceeding.",
@@ -2535,8 +2556,8 @@ class Orchestrator:
                 if not fallback_active:
                     issues.append(f"{tf}:missing")
             else:
-                df = multi_tf_data.timeframes[tf]
-                min_required = MIN_CANDLES.get(tf, 100)
+                df = multi_tf_data.timeframes[tf_lower]
+                min_required = MIN_CANDLES.get(tf_lower, 100)
                 actual_count = len(df) if df is not None else 0
                 if actual_count < min_required:
                     issues.append(f"{tf}:{actual_count}/{min_required}")
@@ -3026,3 +3047,44 @@ class Orchestrator:
                     pass
         except Exception:
             pass
+
+
+def _parallel_process_symbol_worker(args):
+    """
+    Module-level worker for ProcessPoolExecutor.
+    Runs symbol analysis in a separate CPU process.
+    """
+    symbol, run_id, timestamp, prefetched_data, config, macro_context, scanner_mode = args
+    
+    try:
+        # Import inside worker to avoid circularity and ensure child process has components
+        from backend.engine.orchestrator import Orchestrator
+        
+        # We need a minimal orchestrator for this symbol
+        # We use a dummy adapter as data is already prefetched
+        class DummyAdapter:
+            def fetch_ohlcv(self, *args, **kwargs): return None
+            
+        # Initialize a temporary orchestrator in the child process
+        worker_orchestrator = Orchestrator(
+            config=config,
+            exchange_adapter=DummyAdapter(),
+            concurrency_workers=1
+        )
+        # Manually sync the execution state
+        worker_orchestrator.macro_context = macro_context
+        worker_orchestrator.scanner_mode = scanner_mode
+        
+        # Execute the pipeline for this symbol
+        return worker_orchestrator._process_symbol(symbol, run_id, timestamp, prefetched_data=prefetched_data)
+        
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        # Return a rejection info instead of crashing the process
+        return None, {
+            "symbol": symbol,
+            "reason_type": "errors",
+            "reason": f"Process worker error: {str(e)}",
+            "error_details": tb
+        }

@@ -111,6 +111,7 @@ class IngestionPipeline:
         cache_misses = 0
 
         for tf in timeframes:
+            tf = tf.lower()
             try:
                 df = None
 
@@ -365,6 +366,7 @@ class IngestionPipeline:
         if df.empty:
             raise ValueError(f"Empty DataFrame for {symbol} {timeframe}")
 
+        timeframe = timeframe.lower()
         # Check required columns
         required_cols = ["timestamp", "open", "high", "low", "close", "volume"]
         missing_cols = set(required_cols) - set(df.columns)

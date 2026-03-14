@@ -58,17 +58,6 @@ def get_atr_regime(
     # RegimeDetector._detect_volatility returns (label, score)
     label, score = get_regime_detector()._detect_volatility(indicators)
 
-    # Map detector labels to planner labels if necessary
-    # Detector: compressed, normal, elevated, volatile, chaotic
-    # Planner Config expects: variable keys. Standard mapping:
-    # calm -> compressed
-    # normal -> normal
-    # elevated -> elevated
-    # explosive -> volatile/chaotic
-
-    # We will return the detector's raw label and let the PlannerConfig adapt via keys
-    # or we map it here to match legacy planner config keys ("calm", "normal", "elevated", "explosive")
-
     # Mapping for backward compatibility with PlannerConfig keys
     mapping = {
         "compressed": "calm",
@@ -294,3 +283,24 @@ def get_mode_recommendation(
         }
 
     return rec
+
+
+def select_market_regime(adx: float, atr_pct: float) -> str:
+    """
+    Analyzes market DNA to select the optimal trading regime.
+    adx: Trend strength (0-100)
+    atr_pct: Volatility as a % of price
+    """
+    # 1. Extreme Volatility -> Scalp
+    # Fast moves require fast execution to capture slippage-sensitive alpha.
+    if atr_pct > 3.0: 
+        return "scalp"
+    
+    # 2. Strong Trend + Health Volatility -> Intraday
+    # ADX > 25 indicates a trending market suitable for 15m structure.
+    if adx > 25 and atr_pct > 1.2:
+        return "intraday"
+    
+    # 3. Low Volatility or Range-Bound -> Swing
+    # Wider stops and higher timeframes needed to avoid noise.
+    return "swing"

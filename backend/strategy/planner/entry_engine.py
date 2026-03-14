@@ -21,6 +21,8 @@ from backend.shared.config.planner_config import PlannerConfig
 from backend.strategy.planner.regime_engine import get_atr_regime, _calculate_htf_bias_factor
 from backend.shared.models.indicators import IndicatorSet
 from backend.strategy.planner.risk_engine import _get_allowed_entry_tfs
+from backend.shared.config.scanner_modes import RELATIVITY_MAP, map_profile_to_relativity
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,7 @@ def _calculate_pullback_probability(
     htf_trend: Optional[str] = None,
     smc_snapshot: Optional[SMCSnapshot] = None,
     confluence_breakdown: Optional[ConfluenceBreakdown] = None,
+    config: Optional[ScanConfig] = None,
 ) -> float:
     """
     Calculate probability that price will pull back to reach entry zone.
@@ -98,11 +101,15 @@ def _calculate_pullback_probability(
         try:
             # Get primary timeframe indicators
             # Prefer 15m/1h for pullback momentum validity
-            primary_tf = None
-            for tf_candidate in ["15m", "1h", "5m", "4h", "1d"]:
-                if tf_candidate in indicators.by_timeframe:
-                    primary_tf = tf_candidate
-                    break
+            # Determine primary timeframe from RELATIVITY_MAP based on mode
+            mode_key = map_profile_to_relativity(getattr(config, "profile", "stealth"))
+            relativity = RELATIVITY_MAP.get(mode_key, RELATIVITY_MAP["intraday"])
+            
+            # Prefer 'plan' timeframe for pullback momentum validity
+            primary_tf = relativity["plan"]
+
+            if primary_tf not in indicators.by_timeframe:
+                primary_tf = list(indicators.by_timeframe.keys())[0]
 
             if not primary_tf:
                 primary_tf = list(indicators.by_timeframe.keys())[0]
@@ -228,10 +235,20 @@ def _is_in_correct_pd_zone(
     # Try specific timeframe, then fallback
     pd_data = smc_snapshot.premium_discount.get(timeframe)
     if not pd_data:
-        # Fallback to any HTF PD data
-        for tf in ["1w", "1d", "4h"]:
-            if tf in smc_snapshot.premium_discount:
-                pd_data = smc_snapshot.premium_discount[tf]
+        # Fallback to any HTF PD data using dynamic context
+        # We don't have config here yet, so we'll check common HTFs or pass it in later if needed
+        # For now, stick to structural hierarchy
+        # TRY: Find any available PD data in structural order (1w -> 1h)
+        # Fixes case-sensitivity issues by checking both layouts if needed
+        for tf_opt in ["1w", "1d", "4h", "1h"]:
+            # Check lowercase
+            if tf_opt in smc_snapshot.premium_discount:
+                pd_data = smc_snapshot.premium_discount[tf_opt]
+                break
+            # Check uppercase fallback
+            tf_upper = tf_opt.upper()
+            if tf_upper in smc_snapshot.premium_discount:
+                pd_data = smc_snapshot.premium_discount[tf_upper]
                 break
 
     if not pd_data or "equilibrium" not in pd_data:
@@ -298,13 +315,17 @@ def _has_sweep_backing(
 
 def _is_order_block_valid(ob: OrderBlock, df: pd.DataFrame, current_price: float) -> bool:
     """Validate an order block is not broken and not currently being mitigated."""
-    if df is None or len(df) == 0:
+    if df is None or df.empty:
         return True
+
+    # CRITICAL: Ensure index is clean before comparison (Deduplication)
+    # Fixes "truth value of a Series is ambiguous" errors
+    if df.index.duplicated().any():
+        df = df[~df.index.duplicated(keep="first")]
+
     future_index_match = df.index > ob.timestamp
     # Defensive fix for duplicate columns
     if isinstance(future_index_match, pd.DataFrame):
-        # If boolean mask is a DataFrame (due to duplicate index?), this is bad data
-        # Fallback: take the first column
         future_index_match = future_index_match.iloc[:, 0]
 
     try:
@@ -314,38 +335,38 @@ def _is_order_block_valid(ob: OrderBlock, df: pd.DataFrame, current_price: float
             future_candles = future_candles.loc[:, ~future_candles.columns.duplicated()]
     except Exception:
         return True
-    if future_candles.empty:  # FIX: Use .empty instead of len() == 0
+
+    if future_candles.empty:
         return True
+
     if ob.direction == "bullish":
         try:
-            lows = future_candles["low"]
-            # Defensive check: if 'low' returns DataFrame (duplicate cols), reduce to min of rows then min of series
-            if isinstance(lows, pd.DataFrame):
-                lowest = lows.min(axis=1).min()
-            else:
-                lowest = lows.min()
+            # Use .min().min() to collapse any multi-element series/dataframe into a single scalar
+            # This is the most robust way to ensure we get a single float value even with duplicate columns
+            low_data = future_candles["low"]
+            lowest = low_data.min()
+            if hasattr(lowest, "min"): # Multi-column result
+                lowest = lowest.min()
 
-            if lowest < ob.low:  # broken through
+            if float(lowest) < float(ob.low):  # broken through
                 return False
             if ob.low <= current_price <= ob.high:  # currently inside zone
                 return False
-        except ValueError:
-            # Fallback if ambiguity persists
+        except (ValueError, TypeError):
             return True
 
     else:
         try:
-            highs = future_candles["high"]
-            if isinstance(highs, pd.DataFrame):
-                highest = highs.max(axis=1).max()
-            else:
-                highest = highs.max()
+            high_data = future_candles["high"]
+            highest = high_data.max()
+            if hasattr(highest, "max"): # Multi-column result
+                highest = highest.max()
 
-            if highest > ob.high:
+            if float(highest) > float(ob.high):
                 return False
             if ob.low <= current_price <= ob.high:
                 return False
-        except ValueError:
+        except (ValueError, TypeError):
             return True
 
     return True
@@ -471,15 +492,20 @@ def _get_zone_and_trigger_tfs(config: ScanConfig) -> tuple:
     if zone_tfs and trigger_tfs:
         return zone_tfs, trigger_tfs
 
-    # Fallback: split entry_timeframes into zone (HTF) and trigger (LTF)
+    # Fallback: split entry_timeframes into zone (HTF) and trigger (LTF) using RELATIVITY_MAP
+    mode_key = map_profile_to_relativity(getattr(config, "profile", "stealth"))
+    rel = RELATIVITY_MAP.get(mode_key, RELATIVITY_MAP["intraday"])
+    
+    # Zone: plan/context | Trigger: exec
+    zone_htf = (rel["context"], rel["plan"])
+    trigger_ltf = (rel["exec"],)
+
     entry_tfs = getattr(config, "entry_timeframes", ())
-    htf = ("1w", "1d", "4h", "1h")
-    ltf = ("15m", "5m", "1m")
+    
+    zone_tfs = tuple(tf for tf in entry_tfs if tf.lower() in [h.lower() for h in zone_htf])
+    trigger_tfs = tuple(tf for tf in entry_tfs if tf.lower() in [l.lower() for l in trigger_ltf])
 
-    zone_tfs = tuple(tf for tf in entry_tfs if tf.lower() in [h.lower() for h in htf])
-    trigger_tfs = tuple(tf for tf in entry_tfs if tf.lower() in [l.lower() for l in ltf])
-
-    return zone_tfs or ("4h", "1h"), trigger_tfs or ("15m", "5m")
+    return zone_tfs or (rel["plan"],), trigger_tfs or (rel["exec"],)
 
 
 def _calculate_entry_zone(
@@ -639,10 +665,13 @@ def _calculate_entry_zone(
         if skip_htf_backing:
             logger.debug("HTF backing filter SKIPPED for bullish OBs (%s mode)", config.profile)
         else:
-            # Prevent taking 5m/15m entries in empty space
+            # Prevent taking LTF entries in empty space (require HTF backing)
+            mode_key = map_profile_to_relativity(getattr(config, "profile", "stealth"))
+            rel = RELATIVITY_MAP.get(mode_key, RELATIVITY_MAP["intraday"])
+            
             validated_backing = []
-            ltf_tfs = ("1m", "5m", "15m")
-            htf_tfs = ("1h", "4h", "1d", "1w")
+            ltf_tfs = (rel["exec"],)
+            htf_tfs = (rel["plan"], rel["context"], "1d", "1w")
 
             for ob in obs:
                 if ob.timeframe in ltf_tfs:
@@ -679,7 +708,17 @@ def _calculate_entry_zone(
             obs = validated_backing
 
         # Prefer higher timeframe / freshness / displacement / low mitigation
-        tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
+        # Dynamic weights based on relativity tiers
+        mode_key = map_profile_to_relativity(getattr(config, "profile", "stealth"))
+        rel = RELATIVITY_MAP.get(mode_key, RELATIVITY_MAP["intraday"])
+        
+        tf_weight = {
+            rel["exec"]: 0.8,
+            rel["plan"]: 1.2,
+            rel["context"]: 1.5,
+            "1d": 2.0,
+            "1w": 2.5
+        }
 
         def _ob_score(ob: OrderBlock) -> float:
             base_score = ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
@@ -1261,6 +1300,7 @@ def _calculate_entry_zone(
         htf_trend=None,  # Caller can provide via confluence_breakdown if needed
         smc_snapshot=smc_snapshot,
         confluence_breakdown=confluence_breakdown,
+        config=config,
     )
     entry_zone.pullback_probability = pullback_prob  # type: ignore
 
@@ -1302,7 +1342,9 @@ def _find_trend_continuation_entry(
     # Get allowed entry timeframes
     allowed_tfs = set(getattr(config, "entry_timeframes", ()))
     if not allowed_tfs:
-        allowed_tfs = {"5m", "15m", "1h", "4h"}  # Default LTF/MTF
+        mode_key = map_profile_to_relativity(getattr(config, "profile", "stealth"))
+        rel = RELATIVITY_MAP.get(mode_key, RELATIVITY_MAP["intraday"])
+        allowed_tfs = {rel["exec"], rel["plan"]}  # Default LTF/MTF from mode
 
     # Filter consolidations by direction and state
     valid_consolidations = []
