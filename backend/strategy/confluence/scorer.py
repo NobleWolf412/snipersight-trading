@@ -3190,50 +3190,7 @@ def calculate_confluence_score(
     # --- NEW: Multi-TF Reversal Confluence ---
     # Bonus when multiple reversal signals align (divergence + sweep + BOS)
     try:
-        reversal_signals = 0
-        reversal_reasons = []
-
-        # Check for liquidity sweeps in direction
-        if smc_snapshot.liquidity_sweeps:
-            for sweep in smc_snapshot.liquidity_sweeps:
-                sweep_type = getattr(sweep, "sweep_type", "")
-                sweep_dir = "bullish" if sweep_type == "low" else ("bearish" if sweep_type == "high" else None)
-                if (direction in ("bullish", "long") and sweep_dir == "bullish") or (
-                    direction in ("bearish", "short") and sweep_dir == "bearish"
-                ):
-                    reversal_signals += 1
-                    reversal_reasons.append(f"{getattr(sweep, 'timeframe', 'unknown')} sweep")
-                    break
-
-        # Check for structural breaks in direction
-        if smc_snapshot.structural_breaks:
-            for brk in smc_snapshot.structural_breaks:
-                brk_dir = getattr(brk, "direction", None)
-                brk_type = getattr(brk, "break_type", "")
-                if (direction in ("bullish", "long") and brk_dir == "bullish") or (
-                    direction in ("bearish", "short") and brk_dir == "bearish"
-                ):
-                    if brk_type in ("bos", "choch", "BOS", "CHoCH"):
-                        reversal_signals += 1
-                        reversal_reasons.append(
-                            f"{getattr(brk, 'timeframe', 'unknown')} {brk_type}"
-                        )
-                        break
-
-        # Check swing structure for bias alignment
-        if smc_snapshot.swing_structure:
-            for tf, ss in smc_snapshot.swing_structure.items():
-                trend = (
-                    ss.get("trend", "neutral")
-                    if isinstance(ss, dict)
-                    else getattr(ss, "trend", "neutral")
-                )
-                if (direction in ("bullish", "long") and trend == "bullish") or (
-                    direction in ("bearish", "short") and trend == "bearish"
-                ):
-                    reversal_signals += 1
-                    reversal_reasons.append(f"{tf} trend={trend}")
-                    break
+        reversal_signals, reversal_reasons = _score_multi_tf_reversal_confluence(smc_snapshot, direction)
 
         if reversal_signals >= 2:
             score = min(100.0, 50.0 + (reversal_signals * 15))
@@ -3434,7 +3391,7 @@ def calculate_confluence_score(
                     weight=new_weight,
                     rationale=f.rationale + f" [dampened: {hard_gate_reason}]",
                 )
-                dampened_count += 1
+                dampened_count += 1  # pyre-ignore[58, 16]
 
         if dampened_count > 0:
             logger.debug(
@@ -3815,6 +3772,61 @@ def calculate_confluence_score(
             pass  # Don't fail scoring if tracing fails
 
     return breakdown
+
+
+def _score_multi_tf_reversal_confluence(
+    smc_snapshot: SMCSnapshot, direction: str
+) -> Tuple[int, List[str]]:
+    """
+    Calculate the number of reversal signals aligned with the trade direction.
+    Signals include liquidity sweeps, structural breaks (BOS/ChoCH), and swing structure trends.
+    """
+    reversal_signals: int = 0
+    reversal_reasons: List[str] = []
+
+    # Check for liquidity sweeps in direction
+    if smc_snapshot.liquidity_sweeps:
+        for sweep in smc_snapshot.liquidity_sweeps:
+            sweep_type = getattr(sweep, "sweep_type", "")
+            sweep_dir = "bullish" if sweep_type == "low" else ("bearish" if sweep_type == "high" else None)
+            if (direction in ("bullish", "long") and sweep_dir == "bullish") or (
+                direction in ("bearish", "short") and sweep_dir == "bearish"
+            ):
+                reversal_signals += 1  # type: ignore
+                reversal_reasons.append(f"{getattr(sweep, 'timeframe', 'unknown')} sweep")
+                break
+
+    # Check for structural breaks in direction
+    if smc_snapshot.structural_breaks:
+        for brk in smc_snapshot.structural_breaks:
+            brk_dir = getattr(brk, "direction", None)
+            brk_type = getattr(brk, "break_type", "")
+            if (direction in ("bullish", "long") and brk_dir == "bullish") or (
+                direction in ("bearish", "short") and brk_dir == "bearish"
+            ):
+                if str(brk_type).lower() in ("bos", "choch"):
+                    reversal_signals += 1  # type: ignore
+                    reversal_reasons.append(
+                        f"{getattr(brk, 'timeframe', 'unknown')} {brk_type}"
+                    )
+                    break
+
+    # Check swing structure for bias alignment
+    if smc_snapshot.swing_structure:
+        for tf, ss in smc_snapshot.swing_structure.items():
+            trend = (
+                ss.get("trend", "neutral")
+                if isinstance(ss, dict)
+                else getattr(ss, "trend", "neutral")
+            )
+            if (direction in ("bullish", "long") and trend == "bullish") or (
+                direction in ("bearish", "short") and trend == "bearish"
+            ):
+                reversal_signals += 1  # type: ignore
+                reversal_reasons.append(f"{tf} trend={trend}")
+                break
+
+    return reversal_signals, reversal_reasons
 
 
 # --- HTF Structure Bias Scoring ---
