@@ -53,6 +53,40 @@ class PhemexAdapter:
         except Exception as e:
             logger.warning(f"Failed to load markets on init: {e}")
 
+    def get_market_info(self, symbol: str) -> Dict[str, float]:
+        """
+        Fetch market precision information (tick size and lot size).
+        
+        Args:
+            symbol: Trading pair
+            
+        Returns:
+            Dict with tick_size and lot_size
+        """
+        try:
+            if not self.exchange.markets:
+                self.exchange.load_markets()
+            
+            market = self.exchange.market(symbol)
+            # CCXT precision can be standard (e.g. 0.01) or decimal places (e.g. 2)
+            # We want the absolute value (tick size)
+            tick_size = market["precision"].get("price", 0.0)
+            lot_size = market["precision"].get("amount", 0.0)
+            
+            # If CCXT returns decimal places (int), convert to absolute value
+            if isinstance(tick_size, int):
+                tick_size = 10 ** -tick_size
+            if isinstance(lot_size, int):
+                lot_size = 10 ** -lot_size
+                
+            return {
+                "tick_size": float(tick_size),
+                "lot_size": float(lot_size),
+            }
+        except Exception as e:
+            logger.warning(f"Failed to fetch market info for {symbol}: {e}")
+            return {"tick_size": 0.0, "lot_size": 0.0}
+
     @retry_on_rate_limit(max_retries=3)
     def fetch_ohlcv(
         self,

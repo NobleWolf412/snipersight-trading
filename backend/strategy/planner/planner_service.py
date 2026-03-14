@@ -35,6 +35,7 @@ from backend.strategy.planner.risk_engine import (
     _adjust_targets_for_leverage,
 )
 from backend.strategy.planner.regime_engine import get_atr_regime
+from backend.shared.utils.math_utils import round_to_tick
 
 # Re-export SetupArchetype if needed by consumers, though ideally they import from models?
 # For now, defining local type alias to match previous API surface if it was used
@@ -143,6 +144,8 @@ def generate_trade_plan(
     multi_tf_data: Optional[MultiTimeframeData] = None,
     expected_trade_type: Optional[str] = None,
     volume_profile: Optional["VolumeProfile"] = None,  # NEW: For HVN/LVN target filtering
+    tick_size: float = 0.0,  # NEW: For exchange tick alignment
+    lot_size: float = 0.0,
 ) -> TradePlan:
     """
     Generate a complete, actionable trade plan.
@@ -540,6 +543,26 @@ def generate_trade_plan(
         raise ValueError(rejection_msg)
 
 
+    # === 6b. Exchange Tick Alignment ===
+    if tick_size and tick_size > 0:
+        from backend.shared.utils.math_utils import round_to_tick
+        
+        # Round entry zone
+        entry_zone.near_entry = round_to_tick(entry_zone.near_entry, tick_size)
+        entry_zone.far_entry = round_to_tick(entry_zone.far_entry, tick_size)
+        
+        # Round stop loss
+        stop_loss.level = round_to_tick(stop_loss.level, tick_size)
+        
+        # Round targets
+        for tp in targets:
+            tp.level = round_to_tick(tp.level, tick_size)
+            
+        logger.info(
+            f"🎯 TICK ALIGNMENT | {symbol} | Rounded Entry=[{entry_zone.far_entry:.4f}-{entry_zone.near_entry:.4f}] "
+            f"| Stop={stop_loss.level:.4f} | TickSize={tick_size}"
+        )
+
     # DEBUG: Log final values before TradePlan validation
     try:
         targets_levels = [f"{t.level:.4f}" for t in targets[:3]] if targets else []
@@ -571,6 +594,8 @@ def generate_trade_plan(
             trade_type=trade_type,
             confidence_score=confluence_breakdown.total_score,
             confluence_breakdown=confluence_breakdown,
+            tick_size=tick_size,
+            lot_size=lot_size,
         )
 
         # === GENERATE MISSION RATIONALE ===

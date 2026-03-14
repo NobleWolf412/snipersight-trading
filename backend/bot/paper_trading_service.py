@@ -30,6 +30,7 @@ from backend.shared.config.defaults import ScanConfig
 from backend.shared.models.planner import TradePlan
 from backend.data.adapters.phemex import PhemexAdapter
 from backend.analysis.regime_policies import get_regime_policy
+from backend.shared.utils.math_utils import round_to_lot
 from backend.diagnostics.logger import DiagnosticLogger, ProbeCategory, Severity
 from backend.diagnostics.report import ReportGenerator, ModeStats
 
@@ -1399,6 +1400,10 @@ class PaperTradingService:
         max_size = max_position_value / entry if entry > 0 else 0
 
         final_size = min(position_size, max_size)
+        
+        # Apply lot size rounding to align with exchange requirements
+        if hasattr(plan, 'lot_size') and plan.lot_size > 0:
+            final_size = round_to_lot(final_size, plan.lot_size)
 
         if regime_multiplier != 1.0:
             logger.info(

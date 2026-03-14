@@ -15,6 +15,7 @@ All calculations respect max position size limits and minimum order requirements
 
 from typing import Optional
 from dataclasses import dataclass
+from backend.shared.utils.math_utils import round_to_lot
 
 
 @dataclass
@@ -92,6 +93,7 @@ class PositionSizer:
         max_position_pct: float = 25.0,
         max_risk_pct: float = 2.0,
         min_order_value: float = 10.0,
+        lot_size: float = 0.0,
     ):
         """
         Initialize position sizer.
@@ -101,6 +103,7 @@ class PositionSizer:
             max_position_pct: Maximum position size as % of account (default 25%)
             max_risk_pct: Maximum risk per trade as % of account (default 2%)
             min_order_value: Minimum order value required by exchange (default $10)
+            lot_size: Exchange minimum quantity step size (default 0.0 = no rounding)
 
         Raises:
             ValueError: If any parameter is invalid
@@ -118,6 +121,7 @@ class PositionSizer:
         self.max_position_pct = max_position_pct
         self.max_risk_pct = max_risk_pct
         self.min_order_value = min_order_value
+        self.lot_size = lot_size
 
     def calculate_fixed_fractional(
         self, risk_pct: float, entry_price: float, stop_price: float, leverage: float = 1.0
@@ -483,6 +487,12 @@ class PositionSizer:
             quantity = quantity * scale_factor
             notional_value = self.account_balance * leverage
 
+        # === Task 1: Exchange Lot Alignment ===
+        if self.lot_size > 0:
+            quantity = round_to_lot(quantity, self.lot_size)
+            # Re-calculate notional and risk based on rounded quantity
+            notional_value = quantity * entry_price
+            
         # Calculate actual risk after constraints
         # Risk is always quantity * stop_distance, regardless of leverage
         actual_risk = quantity * stop_distance

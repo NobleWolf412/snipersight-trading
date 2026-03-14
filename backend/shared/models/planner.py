@@ -163,6 +163,8 @@ class TradePlan:
     missing_critical_timeframes: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.utcnow)
+    tick_size: float = 0.0  # Exchange price precision
+    lot_size: float = 0.0   # Exchange quantity precision
 
     # Backward compatibility alias
     @property

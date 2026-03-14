@@ -409,13 +409,23 @@ class Orchestrator:
             "shorts_generated": 0,
             "tie_breaks_long": 0,
             "tie_breaks_short": 0,
-            "tie_breaks_neutral_default": 0,
         }
-
+        
         # Prepare inputs for child processes
         # We pass minimal serializable data to avoid pickling the main Orchestrator object's locks
         worker_args = []
         for sym in symbols:
+            # Task 1: Get exchange precision metadata for rounding
+            tick_size = 0.0
+            lot_size = 0.0
+            try:
+                if hasattr(self.exchange_adapter, "get_market_info"):
+                    info = self.exchange_adapter.get_market_info(sym)
+                    tick_size = info.get("tick_size", 0.0)
+                    lot_size = info.get("lot_size", 0.0)
+            except Exception as e:
+                logger.debug(f"Failed to get precision for {sym}: {e}")
+
             worker_args.append((
                 sym, 
                 run_id, 
@@ -423,7 +433,9 @@ class Orchestrator:
                 prefetched_data.get(sym),
                 self.config,
                 self.macro_context,
-                self.scanner_mode
+                self.scanner_mode,
+                tick_size,  # Pass tick_size to worker
+                lot_size    # Pass lot_size to worker
             ))
 
         # Process symbols with ProcessPoolExecutor for true CPU parallelism
@@ -763,6 +775,8 @@ class Orchestrator:
         run_id: str,
         timestamp: datetime,
         prefetched_data: Optional[MultiTimeframeData] = None,
+        tick_size: float = 0.0,
+        lot_size: float = 0.0,
     ) -> tuple[Optional[TradePlan], Optional[Dict[str, Any]]]:
         """
         Process single symbol through complete pipeline.
@@ -1877,6 +1891,8 @@ class Orchestrator:
                 multi_tf_data=context.multi_tf_data,
                 expected_trade_type=current_trade_type,
                 volume_profile=context.metadata.get("_volume_profile_obj"),
+                tick_size=tick_size,
+                lot_size=lot_size,
             )
 
             # === POST-PLAN ADJUSTMENTS ===
@@ -3054,7 +3070,7 @@ def _parallel_process_symbol_worker(args):
     Module-level worker for ProcessPoolExecutor.
     Runs symbol analysis in a separate CPU process.
     """
-    symbol, run_id, timestamp, prefetched_data, config, macro_context, scanner_mode = args
+    symbol, run_id, timestamp, prefetched_data, config, macro_context, scanner_mode, tick_size, lot_size = args
     
     try:
         # Import inside worker to avoid circularity and ensure child process has components
@@ -3076,7 +3092,14 @@ def _parallel_process_symbol_worker(args):
         worker_orchestrator.scanner_mode = scanner_mode
         
         # Execute the pipeline for this symbol
-        return worker_orchestrator._process_symbol(symbol, run_id, timestamp, prefetched_data=prefetched_data)
+        return worker_orchestrator._process_symbol(
+            symbol, 
+            run_id, 
+            timestamp, 
+            prefetched_data=prefetched_data,
+            tick_size=tick_size,
+            lot_size=lot_size
+        )
         
     except Exception as e:
         import traceback
