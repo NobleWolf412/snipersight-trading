@@ -509,7 +509,9 @@ export function TacticalTargetInput({
     const [symbol, base] = value.includes('/') ? value.split('/') : [value, 'USDT'];
 
     const handleSymbolChange = (newSymbol: string) => {
-        const cleanSymbol = newSymbol.toUpperCase().trim();
+        // Remove slashes and other non-alphanumeric chars from the symbol part to be safe
+        const cleanSymbol = newSymbol.replace(/[^A-Z0-9]/gi, '').toUpperCase().trim();
+        
         if (!cleanSymbol) {
             onChange('');
         } else {
@@ -518,7 +520,14 @@ export function TacticalTargetInput({
     };
 
     const handleBaseChange = (newBase: string) => {
-        onChange(`${symbol}/${newBase}`);
+        const cleanSymbol = symbol.trim();
+        if (cleanSymbol) {
+            onChange(`${cleanSymbol}/${newBase}`);
+        } else if (value !== '') {
+            // Case where value was something like "/USDT" (invalid)
+            // Selecting a new base should probably just clear it if no symbol exists
+            onChange('');
+        }
     };
 
     return (
@@ -551,10 +560,10 @@ export function TacticalTargetInput({
                             active && "border-accent/40 bg-accent/5"
                         )}
                     />
-                    {symbol && (
+                    {value && (
                         <button
                             onClick={() => onChange('')}
-                            className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition-all"
+                            className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition-all z-10"
                         >
                             <X size={18} weight="bold" />
                         </button>

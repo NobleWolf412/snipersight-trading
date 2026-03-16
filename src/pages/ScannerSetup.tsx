@@ -124,7 +124,7 @@ export function ScannerSetup() {
         leverage: scanConfig.leverage || 1,
         macro_overlay: scanConfig.macroOverlay,
         market_type: scanConfig.marketType,
-        target_symbol: scanConfig.targetSymbol,
+        target_symbol: ((scanConfig.targetSymbol || '').split('/')[0].trim().length > 0) ? scanConfig.targetSymbol : undefined,
       });
 
       if (runResponse.error || !runResponse.data) {
@@ -532,7 +532,7 @@ export function ScannerSetup() {
                       label="TARGETED RECON"
                       subLabel="Scan specific instrument directly"
                       value={scanConfig.targetSymbol || ''}
-                      active={!!scanConfig.targetSymbol}
+                      active={Boolean((scanConfig.targetSymbol || '').split('/')[0].trim().length > 0)}
                       onChange={(val) => {
                         setScanConfig({ ...scanConfig, targetSymbol: val });
                         if (val) addConsoleLog(`TARGET: Locked on ${val}`, 'config');
@@ -640,7 +640,7 @@ export function ScannerSetup() {
                   <div className="relative group">
                     <div className={cn(
                       "transition-all duration-500",
-                      scanConfig.targetSymbol && "opacity-20 blur-[1px] grayscale pointer-events-none"
+                      ((scanConfig.targetSymbol || '').split('/')[0].trim().length > 0) && "opacity-20 blur-[1px] grayscale pointer-events-none"
                     )}>
                       <TacticalSelector
                         label="SCAN SCOPE"
@@ -654,7 +654,7 @@ export function ScannerSetup() {
                         ]}
                       />
                     </div>
-                    {scanConfig.targetSymbol && (
+                    {(scanConfig.targetSymbol && scanConfig.targetSymbol.split('/')[0] !== '') && (
                       <div className="absolute inset-0 flex items-center justify-center z-20">
                         <div className="bg-black/80 border border-[#00ff88]/30 px-6 py-2 rounded-full backdrop-blur-md shadow-[0_0_30px_rgba(0,255,136,0.1)]">
                           <span className="text-[#00ff88] font-mono text-xs font-black tracking-[0.3em] uppercase">Scope Bypassed by Target Lock</span>
@@ -677,7 +677,7 @@ export function ScannerSetup() {
                 <div className="relative flex-1">
                   <div className={cn(
                     "grid gap-3 content-start transition-all duration-500",
-                    scanConfig.targetSymbol && "opacity-20 blur-[1px] grayscale pointer-events-none"
+                       ((scanConfig.targetSymbol || '').split('/')[0].trim().length > 0) && "opacity-20 blur-[1px] grayscale pointer-events-none"
                   )}>
                     <TacticalToggle
                       label="MAJORS"
@@ -722,7 +722,7 @@ export function ScannerSetup() {
                     />
                   </div>
 
-                  {scanConfig.targetSymbol && (
+                     {((scanConfig.targetSymbol || '').split('/')[0].trim().length > 0) && (
                     <div className="absolute inset-0 flex items-center justify-center z-20">
                       <div className="bg-black/80 border border-[#00ff88]/30 px-6 py-3 rounded-full backdrop-blur-md shadow-[0_0_30px_rgba(0,255,136,0.1)] flex flex-col items-center gap-1">
                         <span className="text-[#00ff88] font-mono text-xs font-black tracking-[0.3em] uppercase">Sectors Bypassed</span>

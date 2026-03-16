@@ -114,133 +114,91 @@ MODE_SYNERGY_CAPS = {
 # STEALTH (Balanced): Balanced approach across all factors.
 
 MODE_FACTOR_WEIGHTS = {
-    "macro_surveillance": {  # OVERWATCH
-        "order_block": 0.25,
-        "fvg": 0.18,
+    "macro_surveillance": {  # OVERWATCH (Swing) - Total 1.0
+        # Core Structure (30%)
         "market_structure": 0.20,
-        "liquidity_sweep": 0.18,
-        "kill_zone": 0.03,
-        "momentum": 0.08,
-        "divergence": 0.15,
-        "fibonacci": 0.10,
-        "volume": 0.10,
-        "volatility": 0.08,
-        "htf_alignment": 0.25,
-        "htf_momentum_gate": 0.10,
-        "regime_alignment": 0.10,
-        "htf_proximity": 0.15,
-        "btc_impulse": 0.12,
-        "weekly_stoch_rsi": 0.12,
-        "htf_structure_bias": 0.15,
-        "premium_discount": 0.15,
-        "inside_ob": 0.10,
-        "nested_ob": 0.10,
-        "opposing_structure": 0.06,
-        "htf_inflection": 0.18,
-        "multi_tf_reversal": 0.12,
-        "ltf_structure_shift": 0.05,
-        "institutional_sequence": 0.15,
-        "timeframe_conflict": 0.10,
-        "macd_veto": 0.05,
-        "close_momentum": 0.06,
-        "multi_close_confirm": 0.08,
-        "liquidity_draw": 0.08,
-    },
-    "intraday_aggressive": {  # STRIKE
-        "order_block": 0.18,
-        "fvg": 0.12,
-        "market_structure": 0.28,
-        "liquidity_sweep": 0.12,
-        "kill_zone": 0.08,
-        "momentum": 0.15,
-        "divergence": 0.18,
-        "fibonacci": 0.10,
-        "volume": 0.10,
-        "volatility": 0.10,
-        "htf_alignment": 0.12,
-        "htf_momentum_gate": 0.07,
-        "regime_alignment": 0.07,
-        "htf_proximity": 0.10,
-        "btc_impulse": 0.08,
-        "weekly_stoch_rsi": 0.06,
-        "htf_structure_bias": 0.10,
-        "premium_discount": 0.10,
-        "inside_ob": 0.10,
-        "nested_ob": 0.08,
-        "opposing_structure": 0.10,
-        "htf_inflection": 0.10,
-        "multi_tf_reversal": 0.12,
-        "ltf_structure_shift": 0.10,
-        "institutional_sequence": 0.12,
-        "timeframe_conflict": 0.12,
-        "macd_veto": 0.05,
-        "close_momentum": 0.08,
-        "multi_close_confirm": 0.07,
-        "liquidity_draw": 0.12,
-    },
-    "precision": {  # SURGICAL
-        "order_block": 0.15,
-        "fvg": 0.10,
-        "market_structure": 0.30,
-        "liquidity_sweep": 0.10,
-        "kill_zone": 0.10,
-        "momentum": 0.12,
-        "divergence": 0.16,
-        "fibonacci": 0.10,
-        "volume": 0.08,
-        "volatility": 0.12,
+        "order_block": 0.05,
+        "fvg": 0.03,
+        "ltf_structure_shift": 0.02,
+        # HTF Alignment (30%)
         "htf_alignment": 0.10,
-        "htf_momentum_gate": 0.05,
-        "regime_alignment": 0.05,
-        "htf_proximity": 0.08,
-        "btc_impulse": 0.05,
-        "weekly_stoch_rsi": 0.05,
         "htf_structure_bias": 0.08,
-        "premium_discount": 0.12,
-        "inside_ob": 0.10,
-        "nested_ob": 0.05,
-        "opposing_structure": 0.12,
-        "htf_inflection": 0.08,
-        "multi_tf_reversal": 0.10,
-        "ltf_structure_shift": 0.12,
-        "institutional_sequence": 0.10,
-        "timeframe_conflict": 0.15,
-        "macd_veto": 0.05,
-        "close_momentum": 0.09,
-        "multi_close_confirm": 0.06,
-        "liquidity_draw": 0.15,
+        "htf_proximity": 0.07,
+        "regime_alignment": 0.05,
+        # Conviction & Depth (25%)
+        "momentum": 0.05,
+        "volume": 0.05,
+        "liquidity_draw": 0.05,
+        "liquidity_sweep": 0.05,
+        "volatility": 0.02,
+        "institutional_sequence": 0.03,
+        # Precision & Timing (15%)
+        "kill_zone": 0.05,
+        "premium_discount": 0.04,
+        "macd_veto": 0.03,
+        "btc_impulse": 0.03,
     },
-    "stealth_balanced": {  # STEALTH
-        "order_block": 0.20,
-        "fvg": 0.15,
-        "market_structure": 0.25,
-        "liquidity_sweep": 0.15,
-        "kill_zone": 0.10,  # RAISED: 0.05→0.10 — timing matters for quality entries
-        "momentum": 0.10,
-        "divergence": 0.15,
-        "fibonacci": 0.10,
-        "volume": 0.10,
-        "volatility": 0.08,
-        "htf_alignment": 0.18,
-        "htf_momentum_gate": 0.08,
-        "regime_alignment": 0.08,
-        "htf_proximity": 0.12,
-        "btc_impulse": 0.10,
-        "weekly_stoch_rsi": 0.10,
-        "htf_structure_bias": 0.12,
-        "premium_discount": 0.12,
-        "inside_ob": 0.10,
-        "nested_ob": 0.08,
-        "opposing_structure": 0.08,
-        "htf_inflection": 0.12,
-        "multi_tf_reversal": 0.12,
-        "ltf_structure_shift": 0.08,
-        "institutional_sequence": 0.12,
-        "timeframe_conflict": 0.10,
+    "intraday_aggressive": {  # STRIKE (Intraday) - Total 1.0
+        # Core Structure (35%)
+        "market_structure": 0.15,
+        "order_block": 0.10,
+        "fvg": 0.05,
+        "ltf_structure_shift": 0.05,
+        # Conviction & Flow (25%)
+        "momentum": 0.08,
+        "volume": 0.05,
+        "liquidity_sweep": 0.05,
+        "liquidity_draw": 0.05,
+        "volatility": 0.02,
+        # HTF Alignment (25%)
+        "htf_alignment": 0.10,
+        "htf_proximity": 0.05,
+        "regime_alignment": 0.05,
+        "htf_structure_bias": 0.05,
+        # Precision & Timing (15%)
+        "kill_zone": 0.04,
+        "premium_discount": 0.04,
+        "macd_veto": 0.02,
+        "institutional_sequence": 0.05,
+    },
+    "stealth_balanced": {  # STEALTH (Balanced) - Total 1.0
+        # Core Structure (30%)
+        "market_structure": 0.15,
+        "order_block": 0.10,
+        "fvg": 0.05,
+        # HTF Alignment (25%)
+        "htf_alignment": 0.15,
+        "htf_proximity": 0.05,
+        "regime_alignment": 0.05,
+        # Conviction & Flow (25%)
+        "momentum": 0.07,
+        "volume": 0.08,
+        "liquidity_sweep": 0.05,
+        "liquidity_draw": 0.05,
+        # Precision & Timing (20%)
+        "kill_zone": 0.08,
+        "premium_discount": 0.05,
+        "macd_veto": 0.02,
+        "institutional_sequence": 0.05,
+    },
+    "precision": {  # SURGICAL (Scalp) - Total 1.0
+        # Core Structure (40%)
+        "market_structure": 0.20,
+        "order_block": 0.12,
+        "fvg": 0.04,
+        "ltf_structure_shift": 0.04,
+        # Precision Timing (25%)
+        "kill_zone": 0.12,
+        "premium_discount": 0.08,
         "macd_veto": 0.05,
-        "close_momentum": 0.07,
-        "multi_close_confirm": 0.08,
-        "liquidity_draw": 0.10,
+        # Conviction/Flow (20%)
+        "momentum": 0.05,
+        "liquidity_sweep": 0.10,
+        "liquidity_draw": 0.05,
+        # HTF Alignment (15%)
+        "htf_alignment": 0.05,
+        "htf_proximity": 0.05,
+        "regime_alignment": 0.05,
     },
     # Surgical alias
     "surgical": {  # Maps to precision
@@ -2028,55 +1986,71 @@ def calculate_confluence_score(
     # --- SMC Pattern Scoring ---
 
     # Order Blocks
-    # Order Blocks
     ob_result = _score_order_blocks_incremental(smc_snapshot.order_blocks, direction)
     ob_score = ob_result["score"]
-    if ob_score > 0:
-        factors.append(
-            ConfluenceFactor(
-                name="Order Block",
-                score=ob_score,
-                weight=get_w("order_block", 0.20),
-                rationale=ob_result["rationale"],
-            )
+    factors.append(
+        ConfluenceFactor(
+            name="Order Block",
+            score=ob_score,
+            weight=get_w("order_block", 0.15),
+            rationale=ob_result["rationale"] if ob_score > 0 else "No valid order block in direction",
         )
+    )
 
     # Fair Value Gaps
     fvg_result = _score_fvgs_incremental(smc_snapshot.fvgs, direction)
     fvg_score = fvg_result["score"]
-    if fvg_score > 0:
-        factors.append(
-            ConfluenceFactor(
-                name="Fair Value Gap",
-                score=fvg_score,
-                weight=get_w("fvg", 0.15),
-                rationale=fvg_result["rationale"],
-            )
+    factors.append(
+        ConfluenceFactor(
+            name="Fair Value Gap",
+            score=fvg_score,
+            weight=get_w("fvg", 0.05),
+            rationale=fvg_result["rationale"] if fvg_score > 0 else "No fair value gaps identified",
         )
+    )
 
-    # Structural Breaks
-    structure_score = _score_structural_breaks(smc_snapshot.structural_breaks, direction)
-    if structure_score > 0:
-        factors.append(
-            ConfluenceFactor(
-                name="Market Structure",
-                score=structure_score,
-                weight=get_w("market_structure", 0.25),
-                rationale=_get_structure_rationale(smc_snapshot.structural_breaks, direction),
-            )
+    # Market Structure (CHoCH / BOS)
+    ms_result = _score_market_structure_incremental(smc_snapshot, direction)
+    ms_score = ms_result["score"]
+    factors.append(
+        ConfluenceFactor(
+            name="Market Structure",
+            score=ms_score,
+            weight=get_w("market_structure", 0.20),
+            rationale=ms_result["rationale"],
         )
+    )
 
     # Liquidity Sweeps
-    sweep_score = _score_liquidity_sweeps(smc_snapshot.liquidity_sweeps, direction)
-    if sweep_score > 0:
+    sweep_result = _score_liquidity_sweeps_incremental(smc_snapshot.liquidity_sweeps, direction)
+    sweep_score = sweep_result["score"]
+    factors.append(
+        ConfluenceFactor(
+            name="Liquidity Sweep",
+            score=sweep_score,
+            weight=get_w("liquidity_sweep", 0.10),
+            rationale=sweep_result["rationale"] if sweep_score > 0 else "No recent liquidity sweep detected",
+        )
+    )
+
+    # Kill Zone Timing
+    try:
+        from backend.strategy.confluence.scorer import get_current_kill_zone, _score_kill_zone_incremental
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        curr_kz = get_current_kill_zone(now)
+        kz_result = _score_kill_zone_incremental(now, curr_kz)
+        kz_score = kz_result["score"]
         factors.append(
             ConfluenceFactor(
-                name="Liquidity Sweep",
-                score=sweep_score,
-                weight=get_w("liquidity_sweep", 0.15),
-                rationale=_get_sweep_rationale(smc_snapshot.liquidity_sweeps, direction),
+                name="Kill Zone Timing",
+                score=kz_score,
+                weight=get_w("kill_zone", 0.05),
+                rationale=kz_result["rationale"],
             )
         )
+    except Exception as kz_err:
+        logger.debug(f"Kill zone check failed: {kz_err}")
 
     # --- MODE-AWARE STRUCTURAL MINIMUM GATE ---
     # Swing modes (overwatch, stealth, macro_surveillance) require at least ONE
@@ -2107,979 +2081,264 @@ def calculate_confluence_score(
             )
         )
 
-    # Kill Zone Timing (high-probability institutional windows)
-    try:
-        from datetime import datetime, timezone
-
-        now = datetime.now(timezone.utc)
-        kill_zone = get_current_kill_zone(now)
-        if kill_zone:
-            # Use incremental scoring
-            kz_result = _score_kill_zone_incremental(now, kill_zone)
-            if kz_result["score"] > 0:
-                factors.append(
-                    ConfluenceFactor(
-                        name="Kill Zone Timing",
-                        score=kz_result["score"],
-                        weight=get_w("kill_zone", 0.05),
-                        rationale=kz_result["rationale"],
-                    )
-                )
-                logger.debug("⏰ Kill zone active: %s (Score: %.1f)", kill_zone, kz_result["score"])
-
-    except Exception as e:
-        logger.debug("Kill zone check failed: %s", e)
-
     # --- Indicator Scoring ---
 
-    # Select primary timeframe (Anchor Chart) for indicator scoring based on mode
-    # 1. Try mode-specific planning timeframe (e.g. Strike=15m, Overwatch=4h)
+    # Select primary timeframe (Anchor Chart)
     if config and getattr(config, "primary_planning_timeframe", None):
         cfg_tf = config.primary_planning_timeframe
         if indicators.has_timeframe(cfg_tf):
             primary_tf = cfg_tf
-            # logger.debug(f"Using mode-specific primary timeframe: {primary_tf}")
 
-    # 2. Fallback: Try standard anchors if mode TF missing
     if not primary_tf:
         for tf_candidate in ["1h", "15m", "4h", "1d"]:
             if indicators.has_timeframe(tf_candidate):
                 primary_tf = tf_candidate
                 break
 
-    # 3. Final Fallback: First available
     if not primary_tf and indicators.by_timeframe:
         primary_tf = list(indicators.by_timeframe.keys())[0]
 
-    # --- PRICE INITIALIZATION (For proximity/alignment checks) ---
+    # --- Price Initialization ---
     entry_price = current_price
     if not entry_price and primary_tf:
-        # Try to get from indicators
         prim_ind = indicators.by_timeframe.get(primary_tf)
         if prim_ind and hasattr(prim_ind, "dataframe") and prim_ind.dataframe is not None:
             if len(prim_ind.dataframe) > 0:
                 entry_price = float(prim_ind.dataframe["close"].iloc[-1])
-            else:
-                entry_price = None
 
-    # Get MACD mode config based on profile
-    profile = getattr(config, "profile", "balanced")
-    macd_config = get_macd_config(profile)
-
-    # Get HTF indicators for MACD bias (if available)
-    htf_tf = macd_config.htf_timeframe
-    htf_indicators = indicators.by_timeframe.get(htf_tf) if indicators.by_timeframe else None
+    profile_name = getattr(config, "profile", "balanced")
+    macd_config = get_macd_config(profile_name)
+    htf_indicators = indicators.by_timeframe.get(macd_config.htf_timeframe) if indicators.by_timeframe else None
 
     if primary_tf:
         primary_indicators = indicators.by_timeframe[primary_tf]
 
         # Momentum indicators (with mode-aware MACD)
-        momentum_score, macd_analysis = _score_momentum(
-            primary_indicators,
-            direction,
-            macd_config=macd_config,
-            htf_indicators=htf_indicators,
-            timeframe=primary_tf,
+        momentum_score, m_analysis = _score_momentum(
+            primary_indicators, direction, macd_config=macd_config, htf_indicators=htf_indicators, timeframe=primary_tf
         )
-        if momentum_score > 0:
-            # Build momentum rationale including MACD analysis
-            momentum_rationale = _get_momentum_rationale(primary_indicators, direction)
-            if macd_analysis and macd_analysis.get("reasons"):
-                momentum_rationale += (
-                    f" | MACD [{macd_analysis['role']}]: {'; '.join(macd_analysis['reasons'][:2])}"
-                )
-
-            factors.append(
-                ConfluenceFactor(
-                    name="Momentum",
-                    score=momentum_score,
-                    weight=get_w("momentum", 0.10),
-                    rationale=momentum_rationale,
-                )
+        momentum_rationale = _get_momentum_rationale(primary_indicators, direction)
+        if m_analysis and m_analysis.get("reasons"):
+            momentum_rationale += f" | MACD [{m_analysis['role']}]: {'; '.join(m_analysis['reasons'][:2])}"
+        
+        factors.append(
+            ConfluenceFactor(
+                name="Momentum",
+                score=momentum_score,
+                weight=get_w("momentum", 0.10),
+                rationale=momentum_rationale if momentum_score > 0 else "Weak momentum bias",
             )
+        )
+        macd_analysis = m_analysis
 
-        # Divergence Detection (RSI/MACD)
+        # Divergence Detection
+        div_score = 0.0
+        div_rationale = "No divergence detected"
         if hasattr(primary_indicators, "dataframe") and primary_indicators.dataframe is not None:
             df = primary_indicators.dataframe
-            if len(df) >= 50:  # Minimum data for divergence detection
+            if len(df) >= 50:
                 try:
-                    divergences = detect_all_divergences(
-                        df=df,
-                        direction=direction,
-                        lookback=5,
-                        min_pivot_distance=10,
-                        max_lookback_bars=100,
-                    )
-                    
-                    div_result = _score_divergences_incremental(divergences, direction)
-                    if div_result["score"] > 0:
-                        factors.append(
-                            ConfluenceFactor(
-                                name="Price-Indicator Divergence",
-                                score=div_result["score"],
-                                weight=get_w("divergence", 0.15),
-                                rationale=div_result["rationale"]
-                            )
-                        )
-                        logger.debug(f"🔄 Divergence detected: {div_result['rationale']}")
-                except Exception as e:
-                    logger.warning(f"Divergence detection failed: {e}")
+                    divergences = detect_all_divergences(df=df, direction=direction, lookback=5, min_pivot_distance=10, max_lookback_bars=100)
+                    div_res = _score_divergences_incremental(divergences, direction)
+                    div_score = div_res["score"]
+                    div_rationale = div_res["rationale"]
+                except: pass
+        
+        factors.append(
+            ConfluenceFactor(
+                name="Price-Indicator Divergence",
+                score=div_score,
+                weight=get_w("divergence", 0.05),
+                rationale=div_rationale,
+            )
+        )
 
         # Volume confirmation
         volume_score = _score_volume(primary_indicators, direction)
-        if volume_score > 0:
-            factors.append(
-                ConfluenceFactor(
-                    name="Volume",
-                    score=volume_score,
-                    weight=get_w("volume", 0.10),
-                    rationale=_get_volume_rationale(primary_indicators),
-                )
-            )
-
-        # VOLUME CONVICTION GATE (Soft Block)
-        # Prevents trades with zero volume confirmation from passing if other scores are borderline
-        if volume_score < 30.0:
-            factors.append(
-                ConfluenceFactor(
-                    name="Low Volume Penalty",
-                    score=20.0,
-                    weight=0.15,  # Heavier weight to act as a drag
-                    rationale=f"Trade lacks volume confirmation (Score: {volume_score:.1f}) - low conviction",
-                )
-            )
-        elif profile in ("macro_surveillance", "stealth_balanced") and volume_score < 40.0:
-            factors.append(
-                ConfluenceFactor(
-                    name="Swing Volume Penalty",
-                    score=30.0,
-                    weight=0.10,
-                    rationale=f"Swing setups require solid volume backing (Score: {volume_score:.1f})",
-                )
-            )
-
-        # VWAP Alignment
-        vwap = getattr(primary_indicators, "vwap", None)
-        if vwap and entry_price:
-            vwap_score = 0.0
-            vwap_rationale = ""
-            if direction in ("bullish", "long"):
-                if entry_price < vwap:
-                    vwap_score = 60.0  # Good entry
-                    vwap_rationale = (
-                        f"Price ({entry_price:.2f}) below VWAP ({vwap:.2f}) - value entry"
-                    )
-                elif entry_price < vwap * 1.01:
-                    vwap_score = 50.0  # Neutral
-            else:  # bearish
-                if entry_price > vwap:
-                    vwap_score = 60.0
-                    vwap_rationale = (
-                        f"Price ({entry_price:.2f}) above VWAP ({vwap:.2f}) - premium entry"
-                    )
-                elif entry_price > vwap * 0.99:
-                    vwap_score = 50.0
-
-            if vwap_score > 50.0:
-                factors.append(
-                    ConfluenceFactor(
-                        name="VWAP Alignment",
-                        score=min(100.0, 50.0 + (vwap_score - 50.0) * 3.0),  # Scale 60->80
-                        weight=0.05,  # Small weight
-                        rationale=vwap_rationale,
-                    )
-                )
-
-        # Volatility normalization (ATR%) - prefer moderate volatility
-        volatility_score = _score_volatility(primary_indicators)
-        if volatility_score > 0:
-            factors.append(
-                ConfluenceFactor(
-                    name="Volatility",
-                    score=volatility_score,
-                    weight=get_w("volatility", 0.08),
-                    rationale=_get_volatility_rationale(primary_indicators),
-                )
-            )
-
-        # MTF Indicator Confluence (New)
-        mtf_score, mtf_rationale = _score_mtf_indicator_confluence(indicators, direction)
-        if mtf_score != 0:
-            # Base 50 +/- bonus. Bonus is 15 -> 15*3.33 = 50. Total 100.
-            # Penalty is -10 -> -10*3.33 = -33. Total 17.
-            mtf_final_score = 50.0 + (mtf_score * 3.33)
-            factors.append(
-                ConfluenceFactor(
-                    name="MTF Indicator Alignment",
-                    score=min(100.0, max(0.0, mtf_final_score)),
-                    weight=get_w("multi_tf_reversal", 0.10),
-                    rationale=mtf_rationale,
-                )
-            )
-
-        # --- Close Quality Confluence ---
-        # NEW: Reward strong closes that show conviction
-        
-        # Close Momentum: Position within candle range
-        close_momentum_score, close_momentum_rationale = _score_close_momentum(
-            indicators=indicators,
-            direction=direction,
-            primary_tf=primary_tf or "4h",
-        )
-        if close_momentum_score > 0:
-            factors.append(
-                ConfluenceFactor(
-                    name="Close Momentum",
-                    score=close_momentum_score,
-                    weight=get_w("close_momentum", 0.07),
-                    rationale=close_momentum_rationale,
-                )
-            )
-            logger.debug(f"📍 Close Momentum: {close_momentum_rationale}")
-        
-        # Multi-Candle Close Confirmation: Consecutive closes beyond levels
-        if current_price:  # Need price reference
-            multi_close_score, multi_close_rationale = _score_multi_close_confirmation(
-                indicators=indicators,
-                smc_snapshot=smc_snapshot,
-                direction=direction,
-                current_price=current_price,
-                primary_tf=primary_tf or "4h",
-            )
-            if multi_close_score > 0:
-                factors.append(
-                    ConfluenceFactor(
-                        name="Multi-Candle Confirmation",
-                        score=multi_close_score,
-                        weight=get_w("multi_close_confirm", 0.07),
-                        rationale=multi_close_rationale,
-                    )
-                )
-                logger.debug(f"📍 Multi-Candle Confirmation: {multi_close_rationale}")
-
-    # --- Volume Profile (Institutional VAP Analysis) ---
-    # Only if volume profile and current price are available
-    if volume_profile and current_price:
-        try:
-            vp_factor = calculate_volume_confluence_factor(
-                entry_price=current_price, volume_profile=volume_profile, direction=direction
-            )
-            if vp_factor and vp_factor.get("score", 0) > 0:
-                factors.append(
-                    ConfluenceFactor(
-                        name=vp_factor["name"],
-                        score=vp_factor["score"],
-                        weight=vp_factor["weight"],
-                        rationale=vp_factor["rationale"],
-                    )
-                )
-                logger.debug(
-                    "📊 Volume Profile factor: %.1f (weight=%.2f)",
-                    vp_factor["score"],
-                    vp_factor["weight"],
-                )
-        except Exception as e:
-            logger.debug("Volume profile scoring skipped: %s", e)
-
-    # --- MACD Veto Check (for scalp/surgical modes) ---
-    # If MACD veto is active, add a conflict factor
-    if macd_analysis and macd_analysis.get("veto_active"):
         factors.append(
             ConfluenceFactor(
-                name="MACD Veto",
-                score=0.0,
-                weight=get_w("macd_veto", 0.10),
-                rationale=f"MACD opposing direction with veto active: {'; '.join(macd_analysis.get('reasons', []))}",
+                name="Volume",
+                score=volume_score,
+                weight=get_w("volume", 0.05),
+                rationale=_get_volume_rationale(primary_indicators) if volume_score > 0 else "Low volume relative to avg",
             )
         )
 
-    # --- HTF Alignment ---
+        # VWAP Alignment
+        vwap_score = 40.0
+        vwap_rationale = "Neutral VWAP alignment"
+        vwap = getattr(primary_indicators, "vwap", None)
+        if vwap and entry_price:
+            if (direction in ("bullish", "long") and entry_price < vwap) or (direction in ("bearish", "short") and entry_price > vwap):
+                vwap_score = 80.0
+                vwap_rationale = f"Price ({entry_price:.2f}) at premium/discount relative to VWAP"
+            elif (direction in ("bullish", "long") and entry_price < vwap * 1.01) or (direction in ("bearish", "short") and entry_price > vwap * 0.99):
+                vwap_score = 60.0
+                vwap_rationale = "Price near VWAP equilibrium"
+        
+        factors.append(
+            ConfluenceFactor(
+                name="VWAP Alignment",
+                score=vwap_score,
+                weight=get_w("vwap", 0.05),
+                rationale=vwap_rationale,
+            )
+        )
 
-    htf_aligned = False
+        # Volatility
+        volatility_score = _score_volatility(primary_indicators)
+        factors.append(
+            ConfluenceFactor(
+                name="Volatility",
+                score=volatility_score,
+                weight=get_w("volatility", 0.05),
+                rationale=_get_volatility_rationale(primary_indicators),
+            )
+        )
+
+        # MTF Indicator Confluence
+        mtf_score, mtf_rationale = _score_mtf_indicator_confluence(indicators, direction)
+        mtf_final_score = 50.0 + (mtf_score * 3.33)
+        factors.append(
+            ConfluenceFactor(
+                name="MTF Indicator Alignment",
+                score=min(100.0, max(0.0, mtf_final_score)),
+                weight=get_w("multi_tf_reversal", 0.10),
+                rationale=mtf_rationale if mtf_score != 0 else "Neutral indicator alignment across timeframes",
+            )
+        )
+
+        # Close Momentum
+        close_mom_score, close_mom_rationale = _score_close_momentum(indicators=indicators, direction=direction, primary_tf=primary_tf)
+        factors.append(
+            ConfluenceFactor(
+                name="Close Momentum",
+                score=close_mom_score,
+                weight=get_w("close_momentum", 0.05),
+                rationale=close_mom_rationale if close_mom_score > 0 else "Weak candle close momentum",
+            )
+        )
+        
+        # Multi-Candle Confirmation
+        multi_close_score = 0.0
+        multi_close_rationale = "No multi-candle confirmation"
+        if current_price:
+            multi_close_score, multi_close_rationale = _score_multi_close_confirmation(indicators=indicators, smc_snapshot=smc_snapshot, direction=direction, current_price=current_price, primary_tf=primary_tf)
+        
+        factors.append(
+            ConfluenceFactor(
+                name="Multi-Candle Confirmation",
+                score=multi_close_score,
+                weight=get_w("multi_close_confirm", 0.05),
+                rationale=multi_close_rationale if multi_close_score > 0 else "Lack of consecutive close confirmation",
+            )
+        )
+
+    # --- Volume Profile (Institutional VAP Analysis) ---
+    if volume_profile and current_price:
+        try:
+            vp_factor = calculate_volume_confluence_factor(entry_price=current_price, volume_profile=volume_profile, direction=direction)
+            if vp_factor and vp_factor.get("score", 0) > 0:
+                factors.append(ConfluenceFactor(name=vp_factor["name"], score=vp_factor["score"], weight=vp_factor.get("weight", 0.05), rationale=vp_factor["rationale"]))
+        except: pass
+
+    # --- MACD Veto Confirmation ---
+    if macd_analysis and macd_analysis.get("veto_active"):
+        factors.append(ConfluenceFactor(name="MACD Veto", score=0.0, weight=get_w("macd_veto", 0.05), rationale=f"MACD Veto: {'; '.join(macd_analysis.get('reasons', []))}"))
+    else:
+        factors.append(ConfluenceFactor(name="MACD Veto", score=100.0, weight=get_w("macd_veto", 0.05), rationale="MACD alignment confirmed"))
+
+    # --- HTF Alignment & Proximity ---
     if htf_trend:
-        # Use new incremental scoring for richer detail
-        htf_align_result = _score_htf_alignment_incremental(
-            htf_trend, 
-            direction, 
-            htf_indicators=htf_indicators,
-            indicator_set=indicators
-        )
-        htf_score = htf_align_result["score"]
-        
-        # Update alignment flag - consider aligned if score > neutral (50) or trend matches
-        if htf_score > 55.0 or htf_align_result["aligned"]:
-            htf_aligned = True
-            
-        # Append factor if score is meaningful (allow showing slight conflicts for context)
-        if htf_score > 10.0:
-            factors.append(
-                ConfluenceFactor(
-                    name="HTF Alignment",
-                    score=htf_score,
-                    weight=get_w("htf_alignment", 0.20),
-                    rationale=htf_align_result["rationale"],
-                )
-            )
-
-    # --- HTF Level Proximity ---
-    htf_proximity_result = None
-    if getattr(config, "htf_proximity_enabled", False) and htf_context:
-        htf_proximity_result = htf_context
-        atr_dist = htf_context.get("within_atr", 999.0)
-        
-        prox_score = 0.0
-        if atr_dist <= 0.5:
-            prox_score = 100.0
-        elif atr_dist <= 1.0:
-            prox_score = 75.0
-        elif atr_dist <= 2.0:
-            prox_score = 40.0
-            
-        if prox_score > 0.0:
-            factors.append(
-                ConfluenceFactor(
-                    name="HTF Level Proximity",
-                    score=prox_score,
-                    weight=get_w("htf_proximity", getattr(config, "htf_proximity_weight", 0.15)),
-                    rationale=f"Near {htf_context.get('timeframe', 'HTF')} {htf_context.get('type', 'level')} (dist: {atr_dist:.1f} ATR)",
-                )
-            )
-    # --- Fibonacci Proximity Scoring ---
-    # Check if entry price is near key Fibonacci retracement levels
-    # Uses HTF swing highs/lows (4H/1D) for institutional-grade Fib levels
-
+        htf_align_res = _score_htf_alignment_incremental(htf_trend, direction, htf_indicators=htf_indicators, indicator_set=indicators)
+        factors.append(ConfluenceFactor(name="HTF Alignment", score=htf_align_res["score"], weight=get_w("htf_alignment", 0.10), rationale=htf_align_res["rationale"]))
 
     # --- BTC Impulse Gate ---
+    if btc_impulse:
+        btc_score = 100.0 if (btc_impulse == direction or btc_impulse == "neutral") else 40.0
+        factors.append(ConfluenceFactor(name="BTC Impulse Gate", score=btc_score, weight=get_w("btc_impulse", 0.05), rationale=f"BTC trend: {btc_impulse}"))
 
-    btc_impulse_gate = True
-    if config.btc_impulse_gate_enabled and btc_impulse:
-        if btc_impulse != direction and btc_impulse != "neutral":
-            btc_impulse_gate = False
-            # Add negative factor (softened penalty)
-            factors.append(
-                ConfluenceFactor(
-                    name="BTC Impulse Gate",
-                    score=40.0,
-                    weight=get_w("btc_impulse", 0.10),
-                    rationale=f"BTC trend ({btc_impulse}) conflicts with setup direction ({direction})",
-                )
-            )
-        else:
-            btc_impulse_gate = True
-            factors.append(
-                ConfluenceFactor(
-                    name="BTC Impulse Gate",
-                    score=100.0,
-                    weight=get_w("btc_impulse", 0.10),
-                    rationale=f"BTC trend ({btc_impulse}) supports {direction} setup",
-                )
-            )
-
-    # --- Fibonacci Proximity Scoring ---
-    # Check if entry price is near key Fibonacci retracement levels
+    # --- Fibonacci Proximity ---
     if current_price and smc_snapshot.swing_structure:
         try:
-             fib_result = _score_fibonacci_incremental(
-                 current_price, 
-                 smc_snapshot.swing_structure,
-                 direction
-             )
-             if fib_result["score"] > 0:
-                 factors.append(
-                     ConfluenceFactor(
-                         name="Fibonacci Proximity",
-                         score=fib_result["score"],
-                         weight=get_w("fibonacci", 0.10),
-                         rationale=fib_result["rationale"]
-                     )
-                 )
-        except Exception as e:
-            logger.debug(f"Fibonacci scoring failed: {e}")
+            fib_res = _score_fibonacci_incremental(current_price, smc_snapshot.swing_structure, direction)
+            if fib_res["score"] > 0 or get_w("fibonacci", 0) > 0:
+                factors.append(ConfluenceFactor(name="Fibonacci Proximity", score=fib_res["score"], weight=get_w("fibonacci", 0.05), rationale=fib_res["rationale"]))
+        except: pass
 
-    # --- Weekly StochRSI Bonus ---
-    # Directional bonus/penalty system based on weekly momentum
-    # Replaces the old hard gate - no longer blocks, just influences score
-    # SKIP for LTF-only modes (surgical, precision) - weekly momentum is too slow for scalps
-    weekly_stoch_rsi_bonus = 0.0
-    weekly_stoch_rsi_analysis = None
+    # --- Weekly StochRSI Bonus/Penalty ---
+    if getattr(config, "weekly_stoch_rsi_gate_enabled", True):
+        w_analysis = evaluate_weekly_stoch_rsi_bonus(indicators=indicators, direction=direction)
+        w_bonus = w_analysis["bonus"]
+        w_score = min(100.0, max(0.0, 50.0 + w_bonus * 3.33))
+        factors.append(ConfluenceFactor(name="Weekly StochRSI Bonus", score=w_score, weight=get_w("weekly_stoch_rsi", 0.05), rationale=w_analysis["reason"]))
 
-    # Check if this mode should skip Weekly StochRSI
-    skip_weekly_stoch = current_profile in ("precision",)  # Only precision profile skips; surgical has HTF data
-
-    if not skip_weekly_stoch and getattr(config, "weekly_stoch_rsi_gate_enabled", True):
-        weekly_stoch_rsi_analysis = evaluate_weekly_stoch_rsi_bonus(
-            indicators=indicators,
-            direction=direction,
-            oversold_threshold=getattr(config, "weekly_stoch_rsi_oversold", 20.0),
-            overbought_threshold=getattr(config, "weekly_stoch_rsi_overbought", 80.0),
-        )
-
-        weekly_stoch_rsi_bonus = weekly_stoch_rsi_analysis["bonus"]
-        is_aligned = weekly_stoch_rsi_analysis.get("aligned", True)
-
-        # Add as a factor that influences but doesn't block
-        if weekly_stoch_rsi_bonus > 0:
-            # Positive bonus - momentum aligned with direction
-            # Convert bonus to 0-100 scale for factor (bonus max is ~15, so scale by 6.67)
-            factor_score = min(100.0, 50.0 + weekly_stoch_rsi_bonus * 3.33)
-            factors.append(
-                ConfluenceFactor(
-                    name="Weekly StochRSI Bonus",
-                    score=factor_score,
-                    weight=get_w("weekly_stoch_rsi", 0.10),
-                    rationale=f"[+{weekly_stoch_rsi_bonus:.1f}] {weekly_stoch_rsi_analysis['reason']}",
-                )
-            )
-            logger.debug(
-                "📈 Weekly StochRSI BONUS +%.1f: %s",
-                weekly_stoch_rsi_bonus,
-                weekly_stoch_rsi_analysis["reason"],
-            )
-        elif weekly_stoch_rsi_bonus < 0:
-            # Negative bonus (penalty) - momentum opposes direction
-            # Penalty reduces score but doesn't block (penalty max is -10)
-            factor_score = max(0.0, 50.0 + weekly_stoch_rsi_bonus * 5.0)  # -10 penalty = 0 score
-            factors.append(
-                ConfluenceFactor(
-                    name="Weekly StochRSI Bonus",
-                    score=factor_score,
-                    weight=get_w("weekly_stoch_rsi", 0.10),
-                    rationale=f"[{weekly_stoch_rsi_bonus:.1f}] {weekly_stoch_rsi_analysis['reason']}",
-                )
-            )
-            logger.debug(
-                "📉 Weekly StochRSI PENALTY %.1f: %s",
-                weekly_stoch_rsi_bonus,
-                weekly_stoch_rsi_analysis["reason"],
-            )
-        # For zero bonus (neutral), no factor added - doesn't help or hurt
-
-    # --- HTF Structure Bias (HH/HL/LH/LL) ---
-    # Score based on swing structure alignment with trade direction
-    # This is KEY for pullback trading - HTF trend defines preferred direction
-    htf_structure_bonus = 0.0
-    htf_structure_analysis = None
-
+    # --- HTF Structure Bias ---
     if smc_snapshot.swing_structure:
-        htf_structure_analysis = _score_htf_structure_bias(
-            swing_structure=smc_snapshot.swing_structure, direction=direction
-        )
-        htf_structure_bonus = htf_structure_analysis["bonus"]
-
-        if htf_structure_bonus != 0:
-            # Add as weighted factor
-            if htf_structure_bonus > 0:
-                # Aligned with HTF structure → bonus
-                factor_score = min(100.0, 50.0 + htf_structure_bonus * 3.33)
-                factors.append(
-                    ConfluenceFactor(
-                        name="HTF Structure Bias",
-                        score=factor_score,
-                        weight=get_w("htf_structure_bias", 0.12),
-                        rationale=f"[+{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}",
-                    )
-                )
-                logger.debug(
-                    "📊 HTF Structure BONUS +%.1f: %s",
-                    htf_structure_bonus,
-                    htf_structure_analysis["reason"],
-                )
-            else:
-                # Counter-trend → check if pullback conditions override the penalty
-                pullback_override = False
-                pullback_bonus = 0.0
-                pullback_rationale = ""
-
-                # Try to detect pullback setup using 4H data
-                try:
-                    # Get 4H dataframe from indicators
-                    ind_4h = indicators.by_timeframe.get("4h")
-                    df_4h = getattr(ind_4h, "dataframe", None) if ind_4h else None
-
-                    if df_4h is not None and len(df_4h) > 30:
-                        # Detect pullback setup
-                        pullback_dir = (
-                            "SHORT"
-                            if direction.upper() == "BEARISH" or direction.upper() == "SHORT"
-                            else "LONG"
-                        )
-                        pullback_result = detect_pullback_setup(
-                            df_4h=df_4h,
-                            smc_snapshot=smc_snapshot,
-                            requested_direction=pullback_dir,
-                            extension_threshold=3.0,  # 3% from EMA
-                        )
-
-                        if pullback_result.override_counter_trend:
-                            pullback_override = True
-                            pullback_bonus = 8.0  # Convert penalty to +8 bonus
-                            pullback_rationale = f"PULLBACK OVERRIDE: {pullback_result.rationale}"
-                            logger.info(
-                                f"🔄 Pullback detected, overriding counter-trend penalty: {pullback_rationale}"
-                            )
-                except Exception as e:
-                    logger.debug(f"Pullback detection failed: {e}")
-
-                if pullback_override:
-                    # Pullback conditions met → give bonus instead of penalty!
-                    factor_score = min(100.0, 50.0 + pullback_bonus * 3.33)
-                    factors.append(
-                        ConfluenceFactor(
-                            name="HTF Pullback Setup",
-                            score=factor_score,
-                            weight=get_w("htf_structure_bias", 0.12),
-                            rationale=f"[+{pullback_bonus:.1f}] {pullback_rationale}",
-                        )
-                    )
-                    logger.debug(
-                        "🔄 HTF Pullback BONUS +%.1f: %s", pullback_bonus, pullback_rationale
-                    )
-                else:
-                    # No pullback override → apply counter-trend penalty as usual
-                    factor_score = max(0.0, 50.0 + htf_structure_bonus * 5.0)
-                    factors.append(
-                        ConfluenceFactor(
-                            name="HTF Structure Bias",
-                            score=factor_score,
-                            weight=get_w("htf_structure_bias", 0.12),
-                            rationale=f"[{htf_structure_bonus:.1f}] {htf_structure_analysis['reason']}",
-                        )
-                    )
-                    logger.debug(
-                        "⚠️ HTF Structure PENALTY %.1f: %s",
-                        htf_structure_bonus,
-                        htf_structure_analysis["reason"],
-                    )
+        bias_res = _score_htf_structure_bias(swing_structure=smc_snapshot.swing_structure, direction=direction)
+        factors.append(ConfluenceFactor(name="HTF Structure Bias", score=max(0.0, min(100.0, 50.0 + bias_res["bonus"] * 5.0)), weight=get_w("htf_structure_bias", 0.05), rationale=bias_res["reason"]))
 
     # ===========================================================================
-    # === CRITICAL HTF GATES (New: filters low-quality signals) ===
+    # === CRITICAL HTF GATES ===
     # ===========================================================================
 
     # === Gate 1: HTF STRUCTURAL PROXIMITY GATE ===
     # Entry must be at meaningful HTF structural level
-    # SKIP for LTF-only modes (surgical, precision) that don't scan HTF timeframes
-    htf_proximity_result = None
-    profile = getattr(config, "profile", "balanced")
-    is_ltf_only_mode = (
-        hasattr(config, "timeframes")
-        and not any(tf.lower() in ("4h", "1d", "1w") for tf in getattr(config, "timeframes", ()))
-    )
+    # === Gate 1: HTF Structural Proximity ===
+    if entry_price and htf_context:
+        prox_res = evaluate_htf_structural_proximity(entry_price, htf_context, direction)
+        factors.append(ConfluenceFactor(name="HTF Structural Proximity", score=prox_res["score"], weight=get_w("htf_proximity", 0.08), rationale=prox_res["rationale"]))
+    
+    # === Gate 2: HTF Momentum Gate ===
+    m_gate = evaluate_htf_momentum_gate(indicators=indicators, direction=direction, mode_config=config, swing_structure=smc_snapshot.swing_structure, reversal_context=reversal_context)
+    # Map gate to Factor score: Allowed=100, Blocked=0. Adjust by momentum bonus/penalty.
+    m_gate_base = 100.0 if m_gate["allowed"] else 0.0
+    m_gate_score = max(0.0, min(100.0, m_gate_base + m_gate.get("score_adjustment", 0.0)))
+    factors.append(ConfluenceFactor(name="HTF Momentum Gate", score=m_gate_score, weight=get_w("htf_momentum_gate", 0.06), rationale=m_gate["reason"]))
 
-    if getattr(config, "enable_htf_structural_gate", True) and entry_price and not is_ltf_only_mode:
-        htf_proximity_result = evaluate_htf_structural_proximity(
-            smc=smc_snapshot,
-            indicators=indicators,
-            entry_price=entry_price,
-            direction=direction,
-            mode_config=config,
-            swing_structure=smc_snapshot.swing_structure,
-        )
-
-        if htf_proximity_result["score_adjustment"] != 0:
-            factor_score = max(
-                0.0, min(100.0, 50.0 + htf_proximity_result["score_adjustment"] * 1.5)
-            )
-            factors.append(
-                ConfluenceFactor(
-                    name="HTF_Structural_Proximity",
-                    score=factor_score,
-                    weight=get_w("htf_proximity", 0.15),
-                    rationale=(
-                        f"{htf_proximity_result['nearest_structure']} ({htf_proximity_result.get('proximity_atr', 'N/A'):.1f} ATR)"
-                        if htf_proximity_result.get("proximity_atr")
-                        else htf_proximity_result["nearest_structure"]
-                    ),
-                )
-            )
-
-            if not htf_proximity_result["valid"]:
-                logger.warning(
-                    "🚫 HTF Structural Gate FAILED: entry %.1f ATR from nearest structure",
-                    htf_proximity_result.get("proximity_atr", 999),
-                )
-    elif is_ltf_only_mode:
-        # For LTF modes, give neutral score - don't penalize missing HTF
-        logger.debug("⏭️ HTF Structural Gate SKIPPED for %s mode (LTF-only)", profile)
-
-    # === Gate 2: HTF MOMENTUM GATE ===
-    # Block counter-trend trades during strong HTF momentum
-    # SKIP for LTF-only modes (surgical, precision) that don't scan HTF timeframes
-    if getattr(config, "enable_htf_momentum_gate", True) and not is_ltf_only_mode:
-        momentum_gate = evaluate_htf_momentum_gate(
-            indicators=indicators,
-            direction=direction,
-            mode_config=config,
-            swing_structure=smc_snapshot.swing_structure,
-            reversal_context=reversal_context,
-        )
-
-        if momentum_gate["score_adjustment"] != 0:
-            factor_score = max(0.0, min(100.0, 50.0 + momentum_gate["score_adjustment"] * 1.0))
-            factors.append(
-                ConfluenceFactor(
-                    name="HTF_Momentum_Gate",
-                    score=factor_score,
-                    weight=get_w("htf_momentum_gate", 0.08),
-                    rationale=momentum_gate["reason"],
-                )
-            )
-
-            if not momentum_gate["allowed"]:
-                logger.warning(
-                    "🚫 HTF Momentum Gate BLOCKED: %s trend with %s momentum",
-                    momentum_gate["htf_trend"],
-                    momentum_gate["htf_momentum"],
-                )
-    elif is_ltf_only_mode:
-        logger.debug("⏭️ HTF Momentum Gate SKIPPED for %s mode (LTF-only)", profile)
-
-    # === Gate 3: TIMEFRAME CONFLICT RESOLUTION ===
-    # Explicit rules for handling timeframe conflicts
-    if getattr(config, "enable_conflict_resolution", True):
-        conflict_result = resolve_timeframe_conflicts(
-            indicators=indicators,
-            direction=direction,
-            mode_config=config,
-            swing_structure=smc_snapshot.swing_structure,
-            htf_proximity=htf_proximity_result,
-        )
-
-        if conflict_result["score_adjustment"] != 0:
-            factor_score = max(0.0, min(100.0, 50.0 + conflict_result["score_adjustment"] * 1.0))
-            factors.append(
-                ConfluenceFactor(
-                    name="Timeframe_Conflict_Resolution",
-                    score=factor_score,
-                    weight=get_w("timeframe_conflict", 0.10),
-                    rationale=conflict_result["resolution_reason"],
-                )
-            )
-
-            if conflict_result["resolution"] == "blocked":
-                logger.warning(
-                    "🚫 Timeframe Conflict BLOCKED: conflicts: %s",
-                    ", ".join(conflict_result["conflicts"]),
-                )
-
-    # --- NEW: Premium/Discount Zone Scoring ---
-    # Bonus for trading in the optimal zone for direction
+    # --- Premium/Discount Zone ---
+    pd_score, pd_rat = 50.0, "Equilibrium zone"
     try:
-        if current_price is not None and smc_snapshot.premium_discount:
-            # Get the zone from the primary planning timeframe - explicit None check
-            primary_tf = getattr(config, "primary_planning_timeframe", "4h")
-            pd_zone = smc_snapshot.premium_discount.get(primary_tf)
-            if pd_zone is None:
-                pd_zone = smc_snapshot.premium_discount.get(primary_tf.upper())
-
-            if pd_zone:
-                current_zone = pd_zone.get("current_zone", "neutral")
-                zone_pct = pd_zone.get("zone_percentage", 50)
-
-                pd_score = 50.0  # Neutral baseline
-                pd_rationale = "Price at equilibrium"
-
-                # For LONG: discount zone is preferred
-                if direction in ("bullish", "long"):
-                    if current_zone == "discount":
-                        if zone_pct < 30:  # Deep discount
-                            pd_score = 100.0
-                            pd_rationale = f"Deep discount zone ({zone_pct:.0f}%) - ideal for longs"
-                        else:
-                            pd_score = 75.0
-                            pd_rationale = f"Discount zone ({zone_pct:.0f}%) - good for longs"
-                    elif current_zone == "premium":
-                        if zone_pct > 70:  # Deep premium
-                            pd_score = 20.0
-                            pd_rationale = f"Deep premium zone ({zone_pct:.0f}%) - risky for longs"
-                        else:
-                            pd_score = 35.0
-                            pd_rationale = f"Premium zone ({zone_pct:.0f}%) - caution for longs"
-
-                # For SHORT: premium zone is preferred
-                elif direction in ("bearish", "short"):
-                    if current_zone == "premium":
-                        if zone_pct > 70:  # Deep premium
-                            pd_score = 100.0
-                            pd_rationale = f"Deep premium zone ({zone_pct:.0f}%) - ideal for shorts"
-                        else:
-                            pd_score = 75.0
-                            pd_rationale = f"Premium zone ({zone_pct:.0f}%) - good for shorts"
-                    elif current_zone == "discount":
-                        if zone_pct < 30:  # Deep discount
-                            pd_score = 20.0
-                            pd_rationale = (
-                                f"Deep discount zone ({zone_pct:.0f}%) - risky for shorts"
-                            )
-                        else:
-                            pd_score = 35.0
-                            pd_rationale = f"Discount zone ({zone_pct:.0f}%) - caution for shorts"
-
-                factors.append(
-                    ConfluenceFactor(
-                        name="Premium/Discount Zone",
-                        score=pd_score,
-                        weight=get_w("premium_discount", 0.08),
-                        rationale=pd_rationale,
-                    )
-                )
-    except Exception as e:
-        error_type = type(e).__name__
-        has_pd_zones = smc_snapshot.premium_discount is not None
-        zone_count = len(smc_snapshot.premium_discount) if has_pd_zones else 0
-        logger.warning(
-            f"📊 P/D Zone DIAGNOSTIC [{symbol}]: Scoring FAILED with {error_type}. "
-            f"Has P/D zones: {has_pd_zones}, Zone count: {zone_count}. Error: {str(e)[:150]}"
-        )
-        logger.debug(f"📊 P/D Zone DIAGNOSTIC [{symbol}]: Full error", exc_info=True)
-
-    # --- NEW: Symbol Regime Alignment Scoring ---
-    # Rewards trades aligned with the local symbol regime (from RegimeDetector)
-    # Penalizes trades that fight the regime
-    if regime is not None:
-        try:
-            regime_result = _score_regime_alignment(
-                regime=regime,
-                direction=direction,
-                max_bonus=15.0,
-                max_penalty=12.0,
-                scanner_profile=getattr(config, "profile", "balanced"),
-            )
-
-            # Add as weighted factor (regime alignment is important for timing)
-            factor_score = regime_result["factor_score"]
-            factors.append(
-                ConfluenceFactor(
-                    name="Regime Alignment",
-                    score=factor_score,
-                    weight=get_w("regime_alignment", 0.08),
-                    rationale=regime_result["reason"],
-                )
-            )
-
-            if regime_result["aligned"]:
-                logger.debug(
-                    "📊 Regime ALIGNED: %s (adj=%.1f)",
-                    regime_result["reason"],
-                    regime_result["adjustment"],
-                )
+        p_tf = getattr(config, "primary_planning_timeframe", "4h")
+        pd_z = smc_snapshot.premium_discount.get(p_tf) or smc_snapshot.premium_discount.get(p_tf.upper())
+        if pd_z:
+            c_z, z_p = pd_z.get("current_zone", "neutral"), pd_z.get("zone_percentage", 50)
+            if direction in ("bullish", "long"):
+                pd_score = 100.0 if (c_z == "discount" and z_p < 30) else (75.0 if c_z == "discount" else 30.0)
             else:
-                logger.debug(
-                    "⚠️ Regime OPPOSED: %s (adj=%.1f)",
-                    regime_result["reason"],
-                    regime_result["adjustment"],
-                )
-        except Exception as e:
-            logger.debug("Regime alignment scoring failed: %s", e)
+                pd_score = 100.0 if (c_z == "premium" and z_p > 70) else (75.0 if c_z == "premium" else 30.0)
+            pd_rat = f"{c_z.capitalize()} zone ({z_p:.0f}%)"
+    except: pass
+    factors.append(ConfluenceFactor(name="Premium/Discount Zone", score=pd_score, weight=get_w("premium_discount", 0.05), rationale=pd_rat))
 
-    # --- NEW: Inside Order Block Bonus WITH REJECTION CONFIRMATION ---
-    # Evaluates price action when inside an aligned OB to ensure it is holding
+    # --- Regime Alignment ---
+    reg_score, reg_rat = 50.0, "Neutral regime"
+    if regime:
+        try:
+            r_res = _score_regime_alignment(regime=regime, direction=direction, scanner_profile=current_profile)
+            reg_score, reg_rat = r_res["factor_score"], r_res["reason"]
+        except: pass
+    factors.append(ConfluenceFactor(name="Regime Alignment", score=reg_score, weight=get_w("regime_alignment", 0.08), rationale=reg_rat))
+
+    # --- Inside Order Block Confirmation ---
+    in_ob_score, in_ob_rat = 50.0, "No active OB detected"
     try:
-        if current_price is not None:
-            for ob in smc_snapshot.order_blocks:
-                ob_direction = getattr(ob, "direction", None)
-                ob_low = getattr(ob, "low", 0)
-                ob_high = getattr(ob, "high", 0)
-
-                # Check if price is inside this OB
-                if ob_low <= current_price <= ob_high:
-                    # Check if OB direction aligns with trade direction
-                    if (direction in ("bullish", "long") and ob_direction == "bullish") or (
-                        direction in ("bearish", "short") and ob_direction == "bearish"
-                    ):
-                        tf = getattr(ob, "timeframe", "unknown")
-                        mitigation = getattr(ob, "mitigation_level", 0.0)
-                        freshness = getattr(ob, "freshness_score", 0.8)
-                        
-                        # Structural base quality (max 30)
-                        base_quality = (freshness * 20) + ((1.0 - mitigation) * 10)
-                        
-                        # Rejection Quality check
-                        rejection_score = 50.0
-                        rejection_reason = "No price action data"
-                        
-                        # Try to get timeframe data for the OB's timeframe or primary tf
-                        df_to_check = None
-                        if indicators.by_timeframe.get(tf):
-                            df_to_check = getattr(indicators.by_timeframe[tf], "dataframe", None)
-                        elif primary_tf and indicators.by_timeframe.get(primary_tf):
-                            df_to_check = getattr(indicators.by_timeframe[primary_tf], "dataframe", None)
-                            
-                        if df_to_check is not None:
-                            rej_result = _score_ob_rejection_quality(df_to_check, direction)
-                            rejection_score = rej_result["score"]
-                            rejection_reason = rej_result["reason"]
-                            
-                        # If rejection score is extremely low (<30), price is bleeding through the OB
-                        if rejection_score < 30.0:
-                            factors.append(
-                                ConfluenceFactor(
-                                    name="Failed Rejection Block",
-                                    score=rejection_score,  # Huge penalty
-                                    weight=get_w("inside_ob", 0.15), # Increased weight for veto
-                                    rationale=f"At {tf} {ob_direction} OB but failing to hold: {rejection_reason}",
-                                )
-                            )
-                            # Log severe warning for bleeding OB
-                            logger.warning(
-                                "🚫 Order Block Bleed: %s trade at %s OB failing rejection check (%s)",
-                                direction, tf, rejection_reason
-                            )
-                        else:
-                            # Healthy rejection -> give bonus
-                            inside_score = base_quality + (rejection_score * 0.7) # 30 max base + 70 max rej = 100 max
-                            factors.append(
-                                ConfluenceFactor(
-                                    name="Inside Order Block",
-                                    score=min(100.0, inside_score),
-                                    weight=get_w("inside_ob", 0.12),
-                                    rationale=f"Inside {tf} {ob_direction} OB: {rejection_reason}",
-                                )
-                            )
-                        break  # Only evaluate the first aligned enclosing OB
-
-    except Exception as e:
-        logger.debug("Inside OB bonus failed: %s", e)
-
-    # --- NEW: Nested Order Block Bonus (STRICT VALIDATION) ---
-    # Extra confluence when LTF OB is nested inside HTF OB (same direction)
-    # with strict quality requirements:
-    # 1. Containment: LTF must be >=50% inside HTF (not just any overlap)
-    # 2. PD Array: For bearish, LTF must be in Premium (upper 50%) of HTF
-    #              For bullish, LTF must be in Discount (lower 50%) of HTF
-    #
-    # This prevents "100% nested OB" noise from weak overlap at edges.
-    try:
-        ltf_timeframes = {"5m", "15m"}
-        htf_timeframes = {"1h", "1H", "4h", "4H", "1d", "1D"}
-
-        # Separate OBs by timeframe category
-        ltf_obs = [ob for ob in smc_snapshot.order_blocks if ob.timeframe.lower() in ltf_timeframes]
-        htf_obs = [
-            ob
-            for ob in smc_snapshot.order_blocks
-            if ob.timeframe.lower().replace("h", "h").replace("d", "d") in htf_timeframes
-            or ob.timeframe in htf_timeframes
-        ]
-
-        nested_found = False
-        for ltf_ob in ltf_obs:
-            ltf_dir = getattr(ltf_ob, "direction", None)
-            ltf_low = getattr(ltf_ob, "low", 0)
-            ltf_high = getattr(ltf_ob, "high", 0)
-            ltf_tf = getattr(ltf_ob, "timeframe", "unknown")
-
-            # Check if this LTF OB aligns with trade direction
-            if not (
-                (direction in ("bullish", "long") and ltf_dir == "bullish")
-                or (direction in ("bearish", "short") and ltf_dir == "bearish")
-            ):
-                continue
-
-            # Find an HTF OB that contains this LTF OB (same direction)
-            for htf_ob in htf_obs:
-                htf_dir = getattr(htf_ob, "direction", None)
-                htf_low = getattr(htf_ob, "low", 0)
-                htf_high = getattr(htf_ob, "high", 0)
-                htf_tf = getattr(htf_ob, "timeframe", "unknown")
-
-                # Same direction required
-                if htf_dir != ltf_dir:
-                    continue
-
-                # === STRICT CONTAINMENT CHECK ===
-                # Calculate overlap percentage (how much of LTF is inside HTF)
-                ltf_range = ltf_high - ltf_low
-                if ltf_range <= 0:
-                    continue  # Invalid LTF OB
-
-                # Calculate overlap boundaries
-                overlap_low = max(ltf_low, htf_low)
-                overlap_high = min(ltf_high, htf_high)
-
-                if overlap_high <= overlap_low:
-                    # No overlap at all
-                    continue
-
-                overlap_range = overlap_high - overlap_low
-                overlap_pct = overlap_range / ltf_range
-
-                # Require at least 50% containment
-                if overlap_pct < NESTED_OB_CONTAINMENT_MIN:
-                    logger.debug(
-                        "🔍 Nested OB rejected: %s %s OB only %.0f%% inside %s OB (need %.0f%%)",
-                        ltf_tf,
-                        ltf_dir,
-                        overlap_pct * 100,
-                        htf_tf,
-                        NESTED_OB_CONTAINMENT_MIN * 100,
-                    )
-                    continue
-
-                # === PD ARRAY VALIDATION ===
-                # For bearish: LTF OB should be in Premium (upper 50%) of HTF OB
-                # For bullish: LTF OB should be in Discount (lower 50%) of HTF OB
-                htf_mid = (htf_high + htf_low) / 2
-                ltf_mid = (ltf_high + ltf_low) / 2
-
-                pd_array_valid = False
-                if ltf_dir == "bearish":
-                    # Supply zone - should be in premium (upper half)
-                    # Ideally: ltf_low >= htf_mid (entire LTF OB above midpoint)
-                    # Acceptable: ltf_mid >= htf_mid (LTF midpoint above HTF midpoint)
-                    if ltf_mid >= htf_mid:
-                        pd_array_valid = True
-                    else:
-                        logger.debug(
-                            "🔍 Nested OB rejected: Bearish %s OB in Discount zone of %s OB (mid %.5f < htf_mid %.5f)",
-                            ltf_tf,
-                            htf_tf,
-                            ltf_mid,
-                            htf_mid,
-                        )
-                else:  # bullish
-                    # Demand zone - should be in discount (lower half)
-                    # Ideally: ltf_high <= htf_mid (entire LTF OB below midpoint)
-                    # Acceptable: ltf_mid <= htf_mid (LTF midpoint below HTF midpoint)
-                    if ltf_mid <= htf_mid:
-                        pd_array_valid = True
-                    else:
-                        logger.debug(
-                            "🔍 Nested OB rejected: Bullish %s OB in Premium zone of %s OB (mid %.5f > htf_mid %.5f)",
-                            ltf_tf,
-                            htf_tf,
-                            ltf_mid,
-                            htf_mid,
-                        )
-
-                if not pd_array_valid:
-                    continue
-
-                # === PASSED ALL CHECKS ===
-                # TIGHTENED: Score based on nesting quality instead of flat 100
-                # Base: 60pts for passing strict checks
-                # Bonus: up to +15 for overlap quality (>75% = excellent)
-                # Bonus: up to +10 for HTF OB quality
-                overlap_bonus = min(15.0, (overlap_pct - 0.5) / 0.5 * 15.0)
-                htf_freshness = getattr(htf_ob, "freshness_score", 0.7)
-                htf_bonus = htf_freshness * 10.0
-                nested_score = 60.0 + overlap_bonus + htf_bonus
-
-                factors.append(
-                    ConfluenceFactor(
-                        name="Nested Order Block",
-                        score=min(85.0, nested_score),  # Cap at 85 (was 100)
-                        weight=get_w("nested_ob", 0.08),
-                        rationale=f"{ltf_tf} {ltf_dir} OB (%.0f%% contained) in {htf_tf} {'Premium' if ltf_dir == 'bearish' else 'Discount'} zone - high-quality nested structure"
-                        % (overlap_pct * 100),
-                    )
-                )
-                nested_found = True
+        for ob in smc_snapshot.order_blocks:
+            if ob.low <= entry_price <= ob.high and ((direction in ("long", "bullish") and ob.direction == "bullish") or (direction in ("short", "bearish") and ob.direction == "bearish")):
+                df_rej = getattr(indicators.by_timeframe.get(ob.timeframe) or indicators.by_timeframe.get(primary_tf), "dataframe", None)
+                rej_res = _score_ob_rejection_quality(df_rej, direction) if df_rej is not None else {"score": 50, "reason": "Inside OB"}
+                in_ob_score, in_ob_rat = rej_res["score"], rej_res["reason"]
                 break
+    except: pass
+    factors.append(ConfluenceFactor(name="Inside Order Block", score=in_ob_score, weight=get_w("inside_ob", 0.05), rationale=in_ob_rat))
 
-            if nested_found:
-                break  # Only count once
-    except Exception as e:
-        logger.debug("Nested OB bonus failed: %s", e)
+    # --- Nested Order Block Bonus ---
+    nested_score, nested_rat = 0.0, "No nested OB found"
+    try:
+        if _detect_nested_ob(smc_snapshot, direction):
+            nested_score, nested_rat = 80.0, "LTF OB nested in HTF OB"
+    except: pass
+    factors.append(ConfluenceFactor(name="Nested Order Block", score=nested_score, weight=get_w("nested_ob", 0.04), rationale=nested_rat))
 
     # --- NEW: Opposing Structure Penalty ---
     # Penalty when opposing OB/FVG is near the entry (immediate resistance/support)
@@ -3136,640 +2395,110 @@ def calculate_confluence_score(
     # Big bonus when at HTF support (for LONG) or HTF resistance (for SHORT)
     # This can tip direction organically when at major reversal zones
     try:
-        if current_price is not None:
-            htf_tfs = ("1w", "1W", "1d", "1D", "4h", "4H")
-            for ob in smc_snapshot.order_blocks:
-                ob_tf = getattr(ob, "timeframe", "")
-                if ob_tf not in htf_tfs:
-                    continue
-
-                ob_direction = getattr(ob, "direction", None)
-                ob_low = getattr(ob, "low", 0)
-                ob_high = getattr(ob, "high", 0)
-
-                # Check if price is near HTF support (bullish OB below)
-                if direction in ("bullish", "long") and ob_direction == "bullish":
-                    if ob_low < current_price:
-                        atr_obj = indicators.by_timeframe.get(
-                            getattr(config, "primary_planning_timeframe", "4h")
-                        )
-                        atr_val = getattr(atr_obj, "atr", 1) if atr_obj else 1
-                        dist = (current_price - ob_high) / atr_val
-                        if dist <= 2.0:  # Within 2 ATR of support
+        if current_price and smc_snapshot.order_blocks:
+            # Need ATR for scaling
+            target_tf = getattr(config, "primary_planning_timeframe", "4h")
+            atr_ind = indicators.by_timeframe.get(target_tf)
+            atr_val = getattr(atr_ind, "atr", current_price * 0.01) if atr_ind else current_price * 0.01
+            
+            if atr_val > 0:
+                for ob in smc_snapshot.order_blocks:
+                    if ob.timeframe in ("1w", "1d", "4h"):
+                        target_price = ob.high if direction in ("long", "bullish") else ob.low
+                        dist_atr = abs(current_price - target_price) / atr_val
+                        if dist_atr < 1.0: # Within 1 ATR of major HTF level
+                            inflection_score = min(100.0, max(0.0, 100.0 - (dist_atr * 50.0)))
                             factors.append(
                                 ConfluenceFactor(
-                                    name="HTF Inflection Point",
-                                    score=max(50.0, 100.0 - (dist * 25.0)),  # Distance decay: 100 at 0 ATR, 50 at 2 ATR
-                                    weight=get_w("htf_inflection", 0.15),
-                                    rationale=f"At {ob_tf} support OB ({dist:.1f} ATR) - strong reversal zone for longs",
-                                )
-                            )
-                            break
-
-                # Check if price is near HTF resistance (bearish OB above)
-                elif direction in ("bearish", "short") and ob_direction == "bearish":
-                    if ob_high > current_price:
-                        atr_obj = indicators.by_timeframe.get(
-                            getattr(config, "primary_planning_timeframe", "4h")
-                        )
-                        atr_val = getattr(atr_obj, "atr", 1) if atr_obj else 1
-                        dist = (ob_low - current_price) / atr_val
-                        if dist <= 2.0:  # Within 2 ATR of resistance
-                            factors.append(
-                                ConfluenceFactor(
-                                    name="HTF Inflection Point",
-                                    score=max(50.0, 100.0 - (dist * 25.0)),  # Distance decay: 100 at 0 ATR, 50 at 2 ATR
-                                    weight=get_w("htf_inflection", 0.15),
-                                    rationale=f"At {ob_tf} resistance OB ({dist:.1f} ATR) - strong reversal zone for shorts",
+                                    name="HTF Inflection Point", 
+                                    score=inflection_score, 
+                                    weight=get_w("htf_inflection", 0.10), 
+                                    rationale=f"Near {ob.timeframe} HTF inflection zone ({dist_atr:.1f} ATR)"
                                 )
                             )
                             break
     except Exception as e:
-        logger.debug("HTF Inflection bonus failed: %s", e)
+        logger.debug("HTF inflation point bonus failed: %s", e)
 
-    # --- NEW: Multi-TF Reversal Confluence ---
-    # Bonus when multiple reversal signals align (divergence + sweep + BOS)
-    try:
-        reversal_signals, reversal_reasons = _score_multi_tf_reversal_confluence(smc_snapshot, direction)
-
-        if reversal_signals >= 2:
-            score = min(100.0, 50.0 + (reversal_signals * 15))
-            factors.append(
-                ConfluenceFactor(
-                    name="Multi-TF Reversal",
-                    score=score,
-                    weight=get_w("multi_tf_reversal", 0.12),
-                    rationale=f"{reversal_signals} reversal signals: {', '.join(reversal_reasons[:3])}",
-                )
-            )
-    except Exception as e:
-        logger.debug("Multi-TF reversal failed: %s", e)
-
-    # --- NEW: LTF Structure Shift (Micro-Reversal) ---
-    # Partial bonus when LTF (5m/15m) shows CHoCH/BOS even if HTF is against
-    try:
-        ltf_tfs = ("5m", "15m", "1m")
-        for brk in smc_snapshot.structural_breaks:
-            brk_tf = getattr(brk, "timeframe", "")
-            if brk_tf not in ltf_tfs:
-                continue
-
-            brk_dir = getattr(brk, "direction", None)
-            brk_type = getattr(brk, "break_type", "")
-
-            if brk_type in ("choch", "CHoCH", "bos", "BOS"):
-                if (direction in ("bullish", "long") and brk_dir == "bullish") or (
-                    direction in ("bearish", "short") and brk_dir == "bearish"
-                ):
-                    factors.append(
-                        ConfluenceFactor(
-                            name="LTF Structure Shift",
-                            score=75.0,
-                            weight=get_w("ltf_structure_shift", 0.08),
-                            rationale=f"{brk_tf} {brk_type} {brk_dir} - micro-reversal forming",
-                        )
-                    )
-                    break
-    except Exception as e:
-        logger.debug("LTF structure shift failed: %s", e)
-
-    # --- NEW: Institutional Sequence Factor ---
-    # Detects Sweep → OB → BOS pattern (institutional footprint)
-    # Sweep before OB: 3-7 candles (same TF as OB)
-    # BOS after OB: 3-10 candles
-    try:
-        best_sequence_score = 0
-        best_sequence_rationale = ""
-
-        for ob in smc_snapshot.order_blocks:
-            ob_direction = getattr(ob, "direction", None)
-            ob_timestamp = getattr(ob, "timestamp", None)
-            ob_tf = getattr(ob, "timeframe", "")
-
-            # Skip OBs that don't align with trade direction
-            if direction in ("bullish", "long") and ob_direction != "bullish":
-                continue
-            if direction in ("bearish", "short") and ob_direction != "bearish":
-                continue
-
-            if not ob_timestamp:
-                continue
-
-            has_sweep_before = False
-            has_bos_after = False
-            sweep_detail = ""
-            bos_detail = ""
-
-            # Check for liquidity sweep BEFORE this OB (within 7 candles = ~hours on 4H)
-            for sweep in smc_snapshot.liquidity_sweeps:
-                sweep_ts = getattr(sweep, "timestamp", None)
-                sweep_type = getattr(sweep, "sweep_type", "")
-                sweep_dir = "bullish" if sweep_type == "low" else ("bearish" if sweep_type == "high" else None)
-                sweep_tf = getattr(sweep, "timeframe", "")
-
-                if not sweep_ts or sweep_tf.lower() != ob_tf.lower():
-                    continue
-
-                # Sweep should be before OB and align with direction
-                if sweep_ts < ob_timestamp:
-                    time_diff = (ob_timestamp - sweep_ts).total_seconds()
-                    # 7 candles on 4H = 28 hours
-                    max_lookback = 7 * 4 * 3600 if "4" in ob_tf else 7 * 3600
-
-                    if time_diff <= max_lookback:
-                        if (direction in ("bullish", "long") and sweep_dir == "bullish") or (
-                            direction in ("bearish", "short") and sweep_dir == "bearish"
-                        ):
-                            has_sweep_before = True
-                            sweep_detail = f"{sweep_tf} sweep"
-                            break
-
-            # Check for BOS/CHoCH AFTER this OB (within 10 candles)
-            for brk in smc_snapshot.structural_breaks:
-                brk_ts = getattr(brk, "timestamp", None)
-                brk_dir = getattr(brk, "direction", None)
-                brk_type = getattr(brk, "break_type", "")
-                brk_tf = getattr(brk, "timeframe", "")
-
-                if not brk_ts:
-                    continue
-
-                # BOS should be after OB
-                if brk_ts > ob_timestamp:
-                    time_diff = (brk_ts - ob_timestamp).total_seconds()
-                    # 10 candles on 4H = 40 hours
-                    max_forward = 10 * 4 * 3600 if "4" in ob_tf else 10 * 3600
-
-                    if time_diff <= max_forward:
-                        if (direction in ("bullish", "long") and brk_dir == "bullish") or (
-                            direction in ("bearish", "short") and brk_dir == "bearish"
-                        ):
-                            has_bos_after = True
-                            bos_detail = f"{brk_tf} {brk_type}"
-                            break
-
-            # Score the sequence
-            sequence_score = 0
-            if has_sweep_before and has_bos_after:
-                sequence_score = 100  # Full sequence
-                rationale = (
-                    f"Full institutional sequence: {sweep_detail} → {ob_tf} OB → {bos_detail}"
-                )
-            elif has_sweep_before:
-                sequence_score = 60  # Sweep + OB
-                rationale = f"Sweep + OB: {sweep_detail} → {ob_tf} OB (awaiting BOS)"
-            elif has_bos_after:
-                sequence_score = 50  # OB + BOS
-                rationale = f"OB + BOS: {ob_tf} OB → {bos_detail} (no sweep detected)"
-            else:
-                continue  # No sequence worth mentioning
-
-            if sequence_score > best_sequence_score:
-                best_sequence_score = sequence_score
-                best_sequence_rationale = rationale
-
-        if best_sequence_score > 0:
-            # Weight based on sequence completeness
-            # Sweep+OB+BOS=20pts (100*0.20), Sweep+OB=12pts, OB+BOS=10pts
-            weight = (
-                0.20
-                if best_sequence_score == 100
-                else (0.12 if best_sequence_score == 60 else 0.10)
-            )
-            factors.append(
-                ConfluenceFactor(
-                    name="Institutional Sequence",
-                    score=best_sequence_score,
-                    weight=weight,
-                    rationale=best_sequence_rationale,
-                )
-            )
-    except Exception as e:
-        logger.debug("Institutional sequence failed: %s", e)
-
-    # ===========================================================================
-    # === PRIMARY FAILURE DAMPENING ===
-    # ===========================================================================
-    # If a "hard gate" fires (MACD veto, HTF Momentum blocked), we should NOT
-    # quadruple-punish the same underlying issue. Reduce overlapping soft
-    # penalties by 50% to prevent score obliteration.
-
-    # Identify hard gate failures
-    hard_gate_fired = False
-    hard_gate_reason = None
-
-    # Check for MACD veto (factor with score=0, name contains "MACD")
-    for f in factors:
-        if "MACD Veto" in f.name and f.score == 0:
-            hard_gate_fired = True
-            hard_gate_reason = "MACD Veto"
-            break
-        if "HTF_Momentum_Gate" in f.name and f.score < 30:  # Blocked or severely penalized
-            hard_gate_fired = True
-            hard_gate_reason = "HTF Momentum Gate"
-            break
-
-    # Dampen overlapping soft penalties if hard gate fired
-    if hard_gate_fired:
-        dampened_factors = {
-            "Timeframe_Conflict_Resolution",
-            "HTF Structure Bias",
-            "HTF Pullback Setup",
-            "Opposing Structure",
-            "Weekly StochRSI Bonus",
-        }
-
-        dampened_count = 0
-        for i, f in enumerate(factors):
-            if f.name in dampened_factors and f.score < 50:  # Only dampen penalties, not bonuses
-                # Reduce penalty weight by 50% (move score toward neutral)
-                original_weight = f.weight
-                new_weight = f.weight * 0.5
-                factors[i] = ConfluenceFactor(
-                    name=f.name,
-                    score=f.score,
-                    weight=new_weight,
-                    rationale=f.rationale + f" [dampened: {hard_gate_reason}]",
-                )
-                dampened_count += 1  # pyre-ignore[58, 16]
-
-        if dampened_count > 0:
-            logger.debug(
-                "🔇 Primary failure dampening: %d factors reduced (cause: %s)",
-                dampened_count,
-                hard_gate_reason,
-            )
-
-    # --- Normalize Weights ---
-
-    # If no factors present, return minimal breakdown
-    if not factors:
-        # Detect regime even if no factors (defaults to 'range' if no data)
-        regime = _detect_regime(smc_snapshot, indicators)
-        logger.warning(
-            "⚠️ No confluence factors generated! Possible data starvation or strict mode. Defaulting regime to %s.",
-            regime,
-        )
-
-        return ConfluenceBreakdown(
-            total_score=0.0,
-            factors=[],
-            synergy_bonus=0.0,
-            conflict_penalty=0.0,
-            regime=regime,
-            htf_aligned=False,
-            btc_impulse_gate=True,
-            weekly_stoch_rsi_gate=True,
-        )
+    # --- Institutional Sequence ---
+    seq_score, seq_rat = _score_institutional_sequence(smc_snapshot, direction)
+    factors.append(ConfluenceFactor(name="Institutional Sequence", score=seq_score, weight=get_w("institutional_sequence", 0.10), rationale=seq_rat))
 
     # --- Liquidity Draw Factor ---
-    # Score based on whether a clear unswept liquidity pool exists in the trade direction.
-    # Higher score when: pool is Grade A/B, 2-5 ATR away, and a sweep confirms the origin.
     try:
-        from backend.strategy.confluence.liquidity_map_scorer import score_liquidity_draw as _score_liq_draw
-        _liq_prim_ind = indicators.by_timeframe.get(primary_tf) if primary_tf else None
-        _liq_atr = getattr(_liq_prim_ind, "atr", None) or (
-            (entry_price * 0.01) if entry_price else 0.0
-        )
-        if _liq_atr and _liq_atr > 0 and entry_price:
-            _liq_result = _score_liq_draw(
-                direction=direction,
-                current_price=entry_price,
-                smc=smc_snapshot,
-                atr=_liq_atr,
-                max_target_atr=15.0,
-            )
-            if _liq_result["score"] > 0:
-                _liq_weight = get_w("liquidity_draw", 0.10)
-                factors.append(
-                    ConfluenceFactor(
-                        name="Liquidity Draw",
-                        score=_liq_result["score"],
-                        weight=_liq_weight,
-                        rationale="; ".join(f[2] for f in _liq_result["factors"]) if _liq_result["factors"] else "Liquidity target identified",
-                    )
-                )
-                logger.debug(
-                    "Liquidity Draw factor: score=%.1f, weight=%.2f, target_dist=%.1f ATR",
-                    _liq_result["score"], _liq_weight,
-                    _liq_result["target_distance_atr"] or 0.0,
-                )
-    except Exception as _liq_err:
-        logger.debug("Liquidity draw scoring skipped: %s", _liq_err)
+        from backend.strategy.confluence.liquidity_map_scorer import score_liquidity_draw as _score_ld
+        l_prim = indicators.by_timeframe.get(primary_tf)
+        l_atr = getattr(l_prim, "atr", current_price * 0.01) if current_price else 0
+        l_res = _score_ld(direction=direction, current_price=current_price, smc=smc_snapshot, atr=l_atr)
+        factors.append(ConfluenceFactor(name="Liquidity Draw", score=l_res["score"], weight=get_w("liquidity_draw", 0.10), rationale="Liquidity targets active"))
+    except: pass
 
-    # If not all factors present, weights won't sum to 1.0 - normalize them
-    total_weight = sum(f.weight for f in factors)
-    if total_weight > 0 and abs(total_weight - 1.0) > 0.01:
-        # Normalize weights to sum to 1.0
-        for i, factor in enumerate(factors):
-            factors[i] = ConfluenceFactor(
-                name=factor.name,
-                score=factor.score,
-                weight=factor.weight / total_weight,
-                rationale=factor.rationale,
-            )
+    # --- FINAL WEIGHT NORMALIZATION ---
+    # This prevents weight dilution - all weights sum to 100% exactly
+    total_w = sum(f.weight for f in factors)
+    if total_w > 0:
+        for i in range(len(factors)):
+            factors[i] = ConfluenceFactor(name=factors[i].name, score=factors[i].score, weight=factors[i].weight/total_w, rationale=factors[i].rationale)
 
-    # --- Factor Coverage Penalty (Mode-Aware) ---
-    # Low-information setups (few factors) should not score as high as rich multi-factor setups.
-    # Weight normalization inflates scores when only 2-3 factors fire; this compensates.
-    #
-    # Mode requirements — stricter modes demand more confluence evidence:
-    #   Overwatch  (swing, macro): min 7 factors, -4pts each missing  (highest bar)
-    #   Stealth    (balanced):     min 5 factors, -3pts each missing
-    #   Strike     (intraday):     min 4 factors, -2.5pts each missing
-    #   Surgical   (scalp/LTF):   min 3 factors, -2pts each missing  (lowest bar)
-    factor_coverage_penalty = 0.0
-    active_factor_count = len([f for f in factors if f.score > 0])
-
-    _coverage_profile = getattr(config, "profile", "balanced")
-    if _coverage_profile in ("macro_surveillance", "overwatch"):
-        _min_factors, _penalty_per = 7, 4.0
-    elif _coverage_profile in ("stealth_balanced", "stealth"):
-        _min_factors, _penalty_per = 5, 3.0
-    elif _coverage_profile in ("intraday_aggressive", "strike"):
-        _min_factors, _penalty_per = 4, 2.5
-    elif _coverage_profile in ("precision", "surgical"):
-        _min_factors, _penalty_per = 3, 2.0
-    else:
-        _min_factors, _penalty_per = 5, 3.0  # Balanced default
-
-    if active_factor_count < _min_factors:
-        missing = _min_factors - active_factor_count
-        factor_coverage_penalty = missing * _penalty_per
-        logger.debug(
-            "Factor coverage penalty [%s]: %d active factors (min %d, -%g/missing) => -%.1f",
-            _coverage_profile, active_factor_count, _min_factors, _penalty_per, factor_coverage_penalty,
-        )
-
-    # --- Calculate Weighted Score ---
-
+    # --- Final Score Calculation ---
     weighted_score = sum(f.score * f.weight for f in factors)
-
-    # --- Synergy Bonuses ---
-
-    synergy_bonus = _calculate_synergy_bonus(
-        factors,
-        smc_snapshot,
-        cycle_context=cycle_context,
-        reversal_context=reversal_context,
-        direction=direction,
-        mode_config=config,
-    )
-
-    # --- Conflict Penalties ---
-
-    conflict_penalty = _calculate_conflict_penalty(
-        factors, direction, smc=smc_snapshot, mode_config=config
-    )
-
-    # --- Macro Overlay (if enabled) ---
-    macro_score_val = 0.0
-    if config and getattr(config, "macro_overlay_enabled", False) and macro_context:
-        # Use boolean flags if available, otherwise heuristics based on symbol being passed down?
-        # Scorer doesn't have 'symbol', relying on flags 'is_btc', 'is_alt' passed in
-        raw_macro = compute_macro_score(macro_context, direction, is_btc, is_alt)
-
-        # Scale impact: +/- 1 raw point = +/- 5% adjustment
-        # Max impact: +/- 4 * 5 = +/- 20%
-        macro_score_val = raw_macro * 5.0
-
-        if macro_score_val != 0:
-            logger.info("🌍 Macro Overlay Applied: Raw=%d -> Adj=%.1f", raw_macro, macro_score_val)
-
-            # Add explicit factor for visibility in "Details" modal
-            rationale_prefix = "MACRO " + ("BONUS" if macro_score_val > 0 else "PENALTY")
-            macro_notes = "; ".join(macro_context.notes[-2:])  # Last few notes
-            factors.append(
-                ConfluenceFactor(
-                    name="Macro Overlay",
-                    score=50.0 + macro_score_val,  # Center around 50 for display
-                    weight=0.0,  # Information only, score applied via multiplier/adjustment below
-                    rationale=f"{rationale_prefix}: {macro_notes} ({macro_score_val:+.1f})",
-                )
-            )
-
-            # Apply to bonuses/penalties to affect final score without breaking weight normalization
-            if macro_score_val > 0:
-                synergy_bonus += macro_score_val
-            else:
-                conflict_penalty += abs(macro_score_val)
-
-    # --- LTF-Only Penalty ---
-    # Penalize setups that have NO HTF pattern backing (all patterns are 15m/5m)
-    htf_timeframes = {"1w", "1W", "1d", "1D", "4h", "4H", "1h", "1H"}
-    htf_pattern_count = 0
-    htf_pattern_count += sum(
-        1 for ob in smc_snapshot.order_blocks if getattr(ob, "timeframe", "1h") in htf_timeframes
-    )
-    htf_pattern_count += sum(
-        1 for fvg in smc_snapshot.fvgs if getattr(fvg, "timeframe", "1h") in htf_timeframes
-    )
-    htf_pattern_count += sum(
-        1
-        for brk in smc_snapshot.structural_breaks
-        if getattr(brk, "timeframe", "1h") in htf_timeframes
-    )
-
-    if htf_pattern_count == 0:
-        # LTF-only setup - apply penalty
-        ltf_penalty = 15.0
-        conflict_penalty += ltf_penalty
-        logger.debug("⚠️ LTF-only setup penalty: +%.1f (no HTF pattern backing)", ltf_penalty)
-
-    # --- Regime Detection ---
-
-    regime = _detect_regime(smc_snapshot, indicators)
-
-    # --- Final Score ---
-
-    raw_score = weighted_score + synergy_bonus - conflict_penalty - factor_coverage_penalty
+    synergy_bonus = _calculate_synergy_bonus(factors, smc_snapshot, cycle_context=cycle_context, reversal_context=reversal_context, direction=direction, mode_config=config)
+    conflict_penalty = _calculate_conflict_penalty(factors, direction, smc=smc_snapshot, mode_config=config)
     
-    # CRITICAL: Cap raw_score immediately to prevent overflow
-    # Close-quality factors can push high-scoring setups over 100
+    # Coverage Penalty for low-evidence setups
+    coverage_penalty = 0.0
+    active_factors = len([f for f in factors if f.score > 0])
+    if active_factors < 4: coverage_penalty = (4 - active_factors) * 5.0
+    
+    # Macro Adjustment
+    macro_adj = 0.0
+    if config and getattr(config, "macro_overlay_enabled", False) and macro_context:
+        macro_adj = compute_macro_score(macro_context, direction, is_btc, is_alt) * 5.0
+
+    raw_score = weighted_score + synergy_bonus - conflict_penalty - coverage_penalty + macro_adj
     raw_score = max(0.0, min(100.0, raw_score))
 
-    # --- Structural Minimum Hard Cap (Issue 8) ---
-    # Swing modes without any structural element should never score above 60
-    if structural_minimum_failed:
-        raw_score = min(raw_score, 60.0)
-        logger.info(
-            "🧱 Structural minimum cap applied: score capped at 60.0 for swing setup without structure"
-        )
+    # Structural Minimum Gate
+    if structural_minimum_failed: raw_score = min(raw_score, 60.0)
 
-    # ===========================================================================
-    # === VARIANCE AMPLIFICATION CURVE (Mode-Aware) ===
-    # ===========================================================================
-    # Design goals:
-    #   1. No discontinuities — all tier transitions are continuous.
-    #   2. Mode-aware — peak boost is centred on THIS mode's pass/fail threshold,
-    #      so the curve amplifies exactly where it matters for that mode.
-    #   3. High-end boost is moderate (+3 flat) — already-passing setups don't
-    #      need to be pushed further; the boost should help borderline ones pass.
-    #   4. Poor scores (<45) are dampened hard to clean out noise.
-    #
-    # Regions (T = mode threshold, e.g. 78 for Overwatch):
-    #   raw >= T+3    : +3 flat    (well above threshold, modest reward)
-    #   T-5 <= raw < T+3: peak ramp (0 -> +5 -> +3, centred at T)
-    #   45 <= raw < T-5 : linear dampen from 0 at T-5 to -6 at 45
-    #   raw < 45      : heavy dampen (-6 at 45, -15 at 30)
-    # ===========================================================================
-
-    # Derive mode threshold from config
-    mode_threshold = float(getattr(config, "min_confluence_score", 70.0))
-
-    T = mode_threshold
-    if raw_score >= T + 3:
-        # Well above threshold: flat reward
-        final_score = raw_score + 3.0
+    # Variance Amplification Curve (Centre on mode threshold)
+    T = float(getattr(config, "min_confluence_score", 70.0))
+    if raw_score >= T + 3: final_score = raw_score + 2.0
     elif raw_score >= T - 5:
-        # Inflection zone: ramp up to T then ease off
-        if raw_score < T:
-            # Below threshold side: linear ramp 0 -> +5
-            boost = (raw_score - (T - 5)) * (5.0 / 5.0) * 0.8  # 0 at T-5, ~4 at T
-        else:
-            # Above threshold side: ease off from +5 -> +3
-            boost = 5.0 - (raw_score - T) * (2.0 / 3.0)         # 5 at T, 3 at T+3
+        boost = (raw_score - (T - 5)) * 0.8 # Ramp up near threshold
         final_score = raw_score + boost
-    elif raw_score >= 45.0:
-        # Mediocre zone: continuous dampen from 0 at T-5 to -6 at 45
-        span = max((T - 5) - 45.0, 1.0)  # avoid div-by-zero if T is very low
-        t = (raw_score - 45.0) / span    # 0.0 at raw=45, 1.0 at raw=T-5
-        dampen = 6.0 * (1.0 - t)
+    elif raw_score >= 50:
+        dampen = (T - 5 - raw_score) * 0.5
         final_score = raw_score - dampen
     else:
-        # Poor zone: heavy continuing dampen
-        extra_dampen = (45.0 - raw_score) * 0.6
-        final_score = raw_score - 6.0 - extra_dampen
+        final_score = raw_score * (raw_score / 50.0) # Quadratic decay for garbage signals
 
-    logger.debug(
-        "Variance curve [threshold=%.0f]: raw=%.1f -> final=%.1f (delta=%+.1f)",
-        T, raw_score, final_score, final_score - raw_score,
-    )
-
-    # Clamp to 0-100 BEFORE creating ConfluenceBreakdown
     final_score = max(0.0, min(100.0, final_score))
 
+    # Determine Signal Tier
+    strong_factors = sum(1 for f in factors if f.score >= 65)
+    tier = "APEX" if strong_factors >= 7 else ("A" if strong_factors >= 5 else ("B" if strong_factors >= 3 else "C"))
 
     breakdown = ConfluenceBreakdown(
         total_score=final_score,
         factors=factors,
         synergy_bonus=synergy_bonus,
         conflict_penalty=conflict_penalty,
-        regime=regime,
-        htf_aligned=htf_aligned,
-        btc_impulse_gate=btc_impulse_gate,
-        weekly_stoch_rsi_gate=True,  # DEPRECATED - always True (no longer a hard gate)
-        weekly_stoch_rsi_bonus=weekly_stoch_rsi_bonus,  # NEW bonus system
-        # Prefer internal calculation result, fallback to htf_context for legacy safety
-        htf_proximity_atr=(
-            htf_proximity_result.get("proximity_atr")
-            if htf_proximity_result
-            else (htf_context or {}).get("within_atr")
-        ),
-        htf_proximity_pct=(htf_context or {}).get("within_pct"),  # Not calculated internally yet
-        nearest_htf_level_timeframe=(htf_context or {}).get(
-            "timeframe"
-        ),  # TODO: Extract from result
-        nearest_htf_level_type=(
-            htf_proximity_result.get("structure_type")
-            if htf_proximity_result
-            else (htf_context or {}).get("type")
-        ),
-        macro_score=macro_score_val,
+        regime=_detect_regime(smc_snapshot, indicators),
+        htf_aligned=any(f.name == "HTF Alignment" and f.score > 55 for f in factors),
+        btc_impulse_gate=not any(f.name == "BTC Impulse Gate" and f.score < 50 for f in factors),
+        weekly_stoch_rsi_gate=True,
+        weekly_stoch_rsi_bonus=next((f.score-50 for f in factors if f.name == "Weekly StochRSI Bonus"), 0.0),
+        macro_score=macro_adj,
+        symbol=symbol,
+        direction=direction,
+        profile=current_profile
     )
-
-    # === SIGNAL QUALITY TIER ===
-    # Count factors that scored strongly (>=65). APEX (7+) gets a lower R:R bar and
-    # a special visual label in the frontend. Tier flows through breakdown.metadata.
-    strong_factor_count = sum(1 for f in factors if f.score >= 65)
-    if strong_factor_count >= 7:
-        signal_tier = "APEX"
-    elif strong_factor_count >= 5:
-        signal_tier = "A"
-    elif strong_factor_count >= 3:
-        signal_tier = "B"
-    else:
-        signal_tier = "C"
-
-    if not hasattr(breakdown, "metadata") or breakdown.metadata is None:
-        breakdown.metadata = {}
-    breakdown.metadata["signal_tier"] = signal_tier
-    breakdown.metadata["strong_factor_count"] = strong_factor_count
-    logger.info(
-        "⭐ %s Signal Tier: %s (%d strong factors >=65)",
-        symbol, signal_tier, strong_factor_count,
-    )
-
-    # TRACING: Log detailed score breakdown for analysis
-    # Only trace non-zero scores to reduce noise, unless it's a specific debug target
-    if final_score > 0:
-        # === ENHANCED CONFLUENCE BREAKDOWN LOGGING ===
-        logger.info(
-            f"📊 CONFLUENCE BREAKDOWN | {symbol} {direction.upper()}\n"
-            f"├─ Final Score: {final_score:.2f} (Raw: {raw_score:.2f})\n"
-            f"├─ Components:\n"
-            f"│  ├─ Weighted Base: {weighted_score:.2f}\n"
-            f"│  ├─ Synergy Bonus: +{synergy_bonus:.2f}\n"
-            f"│  ├─ Conflict Penalty: -{conflict_penalty:.2f}\n"
-            f"│  └─ Macro Score: {macro_score_val:.2f}\n"
-            f"└─ Top Factors:"
-        )
-
-        # Show top 5 contributing factors
-        sorted_factors = sorted(factors, key=lambda f: f.score * f.weight, reverse=True)
-        for i, f in enumerate(sorted_factors[:5], 1):
-            contribution = f.score * f.weight
-            logger.info(f"   {i}. {f.name}: {f.score:.1f} × {f.weight:.2f} = {contribution:.2f}pts")
-
-        # === WRITE TO FILE LOG ===
-        if BREAKDOWN_LOG_FILE:
-            try:
-                with BREAKDOWN_LOG_LOCK:
-                    BREAKDOWN_LOG_FILE.write(f"\n{'='*80}\n")
-                    BREAKDOWN_LOG_FILE.write(f"CONFLUENCE BREAKDOWN | {symbol} {direction.upper()}\n")
-                    BREAKDOWN_LOG_FILE.write(f"Final Score: {final_score:.2f} (Raw: {raw_score:.2f})\n")
-                    BREAKDOWN_LOG_FILE.write(f"Components:\n")
-                    BREAKDOWN_LOG_FILE.write(f"  - Weighted Base: {weighted_score:.2f}\n")
-                    BREAKDOWN_LOG_FILE.write(f"  - Synergy Bonus: +{synergy_bonus:.2f}\n")
-                    BREAKDOWN_LOG_FILE.write(f"  - Conflict Penalty: -{conflict_penalty:.2f}\n")
-                    BREAKDOWN_LOG_FILE.write(f"  - Macro Score: {macro_score_val:.2f}\n")
-                    BREAKDOWN_LOG_FILE.write(f"Top Factors:\n")
-                    for i, f in enumerate(sorted_factors[:5], 1):
-                        contribution = f.score * f.weight
-                        BREAKDOWN_LOG_FILE.write(
-                            f"  {i}. {f.name}: {f.score:.1f} × {f.weight:.2f} = {contribution:.2f}pts\n"
-                        )
-                    BREAKDOWN_LOG_FILE.write(f"{'='*80}\n")
-                    BREAKDOWN_LOG_FILE.flush()
-            except Exception as e:
-                logger.warning(f"Failed to write breakdown to file: {e}")
-
-        try:
-            trace_data = {
-                "symbol": symbol,
-                "direction": direction,
-                "final_score": round(final_score, 2),
-                "raw_score": round(raw_score, 2),
-                "components": {
-                    "weighted_base": round(weighted_score, 2),
-                    "synergy": round(synergy_bonus, 2),
-                    "penalty": round(conflict_penalty, 2),
-                    "macro": round(macro_score_val, 2),
-                },
-                "factors": [
-                    {
-                        "name": f.name,
-                        "raw_score": f.score,
-                        "weight": f.weight,
-                        "contribution": round(f.score * f.weight, 2),
-                        "rationale": f.rationale,
-                    }
-                    for f in factors
-                ],
-            }
-            logger.info(f"SCORE_TRACE: {json.dumps(trace_data)}")
-        except Exception:
-            pass  # Don't fail scoring if tracing fails
+    if not hasattr(breakdown, "metadata") or breakdown.metadata is None: breakdown.metadata = {}
+    breakdown.metadata["signal_tier"] = tier
+    
+    # Final Logging
+    logger.info(f"📊 CONFLUENCE [{symbol} {direction}]: {final_score:.1f} ({tier}) | Factors: {active_factors} | Synergy: +{synergy_bonus:.1f} | Conflict: -{conflict_penalty:.1f}")
 
     return breakdown
 

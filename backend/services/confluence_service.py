@@ -243,49 +243,26 @@ class ConfluenceService:
                     # the stronger direction is still a valid trade; compressed vol means
                     # reduce size, not zero trades.
                     if volatility == "compressed":
-                        # Both fail threshold -> unreliable, skip
+                        # NEW behavior: Even if both fail threshold, we still proceed to pick a winner
+                        # (usually via regime trend) so that it can be filtered normally by the gate
+                        # in the orchestrator/service, rather than throwing an exception.
+                        # This provides better diagnostic visibility (Below Gate vs Scoring Failed).
+                        context.metadata["compressed_vol_tiebreak"] = True
                         if not bullish_passes and not bearish_passes:
                             logger.info(
-                                "🚧 %s Compressed volatility tie — skipping (scores %.1f vs %.1f failed threshold in coil market)",
+                                "🚧 %s Compressed volatility tie (failure) — proceeding for diagnostic clarity (%.1f vs %.1f)",
                                 context.symbol,
                                 bullish_breakdown.total_score,
                                 bearish_breakdown.total_score
                             )
-                            context.metadata["chosen_direction"] = None
-                            context.metadata["alt_confluence"] = {
-                                "long": bullish_breakdown.total_score,
-                                "short": bearish_breakdown.total_score,
-                                "tie_break_used": "skipped_compressed_volatility",
-                            }
-                            raise ConflictingDirectionsException(
-                                f"Compressed volatility tie ({bullish_breakdown.total_score:.1f}%): "
-                                "no directional edge in coiling market",
-                                bullish_breakdown=bullish_breakdown,
-                                bearish_breakdown=bearish_breakdown,
+                        else:
+                            logger.info(
+                                "⚠️ %s Compressed volatility tie (one/both pass) — proceeding (%.1f vs %.1f)",
+                                context.symbol,
+                                bullish_breakdown.total_score,
+                                bearish_breakdown.total_score
                             )
-                        
-                        # Both pass threshold -> still use regime/structural tiebreaker below
-                        # (compressed vol noted in metadata for position sizing reduction)
-                        context.metadata["compressed_vol_tiebreak"] = True
-                        logger.info(
-                            "⚠️ %s Compressed volatility tie but both scores pass threshold (%.1f vs %.1f) "
-                            "— proceeding with regime tiebreaker at reduced conviction",
-                            context.symbol,
-                            bullish_breakdown.total_score,
-                            bearish_breakdown.total_score,
-                        )
 
-                    if volatility == "compressed" and (bullish_passes or bearish_passes):
-                        # Both pass (or mixed) — note compressed vol for reduced sizing,
-                        # but still let the regime/structural tiebreaker choose direction.
-                        context.metadata["compressed_vol_tiebreak"] = True
-                        logger.info(
-                            "⚠️ %s Compressed volatility tie — both scores near threshold "
-                            "(%.1f vs %.1f), proceeding with regime tiebreaker at reduced conviction",
-                            context.symbol,
-                            bullish_breakdown.total_score,
-                            bearish_breakdown.total_score,
-                        )
 
                     if regime_trend == "bearish":
                         chosen = bearish_breakdown

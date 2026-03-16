@@ -2,6 +2,9 @@
   "source_directories": [
     "."
   ],
+  "search_path": [
+    "."
+  ],
   "exclude": [
     "**/node_modules/**",
     "**/.venv/**"

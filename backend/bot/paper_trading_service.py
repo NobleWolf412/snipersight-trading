@@ -341,7 +341,7 @@ class PaperTradingService:
 
             # Create ScanConfig from paper trading config
             scan_config = ScanConfig(
-                profile=config.sniper_mode,
+                profile=self.mode.profile,
                 timeframes=tuple(self.mode.timeframes),
                 min_confluence_score=config.min_confluence or self.mode.min_confluence_score,
                 min_rr_ratio=min_rr,

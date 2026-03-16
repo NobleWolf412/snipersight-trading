@@ -1525,7 +1525,7 @@ class Orchestrator:
             chosen_direction,
             context.confluence_breakdown.total_score,
         )
-        context.plan = self._generate_trade_plan(context, current_price)
+        context.plan = self._generate_trade_plan(context, current_price, tick_size=tick_size, lot_size=lot_size)
         logger.info(
             "%s [%s]: 🎯 _generate_trade_plan returned: %s",
             symbol,
@@ -1788,7 +1788,7 @@ class Orchestrator:
         )
 
     def _generate_trade_plan(
-        self, context: SniperContext, current_price: float
+        self, context: SniperContext, current_price: float, tick_size: float = 0.0, lot_size: float = 0.0
     ) -> Optional[TradePlan]:
         """
         Generate complete trade plan from analysis.
