@@ -2866,8 +2866,117 @@ def _score_fvgs_incremental(
         "best_fvg": best_fvg
     }
 
+def _score_market_structure_incremental(
+    smc_snapshot: SMCSnapshot, direction: str
+) -> Dict[str, Any]:
+    """
+    Score market structure (BOS/ChoCH) with detailed incremental factors.
+    """
+    score = _score_structural_breaks(smc_snapshot.structural_breaks, direction)
+    
+    # Add swing structure alignment bonus
+    components = []
+    if score > 0:
+        components.append(("Structure Break", score, "Aligned BOS/ChoCH"))
+    
+    # Check Swing Structure (HH/HL etc)
+    bias_res = _score_htf_structure_bias(smc_snapshot.swing_structure, direction)
+    if bias_res["bonus"] > 0:
+        bonus = bias_res["bonus"]
+        score += bonus
+        components.append(("Swing Bias", bonus, bias_res["reason"]))
+    elif bias_res["bonus"] < 0:
+        penalty = bias_res["bonus"]
+        score += penalty
+        components.append(("Swing Conflict", penalty, bias_res["reason"]))
 
-    return min(85.0, score)
+    return {
+        "score": max(0.0, min(100.0, score)),
+        "rationale": _get_structure_rationale(smc_snapshot.structural_breaks, direction),
+        "components": components
+    }
+
+
+def _score_liquidity_sweeps_incremental(
+    sweeps: List[LiquiditySweep], direction: str
+) -> Dict[str, Any]:
+    """
+    Score liquidity sweeps with detailed incremental factors.
+    """
+    score = _score_liquidity_sweeps(sweeps, direction)
+    
+    return {
+        "score": max(0.0, min(100.0, score)),
+        "rationale": _get_sweep_rationale(sweeps, direction),
+        "components": [("Sweep Confirmation", score, "Liquidity sweep detected")] if score > 0 else []
+    }
+
+
+def _score_institutional_sequence(
+    smc_snapshot: SMCSnapshot, direction: str
+) -> Tuple[float, str]:
+    """
+    Score institutional sequence (Sweep -> Shift -> Return to OB).
+    
+    This is the highest probability entry pattern.
+    """
+    score = 0.0
+    reason_parts = []
+    
+    # 1. Look for recent sweep in direction
+    norm_dir = _normalize_direction(direction)
+    target_type = "low" if norm_dir == "bullish" else "high"
+    has_sweep = any(getattr(s, "sweep_type", "") == target_type for s in smc_snapshot.liquidity_sweeps)
+    
+    # 2. Look for recent BOS/ChoCH in direction
+    has_shift = any(getattr(b, "direction", "") == norm_dir for b in smc_snapshot.structural_breaks)
+    
+    # 3. Look for recent OB in direction
+    has_ob = any(ob.direction == norm_dir for ob in smc_snapshot.order_blocks)
+    
+    if has_sweep and has_shift and has_ob:
+        score = 100.0
+        reason_parts.append("Institutional Sequence confirmed (Sweep + Shift + OB)")
+    elif has_sweep and has_shift:
+        score = 70.0
+        reason_parts.append("Incomplete sequence (Sweep + Shift, missing OB confirmation)")
+    elif has_shift and has_ob:
+        score = 50.0
+        reason_parts.append("Partial sequence (Shift + OB, no preceding sweep)")
+        
+    return score, " | ".join(reason_parts) if reason_parts else "No institutional sequence detected"
+
+
+def _detect_nested_ob(smc: SMCSnapshot, direction: str) -> bool:
+    """Detect if a lower timeframe OB is nested within a higher timeframe OB."""
+    norm_dir = _normalize_direction(direction)
+    obs = [ob for ob in smc.order_blocks if ob.direction == norm_dir]
+    
+    # Need at least two OBs to have nesting
+    if len(obs) < 2:
+        return False
+        
+    # Group by timeframe
+    tf_groups = {}
+    for ob in obs:
+        tf = ob.timeframe
+        if tf not in tf_groups:
+            tf_groups[tf] = []
+        tf_groups[tf].append(ob)
+        
+    tfs = sorted(tf_groups.keys(), key=lambda x: _get_timeframe_weight(x), reverse=True)
+    
+    for i in range(len(tfs)):
+        htf = tfs[i]
+        for j in range(i + 1, len(tfs)):
+            ltf = tfs[j]
+            
+            for h_ob in tf_groups[htf]:
+                for l_ob in tf_groups[ltf]:
+                    # Check if l_ob is nested in h_ob
+                    if l_ob.low >= h_ob.low and l_ob.high <= h_ob.high:
+                        return True
+    return False
 
 
 def _score_divergences_incremental(

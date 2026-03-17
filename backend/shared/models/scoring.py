@@ -85,6 +85,11 @@ class ConfluenceBreakdown:
     # Macro Overlay Score (adjustment based on BTC dominance/Risk regimes)
     macro_score: float = 0.0
 
+    # Contextual fields
+    symbol: str = "Unknown"
+    direction: str = "bullish"
+    profile: str = "balanced"
+
     # General metadata dict for downstream enrichment (signal_tier, strong_factor_count, etc.)
     # Does NOT participate in __post_init__ validation.
     metadata: Dict[str, object] = field(default_factory=dict)
