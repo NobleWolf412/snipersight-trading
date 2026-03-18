@@ -322,11 +322,17 @@ class PaperTradingService:
         self.config = config
         self.session_id = str(uuid.uuid4())[:8]
 
-        # Force stealth mode for paper trading — it's the optimal balance:
+        # Paper trading always uses stealth mode — it's the optimal balance:
         # - Covers D→5m timeframes (full range)
         # - Allows all trade types (scalp, intraday, swing) adaptively
-        # - Requires solid 1.8 R:R minimum
+        # - Requires solid 1.5 R:R minimum
         # - Can trade both directions (long + short)
+        # If the caller requested a different mode, log it so the user knows it was overridden.
+        if config.sniper_mode != "stealth":
+            logger.info(
+                f"Paper trading overrides sniper_mode '{config.sniper_mode}' → 'stealth'. "
+                "Stealth is the only supported mode for paper trading (adaptive scalp/intraday/swing)."
+            )
         config.sniper_mode = "stealth"
         self.mode = get_mode("stealth")
         if not self.mode:
@@ -894,15 +900,19 @@ class PaperTradingService:
                             f"🧠 ADAPTIVE MODE: Regime is {global_regime.composite}. "
                             f"Adapting scan mode from stealth → {recommended_mode} ({rec.get('reason')})"
                         )
-                        # NOTE: For Training Ground paper trading, we keep the execution engine
-                        # locked to STEALTH to avoid accidentally switching into stricter modes
-                        # (e.g., Overwatch 78% gate) which can starve trade frequency.
-                        # We still surface the recommendation in the UI for transparency.
+                        # NOTE: For paper trading, execution stays locked to STEALTH to avoid
+                        # accidentally switching into stricter modes (e.g., Overwatch 78% gate)
+                        # which can starve trade frequency.  actual_scan_mode is only used for
+                        # display/logging — the orchestrator always scans with self.mode (stealth).
                         actual_scan_mode = recommended_mode
-                        
-                        # Log the adaptation to the UI Activity Feed
+
+                        # Log the recommendation to the UI Activity Feed.
+                        # Explicitly note the scan remains in stealth to avoid misleading users.
                         self._log_activity("system_update", {
-                            "message": f"Adaptive Shift: Now scanning in {recommended_mode.upper()} mode.",
+                            "message": (
+                                f"Regime Advisory: {recommended_mode.upper()} conditions detected "
+                                f"(scan stays in STEALTH)."
+                            ),
                             "details": rec.get("reason", "")
                         })
             except Exception as e:

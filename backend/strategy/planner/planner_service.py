@@ -508,10 +508,11 @@ def generate_trade_plan(
                 f"This move is too large for Strike's risk parameters. "
                 f"Try Overwatch for swing-sized setups."
             ),
-            "tactical": (
+            "stealth_balanced": (
                 f"Derived trade type '{trade_type}' ({geometry_summary}) "
                 f"is not supported in Stealth mode. "
-                f"Stealth accepts swing and intraday setups — scalp-only geometry was found."
+                f"Stealth accepts swing, intraday, and scalp setups — "
+                f"the detected geometry falls outside supported bounds."
             ),
         }
         
@@ -648,7 +649,7 @@ def generate_trade_plan(
         logger.info(
             f"📋 TRADE PLAN: {symbol} {direction} | "
             f"{len(targets)} targets | "
-            f"Final R:R = {plan.risk_reward_ratio:.2f}R (from TP{len(targets)})"
+            f"Final R:R = {plan.risk_reward_ratio:.2f}R (from TP1)"
         )
 
         # === MINIMUM R:R VALIDATION ===
