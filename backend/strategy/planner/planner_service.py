@@ -508,7 +508,14 @@ def generate_trade_plan(
                 f"This move is too large for Strike's risk parameters. "
                 f"Try Overwatch for swing-sized setups."
             ),
+            # Both "stealth" (raw profile) and "stealth_balanced" (after apply_mode) are valid keys
             "stealth_balanced": (
+                f"Derived trade type '{trade_type}' ({geometry_summary}) "
+                f"is not supported in Stealth mode. "
+                f"Stealth accepts swing, intraday, and scalp setups — "
+                f"the detected geometry falls outside supported bounds."
+            ),
+            "stealth": (
                 f"Derived trade type '{trade_type}' ({geometry_summary}) "
                 f"is not supported in Stealth mode. "
                 f"Stealth accepts swing, intraday, and scalp setups — "
