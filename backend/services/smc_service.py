@@ -326,6 +326,9 @@ class SMCDetectionService:
 
                     if has_backing:
                         validated_obs.append(ob)
+                    elif getattr(ob, "grade", "C") == "A":
+                        # RELAXED: Keep Grade A LTF patterns even without HTF backing
+                        validated_obs.append(ob)
                     else:
                         # Log rejection debug (reduced noise)
                         # logger.debug("Refined: Rejected isolated %s %s OB at %s (no HTF backing)",

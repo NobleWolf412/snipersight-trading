@@ -408,8 +408,8 @@ def get_tf_smc_config(timeframe: str, mode: str = "strike") -> dict:
 @dataclass
 class SMCConfig:
     # Order Block parameters
-    min_wick_ratio: float = 2.5  # TIGHTENED: Was 1.5 - require significant wick rejection
-    min_displacement_atr: float = 1.5  # TIGHTENED: Was 1.0 - require strong displacement
+    min_wick_ratio: float = 1.5  # RELAXED: Was 2.5 - allow standard rejections
+    min_displacement_atr: float = 1.2  # RELAXED: Was 1.5 - capture moderate impulses
     ob_lookback_candles: int = 7  # Time to verify displacement
     ob_volume_threshold: float = 1.3  # Volume confirmation threshold
     ob_max_mitigation: float = 0.85  # Max mitigation level to keep OB

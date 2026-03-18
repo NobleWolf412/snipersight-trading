@@ -534,7 +534,7 @@ def evaluate_htf_structural_proximity(
 
     # Get ATR from primary planning timeframe
     primary_tf = getattr(mode_config, "primary_planning_timeframe", "1h")
-    primary_ind = indicators.by_timeframe.get(primary_tf)
+    primary_ind = _get_tf_indicators(indicators, primary_tf)
 
     if not primary_ind or not primary_ind.atr:
         return {
@@ -597,6 +597,14 @@ def evaluate_htf_structural_proximity(
     # 2. Check HTF FVGs (direction-aware)
     for fvg in smc.fvgs:
         if fvg.timeframe not in structure_tfs:
+            continue
+        
+        atr_ind = _get_tf_indicators(indicators, fvg.timeframe) or primary_ind
+        if not atr_ind or not atr_ind.atr:
+            continue
+            
+        fvg_grade = getattr(fvg, "grade", "B")
+        if fvg_grade not in ("A", "B"):
             continue
         if fvg.size < atr:
             continue
@@ -685,7 +693,7 @@ def evaluate_htf_structural_proximity(
         structure_tfs,
         key=lambda x: {"5m": 0, "15m": 1, "1h": 2, "4h": 3, "1d": 4, "1w": 5}.get(x, 0),
     )
-    htf_ind = indicators.by_timeframe.get(htf)
+    htf_ind = _get_tf_indicators(indicators, htf)
 
     if htf_ind and hasattr(htf_ind, "dataframe"):
         try:
@@ -838,7 +846,9 @@ def evaluate_htf_momentum_gate(
 
     # 2. GET DATA
     # Elastic fallback if specific TF is missing
-    if momentum_tf not in indicators.by_timeframe:
+    ind = _get_tf_indicators(indicators, momentum_tf)
+    if not ind:
+        # Fallback to any available timeframe if the preferred one is missing
         available = sorted(
             list(indicators.by_timeframe.keys()),
             key=lambda x: {
@@ -852,8 +862,8 @@ def evaluate_htf_momentum_gate(
             }.get(x, 0),
         )
         momentum_tf = available[-1] if available else None
+        ind = _get_tf_indicators(indicators, momentum_tf) if momentum_tf else None
 
-    ind = indicators.by_timeframe.get(momentum_tf)
     if not ind:
         return {
             "allowed": True,
@@ -1074,7 +1084,7 @@ def resolve_timeframe_conflicts(
         if not htf_aligned and htf_trend != "neutral":
             conflicts.append(f"{tf} {htf_trend}")
 
-            htf_ind = indicators.by_timeframe.get(tf)
+            htf_ind = _get_tf_indicators(indicators, tf)
             is_strong_momentum = False
 
             if htf_ind and htf_ind.atr:
@@ -1496,9 +1506,7 @@ def evaluate_weekly_stoch_rsi_bonus(
     }
 
     # Get weekly indicators - explicit None checks to avoid potential truthiness errors
-    weekly_ind = indicators.by_timeframe.get("1W")
-    if weekly_ind is None:
-        weekly_ind = indicators.by_timeframe.get("1w")
+    weekly_ind = _get_tf_indicators(indicators, "1W")
     if not weekly_ind:
         return result
 
@@ -1928,6 +1936,24 @@ def _score_ob_rejection_quality(df: Any, direction: str) -> Dict:
     return {"score": score, "reason": reason}
 
 
+def _get_tf_indicators(indicators: IndicatorSet, timeframe: str) -> Optional[IndicatorSnapshot]:
+    """Case-insensitive indicators lookup."""
+    if not indicators or not indicators.by_timeframe or not timeframe:
+        return None
+    
+    # Try direct match
+    if timeframe in indicators.by_timeframe:
+        return indicators.by_timeframe[timeframe]
+        
+    # Try case-insensitive match
+    tf_lower = timeframe.lower()
+    for actual_tf, snapshot in indicators.by_timeframe.items():
+        if actual_tf.lower() == tf_lower:
+            return snapshot
+            
+    return None
+
+
 def calculate_confluence_score(
     smc_snapshot: SMCSnapshot,
     indicators: IndicatorSet,
@@ -1993,7 +2019,7 @@ def calculate_confluence_score(
             name="Order Block",
             score=ob_score,
             weight=get_w("order_block", 0.15),
-            rationale=ob_result["rationale"] if ob_score > 0 else "No valid order block in direction",
+            rationale=(ob_result["rationale"] if ob_score > 0 else "No valid order block in direction") or "Order Block analysis available",
         )
     )
 
@@ -2005,7 +2031,7 @@ def calculate_confluence_score(
             name="Fair Value Gap",
             score=fvg_score,
             weight=get_w("fvg", 0.05),
-            rationale=fvg_result["rationale"] if fvg_score > 0 else "No fair value gaps identified",
+            rationale=(fvg_result["rationale"] if fvg_score > 0 else "No fair value gaps identified") or "FVG analysis available",
         )
     )
 
@@ -2029,7 +2055,7 @@ def calculate_confluence_score(
             name="Liquidity Sweep",
             score=sweep_score,
             weight=get_w("liquidity_sweep", 0.10),
-            rationale=sweep_result["rationale"] if sweep_score > 0 else "No recent liquidity sweep detected",
+            rationale=(sweep_result["rationale"] if sweep_score > 0 else "No recent liquidity sweep detected") or "Liquidity sweep analysis available",
         )
     )
 
@@ -2084,36 +2110,57 @@ def calculate_confluence_score(
     # --- Indicator Scoring ---
 
     # Select primary timeframe (Anchor Chart)
+    # 1. Use config preference if valid
     if config and getattr(config, "primary_planning_timeframe", None):
         cfg_tf = config.primary_planning_timeframe
         if indicators.has_timeframe(cfg_tf):
             primary_tf = cfg_tf
+        # Try case-insensitive fallback for config TF
+        elif indicators.by_timeframe:
+            for tf in indicators.by_timeframe.keys():
+                if tf.lower() == cfg_tf.lower():
+                    primary_tf = tf
+                    break
 
+    # 2. Sequential search through candidates if still not set
     if not primary_tf:
-        for tf_candidate in ["1h", "15m", "4h", "1d"]:
-            if indicators.has_timeframe(tf_candidate):
-                primary_tf = tf_candidate
+        candidates = ["1h", "15m", "4h", "1d"]
+        for cand in candidates:
+            # Check direct match
+            if indicators.has_timeframe(cand):
+                primary_tf = cand
+                break
+            # Check case-insensitive match
+            for actual_tf in indicators.by_timeframe.keys():
+                if actual_tf.lower() == cand.lower():
+                    primary_tf = actual_tf
+                    break
+            if primary_tf:
                 break
 
+    # 3. Last resort fallback to any available timeframe
     if not primary_tf and indicators.by_timeframe:
         primary_tf = list(indicators.by_timeframe.keys())[0]
 
     # --- Price Initialization ---
     entry_price = current_price
     if not entry_price and primary_tf:
-        prim_ind = indicators.by_timeframe.get(primary_tf)
+        prim_ind = _get_tf_indicators(indicators, primary_tf)
         if prim_ind and hasattr(prim_ind, "dataframe") and prim_ind.dataframe is not None:
             if len(prim_ind.dataframe) > 0:
                 entry_price = float(prim_ind.dataframe["close"].iloc[-1])
 
     profile_name = getattr(config, "profile", "balanced")
     macd_config = get_macd_config(profile_name)
-    htf_indicators = indicators.by_timeframe.get(macd_config.htf_timeframe) if indicators.by_timeframe else None
+    htf_indicators = _get_tf_indicators(indicators, macd_config.htf_timeframe)
 
     if primary_tf:
-        primary_indicators = indicators.by_timeframe[primary_tf]
+        primary_indicators = _get_tf_indicators(indicators, primary_tf)
+        if not primary_indicators:
+            # Fallback for UI robustness
+            primary_indicators = list(indicators.by_timeframe.values())[0] if indicators.by_timeframe else None
 
-        # Momentum indicators (with mode-aware MACD)
+    if primary_indicators:
         momentum_score, m_analysis = _score_momentum(
             primary_indicators, direction, macd_config=macd_config, htf_indicators=htf_indicators, timeframe=primary_tf
         )
@@ -2126,7 +2173,7 @@ def calculate_confluence_score(
                 name="Momentum",
                 score=momentum_score,
                 weight=get_w("momentum", 0.10),
-                rationale=momentum_rationale if momentum_score > 0 else "Weak momentum bias",
+                rationale=(momentum_rationale if momentum_score > 0 else "Weak momentum bias") or "Momentum analysis available",
             )
         )
         macd_analysis = m_analysis
@@ -2149,7 +2196,7 @@ def calculate_confluence_score(
                 name="Price-Indicator Divergence",
                 score=div_score,
                 weight=get_w("divergence", 0.05),
-                rationale=div_rationale,
+                rationale=div_rationale or "No divergence detected",
             )
         )
 
@@ -2160,7 +2207,7 @@ def calculate_confluence_score(
                 name="Volume",
                 score=volume_score,
                 weight=get_w("volume", 0.05),
-                rationale=_get_volume_rationale(primary_indicators) if volume_score > 0 else "Low volume relative to avg",
+                rationale=(_get_volume_rationale(primary_indicators) if volume_score > 0 else "Low volume relative to avg") or "Volume analysis neutral",
             )
         )
 
@@ -2181,7 +2228,7 @@ def calculate_confluence_score(
                 name="VWAP Alignment",
                 score=vwap_score,
                 weight=get_w("vwap", 0.05),
-                rationale=vwap_rationale,
+                rationale=vwap_rationale or "Neutral VWAP alignment",
             )
         )
 
@@ -2204,7 +2251,7 @@ def calculate_confluence_score(
                 name="MTF Indicator Alignment",
                 score=min(100.0, max(0.0, mtf_final_score)),
                 weight=get_w("multi_tf_reversal", 0.10),
-                rationale=mtf_rationale if mtf_score != 0 else "Neutral indicator alignment across timeframes",
+                rationale=(mtf_rationale if mtf_score != 0 else "Neutral indicator alignment across timeframes") or "MTF alignment neutral",
             )
         )
 
@@ -2215,7 +2262,7 @@ def calculate_confluence_score(
                 name="Close Momentum",
                 score=close_mom_score,
                 weight=get_w("close_momentum", 0.05),
-                rationale=close_mom_rationale if close_mom_score > 0 else "Weak candle close momentum",
+                rationale=(close_mom_rationale if close_mom_score > 0 else "Weak candle close momentum") or "Neutral candle closes",
             )
         )
         
@@ -2230,7 +2277,7 @@ def calculate_confluence_score(
                 name="Multi-Candle Confirmation",
                 score=multi_close_score,
                 weight=get_w("multi_close_confirm", 0.05),
-                rationale=multi_close_rationale if multi_close_score > 0 else "Lack of consecutive close confirmation",
+                rationale=(multi_close_rationale if multi_close_score > 0 else "Lack of consecutive close confirmation") or "No multi-candle trigger",
             )
         )
 
@@ -2239,12 +2286,22 @@ def calculate_confluence_score(
         try:
             vp_factor = calculate_volume_confluence_factor(entry_price=current_price, volume_profile=volume_profile, direction=direction)
             if vp_factor and vp_factor.get("score", 0) > 0:
-                factors.append(ConfluenceFactor(name=vp_factor["name"], score=vp_factor["score"], weight=vp_factor.get("weight", 0.05), rationale=vp_factor["rationale"]))
+                factors.append(ConfluenceFactor(
+                    name=vp_factor["name"], 
+                    score=vp_factor["score"], 
+                    weight=vp_factor.get("weight", 0.05), 
+                    rationale=vp_factor["rationale"] or "Volume Profile context neutral"
+                ))
         except: pass
 
     # --- MACD Veto Confirmation ---
     if macd_analysis and macd_analysis.get("veto_active"):
-        factors.append(ConfluenceFactor(name="MACD Veto", score=0.0, weight=get_w("macd_veto", 0.05), rationale=f"MACD Veto: {'; '.join(macd_analysis.get('reasons', []))}"))
+        factors.append(ConfluenceFactor(
+            name="MACD Veto", 
+            score=0.0, 
+            weight=get_w("macd_veto", 0.05), 
+            rationale=f"MACD Veto: {'; '.join(macd_analysis.get('reasons', []))}" or "MACD veto active"
+        ))
     else:
         factors.append(ConfluenceFactor(name="MACD Veto", score=100.0, weight=get_w("macd_veto", 0.05), rationale="MACD alignment confirmed"))
 
@@ -2313,7 +2370,7 @@ def calculate_confluence_score(
                 pd_score = 100.0 if (c_z == "premium" and z_p > 70) else (75.0 if c_z == "premium" else 30.0)
             pd_rat = f"{c_z.capitalize()} zone ({z_p:.0f}%)"
     except: pass
-    factors.append(ConfluenceFactor(name="Premium/Discount Zone", score=pd_score, weight=get_w("premium_discount", 0.05), rationale=pd_rat))
+    factors.append(ConfluenceFactor(name="Premium/Discount Zone", score=pd_score, weight=get_w("premium_discount", 0.05), rationale=pd_rat or "Equilibrium zone"))
 
     # --- Regime Alignment ---
     reg_score, reg_rat = 50.0, "Neutral regime"
@@ -2327,19 +2384,20 @@ def calculate_confluence_score(
     # --- Inside Order Block Confirmation ---
     in_ob_score, in_ob_rat = 50.0, "No active OB detected"
     try:
-        for ob in smc_snapshot.order_blocks:
-            if ob.low <= entry_price <= ob.high and ((direction in ("long", "bullish") and ob.direction == "bullish") or (direction in ("short", "bearish") and ob.direction == "bearish")):
-                df_rej = getattr(indicators.by_timeframe.get(ob.timeframe) or indicators.by_timeframe.get(primary_tf), "dataframe", None)
-                rej_res = _score_ob_rejection_quality(df_rej, direction) if df_rej is not None else {"score": 50, "reason": "Inside OB"}
-                in_ob_score, in_ob_rat = rej_res["score"], rej_res["reason"]
-                break
+        if entry_price:
+            for ob in smc_snapshot.order_blocks:
+                if ob.low <= entry_price <= ob.high and ((direction in ("long", "bullish") and ob.direction == "bullish") or (direction in ("short", "bearish") and ob.direction == "bearish")):
+                    df_rej = getattr(_get_tf_indicators(indicators, ob.timeframe) or _get_tf_indicators(indicators, primary_tf or "4h"), "dataframe", None)
+                    rej_res = _score_ob_rejection_quality(df_rej, direction) if df_rej is not None else {"score": 50, "reason": "Inside OB"}
+                    in_ob_score, in_ob_rat = rej_res["score"], rej_res["reason"]
+                    break
     except: pass
     factors.append(ConfluenceFactor(name="Inside Order Block", score=in_ob_score, weight=get_w("inside_ob", 0.05), rationale=in_ob_rat or "No active OB detected"))
 
     # --- Nested Order Block Bonus ---
     nested_score, nested_rat = 0.0, "No nested OB found"
     try:
-        if _detect_nested_ob(smc_snapshot, direction):
+        if _detect_nested_ob(smc_snapshot, direction): # Uses NESTED_OB_CONTAINMENT_MIN (50%)
             nested_score, nested_rat = 80.0, "LTF OB nested in HTF OB"
     except: pass
     factors.append(ConfluenceFactor(name="Nested Order Block", score=nested_score, weight=get_w("nested_ob", 0.04), rationale=nested_rat or "No nested OB found"))
@@ -2347,22 +2405,23 @@ def calculate_confluence_score(
     # --- NEW: Opposing Structure Penalty ---
     # Penalty when opposing OB/FVG is near the entry (immediate resistance/support)
     try:
-        if current_price is not None:
-            atr = indicators.by_timeframe.get(getattr(config, "primary_planning_timeframe", "4h"))
-            atr_val = getattr(atr, "atr", 0) if atr else 0
+        if in_ob_score <= 50.0:
+            # Rejection logic if NOT inside OB
+            atr = 0.0
+            atr_ind = _get_tf_indicators(indicators, getattr(config, "primary_planning_timeframe", "4h"))
+            if atr_ind and atr_ind.atr:
+                atr = atr_ind.atr
 
-            if atr_val > 0:
+            if atr > 0:
                 opposing_atr_threshold = 2.0  # Within 2 ATR
 
                 for ob in smc_snapshot.order_blocks:
                     ob_direction = getattr(ob, "direction", None)
                     ob_low = getattr(ob, "low", 0)
-                    ob_high = getattr(ob, "high", 0)
-
-                    # For LONG, check for bearish OBs above price (resistance)
+                     # For LONG, check for bearish OBs above price (resistance)
                     if direction in ("bullish", "long") and ob_direction == "bearish":
                         if ob_low > current_price:
-                            dist = (ob_low - current_price) / atr_val
+                            dist = (ob_low - current_price) / atr
                             if dist <= opposing_atr_threshold:
                                 tf = getattr(ob, "timeframe", "unknown")
                                 penalty_score = min(50.0, dist * 25.0)  # max penalty (0) when distance is 0
@@ -2379,7 +2438,7 @@ def calculate_confluence_score(
                     # For SHORT, check for bullish OBs below price (support)
                     elif direction in ("bearish", "short") and ob_direction == "bullish":
                         if ob_high < current_price:
-                            dist = (current_price - ob_high) / atr_val
+                            dist = (current_price - ob_high) / atr
                             if dist <= opposing_atr_threshold:
                                 tf = getattr(ob, "timeframe", "unknown")
                                 penalty_score = min(50.0, dist * 25.0)  # max penalty (0) when distance is 0
@@ -2977,8 +3036,18 @@ def _detect_nested_ob(smc: SMCSnapshot, direction: str) -> bool:
             
             for h_ob in tf_groups[htf]:
                 for l_ob in tf_groups[ltf]:
-                    # Check if l_ob is nested in h_ob
-                    if l_ob.low >= h_ob.low and l_ob.high <= h_ob.high:
+                    # Calculate overlap percentage
+                    range_low = max(l_ob.low, h_ob.low)
+                    range_high = min(l_ob.high, h_ob.high)
+                    overlap = 0.0
+                    if range_high > range_low:
+                        overlap_size = range_high - range_low
+                        l_ob_size = l_ob.high - l_ob.low
+                        if l_ob_size > 0:
+                            overlap = overlap_size / l_ob_size
+                            
+                    # Check if l_ob is nested in h_ob based on containment constant
+                    if overlap >= NESTED_OB_CONTAINMENT_MIN:
                         return True
     return False
 

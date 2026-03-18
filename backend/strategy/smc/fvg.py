@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 
 # Mode-specific FVG minimum sizes (in ATR units)
 MODE_FVG_MIN_SIZE = {
-    "macro_surveillance": 0.6,  # OVERWATCH: Large institutional gaps only
-    "stealth_balanced": 0.4,  # STEALTH: Balanced medium gaps
-    "intraday_aggressive": 0.25,  # STRIKE: Smaller for faster intraday moves
-    "precision": 0.15,  # SURGICAL: Micro-gaps for precision scalp entries
+    "macro_surveillance": 0.5,  # OVERWATCH: Large institutional gaps only
+    "stealth_balanced": 0.3,  # STEALTH: Balanced medium gaps (relaxed from 0.4)
+    "intraday_aggressive": 0.2,  # STRIKE: Smaller for faster intraday moves
+    "precision": 0.1,  # SURGICAL: Micro-gaps for precision scalp entries
 }
 
 

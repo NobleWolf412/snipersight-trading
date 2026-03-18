@@ -39,7 +39,7 @@ class ConfluenceFactor:
         if not 0 <= self.weight <= 1:
             raise ValueError(f"Weight must be 0-1, got {self.weight}")
         if not self.rationale:
-            raise ValueError("Rationale cannot be empty")
+            raise ValueError(f"Rationale for factor '{self.name}' cannot be empty")
 
     @property
     def weighted_score(self) -> float:
