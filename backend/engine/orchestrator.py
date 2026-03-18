@@ -1469,9 +1469,16 @@ class Orchestrator:
             weak_factors = sorted(
                 context.confluence_breakdown.factors, key=lambda f: f.score * f.weight
             )[:3]
-            weak_str = ", ".join(
-                [f"{f.name.replace('_',' ')} ({f.score:.0f}%)" for f in weak_factors]
-            )
+
+            def _weak_factor_str(f):
+                name = f.name.replace("_", " ")
+                if f.score <= 0 and (f.rationale or "").strip():
+                    # 0% means "not detected" / "not present" - show rationale so it's clear it's not a bug
+                    r = (f.rationale or "").strip()
+                    return f"{name}: {r[:60]}{'…' if len(r) > 60 else ''}"
+                return f"{name} ({f.score:.0f}%)"
+
+            weak_str = ", ".join(_weak_factor_str(f) for f in weak_factors)
             readable_reason = (
                 f"Score {score:.1f}% is {gap:.1f} points below the {threshold:.0f}% gate. "
                 f"Weakest signals: {weak_str}. "

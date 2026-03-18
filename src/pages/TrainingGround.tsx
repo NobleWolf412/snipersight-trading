@@ -151,7 +151,9 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
   trailing_stop: true,
   trailing_activation: 2.0, // WAS 1.0 - changed to 2.0 to give trade room to breathe
   breakeven_after_target: 1, // Move to BE after TP1 is hit
-  min_confluence: 82,
+  // Default to Stealth baseline (backend mode default) unless user explicitly tightens it.
+  // 82% is extremely strict and can lead to "12h → 1 trade" behavior.
+  min_confluence: null,
   symbols: [],
   exclude_symbols: [],
   majors: true,

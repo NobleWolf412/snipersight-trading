@@ -21,6 +21,7 @@ import json
 import logging
 import uuid
 from pathlib import Path
+import time
 
 from backend.bot.executor.paper_executor import PaperExecutor, OrderStatus, OrderType
 from backend.bot.executor.position_manager import PositionManager, PositionStatus
@@ -36,6 +37,29 @@ from backend.diagnostics.report import ReportGenerator, ModeStats
 
 logger = logging.getLogger(__name__)
 
+
+# #region agent log
+def _dbg_log(hypothesis_id: str, location: str, message: str, data: Dict[str, Any]) -> None:
+    """
+    Lightweight NDJSON logger for debug session 587019.
+    Writes a single line to debug-587019.log; failures are silently ignored.
+    """
+    try:
+        payload = {
+            "sessionId": "587019",
+            "runId": "paper-trading",
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        with open("debug-587019.log", "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, default=str) + "\n")
+    except Exception:
+        # Never let debug logging break the trading loop
+        pass
+# #endregion
 
 class PaperBotStatus(Enum):
     """Paper trading bot status."""
@@ -339,6 +363,22 @@ class PaperTradingService:
             if self.mode.overrides and "min_rr_ratio" in self.mode.overrides:
                 min_rr = self.mode.overrides["min_rr_ratio"]
 
+            # Paper trading should be able to tune planner behavior without affecting
+            # the main scanner. We attach a session-local PlannerConfig to this ScanConfig.
+            from backend.shared.config.planner_config import PlannerConfig
+
+            planner_cfg = PlannerConfig.defaults_for_mode("stealth")
+            # Training Ground tuning:
+            # - don't hard-reject on PD (use confluence + structure instead)
+            # - widen stop buffers to reduce noise stop-outs
+            planner_cfg.pd_compliance_required = False
+            planner_cfg.stop_buffer_by_regime = {
+                "calm": 0.35,
+                "normal": 0.45,
+                "elevated": 0.55,
+                "explosive": 0.65,
+            }
+
             # Create ScanConfig from paper trading config
             scan_config = ScanConfig(
                 profile=self.mode.profile,
@@ -347,6 +387,24 @@ class PaperTradingService:
                 min_rr_ratio=min_rr,
                 max_symbols=20,
             )
+            scan_config.planner = planner_cfg
+
+            # #region agent log
+            _dbg_log(
+                hypothesis_id="H1",
+                location="paper_trading_service.start:scan_config",
+                message="Initialized ScanConfig for paper trading session",
+                data={
+                    "profile": scan_config.profile,
+                    "timeframes": list(scan_config.timeframes),
+                    "min_confluence_score": scan_config.min_confluence_score,
+                    "min_rr_ratio": scan_config.min_rr_ratio,
+                    "pd_compliance_required": planner_cfg.pd_compliance_required,
+                    "stop_buffer_by_regime": planner_cfg.stop_buffer_by_regime,
+                    "user_min_confluence": config.min_confluence,
+                },
+            )
+            # #endregion
 
             self.orchestrator = Orchestrator(config=scan_config, exchange_adapter=adapter)
         except Exception as e:
@@ -819,7 +877,6 @@ class PaperTradingService:
             try:
                 from backend.analysis.regime_detector import get_regime_detector  # type: ignore
                 from backend.strategy.planner.regime_engine import get_mode_recommendation  # type: ignore
-                from backend.shared.config.scanner_modes import get_mode_config  # type: ignore
                 
                 detector = get_regime_detector("stealth_balanced")
                 # Try to get existing confirmed regime, or fallback to whatever last computed
@@ -837,8 +894,10 @@ class PaperTradingService:
                             f"🧠 ADAPTIVE MODE: Regime is {global_regime.composite}. "
                             f"Adapting scan mode from stealth → {recommended_mode} ({rec.get('reason')})"
                         )
-                        # Switch the working mode for this scan cycle
-                        self.mode = get_mode_config(recommended_mode)
+                        # NOTE: For Training Ground paper trading, we keep the execution engine
+                        # locked to STEALTH to avoid accidentally switching into stricter modes
+                        # (e.g., Overwatch 78% gate) which can starve trade frequency.
+                        # We still surface the recommendation in the UI for transparency.
                         actual_scan_mode = recommended_mode
                         
                         # Log the adaptation to the UI Activity Feed
@@ -851,6 +910,22 @@ class PaperTradingService:
 
         self._log_activity("scan_started", {"mode": actual_scan_mode})
         self.stats.scans_completed += 1
+
+        # #region agent log
+        _dbg_log(
+            hypothesis_id="H2",
+            location="paper_trading_service._run_scan:start",
+            message="Starting scan cycle",
+            data={
+                "actual_scan_mode": actual_scan_mode,
+                "requested_sniper_mode": conf.sniper_mode,
+                "symbols_configured": len(getattr(conf, "symbols", []) or []),
+                "majors": getattr(conf, "majors", True),
+                "altcoins": getattr(conf, "altcoins", False),
+                "meme_mode": getattr(conf, "meme_mode", False),
+            },
+        )
+        # #endregion
 
         try:
             # Build symbol list — single code path (fixes dual-path bug)
@@ -1140,6 +1215,21 @@ class PaperTradingService:
         assert position_manager is not None
 
 
+        # #region agent log
+        _dbg_log(
+            hypothesis_id="H3",
+            location="paper_trading_service._process_signal:entry",
+            message="Processing trade plan",
+            data={
+                "symbol": plan.symbol,
+                "direction": getattr(plan, "direction", None),
+                "confidence": getattr(plan, "confidence_score", None),
+                "trade_type": getattr(plan, "trade_type", None),
+                "risk_reward": getattr(plan, "risk_reward_ratio", None),
+            },
+        )
+        # #endregion
+
         # Check if we can take more positions (count open + pending toward cap)
         active_count = len(self._get_active_positions()) + len(self._pending_plans)
         if active_count >= config.max_positions:
@@ -1150,6 +1240,18 @@ class PaperTradingService:
                 "symbol": plan.symbol, "direction": plan.direction,
                 "confluence": plan.confidence_score, "reason": reason,
             })
+            # #region agent log
+            _dbg_log(
+                hypothesis_id="H4",
+                location="paper_trading_service._process_signal:max_positions",
+                message="Signal filtered by max_positions gate",
+                data={
+                    "symbol": plan.symbol,
+                    "active_count": active_count,
+                    "max_positions": config.max_positions,
+                },
+            )
+            # #endregion
             return
 
         # Check if already in position for this symbol
@@ -1161,6 +1263,16 @@ class PaperTradingService:
                 "symbol": plan.symbol, "direction": plan.direction,
                 "confluence": plan.confidence_score, "reason": reason,
             })
+            # #region agent log
+            _dbg_log(
+                hypothesis_id="H4",
+                location="paper_trading_service._process_signal:has_position",
+                message="Signal filtered because position already open",
+                data={
+                    "symbol": plan.symbol,
+                },
+            )
+            # #endregion
             return
 
         # Check for existing pending orders for this symbol
@@ -1204,6 +1316,18 @@ class PaperTradingService:
                 "symbol": plan.symbol, "direction": plan.direction,
                 "confluence": plan.confidence_score, "reason": reason,
             })
+            # #region agent log
+            _dbg_log(
+                hypothesis_id="H5",
+                location="paper_trading_service._process_signal:confluence_gate",
+                message="Signal filtered by confluence gate",
+                data={
+                    "symbol": plan.symbol,
+                    "confidence": plan.confidence_score,
+                    "min_score": min_score,
+                },
+            )
+            # #endregion
             return
 
         # Calculate position size
@@ -1221,6 +1345,20 @@ class PaperTradingService:
                 "symbol": plan.symbol, "direction": plan.direction,
                 "confluence": plan.confidence_score, "reason": reason,
             })
+            # #region agent log
+            _dbg_log(
+                hypothesis_id="H6",
+                location="paper_trading_service._process_signal:position_size",
+                message="Signal filtered due to invalid position size",
+                data={
+                    "symbol": plan.symbol,
+                    "balance": balance,
+                    "entry_near": plan.entry_zone.near_entry,
+                    "stop": plan.stop_loss.level,
+                    "position_size": position_size,
+                },
+            )
+            # #endregion
             return
 
 
@@ -1239,6 +1377,58 @@ class PaperTradingService:
                 "confluence": plan.confidence_score, "reason": reason,
             })
             return
+
+        # If entry is far from price and unlikely to be reached, don't clog the book with
+        # low-probability pending limits. This directly improves trade frequency/quality:
+        # - fewer “12h → 1 pending that never fills”
+        # - frees slots for intraday/scalp setups that are actually reachable
+        try:
+            pullback_prob = None
+            if getattr(plan, "metadata", None):
+                pullback_prob = plan.metadata.get("pullback_probability")
+            if pullback_prob is None:
+                # Backward compat: some plans may carry it on the entry_zone
+                pullback_prob = getattr(plan.entry_zone, "pullback_probability", None)
+
+            # Determine if the placed limit would be fillable right now.
+            side = "BUY" if plan.direction == "LONG" else "SELL"
+            limit_price = float(plan.entry_zone.near_entry)
+            would_fill_now = (current_price <= limit_price) if side == "BUY" else (current_price >= limit_price)
+
+            # If it won't fill now and probability is low, skip instead of placing.
+            if not would_fill_now and pullback_prob is not None:
+                try:
+                    pb = float(pullback_prob)
+                except (TypeError, ValueError):
+                    pb = None
+
+                if pb is not None and pb < 0.45:
+                    reason = f"Low pullback probability ({pb:.2f}) for limit entry @ {limit_price:.4f} (price={current_price:.4f})"
+                    logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
+                    self._log_signal(plan, "filtered", reason)
+                    self._log_activity("signal_filtered", {
+                        "symbol": plan.symbol,
+                        "direction": plan.direction,
+                        "confluence": plan.confidence_score,
+                        "reason": reason,
+                    })
+                    # #region agent log
+                    _dbg_log(
+                        hypothesis_id="H7",
+                        location="paper_trading_service._process_signal:pullback_probability",
+                        message="Signal filtered by pullback_probability heuristic",
+                        data={
+                            "symbol": plan.symbol,
+                            "pullback_probability": pb,
+                            "limit_price": limit_price,
+                            "current_price": current_price,
+                        },
+                    )
+                    # #endregion
+                    return
+        except Exception as _e:
+            # Never let heuristics block execution; fall back to original behavior.
+            pass
 
         # Execute entry
         try:

@@ -17,6 +17,7 @@ Outputs a comprehensive ConfluenceBreakdown with synergy bonuses and conflict pe
 
 from typing import List, Dict, Optional, Tuple, TYPE_CHECKING, Any
 import json
+import time
 from datetime import datetime, timezone
 from loguru import logger
 import threading
@@ -2009,6 +2010,18 @@ def calculate_confluence_score(
     def get_w(key: str, default: float) -> float:
         return MODE_FACTOR_WEIGHTS.get(current_profile, {}).get(key, default)
 
+    # #region agent log
+    try:
+        _ob = getattr(smc_snapshot, "order_blocks", None) or []
+        _fv = getattr(smc_snapshot, "fvgs", None) or []
+        _sw = getattr(smc_snapshot, "liquidity_sweeps", None) or []
+        _tf_count = len(getattr(indicators, "by_timeframe", None) or {})
+        with open("debug-587019.log", "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({"sessionId": "587019", "hypothesisId": "H1", "location": "scorer.calculate_confluence_score:entry", "message": "Confluence inputs", "data": {"symbol": symbol, "direction": direction, "profile": current_profile, "n_order_blocks": len(_ob), "n_fvgs": len(_fv), "n_liquidity_sweeps": len(_sw), "indicator_tf_count": _tf_count}, "timestamp": int(time.time() * 1000)}, default=str) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
     # --- SMC Pattern Scoring ---
 
     # Order Blocks
@@ -2503,6 +2516,16 @@ def calculate_confluence_score(
         for i in range(len(factors)):
             factors[i] = ConfluenceFactor(name=factors[i].name, score=factors[i].score, weight=factors[i].weight/total_w, rationale=factors[i].rationale or "Factor details")
 
+    # #region agent log
+    try:
+        _sum_w = sum(f.weight for f in factors)
+        _factors_summary = [{"name": f.name, "score": round(f.score, 2), "weight": round(f.weight, 4)} for f in factors]
+        with open("debug-587019.log", "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({"sessionId": "587019", "hypothesisId": "H2", "location": "scorer.calculate_confluence_score:weights", "message": "Weights and factors", "data": {"symbol": symbol, "total_weight": round(_sum_w, 6), "n_factors": len(factors), "factors": _factors_summary}, "timestamp": int(time.time() * 1000)}, default=str) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
     # --- Final Score Calculation ---
     weighted_score = sum(f.score * f.weight for f in factors)
     synergy_bonus = _calculate_synergy_bonus(factors, smc_snapshot, cycle_context=cycle_context, reversal_context=reversal_context, direction=direction, mode_config=config)
@@ -2538,6 +2561,14 @@ def calculate_confluence_score(
 
     final_score = max(0.0, min(100.0, final_score))
 
+    # #region agent log
+    try:
+        with open("debug-587019.log", "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({"sessionId": "587019", "hypothesisId": "H3", "location": "scorer.calculate_confluence_score:formula", "message": "Score formula", "data": {"symbol": symbol, "weighted_score": round(weighted_score, 4), "synergy_bonus": round(synergy_bonus, 4), "conflict_penalty": round(conflict_penalty, 4), "coverage_penalty": round(coverage_penalty, 4), "macro_adj": round(macro_adj, 4), "raw_score": round(raw_score, 4), "final_score": round(final_score, 4), "active_factors": active_factors, "structural_minimum_failed": structural_minimum_failed}, "timestamp": int(time.time() * 1000)}, default=str) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
     # Determine Signal Tier
     strong_factors = sum(1 for f in factors if f.score >= 65)
     tier = "APEX" if strong_factors >= 7 else ("A" if strong_factors >= 5 else ("B" if strong_factors >= 3 else "C"))
@@ -2559,7 +2590,16 @@ def calculate_confluence_score(
     )
     if not hasattr(breakdown, "metadata") or breakdown.metadata is None: breakdown.metadata = {}
     breakdown.metadata["signal_tier"] = tier
-    
+
+    # #region agent log
+    try:
+        _zero = [{"name": f.name, "rationale": (f.rationale or "")[:80]} for f in factors if f.score <= 0]
+        with open("debug-587019.log", "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({"sessionId": "587019", "hypothesisId": "H4", "location": "scorer.calculate_confluence_score:zero_factors", "message": "Zero-score factors", "data": {"symbol": symbol, "zero_count": len(_zero), "zero_factors": _zero}, "timestamp": int(time.time() * 1000)}, default=str) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
     # Final Logging
     logger.info(f"📊 CONFLUENCE [{symbol} {direction}]: {final_score:.1f} ({tier}) | Factors: {active_factors} | Synergy: +{synergy_bonus:.1f} | Conflict: -{conflict_penalty:.1f}")
 

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:frontend": "vite --host 0.0.0.0 --port 5000",
-    "backend": ".venv\\Scripts\\python.exe -m uvicorn backend.api_server:app --host 0.0.0.0 --port 8001 --reload",
+    "backend": "python -m uvicorn backend.api_server:app --host 0.0.0.0 --port 8001 --reload",
     "dev:all": "concurrently \"npm run backend\" \"npm run dev:frontend\"",
     "sync": "bash scripts/auto_sync.sh",
     "sync:safe": "bash scripts/safe_sync.sh",
