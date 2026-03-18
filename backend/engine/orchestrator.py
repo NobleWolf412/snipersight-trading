@@ -1525,14 +1525,23 @@ class Orchestrator:
         logger.debug("%s [%s]: Generating trade plan", symbol, trace_id)
         # current_price already computed above for cooldown check
         chosen_direction = context.metadata.get("chosen_direction", "UNKNOWN")
+        cascade_types = getattr(self.scanner_mode, "cascade_trade_types", None)
         logger.info(
-            "%s [%s]: 🎯 Calling _generate_trade_plan (direction=%s, score=%.1f)",
+            "%s [%s]: 🎯 Plan generation (direction=%s, score=%.1f, cascade=%s)",
             symbol,
             trace_id,
             chosen_direction,
             context.confluence_breakdown.total_score,
+            list(cascade_types) if cascade_types else "off",
         )
-        context.plan = self._generate_trade_plan(context, current_price, tick_size=tick_size, lot_size=lot_size)
+        if cascade_types:
+            context.plan = self._cascade_plan_generation(
+                context, current_price, cascade_types, tick_size=tick_size, lot_size=lot_size
+            )
+        else:
+            context.plan = self._generate_trade_plan(
+                context, current_price, tick_size=tick_size, lot_size=lot_size
+            )
         logger.info(
             "%s [%s]: 🎯 _generate_trade_plan returned: %s",
             symbol,
@@ -1795,7 +1804,12 @@ class Orchestrator:
         )
 
     def _generate_trade_plan(
-        self, context: SniperContext, current_price: float, tick_size: float = 0.0, lot_size: float = 0.0
+        self,
+        context: SniperContext,
+        current_price: float,
+        tick_size: float = 0.0,
+        lot_size: float = 0.0,
+        config_override: Optional[ScanConfig] = None,
     ) -> Optional[TradePlan]:
         """
         Generate complete trade plan from analysis.
@@ -1825,24 +1839,27 @@ class Orchestrator:
         setup_type = self._classify_setup_type(context.smc_snapshot)
 
         try:
+            # Resolve active config: cascade overrides take precedence over self.config
+            plan_config = config_override if config_override is not None else self.config
+
             # Enforce TF responsibility by filtering SMC snapshot to allowed TFs
             mode = self.scanner_mode
             allowed_entry = set(
-                getattr(self.config, "entry_timeframes", getattr(mode, "entry_timeframes", ()))
+                getattr(plan_config, "entry_timeframes", getattr(mode, "entry_timeframes", ()))
             )
             allowed_structure = set(
                 getattr(
-                    self.config, "structure_timeframes", getattr(mode, "structure_timeframes", ())
+                    plan_config, "structure_timeframes", getattr(mode, "structure_timeframes", ())
                 )
             )
             allowed_stop = (
-                set(getattr(self.config, "stop_timeframes", getattr(mode, "stop_timeframes", ())))
+                set(getattr(plan_config, "stop_timeframes", getattr(mode, "stop_timeframes", ())))
                 or allowed_structure
             )
             allowed_target = (
                 set(
                     getattr(
-                        self.config, "target_timeframes", getattr(mode, "target_timeframes", ())
+                        plan_config, "target_timeframes", getattr(mode, "target_timeframes", ())
                     )
                 )
                 or allowed_structure
@@ -1875,15 +1892,26 @@ class Orchestrator:
                 ],  # NEW: Pass consolidations
             )
 
-            # NEW: Dynamic Regime Selection - Override mode if auto-detected
-            auto_mode = context.metadata.get("auto_regime_mode")
-            current_trade_type = auto_mode or context.metadata.get("counter_htf_type") or self.scanner_mode.expected_trade_type
-            
-            # Localize config to ensure engines use correct mode-specific relativity
-            planner_config = self.config
-            if auto_mode:
-                planner_config = copy.copy(self.config)
-                planner_config.profile = auto_mode
+            # When running a cascade attempt the config_override already encodes the intended
+            # scale (swing/intraday/scalp) — skip auto_mode so it doesn't fight the cascade.
+            if config_override is not None:
+                planner_config = plan_config  # already resolved above
+                cascade_allowed = getattr(plan_config, "allowed_trade_types", ())
+                current_trade_type = (
+                    cascade_allowed[0] if cascade_allowed else self.scanner_mode.expected_trade_type
+                )
+            else:
+                # Dynamic Regime Selection - Override mode if auto-detected
+                auto_mode = context.metadata.get("auto_regime_mode")
+                current_trade_type = (
+                    auto_mode
+                    or context.metadata.get("counter_htf_type")
+                    or self.scanner_mode.expected_trade_type
+                )
+                planner_config = self.config
+                if auto_mode:
+                    planner_config = copy.copy(self.config)
+                    planner_config.profile = auto_mode
 
             plan = generate_trade_plan(
                 symbol=context.symbol,
@@ -1931,7 +1959,7 @@ class Orchestrator:
                 if signal_tier == "APEX":
                     plan.metadata["apex_signal"] = True
                     plan.metadata["effective_min_rr"] = max(
-                        1.5, float(getattr(self.config, "min_rr_ratio", 1.8)) - 0.3
+                        1.5, float(getattr(plan_config, "min_rr_ratio", 1.8)) - 0.3
                     )
                     logger.info(
                         "⭐ %s APEX signal tagged — 7+ strong factors.",
@@ -2338,6 +2366,125 @@ class Orchestrator:
             # Store the actual failure reason for accurate rejection reporting
             context.metadata["plan_failure_reason"] = str(e)
             return None
+
+    # -------------------------------------------------------------------------
+    # Cascade planning helpers (stealth mode multi-scale selection)
+    # -------------------------------------------------------------------------
+
+    # Quality bonus added to confluence score when ranking cascade candidates.
+    # Swing is preferred when two plans have comparable confluence; a clearly
+    # superior setup of a different type can still win.
+    _CASCADE_TYPE_BONUS: dict = {"swing": 6.0, "intraday": 3.0, "scalp": 0.0}
+
+    # Scale-specific config overrides per trade type.
+    # These are applied on top of the mode's base config so TF responsibility,
+    # stop widths, and ATR limits match the expected trade geometry.
+    _CASCADE_SCALE_SETTINGS: dict = {
+        "swing": {
+            "primary_planning_timeframe": "4h",
+            "entry_timeframes": ("4h", "1h", "15m"),
+            "structure_timeframes": ("1d", "4h", "1h", "15m"),
+            "stop_timeframes": ("4h", "1h", "15m"),
+            "target_timeframes": ("1d", "4h", "1h", "15m"),
+            "min_stop_atr": 1.5,
+            "max_stop_atr": 6.0,
+            "allowed_trade_types": ("swing",),
+        },
+        "intraday": {
+            "primary_planning_timeframe": "1h",
+            "entry_timeframes": ("1h", "15m", "5m"),
+            "structure_timeframes": ("4h", "1h", "15m"),
+            "stop_timeframes": ("1h", "15m", "5m"),
+            "target_timeframes": ("4h", "1h", "15m"),
+            "min_stop_atr": 0.5,
+            "max_stop_atr": 4.0,
+            "allowed_trade_types": ("intraday",),
+        },
+        "scalp": {
+            "primary_planning_timeframe": "15m",
+            "entry_timeframes": ("15m", "5m"),
+            "structure_timeframes": ("1h", "15m", "5m"),
+            "stop_timeframes": ("15m", "5m"),
+            "target_timeframes": ("1h", "15m"),
+            "min_stop_atr": 0.2,
+            "max_stop_atr": 2.5,
+            "allowed_trade_types": ("scalp",),
+        },
+    }
+
+    def _build_cascade_config(self, trade_type: str) -> ScanConfig:
+        """Return a shallow-copied ScanConfig tuned for the requested trade scale."""
+        cfg = copy.copy(self.config)
+        for attr, val in self._CASCADE_SCALE_SETTINGS.get(trade_type, {}).items():
+            setattr(cfg, attr, val)
+        return cfg
+
+    def _cascade_plan_generation(
+        self,
+        context: "SniperContext",
+        current_price: float,
+        cascade_types: tuple,
+        tick_size: float = 0.0,
+        lot_size: float = 0.0,
+    ) -> Optional[TradePlan]:
+        """
+        Attempt plan generation at each trade scale in order, then select the best plan.
+
+        For each scale (swing / intraday / scalp) a separate ScanConfig is built with
+        scale-appropriate timeframe responsibilities.  Every valid plan is scored as:
+
+            effective_score = confluence_score + type_preference_bonus
+
+        where swing=+6, intraday=+3, scalp=+0.  This ensures swing setups are preferred
+        when quality is comparable, while still allowing a clearly superior intraday or
+        scalp setup to win when the market structure genuinely supports it.
+
+        Returns the plan with the highest effective score, or None if all scales fail.
+        """
+        candidates: List[tuple] = []
+
+        for trade_type in cascade_types:
+            try:
+                scale_cfg = self._build_cascade_config(trade_type)
+                plan = self._generate_trade_plan(
+                    context,
+                    current_price,
+                    tick_size=tick_size,
+                    lot_size=lot_size,
+                    config_override=scale_cfg,
+                )
+                if plan:
+                    bonus = self._CASCADE_TYPE_BONUS.get(
+                        getattr(plan, "trade_type", "intraday"), 0.0
+                    )
+                    effective = plan.confidence_score + bonus
+                    candidates.append((plan, effective, trade_type))
+                    logger.info(
+                        "🔀 %s CASCADE %s → %s plan (conf=%.1f, effective=%.1f)",
+                        context.symbol,
+                        trade_type,
+                        getattr(plan, "trade_type", "?"),
+                        plan.confidence_score,
+                        effective,
+                    )
+            except Exception as exc:
+                logger.debug(
+                    "🔀 %s CASCADE %s scale failed: %s", context.symbol, trade_type, exc
+                )
+
+        if not candidates:
+            return None
+
+        best_plan, best_score, best_type = max(candidates, key=lambda x: x[1])
+        if len(candidates) > 1:
+            logger.info(
+                "🔀 %s CASCADE winner: %s (effective=%.1f, %d candidates)",
+                context.symbol,
+                best_type,
+                best_score,
+                len(candidates),
+            )
+        return best_plan
 
     def _classify_setup_type(self, smc_snapshot: SMCSnapshot) -> str:
         """
