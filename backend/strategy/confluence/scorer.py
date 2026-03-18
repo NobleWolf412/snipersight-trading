@@ -2017,7 +2017,7 @@ def calculate_confluence_score(
             name="Market Structure",
             score=ms_score,
             weight=get_w("market_structure", 0.20),
-            rationale=ms_result["rationale"],
+            rationale=ms_result["rationale"] or "Structure bias neutral",
         )
     )
 
@@ -2046,7 +2046,7 @@ def calculate_confluence_score(
                 name="Kill Zone Timing",
                 score=kz_score,
                 weight=get_w("kill_zone", 0.05),
-                rationale=kz_result["rationale"],
+                rationale=kz_result["rationale"] or "Outside kill zones",
             )
         )
     except Exception as kz_err:
@@ -2251,7 +2251,7 @@ def calculate_confluence_score(
     # --- HTF Alignment & Proximity ---
     if htf_trend:
         htf_align_res = _score_htf_alignment_incremental(htf_trend, direction, htf_indicators=htf_indicators, indicator_set=indicators)
-        factors.append(ConfluenceFactor(name="HTF Alignment", score=htf_align_res["score"], weight=get_w("htf_alignment", 0.10), rationale=htf_align_res["rationale"]))
+        factors.append(ConfluenceFactor(name="HTF Alignment", score=htf_align_res["score"], weight=get_w("htf_alignment", 0.10), rationale=htf_align_res["rationale"] or f"HTF {htf_trend} baseline"))
 
     # --- BTC Impulse Gate ---
     if btc_impulse:
@@ -2263,7 +2263,7 @@ def calculate_confluence_score(
         try:
             fib_res = _score_fibonacci_incremental(current_price, smc_snapshot.swing_structure, direction)
             if fib_res["score"] > 0 or get_w("fibonacci", 0) > 0:
-                factors.append(ConfluenceFactor(name="Fibonacci Proximity", score=fib_res["score"], weight=get_w("fibonacci", 0.05), rationale=fib_res["rationale"]))
+                factors.append(ConfluenceFactor(name="Fibonacci Proximity", score=fib_res["score"], weight=get_w("fibonacci", 0.05), rationale=fib_res["rationale"] or "Near Fibonacci levels"))
         except: pass
 
     # --- Weekly StochRSI Bonus/Penalty ---
@@ -2271,12 +2271,12 @@ def calculate_confluence_score(
         w_analysis = evaluate_weekly_stoch_rsi_bonus(indicators=indicators, direction=direction)
         w_bonus = w_analysis["bonus"]
         w_score = min(100.0, max(0.0, 50.0 + w_bonus * 3.33))
-        factors.append(ConfluenceFactor(name="Weekly StochRSI Bonus", score=w_score, weight=get_w("weekly_stoch_rsi", 0.05), rationale=w_analysis["reason"]))
+        factors.append(ConfluenceFactor(name="Weekly StochRSI Bonus", score=w_score, weight=get_w("weekly_stoch_rsi", 0.05), rationale=w_analysis["reason"] or "Weekly StochRSI neutral"))
 
     # --- HTF Structure Bias ---
     if smc_snapshot.swing_structure:
         bias_res = _score_htf_structure_bias(swing_structure=smc_snapshot.swing_structure, direction=direction)
-        factors.append(ConfluenceFactor(name="HTF Structure Bias", score=max(0.0, min(100.0, 50.0 + bias_res["bonus"] * 5.0)), weight=get_w("htf_structure_bias", 0.05), rationale=bias_res["reason"]))
+        factors.append(ConfluenceFactor(name="HTF Structure Bias", score=max(0.0, min(100.0, 50.0 + bias_res["bonus"] * 5.0)), weight=get_w("htf_structure_bias", 0.05), rationale=bias_res["reason"] or "HTF structure bias neutral"))
 
     # ===========================================================================
     # === CRITICAL HTF GATES ===
@@ -2285,16 +2285,20 @@ def calculate_confluence_score(
     # === Gate 1: HTF STRUCTURAL PROXIMITY GATE ===
     # Entry must be at meaningful HTF structural level
     # === Gate 1: HTF Structural Proximity ===
-    if entry_price and htf_context:
-        prox_res = evaluate_htf_structural_proximity(entry_price, htf_context, direction)
-        factors.append(ConfluenceFactor(name="HTF Structural Proximity", score=prox_res["score"], weight=get_w("htf_proximity", 0.08), rationale=prox_res["rationale"]))
+    if entry_price:
+        # Corrected positional arguments: smc, indicators, entry_price, direction, mode_config
+        prox_res = evaluate_htf_structural_proximity(smc_snapshot, indicators, entry_price, direction, config)
+        prox_base = 100.0 if prox_res.get("valid", True) else 0.0
+        prox_score = max(0.0, min(100.0, prox_base + prox_res.get("score_adjustment", 0.0)))
+        prox_rat = prox_res.get("nearest_structure", "HTF structural proximity check")
+        factors.append(ConfluenceFactor(name="HTF Structural Proximity", score=prox_score, weight=get_w("htf_proximity", 0.08), rationale=prox_rat))
     
     # === Gate 2: HTF Momentum Gate ===
     m_gate = evaluate_htf_momentum_gate(indicators=indicators, direction=direction, mode_config=config, swing_structure=smc_snapshot.swing_structure, reversal_context=reversal_context)
     # Map gate to Factor score: Allowed=100, Blocked=0. Adjust by momentum bonus/penalty.
     m_gate_base = 100.0 if m_gate["allowed"] else 0.0
     m_gate_score = max(0.0, min(100.0, m_gate_base + m_gate.get("score_adjustment", 0.0)))
-    factors.append(ConfluenceFactor(name="HTF Momentum Gate", score=m_gate_score, weight=get_w("htf_momentum_gate", 0.06), rationale=m_gate["reason"]))
+    factors.append(ConfluenceFactor(name="HTF Momentum Gate", score=m_gate_score, weight=get_w("htf_momentum_gate", 0.06), rationale=m_gate["reason"] or "HTF momentum allowed"))
 
     # --- Premium/Discount Zone ---
     pd_score, pd_rat = 50.0, "Equilibrium zone"
@@ -2318,7 +2322,7 @@ def calculate_confluence_score(
             r_res = _score_regime_alignment(regime=regime, direction=direction, scanner_profile=current_profile)
             reg_score, reg_rat = r_res["factor_score"], r_res["reason"]
         except: pass
-    factors.append(ConfluenceFactor(name="Regime Alignment", score=reg_score, weight=get_w("regime_alignment", 0.08), rationale=reg_rat))
+    factors.append(ConfluenceFactor(name="Regime Alignment", score=reg_score, weight=get_w("regime_alignment", 0.08), rationale=reg_rat or "Regime neutral"))
 
     # --- Inside Order Block Confirmation ---
     in_ob_score, in_ob_rat = 50.0, "No active OB detected"
@@ -2330,7 +2334,7 @@ def calculate_confluence_score(
                 in_ob_score, in_ob_rat = rej_res["score"], rej_res["reason"]
                 break
     except: pass
-    factors.append(ConfluenceFactor(name="Inside Order Block", score=in_ob_score, weight=get_w("inside_ob", 0.05), rationale=in_ob_rat))
+    factors.append(ConfluenceFactor(name="Inside Order Block", score=in_ob_score, weight=get_w("inside_ob", 0.05), rationale=in_ob_rat or "No active OB detected"))
 
     # --- Nested Order Block Bonus ---
     nested_score, nested_rat = 0.0, "No nested OB found"
@@ -2338,7 +2342,7 @@ def calculate_confluence_score(
         if _detect_nested_ob(smc_snapshot, direction):
             nested_score, nested_rat = 80.0, "LTF OB nested in HTF OB"
     except: pass
-    factors.append(ConfluenceFactor(name="Nested Order Block", score=nested_score, weight=get_w("nested_ob", 0.04), rationale=nested_rat))
+    factors.append(ConfluenceFactor(name="Nested Order Block", score=nested_score, weight=get_w("nested_ob", 0.04), rationale=nested_rat or "No nested OB found"))
 
     # --- NEW: Opposing Structure Penalty ---
     # Penalty when opposing OB/FVG is near the entry (immediate resistance/support)
@@ -2422,7 +2426,7 @@ def calculate_confluence_score(
 
     # --- Institutional Sequence ---
     seq_score, seq_rat = _score_institutional_sequence(smc_snapshot, direction)
-    factors.append(ConfluenceFactor(name="Institutional Sequence", score=seq_score, weight=get_w("institutional_sequence", 0.10), rationale=seq_rat))
+    factors.append(ConfluenceFactor(name="Institutional Sequence", score=seq_score, weight=get_w("institutional_sequence", 0.10), rationale=seq_rat or "No institutional sequence detected"))
 
     # --- Liquidity Draw Factor ---
     try:
@@ -2438,7 +2442,7 @@ def calculate_confluence_score(
     total_w = sum(f.weight for f in factors)
     if total_w > 0:
         for i in range(len(factors)):
-            factors[i] = ConfluenceFactor(name=factors[i].name, score=factors[i].score, weight=factors[i].weight/total_w, rationale=factors[i].rationale)
+            factors[i] = ConfluenceFactor(name=factors[i].name, score=factors[i].score, weight=factors[i].weight/total_w, rationale=factors[i].rationale or "Factor details")
 
     # --- Final Score Calculation ---
     weighted_score = sum(f.score * f.weight for f in factors)
