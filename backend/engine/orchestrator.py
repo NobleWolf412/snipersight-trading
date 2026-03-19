@@ -1225,6 +1225,28 @@ class Orchestrator:
                 indicators=context.multi_tf_indicators,
             )
 
+            # ── DYNAMIC LOGIC FUSION (Bot-only) ───────────────────────────────────
+            # When enable_fusion=True (paper trader / live bot), Stealth temporarily
+            # adopts Surgical weights for ranging markets and Strike weights for
+            # trending markets, then restores the original profile in finally.
+            # Scanner always uses pure Stealth (enable_fusion defaults to False).
+            _original_profile = self.config.profile
+            _fusion_active = False
+            if (
+                getattr(self.config, "enable_fusion", False)
+                and _original_profile.lower() in ("stealth", "stealth_balanced")
+            ):
+                auto_mode = context.metadata.get("auto_regime_mode", "swing").lower()
+                fused_profile = {"scalp": "surgical", "intraday": "strike"}.get(auto_mode)
+                if fused_profile:
+                    self.config.profile = fused_profile
+                    _fusion_active = True
+                    logger.info(
+                        "\U0001f500 %s: Logic Fusion | Stealth \u2192 %s weights (regime=%s)",
+                        symbol, fused_profile.upper(), auto_mode,
+                    )
+            # ─────────────────────────────────────────────────────────────────────
+
             context.confluence_breakdown = self.confluence_service.score(
                 context=context,
                 current_price=current_price_val,
@@ -1399,6 +1421,11 @@ class Orchestrator:
                 "reason": f"Confluence scoring failed: {error_msg}",
                 "reason_type": "errors",
             }
+        finally:
+            # ALWAYS restore profile — even if the except handler returns early.
+            # Prevents config.profile from leaking to subsequent symbols in the same worker.
+            if _fusion_active:
+                self.config.profile = _original_profile
         try:
             br = context.confluence_breakdown
             top_factors = [

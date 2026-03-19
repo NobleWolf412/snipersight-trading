@@ -403,6 +403,7 @@ class PaperTradingService:
                 max_symbols=20,
             )
             scan_config.planner = planner_cfg
+            scan_config.enable_fusion = True  # Bot uses Dynamic Logic Fusion — scanner stays on pure Stealth weights
 
             # #region agent log
             _dbg_log(
