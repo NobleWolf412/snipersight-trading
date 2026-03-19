@@ -44,6 +44,7 @@ import {
   PaperTradingActivity,
   SignalLogEntry,
 } from '@/utils/api';
+import { GauntletBreakdown } from '@/components/bot/GauntletBreakdown';
 
 // Format time duration
 function formatDuration(seconds: number): string {
@@ -584,7 +585,7 @@ export function TrainingGround() {
             <section className="glass-card glow-border-green rounded-2xl relative overflow-hidden group">
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-green-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
               <div className="p-4 flex items-center justify-between relative z-10">
-                <div className="flex items-center gap-6">
+                <div className="flex-1 flex items-center justify-between max-w-[80%] mr-12">
                   {/* Session Info */}
                   <div>
                     <div className="text-xs text-[#00ff88] uppercase tracking-widest font-mono font-bold">SESSION</div>
@@ -721,7 +722,7 @@ export function TrainingGround() {
 
                   {/* Recent symbols ticker */}
                   {status.current_scan.recent_symbols && status.current_scan.recent_symbols.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-border/50 flex gap-2 overflow-hidden">
+                    <div className="mt-3 pt-3 border-t border-border/50 flex gap-6 overflow-hidden overflow-x-auto no-scrollbar">
                       {status.current_scan.recent_symbols.map((item, idx) => (
                         <div
                           key={`${item.symbol}-${idx}`}
@@ -847,9 +848,9 @@ export function TrainingGround() {
                       <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">MAX DRAWDOWN</div>
                       <div className={cn(
                         "text-xl font-bold font-mono tracking-tight mt-0.5",
-                        status?.statistics?.max_drawdown ? 'text-red-400' : 'text-muted-foreground'
+                        (status?.statistics as any)?.max_drawdown_pct ? 'text-red-400' : 'text-muted-foreground'
                       )}>
-                        {(status?.statistics?.max_drawdown || 0).toFixed(2)}%
+                        {((status?.statistics as any)?.max_drawdown_pct || 0).toFixed(2)}%
                       </div>
                     </div>
                     <TrendDown size={24} className="text-red-400/20 transition-colors group-hover:text-red-400/50 shrink-0" />
@@ -919,17 +920,25 @@ export function TrainingGround() {
                     <div className="min-w-0">
                       <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">STREAK</div>
                       {(() => {
-                        const streak = status?.statistics?.current_streak || 0;
-                        const streakType: 'win' | 'loss' | 'none' = streak > 0 ? 'win' : streak < 0 ? 'loss' : 'none';
-                        const absStreak = Math.abs(streak);
+                        // Calculate current streak from trade history
+                        let streak = 0;
+                        let streakType: 'win' | 'loss' | 'none' = 'none';
+                        if (trades.length > 0) {
+                          streakType = trades[0].pnl >= 0 ? 'win' : 'loss';
+                          for (const t of trades) {
+                            if ((t.pnl >= 0 && streakType === 'win') || (t.pnl < 0 && streakType === 'loss')) {
+                              streak++;
+                            } else break;
+                          }
+                        }
                         return (
                           <div className={cn(
                             "text-xl font-bold font-mono tracking-tight mt-0.5 flex items-center gap-1.5",
                             streakType === 'win' ? 'text-green-400' : streakType === 'loss' ? 'text-red-400' : 'text-muted-foreground'
                           )}>
-                            {absStreak > 0 && streakType === 'win' && <TrendUp size={18} />}
-                            {absStreak > 0 && streakType === 'loss' && <TrendDown size={18} />}
-                            {absStreak === 0 ? '—' : `${absStreak}${streakType === 'win' ? 'W' : 'L'}`}
+                            {streak > 0 && streakType === 'win' && <TrendUp size={18} />}
+                            {streak > 0 && streakType === 'loss' && <TrendDown size={18} />}
+                            {streak === 0 ? '—' : `${streak}${streakType === 'win' ? 'W' : 'L'}`}
                           </div>
                         );
                       })()}
@@ -1058,7 +1067,7 @@ export function TrainingGround() {
             </section>
             {/* Signal Intelligence Panel */}
             {status?.signal_log && status.signal_log.length > 0 && (
-              <SignalIntelligencePanel signals={status.signal_log} />
+              <GauntletBreakdown signals={status.signal_log} />
             )}
           </div>
         )}
