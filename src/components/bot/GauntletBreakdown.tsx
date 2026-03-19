@@ -209,12 +209,14 @@ function FunnelBar({
   total,
   isSelected,
   onClick,
+  threshold,
 }: {
   stage: GauntletStage;
   count: number;
   total: number;
   isSelected: boolean;
   onClick: () => void;
+  threshold?: number;
 }) {
   const cfg = STAGE_CONFIG[stage];
   const pct = total > 0 ? (count / total) * 100 : 0;
@@ -234,7 +236,7 @@ function FunnelBar({
             {cfg.shortLabel}
           </span>
           <span className="text-[10px] text-muted-foreground hidden sm:inline">
-            {cfg.label}
+            {cfg.label} {threshold !== undefined && stage === 'CONFLUENCE' ? `(<${threshold}%)` : ''}
           </span>
         </div>
         <span className={`text-xs font-mono font-bold ${cfg.color}`}>{count}</span>
@@ -323,9 +325,10 @@ function SignalRow({ entry }: { entry: SymbolLastSeen }) {
 
 interface Props {
   signals: SignalLogEntry[];
+  minConfluence?: number;
 }
 
-export function GauntletBreakdown({ signals }: Props) {
+export function GauntletBreakdown({ signals, minConfluence }: Props) {
   const [selectedStage, setSelectedStage] = useState<GauntletStage | null>(null);
   const [showAll, setShowAll] = useState(false);
 
@@ -476,6 +479,7 @@ export function GauntletBreakdown({ signals }: Props) {
                 stage={stage}
                 count={count}
                 total={totalFiltered}
+                threshold={minConfluence}
                 isSelected={selectedStage === stage}
                 onClick={() => setSelectedStage(selectedStage === stage ? null : stage)}
               />

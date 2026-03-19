@@ -644,6 +644,16 @@ export function TrainingGround() {
                       {(status?.current_scan?.actual_mode || status?.config?.sniper_mode || 'ADAPTIVE').toUpperCase()}
                     </Badge>
                   </div>
+
+                  {/* Confluence Gate */}
+                  <div>
+                    <div className="text-xs text-muted-foreground uppercase tracking-widest font-mono">
+                      GATE
+                    </div>
+                    <div className="mt-1 font-mono text-sm tracking-widest text-yellow-400 font-bold">
+                      ≥ {status?.config?.min_confluence || 0}%
+                    </div>
+                  </div>
                 </div>
 
                 {/* Control Buttons */}
@@ -968,36 +978,53 @@ export function TrainingGround() {
                   </Badge>
                 </div>
 
-                <div className="relative z-10">
-                  {((status?.positions && status.positions.length > 0) || (status?.pending_orders && status.pending_orders.length > 0)) ? (
-                    <div className="space-y-4">
-                      {/* Active Positions */}
-                      {status?.positions && status.positions.length > 0 && (
-                        <div className="space-y-3">
-                          {status.positions.map((pos) => (
-                            <PositionCard key={pos.position_id} position={pos} />
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Pending Limit Orders */}
-                      {status?.pending_orders && status.pending_orders.length > 0 && (
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2 mb-1 px-1">
-                            <Clock size={14} className="text-amber-400" />
-                            <span className="text-[10px] font-mono font-bold tracking-tighter uppercase text-amber-400/80">Pending Limit Orders</span>
-                            <div className="h-px flex-1 bg-amber-400/20" />
-                          </div>
-                          {status.pending_orders.map((order) => (
-                            <PendingOrderCard key={order.order_id} order={order} />
-                          ))}
-                        </div>
-                      )}
+                <div className="relative z-10 space-y-10 mt-4">
+                  {/* Part 1: Active Positions */}
+                  {(status?.positions && status.positions.length > 0) ? (
+                    <div>
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-green-500/20 to-transparent" />
+                        <h3 className="text-[10px] font-black tracking-[0.3em] uppercase text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.3)] bg-green-500/5 px-4 py-1 rounded-full border border-green-500/20">
+                          ACTIVE POSITIONS ({status.positions.length})
+                        </h3>
+                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-green-500/20 to-transparent" />
+                      </div>
+                      <div className="space-y-4">
+                        {status.positions.map((pos) => (
+                          <PositionCard key={pos.position_id} position={pos} />
+                        ))}
+                      </div>
                     </div>
-                  ) : (
-                    <div className="text-center py-12 border border-border border-dashed rounded-lg bg-background/50">
-                      <Crosshair size={32} className="mx-auto mb-3 opacity-20 text-accent" />
-                      <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground/50">No active positions</p>
+                  ) : null}
+
+                  {/* Part 2: Pending Orders */}
+                  {(status?.pending_orders && status.pending_orders.length > 0) ? (
+                    <div>
+                      <div className="flex items-center gap-3 mb-4 mt-6">
+                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-500/20 to-transparent" />
+                        <h3 className="text-[10px] font-black tracking-[0.3em] uppercase text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.3)] bg-amber-500/5 px-4 py-1 rounded-full border border-amber-500/20">
+                          PENDING LIMIT ORDERS ({status.pending_orders.length})
+                        </h3>
+                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-500/20 to-transparent" />
+                      </div>
+                      <div className="space-y-3">
+                        {status.pending_orders.map((order) => (
+                          <PendingOrderCard key={order.order_id} order={order} />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* Combined Empty State */}
+                  {!(status?.positions?.length) && !(status?.pending_orders?.length) && (
+                    <div className="text-center py-20 px-4">
+                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted/5 border border-dashed border-muted/20 mb-4">
+                        <Target size={32} className="text-muted-foreground/30" />
+                      </div>
+                      <h3 className="text-lg font-medium text-muted-foreground/80">No market exposure yet</h3>
+                      <p className="text-sm text-muted-foreground/40 mt-1 max-w-xs mx-auto">
+                        Your bot is currently monitoring {config.symbols.length} symbols for {config.sniper_mode} setups.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1067,7 +1094,10 @@ export function TrainingGround() {
             </section>
             {/* Signal Intelligence Panel */}
             {status?.signal_log && status.signal_log.length > 0 && (
-              <GauntletBreakdown signals={status.signal_log} />
+              <GauntletBreakdown 
+                signals={status.signal_log} 
+                minConfluence={status?.config?.min_confluence ?? undefined}
+              />
             )}
           </div>
         )}
