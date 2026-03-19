@@ -847,9 +847,9 @@ export function TrainingGround() {
                       <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">MAX DRAWDOWN</div>
                       <div className={cn(
                         "text-xl font-bold font-mono tracking-tight mt-0.5",
-                        (status?.statistics as any)?.max_drawdown_pct ? 'text-red-400' : 'text-muted-foreground'
+                        status?.statistics?.max_drawdown ? 'text-red-400' : 'text-muted-foreground'
                       )}>
-                        {((status?.statistics as any)?.max_drawdown_pct || 0).toFixed(2)}%
+                        {(status?.statistics?.max_drawdown || 0).toFixed(2)}%
                       </div>
                     </div>
                     <TrendDown size={24} className="text-red-400/20 transition-colors group-hover:text-red-400/50 shrink-0" />
@@ -919,25 +919,17 @@ export function TrainingGround() {
                     <div className="min-w-0">
                       <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">STREAK</div>
                       {(() => {
-                        // Calculate current streak from trade history
-                        let streak = 0;
-                        let streakType: 'win' | 'loss' | 'none' = 'none';
-                        if (trades.length > 0) {
-                          streakType = trades[0].pnl >= 0 ? 'win' : 'loss';
-                          for (const t of trades) {
-                            if ((t.pnl >= 0 && streakType === 'win') || (t.pnl < 0 && streakType === 'loss')) {
-                              streak++;
-                            } else break;
-                          }
-                        }
+                        const streak = status?.statistics?.current_streak || 0;
+                        const streakType: 'win' | 'loss' | 'none' = streak > 0 ? 'win' : streak < 0 ? 'loss' : 'none';
+                        const absStreak = Math.abs(streak);
                         return (
                           <div className={cn(
                             "text-xl font-bold font-mono tracking-tight mt-0.5 flex items-center gap-1.5",
                             streakType === 'win' ? 'text-green-400' : streakType === 'loss' ? 'text-red-400' : 'text-muted-foreground'
                           )}>
-                            {streak > 0 && streakType === 'win' && <TrendUp size={18} />}
-                            {streak > 0 && streakType === 'loss' && <TrendDown size={18} />}
-                            {streak === 0 ? '—' : `${streak}${streakType === 'win' ? 'W' : 'L'}`}
+                            {absStreak > 0 && streakType === 'win' && <TrendUp size={18} />}
+                            {absStreak > 0 && streakType === 'loss' && <TrendDown size={18} />}
+                            {absStreak === 0 ? '—' : `${absStreak}${streakType === 'win' ? 'W' : 'L'}`}
                           </div>
                         );
                       })()}
