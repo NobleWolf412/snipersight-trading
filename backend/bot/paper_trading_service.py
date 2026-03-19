@@ -124,7 +124,7 @@ class PaperTradingConfig:
     fee_rate: float = 0.001
     max_hours_open: float = 72.0
     max_pending_scans: int = 2  # Cancel pending limit orders after this many scan cycles
-    max_drawdown_pct: float = 10.0  # Session kill-switch threshold
+    max_drawdown_pct: Optional[float] = None  # Kill switch: stop session if balance drops X% from start
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -762,6 +762,28 @@ class PaperTradingService:
                 elapsed = self._get_uptime_seconds()
                 if elapsed >= config.duration_hours * 3600:
                     logger.info("Duration limit reached, stopping")
+                    asyncio.create_task(self.stop())
+                    break
+
+            # Max drawdown kill switch
+            if config.max_drawdown_pct is not None and self.executor:
+                current_equity = self.executor.get_balance()
+                if self.position_manager:
+                    current_equity += sum(
+                        pos.unrealized_pnl
+                        for pos in self.position_manager.positions.values()
+                        if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
+                    )
+                loss_pct = (config.initial_balance - current_equity) / config.initial_balance * 100
+                if loss_pct >= config.max_drawdown_pct:
+                    logger.warning(
+                        f"Max drawdown kill switch triggered: {loss_pct:.1f}% loss >= {config.max_drawdown_pct}% limit"
+                    )
+                    self._log_activity("session_stopped", {
+                        "reason": f"max_drawdown_kill_switch",
+                        "loss_pct": round(loss_pct, 2),
+                        "limit_pct": config.max_drawdown_pct,
+                    })
                     asyncio.create_task(self.stop())
                     break
 

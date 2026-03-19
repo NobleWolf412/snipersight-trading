@@ -41,6 +41,8 @@ import {
   PaperTradingConfigRequest,
   PaperTradingStatusResponse,
   PaperTradingPosition,
+  PaperTradingStats,
+  PaperTradingBalance,
   CompletedPaperTrade,
   PaperTradingActivity,
   SignalLogEntry,
@@ -175,6 +177,7 @@ export function TrainingGround() {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [recommendation, setRecommendation] = useState<{mode: string, reason: string, warning: string | null, confidence: string, recommended_confluence?: number, regime?: any} | null>(null);
+  const [debrief, setDebrief] = useState<{ stats: PaperTradingStats; balance: PaperTradingBalance; config: PaperTradingConfigRequest; uptime: number; signalLog: SignalLogEntry[] } | null>(null);
 
   const pollRef = useRef<number | null>(null);
 
@@ -263,6 +266,9 @@ export function TrainingGround() {
     setIsLoading(true);
     setError(null);
 
+    // Snapshot current session data for the debrief modal
+    const preStopStatus = status;
+
     try {
       const response = await api.stopPaperTrading();
       if (response.error) {
@@ -270,6 +276,16 @@ export function TrainingGround() {
       } else {
         await fetchStatus();
         await fetchTrades();
+        // Show debrief if there was meaningful activity
+        if (preStopStatus?.statistics && preStopStatus.balance && preStopStatus.config) {
+          setDebrief({
+            stats: preStopStatus.statistics,
+            balance: preStopStatus.balance,
+            config: preStopStatus.config,
+            uptime: preStopStatus.uptime_seconds,
+            signalLog: preStopStatus.signal_log ?? [],
+          });
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to stop paper trading');
@@ -396,8 +412,8 @@ export function TrainingGround() {
                   {/* Risk */}
                   <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-border/60 transition-colors">
                     <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Risk Profile</div>
-                    <div className="text-2xl font-mono font-bold text-foreground">2%</div>
-                    <div className="text-[9px] text-muted-foreground mt-1 opacity-60">3-part entry (L1→L3)</div>
+                    <div className="text-2xl font-mono font-bold text-foreground">{config.risk_per_trade ?? 2}%</div>
+                    <div className="text-[9px] text-muted-foreground mt-1 opacity-60">3-part scale-in</div>
                   </div>
                   {/* Regime */}
                   <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-primary/30 transition-colors relative overflow-hidden">
@@ -575,6 +591,37 @@ export function TrainingGround() {
                             </p>
                           );
                         })()}
+                      </div>
+
+                      {/* Risk Per Trade */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Risk Per Trade (%)</label>
+                        <input
+                          type="number"
+                          min="0.1"
+                          max="10"
+                          step="0.5"
+                          value={config.risk_per_trade ?? 2}
+                          onChange={e => setConfig({ ...config, risk_per_trade: Number(e.target.value) })}
+                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
+                        />
+                        <div className="flex gap-1.5">
+                          {[0.5, 1, 2, 3].map(preset => (
+                            <button
+                              key={preset}
+                              onClick={() => setConfig({ ...config, risk_per_trade: preset })}
+                              className={cn(
+                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                                config.risk_per_trade === preset
+                                  ? "bg-accent/15 border-accent/50 text-accent"
+                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
+                              )}
+                            >
+                              {preset}%
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">% of balance risked per entry across 3 scale-in levels</p>
                       </div>
 
                       {/* Duration */}
@@ -1368,6 +1415,18 @@ export function TrainingGround() {
           </TacticalPanel>
         </div>
       </div>
+
+      {/* Session Debrief Modal */}
+      {debrief && (
+        <SessionDebriefModal
+          stats={debrief.stats}
+          balance={debrief.balance}
+          config={debrief.config}
+          uptime={debrief.uptime}
+          signalLog={debrief.signalLog}
+          onClose={() => setDebrief(null)}
+        />
+      )}
     </PageContainer>
   );
 }
@@ -1999,6 +2058,159 @@ function SignalLogRow({ signal }: { signal: SignalLogEntry }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Session Debrief Modal
+function SessionDebriefModal({
+  stats,
+  balance,
+  config,
+  uptime,
+  signalLog,
+  onClose,
+}: {
+  stats: PaperTradingStats;
+  balance: PaperTradingBalance;
+  config: PaperTradingConfigRequest;
+  uptime: number;
+  signalLog: SignalLogEntry[];
+  onClose: () => void;
+}) {
+  const profitFactor = (() => {
+    const wins = stats.winning_trades;
+    const losses = stats.losing_trades;
+    const gross_profit = (stats.avg_win || 0) * wins;
+    const gross_loss = Math.abs(stats.avg_loss || 0) * losses;
+    if (gross_loss === 0) return wins > 0 ? 99 : 0;
+    return gross_profit / gross_loss;
+  })();
+
+  // Compute top filter from signal log
+  const topFilter = (() => {
+    const filtered = signalLog.filter(s => s.result === 'filtered');
+    if (!filtered.length) return null;
+    const counts: Record<string, number> = {};
+    for (const s of filtered) {
+      const key = s.reason || 'unknown';
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    return top ? { reason: top[0], count: top[1] } : null;
+  })();
+
+  // Readiness criteria
+  const criteria = [
+    { label: 'Trade count ≥ 5', met: stats.total_trades >= 5 },
+    { label: 'Win rate ≥ 50%', met: stats.win_rate >= 50 },
+    { label: 'Profit factor ≥ 1.2', met: profitFactor >= 1.2 },
+    { label: 'Max drawdown ≤ 15%', met: stats.max_drawdown <= 15 },
+  ];
+  const metCount = criteria.filter(c => c.met).length;
+  const verdict =
+    metCount === 4 ? { label: 'READY FOR LIVE', color: 'text-accent border-accent/50 bg-accent/10' }
+    : metCount >= 2 ? { label: 'KEEP TRAINING', color: 'text-yellow-400 border-yellow-500/50 bg-yellow-500/10' }
+    : { label: 'NEEDS ADJUSTMENT', color: 'text-red-400 border-red-500/50 bg-red-500/10' };
+
+  const hours = Math.floor(uptime / 3600);
+  const minutes = Math.floor((uptime % 3600) / 60);
+  const durationLabel = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div className="w-full max-w-lg bg-background border border-border rounded-2xl shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Trophy size={20} className="text-accent" weight="fill" />
+            <span className="font-mono font-bold text-sm uppercase tracking-widest text-foreground">Session Debrief</span>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+            <XCircle size={20} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {/* Verdict */}
+          <div className={cn("text-center py-3 rounded-xl border font-mono font-black text-lg tracking-widest", verdict.color)}>
+            {verdict.label}
+          </div>
+
+          {/* Stats grid */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
+              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">P&L</div>
+              <div className={cn("text-lg font-mono font-bold", balance.pnl >= 0 ? 'text-accent' : 'text-red-400')}>
+                {balance.pnl >= 0 ? '+' : ''}{balance.pnl.toFixed(0)}
+              </div>
+              <div className="text-[9px] text-muted-foreground">{balance.pnl_pct >= 0 ? '+' : ''}{balance.pnl_pct.toFixed(2)}%</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
+              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Win Rate</div>
+              <div className={cn("text-lg font-mono font-bold", stats.win_rate >= 50 ? 'text-foreground' : 'text-red-400')}>
+                {stats.win_rate.toFixed(1)}%
+              </div>
+              <div className="text-[9px] text-muted-foreground">{stats.winning_trades}W / {stats.losing_trades}L</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
+              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Prof. Factor</div>
+              <div className={cn("text-lg font-mono font-bold", profitFactor >= 1.2 ? 'text-foreground' : 'text-red-400')}>
+                {profitFactor >= 99 ? '∞' : profitFactor.toFixed(2)}
+              </div>
+              <div className="text-[9px] text-muted-foreground">{stats.total_trades} trades</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
+              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Max DD</div>
+              <div className={cn("text-lg font-mono font-bold", stats.max_drawdown <= 15 ? 'text-foreground' : 'text-red-400')}>
+                {stats.max_drawdown.toFixed(1)}%
+              </div>
+              <div className="text-[9px] text-muted-foreground">from peak</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
+              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Avg R:R</div>
+              <div className="text-lg font-mono font-bold text-foreground">{stats.avg_rr.toFixed(2)}</div>
+              <div className="text-[9px] text-muted-foreground">{durationLabel} session</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
+              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Acceptance</div>
+              <div className="text-lg font-mono font-bold text-foreground">
+                {stats.signals_generated > 0 ? ((stats.signals_taken / stats.signals_generated) * 100).toFixed(0) : 0}%
+              </div>
+              <div className="text-[9px] text-muted-foreground">{stats.signals_taken}/{stats.signals_generated} sigs</div>
+            </div>
+          </div>
+
+          {/* Readiness checklist */}
+          <div className="space-y-1.5">
+            <div className="text-[9px] text-muted-foreground uppercase tracking-widest pl-1 mb-2">Readiness Criteria</div>
+            {criteria.map(c => (
+              <div key={c.label} className="flex items-center gap-2">
+                {c.met
+                  ? <CheckCircle size={14} className="text-accent shrink-0" weight="fill" />
+                  : <XCircle size={14} className="text-muted-foreground/40 shrink-0" />}
+                <span className={cn("text-xs font-mono", c.met ? 'text-foreground' : 'text-muted-foreground/50')}>{c.label}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Top filter killer */}
+          {topFilter && (
+            <div className="p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20 flex items-start gap-2">
+              <Warning size={14} className="text-yellow-400 mt-0.5 shrink-0" />
+              <p className="text-[10px] font-mono text-yellow-300/70 leading-snug">
+                Top killer: <span className="text-yellow-300 font-bold">{topFilter.reason}</span> — blocked {topFilter.count} signal{topFilter.count !== 1 ? 's' : ''}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-border/50">
+          <Button onClick={onClose} className="w-full font-mono text-xs tracking-widest" variant="outline">
+            CLOSE
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
