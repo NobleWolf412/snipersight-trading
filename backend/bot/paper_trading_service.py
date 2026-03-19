@@ -124,6 +124,7 @@ class PaperTradingConfig:
     fee_rate: float = 0.001
     max_hours_open: float = 72.0
     max_pending_scans: int = 2  # Cancel pending limit orders after this many scan cycles
+    max_drawdown_pct: float = 10.0  # Session kill-switch threshold
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -271,6 +272,8 @@ class PaperTradingService:
         self.position_manager: Optional[PositionManager] = None
         self.orchestrator: Optional[Orchestrator] = None
         self.mode: Optional[ScannerMode] = None
+        self.active_mode: str = "stealth"  # Current adaptive mode (e.g. overwatch)
+        self.active_profile: str = "stealth"  # Current logic fusion profile (e.g. surgical)
 
         # Tracking
         self.completed_trades: List[CompletedTrade] = []
@@ -447,6 +450,8 @@ class PaperTradingService:
         self.started_at = datetime.now(timezone.utc)
         self.stopped_at = None
         self.status = PaperBotStatus.RUNNING
+        self.active_mode = "stealth"
+        self.active_profile = "stealth"
         self._running = True
 
         # Initialize diagnostics
@@ -623,6 +628,8 @@ class PaperTradingService:
             "last_scan_at": self.last_scan_at.isoformat() if self.last_scan_at else None,
             "next_scan_in_seconds": next_scan_in,
             "current_scan": self.current_scan,
+            "active_mode": self.active_mode,
+            "active_profile": self.active_profile,
         }
 
         # Balance info
@@ -869,6 +876,18 @@ class PaperTradingService:
                         self._update_drawdown()
                         self._last_drawdown_check = _now
 
+                        # Check for drawdown limit
+                        if self.config and self.stats.max_drawdown >= self.config.max_drawdown_pct:
+                            logger.warning(
+                                f"🛑 MAX DRAWDOWN LIMIT REACHED ({self.stats.max_drawdown:.2f}% >= {self.config.max_drawdown_pct}%)"
+                            )
+                            self._log_activity("drawdown_limit_reached", {
+                                "drawdown": self.stats.max_drawdown,
+                                "limit": self.config.max_drawdown_pct
+                            })
+                            asyncio.create_task(self.stop())
+                            break
+
             except Exception as e:
                 logger.error(f"Monitor error: {e}")
 
@@ -929,6 +948,14 @@ class PaperTradingService:
                         # which can starve trade frequency.  actual_scan_mode is only used for
                         # display/logging — the orchestrator always scans with self.mode (stealth).
                         actual_scan_mode = recommended_mode
+                        self.active_mode = actual_scan_mode
+                        
+                        # Set active profile for fusion visibility
+                        # If recommended is Strike/Surgical, use that; otherwise stealth
+                        if recommended_mode in ["strike", "surgical"]:
+                           self.active_profile = recommended_mode
+                        else:
+                           self.active_profile = "stealth"
 
                         # Log the recommendation to the UI Activity Feed.
                         # Explicitly note the scan remains in stealth to avoid misleading users.

@@ -148,6 +148,7 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
   risk_per_trade: 2, // Total 2% per thesis
   max_positions: 3, // 3 limits (L1, L2, L3)
   leverage: 1, // Default 1x
+  max_drawdown_pct: 10, // 10% session drawdown kill-switch
   duration_hours: 24,
   scan_interval_minutes: 5,
   trailing_stop: true,
@@ -164,7 +165,6 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
   slippage_bps: 5,
   fee_rate: 0.001,
   max_hours_open: 72,
-  max_drawdown_pct: null,
 };
 
 export function TrainingGround() {
@@ -397,7 +397,7 @@ export function TrainingGround() {
                   <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-border/60 transition-colors">
                     <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Risk Profile</div>
                     <div className="text-2xl font-mono font-bold text-foreground">2%</div>
-                    <div className="text-[9px] text-muted-foreground mt-1 opacity-60">3-part scale-in</div>
+                    <div className="text-[9px] text-muted-foreground mt-1 opacity-60">3-part entry (L1→L3)</div>
                   </div>
                   {/* Regime */}
                   <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-primary/30 transition-colors relative overflow-hidden">
@@ -671,11 +671,11 @@ export function TrainingGround() {
                                   : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
                               )}
                             >
-                              {preset >= 168 ? '1w' : `${preset}h`}
+                              {preset}h
                             </button>
                           ))}
                         </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">Auto-closes any trade that hasn't exited after this period</p>
+                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Auto-closes any trade that hasn't exited after this period</p>
                       </div>
 
                       {/* Max Drawdown Kill Switch */}
@@ -708,7 +708,7 @@ export function TrainingGround() {
                             </button>
                           ))}
                         </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">Stop session if balance drops by this % from start</p>
+                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Stop session if balance drops by this % from start</p>
                       </div>
                     </div>
                   </div>
@@ -778,7 +778,7 @@ export function TrainingGround() {
                       />
                     </div>
                   </div>
-                  <p className="text-center text-[10px] text-muted-foreground/40 font-mono">
+                  <p className="text-center text-[10px] text-muted-foreground/40 font-mono italic">
                     Simulated execution only — no real funds at risk
                   </p>
                   <Button
@@ -850,14 +850,21 @@ export function TrainingGround() {
                     <div className="text-xs text-muted-foreground uppercase tracking-widest font-mono">
                       {status?.config?.sniper_mode === 'stealth' ? 'ADAPTIVE MODE' : 'MODE'}
                     </div>
-                    <Badge variant="outline" className={cn(
-                      "font-mono text-xs tracking-widest mt-1",
-                      status?.current_scan?.actual_mode && status.current_scan.actual_mode !== status?.config?.sniper_mode
-                        ? "border-purple-500 text-purple-400 bg-purple-500/10"
-                        : "border-accent text-accent bg-accent/10"
-                    )}>
-                      {(status?.current_scan?.actual_mode || status?.config?.sniper_mode || 'ADAPTIVE').toUpperCase()}
-                    </Badge>
+                    <div className="flex gap-1.5 mt-1">
+                      <Badge variant="outline" className={cn(
+                        "font-mono text-xs tracking-widest",
+                        (status?.active_mode || status?.current_scan?.actual_mode) && (status?.active_mode || status?.current_scan?.actual_mode) !== (status?.config?.sniper_mode || 'stealth')
+                          ? "border-purple-500 text-purple-400 bg-purple-500/10"
+                          : "border-accent text-accent bg-accent/10"
+                      )}>
+                        {(status?.active_mode || status?.current_scan?.actual_mode || status?.config?.sniper_mode || 'ADAPTIVE').toUpperCase()}
+                      </Badge>
+                      {status?.active_profile && status.active_profile !== 'stealth' && (
+                        <Badge variant="outline" className="font-mono text-xs tracking-widest border-yellow-500/50 text-yellow-400 bg-yellow-500/10">
+                          {status.active_profile?.toUpperCase()}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
 
                   {/* Confluence Gate */}

@@ -998,6 +998,8 @@ export interface PaperTradingStatusResponse {
   }>;
   last_scan_at: string | null;
   next_scan_in_seconds: number | null;
+  active_mode?: string;
+  active_profile?: string;
   current_scan?: {
     status: 'running' | 'completed';
     completed: number;
