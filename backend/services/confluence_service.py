@@ -11,6 +11,17 @@ providing the benefits of service-based architecture.
 import logging
 from typing import Dict, Any, Optional
 
+from backend.analysis.macro_context import MacroContext
+
+
+def _btc_dir_to_impulse(macro_context: Optional[MacroContext]) -> Optional[str]:
+    """Translate MacroContext.btc_dir vocab to the btc_impulse vocab expected by scorer."""
+    if macro_context is None:
+        return None
+    return {"up": "bullish", "down": "bearish", "flat": "neutral"}.get(
+        getattr(macro_context, "btc_dir", "flat"), "neutral"
+    )
+
 from backend.engine.context import SniperContext
 from backend.strategy.confluence.scorer import calculate_confluence_score, ConfluenceBreakdown
 
@@ -688,6 +699,7 @@ class ConfluenceService:
             volume_profile=context.metadata.get("_volume_profile_obj"),
             current_price=current_price,
             macro_context=context.macro_context,
+            btc_impulse=_btc_dir_to_impulse(context.macro_context) if "BTC" not in context.symbol.upper() else None,
             is_btc=("BTC" in context.symbol.upper()),
             is_alt=("BTC" not in context.symbol.upper()),
             # Pass symbol-specific regime detected by RegimeDetector
