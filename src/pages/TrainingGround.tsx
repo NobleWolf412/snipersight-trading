@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Target,
   PlayCircle,
@@ -438,11 +439,39 @@ export function TrainingGround() {
                           <Lightning size={18} weight="fill" className="text-purple-400" />
                           <span className="text-sm font-black tracking-widest text-purple-400">STEALTH</span>
                           {recommendation?.mode && recommendation.mode !== 'stealth' ? (
-                            <Badge variant="outline" className="text-[8px] border-accent/40 text-accent bg-accent/10 px-1.5 py-0 capitalize">
-                              ADAPTING TO {recommendation.mode} PROFILE
-                            </Badge>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="outline" className="text-[8px] border-accent/40 text-accent bg-accent/10 px-1.5 py-0 capitalize cursor-help transition-all hover:bg-accent/20">
+                                    ADAPTING TO {recommendation.mode} PROFILE
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[240px] border-accent/30 bg-black/90 p-3 shadow-[0_0_20px_rgba(0,255,170,0.1)]">
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5 text-accent font-bold text-[10px] uppercase tracking-wider">
+                                      <Lightning size={12} weight="fill" />
+                                      {recommendation.mode} Mode Active
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground leading-relaxed italic">
+                                      "Market is currently high-risk. I'm being extra picky with trades—waiting for perfect signals and double-checking volume to ensure we don't get trapped by fake moves. Prioritizing safety over speed."
+                                    </p>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           ) : (
-                            <Badge variant="outline" className="text-[8px] border-purple-500/30 text-purple-300/80 bg-purple-500/10 px-1.5 py-0">LOCKED</Badge>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="outline" className="text-[8px] border-purple-500/30 text-purple-300/80 bg-purple-500/10 px-1.5 py-0 cursor-help">
+                                    LOCKED
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="bg-black/90 border-purple-500/30 text-[10px] p-2">
+                                  Stealth engine is in standard autonomous mode.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           )}
                         </div>
                         <ShieldCheck size={18} className="text-accent/40" />
@@ -471,170 +500,164 @@ export function TrainingGround() {
                     </div>
                   </div>
 
-                  {/* ── Session Parameters label ── */}
-                  <div className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1 -mb-2">Session Parameters</div>
-
-                  {/* ── Row 1: Balance / Leverage / Duration ── */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Starting Balance */}
-                    <div className="space-y-2 text-left">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Starting Balance ($)</label>
-                      <input
-                        type="number"
-                        value={config.initial_balance}
-                        onChange={e => setConfig({ ...config, initial_balance: Number(e.target.value) })}
-                        className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                      />
-                      <div className="flex gap-1.5">
-                        {[1000, 5000, 10000, 50000].map(preset => (
-                          <button
-                            key={preset}
-                            onClick={() => setConfig({ ...config, initial_balance: preset })}
-                            className={cn(
-                              "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                              config.initial_balance === preset
-                                ? "bg-accent/15 border-accent/50 text-accent"
-                                : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                            )}
-                          >
-                            {preset >= 1000 ? `${preset / 1000}k` : preset}
-                          </button>
-                        ))}
+                  {/* ── Parameters Grid ── */}
+                  <div className="space-y-1.5 text-left">
+                    <div className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1 mb-2">Session Parameters</div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      
+                      {/* Starting Balance */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Starting Balance ($)</label>
+                        <input
+                          type="number"
+                          value={config.initial_balance}
+                          onChange={e => setConfig({ ...config, initial_balance: Number(e.target.value) })}
+                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
+                        />
+                        <div className="flex gap-1.5">
+                          {[1000, 5000, 10000, 50000].map(preset => (
+                            <button
+                              key={preset}
+                              onClick={() => setConfig({ ...config, initial_balance: preset })}
+                              className={cn(
+                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                                config.initial_balance === preset
+                                  ? "bg-accent/15 border-accent/50 text-accent"
+                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
+                              )}
+                            >
+                              {preset >= 1000 ? `${preset / 1000}k` : preset}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Leverage */}
-                    <div className="space-y-2 text-left">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Leverage (x)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={config.leverage}
-                        onChange={e => setConfig({ ...config, leverage: Number(e.target.value) })}
-                        className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                      />
-                      <div className="flex gap-1.5">
-                        {[1, 5, 10, 20].map(preset => (
-                          <button
-                            key={preset}
-                            onClick={() => setConfig({ ...config, leverage: preset })}
-                            className={cn(
-                              "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                              config.leverage === preset
-                                ? "bg-accent/15 border-accent/50 text-accent"
-                                : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                            )}
-                          >
-                            {preset}x
-                          </button>
-                        ))}
+                      {/* Leverage */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Leverage (x)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={config.leverage}
+                          onChange={e => setConfig({ ...config, leverage: Number(e.target.value) })}
+                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
+                        />
+                        <div className="flex gap-1.5">
+                          {[1, 5, 10, 20].map(preset => (
+                            <button
+                              key={preset}
+                              onClick={() => setConfig({ ...config, leverage: preset })}
+                              className={cn(
+                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                                config.leverage === preset
+                                  ? "bg-accent/15 border-accent/50 text-accent"
+                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
+                              )}
+                            >
+                              {preset}x
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Duration */}
-                    <div className="space-y-2 text-left">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Session Duration (h)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="720"
-                        value={config.duration_hours}
-                        onChange={e => setConfig({ ...config, duration_hours: Number(e.target.value) })}
-                        className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                      />
-                      <div className="flex gap-1.5">
-                        {[8, 24, 72, 168].map(preset => (
-                          <button
-                            key={preset}
-                            onClick={() => setConfig({ ...config, duration_hours: preset })}
-                            className={cn(
-                              "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                              config.duration_hours === preset
-                                ? "bg-accent/15 border-accent/50 text-accent"
-                                : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                            )}
-                          >
-                            {preset >= 168 ? '1w' : preset >= 72 ? '3d' : `${preset}h`}
-                          </button>
-                        ))}
+                      {/* Duration */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Session Duration (h)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="720"
+                          value={config.duration_hours}
+                          onChange={e => setConfig({ ...config, duration_hours: Number(e.target.value) })}
+                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
+                        />
+                        <div className="flex gap-1.5">
+                          {[8, 24, 72, 168].map(preset => (
+                            <button
+                              key={preset}
+                              onClick={() => setConfig({ ...config, duration_hours: preset })}
+                              className={cn(
+                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                                config.duration_hours === preset
+                                  ? "bg-accent/15 border-accent/50 text-accent"
+                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
+                              )}
+                            >
+                              {preset >= 168 ? '1w' : preset >= 72 ? '3d' : `${preset}h`}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* ── Row 2: Min Confluence / Stagnation Cut ── */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Min Confluence */}
-                    <div className="space-y-2 text-left">
-                      <div className="flex justify-between items-end">
-                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Min Confluence %</label>
-                        {recommendation?.recommended_confluence && (
-                          <div
-                            className="text-[9px] text-accent/80 hover:text-accent cursor-pointer border border-accent/20 bg-accent/5 px-1.5 py-0.5 rounded transition-colors"
-                            onClick={() => setConfig({ ...config, min_confluence: recommendation.recommended_confluence ?? 82 })}
-                            title="Click to apply recommended confluence"
-                          >
-                            Suggested: {recommendation.recommended_confluence}%
-                          </div>
-                        )}
+                      {/* Min Confluence */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center h-4 mb-0.5">
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Min Confluence %</label>
+                          {recommendation?.recommended_confluence && (
+                            <div
+                              onClick={() => setConfig({ ...config, min_confluence: recommendation.recommended_confluence ?? 82 })}
+                              className="text-[8px] text-accent/80 hover:text-accent cursor-pointer border border-accent/20 bg-accent/5 px-1.5 py-0 rounded transition-colors"
+                            >
+                              Suggested: {recommendation.recommended_confluence}%
+                            </div>
+                          )}
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={config.min_confluence ?? 0}
+                          onChange={e => setConfig({ ...config, min_confluence: Number(e.target.value) })}
+                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-yellow-400/40 text-foreground"
+                        />
+                        <div className="flex gap-1.5">
+                          {[{ l: 'AUTO', v: null }, { l: '70', v: 70 }, { l: '75', v: 75 }, { l: '82', v: 82 }].map(({ l, v }) => (
+                            <button
+                              key={l}
+                              onClick={() => setConfig({ ...config, min_confluence: v })}
+                              className={cn(
+                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                                config.min_confluence === v
+                                  ? "bg-yellow-400/15 border-yellow-400/50 text-yellow-400"
+                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
+                              )}
+                            >
+                              {l}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={config.min_confluence ?? 0}
-                        onChange={e => setConfig({ ...config, min_confluence: Number(e.target.value) })}
-                        className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-yellow-400/40 text-foreground"
-                      />
-                      <div className="flex gap-1.5">
-                        {[
-                          { label: 'AUTO', value: null as number | null },
-                          { label: '70%', value: 70 },
-                          { label: '75%', value: 75 },
-                          { label: '82%', value: 82 },
-                        ].map(({ label, value }) => (
-                          <button
-                            key={label}
-                            onClick={() => setConfig({ ...config, min_confluence: value })}
-                            className={cn(
-                              "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                              config.min_confluence === value
-                                ? "bg-yellow-400/15 border-yellow-400/50 text-yellow-400"
-                                : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                            )}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
 
-                    {/* Stagnation Cut */}
-                    <div className="space-y-2 text-left">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Stagnation Cut (h)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="720"
-                        value={config.max_hours_open}
-                        onChange={e => setConfig({ ...config, max_hours_open: Number(e.target.value) })}
-                        className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                      />
-                      <div className="flex gap-1.5">
-                        {[24, 48, 72, 168].map(preset => (
-                          <button
-                            key={preset}
-                            onClick={() => setConfig({ ...config, max_hours_open: preset })}
-                            className={cn(
-                              "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                              config.max_hours_open === preset
-                                ? "bg-accent/15 border-accent/50 text-accent"
-                                : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                            )}
-                          >
-                            {preset >= 168 ? '1w' : `${preset}h`}
-                          </button>
-                        ))}
+                      {/* Stagnation Cut */}
+                      <div className="space-y-2">
+                        <div className="flex items-center h-4 mb-0.5">
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Stagnation Cut (h)</label>
+                        </div>
+                        <input
+                          type="number"
+                          min="1"
+                          max="720"
+                          value={config.max_hours_open}
+                          onChange={e => setConfig({ ...config, max_hours_open: Number(e.target.value) })}
+                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
+                        />
+                        <div className="flex gap-1.5">
+                          {[24, 48, 72, 168].map(preset => (
+                            <button
+                              key={preset}
+                              onClick={() => setConfig({ ...config, max_hours_open: preset })}
+                              className={cn(
+                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                                config.max_hours_open === preset
+                                  ? "bg-accent/15 border-accent/50 text-accent"
+                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
+                              )}
+                            >
+                              {preset >= 168 ? '1w' : `${preset}h`}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -643,41 +666,41 @@ export function TrainingGround() {
                   <div className="bg-background/40 border border-border/50 rounded-xl p-4 space-y-4">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Target Asset Buckets</label>
-                      <span className="text-[9px] text-muted-foreground font-mono italic">Hunting logic utilizes top-volume adapters</span>
+                      <span className="text-[9px] text-muted-foreground font-mono italic">Volume adaptive</span>
                     </div>
 
-                    <div className="flex flex-wrap gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div
                         onClick={() => setConfig({ ...config, majors: !config.majors })}
                         className={cn(
-                          "flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all",
+                          "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all",
                           config.majors ? "bg-accent/10 border-accent text-accent shadow-[0_0_10px_rgba(0,255,170,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
                         )}
                       >
                         <Trophy size={16} weight={config.majors ? "fill" : "regular"} />
-                        <span className="text-xs font-mono font-bold tracking-tighter">MAJORS</span>
+                        <span className="text-xs font-mono font-bold tracking-tight">MAJORS</span>
                       </div>
 
                       <div
                         onClick={() => setConfig({ ...config, altcoins: !config.altcoins })}
                         className={cn(
-                          "flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all",
+                          "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all",
                           config.altcoins ? "bg-primary/10 border-primary text-primary shadow-[0_0_10px_rgba(59,130,246,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
                         )}
                       >
                         <ChartLine size={16} weight={config.altcoins ? "fill" : "regular"} />
-                        <span className="text-xs font-mono font-bold tracking-tighter">TOP VOL ALTS</span>
+                        <span className="text-xs font-mono font-bold tracking-tight">ALTS</span>
                       </div>
 
                       <div
                         onClick={() => setConfig({ ...config, meme_mode: !config.meme_mode })}
                         className={cn(
-                          "flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all",
+                          "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all",
                           config.meme_mode ? "bg-purple-500/10 border-purple-500 text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
                         )}
                       >
                         <Crosshair size={16} weight={config.meme_mode ? "fill" : "regular"} />
-                        <span className="text-xs font-mono font-bold tracking-tighter">MEME HUNTER</span>
+                        <span className="text-xs font-mono font-bold tracking-tight">MEME HUNTER</span>
                       </div>
                     </div>
 
