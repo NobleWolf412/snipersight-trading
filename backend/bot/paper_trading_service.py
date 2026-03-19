@@ -814,36 +814,55 @@ class PaperTradingService:
                                             # (though _process_signal should handle most of these)
                                             pass
 
-                        # Expire stale pending orders that have outlived their TTL
+                        # Expire stale pending orders that have outlived their TTL.
+                        # TTL is per-trade-type: swing setups need hours to pull back to
+                        # their limit zone; scalps need only minutes.
+                        _PENDING_TTL_MINUTES: Dict[str, float] = {
+                            "swing": 240.0,    # 4 hours — HTF limit orders need time
+                            "intraday": 60.0,  # 1 hour
+                            "scalp": 10.0,     # 2 scan cycles (original default)
+                        }
                         if self._pending_plans and self.config:
-                            max_age = timedelta(
-                                minutes=self.config.scan_interval_minutes * self.config.max_pending_scans
-                            )
                             now = datetime.now(timezone.utc)
                             for order_id in list(self._pending_plans.keys()):
                                 placed_at = self._pending_placed_at.get(order_id)
-                                if placed_at and (now - placed_at) > max_age:
-                                    plan = self._pending_plans[order_id]
+                                if not placed_at:
+                                    continue
+                                plan = self._pending_plans[order_id]
+                                trade_type = getattr(plan, "trade_type", "intraday") or "intraday"
+                                ttl_minutes = _PENDING_TTL_MINUTES.get(
+                                    trade_type,
+                                    self.config.scan_interval_minutes * self.config.max_pending_scans,
+                                )
+                                max_age = timedelta(minutes=ttl_minutes)
+                                if (now - placed_at) > max_age:
                                     executor.cancel_order(order_id)
                                     self._pending_plans.pop(order_id, None)
                                     self._pending_placed_at.pop(order_id, None)
                                     logger.info(
-                                        f"PENDING ORDER EXPIRED: {plan.symbol} | "
+                                        f"PENDING ORDER EXPIRED: {plan.symbol} [{trade_type}] | "
                                         f"age={(now - placed_at).total_seconds() / 60:.1f}min "
-                                        f"(max={max_age.total_seconds() / 60:.0f}min)"
+                                        f"(ttl={ttl_minutes:.0f}min)"
                                     )
                                     self._log_activity("pending_order_expired", {
                                         "order_id": order_id,
                                         "symbol": plan.symbol,
                                         "direction": plan.direction,
+                                        "trade_type": trade_type,
                                         "confluence": plan.confidence_score,
                                         "age_minutes": (now - placed_at).total_seconds() / 60,
+                                        "ttl_minutes": ttl_minutes,
                                     })
 
                     await self.position_manager.monitor_all_positions()
 
                     # Check for closed positions
                     await self._sync_closed_positions()
+
+                    # Update drawdown in real-time (every ~10s) to capture open-position
+                    # underwater equity, not only at trade-close time.
+                    if int(datetime.now(timezone.utc).timestamp()) % 10 == 0:
+                        self._update_drawdown()
 
             except Exception as e:
                 logger.error(f"Monitor error: {e}")
@@ -1866,24 +1885,31 @@ class PaperTradingService:
         if self.stats.avg_loss != 0:
             self.stats.avg_rr = abs(self.stats.avg_win / self.stats.avg_loss)
 
-        # Update max drawdown
-        if self.executor and self.config:
-            # Equity = cash balance + unrealized PnL of open positions.
-            # executor.get_balance() already includes all realized PnL (fees + closed trades),
-            # so we must NOT add stats.total_pnl again (that was double-counting).
-            current_equity = self.executor.get_balance()
-            if self.position_manager:
-                current_equity += sum(
-                    pos.unrealized_pnl
-                    for pos in self.position_manager.positions.values() 
-                    if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
-                )
-            if current_equity > self._peak_equity:
-                self._peak_equity = current_equity
-            elif self._peak_equity > 0:
-                drawdown = (self._peak_equity - current_equity) / self._peak_equity * 100
-                if drawdown > self.stats.max_drawdown:
-                    self.stats.max_drawdown = drawdown
+        # Update max drawdown on each trade close
+        self._update_drawdown()
+
+    def _update_drawdown(self) -> None:
+        """Recompute peak equity and max drawdown from current balance + unrealized PnL.
+
+        Called both on trade close (via _update_stats) and on every monitor loop tick
+        so that drawdown is captured in real-time, not only when positions close.
+        """
+        if not self.executor or not self.config:
+            return
+        # Equity = realized balance + all unrealized PnL on open/partial positions
+        current_equity = self.executor.get_balance()
+        if self.position_manager:
+            current_equity += sum(
+                pos.unrealized_pnl
+                for pos in self.position_manager.positions.values()
+                if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
+            )
+        if current_equity > self._peak_equity:
+            self._peak_equity = current_equity
+        elif self._peak_equity > 0:
+            drawdown = (self._peak_equity - current_equity) / self._peak_equity * 100
+            if drawdown > self.stats.max_drawdown:
+                self.stats.max_drawdown = drawdown
 
     def _log_activity(self, event_type: str, data: Dict[str, Any]):
         """Add event to activity log."""

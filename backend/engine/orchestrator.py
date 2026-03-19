@@ -484,6 +484,24 @@ class Orchestrator:
                         except Exception as e:
                             logger.debug("Progress callback error: %s", e)
 
+                except Exception as e:
+                    # Per-symbol isolation: one bad symbol (NaN indicators, bad data, etc.)
+                    # must never abort processing of the remaining symbols.
+                    logger.error("❌ %s: Unhandled error during symbol processing: %s", sym, e)
+                    result, rejection_info = None, {
+                        "symbol": sym,
+                        "reason_type": "errors",
+                        "reason": f"Unhandled error: {type(e).__name__}: {e}",
+                    }
+                    processed_symbol_results.append((sym, result, rejection_info))
+                    completed += 1
+
+                    if progress_callback:
+                        try:
+                            progress_callback(completed, len(symbols), sym, False, rejection_info)
+                        except Exception as cb_e:
+                            logger.debug("Progress callback error: %s", cb_e)
+
         # Process all collected results
         for symbol, result, rejection_info in processed_symbol_results:
             if result:
