@@ -893,6 +893,7 @@ export interface PaperTradingConfigRequest {
   fee_rate?: number;
   max_hours_open?: number;
   max_pending_scans?: number;
+  max_drawdown_pct?: number | null;
 }
 
 export interface PaperTradingPosition {

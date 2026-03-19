@@ -164,6 +164,7 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
   slippage_bps: 5,
   fee_rate: 0.001,
   max_hours_open: 72,
+  max_drawdown_pct: null,
 };
 
 export function TrainingGround() {
@@ -396,7 +397,7 @@ export function TrainingGround() {
                   <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-border/60 transition-colors">
                     <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Risk Profile</div>
                     <div className="text-2xl font-mono font-bold text-foreground">2%</div>
-                    <div className="text-[9px] text-muted-foreground mt-1 opacity-60">Split L1→L3</div>
+                    <div className="text-[9px] text-muted-foreground mt-1 opacity-60">3-part scale-in</div>
                   </div>
                   {/* Regime */}
                   <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-primary/30 transition-colors relative overflow-hidden">
@@ -407,7 +408,9 @@ export function TrainingGround() {
                     <div className="flex items-center gap-1.5">
                       <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", recommendation?.regime?.composite ? "bg-primary animate-pulse" : "bg-muted-foreground/40")} />
                       <div className="text-lg font-mono font-bold text-primary capitalize truncate">
-                        {recommendation?.regime?.composite || 'Adaptive'}
+                        {recommendation?.regime?.composite
+                          ? recommendation.regime.composite.replace(/_/g, ' — ')
+                          : 'Adaptive'}
                       </div>
                     </div>
                     {recommendation?.reason && (
@@ -494,7 +497,11 @@ export function TrainingGround() {
                         </div>
                         <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
                           <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Types</div>
-                          <div className="text-sm font-mono font-bold text-foreground">All</div>
+                          <div className="text-sm font-mono font-bold text-foreground">Scalp / Intraday / Swing</div>
+                        </div>
+                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
+                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Scan Every</div>
+                          <div className="text-sm font-mono font-bold text-accent">{config.scan_interval_minutes ?? 5}m</div>
                         </div>
                       </div>
                     </div>
@@ -559,6 +566,15 @@ export function TrainingGround() {
                             </button>
                           ))}
                         </div>
+                        {(() => {
+                          const exposure = (config.leverage ?? 1) * (config.risk_per_trade ?? 2);
+                          const color = exposure >= 20 ? 'text-red-400' : exposure >= 10 ? 'text-yellow-400' : 'text-muted-foreground/50';
+                          return (
+                            <p className={`text-[9px] font-mono pl-1 leading-snug ${color}`}>
+                              Effective exposure per trade: {exposure.toFixed(1)}%
+                            </p>
+                          );
+                        })()}
                       </div>
 
                       {/* Duration */}
@@ -607,9 +623,10 @@ export function TrainingGround() {
                           type="number"
                           min="0"
                           max="100"
-                          value={config.min_confluence ?? 0}
-                          onChange={e => setConfig({ ...config, min_confluence: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-yellow-400/40 text-foreground"
+                          value={config.min_confluence ?? ''}
+                          placeholder="AUTO"
+                          onChange={e => setConfig({ ...config, min_confluence: e.target.value === '' ? null : Number(e.target.value) })}
+                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-yellow-400/40 text-foreground placeholder:text-yellow-400/60"
                         />
                         <div className="flex gap-1.5">
                           {[{ l: 'AUTO', v: null }, { l: '70', v: 70 }, { l: '75', v: 75 }, { l: '82', v: 82 }].map(({ l, v }) => (
@@ -629,10 +646,10 @@ export function TrainingGround() {
                         </div>
                       </div>
 
-                      {/* Stagnation Cut */}
+                      {/* Max Trade Duration */}
                       <div className="space-y-2">
                         <div className="flex items-center h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Stagnation Cut (h)</label>
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Max Trade Duration (h)</label>
                         </div>
                         <input
                           type="number"
@@ -658,6 +675,40 @@ export function TrainingGround() {
                             </button>
                           ))}
                         </div>
+                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">Auto-closes any trade that hasn't exited after this period</p>
+                      </div>
+
+                      {/* Max Drawdown Kill Switch */}
+                      <div className="space-y-2">
+                        <div className="flex items-center h-4 mb-0.5">
+                          <label className="text-[10px] text-red-400/80 uppercase tracking-widest pl-1">Max Drawdown Limit (%)</label>
+                        </div>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={config.max_drawdown_pct ?? ''}
+                          placeholder="NONE"
+                          onChange={e => setConfig({ ...config, max_drawdown_pct: e.target.value === '' ? null : Number(e.target.value) })}
+                          className="w-full h-12 bg-background border border-red-500/20 rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-red-400/40 text-foreground placeholder:text-muted-foreground/30"
+                        />
+                        <div className="flex gap-1.5">
+                          {[{ l: 'OFF', v: null }, { l: '10%', v: 10 }, { l: '15%', v: 15 }, { l: '25%', v: 25 }].map(({ l, v }) => (
+                            <button
+                              key={l}
+                              onClick={() => setConfig({ ...config, max_drawdown_pct: v })}
+                              className={cn(
+                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                                config.max_drawdown_pct === v
+                                  ? "bg-red-500/15 border-red-500/50 text-red-400"
+                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
+                              )}
+                            >
+                              {l}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">Stop session if balance drops by this % from start</p>
                       </div>
                     </div>
                   </div>
@@ -670,16 +721,25 @@ export function TrainingGround() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div
-                        onClick={() => setConfig({ ...config, majors: !config.majors })}
-                        className={cn(
-                          "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all",
-                          config.majors ? "bg-accent/10 border-accent text-accent shadow-[0_0_10px_rgba(0,255,170,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
-                        )}
-                      >
-                        <Trophy size={16} weight={config.majors ? "fill" : "regular"} />
-                        <span className="text-xs font-mono font-bold tracking-tight">MAJORS</span>
-                      </div>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div
+                              onClick={() => setConfig({ ...config, majors: !config.majors })}
+                              className={cn(
+                                "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all",
+                                config.majors ? "bg-accent/10 border-accent text-accent shadow-[0_0_10px_rgba(0,255,170,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
+                              )}
+                            >
+                              <Trophy size={16} weight={config.majors ? "fill" : "regular"} />
+                              <span className="text-xs font-mono font-bold tracking-tight">MAJORS</span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="bg-black/90 border-border text-[10px] p-2 max-w-[200px]">
+                            BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, DOT, LINK
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
 
                       <div
                         onClick={() => setConfig({ ...config, altcoins: !config.altcoins })}
@@ -718,6 +778,9 @@ export function TrainingGround() {
                       />
                     </div>
                   </div>
+                  <p className="text-center text-[10px] text-muted-foreground/40 font-mono">
+                    Simulated execution only — no real funds at risk
+                  </p>
                   <Button
                     onClick={handleStart}
                     disabled={isLoading}
@@ -803,7 +866,7 @@ export function TrainingGround() {
                       GATE
                     </div>
                     <div className="mt-1 font-mono text-sm tracking-widest text-yellow-400 font-bold">
-                      ≥ {status?.config?.min_confluence || 0}%
+                      {status?.config?.min_confluence != null ? `≥ ${status.config.min_confluence}%` : 'AUTO'}
                     </div>
                   </div>
                 </div>
@@ -1177,6 +1240,9 @@ export function TrainingGround() {
                       <p className="text-sm text-muted-foreground/40 mt-1 max-w-xs mx-auto">
                         Your bot is currently monitoring {config.symbols?.length ?? 0} symbols for {config.sniper_mode} setups.
                       </p>
+                      <p className="text-xs text-muted-foreground/25 mt-2 max-w-xs mx-auto font-mono">
+                        In typical conditions, Stealth generates 1–4 entries per 24h session
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1539,6 +1605,11 @@ function ActivityItem({ event }: { event: PaperTradingActivity }) {
         return <TrendDown size={16} className="text-warning" />;
       case 'signal_filtered':
         return <XCircle size={16} className="text-yellow-400" />;
+      case 'pending_order_placed':
+      case 'pending_order_replaced':
+        return <Clock size={16} className="text-blue-400" />;
+      case 'pending_order_expired':
+        return <XCircle size={16} className="text-muted-foreground" />;
       case 'scan_error':
       case 'trade_error':
         return <XCircle size={16} className="text-red-400" />;
@@ -1580,6 +1651,12 @@ function ActivityItem({ event }: { event: PaperTradingActivity }) {
           : '';
         return `Closed ${d.symbol}${tradeTypeLabel}: ${d.pnl >= 0 ? '+' : ''}${d.pnl?.toFixed(2)} (${displayReason}${regimeLabel})`;
       }
+      case 'pending_order_placed':
+        return `${d.symbol || ''} ${d.direction || ''} — limit placed @ ${d.entry_price != null ? d.entry_price.toFixed(4) : '?'} (${d.confluence != null ? d.confluence.toFixed(0) + '% conf' : ''})`.trim();
+      case 'pending_order_replaced':
+        return `${d.symbol || ''} ${d.direction || ''} — limit updated @ ${d.entry_price != null ? d.entry_price.toFixed(4) : '?'}`.trim();
+      case 'pending_order_expired':
+        return `${d.symbol || ''} ${d.direction || ''} — pending order expired unfilled`.trim();
       case 'scan_error':
         return `⚠️ Scan error: ${d.error || 'Unknown error'}`;
       case 'trade_error':
