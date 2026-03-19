@@ -1080,7 +1080,10 @@ class PaperTradingService:
             # Graduated regime filtering using RegimePolicy system
             # Instead of a nuclear veto that kills ALL signals, apply per-mode
             # policies that adjust position sizing and filter only truly chaotic regimes.
-            regime = rejection_summary.get("regime", {}) if isinstance(rejection_summary, dict) else {}
+            # Use `or {}` rather than a default arg: the orchestrator explicitly packs
+            # "regime": None when BTC data fails, so .get("regime", {}) would still
+            # return None (key exists). `or {}` handles the None case correctly.
+            regime = (rejection_summary.get("regime") if isinstance(rejection_summary, dict) else None) or {}
             regime_composite = regime.get("composite", "unknown")
             regime_score = regime.get("score", 0)
 

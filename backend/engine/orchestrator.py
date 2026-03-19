@@ -3237,49 +3237,63 @@ class Orchestrator:
             pass
 
 
+# Per-worker-process Orchestrator cache. ProcessPoolExecutor reuses worker processes
+# across tasks in the same pool lifetime, so we build the Orchestrator once per
+# process rather than once per symbol. _WORKER_CONFIG_ID tracks the Python id() of
+# the config object; if the caller passes a new config object (e.g. after settings
+# change), the cache is invalidated and the Orchestrator is rebuilt.
+_WORKER_ORCHESTRATOR = None
+_WORKER_CONFIG_ID = None
+
+
 def _parallel_process_symbol_worker(args):
     """
     Module-level worker for ProcessPoolExecutor.
     Runs symbol analysis in a separate CPU process.
+
+    The Orchestrator is cached at module level per worker process so that
+    initialisation (RegimeDetector, HTFLevelDetector, domain services, etc.)
+    only happens once per worker, not once per symbol.
     """
+    global _WORKER_ORCHESTRATOR, _WORKER_CONFIG_ID
+
     symbol, run_id, timestamp, prefetched_data, config, macro_context, scanner_mode, tick_size, lot_size = args
-    
+
     try:
-        # Import inside worker to avoid circularity and ensure child process has components
-        from backend.engine.orchestrator import Orchestrator
-        
-        # We need a minimal orchestrator for this symbol
-        # We use a dummy adapter as data is already prefetched
-        class DummyAdapter:
-            def fetch_ohlcv(self, *args, **kwargs): return None
-            
-        # Initialize a temporary orchestrator in the child process
-        worker_orchestrator = Orchestrator(
-            config=config,
-            exchange_adapter=DummyAdapter(),
-            concurrency_workers=1
-        )
-        # Manually sync the execution state
-        worker_orchestrator.macro_context = macro_context
-        worker_orchestrator.scanner_mode = scanner_mode
-        
-        # Execute the pipeline for this symbol
-        return worker_orchestrator._process_symbol(
-            symbol, 
-            run_id, 
-            timestamp, 
+        # Rebuild the orchestrator only when the worker is brand-new or the
+        # config object has been replaced between scans.
+        if _WORKER_ORCHESTRATOR is None or id(config) != _WORKER_CONFIG_ID:
+            from backend.engine.orchestrator import Orchestrator
+
+            class DummyAdapter:
+                def fetch_ohlcv(self, *args, **kwargs): return None
+
+            _WORKER_ORCHESTRATOR = Orchestrator(
+                config=config,
+                exchange_adapter=DummyAdapter(),
+                concurrency_workers=1,
+            )
+            _WORKER_CONFIG_ID = id(config)
+
+        # Sync per-scan state (lightweight attribute assignment, not re-init)
+        _WORKER_ORCHESTRATOR.macro_context = macro_context
+        _WORKER_ORCHESTRATOR.scanner_mode = scanner_mode
+
+        return _WORKER_ORCHESTRATOR._process_symbol(
+            symbol,
+            run_id,
+            timestamp,
             prefetched_data=prefetched_data,
             tick_size=tick_size,
-            lot_size=lot_size
+            lot_size=lot_size,
         )
-        
+
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
-        # Return a rejection info instead of crashing the process
         return None, {
             "symbol": symbol,
             "reason_type": "errors",
             "reason": f"Process worker error: {str(e)}",
-            "error_details": tb
+            "error_details": tb,
         }
