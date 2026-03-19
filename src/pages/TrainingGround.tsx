@@ -482,7 +482,7 @@ export function TrainingGround() {
                       <p className="text-[11px] text-muted-foreground/80 leading-relaxed mb-3">
                         Stealth is the optimal paper trading engine — it covers the full timeframe range (D→5m) and adaptively selects between scalp, intraday, and swing setups based on what the market structure dictates.
                       </p>
-                      <div className="grid grid-cols-4 gap-2">
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                         <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
                           <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">R:R Min</div>
                           <div className="text-sm font-mono font-bold text-accent">1.8</div>
