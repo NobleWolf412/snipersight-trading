@@ -37,6 +37,14 @@ from backend.diagnostics.report import ReportGenerator, ModeStats
 
 logger = logging.getLogger(__name__)
 
+# Pending order TTL by trade type. Swing limit orders targeting HTF demand zones
+# may not get retested for hours; the old flat 10-min TTL was silently killing them.
+_PENDING_TTL_MINUTES: Dict[str, float] = {
+    "swing": 240.0,    # 4 hours
+    "intraday": 60.0,  # 1 hour
+    "scalp": 10.0,     # 2 scan cycles
+}
+
 
 # #region agent log
 def _dbg_log(hypothesis_id: str, location: str, message: str, data: Dict[str, Any]) -> None:
@@ -270,6 +278,7 @@ class PaperTradingService:
         self.activity_log: List[Dict[str, Any]] = []
         self.stats: PaperTradingStats = PaperTradingStats()
         self._peak_equity: float = 0.0
+        self._last_drawdown_check: datetime = datetime.now(timezone.utc)
 
         # Session timing
         self.started_at: Optional[datetime] = None
@@ -814,14 +823,7 @@ class PaperTradingService:
                                             # (though _process_signal should handle most of these)
                                             pass
 
-                        # Expire stale pending orders that have outlived their TTL.
-                        # TTL is per-trade-type: swing setups need hours to pull back to
-                        # their limit zone; scalps need only minutes.
-                        _PENDING_TTL_MINUTES: Dict[str, float] = {
-                            "swing": 240.0,    # 4 hours — HTF limit orders need time
-                            "intraday": 60.0,  # 1 hour
-                            "scalp": 10.0,     # 2 scan cycles (original default)
-                        }
+                        # Expire stale pending orders that have outlived their per-type TTL.
                         if self._pending_plans and self.config:
                             now = datetime.now(timezone.utc)
                             for order_id in list(self._pending_plans.keys()):
@@ -859,10 +861,12 @@ class PaperTradingService:
                     # Check for closed positions
                     await self._sync_closed_positions()
 
-                    # Update drawdown in real-time (every ~10s) to capture open-position
+                    # Update drawdown in real-time (every 10s) to capture open-position
                     # underwater equity, not only at trade-close time.
-                    if int(datetime.now(timezone.utc).timestamp()) % 10 == 0:
+                    _now = datetime.now(timezone.utc)
+                    if (_now - self._last_drawdown_check).total_seconds() >= 10:
                         self._update_drawdown()
+                        self._last_drawdown_check = _now
 
             except Exception as e:
                 logger.error(f"Monitor error: {e}")
