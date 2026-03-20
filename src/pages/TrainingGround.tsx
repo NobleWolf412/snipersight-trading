@@ -115,10 +115,11 @@ function EquitySparkline({ trades, initialBalance }: { trades: CompletedPaperTra
   const strokeColor = isUp ? '#00ff88' : '#ff4444';
   const fillGradId = 'eq-grad';
 
-  // Area fill path
-  const lastX = pad + (1) * (w - 2 * pad);
+  // Area fill: close from the actual last point's X down to the baseline and back to origin
+  const lastPtX = pad + (lastPt.x / (points.length - 1)) * (w - 2 * pad);
+  const lastPtY = h - pad - ((lastPt.y - minY) / rangeY) * (h - 2 * pad);
   const firstX = pad;
-  const areaD = pathD + ` L ${lastX.toFixed(1)} ${h} L ${firstX.toFixed(1)} ${h} Z`;
+  const areaD = pathD + ` L ${lastPtX.toFixed(1)} ${h} L ${firstX.toFixed(1)} ${h} Z`;
 
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="w-full h-16">
@@ -130,10 +131,10 @@ function EquitySparkline({ trades, initialBalance }: { trades: CompletedPaperTra
       </defs>
       <path d={areaD} fill={`url(#${fillGradId})`} />
       <path d={pathD} fill="none" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Current point dot */}
+      {/* Pulse dot at the actual last data point */}
       <circle
-        cx={pad + (1) * (w - 2 * pad)}
-        cy={h - pad - ((lastPt.y - minY) / rangeY) * (h - 2 * pad)}
+        cx={lastPtX}
+        cy={lastPtY}
         r="3"
         fill={strokeColor}
         className="animate-pulse"
@@ -1477,37 +1478,100 @@ export function TrainingGround() {
         <div className="mt-8">
           <TacticalPanel>
             <div className="p-4 md:p-6">
-              <div className="mb-6">
-                <h3 className="heading-hud text-xl text-foreground mb-2">Phantom Engine Specs</h3>
-                <p className="text-sm text-muted-foreground">How the Stealth engine processes and executes trades</p>
+              <div className="mb-6 flex justify-between items-end">
+                <div>
+                  <h3 className="heading-hud text-xl text-foreground mb-1 uppercase tracking-tight">Phantom Engine Specs</h3>
+                  <p className="text-sm text-muted-foreground">Internal logic and autonomous execution parameters</p>
+                </div>
+                {status?.status === 'running' && (
+                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/5 border border-green-500/20 mb-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.5)]" />
+                    <span className="text-[9px] font-black text-green-400/80 uppercase tracking-[0.2em] pl-1">Engine Active</span>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-5 bg-background rounded-lg border border-border hover:border-purple-500/30 transition-colors group">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Lightning size={18} weight="fill" className="text-purple-400 group-hover:animate-pulse" />
-                    <div className="font-bold text-base heading-hud text-purple-400">Regime Adaptive</div>
+                {/* Regime Adaptive */}
+                <div className="p-5 bg-background/40 hover:bg-background/60 rounded-xl border border-border/50 hover:border-purple-500/30 transition-all duration-300 group relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 blur-3xl rounded-full -mr-12 -mt-12 pointer-events-none" />
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                       <Lightning size={18} weight="fill" className={cn("text-purple-400", status?.status === 'running' && "animate-pulse")} />
+                       <div className="font-bold text-sm tracking-widest uppercase text-purple-400/90">Regime Adaptive</div>
+                    </div>
+                    {status?.regime && status.regime.composite !== 'unknown' && (
+                       <Badge variant="outline" className="text-[9px] border-purple-500/20 text-purple-400/80 bg-purple-500/5 font-mono tracking-tighter">
+                          {status.regime.composite.toUpperCase()}
+                       </Badge>
+                    )}
                   </div>
-                  <div className="text-muted-foreground text-sm leading-relaxed">
-                    Position sizing automatically adjusts based on market regime — scales up in strong trends, reduces in choppy conditions
-                  </div>
+                  <p className="text-muted-foreground text-xs leading-relaxed mb-4">
+                    Position sizing automatically scales up in strong trends and reduces in choppy/risk-off conditions.
+                  </p>
+                  {status?.regime && status.regime.composite !== 'unknown' && (
+                    <div className="pt-3 border-t border-purple-500/10 flex items-center justify-between">
+                       <span className="text-[9px] text-muted-foreground/40 uppercase font-mono tracking-[0.2em]">Live Pulse</span>
+                       <span className="text-[10px] font-mono font-bold text-purple-400/80">{status.regime.trend.toUpperCase()}</span>
+                    </div>
+                  )}
                 </div>
-                <div className="p-5 bg-background rounded-lg border border-border hover:border-accent/30 transition-colors group">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Crosshair size={18} className="text-accent group-hover:animate-pulse" />
-                    <div className="font-bold text-base heading-hud">SMC Detection</div>
+
+                {/* SMC Detection */}
+                <div className="p-5 bg-background/40 hover:bg-background/60 rounded-xl border border-border/50 hover:border-accent/30 transition-all duration-300 group relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 blur-3xl rounded-full -mr-12 -mt-12 pointer-events-none" />
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                       <Crosshair size={18} className={cn("text-accent", status?.status === 'running' && "animate-pulse")} />
+                       <div className="font-bold text-sm tracking-widest uppercase text-accent/90">SMC Detection</div>
+                    </div>
+                    {status?.status === 'running' && (
+                       <Badge variant="outline" className="text-[9px] border-accent/20 text-accent/80 bg-accent/5 font-mono animate-pulse">
+                          SCANNING
+                       </Badge>
+                    )}
                   </div>
-                  <div className="text-muted-foreground text-sm leading-relaxed">
-                    Multi-timeframe Smart Money analysis — order blocks, FVGs, structural breaks, and liquidity sweeps across D→5m
-                  </div>
+                  <p className="text-muted-foreground text-xs leading-relaxed mb-4">
+                    MTF Smart Money analysis — hunting Order Blocks, FVGs, and structural breaks across D→5m.
+                  </p>
+                  {status?.status === 'running' && (
+                    <div className="pt-3 border-t border-accent/10 flex items-center justify-between">
+                       <span className="text-[9px] text-muted-foreground/40 uppercase font-mono tracking-[0.2em]">Target Depth</span>
+                       <span className="text-[10px] font-mono font-bold text-accent/80">{(config.symbols?.length || 0) + (config.majors ? 5 : 0) + (config.altcoins ? 15 : 0)} Assets</span>
+                    </div>
+                  )}
                 </div>
-                <div className="p-5 bg-background rounded-lg border border-border hover:border-amber-500/30 transition-colors group">
-                  <div className="flex items-center gap-2 mb-3">
-                    <ShieldCheck size={18} className="text-amber-400 group-hover:animate-pulse" />
-                    <div className="font-bold text-base heading-hud text-amber-400">Risk Management</div>
+
+                {/* Risk Management */}
+                <div className="p-5 bg-background/40 hover:bg-background/60 rounded-xl border border-border/50 hover:border-amber-500/30 transition-all duration-300 group relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 blur-3xl rounded-full -mr-12 -mt-12 pointer-events-none" />
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                       <ShieldCheck size={18} className={cn("text-amber-400", status?.status === 'running' && "animate-pulse")} />
+                       <div className="font-bold text-sm tracking-widest uppercase text-amber-400/90">Risk Control</div>
+                    </div>
+                    {status?.statistics && (
+                       <Badge variant="outline" className="text-[9px] border-amber-500/20 text-amber-400/80 bg-amber-500/5 font-mono">
+                          {status.statistics.total_pnl < 0 ? Math.abs(status.statistics.total_pnl_pct).toFixed(1) : '0.0'}% DD
+                       </Badge>
+                    )}
                   </div>
-                  <div className="text-muted-foreground text-sm leading-relaxed">
-                    Scale-in ladder (L1→L3), trailing stops, breakeven protection, and stagnation timeout — fully automated risk control
-                  </div>
+                  <p className="text-muted-foreground text-xs leading-relaxed mb-4">
+                    Scalable entry ladder (L1→L3), trailing stops, and proprietary stagnation kill-switches.
+                  </p>
+                  {status?.status === 'running' && (
+                    <div className="pt-3 border-t border-amber-500/10">
+                       <div className="flex items-center justify-between mb-2">
+                          <span className="text-[9px] text-muted-foreground/40 uppercase font-mono tracking-[0.2em]">DD Threshold</span>
+                          <span className="text-[10px] font-mono text-foreground/60">{config.max_drawdown_pct || 'OFF'}%</span>
+                       </div>
+                       <div className="h-1 w-full bg-black/40 rounded-full overflow-hidden border border-white/5">
+                          <div 
+                             className="h-full bg-gradient-to-r from-amber-500/50 to-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)] transition-all duration-700"
+                             style={{ width: `${Math.min(100, ((status.statistics?.total_pnl < 0 ? Math.abs(status.statistics.total_pnl_pct) : 0) / (config.max_drawdown_pct || 100)) * 100)}%` }}
+                          />
+                       </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2082,44 +2146,48 @@ function SignalLogRow({ signal }: { signal: SignalLogEntry }) {
 
   return (
     <div
-      className="p-2 rounded-lg bg-background/60 border border-border/50 hover:border-purple-500/30 transition-colors cursor-pointer"
+      className="rounded-lg bg-background/60 border border-border/50 hover:border-purple-500/30 transition-colors cursor-pointer overflow-hidden"
       onClick={() => setExpanded(!expanded)}
     >
-      <div className="flex items-center gap-4 text-[10px] sm:text-xs font-mono py-1">
+      {/* Row 1: badges + key numbers + time */}
+      <div className="flex items-center gap-2 px-3 py-2 text-[10px] font-mono flex-wrap">
         {/* Result badge */}
-        <Badge variant="outline" className={cn("text-[9px] tracking-widest uppercase border px-2 py-0 min-w-[45px] text-center shrink-0", resultColor)}>
+        <Badge variant="outline" className={cn("text-[9px] tracking-widest uppercase border px-2 py-0 shrink-0", resultColor)}>
           {resultLabel}
         </Badge>
 
-        {/* Direction & Symbol */}
-        <div className="flex items-center gap-2 w-32 shrink-0">
-          <span className={cn("font-bold", isLong ? 'text-green-400' : 'text-red-400')}>
-            {isLong ? <ArrowUp size={12} className="inline" /> : <ArrowDown size={12} className="inline" />}
-            {signal.direction.slice(0, 1)}
-          </span>
-          <span className="font-bold text-foreground truncate">{signal.symbol.replace('/USDT', '')}</span>
-        </div>
+        {/* Direction arrow */}
+        <span className={cn("font-bold shrink-0", isLong ? 'text-green-400' : 'text-red-400')}>
+          {isLong ? <ArrowUp size={11} className="inline" /> : <ArrowDown size={11} className="inline" />}
+        </span>
 
-        {/* Confluence */}
-        <span className={cn("w-12 text-right shrink-0", signal.confluence >= 82 ? 'text-green-400' : 'text-yellow-400')}>
+        {/* Symbol */}
+        <span className="font-bold text-foreground text-xs shrink-0">{signal.symbol.replace('/USDT', '')}</span>
+
+        {/* Confluece */}
+        <span className={cn("px-1.5 py-0.5 rounded font-bold shrink-0", signal.confluence >= 82 ? 'text-green-400 bg-green-500/10' : signal.confluence >= 65 ? 'text-yellow-400 bg-yellow-500/10' : 'text-red-400 bg-red-500/10')}>
           {signal.confluence.toFixed(0)}%
         </span>
 
-        {/* Entry / Stop / R:R */}
-        <div className="flex items-center gap-3 w-40 justify-end shrink-0">
-          <span className="text-muted-foreground">${signal.entry_zone.toFixed(2)}</span>
-          <span className="text-red-400/60">${signal.stop_loss.toFixed(2)}</span>
-        </div>
+        {/* Entry / SL */}
+        <span className="text-muted-foreground/60 shrink-0">@ <span className="text-foreground/80">${signal.entry_zone.toFixed(2)}</span></span>
+        <span className="text-red-400/50 shrink-0">SL ${signal.stop_loss.toFixed(2)}</span>
+        {signal.rr != null && (
+          <span className="text-accent/60 shrink-0">{signal.rr.toFixed(1)}R</span>
+        )}
 
-        {/* Reason (truncated) */}
-        <span className="flex-1 truncate text-muted-foreground/80 pl-4 border-l border-border/30 italic">
-          {signal.reason}
+        {/* Timestamp — pushed right */}
+        <span className="ml-auto text-muted-foreground/40 shrink-0">
+          {new Date(signal.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
+      </div>
 
-        {/* Time */}
-        <span className="text-muted-foreground/40 w-20 text-right shrink-0">
-          {new Date(signal.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-        </span>
+      {/* Row 2: Reason — full width, readable */}
+      <div className={cn(
+        "px-3 pb-2 text-[10px] font-mono leading-relaxed",
+        signal.result === 'executed' ? 'text-green-400/70' : signal.result === 'error' ? 'text-red-400/70' : 'text-muted-foreground/60'
+      )}>
+        {signal.reason}
       </div>
 
       {/* Expanded details */}
