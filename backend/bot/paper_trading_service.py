@@ -1323,8 +1323,12 @@ class PaperTradingService:
         )
         # #endregion
 
-        # Check if we can take more positions (count open + pending toward cap)
-        active_count = len(self._get_active_positions()) + len(self._pending_plans)
+        # Check if we can take more positions.
+        # Only count ACTIVE (filled) positions against the cap — pending limit orders
+        # hold no capital and are already deduplicated per-symbol by Gate 3.
+        # Counting pending here caused valid signals to be blocked whenever the book
+        # was full of stale unfilled limits, even with zero actual exposure.
+        active_count = len(self._get_active_positions())
         if active_count >= config.max_positions:
             reason = f"Max positions reached ({active_count}/{config.max_positions})"
             logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
@@ -1341,6 +1345,7 @@ class PaperTradingService:
                 data={
                     "symbol": plan.symbol,
                     "active_count": active_count,
+                    "pending_count": len(self._pending_plans),
                     "max_positions": config.max_positions,
                 },
             )
@@ -1374,7 +1379,30 @@ class PaperTradingService:
         )
         if existing_order_id:
             existing_plan = self._pending_plans[existing_order_id]
-            if plan.confidence_score <= existing_plan.confidence_score:
+            direction_flipped = existing_plan.direction != plan.direction
+
+            if direction_flipped:
+                # Market structure has flipped — always cancel the stale opposite-direction
+                # pending and take the new signal regardless of confluence comparison.
+                logger.info(
+                    f"DIRECTION FLIP: {plan.symbol} | cancelling stale {existing_plan.direction} "
+                    f"pending ({existing_plan.confidence_score:.1f}%), taking {plan.direction} "
+                    f"({plan.confidence_score:.1f}%)"
+                )
+                executor.cancel_order(existing_order_id)
+                self._pending_plans.pop(existing_order_id, None)
+                self._pending_placed_at.pop(existing_order_id, None)
+                self._log_activity("pending_order_replaced", {
+                    "symbol": plan.symbol,
+                    "reason": "direction_flip",
+                    "old_direction": existing_plan.direction,
+                    "new_direction": plan.direction,
+                    "old_confluence": existing_plan.confidence_score,
+                    "new_confluence": plan.confidence_score,
+                    "limit_price": plan.entry_zone.near_entry,
+                })
+            elif plan.confidence_score <= existing_plan.confidence_score:
+                # Same direction, equal or lower confluence — keep existing
                 reason = (
                     f"Pending order already exists with equal/higher confluence "
                     f"({existing_plan.confidence_score:.1f}% >= {plan.confidence_score:.1f}%)"
@@ -1382,21 +1410,23 @@ class PaperTradingService:
                 logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
                 self._log_signal(plan, "filtered", reason)
                 return
-            # New signal has better confluence — cancel old order and replace it
-            logger.info(
-                f"REPLACING PENDING ORDER: {plan.symbol} | "
-                f"old confluence={existing_plan.confidence_score:.1f}% → "
-                f"new confluence={plan.confidence_score:.1f}%"
-            )
-            executor.cancel_order(existing_order_id)
-            self._pending_plans.pop(existing_order_id, None)
-            self._pending_placed_at.pop(existing_order_id, None)
-            self._log_activity("pending_order_replaced", {
-                "symbol": plan.symbol,
-                "old_confluence": existing_plan.confidence_score,
-                "new_confluence": plan.confidence_score,
-                "limit_price": plan.entry_zone.near_entry,
-            })
+            else:
+                # Same direction, better confluence — replace
+                logger.info(
+                    f"REPLACING PENDING ORDER: {plan.symbol} | "
+                    f"old confluence={existing_plan.confidence_score:.1f}% → "
+                    f"new confluence={plan.confidence_score:.1f}%"
+                )
+                executor.cancel_order(existing_order_id)
+                self._pending_plans.pop(existing_order_id, None)
+                self._pending_placed_at.pop(existing_order_id, None)
+                self._log_activity("pending_order_replaced", {
+                    "symbol": plan.symbol,
+                    "reason": "higher_confluence",
+                    "old_confluence": existing_plan.confidence_score,
+                    "new_confluence": plan.confidence_score,
+                    "limit_price": plan.entry_zone.near_entry,
+                })
 
         # Check confluence threshold - use same rounding as scanner to avoid asymmetry
         min_score = config.min_confluence or (
