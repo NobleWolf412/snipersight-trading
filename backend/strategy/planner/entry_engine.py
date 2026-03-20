@@ -819,18 +819,20 @@ def _calculate_entry_zone(
             near_entry = best_ob.high - offset
             far_entry = best_ob.low + offset
 
-            # FIX: When price is INSIDE the OB (already pulled back), cap near_entry at current price
-            # This allows immediate entry instead of rejecting as "entry above price"
+            # When price is already inside the OB, apply an aggressive-fill buffer so the
+            # marketable limit fills immediately even if price drifts slightly between scan
+            # and signal execution. Capped at 0.1% of price on low-ATR assets.
+            # Also prevents near==far collision in EntryZone (far is anchored to current_price,
+            # near is above it by at least in_zone_buffer).
             price_inside_ob = current_price <= best_ob.high and current_price >= best_ob.low
             if near_entry > current_price:
+                in_zone_buffer = min(planner_cfg.market_entry_aggression_atr * atr, current_price * 0.001)
+                near_entry = current_price + in_zone_buffer
+                far_entry = min(far_entry, current_price)  # anchor far to current_price, not near_entry
                 logger.info(
-                    "📦 ENTRY ZONE FIX: near_entry (%.2f) > price (%.2f), capping at price (inside OB: %s)",
-                    near_entry,
-                    current_price,
-                    price_inside_ob,
+                    "📦 IN-ZONE ENTRY (LONG OB): near=%.4f (price=%.4f + buf=%.4f), far=%.4f (inside OB: %s)",
+                    near_entry, current_price, in_zone_buffer, far_entry, price_inside_ob,
                 )
-                near_entry = current_price  # Allow entry at current price
-                far_entry = min(far_entry, near_entry)  # FIX: Prevent inversion
 
             logger.info(
                 "📦 ENTRY ZONE CALC: OB=[%.2f-%.2f] | offset=%.2f (base=%.2f * htf=%.2f * atr=%.2f) | near=%.2f, far=%.2f | price=%.2f",
@@ -847,7 +849,7 @@ def _calculate_entry_zone(
 
             rationale = f"Entry zone based on {best_ob.timeframe} bullish order block"
             if price_inside_ob:
-                rationale += " (price inside OB - immediate entry)"
+                rationale += " (price inside OB - aggressive fill)"
             used_structure = True
             entry_zone = EntryZone(near_entry=near_entry, far_entry=far_entry, rationale=rationale)
             # Attach entry_tf_used for metadata tracking
@@ -910,15 +912,15 @@ def _calculate_entry_zone(
             near_entry = best_fvg.top - offset
             far_entry = best_fvg.bottom + offset
 
-            # FIX: Cap near_entry at current price if calculated above
+            # When price is already inside the FVG, apply aggressive-fill buffer.
             if near_entry > current_price:
+                in_zone_buffer = min(planner_cfg.market_entry_aggression_atr * atr, current_price * 0.001)
+                near_entry = current_price + in_zone_buffer
+                far_entry = min(far_entry, current_price)  # anchor to current_price to prevent collision
                 logger.info(
-                    "📦 FVG ENTRY FIX: near_entry (%.2f) > price (%.2f), capping at price",
-                    near_entry,
-                    current_price,
+                    "📦 IN-ZONE ENTRY (LONG FVG): near=%.4f (price=%.4f + buf=%.4f), far=%.4f",
+                    near_entry, current_price, in_zone_buffer, far_entry,
                 )
-                near_entry = current_price
-                far_entry = min(far_entry, near_entry)  # FIX: Prevent inversion
 
             rationale = f"Entry zone based on {best_fvg.timeframe} bullish FVG"
             used_structure = True
@@ -1139,17 +1141,16 @@ def _calculate_entry_zone(
             near_entry = best_ob.low + offset
             far_entry = best_ob.high - offset
 
-            # FIX: Cap near_entry at current price if already inside
+            # When price is already inside the OB, apply aggressive-fill buffer for shorts.
             price_inside_ob = current_price <= best_ob.high and current_price >= best_ob.low
             if near_entry < current_price:
+                in_zone_buffer = min(planner_cfg.market_entry_aggression_atr * atr, current_price * 0.001)
+                near_entry = current_price - in_zone_buffer
+                far_entry = max(far_entry, current_price)  # anchor to current_price to prevent collision
                 logger.info(
-                    "📦 ENTRY ZONE FIX: near_entry (%.2f) < price (%.2f), capping at price (inside OB: %s)",
-                    near_entry,
-                    current_price,
-                    price_inside_ob,
+                    "📦 IN-ZONE ENTRY (SHORT OB): near=%.4f (price=%.4f - buf=%.4f), far=%.4f (inside OB: %s)",
+                    near_entry, current_price, in_zone_buffer, far_entry, price_inside_ob,
                 )
-                near_entry = current_price
-                far_entry = max(far_entry, near_entry)  # FIX: Prevent inversion for shorts
 
             logger.info(
                 "📦 ENTRY ZONE CALC: OB=[%.2f-%.2f] | offset=%.2f (base=%.2f * htf=%.2f * atr=%.2f) | near=%.2f, far=%.2f | price=%.2f",
@@ -1166,7 +1167,7 @@ def _calculate_entry_zone(
 
             rationale = f"Entry zone based on {best_ob.timeframe} bearish order block"
             if price_inside_ob:
-                rationale += " (price inside OB - immediate entry)"
+                rationale += " (price inside OB - aggressive fill)"
             used_structure = True
             entry_zone = EntryZone(near_entry=near_entry, far_entry=far_entry, rationale=rationale)
             entry_zone.entry_tf_used = entry_tf_used  # type: ignore
@@ -1224,15 +1225,15 @@ def _calculate_entry_zone(
             near_entry = best_fvg.top - offset   # Close to FVG top (resistance approach from above)
             far_entry = best_fvg.bottom + offset  # Deeper into FVG
 
-            # FIX
+            # When price is already inside the FVG, apply aggressive-fill buffer for shorts.
             if near_entry < current_price:
+                in_zone_buffer = min(planner_cfg.market_entry_aggression_atr * atr, current_price * 0.001)
+                near_entry = current_price - in_zone_buffer
+                far_entry = max(far_entry, current_price)  # anchor to current_price to prevent collision
                 logger.info(
-                    "📦 FVG ENTRY FIX: near_entry (%.2f) < price (%.2f), capping at price",
-                    near_entry,
-                    current_price,
+                    "📦 IN-ZONE ENTRY (SHORT FVG): near=%.4f (price=%.4f - buf=%.4f), far=%.4f",
+                    near_entry, current_price, in_zone_buffer, far_entry,
                 )
-                near_entry = current_price
-                far_entry = max(far_entry, near_entry)  # FIX: Prevent inversion for shorts
 
             rationale = f"Entry zone based on {best_fvg.timeframe} bearish FVG"
             used_structure = True

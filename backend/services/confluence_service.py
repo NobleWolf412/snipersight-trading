@@ -434,46 +434,30 @@ class ConfluenceService:
                                     }
 
                                     raise ConflictingDirectionsException(
-                                        f"Conflicting signals ({bullish_breakdown.total_score:.1f}%) - bullish and bearish scores too close to call (<8pt margin) in neutral market",
+                                        f"Conflicting signals ({bullish_breakdown.total_score:.1f}% vs {bearish_breakdown.total_score:.1f}%) — both above gate, structure tied (<{DIRECTION_MARGIN:.0f}pt margin) in neutral market",
                                         bullish_breakdown=bullish_breakdown,
                                         bearish_breakdown=bearish_breakdown
                                     )
 
                             else:
-                                # Scores not strong enough for structure override (<=70%)
+                                # Scores not strong enough for structure override (<=70%).
+                                # Pick the higher-scoring direction and let the 70% CONF gate
+                                # produce a clear rejection ("Score X% below gate") instead of
+                                # the misleading "No directional edge" exception.
+                                if bullish_breakdown.total_score >= bearish_breakdown.total_score:
+                                    chosen = bullish_breakdown
+                                    chosen_direction = "LONG"
+                                else:
+                                    chosen = bearish_breakdown
+                                    chosen_direction = "SHORT"
+                                tie_break_used = "score_winner_below_gate"
                                 logger.info(
-                                    "🔄 %s Conflicting Signals (%.1f%%) - neutral regime, no clear edge",
+                                    "🔄 %s Both directions below gate (%.1f vs %.1f) — picking %s by score, "
+                                    "CONF gate will reject",
                                     context.symbol,
                                     bullish_breakdown.total_score,
-                                )
-
-                                context.metadata["chosen_direction"] = None
-                                context.metadata["alt_confluence"] = {
-                                    "long": bullish_breakdown.total_score,
-                                    "short": bearish_breakdown.total_score,
-                                    "tie_break_used": "skipped_no_edge",
-                                    # Bypass Exception Transport Issues by storing factors directly in shared metadata
-                                    "long_factors": [
-                                        {"name": f.name, "score": f.score, "weight": f.weight, "rationale": f.rationale} 
-                                        for f in bullish_breakdown.factors
-                                    ],
-                                    "short_factors": [
-                                        {"name": f.name, "score": f.score, "weight": f.weight, "rationale": f.rationale} 
-                                        for f in bearish_breakdown.factors
-                                    ],
-                                }
-
-                                # --- DEBUG SOURCE ---
-                                logger.error(f"DEBUG SOURCE: RAISING CONFLICT! Bull: {bullish_breakdown.total_score}, Bear: {bearish_breakdown.total_score}")
-                                try:
-                                    logger.error(f"DEBUG SOURCE FACTORS: Bull={len(bullish_breakdown.factors)} Bear={len(bearish_breakdown.factors)}")
-                                except: pass
-                                # --------------------
-
-                                raise ConflictingDirectionsException(
-                                    f"No directional edge ({bullish_breakdown.total_score:.1f}%) - bullish and bearish scores too close to call (<8pt margin) in neutral market",
-                                    bullish_breakdown=bullish_breakdown,
-                                    bearish_breakdown=bearish_breakdown
+                                    bearish_breakdown.total_score,
+                                    chosen_direction,
                                 )
 
             # CRITICAL: Store chosen direction in context for downstream use
