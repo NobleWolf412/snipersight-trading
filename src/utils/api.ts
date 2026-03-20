@@ -1046,6 +1046,7 @@ export interface SignalLogEntry {
   position_id?: string;
   balance?: number;
   order_status?: string;
+  timeframe?: string; // Signal timeframe (e.g. '4h', '1h', '15m')
 }
 
 export interface PaperTradingStartResponse {

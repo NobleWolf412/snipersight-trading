@@ -1252,6 +1252,7 @@ class PaperTradingService:
             "confluence": round(plan.confidence_score, 1),
             "setup_type": getattr(plan, "setup_type", "unknown"),
             "trade_type": getattr(plan, "trade_type", "unknown"),
+            "timeframe": getattr(plan, "primary_timeframe", None) or getattr(plan, "signal_timeframe", None),
             "entry_zone": round(plan.entry_zone.near_entry, 2),
             "stop_loss": round(plan.stop_loss.level, 2),
             "rr": round(plan.risk_reward, 2) if hasattr(plan, "risk_reward") else None,

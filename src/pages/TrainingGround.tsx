@@ -31,6 +31,7 @@ import {
   Lightning,
   ShieldCheck,
   Fire,
+  CaretDown,
 } from '@phosphor-icons/react';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { HomeButton } from '@/components/layout/HomeButton';
@@ -2144,84 +2145,140 @@ function SignalLogRow({ signal }: { signal: SignalLogEntry }) {
 
   const resultLabel = signal.result === 'executed' ? 'EXEC' : signal.result === 'error' ? 'ERR' : 'FILT';
 
+  // Parse reason into layman summary + technical detail bullets
+  const { layman, details } = (() => {
+    const r = signal.reason || '';
+
+    // Known layman mappings
+    if (r.toLowerCase().includes('max positions')) return { layman: 'Slot full — max positions reached', details: [] };
+    if (r.toLowerCase().includes('waiting for limit fill') || r.toLowerCase().includes('limit placed')) return { layman: 'Limit order placed, waiting for fill', details: [] };
+    if (r.toLowerCase().includes('no directional edge')) return { layman: 'No clear bias — too close to call', details: [] };
+    if (r.toLowerCase().includes('already in position')) return { layman: 'Already holding this symbol', details: [] };
+    if (r.toLowerCase().includes('pending order already exists')) return { layman: 'Better pending order already queued', details: [] };
+    if (r.toLowerCase().includes('invalid position size')) return { layman: 'Position size too small to open', details: [] };
+    if (r.toLowerCase().includes('session stopped')) return { layman: 'Trade closed — session ended', details: [] };
+
+    // Confluence gate pattern: "Score X% is Y points below Z gate. Weakest signals: a: b, c: d"
+    const scoreMatch = r.match(/score\s+([\d.]+)%\s+is\s+([\d.]+)\s+points\s+below/i);
+    const weakestIdx = r.indexOf('Weakest signals:');
+
+    if (scoreMatch) {
+      const gap = parseFloat(scoreMatch[2]).toFixed(0);
+      const weakestRaw = weakestIdx >= 0 ? r.slice(weakestIdx + 'Weakest signals:'.length).trim() : '';
+      // Split on ", " where followed by a capital letter (each factor starts with a name)
+      const bulletItems = weakestRaw
+        ? weakestRaw.split(/,\s*(?=[A-Z])/).map(s => s.trim()).filter(Boolean)
+        : [];
+      return {
+        layman: `Scored ${parseFloat(scoreMatch[1]).toFixed(0)}% — ${gap}pts below the gate`,
+        details: bulletItems,
+      };
+    }
+
+    // Executed signal
+    if (signal.result === 'executed') {
+      return { layman: r.split('.')[0] || 'Order executed', details: [] };
+    }
+
+    // Fallback: first sentence is layman, rest is detail
+    const dotIdx = r.indexOf('.');
+    if (dotIdx > 0 && dotIdx < r.length - 1) {
+      return { layman: r.slice(0, dotIdx).trim(), details: [r.slice(dotIdx + 1).trim()] };
+    }
+    return { layman: r, details: [] };
+  })();
+
   return (
-    <div
-      className="rounded-lg bg-background/60 border border-border/50 hover:border-purple-500/30 transition-colors cursor-pointer overflow-hidden"
-      onClick={() => setExpanded(!expanded)}
-    >
-      {/* Row 1: badges + key numbers + time */}
-      <div className="flex items-center gap-2 px-3 py-2 text-[10px] font-mono flex-wrap">
-        {/* Result badge */}
-        <Badge variant="outline" className={cn("text-[9px] tracking-widest uppercase border px-2 py-0 shrink-0", resultColor)}>
-          {resultLabel}
-        </Badge>
+    <div className="rounded-lg bg-background/60 border border-border/50 hover:border-purple-500/30 transition-all duration-200 overflow-hidden">
+      {/* Collapsed view body — wraps for mobile/narrow views */}
+      <div 
+        className="cursor-pointer select-none group/row"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {/* Row 1: Badges, Symbol, Conf, Time */}
+        <div className="flex items-center gap-2 px-3 pt-2 pb-1 text-[10px] font-mono">
+          <Badge variant="outline" className={cn("text-[8px] tracking-widest uppercase border px-1.5 py-0 shrink-0 font-bold", resultColor)}>
+            {resultLabel}
+          </Badge>
 
-        {/* Direction arrow */}
-        <span className={cn("font-bold shrink-0", isLong ? 'text-green-400' : 'text-red-400')}>
-          {isLong ? <ArrowUp size={11} className="inline" /> : <ArrowDown size={11} className="inline" />}
-        </span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className={cn("font-bold shrink-0", isLong ? 'text-green-400' : 'text-red-400')}>
+              {isLong ? <ArrowUp size={8} className="inline" /> : <ArrowDown size={8} className="inline" />}
+            </span>
+            <span className="font-bold text-foreground text-xs truncate w-14">{signal.symbol.replace('/USDT', '')}</span>
+          </div>
 
-        {/* Symbol */}
-        <span className="font-bold text-foreground text-xs shrink-0">{signal.symbol.replace('/USDT', '')}</span>
+          <span className={cn(
+            "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0",
+            signal.confluence >= 80 ? 'text-green-400 bg-green-500/10' :
+            signal.confluence >= 65 ? 'text-yellow-400 bg-yellow-500/10' :
+            'text-red-400/80 bg-red-500/10'
+          )}>
+            {signal.confluence.toFixed(0)}%
+          </span>
 
-        {/* Confluece */}
-        <span className={cn("px-1.5 py-0.5 rounded font-bold shrink-0", signal.confluence >= 82 ? 'text-green-400 bg-green-500/10' : signal.confluence >= 65 ? 'text-yellow-400 bg-yellow-500/10' : 'text-red-400 bg-red-500/10')}>
-          {signal.confluence.toFixed(0)}%
-        </span>
+          {/* Time & Chevron pushed right */}
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-[9px] font-mono text-muted-foreground/35">
+              {new Date(signal.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {(details.length > 0 || signal.fill_price) && (
+              <span className={cn("text-purple-400/40 transition-transform duration-200", expanded ? 'rotate-180' : 'group-hover/row:text-purple-400')}>
+                <CaretDown size={11} />
+              </span>
+            )}
+          </div>
+        </div>
 
-        {/* Entry / SL */}
-        <span className="text-muted-foreground/60 shrink-0">@ <span className="text-foreground/80">${signal.entry_zone.toFixed(2)}</span></span>
-        <span className="text-red-400/50 shrink-0">SL ${signal.stop_loss.toFixed(2)}</span>
-        {signal.rr != null && (
-          <span className="text-accent/60 shrink-0">{signal.rr.toFixed(1)}R</span>
-        )}
-
-        {/* Timestamp — pushed right */}
-        <span className="ml-auto text-muted-foreground/40 shrink-0">
-          {new Date(signal.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </span>
+        {/* Row 2: Layman Summary — full width with wrap, no truncate */}
+        <div className="px-3 pb-2 pt-0.5 border-t border-transparent">
+          <p className="text-[10px] text-muted-foreground/60 leading-relaxed italic break-words">
+            {layman}
+          </p>
+        </div>
       </div>
 
-      {/* Row 2: Reason — full width, readable */}
-      <div className={cn(
-        "px-3 pb-2 text-[10px] font-mono leading-relaxed",
-        signal.result === 'executed' ? 'text-green-400/70' : signal.result === 'error' ? 'text-red-400/70' : 'text-muted-foreground/60'
-      )}>
-        {signal.reason}
-      </div>
+      {/* Expanded — technical detail in purple, wrapped */}
+      {expanded && (details.length > 0 || signal.fill_price || signal.fill_qty || signal.balance !== undefined) && (
+        <div className="px-3 pb-3 pt-1 border-t border-purple-500/10 bg-purple-500/5 space-y-2">
+          {/* Weakest signal breakdown — each as its own wrapped line */}
+          {details.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[9px] font-mono uppercase tracking-widest text-purple-400/50 font-bold mb-1">Why it was filtered:</div>
+              {details.map((item, i) => {
+                // Split on first ": " to get factor name vs explanation
+                const colonIdx = item.indexOf(': ');
+                const factor = colonIdx > 0 ? item.slice(0, colonIdx) : null;
+                const explanation = colonIdx > 0 ? item.slice(colonIdx + 2) : item;
+                return (
+                  <div key={i} className="flex gap-2 text-[10px] font-mono leading-relaxed">
+                    <span className="text-purple-400/40 shrink-0 mt-0.5">›</span>
+                    <span>
+                      {factor && <span className="text-purple-300/70 font-bold mr-1">{factor}:</span>}
+                      <span className="text-muted-foreground/60">{explanation}</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-      {/* Expanded details */}
-      {expanded && (
-        <div className="mt-2 pt-2 border-t border-border/30 text-xs font-mono text-muted-foreground grid grid-cols-2 md:grid-cols-4 gap-2">
-          <div>
-            <span className="text-muted-foreground/50">Setup: </span>
-            <span>{signal.setup_type}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground/50">Scan #: </span>
-            <span>{signal.scan_number}</span>
-          </div>
-          {signal.fill_price && (
-            <div>
-              <span className="text-muted-foreground/50">Fill: </span>
-              <span className="text-green-400">${signal.fill_price.toFixed(2)}</span>
-            </div>
-          )}
-          {signal.fill_qty && (
-            <div>
-              <span className="text-muted-foreground/50">Qty: </span>
-              <span>{signal.fill_qty.toFixed(6)}</span>
-            </div>
-          )}
-          {signal.balance !== undefined && (
-            <div>
-              <span className="text-muted-foreground/50">Balance: </span>
-              <span>${signal.balance.toFixed(2)}</span>
-            </div>
-          )}
-          <div className="col-span-full">
-            <span className="text-muted-foreground/50">Reason: </span>
-            <span className="text-yellow-300/80">{signal.reason}</span>
+          {/* Execution metadata — always shown when expanded */}
+          <div className="flex flex-wrap gap-3 text-[10px] font-mono pt-1 border-t border-border/20">
+            {signal.timeframe && (
+              <span><span className="text-muted-foreground/40">TF:</span> <span className="text-accent/70 font-bold">{signal.timeframe}</span></span>
+            )}
+            <span><span className="text-muted-foreground/40">Setup:</span> <span className="text-foreground/70">{signal.setup_type}</span></span>
+            <span><span className="text-muted-foreground/40">Scan #:</span> <span className="text-foreground/70">{signal.scan_number}</span></span>
+            {signal.fill_price && (
+              <span><span className="text-muted-foreground/40">Fill:</span> <span className="text-green-400">${signal.fill_price.toFixed(4)}</span></span>
+            )}
+            {signal.fill_qty && (
+              <span><span className="text-muted-foreground/40">Qty:</span> <span className="text-foreground/70">{signal.fill_qty.toFixed(6)}</span></span>
+            )}
+            {signal.balance !== undefined && (
+              <span><span className="text-muted-foreground/40">Balance:</span> <span className="text-foreground/70">${signal.balance.toFixed(2)}</span></span>
+            )}
           </div>
         </div>
       )}
