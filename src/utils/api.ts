@@ -1000,6 +1000,12 @@ export interface PaperTradingStatusResponse {
   next_scan_in_seconds: number | null;
   active_mode?: string;
   active_profile?: string;
+  regime?: {
+    composite: string;
+    score: number;
+    trend: string;
+    volatility: string;
+  };
   current_scan?: {
     status: 'running' | 'completed';
     completed: number;

@@ -630,6 +630,12 @@ class PaperTradingService:
             "current_scan": self.current_scan,
             "active_mode": self.active_mode,
             "active_profile": self.active_profile,
+            "regime": {
+                "composite": self._current_regime_composite,
+                "score": self._current_regime_score,
+                "trend": self._current_regime_trend,
+                "volatility": self._current_regime_volatility,
+            },
         }
 
         # Balance info
@@ -1388,6 +1394,7 @@ class PaperTradingService:
                 "symbol": plan.symbol,
                 "old_confluence": existing_plan.confidence_score,
                 "new_confluence": plan.confidence_score,
+                "limit_price": plan.entry_zone.near_entry,
             })
 
         # Check confluence threshold - use same rounding as scanner to avoid asymmetry

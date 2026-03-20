@@ -530,7 +530,9 @@ export function TrainingGround() {
                       
                       {/* Starting Balance */}
                       <div className="space-y-2">
-                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Starting Balance ($)</label>
+                        <div className="flex items-center justify-between h-4 mb-0.5">
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Starting Balance ($)</label>
+                        </div>
                         <input
                           type="number"
                           value={config.initial_balance}
@@ -557,7 +559,9 @@ export function TrainingGround() {
 
                       {/* Leverage */}
                       <div className="space-y-2">
-                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Leverage (x)</label>
+                        <div className="flex items-center justify-between h-4 mb-0.5">
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Leverage (x)</label>
+                        </div>
                         <input
                           type="number"
                           min="1"
@@ -595,7 +599,9 @@ export function TrainingGround() {
 
                       {/* Risk Per Trade */}
                       <div className="space-y-2">
-                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Risk Per Trade (%)</label>
+                        <div className="flex items-center justify-between h-4 mb-0.5">
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Risk Per Trade (%)</label>
+                        </div>
                         <input
                           type="number"
                           min="0.1"
@@ -626,7 +632,9 @@ export function TrainingGround() {
 
                       {/* Duration */}
                       <div className="space-y-2">
-                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Session Duration (h)</label>
+                        <div className="flex items-center justify-between h-4 mb-0.5">
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Session Duration (h)</label>
+                        </div>
                         <input
                           type="number"
                           min="1"
@@ -695,7 +703,7 @@ export function TrainingGround() {
 
                       {/* Max Trade Duration */}
                       <div className="space-y-2">
-                        <div className="flex items-center h-4 mb-0.5">
+                        <div className="flex items-center justify-between h-4 mb-0.5">
                           <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Max Trade Duration (h)</label>
                         </div>
                         <input
@@ -727,7 +735,7 @@ export function TrainingGround() {
 
                       {/* Max Drawdown Kill Switch */}
                       <div className="space-y-2">
-                        <div className="flex items-center h-4 mb-0.5">
+                        <div className="flex items-center justify-between h-4 mb-0.5">
                           <label className="text-[10px] text-red-400/80 uppercase tracking-widest pl-1">Max Drawdown Limit (%)</label>
                         </div>
                         <input
@@ -756,6 +764,76 @@ export function TrainingGround() {
                           ))}
                         </div>
                         <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Stop session if balance drops by this % from start</p>
+                      </div>
+
+                      {/* Scan Interval */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between h-4 mb-0.5">
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Scan Every (m)</label>
+                          <div className="text-[8px] text-accent/60 border border-accent/20 bg-accent/5 px-1.5 py-0 rounded">
+                            Suggested: 5m
+                          </div>
+                        </div>
+                        <input
+                          type="number"
+                          min="1"
+                          max="60"
+                          value={config.scan_interval_minutes}
+                          onChange={e => setConfig({ ...config, scan_interval_minutes: Number(e.target.value) })}
+                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
+                        />
+                        <div className="flex gap-1.5">
+                          {[2, 5, 15, 30].map(m => (
+                            <button
+                              key={m}
+                              onClick={() => setConfig({ ...config, scan_interval_minutes: m })}
+                              className={cn(
+                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                                config.scan_interval_minutes === m
+                                  ? "bg-accent/15 border-accent/50 text-accent"
+                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
+                              )}
+                            >
+                              {m}m
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Fast scans (2-5m) catch Scalp entries on lower timeframes</p>
+                      </div>
+
+                      {/* Max Assets */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between h-4 mb-0.5">
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Max Concurrent Assets</label>
+                          <div className="text-[8px] text-accent/60 border border-accent/20 bg-accent/5 px-1.5 py-0 rounded">
+                            Suggested: 3
+                          </div>
+                        </div>
+                        <input
+                          type="number"
+                          min="1"
+                          max="20"
+                          value={config.max_positions}
+                          onChange={e => setConfig({ ...config, max_positions: Number(e.target.value) })}
+                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
+                        />
+                        <div className="flex gap-1.5">
+                          {[1, 3, 5, 10].map(v => (
+                            <button
+                              key={v}
+                              onClick={() => setConfig({ ...config, max_positions: v })}
+                              className={cn(
+                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                                config.max_positions === v
+                                  ? "bg-accent/15 border-accent/50 text-accent"
+                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
+                              )}
+                            >
+                              {v}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Limit of concurrent active symbol slots (Positions + Pending)</p>
                       </div>
                     </div>
                   </div>
@@ -908,11 +986,32 @@ export function TrainingGround() {
                       </Badge>
                       {status?.active_profile && status.active_profile !== 'stealth' && (
                         <Badge variant="outline" className="font-mono text-xs tracking-widest border-yellow-500/50 text-yellow-400 bg-yellow-500/10">
-                          {status.active_profile?.toUpperCase()}
+                          {(status.active_profile || '').toUpperCase()}
                         </Badge>
                       )}
                     </div>
                   </div>
+
+                  {/* Market Regime */}
+                  {status?.regime && status.regime.composite !== 'unknown' && (
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-widest font-mono">
+                        MARKET REGIME
+                      </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className={cn(
+                          "font-mono text-sm font-bold tracking-tight",
+                          status.regime.trend.includes('up') ? 'text-green-400' : status.regime.trend.includes('down') ? 'text-red-400' : 'text-blue-400'
+                        )}>
+                          {status.regime.trend.toUpperCase()}
+                        </span>
+                        <span className="text-muted-foreground/30 font-mono text-xs">—</span>
+                        <span className="text-xs font-mono text-muted-foreground/80 uppercase">
+                          {status.regime.volatility}
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Confluence Gate */}
                   <div>
@@ -1718,9 +1817,9 @@ function ActivityItem({ event }: { event: PaperTradingActivity }) {
         return `Closed ${d.symbol}${tradeTypeLabel}: ${d.pnl >= 0 ? '+' : ''}${d.pnl?.toFixed(2)} (${displayReason}${regimeLabel})`;
       }
       case 'pending_order_placed':
-        return `${d.symbol || ''} ${d.direction || ''} — limit placed @ ${d.entry_price != null ? d.entry_price.toFixed(4) : '?'} (${d.confluence != null ? d.confluence.toFixed(0) + '% conf' : ''})`.trim();
+        return `${d.symbol || ''} ${d.direction || ''} — limit placed @ ${d.limit_price != null ? d.limit_price.toFixed(4) : '?'} (${d.confluence != null ? d.confluence.toFixed(0) + '% conf' : ''})`.trim();
       case 'pending_order_replaced':
-        return `${d.symbol || ''} ${d.direction || ''} — limit updated @ ${d.entry_price != null ? d.entry_price.toFixed(4) : '?'}`.trim();
+        return `${d.symbol || ''} ${d.direction || ''} — limit updated @ ${d.limit_price != null ? d.limit_price.toFixed(4) : '?'}`.trim();
       case 'pending_order_expired':
         return `${d.symbol || ''} ${d.direction || ''} — pending order expired unfilled`.trim();
       case 'scan_error':
