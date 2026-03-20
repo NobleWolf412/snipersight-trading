@@ -2228,12 +2228,20 @@ def _derive_trade_type(
     # Including them in is_scalp_mode incorrectly raised the swing threshold to 8%/6ATR and
     # demoted 4H from HTF to MTF — making it virtually impossible for stealth to produce swing
     # classifications (stealth max_stop_atr=4.5 can never reach the 6ATR scalp-mode threshold).
+    #
+    # "intraday_cascade" is a sentinel set by the cascade runner when it explicitly attempts
+    # the intraday scale. That attempt includes 4H in structure_timeframes for level discovery,
+    # but 4H should not count as HTF structure for CLASSIFICATION in that context — otherwise
+    # any target ≥2.45% gets labelled swing and the intraday cascade never produces a candidate
+    # (it's rejected by allowed_trade_types=("intraday",)). Treating it as scalp-mode here
+    # raises the swing bar to 8%/6ATR, letting 1H-primary intraday plans classify correctly.
     is_scalp_mode = expected_trade_type in (
         "precision",
         "surgical",
         "strike",
         "scalp",
         "intraday_aggressive",
+        "intraday_cascade",  # cascade sentinel — intraday scale should not auto-promote to swing
     )
 
     # Adjust structure definitions based on mode intent

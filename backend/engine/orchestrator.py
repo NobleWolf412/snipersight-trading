@@ -2444,6 +2444,11 @@ class Orchestrator:
             "min_stop_atr": 0.5,
             "max_stop_atr": 4.0,
             "allowed_trade_types": ("intraday",),
+            # Sentinel for _derive_trade_type: 4H is present for level-discovery only.
+            # Without this, htf_structure=True (4H in HTF) causes any target ≥2.45% to
+            # be classified swing, the intraday cascade never produces a valid candidate,
+            # and all stealth plans end up as swing.
+            "expected_trade_type": "intraday_cascade",
         },
         "scalp": {
             "primary_planning_timeframe": "15m",
