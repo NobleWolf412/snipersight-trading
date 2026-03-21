@@ -521,6 +521,17 @@ class ConfluenceService:
                 primary_tf = getattr(self._config, "primary_planning_timeframe", "1h")
                 if primary_tf not in allowed_tfs:
                     allowed_tfs = tuple(list(allowed_tfs) + [primary_tf])
+                # Also include the exec TF from the mode's relativity so that reversal signals
+                # on the execution timeframe (e.g. 15m CHoCH in Strike mode) aren't excluded.
+                try:
+                    from backend.shared.config.scanner_modes import RELATIVITY_MAP, map_profile_to_relativity
+                    _mode_key = map_profile_to_relativity(getattr(self._config, "profile", "stealth"))
+                    _rel = RELATIVITY_MAP.get(_mode_key, RELATIVITY_MAP["intraday"])
+                    exec_tf = _rel["exec"]
+                    if exec_tf not in allowed_tfs:
+                        allowed_tfs = tuple(list(allowed_tfs) + [exec_tf])
+                except Exception:
+                    pass
 
                 target_sweep_type = "low" if is_long else "high"
 

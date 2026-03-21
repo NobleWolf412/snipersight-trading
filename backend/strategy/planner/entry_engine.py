@@ -636,18 +636,21 @@ def _calculate_entry_zone(
         obs = [ob for ob in obs if (max(0.0, current_price - ob.high) / atr) <= max_pullback_atr]
         # Filter out heavily mitigated OBs
         obs = [ob for ob in obs if ob.mitigation_level <= planner_cfg.ob_mitigation_max]
-        # Validate OB integrity (not broken / not currently tapped)
+        # Validate OB integrity: price inside the zone counts as "tapped".
+        # Only allow in-zone OBs if mitigation is still low (zone is fresh).
         if multi_tf_data and primary_tf in getattr(multi_tf_data, "timeframes", {}):
-            df_primary = multi_tf_data.timeframes[primary_tf]
+            _df_primary = multi_tf_data.timeframes[primary_tf]  # available for future candle-close checks
+            tapped_threshold = planner_cfg.ob_mitigation_max * 0.5
             validated = []
             for ob in obs:
-                # Ensure price hasn't broken the OB
-                if current_price >= ob.low:
-                    validated.append(ob)
-                else:
+                price_inside = ob.low <= current_price <= ob.high
+                if price_inside and ob.mitigation_level > tapped_threshold:
                     logger.debug(
-                        f"Filtered invalid bullish OB (broken or tapped): low={ob.low} high={ob.high} ts={ob.timestamp}"
+                        f"Filtered heavily-mitigated in-zone bullish OB (tapped): "
+                        f"low={ob.low} high={ob.high} mitigation={ob.mitigation_level:.2f}"
                     )
+                else:
+                    validated.append(ob)
             obs = validated
 
         # NOTE: Removed Grade A/B filter - confluence scoring already penalizes weak OBs.
@@ -869,12 +872,18 @@ def _calculate_entry_zone(
             return entry_zone, used_structure
 
         elif fvgs:
-            # Use nearest unfilled FVG (filter by overlap threshold)
-            best_fvg = min(
-                [fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max],
-                key=lambda fvg: abs(fvg.top - current_price),
-                default=fvgs[0],
-            )
+            # Score FVGs by quality (freshness, mitigation, displacement, TF weight)
+            # mirrors _ob_score so FVG selection is not purely proximity-based
+            def _fvg_score_bullish(fvg) -> float:
+                freshness = getattr(fvg, "freshness_score", 0.5)
+                mitigation = 1.0 - min(getattr(fvg, "overlap_with_price", 0.0), 1.0)
+                displacement = 1.0 + getattr(fvg, "displacement_strength", 0.0) * planner_cfg.ob_displacement_weight
+                return freshness * mitigation * displacement * tf_weight.get(fvg.timeframe, 1.0)
+
+            eligible_fvgs = [fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max]
+            if not eligible_fvgs:
+                eligible_fvgs = fvgs
+            best_fvg = max(eligible_fvgs, key=_fvg_score_bullish)
             entry_tf_used = best_fvg.timeframe  # Track for metadata
 
             if indicators:
@@ -996,17 +1005,21 @@ def _calculate_entry_zone(
         # Fix: If inside OB (price >= low), distance is 0.
         obs = [ob for ob in obs if (max(0.0, ob.low - current_price) / atr) <= max_pullback_atr]
         obs = [ob for ob in obs if ob.mitigation_level <= planner_cfg.ob_mitigation_max]
+        # Validate OB integrity: price inside the zone counts as "tapped".
+        # Only allow in-zone OBs if mitigation is still low (zone is fresh).
         if multi_tf_data and primary_tf in getattr(multi_tf_data, "timeframes", {}):
-            df_primary = multi_tf_data.timeframes[primary_tf]
+            _df_primary = multi_tf_data.timeframes[primary_tf]  # available for future candle-close checks
+            tapped_threshold = planner_cfg.ob_mitigation_max * 0.5
             validated = []
             for ob in obs:
-                # Ensure price hasn't broken the OB
-                if current_price <= ob.high:
-                    validated.append(ob)
-                else:
+                price_inside = ob.low <= current_price <= ob.high
+                if price_inside and ob.mitigation_level > tapped_threshold:
                     logger.debug(
-                        f"Filtered invalid bearish OB (broken): low={ob.low} high={ob.high}"
+                        f"Filtered heavily-mitigated in-zone bearish OB (tapped): "
+                        f"low={ob.low} high={ob.high} mitigation={ob.mitigation_level:.2f}"
                     )
+                else:
+                    validated.append(ob)
             obs = validated
 
         logger.debug(
@@ -1015,10 +1028,14 @@ def _calculate_entry_zone(
 
         # NEW: Validate LTF OBs have HTF backing
         skip_htf_backing = config.profile in ("precision", "surgical")
+        if skip_htf_backing:
+            logger.debug("HTF backing filter SKIPPED for bearish OBs (%s mode)", config.profile)
         if not skip_htf_backing:
             validated_backing = []
-            ltf_tfs = ("1m", "5m", "15m")
-            htf_tfs = ("1h", "4h", "1d", "1w")
+            mode_key = map_profile_to_relativity(getattr(config, "profile", "stealth"))
+            rel = RELATIVITY_MAP.get(mode_key, RELATIVITY_MAP["intraday"])
+            ltf_tfs = (rel["exec"],)
+            htf_tfs = (rel["plan"], rel["context"], "1d", "1w")
             for ob in obs:
                 if ob.timeframe in ltf_tfs:
                     # Check for overlapping HTF structure (OB or FVG)
@@ -1044,7 +1061,15 @@ def _calculate_entry_zone(
                     validated_backing.append(ob)
             obs = validated_backing
 
-        tf_weight = {"1m": 0.5, "5m": 0.8, "15m": 1.0, "1h": 1.2, "4h": 1.5, "1d": 2.0}
+        mode_key = map_profile_to_relativity(getattr(config, "profile", "stealth"))
+        rel = RELATIVITY_MAP.get(mode_key, RELATIVITY_MAP["intraday"])
+        tf_weight = {
+            rel["exec"]: 0.8,
+            rel["plan"]: 1.2,
+            rel["context"]: 1.5,
+            "1d": 2.0,
+            "1w": 2.5,
+        }
 
         def _ob_score_bearish(ob: OrderBlock) -> float:
             base_score = ob.freshness_score * tf_weight.get(ob.timeframe, 1.0)
@@ -1186,11 +1211,18 @@ def _calculate_entry_zone(
             return entry_zone, used_structure
 
         elif fvgs:
-            best_fvg = min(
-                [fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max],
-                key=lambda fvg: abs(fvg.bottom - current_price),
-                default=fvgs[0],
-            )
+            # Score FVGs by quality (freshness, mitigation, displacement, TF weight)
+            # mirrors _ob_score_bearish so FVG selection is not purely proximity-based
+            def _fvg_score_bearish(fvg) -> float:
+                freshness = getattr(fvg, "freshness_score", 0.5)
+                mitigation = 1.0 - min(getattr(fvg, "overlap_with_price", 0.0), 1.0)
+                displacement = 1.0 + getattr(fvg, "displacement_strength", 0.0) * planner_cfg.ob_displacement_weight
+                return freshness * mitigation * displacement * tf_weight.get(fvg.timeframe, 1.0)
+
+            eligible_fvgs = [fvg for fvg in fvgs if fvg.overlap_with_price < planner_cfg.fvg_overlap_max]
+            if not eligible_fvgs:
+                eligible_fvgs = fvgs
+            best_fvg = max(eligible_fvgs, key=_fvg_score_bearish)
             entry_tf_used = best_fvg.timeframe  # Track for metadata
 
             if indicators:
@@ -1282,10 +1314,11 @@ def _calculate_entry_zone(
             rationale=f"ATR fallback entry zone (no SMC structure found): offset={fallback_offset:.4f}",
         )
     else:
-        # Bearish fallback: near_entry is ABOVE price (resistance side), far is BELOW near, but ABOVE current price
+        # Bearish fallback: price rallies up into the zone.
+        # near_entry = first touch (bottom of zone, lower price), far_entry = deeper resistance (higher price).
         entry_zone = EntryZone(
-            near_entry=current_price + fallback_offset,
-            far_entry=current_price + fallback_offset * 0.5,
+            near_entry=current_price + fallback_offset * 0.5,
+            far_entry=current_price + fallback_offset,
             rationale=f"ATR fallback entry zone (no SMC structure found): offset={fallback_offset:.4f}",
         )
     entry_zone.entry_tf_used = "N/A"  # type: ignore
