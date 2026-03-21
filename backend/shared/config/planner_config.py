@@ -22,6 +22,10 @@ class PlannerConfig:
 
     # ATR-based offsets
     entry_zone_offset_atr: float = 0.1  # Base offset for entry zone boundaries
+    market_entry_aggression_atr: float = 0.05  # Buffer added when price is already inside OB/FVG.
+                                                # Creates a marketable limit that fills immediately
+                                                # even if price drifts slightly between scan and execution.
+                                                # Also prevents near==far collision in EntryZone.
     stop_buffer_atr: float = 0.3  # Buffer beyond structure for stop loss
     fallback_entry_near_atr: float = 0.5  # ATR fallback: near entry offset
     fallback_entry_far_atr: float = 1.5  # ATR fallback: far entry offset
@@ -72,6 +76,12 @@ class PlannerConfig:
     # Order Block filtering
     ob_mitigation_max: float = 0.3  # Exclude or deprioritize OBs with mitigation > 30%
     ob_displacement_weight: float = 0.5  # Weight for displacement in scoring
+    ob_max_entry_depth: float = 0.5  # Max fraction of OB height price can penetrate before
+                                     # mid-zone entry is rejected (0.5 = top half only).
+                                     # When price is deeper than this, near_entry is NOT set
+                                     # to current_price — the signal is dropped and the cascade
+                                     # tries the next trade type. Prevents entering with a
+                                     # shrunken stop vs. the true zone bottom.
 
     # Swing stop search
     # NOTE: stop_lookback_bars is the BASE value - it gets scaled by timeframe automatically
@@ -142,6 +152,7 @@ class PlannerConfig:
                 pd_compliance_required=False,  # Speed over perfection
                 sweep_backing_boost=2.0,  # Prioritize Turtle Soups (High conviction)
                 sweep_lookback_candles=3,  # Fast reaction
+                ob_max_entry_depth=0.55,  # Scalps: slightly more tolerant (zones fill fast on LTF)
                 # Trend Continuation for Surgical (precision mode)
                 enable_trend_continuation=True,  # ENABLED: Surgical has 4H targets, can benefit from quality consolidations
                 consolidation_min_touches=5,  # Strictest quality (no compromise)
@@ -163,6 +174,7 @@ class PlannerConfig:
                 pd_compliance_required=False,  # Speed/Volume focus
                 sweep_backing_boost=2.0,  # Heavy focus on liquidity grabs
                 sweep_lookback_candles=5,
+                ob_max_entry_depth=0.45,  # Intraday: moderate tolerance
                 # Trend Continuation for Strike (intraday aggressive)
                 enable_trend_continuation=True,  # ENABLED: Strike can hold for swing-sized moves
                 consolidation_min_duration_candles=8,  # Shorter for intraday speed
@@ -181,6 +193,7 @@ class PlannerConfig:
                 pd_compliance_tolerance=0.05,  # Allow 5% buffer for near-misses
                 sweep_backing_boost=1.2,  # Less boost (Structure > Sweeps)
                 sweep_lookback_candles=10,
+                ob_max_entry_depth=0.35,  # Swing: tightest gate — only enter near OB top
                 # Trend Continuation (NEW)
                 enable_trend_continuation=True,  # Enable for swing trading
                 consolidation_min_duration_candles=15,  # INCREASED from 12 for HTF macro ranges (60h on 4H, 15 days on 1D)
@@ -201,6 +214,7 @@ class PlannerConfig:
                 pd_compliance_tolerance=0.05,  # Allow 5% buffer
                 sweep_backing_boost=1.5,  # Balanced sweep importance
                 sweep_lookback_candles=8,
+                ob_max_entry_depth=0.40,  # Stealth: balanced — top 40% of zone only
                 # Trend Continuation (NEW)
                 enable_trend_continuation=True,  # Enable for balanced/swing
                 consolidation_min_duration_candles=10,  # Balanced duration

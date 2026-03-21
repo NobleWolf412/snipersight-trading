@@ -450,8 +450,15 @@ class SMCConfig:
 
     @staticmethod
     def defaults() -> "SMCConfig":
-        """Return a fresh default configuration object."""
-        return SMCConfig()
+        """Return a fresh default configuration object.
+
+        ob_lookback_candles=5 (reduced from 7):
+        On 15m the scaled window was 7*2.0=14 candles = 3.5h dead zone where
+        no OBs could be confirmed (forward displacement check). Reducing to 5
+        → 10 candles = 2.5h, cutting the dead zone by ~30 minutes.
+        On 4h the window stays 5 candles = 20h (still appropriate for swings).
+        """
+        return SMCConfig(ob_lookback_candles=5)
 
     @staticmethod
     def luxalgo_strict() -> "SMCConfig":
@@ -541,12 +548,18 @@ class SMCConfig:
         Designed for intraday/scalp trading where more signals are preferred.
         Uses relaxed thresholds to catch more patterns while still
         maintaining SMC structure requirements.
+
+        ob_lookback_candles=4 (reduced from 7):
+        On 15m the scaled forward window was 7*2.0=14 candles = 3.5h dead zone.
+        Aggressive modes focus on recent price action so we accept 4 candles of
+        forward displacement confirmation (8 × 15m = 2h dead zone instead of 3.5h).
+        4 candles is still meaningful displacement for intraday/scalp setups.
         """
         return SMCConfig(
             # Order Blocks: Relaxed for more OB detection
             min_wick_ratio=1.5,  # Lower bar for rejection wicks
             min_displacement_atr=1.0,  # Lower displacement requirement
-            ob_lookback_candles=7,  # Standard validation window
+            ob_lookback_candles=4,  # REDUCED: 4 → scaled to 8 candles on 15m = 2h dead zone
             ob_volume_threshold=1.2,  # Slightly above average volume
             ob_max_mitigation=0.90,  # Keep high-mitigation OBs
             ob_min_freshness=0.03,  # Keep older OBs longer

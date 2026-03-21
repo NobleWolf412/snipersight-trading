@@ -484,6 +484,24 @@ class Orchestrator:
                         except Exception as e:
                             logger.debug("Progress callback error: %s", e)
 
+                except Exception as e:
+                    # Per-symbol isolation: one bad symbol (NaN indicators, bad data, etc.)
+                    # must never abort processing of the remaining symbols.
+                    logger.error("❌ %s: Unhandled error during symbol processing: %s", sym, e)
+                    result, rejection_info = None, {
+                        "symbol": sym,
+                        "reason_type": "errors",
+                        "reason": f"Unhandled error: {type(e).__name__}: {e}",
+                    }
+                    processed_symbol_results.append((sym, result, rejection_info))
+                    completed += 1
+
+                    if progress_callback:
+                        try:
+                            progress_callback(completed, len(symbols), sym, False, rejection_info)
+                        except Exception as cb_e:
+                            logger.debug("Progress callback error: %s", cb_e)
+
         # Process all collected results
         for symbol, result, rejection_info in processed_symbol_results:
             if result:
@@ -1207,6 +1225,28 @@ class Orchestrator:
                 indicators=context.multi_tf_indicators,
             )
 
+            # ── DYNAMIC LOGIC FUSION (Bot-only) ───────────────────────────────────
+            # When enable_fusion=True (paper trader / live bot), Stealth temporarily
+            # adopts Surgical weights for ranging markets and Strike weights for
+            # trending markets, then restores the original profile in finally.
+            # Scanner always uses pure Stealth (enable_fusion defaults to False).
+            _original_profile = self.config.profile
+            _fusion_active = False
+            if (
+                getattr(self.config, "enable_fusion", False)
+                and _original_profile.lower() in ("stealth", "stealth_balanced")
+            ):
+                auto_mode = context.metadata.get("auto_regime_mode", "swing").lower()
+                fused_profile = {"scalp": "surgical", "intraday": "strike"}.get(auto_mode)
+                if fused_profile:
+                    self.config.profile = fused_profile
+                    _fusion_active = True
+                    logger.info(
+                        "\U0001f500 %s: Logic Fusion | Stealth \u2192 %s weights (regime=%s)",
+                        symbol, fused_profile.upper(), auto_mode,
+                    )
+            # ─────────────────────────────────────────────────────────────────────
+
             context.confluence_breakdown = self.confluence_service.score(
                 context=context,
                 current_price=current_price_val,
@@ -1381,6 +1421,11 @@ class Orchestrator:
                 "reason": f"Confluence scoring failed: {error_msg}",
                 "reason_type": "errors",
             }
+        finally:
+            # ALWAYS restore profile — even if the except handler returns early.
+            # Prevents config.profile from leaking to subsequent symbols in the same worker.
+            if _fusion_active:
+                self.config.profile = _original_profile
         try:
             br = context.confluence_breakdown
             top_factors = [
@@ -1525,14 +1570,23 @@ class Orchestrator:
         logger.debug("%s [%s]: Generating trade plan", symbol, trace_id)
         # current_price already computed above for cooldown check
         chosen_direction = context.metadata.get("chosen_direction", "UNKNOWN")
+        cascade_types = getattr(self.scanner_mode, "cascade_trade_types", None)
         logger.info(
-            "%s [%s]: 🎯 Calling _generate_trade_plan (direction=%s, score=%.1f)",
+            "%s [%s]: 🎯 Plan generation (direction=%s, score=%.1f, cascade=%s)",
             symbol,
             trace_id,
             chosen_direction,
             context.confluence_breakdown.total_score,
+            list(cascade_types) if cascade_types else "off",
         )
-        context.plan = self._generate_trade_plan(context, current_price, tick_size=tick_size, lot_size=lot_size)
+        if cascade_types:
+            context.plan = self._cascade_plan_generation(
+                context, current_price, cascade_types, tick_size=tick_size, lot_size=lot_size
+            )
+        else:
+            context.plan = self._generate_trade_plan(
+                context, current_price, tick_size=tick_size, lot_size=lot_size
+            )
         logger.info(
             "%s [%s]: 🎯 _generate_trade_plan returned: %s",
             symbol,
@@ -1795,7 +1849,12 @@ class Orchestrator:
         )
 
     def _generate_trade_plan(
-        self, context: SniperContext, current_price: float, tick_size: float = 0.0, lot_size: float = 0.0
+        self,
+        context: SniperContext,
+        current_price: float,
+        tick_size: float = 0.0,
+        lot_size: float = 0.0,
+        config_override: Optional[ScanConfig] = None,
     ) -> Optional[TradePlan]:
         """
         Generate complete trade plan from analysis.
@@ -1825,24 +1884,27 @@ class Orchestrator:
         setup_type = self._classify_setup_type(context.smc_snapshot)
 
         try:
+            # Resolve active config: cascade overrides take precedence over self.config
+            plan_config = config_override if config_override is not None else self.config
+
             # Enforce TF responsibility by filtering SMC snapshot to allowed TFs
             mode = self.scanner_mode
             allowed_entry = set(
-                getattr(self.config, "entry_timeframes", getattr(mode, "entry_timeframes", ()))
+                getattr(plan_config, "entry_timeframes", getattr(mode, "entry_timeframes", ()))
             )
             allowed_structure = set(
                 getattr(
-                    self.config, "structure_timeframes", getattr(mode, "structure_timeframes", ())
+                    plan_config, "structure_timeframes", getattr(mode, "structure_timeframes", ())
                 )
             )
             allowed_stop = (
-                set(getattr(self.config, "stop_timeframes", getattr(mode, "stop_timeframes", ())))
+                set(getattr(plan_config, "stop_timeframes", getattr(mode, "stop_timeframes", ())))
                 or allowed_structure
             )
             allowed_target = (
                 set(
                     getattr(
-                        self.config, "target_timeframes", getattr(mode, "target_timeframes", ())
+                        plan_config, "target_timeframes", getattr(mode, "target_timeframes", ())
                     )
                 )
                 or allowed_structure
@@ -1875,15 +1937,26 @@ class Orchestrator:
                 ],  # NEW: Pass consolidations
             )
 
-            # NEW: Dynamic Regime Selection - Override mode if auto-detected
-            auto_mode = context.metadata.get("auto_regime_mode")
-            current_trade_type = auto_mode or context.metadata.get("counter_htf_type") or self.scanner_mode.expected_trade_type
-            
-            # Localize config to ensure engines use correct mode-specific relativity
-            planner_config = self.config
-            if auto_mode:
-                planner_config = copy.copy(self.config)
-                planner_config.profile = auto_mode
+            # When running a cascade attempt the config_override already encodes the intended
+            # scale (swing/intraday/scalp) — skip auto_mode so it doesn't fight the cascade.
+            if config_override is not None:
+                planner_config = plan_config  # already resolved above
+                cascade_allowed = getattr(plan_config, "allowed_trade_types", ())
+                current_trade_type = (
+                    cascade_allowed[0] if cascade_allowed else self.scanner_mode.expected_trade_type
+                )
+            else:
+                # Dynamic Regime Selection - Override mode if auto-detected
+                auto_mode = context.metadata.get("auto_regime_mode")
+                current_trade_type = (
+                    auto_mode
+                    or context.metadata.get("counter_htf_type")
+                    or self.scanner_mode.expected_trade_type
+                )
+                planner_config = self.config
+                if auto_mode:
+                    planner_config = copy.copy(self.config)
+                    planner_config.profile = auto_mode
 
             plan = generate_trade_plan(
                 symbol=context.symbol,
@@ -1931,7 +2004,7 @@ class Orchestrator:
                 if signal_tier == "APEX":
                     plan.metadata["apex_signal"] = True
                     plan.metadata["effective_min_rr"] = max(
-                        1.5, float(getattr(self.config, "min_rr_ratio", 1.8)) - 0.3
+                        1.5, float(getattr(plan_config, "min_rr_ratio", 1.8)) - 0.3
                     )
                     logger.info(
                         "⭐ %s APEX signal tagged — 7+ strong factors.",
@@ -2339,6 +2412,130 @@ class Orchestrator:
             context.metadata["plan_failure_reason"] = str(e)
             return None
 
+    # -------------------------------------------------------------------------
+    # Cascade planning helpers (stealth mode multi-scale selection)
+    # -------------------------------------------------------------------------
+
+    # Quality bonus added to confluence score when ranking cascade candidates.
+    # Swing is preferred when two plans have comparable confluence; a clearly
+    # superior setup of a different type can still win.
+    _CASCADE_TYPE_BONUS: dict = {"swing": 6.0, "intraday": 3.0, "scalp": 0.0}
+
+    # Scale-specific config overrides per trade type.
+    # These are applied on top of the mode's base config so TF responsibility,
+    # stop widths, and ATR limits match the expected trade geometry.
+    _CASCADE_SCALE_SETTINGS: dict = {
+        "swing": {
+            "primary_planning_timeframe": "4h",
+            "entry_timeframes": ("4h", "1h", "15m"),
+            "structure_timeframes": ("1d", "4h", "1h", "15m"),
+            "stop_timeframes": ("4h", "1h", "15m"),
+            "target_timeframes": ("1d", "4h", "1h", "15m"),
+            "min_stop_atr": 1.5,
+            "max_stop_atr": 6.0,
+            "allowed_trade_types": ("swing",),
+        },
+        "intraday": {
+            "primary_planning_timeframe": "1h",
+            "entry_timeframes": ("1h", "15m", "5m"),
+            "structure_timeframes": ("4h", "1h", "15m"),
+            "stop_timeframes": ("1h", "15m", "5m"),
+            "target_timeframes": ("4h", "1h", "15m"),
+            "min_stop_atr": 0.5,
+            "max_stop_atr": 4.0,
+            "allowed_trade_types": ("intraday",),
+            # Sentinel for _derive_trade_type: 4H is present for level-discovery only.
+            # Without this, htf_structure=True (4H in HTF) causes any target ≥2.45% to
+            # be classified swing, the intraday cascade never produces a valid candidate,
+            # and all stealth plans end up as swing.
+            "expected_trade_type": "intraday_cascade",
+        },
+        "scalp": {
+            "primary_planning_timeframe": "15m",
+            "entry_timeframes": ("15m", "5m"),
+            "structure_timeframes": ("1h", "15m", "5m"),
+            "stop_timeframes": ("15m", "5m"),
+            "target_timeframes": ("1h", "15m"),
+            "min_stop_atr": 0.2,
+            "max_stop_atr": 2.5,
+            "allowed_trade_types": ("scalp",),
+        },
+    }
+
+    def _build_cascade_config(self, trade_type: str) -> ScanConfig:
+        """Return a shallow-copied ScanConfig tuned for the requested trade scale."""
+        cfg = copy.copy(self.config)
+        for attr, val in self._CASCADE_SCALE_SETTINGS.get(trade_type, {}).items():
+            setattr(cfg, attr, val)
+        return cfg
+
+    def _cascade_plan_generation(
+        self,
+        context: "SniperContext",
+        current_price: float,
+        cascade_types: tuple,
+        tick_size: float = 0.0,
+        lot_size: float = 0.0,
+    ) -> Optional[TradePlan]:
+        """
+        Attempt plan generation at each trade scale in order, then select the best plan.
+
+        For each scale (swing / intraday / scalp) a separate ScanConfig is built with
+        scale-appropriate timeframe responsibilities.  Every valid plan is scored as:
+
+            effective_score = confluence_score + type_preference_bonus
+
+        where swing=+6, intraday=+3, scalp=+0.  This ensures swing setups are preferred
+        when quality is comparable, while still allowing a clearly superior intraday or
+        scalp setup to win when the market structure genuinely supports it.
+
+        Returns the plan with the highest effective score, or None if all scales fail.
+        """
+        candidates: List[tuple] = []
+
+        for trade_type in cascade_types:
+            try:
+                scale_cfg = self._build_cascade_config(trade_type)
+                plan = self._generate_trade_plan(
+                    context,
+                    current_price,
+                    tick_size=tick_size,
+                    lot_size=lot_size,
+                    config_override=scale_cfg,
+                )
+                if plan:
+                    bonus = self._CASCADE_TYPE_BONUS.get(
+                        getattr(plan, "trade_type", "intraday"), 0.0
+                    )
+                    effective = plan.confidence_score + bonus
+                    candidates.append((plan, effective, trade_type))
+                    logger.info(
+                        "🔀 %s CASCADE %s → %s plan (conf=%.1f, effective=%.1f)",
+                        context.symbol,
+                        trade_type,
+                        getattr(plan, "trade_type", "?"),
+                        plan.confidence_score,
+                        effective,
+                    )
+            except Exception as exc:
+                logger.debug(
+                    "🔀 %s CASCADE %s scale failed: %s", context.symbol, trade_type, exc
+                )
+
+        if not candidates:
+            return None
+
+        best_plan, best_score, best_type = max(candidates, key=lambda x: x[1])
+        if len(candidates) > 1:
+            logger.info(
+                "🔀 %s CASCADE winner: %s (effective=%.1f, %d candidates)",
+                context.symbol,
+                best_type,
+                best_score,
+                len(candidates),
+            )
+        return best_plan
+
     def _classify_setup_type(self, smc_snapshot: SMCSnapshot) -> str:
         """
         Classify setup type based on SMC patterns.
@@ -2514,6 +2711,11 @@ class Orchestrator:
             if smc_preset == "luxalgo_strict":
                 self.smc_config = SMCConfig.luxalgo_strict()
                 logger.info("🎯 SMC preset: LUXALGO_STRICT (institutional-grade detection)")
+            elif smc_preset == "luxalgo_aggressive":
+                # BUG FIX: This branch was previously missing, causing Strike mode to silently
+                # fall back to defaults() instead of the intended aggressive preset.
+                self.smc_config = SMCConfig.luxalgo_aggressive()
+                logger.info("🎯 SMC preset: LUXALGO_AGGRESSIVE (max signals / intraday)")
             elif smc_preset == "sensitive":
                 self.smc_config = SMCConfig.sensitive()
                 logger.info("🎯 SMC preset: SENSITIVE (research/backtesting mode)")
@@ -3072,49 +3274,63 @@ class Orchestrator:
             pass
 
 
+# Per-worker-process Orchestrator cache. ProcessPoolExecutor reuses worker processes
+# across tasks in the same pool lifetime, so we build the Orchestrator once per
+# process rather than once per symbol. _WORKER_CONFIG_ID tracks the Python id() of
+# the config object; if the caller passes a new config object (e.g. after settings
+# change), the cache is invalidated and the Orchestrator is rebuilt.
+_WORKER_ORCHESTRATOR = None
+_WORKER_CONFIG_ID = None
+
+
 def _parallel_process_symbol_worker(args):
     """
     Module-level worker for ProcessPoolExecutor.
     Runs symbol analysis in a separate CPU process.
+
+    The Orchestrator is cached at module level per worker process so that
+    initialisation (RegimeDetector, HTFLevelDetector, domain services, etc.)
+    only happens once per worker, not once per symbol.
     """
+    global _WORKER_ORCHESTRATOR, _WORKER_CONFIG_ID
+
     symbol, run_id, timestamp, prefetched_data, config, macro_context, scanner_mode, tick_size, lot_size = args
-    
+
     try:
-        # Import inside worker to avoid circularity and ensure child process has components
-        from backend.engine.orchestrator import Orchestrator
-        
-        # We need a minimal orchestrator for this symbol
-        # We use a dummy adapter as data is already prefetched
-        class DummyAdapter:
-            def fetch_ohlcv(self, *args, **kwargs): return None
-            
-        # Initialize a temporary orchestrator in the child process
-        worker_orchestrator = Orchestrator(
-            config=config,
-            exchange_adapter=DummyAdapter(),
-            concurrency_workers=1
-        )
-        # Manually sync the execution state
-        worker_orchestrator.macro_context = macro_context
-        worker_orchestrator.scanner_mode = scanner_mode
-        
-        # Execute the pipeline for this symbol
-        return worker_orchestrator._process_symbol(
-            symbol, 
-            run_id, 
-            timestamp, 
+        # Rebuild the orchestrator only when the worker is brand-new or the
+        # config object has been replaced between scans.
+        if _WORKER_ORCHESTRATOR is None or id(config) != _WORKER_CONFIG_ID:
+            from backend.engine.orchestrator import Orchestrator
+
+            class DummyAdapter:
+                def fetch_ohlcv(self, *args, **kwargs): return None
+
+            _WORKER_ORCHESTRATOR = Orchestrator(
+                config=config,
+                exchange_adapter=DummyAdapter(),
+                concurrency_workers=1,
+            )
+            _WORKER_CONFIG_ID = id(config)
+
+        # Sync per-scan state (lightweight attribute assignment, not re-init)
+        _WORKER_ORCHESTRATOR.macro_context = macro_context
+        _WORKER_ORCHESTRATOR.scanner_mode = scanner_mode
+
+        return _WORKER_ORCHESTRATOR._process_symbol(
+            symbol,
+            run_id,
+            timestamp,
             prefetched_data=prefetched_data,
             tick_size=tick_size,
-            lot_size=lot_size
+            lot_size=lot_size,
         )
-        
+
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
-        # Return a rejection info instead of crashing the process
         return None, {
             "symbol": symbol,
             "reason_type": "errors",
             "reason": f"Process worker error: {str(e)}",
-            "error_details": tb
+            "error_details": tb,
         }

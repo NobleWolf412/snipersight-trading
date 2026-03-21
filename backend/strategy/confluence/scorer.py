@@ -109,193 +109,203 @@ MODE_SYNERGY_CAPS = {
 # ==============================================================================
 # Tunes the scoring engine to prioritize factors relevant to each trading style.
 #
-# OVERWATCH (Swing): Prioritizes HTF alignment, structure, and institutional accumulation.
-# STRIKE (Intraday): Prioritizes Momentum, Flow, and Volatility.
-# SURGICAL (Scalp): Prioritizes Structure, Precision Timing (Kill Zones), and specific OBs.
-# STEALTH (Balanced): Balanced approach across all factors.
+# OVERWATCH (Swing): HTF alignment, institutional structure, deep confirmation.
+# STRIKE (Intraday): Momentum, divergence, structure breaks, flow.
+# SURGICAL (Scalp): Precision entries, OB quality, kill zones, close quality.
+# STEALTH (Balanced): Balanced spread across all factor categories.
+#
+# NOTE: Weights are renormalized to sum=1.0 at score calculation time (see
+# FINAL WEIGHT NORMALIZATION block in calculate_confluence_score). These values
+# represent RELATIVE importance — higher = more influence on the final score.
+# Aliases (overwatch, strike, surgical, stealth) reference the same dict as
+# their canonical counterpart to guarantee identical behaviour.
+#
+# COMPLETE FACTOR KEY REFERENCE (all keys used by get_w() in this module):
+#   SMC Core:        order_block, fvg, market_structure, liquidity_sweep
+#   OB Precision:    inside_ob, nested_ob, opposing_structure
+#   Indicators:      momentum, divergence, volume, vwap, volatility
+#   Close Quality:   close_momentum, multi_close_confirm
+#   MACD:            macd_veto
+#   HTF / Regime:    htf_alignment, htf_structure_bias, htf_proximity,
+#                    htf_momentum_gate, htf_inflection, regime_alignment
+#   BTC / Macro:     btc_impulse, weekly_stoch_rsi, fibonacci
+#   Timing:          kill_zone, premium_discount
+#   Sequence:        institutional_sequence, multi_tf_reversal, liquidity_draw
+
+_OVERWATCH_WEIGHTS = {
+    # --- SMC Core ---
+    "order_block":           0.25,  # Institutional demand/supply; primary entry signal
+    "fvg":                   0.18,  # Imbalance confirmation; strong for swing
+    "market_structure":      0.20,  # BOS/CHoCH; directional bias anchor
+    "liquidity_sweep":       0.18,  # Sweep precedes the real move; critical for swing
+    # --- OB Precision ---
+    "inside_ob":             0.10,  # Price inside OB = textbook entry
+    "nested_ob":             0.10,  # LTF OB inside HTF OB = precision layer
+    "opposing_structure":    0.06,  # Walls in the way; penalty factor
+    # --- Indicators ---
+    "momentum":              0.08,
+    "divergence":            0.15,  # Divergence on swing = high-conviction reversal signal
+    "volume":                0.10,
+    "vwap":                  0.04,
+    "volatility":            0.08,
+    # --- Close Quality ---
+    "close_momentum":        0.06,
+    "multi_close_confirm":   0.08,
+    # --- MACD ---
+    "macd_veto":             0.08,
+    # --- HTF / Regime ---
+    "htf_alignment":         0.25,  # HTF trend alignment is the backbone of swing trades
+    "htf_structure_bias":    0.15,
+    "htf_proximity":         0.15,
+    "htf_momentum_gate":     0.10,
+    "htf_inflection":        0.18,  # HTF turning point; powerful for swing entries
+    "regime_alignment":      0.10,
+    # --- BTC / Macro ---
+    "btc_impulse":           0.12,
+    "weekly_stoch_rsi":      0.12,  # Weekly StochRSI is a meaningful filter for swing
+    "fibonacci":             0.08,
+    # --- Timing ---
+    "kill_zone":             0.03,  # Kill zones matter less on swing TFs
+    "premium_discount":      0.12,
+    # --- Sequence ---
+    "institutional_sequence": 0.15,
+    "multi_tf_reversal":     0.12,
+    "liquidity_draw":        0.08,
+}
+
+_STRIKE_WEIGHTS = {
+    # --- SMC Core ---
+    "order_block":           0.18,
+    "fvg":                   0.12,
+    "market_structure":      0.28,  # Structure breaks drive intraday momentum entries
+    "liquidity_sweep":       0.12,
+    # --- OB Precision ---
+    "inside_ob":             0.10,
+    "nested_ob":             0.08,
+    "opposing_structure":    0.10,
+    # --- Indicators ---
+    "momentum":              0.15,  # Momentum confirmation is key for intraday strikes
+    "divergence":            0.18,  # Divergence is strong entry trigger intraday
+    "volume":                0.10,
+    "vwap":                  0.08,  # VWAP more relevant on intraday TFs
+    "volatility":            0.10,
+    # --- Close Quality ---
+    "close_momentum":        0.08,
+    "multi_close_confirm":   0.07,
+    # --- MACD ---
+    "macd_veto":             0.08,
+    # --- HTF / Regime ---
+    "htf_alignment":         0.12,
+    "htf_structure_bias":    0.10,
+    "htf_proximity":         0.10,
+    "htf_momentum_gate":     0.07,
+    "htf_inflection":        0.10,
+    "regime_alignment":      0.07,
+    # --- BTC / Macro ---
+    "btc_impulse":           0.08,
+    "weekly_stoch_rsi":      0.06,
+    "fibonacci":             0.05,
+    # --- Timing ---
+    "kill_zone":             0.08,
+    "premium_discount":      0.07,
+    # --- Sequence ---
+    "institutional_sequence": 0.12,
+    "multi_tf_reversal":     0.12,
+    "liquidity_draw":        0.12,
+}
+
+_SURGICAL_WEIGHTS = {
+    # --- SMC Core ---
+    "order_block":           0.15,
+    "fvg":                   0.10,
+    "market_structure":      0.30,  # Structure quality is the dominant filter for scalps
+    "liquidity_sweep":       0.10,
+    # --- OB Precision ---
+    "inside_ob":             0.12,  # Being inside a valid OB is a hard entry requirement for scalp
+    "nested_ob":             0.10,
+    "opposing_structure":    0.12,
+    # --- Indicators ---
+    "momentum":              0.12,
+    "divergence":            0.10,
+    "volume":                0.08,
+    "vwap":                  0.05,
+    "volatility":            0.12,  # Volatility conditions matter more at scalp precision
+    # --- Close Quality ---
+    "close_momentum":        0.09,  # Close quality is critical; scalps need candle confirmation
+    "multi_close_confirm":   0.06,
+    # --- MACD ---
+    "macd_veto":             0.08,
+    # --- HTF / Regime ---
+    "htf_alignment":         0.05,  # HTF is a backdrop filter; scalp entries don't need full alignment
+    "htf_structure_bias":    0.08,
+    "htf_proximity":         0.08,
+    "htf_momentum_gate":     0.05,
+    "htf_inflection":        0.08,
+    "regime_alignment":      0.05,
+    # --- BTC / Macro ---
+    "btc_impulse":           0.05,
+    "weekly_stoch_rsi":      0.03,
+    "fibonacci":             0.06,
+    # --- Timing ---
+    "kill_zone":             0.12,  # Kill zones are high-priority for scalp entries
+    "premium_discount":      0.09,
+    # --- Sequence ---
+    "institutional_sequence": 0.10,
+    "multi_tf_reversal":     0.10,
+    "liquidity_draw":        0.15,
+}
+
+_STEALTH_WEIGHTS = {
+    # --- SMC Core ---
+    "order_block":           0.15,
+    "fvg":                   0.08,
+    "market_structure":      0.20,
+    "liquidity_sweep":       0.10,
+    # --- OB Precision ---
+    "inside_ob":             0.08,
+    "nested_ob":             0.06,
+    "opposing_structure":    0.08,
+    # --- Indicators ---
+    "momentum":              0.10,
+    "divergence":            0.10,
+    "volume":                0.10,
+    "vwap":                  0.05,
+    "volatility":            0.05,
+    # --- Close Quality ---
+    "close_momentum":        0.05,
+    "multi_close_confirm":   0.05,
+    # --- MACD ---
+    "macd_veto":             0.05,
+    # --- HTF / Regime ---
+    "htf_alignment":         0.15,
+    "htf_structure_bias":    0.10,
+    "htf_proximity":         0.10,
+    "htf_momentum_gate":     0.07,
+    "htf_inflection":        0.10,
+    "regime_alignment":      0.08,
+    # --- BTC / Macro ---
+    "btc_impulse":           0.07,
+    "weekly_stoch_rsi":      0.06,
+    "fibonacci":             0.05,
+    # --- Timing ---
+    "kill_zone":             0.08,
+    "premium_discount":      0.08,
+    # --- Sequence ---
+    "institutional_sequence": 0.10,
+    "multi_tf_reversal":     0.10,
+    "liquidity_draw":        0.08,
+}
 
 MODE_FACTOR_WEIGHTS = {
-    "macro_surveillance": {  # OVERWATCH (Swing) - Total 1.0
-        # Core Structure (30%)
-        "market_structure": 0.20,
-        "order_block": 0.05,
-        "fvg": 0.03,
-        "ltf_structure_shift": 0.02,
-        # HTF Alignment (30%)
-        "htf_alignment": 0.10,
-        "htf_structure_bias": 0.08,
-        "htf_proximity": 0.07,
-        "regime_alignment": 0.05,
-        # Conviction & Depth (25%)
-        "momentum": 0.05,
-        "volume": 0.05,
-        "liquidity_draw": 0.05,
-        "liquidity_sweep": 0.05,
-        "volatility": 0.02,
-        "institutional_sequence": 0.03,
-        # Precision & Timing (15%)
-        "kill_zone": 0.05,
-        "premium_discount": 0.04,
-        "macd_veto": 0.03,
-        "btc_impulse": 0.03,
-    },
-    "intraday_aggressive": {  # STRIKE (Intraday) - Total 1.0
-        # Core Structure (35%)
-        "market_structure": 0.15,
-        "order_block": 0.10,
-        "fvg": 0.05,
-        "ltf_structure_shift": 0.05,
-        # Conviction & Flow (25%)
-        "momentum": 0.08,
-        "volume": 0.05,
-        "liquidity_sweep": 0.05,
-        "liquidity_draw": 0.05,
-        "volatility": 0.02,
-        # HTF Alignment (25%)
-        "htf_alignment": 0.10,
-        "htf_proximity": 0.05,
-        "regime_alignment": 0.05,
-        "htf_structure_bias": 0.05,
-        # Precision & Timing (15%)
-        "kill_zone": 0.04,
-        "premium_discount": 0.04,
-        "macd_veto": 0.02,
-        "institutional_sequence": 0.05,
-    },
-    "stealth_balanced": {  # STEALTH (Balanced) - Total 1.0
-        # Core Structure (30%)
-        "market_structure": 0.15,
-        "order_block": 0.10,
-        "fvg": 0.05,
-        # HTF Alignment (25%)
-        "htf_alignment": 0.15,
-        "htf_proximity": 0.05,
-        "regime_alignment": 0.05,
-        # Conviction & Flow (25%)
-        "momentum": 0.07,
-        "volume": 0.08,
-        "liquidity_sweep": 0.05,
-        "liquidity_draw": 0.05,
-        # Precision & Timing (20%)
-        "kill_zone": 0.08,
-        "premium_discount": 0.05,
-        "macd_veto": 0.02,
-        "institutional_sequence": 0.05,
-    },
-    "precision": {  # SURGICAL (Scalp) - Total 1.0
-        # Core Structure (40%)
-        "market_structure": 0.20,
-        "order_block": 0.12,
-        "fvg": 0.04,
-        "ltf_structure_shift": 0.04,
-        # Precision Timing (25%)
-        "kill_zone": 0.12,
-        "premium_discount": 0.08,
-        "macd_veto": 0.05,
-        # Conviction/Flow (20%)
-        "momentum": 0.05,
-        "liquidity_sweep": 0.10,
-        "liquidity_draw": 0.05,
-        # HTF Alignment (15%)
-        "htf_alignment": 0.05,
-        "htf_proximity": 0.05,
-        "regime_alignment": 0.05,
-    },
-    # Surgical alias
-    "surgical": {  # Maps to precision
-        "order_block": 0.15,
-        "fvg": 0.10,
-        "market_structure": 0.30,
-        "liquidity_sweep": 0.10,
-        "kill_zone": 0.10,
-        "momentum": 0.12,
-        "volume": 0.08,
-        "volatility": 0.12,
-        "htf_alignment": 0.10,
-        "htf_momentum_gate": 0.05,
-        "regime_alignment": 0.05,
-        "htf_proximity": 0.08,
-        "btc_impulse": 0.05,
-        "weekly_stoch_rsi": 0.05,
-        "htf_structure_bias": 0.08,
-        "premium_discount": 0.12,
-        "inside_ob": 0.10,
-        "nested_ob": 0.05,
-        "opposing_structure": 0.12,
-        "htf_inflection": 0.08,
-        "multi_tf_reversal": 0.10,
-        "ltf_structure_shift": 0.12,
-        "institutional_sequence": 0.10,
-        "timeframe_conflict": 0.15,
-        "macd_veto": 0.05,
-        "close_momentum": 0.09,
-        "multi_close_confirm": 0.06,
-        "liquidity_draw": 0.15,
-    },
-    # Overwatch alias
-    "overwatch": {  # Maps to macro_surveillance
-        "order_block": 0.25,
-        "fvg": 0.18,
-        "market_structure": 0.20,
-        "liquidity_sweep": 0.18,
-        "kill_zone": 0.03,
-        "momentum": 0.08,
-        "divergence": 0.15,
-        "volume": 0.10,
-        "volatility": 0.08,
-        "htf_alignment": 0.25,
-        "htf_momentum_gate": 0.10,
-        "regime_alignment": 0.10,
-        "htf_proximity": 0.15,
-        "btc_impulse": 0.12,
-        "weekly_stoch_rsi": 0.12,
-        "htf_structure_bias": 0.15,
-        "premium_discount": 0.15,
-        "inside_ob": 0.10,
-        "nested_ob": 0.10,
-        "opposing_structure": 0.06,
-        "htf_inflection": 0.18,
-        "multi_tf_reversal": 0.12,
-        "ltf_structure_shift": 0.05,
-        "institutional_sequence": 0.15,
-        "timeframe_conflict": 0.10,
-        "macd_veto": 0.05,
-        "close_momentum": 0.06,
-        "multi_close_confirm": 0.08,
-        "liquidity_draw": 0.08,
-    },
-    # Strike alias
-    "strike": {  # Maps to intraday_aggressive
-        "order_block": 0.18,
-        "fvg": 0.12,
-        "market_structure": 0.28,
-        "liquidity_sweep": 0.12,
-        "kill_zone": 0.08,
-        "momentum": 0.15,
-        "divergence": 0.18,
-        "volume": 0.10,
-        "volatility": 0.10,
-        "htf_alignment": 0.12,
-        "htf_momentum_gate": 0.07,
-        "regime_alignment": 0.07,
-        "htf_proximity": 0.10,
-        "btc_impulse": 0.08,
-        "weekly_stoch_rsi": 0.06,
-        "htf_structure_bias": 0.10,
-        "premium_discount": 0.10,
-        "inside_ob": 0.10,
-        "nested_ob": 0.08,
-        "opposing_structure": 0.10,
-        "htf_inflection": 0.10,
-        "multi_tf_reversal": 0.12,
-        "ltf_structure_shift": 0.10,
-        "institutional_sequence": 0.12,
-        "timeframe_conflict": 0.12,
-        "macd_veto": 0.05,
-        "close_momentum": 0.08,
-        "multi_close_confirm": 0.07,
-        "liquidity_draw": 0.12,
-    },
+    # Canonical mode names
+    "macro_surveillance": _OVERWATCH_WEIGHTS,
+    "overwatch":          _OVERWATCH_WEIGHTS,   # alias
+    "intraday_aggressive": _STRIKE_WEIGHTS,
+    "strike":             _STRIKE_WEIGHTS,       # alias
+    "precision":          _SURGICAL_WEIGHTS,
+    "surgical":           _SURGICAL_WEIGHTS,     # alias
+    "stealth_balanced":   _STEALTH_WEIGHTS,
+    "stealth":            _STEALTH_WEIGHTS,       # alias
 }
 
 
@@ -951,6 +961,34 @@ def evaluate_htf_momentum_gate(
 
     # B. COUNTER-TREND (Opposed)
     if is_opposed:
+        # 0. Check for HTF Hidden Divergence — continuation signal that justifies
+        #    counter-trend entry without needing RSI climax
+        htf_hidden_div = False
+        if hasattr(ind, "dataframe") and ind.dataframe is not None and len(ind.dataframe) >= 50:
+            try:
+                htf_divs = detect_all_divergences(
+                    df=ind.dataframe,
+                    direction=direction,
+                    lookback=5,
+                    min_pivot_distance=10,
+                    max_lookback_bars=100,
+                )
+                htf_hidden_div = bool(
+                    any("hidden" in d.divergence_type for d in htf_divs.get("rsi", []))
+                    or any("hidden" in d.divergence_type for d in htf_divs.get("macd", []))
+                )
+            except Exception:
+                pass
+
+        if htf_hidden_div:
+            return {
+                "allowed": True,
+                "score_adjustment": 15.0,
+                "htf_momentum": momentum_state,
+                "htf_trend": htf_trend_dir,
+                "reason": f"HTF hidden divergence on {momentum_tf} justifies counter-trend entry",
+            }
+
         # 1. Check for CLIMAX (The only valid reason to fade a strong trend)
         is_climax = False
         current_rsi = rsi if rsi else 50.0
@@ -1405,14 +1443,14 @@ def evaluate_macd_for_mode(
             score += 10.0 * macd_config.weight
             reasons.append(f"{timeframe} MACD supportive bearish (FILTER)")
         elif macd_config.allow_ltf_veto:
-            # Check for veto conditions - reduced penalty from -15 to -8 for less aggressive filtering
+            # Check for veto conditions
             if is_bullish and bearish_persistent:
-                score -= 8.0 * macd_config.weight
+                score -= 15.0 * macd_config.weight
                 veto_active = True
                 role = "VETO"
                 reasons.append(f"{timeframe} MACD bearish veto active against bullish setup")
             elif not is_bullish and bullish_persistent:
-                score -= 8.0 * macd_config.weight
+                score -= 15.0 * macd_config.weight
                 veto_active = True
                 role = "VETO"
                 reasons.append(f"{timeframe} MACD bullish veto active against bearish setup")
@@ -3605,6 +3643,7 @@ def _score_momentum(
         score = min(MOMENTUM_CATEGORY_CAP, raw_momentum)
 
     # Stoch RSI K/D crossover enhancement (debounced by minimum separation)
+    kd_bonus = 0.0
     k = getattr(indicators, "stoch_rsi_k", None)
     d = getattr(indicators, "stoch_rsi_d", None)
     if k is not None and d is not None:
@@ -3614,39 +3653,42 @@ def _score_momentum(
             if normalized_dir == "bullish" and k > d:
                 # Region-sensitive weighting
                 if k < 20:
-                    score += 25.0  # early oversold bullish cross
+                    kd_bonus += 25.0  # early oversold bullish cross
                 elif k < 50:
-                    score += 15.0  # moderate bullish cross
+                    kd_bonus += 15.0  # moderate bullish cross
                 elif k < 80:
-                    score += 8.0
+                    kd_bonus += 8.0
                 else:
-                    score += 5.0  # late/exhaustive
+                    kd_bonus += 5.0  # late/exhaustive
 
                 # Check previous values for FRESH crossover (just happened)
                 k_prev = getattr(indicators, "stoch_rsi_k_prev", None)
                 d_prev = getattr(indicators, "stoch_rsi_d_prev", None)
                 if k_prev is not None and d_prev is not None and k_prev <= d_prev:
-                    score += 10.0  # Just crossed over!
+                    kd_bonus += 10.0  # Just crossed over!
 
             elif normalized_dir == "bearish" and k < d:
                 if k > 80:
-                    score += 25.0  # overbought bearish cross
+                    kd_bonus += 25.0  # overbought bearish cross
                 elif k > 50:
-                    score += 15.0  # moderate bearish cross
+                    kd_bonus += 15.0  # moderate bearish cross
                 elif k > 20:
-                    score += 8.0
+                    kd_bonus += 8.0
                 else:
-                    score += 5.0
+                    kd_bonus += 5.0
 
                 # Check previous values for FRESH crossover (just happened)
                 k_prev = getattr(indicators, "stoch_rsi_k_prev", None)
                 d_prev = getattr(indicators, "stoch_rsi_d_prev", None)
                 if k_prev is not None and d_prev is not None and k_prev >= d_prev:
-                    score += 10.0  # Just crossed under!
+                    kd_bonus += 10.0  # Just crossed under!
             else:
                 # Opposing crossover strong penalty (avoid chasing into momentum shift)
                 if separation >= 5.0:
-                    score -= 10.0
+                    kd_bonus -= 10.0
+
+    # Re-apply cap after K/D bonus to prevent cap bypass
+    score = min(MOMENTUM_CATEGORY_CAP, score + kd_bonus)
 
     # ADX Trend Strength & DI Confirmation
     adx = getattr(indicators, "adx", None)
