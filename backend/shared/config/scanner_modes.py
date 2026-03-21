@@ -180,6 +180,12 @@ class ScannerMode:
     # Scalp/intraday modes use "intermediate" so 4H structure drives alignment, not the daily
     regime_reference: str = "global"
 
+    # Cascade trade-type preference ordering (None = disabled, single-scale planning)
+    # When set, the orchestrator attempts plan generation at each scale in order and
+    # selects the highest-quality plan (confluence score + type-preference bonus).
+    # Swing is preferred when quality is comparable; a clearly superior scalp can still win.
+    cascade_trade_types: Optional[Tuple[str, ...]] = None
+
     @property
     def bias_timeframes(self) -> Tuple[str, ...]:
         """Alias for timeframes (bias + indicator TFs). For clarity in code."""
@@ -352,6 +358,10 @@ MODES: Dict[str, ScannerMode] = {
         # NEW: Nested OB entry hierarchy
         zone_timeframes=("4h", "1h", "15m"),  # Entry zone OBs (balanced)
         entry_trigger_timeframes=("5m",),  # Refined entry OBs
+        # Cascade: try swing first (highest quality), then intraday, then scalp.
+        # The orchestrator attempts plan generation at each scale and picks the best-scoring plan
+        # (confluence + type-preference bonus so swing is preferred when quality is comparable).
+        cascade_trade_types=("swing", "intraday", "scalp"),
     ),
 }
 

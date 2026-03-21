@@ -893,6 +893,7 @@ export interface PaperTradingConfigRequest {
   fee_rate?: number;
   max_hours_open?: number;
   max_pending_scans?: number;
+  max_drawdown_pct?: number | null;
 }
 
 export interface PaperTradingPosition {
@@ -997,6 +998,14 @@ export interface PaperTradingStatusResponse {
   }>;
   last_scan_at: string | null;
   next_scan_in_seconds: number | null;
+  active_mode?: string;
+  active_profile?: string;
+  regime?: {
+    composite: string;
+    score: number;
+    trend: string;
+    volatility: string;
+  };
   current_scan?: {
     status: 'running' | 'completed';
     completed: number;
@@ -1037,6 +1046,7 @@ export interface SignalLogEntry {
   position_id?: string;
   balance?: number;
   order_status?: string;
+  timeframe?: string; // Signal timeframe (e.g. '4h', '1h', '15m')
 }
 
 export interface PaperTradingStartResponse {

@@ -829,6 +829,7 @@ def _calculate_entry_zone(
             # near is above it by at least in_zone_buffer).
             price_inside_ob = current_price <= best_ob.high and current_price >= best_ob.low
             if near_entry > current_price:
+<<<<<<< HEAD
                 # OB DEPTH GATE: Price has fallen deeper into the zone than the planned limit.
                 # Entering mid-zone shrinks the actual stop distance (OB.low is still the SL
                 # anchor but the entry is lower), so normal wick noise inside the zone will
@@ -849,14 +850,21 @@ def _calculate_entry_zone(
                     )
                     return None, False  # Signal dropped; planner_service guards this None
 
+=======
+>>>>>>> dceac3bd8a0d4a520e9be7922cc4498cb4fcc3e2
                 in_zone_buffer = min(planner_cfg.market_entry_aggression_atr * atr, current_price * 0.001)
                 near_entry = current_price + in_zone_buffer
                 far_entry = min(far_entry, current_price)  # anchor far to current_price, not near_entry
                 logger.info(
+<<<<<<< HEAD
                     "📦 IN-ZONE ENTRY (LONG OB): near=%.4f (price=%.4f + buf=%.4f), far=%.4f"
                     " (inside OB: %s, depth=%.0f%%)",
                     near_entry, current_price, in_zone_buffer, far_entry,
                     price_inside_ob, depth_pct * 100,
+=======
+                    "📦 IN-ZONE ENTRY (LONG OB): near=%.4f (price=%.4f + buf=%.4f), far=%.4f (inside OB: %s)",
+                    near_entry, current_price, in_zone_buffer, far_entry, price_inside_ob,
+>>>>>>> dceac3bd8a0d4a520e9be7922cc4498cb4fcc3e2
                 )
 
             logger.info(
