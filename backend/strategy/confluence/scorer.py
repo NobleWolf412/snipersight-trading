@@ -2459,6 +2459,7 @@ def calculate_confluence_score(
                 for ob in smc_snapshot.order_blocks:
                     ob_direction = getattr(ob, "direction", None)
                     ob_low = getattr(ob, "low", 0)
+                    ob_high = getattr(ob, "high", 0)
                      # For LONG, check for bearish OBs above price (resistance)
                     if direction in ("bullish", "long") and ob_direction == "bearish":
                         if ob_low > current_price:
@@ -2560,9 +2561,15 @@ def calculate_confluence_score(
     conflict_penalty = _calculate_conflict_penalty(factors, direction, smc=smc_snapshot, mode_config=config)
     
     # Coverage Penalty for low-evidence setups
+    # Uses quality-factor count (score >= 50) instead of any-non-zero count.
+    # The original active_factors < 4 never fires because housekeeping factors
+    # (MACD Veto, Volatility, Regime, VWAP) always produce a non-zero score.
+    # Quality count penalizes setups where meaningful signal factors are absent.
     coverage_penalty = 0.0
     active_factors = len([f for f in factors if f.score > 0])
-    if active_factors < 4: coverage_penalty = (4 - active_factors) * 5.0
+    quality_factors = len([f for f in factors if f.score >= 50])
+    if quality_factors < 6:
+        coverage_penalty = (6 - quality_factors) * 3.0  # up to 15 pts for near-empty setups
     
     # Macro Adjustment
     macro_adj = 0.0
@@ -2576,16 +2583,23 @@ def calculate_confluence_score(
     if structural_minimum_failed: raw_score = min(raw_score, 60.0)
 
     # Variance Amplification Curve (Centre on mode threshold)
+    # NOTE: Boost is only applied to scores already at or above T.
+    # Sub-threshold scores are never pushed over the line — they must earn it.
     T = float(getattr(config, "min_confluence_score", 70.0))
-    if raw_score >= T + 3: final_score = raw_score + 2.0
-    elif raw_score >= T - 5:
-        boost = (raw_score - (T - 5)) * 0.8 # Ramp up near threshold
+    if raw_score >= T + 3:
+        final_score = raw_score + 2.0
+    elif raw_score >= T:
+        # Already passing — small clarity boost
+        boost = (raw_score - T) * 0.4
         final_score = raw_score + boost
+    elif raw_score >= T - 5:
+        # Near threshold but below — no adjustment (previously inflated via 0.8 multiplier)
+        final_score = raw_score
     elif raw_score >= 50:
         dampen = (T - 5 - raw_score) * 0.5
         final_score = raw_score - dampen
     else:
-        final_score = raw_score * (raw_score / 50.0) # Quadratic decay for garbage signals
+        final_score = raw_score * (raw_score / 50.0)  # Quadratic decay for garbage signals
 
     final_score = max(0.0, min(100.0, final_score))
 
