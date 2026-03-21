@@ -32,6 +32,8 @@ class ScanConfig:
     max_symbols: int = 20
     max_risk_pct: float = 2.0
     leverage: int = 1  # Added: user-selected leverage to allow planner adaptive buffers/targets
+    enable_fusion: bool = False  # Bot-only: adopt Surgical/Strike weights per market regime (scanner always uses pure Stealth)
+    max_drawdown_pct: float = 10.0  # Session kill-switch threshold
 
     # Regime detection assets - configurable for different exchanges
     # Examples: Binance: ['BTC/USDT', 'ETH/USDT'], Coinbase: ['BTC-USD', 'ETH-USD']

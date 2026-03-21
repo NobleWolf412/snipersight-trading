@@ -37,6 +37,14 @@ from backend.diagnostics.report import ReportGenerator, ModeStats
 
 logger = logging.getLogger(__name__)
 
+# Pending order TTL by trade type. Swing limit orders targeting HTF demand zones
+# may not get retested for hours; the old flat 10-min TTL was silently killing them.
+_PENDING_TTL_MINUTES: Dict[str, float] = {
+    "swing": 240.0,    # 4 hours
+    "intraday": 60.0,  # 1 hour
+    "scalp": 10.0,     # 2 scan cycles
+}
+
 
 # #region agent log
 def _dbg_log(hypothesis_id: str, location: str, message: str, data: Dict[str, Any]) -> None:
@@ -116,6 +124,7 @@ class PaperTradingConfig:
     fee_rate: float = 0.001
     max_hours_open: float = 72.0
     max_pending_scans: int = 2  # Cancel pending limit orders after this many scan cycles
+    max_drawdown_pct: Optional[float] = None  # Kill switch: stop session if balance drops X% from start
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -263,6 +272,8 @@ class PaperTradingService:
         self.position_manager: Optional[PositionManager] = None
         self.orchestrator: Optional[Orchestrator] = None
         self.mode: Optional[ScannerMode] = None
+        self.active_mode: str = "stealth"  # Current adaptive mode (e.g. overwatch)
+        self.active_profile: str = "stealth"  # Current logic fusion profile (e.g. surgical)
 
         # Tracking
         self.completed_trades: List[CompletedTrade] = []
@@ -270,6 +281,7 @@ class PaperTradingService:
         self.activity_log: List[Dict[str, Any]] = []
         self.stats: PaperTradingStats = PaperTradingStats()
         self._peak_equity: float = 0.0
+        self._last_drawdown_check: datetime = datetime.now(timezone.utc)
 
         # Session timing
         self.started_at: Optional[datetime] = None
@@ -322,11 +334,17 @@ class PaperTradingService:
         self.config = config
         self.session_id = str(uuid.uuid4())[:8]
 
-        # Force stealth mode for paper trading — it's the optimal balance:
+        # Paper trading always uses stealth mode — it's the optimal balance:
         # - Covers D→5m timeframes (full range)
         # - Allows all trade types (scalp, intraday, swing) adaptively
-        # - Requires solid 1.8 R:R minimum
+        # - Requires solid 1.5 R:R minimum
         # - Can trade both directions (long + short)
+        # If the caller requested a different mode, log it so the user knows it was overridden.
+        if config.sniper_mode != "stealth":
+            logger.info(
+                f"Paper trading overrides sniper_mode '{config.sniper_mode}' → 'stealth'. "
+                "Stealth is the only supported mode for paper trading (adaptive scalp/intraday/swing)."
+            )
         config.sniper_mode = "stealth"
         self.mode = get_mode("stealth")
         if not self.mode:
@@ -388,6 +406,7 @@ class PaperTradingService:
                 max_symbols=20,
             )
             scan_config.planner = planner_cfg
+            scan_config.enable_fusion = True  # Bot uses Dynamic Logic Fusion — scanner stays on pure Stealth weights
 
             # #region agent log
             _dbg_log(
@@ -431,6 +450,8 @@ class PaperTradingService:
         self.started_at = datetime.now(timezone.utc)
         self.stopped_at = None
         self.status = PaperBotStatus.RUNNING
+        self.active_mode = "stealth"
+        self.active_profile = "stealth"
         self._running = True
 
         # Initialize diagnostics
@@ -607,6 +628,14 @@ class PaperTradingService:
             "last_scan_at": self.last_scan_at.isoformat() if self.last_scan_at else None,
             "next_scan_in_seconds": next_scan_in,
             "current_scan": self.current_scan,
+            "active_mode": self.active_mode,
+            "active_profile": self.active_profile,
+            "regime": {
+                "composite": self._current_regime_composite,
+                "score": self._current_regime_score,
+                "trend": self._current_regime_trend,
+                "volatility": self._current_regime_volatility,
+            },
         }
 
         # Balance info
@@ -742,6 +771,28 @@ class PaperTradingService:
                     asyncio.create_task(self.stop())
                     break
 
+            # Max drawdown kill switch
+            if config.max_drawdown_pct is not None and self.executor:
+                current_equity = self.executor.get_balance()
+                if self.position_manager:
+                    current_equity += sum(
+                        pos.unrealized_pnl
+                        for pos in self.position_manager.positions.values()
+                        if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
+                    )
+                loss_pct = (config.initial_balance - current_equity) / config.initial_balance * 100
+                if loss_pct >= config.max_drawdown_pct:
+                    logger.warning(
+                        f"Max drawdown kill switch triggered: {loss_pct:.1f}% loss >= {config.max_drawdown_pct}% limit"
+                    )
+                    self._log_activity("session_stopped", {
+                        "reason": f"max_drawdown_kill_switch",
+                        "loss_pct": round(loss_pct, 2),
+                        "limit_pct": config.max_drawdown_pct,
+                    })
+                    asyncio.create_task(self.stop())
+                    break
+
             # Wait for next interval
             await asyncio.sleep(interval)
 
@@ -808,36 +859,62 @@ class PaperTradingService:
                                             # (though _process_signal should handle most of these)
                                             pass
 
-                        # Expire stale pending orders that have outlived their TTL
+                        # Expire stale pending orders that have outlived their per-type TTL.
                         if self._pending_plans and self.config:
-                            max_age = timedelta(
-                                minutes=self.config.scan_interval_minutes * self.config.max_pending_scans
-                            )
                             now = datetime.now(timezone.utc)
                             for order_id in list(self._pending_plans.keys()):
                                 placed_at = self._pending_placed_at.get(order_id)
-                                if placed_at and (now - placed_at) > max_age:
-                                    plan = self._pending_plans[order_id]
+                                if not placed_at:
+                                    continue
+                                plan = self._pending_plans[order_id]
+                                trade_type = getattr(plan, "trade_type", "intraday") or "intraday"
+                                ttl_minutes = _PENDING_TTL_MINUTES.get(
+                                    trade_type,
+                                    self.config.scan_interval_minutes * self.config.max_pending_scans,
+                                )
+                                max_age = timedelta(minutes=ttl_minutes)
+                                if (now - placed_at) > max_age:
                                     executor.cancel_order(order_id)
                                     self._pending_plans.pop(order_id, None)
                                     self._pending_placed_at.pop(order_id, None)
                                     logger.info(
-                                        f"PENDING ORDER EXPIRED: {plan.symbol} | "
+                                        f"PENDING ORDER EXPIRED: {plan.symbol} [{trade_type}] | "
                                         f"age={(now - placed_at).total_seconds() / 60:.1f}min "
-                                        f"(max={max_age.total_seconds() / 60:.0f}min)"
+                                        f"(ttl={ttl_minutes:.0f}min)"
                                     )
                                     self._log_activity("pending_order_expired", {
                                         "order_id": order_id,
                                         "symbol": plan.symbol,
                                         "direction": plan.direction,
+                                        "trade_type": trade_type,
                                         "confluence": plan.confidence_score,
                                         "age_minutes": (now - placed_at).total_seconds() / 60,
+                                        "ttl_minutes": ttl_minutes,
                                     })
 
                     await self.position_manager.monitor_all_positions()
 
                     # Check for closed positions
                     await self._sync_closed_positions()
+
+                    # Update drawdown in real-time (every 10s) to capture open-position
+                    # underwater equity, not only at trade-close time.
+                    _now = datetime.now(timezone.utc)
+                    if (_now - self._last_drawdown_check).total_seconds() >= 10:
+                        self._update_drawdown()
+                        self._last_drawdown_check = _now
+
+                        # Check for drawdown limit
+                        if self.config and self.stats.max_drawdown >= self.config.max_drawdown_pct:
+                            logger.warning(
+                                f"🛑 MAX DRAWDOWN LIMIT REACHED ({self.stats.max_drawdown:.2f}% >= {self.config.max_drawdown_pct}%)"
+                            )
+                            self._log_activity("drawdown_limit_reached", {
+                                "drawdown": self.stats.max_drawdown,
+                                "limit": self.config.max_drawdown_pct
+                            })
+                            asyncio.create_task(self.stop())
+                            break
 
             except Exception as e:
                 logger.error(f"Monitor error: {e}")
@@ -894,15 +971,27 @@ class PaperTradingService:
                             f"🧠 ADAPTIVE MODE: Regime is {global_regime.composite}. "
                             f"Adapting scan mode from stealth → {recommended_mode} ({rec.get('reason')})"
                         )
-                        # NOTE: For Training Ground paper trading, we keep the execution engine
-                        # locked to STEALTH to avoid accidentally switching into stricter modes
-                        # (e.g., Overwatch 78% gate) which can starve trade frequency.
-                        # We still surface the recommendation in the UI for transparency.
+                        # NOTE: For paper trading, execution stays locked to STEALTH to avoid
+                        # accidentally switching into stricter modes (e.g., Overwatch 78% gate)
+                        # which can starve trade frequency.  actual_scan_mode is only used for
+                        # display/logging — the orchestrator always scans with self.mode (stealth).
                         actual_scan_mode = recommended_mode
+                        self.active_mode = actual_scan_mode
                         
-                        # Log the adaptation to the UI Activity Feed
+                        # Set active profile for fusion visibility
+                        # If recommended is Strike/Surgical, use that; otherwise stealth
+                        if recommended_mode in ["strike", "surgical"]:
+                           self.active_profile = recommended_mode
+                        else:
+                           self.active_profile = "stealth"
+
+                        # Log the recommendation to the UI Activity Feed.
+                        # Explicitly note the scan remains in stealth to avoid misleading users.
                         self._log_activity("system_update", {
-                            "message": f"Adaptive Shift: Now scanning in {recommended_mode.upper()} mode.",
+                            "message": (
+                                f"Regime Advisory: {recommended_mode.upper()} conditions detected "
+                                f"(scan stays in STEALTH)."
+                            ),
                             "details": rec.get("reason", "")
                         })
             except Exception as e:
@@ -1047,7 +1136,10 @@ class PaperTradingService:
             # Graduated regime filtering using RegimePolicy system
             # Instead of a nuclear veto that kills ALL signals, apply per-mode
             # policies that adjust position sizing and filter only truly chaotic regimes.
-            regime = rejection_summary.get("regime", {}) if isinstance(rejection_summary, dict) else {}
+            # Use `or {}` rather than a default arg: the orchestrator explicitly packs
+            # "regime": None when BTC data fails, so .get("regime", {}) would still
+            # return None (key exists). `or {}` handles the None case correctly.
+            regime = (rejection_summary.get("regime") if isinstance(rejection_summary, dict) else None) or {}
             regime_composite = regime.get("composite", "unknown")
             regime_score = regime.get("score", 0)
 
@@ -1160,6 +1252,7 @@ class PaperTradingService:
             "confluence": round(plan.confidence_score, 1),
             "setup_type": getattr(plan, "setup_type", "unknown"),
             "trade_type": getattr(plan, "trade_type", "unknown"),
+            "timeframe": getattr(plan, "primary_timeframe", None) or getattr(plan, "signal_timeframe", None),
             "entry_zone": round(plan.entry_zone.near_entry, 2),
             "stop_loss": round(plan.stop_loss.level, 2),
             "rr": round(plan.risk_reward, 2) if hasattr(plan, "risk_reward") else None,
@@ -1230,8 +1323,12 @@ class PaperTradingService:
         )
         # #endregion
 
-        # Check if we can take more positions (count open + pending toward cap)
-        active_count = len(self._get_active_positions()) + len(self._pending_plans)
+        # Check if we can take more positions.
+        # Only count ACTIVE (filled) positions against the cap — pending limit orders
+        # hold no capital and are already deduplicated per-symbol by Gate 3.
+        # Counting pending here caused valid signals to be blocked whenever the book
+        # was full of stale unfilled limits, even with zero actual exposure.
+        active_count = len(self._get_active_positions())
         if active_count >= config.max_positions:
             reason = f"Max positions reached ({active_count}/{config.max_positions})"
             logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
@@ -1248,6 +1345,7 @@ class PaperTradingService:
                 data={
                     "symbol": plan.symbol,
                     "active_count": active_count,
+                    "pending_count": len(self._pending_plans),
                     "max_positions": config.max_positions,
                 },
             )
@@ -1281,7 +1379,30 @@ class PaperTradingService:
         )
         if existing_order_id:
             existing_plan = self._pending_plans[existing_order_id]
-            if plan.confidence_score <= existing_plan.confidence_score:
+            direction_flipped = existing_plan.direction != plan.direction
+
+            if direction_flipped:
+                # Market structure has flipped — always cancel the stale opposite-direction
+                # pending and take the new signal regardless of confluence comparison.
+                logger.info(
+                    f"DIRECTION FLIP: {plan.symbol} | cancelling stale {existing_plan.direction} "
+                    f"pending ({existing_plan.confidence_score:.1f}%), taking {plan.direction} "
+                    f"({plan.confidence_score:.1f}%)"
+                )
+                executor.cancel_order(existing_order_id)
+                self._pending_plans.pop(existing_order_id, None)
+                self._pending_placed_at.pop(existing_order_id, None)
+                self._log_activity("pending_order_replaced", {
+                    "symbol": plan.symbol,
+                    "reason": "direction_flip",
+                    "old_direction": existing_plan.direction,
+                    "new_direction": plan.direction,
+                    "old_confluence": existing_plan.confidence_score,
+                    "new_confluence": plan.confidence_score,
+                    "limit_price": plan.entry_zone.near_entry,
+                })
+            elif plan.confidence_score <= existing_plan.confidence_score:
+                # Same direction, equal or lower confluence — keep existing
                 reason = (
                     f"Pending order already exists with equal/higher confluence "
                     f"({existing_plan.confidence_score:.1f}% >= {plan.confidence_score:.1f}%)"
@@ -1289,20 +1410,23 @@ class PaperTradingService:
                 logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
                 self._log_signal(plan, "filtered", reason)
                 return
-            # New signal has better confluence — cancel old order and replace it
-            logger.info(
-                f"REPLACING PENDING ORDER: {plan.symbol} | "
-                f"old confluence={existing_plan.confidence_score:.1f}% → "
-                f"new confluence={plan.confidence_score:.1f}%"
-            )
-            executor.cancel_order(existing_order_id)
-            self._pending_plans.pop(existing_order_id, None)
-            self._pending_placed_at.pop(existing_order_id, None)
-            self._log_activity("pending_order_replaced", {
-                "symbol": plan.symbol,
-                "old_confluence": existing_plan.confidence_score,
-                "new_confluence": plan.confidence_score,
-            })
+            else:
+                # Same direction, better confluence — replace
+                logger.info(
+                    f"REPLACING PENDING ORDER: {plan.symbol} | "
+                    f"old confluence={existing_plan.confidence_score:.1f}% → "
+                    f"new confluence={plan.confidence_score:.1f}%"
+                )
+                executor.cancel_order(existing_order_id)
+                self._pending_plans.pop(existing_order_id, None)
+                self._pending_placed_at.pop(existing_order_id, None)
+                self._log_activity("pending_order_replaced", {
+                    "symbol": plan.symbol,
+                    "reason": "higher_confluence",
+                    "old_confluence": existing_plan.confidence_score,
+                    "new_confluence": plan.confidence_score,
+                    "limit_price": plan.entry_zone.near_entry,
+                })
 
         # Check confluence threshold - use same rounding as scanner to avoid asymmetry
         min_score = config.min_confluence or (
@@ -1856,24 +1980,31 @@ class PaperTradingService:
         if self.stats.avg_loss != 0:
             self.stats.avg_rr = abs(self.stats.avg_win / self.stats.avg_loss)
 
-        # Update max drawdown
-        if self.executor and self.config:
-            # Equity = cash balance + unrealized PnL of open positions.
-            # executor.get_balance() already includes all realized PnL (fees + closed trades),
-            # so we must NOT add stats.total_pnl again (that was double-counting).
-            current_equity = self.executor.get_balance()
-            if self.position_manager:
-                current_equity += sum(
-                    pos.unrealized_pnl
-                    for pos in self.position_manager.positions.values() 
-                    if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
-                )
-            if current_equity > self._peak_equity:
-                self._peak_equity = current_equity
-            elif self._peak_equity > 0:
-                drawdown = (self._peak_equity - current_equity) / self._peak_equity * 100
-                if drawdown > self.stats.max_drawdown:
-                    self.stats.max_drawdown = drawdown
+        # Update max drawdown on each trade close
+        self._update_drawdown()
+
+    def _update_drawdown(self) -> None:
+        """Recompute peak equity and max drawdown from current balance + unrealized PnL.
+
+        Called both on trade close (via _update_stats) and on every monitor loop tick
+        so that drawdown is captured in real-time, not only when positions close.
+        """
+        if not self.executor or not self.config:
+            return
+        # Equity = realized balance + all unrealized PnL on open/partial positions
+        current_equity = self.executor.get_balance()
+        if self.position_manager:
+            current_equity += sum(
+                pos.unrealized_pnl
+                for pos in self.position_manager.positions.values()
+                if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
+            )
+        if current_equity > self._peak_equity:
+            self._peak_equity = current_equity
+        elif self._peak_equity > 0:
+            drawdown = (self._peak_equity - current_equity) / self._peak_equity * 100
+            if drawdown > self.stats.max_drawdown:
+                self.stats.max_drawdown = drawdown
 
     def _log_activity(self, event_type: str, data: Dict[str, Any]):
         """Add event to activity log."""

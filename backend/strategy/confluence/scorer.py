@@ -143,7 +143,7 @@ MODE_FACTOR_WEIGHTS = {
         # Core Structure (35%)
         "market_structure": 0.15,
         "order_block": 0.10,
-        "fvg": 0.05,
+        "fvg": 0.02,
         "ltf_structure_shift": 0.05,
         # Conviction & Flow (25%)
         "momentum": 0.08,
@@ -159,14 +159,14 @@ MODE_FACTOR_WEIGHTS = {
         # Precision & Timing (15%)
         "kill_zone": 0.04,
         "premium_discount": 0.04,
-        "macd_veto": 0.02,
+        "macd_veto": 0.05,
         "institutional_sequence": 0.05,
     },
     "stealth_balanced": {  # STEALTH (Balanced) - Total 1.0
         # Core Structure (30%)
         "market_structure": 0.15,
         "order_block": 0.10,
-        "fvg": 0.05,
+        "fvg": 0.02,
         # HTF Alignment (25%)
         "htf_alignment": 0.15,
         "htf_proximity": 0.05,
@@ -179,7 +179,7 @@ MODE_FACTOR_WEIGHTS = {
         # Precision & Timing (20%)
         "kill_zone": 0.08,
         "premium_discount": 0.05,
-        "macd_veto": 0.02,
+        "macd_veto": 0.05,
         "institutional_sequence": 0.05,
     },
     "precision": {  # SURGICAL (Scalp) - Total 1.0
@@ -190,8 +190,8 @@ MODE_FACTOR_WEIGHTS = {
         "ltf_structure_shift": 0.04,
         # Precision Timing (25%)
         "kill_zone": 0.12,
-        "premium_discount": 0.08,
-        "macd_veto": 0.05,
+        "premium_discount": 0.05,
+        "macd_veto": 0.08,
         # Conviction/Flow (20%)
         "momentum": 0.05,
         "liquidity_sweep": 0.10,
@@ -218,7 +218,7 @@ MODE_FACTOR_WEIGHTS = {
         "btc_impulse": 0.05,
         "weekly_stoch_rsi": 0.05,
         "htf_structure_bias": 0.08,
-        "premium_discount": 0.12,
+        "premium_discount": 0.09,
         "inside_ob": 0.10,
         "nested_ob": 0.05,
         "opposing_structure": 0.12,
@@ -227,7 +227,7 @@ MODE_FACTOR_WEIGHTS = {
         "ltf_structure_shift": 0.12,
         "institutional_sequence": 0.10,
         "timeframe_conflict": 0.15,
-        "macd_veto": 0.05,
+        "macd_veto": 0.08,
         "close_momentum": 0.09,
         "multi_close_confirm": 0.06,
         "liquidity_draw": 0.15,
@@ -250,7 +250,7 @@ MODE_FACTOR_WEIGHTS = {
         "btc_impulse": 0.12,
         "weekly_stoch_rsi": 0.12,
         "htf_structure_bias": 0.15,
-        "premium_discount": 0.15,
+        "premium_discount": 0.12,
         "inside_ob": 0.10,
         "nested_ob": 0.10,
         "opposing_structure": 0.06,
@@ -259,7 +259,7 @@ MODE_FACTOR_WEIGHTS = {
         "ltf_structure_shift": 0.05,
         "institutional_sequence": 0.15,
         "timeframe_conflict": 0.10,
-        "macd_veto": 0.05,
+        "macd_veto": 0.08,
         "close_momentum": 0.06,
         "multi_close_confirm": 0.08,
         "liquidity_draw": 0.08,
@@ -282,7 +282,7 @@ MODE_FACTOR_WEIGHTS = {
         "btc_impulse": 0.08,
         "weekly_stoch_rsi": 0.06,
         "htf_structure_bias": 0.10,
-        "premium_discount": 0.10,
+        "premium_discount": 0.07,
         "inside_ob": 0.10,
         "nested_ob": 0.08,
         "opposing_structure": 0.10,
@@ -291,7 +291,7 @@ MODE_FACTOR_WEIGHTS = {
         "ltf_structure_shift": 0.10,
         "institutional_sequence": 0.12,
         "timeframe_conflict": 0.12,
-        "macd_veto": 0.05,
+        "macd_veto": 0.08,
         "close_momentum": 0.08,
         "multi_close_confirm": 0.07,
         "liquidity_draw": 0.12,
@@ -951,6 +951,34 @@ def evaluate_htf_momentum_gate(
 
     # B. COUNTER-TREND (Opposed)
     if is_opposed:
+        # 0. Check for HTF Hidden Divergence — continuation signal that justifies
+        #    counter-trend entry without needing RSI climax
+        htf_hidden_div = False
+        if hasattr(ind, "dataframe") and ind.dataframe is not None and len(ind.dataframe) >= 50:
+            try:
+                htf_divs = detect_all_divergences(
+                    df=ind.dataframe,
+                    direction=direction,
+                    lookback=5,
+                    min_pivot_distance=10,
+                    max_lookback_bars=100,
+                )
+                htf_hidden_div = bool(
+                    any("hidden" in d.divergence_type for d in htf_divs.get("rsi", []))
+                    or any("hidden" in d.divergence_type for d in htf_divs.get("macd", []))
+                )
+            except Exception:
+                pass
+
+        if htf_hidden_div:
+            return {
+                "allowed": True,
+                "score_adjustment": 15.0,
+                "htf_momentum": momentum_state,
+                "htf_trend": htf_trend_dir,
+                "reason": f"HTF hidden divergence on {momentum_tf} justifies counter-trend entry",
+            }
+
         # 1. Check for CLIMAX (The only valid reason to fade a strong trend)
         is_climax = False
         current_rsi = rsi if rsi else 50.0
@@ -1405,14 +1433,14 @@ def evaluate_macd_for_mode(
             score += 10.0 * macd_config.weight
             reasons.append(f"{timeframe} MACD supportive bearish (FILTER)")
         elif macd_config.allow_ltf_veto:
-            # Check for veto conditions - reduced penalty from -15 to -8 for less aggressive filtering
+            # Check for veto conditions
             if is_bullish and bearish_persistent:
-                score -= 8.0 * macd_config.weight
+                score -= 15.0 * macd_config.weight
                 veto_active = True
                 role = "VETO"
                 reasons.append(f"{timeframe} MACD bearish veto active against bullish setup")
             elif not is_bullish and bullish_persistent:
-                score -= 8.0 * macd_config.weight
+                score -= 15.0 * macd_config.weight
                 veto_active = True
                 role = "VETO"
                 reasons.append(f"{timeframe} MACD bullish veto active against bearish setup")
@@ -3605,6 +3633,7 @@ def _score_momentum(
         score = min(MOMENTUM_CATEGORY_CAP, raw_momentum)
 
     # Stoch RSI K/D crossover enhancement (debounced by minimum separation)
+    kd_bonus = 0.0
     k = getattr(indicators, "stoch_rsi_k", None)
     d = getattr(indicators, "stoch_rsi_d", None)
     if k is not None and d is not None:
@@ -3614,39 +3643,42 @@ def _score_momentum(
             if normalized_dir == "bullish" and k > d:
                 # Region-sensitive weighting
                 if k < 20:
-                    score += 25.0  # early oversold bullish cross
+                    kd_bonus += 25.0  # early oversold bullish cross
                 elif k < 50:
-                    score += 15.0  # moderate bullish cross
+                    kd_bonus += 15.0  # moderate bullish cross
                 elif k < 80:
-                    score += 8.0
+                    kd_bonus += 8.0
                 else:
-                    score += 5.0  # late/exhaustive
+                    kd_bonus += 5.0  # late/exhaustive
 
                 # Check previous values for FRESH crossover (just happened)
                 k_prev = getattr(indicators, "stoch_rsi_k_prev", None)
                 d_prev = getattr(indicators, "stoch_rsi_d_prev", None)
                 if k_prev is not None and d_prev is not None and k_prev <= d_prev:
-                    score += 10.0  # Just crossed over!
+                    kd_bonus += 10.0  # Just crossed over!
 
             elif normalized_dir == "bearish" and k < d:
                 if k > 80:
-                    score += 25.0  # overbought bearish cross
+                    kd_bonus += 25.0  # overbought bearish cross
                 elif k > 50:
-                    score += 15.0  # moderate bearish cross
+                    kd_bonus += 15.0  # moderate bearish cross
                 elif k > 20:
-                    score += 8.0
+                    kd_bonus += 8.0
                 else:
-                    score += 5.0
+                    kd_bonus += 5.0
 
                 # Check previous values for FRESH crossover (just happened)
                 k_prev = getattr(indicators, "stoch_rsi_k_prev", None)
                 d_prev = getattr(indicators, "stoch_rsi_d_prev", None)
                 if k_prev is not None and d_prev is not None and k_prev >= d_prev:
-                    score += 10.0  # Just crossed under!
+                    kd_bonus += 10.0  # Just crossed under!
             else:
                 # Opposing crossover strong penalty (avoid chasing into momentum shift)
                 if separation >= 5.0:
-                    score -= 10.0
+                    kd_bonus -= 10.0
+
+    # Re-apply cap after K/D bonus to prevent cap bypass
+    score = min(MOMENTUM_CATEGORY_CAP, score + kd_bonus)
 
     # ADX Trend Strength & DI Confirmation
     adx = getattr(indicators, "adx", None)

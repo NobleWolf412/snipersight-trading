@@ -22,6 +22,10 @@ class PlannerConfig:
 
     # ATR-based offsets
     entry_zone_offset_atr: float = 0.1  # Base offset for entry zone boundaries
+    market_entry_aggression_atr: float = 0.05  # Buffer added when price is already inside OB/FVG.
+                                                # Creates a marketable limit that fills immediately
+                                                # even if price drifts slightly between scan and execution.
+                                                # Also prevents near==far collision in EntryZone.
     stop_buffer_atr: float = 0.3  # Buffer beyond structure for stop loss
     fallback_entry_near_atr: float = 0.5  # ATR fallback: near entry offset
     fallback_entry_far_atr: float = 1.5  # ATR fallback: far entry offset

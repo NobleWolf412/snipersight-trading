@@ -11,6 +11,17 @@ providing the benefits of service-based architecture.
 import logging
 from typing import Dict, Any, Optional
 
+from backend.analysis.macro_context import MacroContext
+
+
+def _btc_dir_to_impulse(macro_context: Optional[MacroContext]) -> Optional[str]:
+    """Translate MacroContext.btc_dir vocab to the btc_impulse vocab expected by scorer."""
+    if macro_context is None:
+        return None
+    return {"up": "bullish", "down": "bearish", "flat": "neutral"}.get(
+        getattr(macro_context, "btc_dir", "flat"), "neutral"
+    )
+
 from backend.engine.context import SniperContext
 from backend.strategy.confluence.scorer import calculate_confluence_score, ConfluenceBreakdown
 
@@ -423,46 +434,30 @@ class ConfluenceService:
                                     }
 
                                     raise ConflictingDirectionsException(
-                                        f"Conflicting signals ({bullish_breakdown.total_score:.1f}%) - bullish and bearish scores too close to call (<8pt margin) in neutral market",
+                                        f"Conflicting signals ({bullish_breakdown.total_score:.1f}% vs {bearish_breakdown.total_score:.1f}%) — both above gate, structure tied (<{DIRECTION_MARGIN:.0f}pt margin) in neutral market",
                                         bullish_breakdown=bullish_breakdown,
                                         bearish_breakdown=bearish_breakdown
                                     )
 
                             else:
-                                # Scores not strong enough for structure override (<=70%)
+                                # Scores not strong enough for structure override (<=70%).
+                                # Pick the higher-scoring direction and let the 70% CONF gate
+                                # produce a clear rejection ("Score X% below gate") instead of
+                                # the misleading "No directional edge" exception.
+                                if bullish_breakdown.total_score >= bearish_breakdown.total_score:
+                                    chosen = bullish_breakdown
+                                    chosen_direction = "LONG"
+                                else:
+                                    chosen = bearish_breakdown
+                                    chosen_direction = "SHORT"
+                                tie_break_used = "score_winner_below_gate"
                                 logger.info(
-                                    "🔄 %s Conflicting Signals (%.1f%%) - neutral regime, no clear edge",
+                                    "🔄 %s Both directions below gate (%.1f vs %.1f) — picking %s by score, "
+                                    "CONF gate will reject",
                                     context.symbol,
                                     bullish_breakdown.total_score,
-                                )
-
-                                context.metadata["chosen_direction"] = None
-                                context.metadata["alt_confluence"] = {
-                                    "long": bullish_breakdown.total_score,
-                                    "short": bearish_breakdown.total_score,
-                                    "tie_break_used": "skipped_no_edge",
-                                    # Bypass Exception Transport Issues by storing factors directly in shared metadata
-                                    "long_factors": [
-                                        {"name": f.name, "score": f.score, "weight": f.weight, "rationale": f.rationale} 
-                                        for f in bullish_breakdown.factors
-                                    ],
-                                    "short_factors": [
-                                        {"name": f.name, "score": f.score, "weight": f.weight, "rationale": f.rationale} 
-                                        for f in bearish_breakdown.factors
-                                    ],
-                                }
-
-                                # --- DEBUG SOURCE ---
-                                logger.error(f"DEBUG SOURCE: RAISING CONFLICT! Bull: {bullish_breakdown.total_score}, Bear: {bearish_breakdown.total_score}")
-                                try:
-                                    logger.error(f"DEBUG SOURCE FACTORS: Bull={len(bullish_breakdown.factors)} Bear={len(bearish_breakdown.factors)}")
-                                except: pass
-                                # --------------------
-
-                                raise ConflictingDirectionsException(
-                                    f"No directional edge ({bullish_breakdown.total_score:.1f}%) - bullish and bearish scores too close to call (<8pt margin) in neutral market",
-                                    bullish_breakdown=bullish_breakdown,
-                                    bearish_breakdown=bearish_breakdown
+                                    bearish_breakdown.total_score,
+                                    chosen_direction,
                                 )
 
             # CRITICAL: Store chosen direction in context for downstream use
@@ -526,6 +521,17 @@ class ConfluenceService:
                 primary_tf = getattr(self._config, "primary_planning_timeframe", "1h")
                 if primary_tf not in allowed_tfs:
                     allowed_tfs = tuple(list(allowed_tfs) + [primary_tf])
+                # Also include the exec TF from the mode's relativity so that reversal signals
+                # on the execution timeframe (e.g. 15m CHoCH in Strike mode) aren't excluded.
+                try:
+                    from backend.shared.config.scanner_modes import RELATIVITY_MAP, map_profile_to_relativity
+                    _mode_key = map_profile_to_relativity(getattr(self._config, "profile", "stealth"))
+                    _rel = RELATIVITY_MAP.get(_mode_key, RELATIVITY_MAP["intraday"])
+                    exec_tf = _rel["exec"]
+                    if exec_tf not in allowed_tfs:
+                        allowed_tfs = tuple(list(allowed_tfs) + [exec_tf])
+                except Exception:
+                    pass
 
                 target_sweep_type = "low" if is_long else "high"
 
@@ -688,6 +694,7 @@ class ConfluenceService:
             volume_profile=context.metadata.get("_volume_profile_obj"),
             current_price=current_price,
             macro_context=context.macro_context,
+            btc_impulse=_btc_dir_to_impulse(context.macro_context) if "BTC" not in context.symbol.upper() else None,
             is_btc=("BTC" in context.symbol.upper()),
             is_alt=("BTC" not in context.symbol.upper()),
             # Pass symbol-specific regime detected by RegimeDetector

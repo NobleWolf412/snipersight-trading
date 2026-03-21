@@ -2224,24 +2224,35 @@ def _derive_trade_type(
     Returns:
         'scalp', 'swing', or 'intraday'
     """
+    # Stealth/stealth_balanced are BALANCED modes (swing + intraday + scalp), not scalp-only.
+    # Including them in is_scalp_mode incorrectly raised the swing threshold to 8%/6ATR and
+    # demoted 4H from HTF to MTF — making it virtually impossible for stealth to produce swing
+    # classifications (stealth max_stop_atr=4.5 can never reach the 6ATR scalp-mode threshold).
+    #
+    # "intraday_cascade" is a sentinel set by the cascade runner when it explicitly attempts
+    # the intraday scale. That attempt includes 4H in structure_timeframes for level discovery,
+    # but 4H should not count as HTF structure for CLASSIFICATION in that context — otherwise
+    # any target ≥2.45% gets labelled swing and the intraday cascade never produces a candidate
+    # (it's rejected by allowed_trade_types=("intraday",)). Treating it as scalp-mode here
+    # raises the swing bar to 8%/6ATR, letting 1H-primary intraday plans classify correctly.
     is_scalp_mode = expected_trade_type in (
         "precision",
         "surgical",
         "strike",
         "scalp",
         "intraday_aggressive",
-        "stealth",
-        "stealth_balanced",
+        "intraday_cascade",  # cascade sentinel — intraday scale should not auto-promote to swing
     )
 
     # Adjust structure definitions based on mode intent
-    # For Scalpers, 4H is context/bias, not "Swing Structure"
+    # For scalp/intraday modes: 4H is context/bias only, not "Swing Structure"
+    # For balanced/swing modes (stealth, overwatch): 4H is genuine HTF structure
     if is_scalp_mode:
         HTF = ("1w", "1d")
     else:
         HTF = ("1w", "1d", "4h")
 
-    MTF = ("1h", "4h") if is_scalp_mode else ("1h",)  # 4H is MTF for scalpers
+    MTF = ("1h", "4h") if is_scalp_mode else ("1h",)  # 4H is MTF for scalpers only
     LTF = ("15m", "5m", "1m")
 
     # Check structure timeframe categories

@@ -1038,6 +1038,7 @@ class PaperTradingConfigRequest(BaseModel):
     meme_mode: bool = False
     slippage_bps: float = Field(default=5.0, ge=0, le=50)
     fee_rate: float = Field(default=0.001, ge=0, le=0.01)
+    max_drawdown_pct: Optional[float] = Field(default=None, ge=0, le=100)
 
 
 @app.post("/api/paper-trading/start")
@@ -1074,6 +1075,7 @@ async def start_paper_trading(config: PaperTradingConfigRequest):
             meme_mode=config.meme_mode,
             slippage_bps=config.slippage_bps,
             fee_rate=config.fee_rate,
+            max_drawdown_pct=config.max_drawdown_pct,
         )
 
         result = await service.start(paper_config)
