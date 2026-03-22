@@ -93,8 +93,8 @@ MODE_PENALTY_MULTIPLIERS = {
 # Maximum synergy bonus per mode. Aggressive modes allow more synergy to offset penalties.
 
 MODE_SYNERGY_CAPS = {
-    "overwatch": 10.0,
-    "macro_surveillance": 10.0,
+    "overwatch": 15.0,         # RAISED: 10→15 — conflict penalties can reach 42pts (35 cap × 1.2x multiplier); 10pt synergy cap was mathematically unable to offset them
+    "macro_surveillance": 15.0,
     "stealth_balanced": 12.0,
     "stealth": 12.0,
     "strike": 15.0,             # Aggressive: higher cap
@@ -2112,9 +2112,9 @@ def calculate_confluence_score(
     )
 
     # Kill Zone Timing
+    # NOTE: get_current_kill_zone and _score_kill_zone_incremental are defined
+    # in this same module — use them directly (the previous self-import was dead weight).
     try:
-        from backend.strategy.confluence.scorer import get_current_kill_zone, _score_kill_zone_incremental
-        from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
         curr_kz = get_current_kill_zone(now)
         kz_result = _score_kill_zone_incremental(now, curr_kz)
@@ -2587,8 +2587,12 @@ def calculate_confluence_score(
     coverage_penalty = 0.0
     active_factors = len([f for f in factors if f.score > 0])
     quality_factors = len([f for f in factors if f.score >= 50])
-    if quality_factors < 6:
-        coverage_penalty = (6 - quality_factors) * 3.0  # up to 15 pts for near-empty setups
+    # Require 5 quality factors (down from 6) — many valid SMC setups lack nested OBs,
+    # divergence, or FVGs by design; the old rule taxed normal conditions as if they
+    # were low-quality signals. Cap at -6 (max 2 factors missing × 3pts) so the
+    # penalty catches truly sparse setups without crippling borderline ones.
+    if quality_factors < 5:
+        coverage_penalty = min((5 - quality_factors) * 3.0, 6.0)
     
     # Macro Adjustment
     macro_adj = 0.0
@@ -3898,30 +3902,32 @@ def _score_kill_zone_incremental(
     
     Returns detailed score and rationale components.
     """
-    score = 0.0
+    # Base score is 40 (neutral/acceptable) — outside a kill zone is not a red flag,
+    # it simply means no timing edge. Starting at 0 was causing kill zone to routinely
+    # trigger the coverage penalty during Sydney morning hours (UTC 8pm–6am = outside
+    # London/NY sessions), unfairly penalising structurally valid setups.
+    score = 40.0
     components = []
-    
+
     # NOTE: No weekend penalty for crypto - markets trade 24/7
     # (Traditional markets have liquidity drought on weekends, crypto does not)
-        
-    # 1. Session Active (+25 pts)
+
+    # 1. Session Active (+25 pts above neutral)
     if kill_zone:
         score += 25.0
         kz_name = kill_zone.value.replace("_", " ").title() if hasattr(kill_zone, "value") else str(kill_zone)
         components.append(("Active KZ", 25.0, f"{kz_name} active"))
-        
-    # 3. Overlap / Prime Session Check (+10 pts)
-    # Simple heuristic without timezone math: NY Open and London Open are prime
+
+    # 2. Prime Session bonus (+10 pts) — NY Open and London Open carry highest volume
     if kill_zone:
         kz_str = str(kill_zone).lower()
         if "new_york" in kz_str or "london_open" in kz_str:
-             # Major sessions get a "Prime Session" bonus
             score += 10.0
             components.append(("Prime Session", 10.0, "Major volume session"))
-            
+
     return {
         "score": max(0.0, min(100.0, score)),
-        "rationale": ", ".join([f"{c[0]}({c[1]:+.0f})" for c in components]) if components else "Outside kill zones",
+        "rationale": ", ".join([f"{c[0]}({c[1]:+.0f})" for c in components]) if components else "Outside kill zones (neutral)",
         "components": components,
         "in_zone": bool(kill_zone)
     }

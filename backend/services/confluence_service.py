@@ -173,9 +173,12 @@ class ConfluenceService:
                 bearish_breakdown.total_score,
             )
 
-            # NEW: Require minimum margin for directional confidence
-            # Close scores (within margin) are treated as indeterminate
-            DIRECTION_MARGIN = 5.0  # Minimum score edge required (was 8.0 — too aggressive, caused excessive compressed vol ties)
+            # Require minimum margin for directional confidence.
+            # Intraday/scalp modes (strike, surgical) use a tighter margin because
+            # cycle gates already create large asymmetric score gaps; a 5pt margin
+            # on top caused excessive false direction failures in those modes.
+            _profile = getattr(self._config, "profile", "balanced").lower() if self._config else "balanced"
+            DIRECTION_MARGIN = 3.0 if _profile in ("intraday_aggressive", "surgical", "precision", "strike") else 5.0
             score_diff = bullish_breakdown.total_score - bearish_breakdown.total_score
 
             # Determine winner - use STRICT greater-than to avoid long bias on ties
