@@ -814,7 +814,7 @@ export function TrainingGround() {
                         <input
                           type="number"
                           min="1"
-                          max="20"
+                          max="10"
                           value={config.max_positions}
                           onChange={e => setConfig({ ...config, max_positions: Number(e.target.value) })}
                           className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"

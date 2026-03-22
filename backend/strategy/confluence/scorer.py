@@ -132,10 +132,7 @@ MODE_SYNERGY_CAPS = {
 #   BTC / Macro:     btc_impulse, weekly_stoch_rsi, fibonacci
 #   Timing:          kill_zone, premium_discount
 #   Sequence:        institutional_sequence, multi_tf_reversal, liquidity_draw
-<<<<<<< HEAD
 
-=======
->>>>>>> dceac3bd8a0d4a520e9be7922cc4498cb4fcc3e2
 _OVERWATCH_WEIGHTS = {
     # --- SMC Core ---
     "order_block":           0.25,  # Institutional demand/supply; primary entry signal
@@ -176,10 +173,7 @@ _OVERWATCH_WEIGHTS = {
     "multi_tf_reversal":     0.12,
     "liquidity_draw":        0.08,
 }
-<<<<<<< HEAD
 
-=======
->>>>>>> dceac3bd8a0d4a520e9be7922cc4498cb4fcc3e2
 _STRIKE_WEIGHTS = {
     # --- SMC Core ---
     "order_block":           0.18,
@@ -220,10 +214,7 @@ _STRIKE_WEIGHTS = {
     "multi_tf_reversal":     0.12,
     "liquidity_draw":        0.12,
 }
-<<<<<<< HEAD
 
-=======
->>>>>>> dceac3bd8a0d4a520e9be7922cc4498cb4fcc3e2
 _SURGICAL_WEIGHTS = {
     # --- SMC Core ---
     "order_block":           0.15,
@@ -264,10 +255,7 @@ _SURGICAL_WEIGHTS = {
     "multi_tf_reversal":     0.10,
     "liquidity_draw":        0.15,
 }
-<<<<<<< HEAD
 
-=======
->>>>>>> dceac3bd8a0d4a520e9be7922cc4498cb4fcc3e2
 _STEALTH_WEIGHTS = {
     # --- SMC Core ---
     "order_block":           0.15,
@@ -308,10 +296,7 @@ _STEALTH_WEIGHTS = {
     "multi_tf_reversal":     0.10,
     "liquidity_draw":        0.08,
 }
-<<<<<<< HEAD
 
-=======
->>>>>>> dceac3bd8a0d4a520e9be7922cc4498cb4fcc3e2
 MODE_FACTOR_WEIGHTS = {
     # Canonical mode names
     "macro_surveillance": _OVERWATCH_WEIGHTS,
