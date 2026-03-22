@@ -2241,8 +2241,9 @@ def calculate_confluence_score(
                     div_res = _score_divergences_incremental(divergences, direction)
                     div_score = div_res["score"]
                     div_rationale = div_res["rationale"]
-                except: pass
-        
+                except Exception as e:
+                    logger.warning("Divergence scoring failed: %s", e)
+
         factors.append(
             ConfluenceFactor(
                 name="Price-Indicator Divergence",
@@ -2344,7 +2345,8 @@ def calculate_confluence_score(
                     weight=vp_factor.get("weight", 0.05), 
                     rationale=vp_factor["rationale"] or "Volume Profile context neutral"
                 ))
-        except: pass
+        except Exception as e:
+            logger.warning("Volume profile scoring failed: %s", e)
 
     # --- MACD Veto Confirmation ---
     if macd_analysis and macd_analysis.get("veto_active"):
@@ -2373,7 +2375,8 @@ def calculate_confluence_score(
             fib_res = _score_fibonacci_incremental(current_price, smc_snapshot.swing_structure, direction)
             if fib_res["score"] > 0 or get_w("fibonacci", 0) > 0:
                 factors.append(ConfluenceFactor(name="Fibonacci Proximity", score=fib_res["score"], weight=get_w("fibonacci", 0.05), rationale=fib_res["rationale"] or "Near Fibonacci levels"))
-        except: pass
+        except Exception as e:
+            logger.warning("Fibonacci proximity scoring failed: %s", e)
 
     # --- Weekly StochRSI Bonus/Penalty ---
     if getattr(config, "weekly_stoch_rsi_gate_enabled", True):
@@ -2421,7 +2424,8 @@ def calculate_confluence_score(
             else:
                 pd_score = 100.0 if (c_z == "premium" and z_p > 70) else (75.0 if c_z == "premium" else 30.0)
             pd_rat = f"{c_z.capitalize()} zone ({z_p:.0f}%)"
-    except: pass
+    except Exception as e:
+        logger.warning("Premium/discount zone scoring failed: %s", e)
     factors.append(ConfluenceFactor(name="Premium/Discount Zone", score=pd_score, weight=get_w("premium_discount", 0.05), rationale=pd_rat or "Equilibrium zone"))
 
     # --- Regime Alignment ---
@@ -2430,7 +2434,8 @@ def calculate_confluence_score(
         try:
             r_res = _score_regime_alignment(regime=regime, direction=direction, scanner_profile=current_profile)
             reg_score, reg_rat = r_res["factor_score"], r_res["reason"]
-        except: pass
+        except Exception as e:
+            logger.warning("Regime alignment scoring failed: %s", e)
     factors.append(ConfluenceFactor(name="Regime Alignment", score=reg_score, weight=get_w("regime_alignment", 0.08), rationale=reg_rat or "Regime neutral"))
 
     # --- Inside Order Block Confirmation ---
@@ -2443,7 +2448,8 @@ def calculate_confluence_score(
                     rej_res = _score_ob_rejection_quality(df_rej, direction) if df_rej is not None else {"score": 50, "reason": "Inside OB"}
                     in_ob_score, in_ob_rat = rej_res["score"], rej_res["reason"]
                     break
-    except: pass
+    except Exception as e:
+        logger.warning("Inside order block scoring failed: %s", e)
     factors.append(ConfluenceFactor(name="Inside Order Block", score=in_ob_score, weight=get_w("inside_ob", 0.05), rationale=in_ob_rat or "No active OB detected"))
 
     # --- Nested Order Block Bonus ---
@@ -2451,7 +2457,8 @@ def calculate_confluence_score(
     try:
         if _detect_nested_ob(smc_snapshot, direction): # Uses NESTED_OB_CONTAINMENT_MIN (50%)
             nested_score, nested_rat = 80.0, "LTF OB nested in HTF OB"
-    except: pass
+    except Exception as e:
+        logger.warning("Nested order block scoring failed: %s", e)
     factors.append(ConfluenceFactor(name="Nested Order Block", score=nested_score, weight=get_w("nested_ob", 0.04), rationale=nested_rat or "No nested OB found"))
 
     # --- NEW: Opposing Structure Penalty ---
@@ -2547,7 +2554,8 @@ def calculate_confluence_score(
         l_atr = getattr(l_prim, "atr", current_price * 0.01) if current_price else 0
         l_res = _score_ld(direction=direction, current_price=current_price, smc=smc_snapshot, atr=l_atr)
         factors.append(ConfluenceFactor(name="Liquidity Draw", score=l_res["score"], weight=get_w("liquidity_draw", 0.10), rationale="Liquidity targets active"))
-    except: pass
+    except Exception as e:
+        logger.warning("Liquidity draw scoring failed: %s", e)
 
     # --- FINAL WEIGHT NORMALIZATION ---
     # This prevents weight dilution - all weights sum to 100% exactly

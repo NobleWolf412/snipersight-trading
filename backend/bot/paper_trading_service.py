@@ -213,10 +213,13 @@ class PaperTradingStats:
         best_trade: Largest winning trade P&L
         worst_trade: Largest losing trade P&L
         max_drawdown: Maximum drawdown experienced
-        current_streak: Current win/loss streak
+        current_streak: Current win/loss streak (positive=wins, negative=losses)
         scans_completed: Number of scanner runs
         signals_generated: Total signals from scanner
         signals_taken: Signals that passed filters and were executed
+        exit_reasons: Count of trades by exit reason (target/stop_loss/stagnation/etc.)
+        by_trade_type: Per-type breakdown (scalp/intraday/swing) with wins, losses,
+                       win_rate, total_pnl, avg_win, avg_loss
     """
 
     total_trades: int = 0
@@ -235,6 +238,8 @@ class PaperTradingStats:
     scans_completed: int = 0
     signals_generated: int = 0
     signals_taken: int = 0
+    exit_reasons: Dict[str, int] = field(default_factory=dict)
+    by_trade_type: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -296,6 +301,7 @@ class PaperTradingService:
 
         # Price cache for P&L calculations
         self._price_cache: Dict[str, float] = {}
+        self._price_cache_refreshed_at: Optional[datetime] = None
         # Detailed signal processing log (every signal, not just recent activity)
         self.signal_log: List[Dict[str, Any]] = []
 
@@ -557,6 +563,9 @@ class PaperTradingService:
             "session_stopped", {"session_id": self.session_id, "final_stats": self.stats.to_dict()}
         )
 
+        # Final state checkpoint before session report (captures last balance/stats)
+        self._save_state()
+
         # Generate comprehensive session report on disk
         report_path = self._generate_session_report()
         if report_path:
@@ -638,23 +647,38 @@ class PaperTradingService:
             },
         }
 
+        # Active positions — must be computed first so unrealized_pnl on each
+        # PositionState is refreshed from the price cache before equity is summed.
+        # Previously equity was summed from pos.unrealized_pnl (set by the last
+        # monitor tick) while the positions list was built from a newer cache read
+        # — the two could reflect different price snapshots.
+        active_positions = self._get_active_positions()
+        result["positions"] = active_positions
+
         # Balance info
         if self.executor:
             initial = self.config.initial_balance if self.config else 0
-            
-            # Pure cash balance (executor now handles fees and ALL realized PnL internally)
-            current = self.executor.get_balance() 
-            
-            # Calculate ONLY unrealized PnL from the PositionManager
+
+            # Pure cash balance (executor handles fees and ALL realized PnL)
+            current = self.executor.get_balance()
+
+            # Sum unrealized PnL from PositionState — already refreshed by
+            # _get_active_positions() above, so equity and positions are consistent.
             unrealized_pnl = 0.0
             if self.position_manager:
                 unrealized_pnl = sum(
-                    pos.unrealized_pnl 
-                    for pos in self.position_manager.positions.values() 
+                    pos.unrealized_pnl
+                    for pos in self.position_manager.positions.values()
                     if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
                 )
-            
+
             equity = current + unrealized_pnl
+
+            prices_age_seconds = None
+            if self._price_cache_refreshed_at:
+                prices_age_seconds = round(
+                    (datetime.now(timezone.utc) - self._price_cache_refreshed_at).total_seconds(), 1
+                )
 
             result["balance"] = {
                 "initial": initial,
@@ -662,12 +686,10 @@ class PaperTradingService:
                 "equity": equity,
                 "pnl": equity - initial,
                 "pnl_pct": ((equity - initial) / initial * 100) if initial > 0 else 0,
+                "prices_age_seconds": prices_age_seconds,
             }
         else:
             result["balance"] = None
-
-        # Active positions
-        result["positions"] = self._get_active_positions()
 
         # Statistics
         result["statistics"] = self.stats.to_dict()
@@ -960,6 +982,9 @@ class PaperTradingService:
             except Exception as e:
                 logger.debug(f"Price refresh failed for {symbol}: {e}")
 
+        if symbols:
+            self._price_cache_refreshed_at = datetime.now(timezone.utc)
+
     async def _run_scan(self):
         """Run a single scanner iteration."""
         if not self.orchestrator or not self.config or not self.mode:
@@ -978,8 +1003,7 @@ class PaperTradingService:
                 from backend.strategy.planner.regime_engine import get_mode_recommendation  # type: ignore
                 
                 detector = get_regime_detector("stealth_balanced")
-                # Try to get existing confirmed regime, or fallback to whatever last computed
-                global_regime = detector._confirmed_regime
+                global_regime = detector.get_confirmed_regime()
                 
                 if global_regime and global_regime.composite != "unknown":
                     rec = get_mode_recommendation(
@@ -1665,6 +1689,7 @@ class PaperTradingService:
                     "confluence": plan.confidence_score,
                     "trade_type": getattr(plan, "trade_type", "unknown"),
                 })
+                self._save_state()
             else:
                 order_status = order.status.value if order.status else "unknown"
                 reason = (
@@ -1938,6 +1963,19 @@ class PaperTradingService:
                 if pos.status == PositionStatus.EMERGENCY_EXIT:
                     exit_reason = "emergency"
 
+                # MFE/MAE as % of entry price.
+                # highest_price and lowest_price are now tracked for all directions
+                # (both initialized to entry_price in __post_init__).
+                _entry = pos.entry_price
+                _high = pos.highest_price or _entry
+                _low = pos.lowest_price or _entry
+                if pos.direction == "LONG":
+                    _mfe = max(0.0, (_high - _entry) / _entry * 100) if _entry else 0.0
+                    _mae = max(0.0, (_entry - _low) / _entry * 100) if _entry else 0.0
+                else:  # SHORT
+                    _mfe = max(0.0, (_entry - _low) / _entry * 100) if _entry else 0.0
+                    _mae = max(0.0, (_high - _entry) / _entry * 100) if _entry else 0.0
+
                 trade = CompletedTrade(
                     trade_id=pos.position_id,
                     symbol=pos.symbol,
@@ -1951,8 +1989,8 @@ class PaperTradingService:
                     pnl_pct=pos.pnl_percentage,
                     exit_reason=exit_reason,
                     targets_hit=[i for i, _ in enumerate(pos.targets_hit)],
-                    max_favorable=0.0,  # Would track during position
-                    max_adverse=0.0,
+                    max_favorable=_mfe,
+                    max_adverse=_mae,
                     trade_type=getattr(pos, "trade_type", "intraday"),
                 )
 
@@ -1983,6 +2021,7 @@ class PaperTradingService:
                         },
                     },
                 )
+                self._save_state()
 
     async def _close_all_positions(self, reason: str):
         """Close all open positions."""
@@ -2039,8 +2078,98 @@ class PaperTradingService:
         if self.stats.avg_loss != 0:
             self.stats.avg_rr = abs(self.stats.avg_win / self.stats.avg_loss)
 
+        # --- Exit reason breakdown ---
+        reason = trade.exit_reason or "unknown"
+        self.stats.exit_reasons[reason] = self.stats.exit_reasons.get(reason, 0) + 1
+
+        # --- Per-trade-type breakdown ---
+        tt = trade.trade_type or "unknown"
+        if tt not in self.stats.by_trade_type:
+            self.stats.by_trade_type[tt] = {
+                "trades": 0,
+                "wins": 0,
+                "losses": 0,
+                "win_rate": 0.0,
+                "total_pnl": 0.0,
+                "avg_win": 0.0,
+                "avg_loss": 0.0,
+            }
+        bucket = self.stats.by_trade_type[tt]
+        bucket["trades"] += 1
+        bucket["total_pnl"] += trade.pnl
+        if trade.pnl > 0:
+            bucket["wins"] += 1
+            bucket["avg_win"] = (
+                bucket["avg_win"] * (bucket["wins"] - 1) + trade.pnl
+            ) / bucket["wins"]
+        else:
+            bucket["losses"] += 1
+            bucket["avg_loss"] = (
+                bucket["avg_loss"] * (bucket["losses"] - 1) + trade.pnl
+            ) / bucket["losses"]
+        bucket["win_rate"] = (bucket["wins"] / bucket["trades"]) * 100
+
         # Update max drawdown on each trade close
         self._update_drawdown()
+
+    def _save_state(self) -> None:
+        """Write a crash-recovery checkpoint to state.json in the session log dir.
+
+        Called after every position open/close and on session stop so that a server
+        restart can show what was happening. Uses an atomic write (tmp → rename) to
+        avoid a corrupt checkpoint if the process dies mid-write.
+
+        Restoring from this file is a manual/future operation — it does not
+        automatically resume the session, but it gives enough context to reconstruct
+        what happened and what the final balance / open exposure was.
+        """
+        if not self._session_log_dir:
+            return
+        try:
+            # Serialize open/partial positions
+            positions_data = []
+            if self.position_manager:
+                for pos in self.position_manager.positions.values():
+                    if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]:
+                        positions_data.append(asdict(pos))
+
+            # Serialize pending orders — simplified (no full TradePlan graph needed)
+            pending_data = []
+            for order_id, plan in self._pending_plans.items():
+                placed_at = self._pending_placed_at.get(order_id)
+                pending_data.append({
+                    "order_id": order_id,
+                    "symbol": plan.symbol,
+                    "direction": plan.direction,
+                    "limit_price": getattr(plan.entry_zone, "near_entry", None),
+                    "stop_loss": getattr(plan.stop_loss, "level", None),
+                    "targets": [
+                        {"level": t.level, "percentage": t.percentage, "label": getattr(t, "label", "")}
+                        for t in (plan.targets or [])
+                    ],
+                    "trade_type": getattr(plan, "trade_type", "intraday"),
+                    "confluence": getattr(plan, "confidence_score", None),
+                    "placed_at": placed_at.isoformat() if placed_at else None,
+                })
+
+            state = {
+                "session_id": self.session_id,
+                "saved_at": datetime.now(timezone.utc).isoformat(),
+                "config": self.config.to_dict() if self.config else None,
+                "balance": self.executor.get_balance() if self.executor else None,
+                "stats": self.stats.to_dict(),
+                "positions": positions_data,
+                "pending_orders": pending_data,
+            }
+
+            state_path = self._session_log_dir / "state.json"
+            tmp_path = state_path.with_suffix(".tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2, default=str)
+            tmp_path.rename(state_path)
+
+        except Exception as e:
+            logger.warning(f"State checkpoint save failed: {e}")
 
     def _update_drawdown(self) -> None:
         """Recompute peak equity and max drawdown from current balance + unrealized PnL.

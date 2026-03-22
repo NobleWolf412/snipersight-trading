@@ -286,8 +286,9 @@ export function ModeVisuals({ activeMode }: ModeVisualsProps) {
 
             // Radar grid (flat)
             const radarGrid = new THREE.PolarGridHelper(2, 8, 6, 32, colors.secondary, colors.secondary);
-            radarGrid.material.opacity = 0.2;
-            radarGrid.material.transparent = true;
+            const radarMat = Array.isArray(radarGrid.material) ? radarGrid.material[0] : radarGrid.material;
+            radarMat.opacity = 0.2;
+            radarMat.transparent = true;
             contentGroup.add(radarGrid);
 
             // Sweep line with glow

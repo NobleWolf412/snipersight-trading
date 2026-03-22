@@ -59,7 +59,8 @@ function WaveformLine({ isActive, intensity = 0.5 }: { isActive: boolean; intens
     });
 
     return (
-        <line ref={lineRef} geometry={geometry}>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        <line ref={lineRef as any} geometry={geometry}>
             <lineBasicMaterial color="#00ff88" linewidth={2} />
         </line>
     );

@@ -379,13 +379,25 @@ class PaperExecutor:
         if order.side == OrderSide.SELL and current_price < limit_price:
             return None
 
-        # Calculate partial fill
+        # Calculate partial fill.
+        # Guard: stop partial-fill simulation when the remaining qty is below 1% of the
+        # original order size. Without this, repeated partial fills cause the remaining to
+        # decay exponentially (0.7^k per tick) and the order can stay PARTIALLY_FILLED for
+        # 60+ monitor ticks — charging a fee each time and flooding add_position_volume
+        # with near-zero fills. Once below the threshold we force-complete the remainder.
         fill_qty = order.remaining_quantity
-        if self.enable_partial_fills and fill_qty > 0:
-            if random.random() < self.partial_fill_prob:
+        if self.enable_partial_fills and fill_qty > 0 and not order.is_filled:
+            meaningful_remaining = fill_qty >= order.quantity * 0.01
+            if meaningful_remaining and random.random() < self.partial_fill_prob:
                 fill_pct = random.uniform(self.min_fill_pct, self.max_fill_pct)
                 fill_qty = order.remaining_quantity * fill_pct
                 logger.info(f"LIMIT PARTIAL FILL: Order {order_id} filled {fill_pct*100:.1f}% ({fill_qty:.6f})")
+            elif not meaningful_remaining:
+                # Remaining is a rounding sliver — fill it completely to close out the order.
+                logger.info(
+                    f"LIMIT FILL COMPLETED (sliver): Order {order_id} remaining={fill_qty:.8f} "
+                    f"< 1% of {order.quantity:.6f} — forcing full fill"
+                )
 
         fill_price = limit_price  # Limit orders execute exactly at the limit price
         fee = self._calculate_fee(fill_qty, fill_price)

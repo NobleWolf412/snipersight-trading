@@ -282,8 +282,17 @@ class ScannerService:
             # Inject leverage for proper stop validation
             try:
                 setattr(self._orchestrator.config, "leverage", params["leverage"])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(
+                    "Failed to inject leverage=%s into orchestrator config: %s. "
+                    "Defaulting to 1x to prevent incorrect stop sizing.",
+                    params.get("leverage"),
+                    e,
+                )
+                try:
+                    setattr(self._orchestrator.config, "leverage", 1)
+                except Exception:
+                    pass
             self._orchestrator.exchange_adapter = current_adapter
             self._orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
 
@@ -372,7 +381,7 @@ class ScannerService:
             if self._log_handler:
                 self._log_handler.set_current_job(None)
 
-    def _transform_signals(self, trade_plans: List, mode, adapter=None) -> List[Dict]:
+    def _transform_signals(self, trade_plans: List, mode, adapter=None) -> tuple:
         """
         Transform TradePlan objects to API response format.
 

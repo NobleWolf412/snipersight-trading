@@ -975,6 +975,10 @@ class RegimeDetector:
             # Return confirmed until transition completes
             return self._confirmed_regime
 
+    def get_confirmed_regime(self) -> Optional["MarketRegime"]:
+        """Return the current confirmed regime, or None if not yet established."""
+        return self._confirmed_regime
+
 
 # Singleton instance
 _regime_detector = None
