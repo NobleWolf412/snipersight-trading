@@ -296,6 +296,7 @@ class PaperTradingService:
 
         # Price cache for P&L calculations
         self._price_cache: Dict[str, float] = {}
+        self._price_cache_refreshed_at: Optional[datetime] = None
         # Detailed signal processing log (every signal, not just recent activity)
         self.signal_log: List[Dict[str, Any]] = []
 
@@ -638,23 +639,38 @@ class PaperTradingService:
             },
         }
 
+        # Active positions — must be computed first so unrealized_pnl on each
+        # PositionState is refreshed from the price cache before equity is summed.
+        # Previously equity was summed from pos.unrealized_pnl (set by the last
+        # monitor tick) while the positions list was built from a newer cache read
+        # — the two could reflect different price snapshots.
+        active_positions = self._get_active_positions()
+        result["positions"] = active_positions
+
         # Balance info
         if self.executor:
             initial = self.config.initial_balance if self.config else 0
-            
-            # Pure cash balance (executor now handles fees and ALL realized PnL internally)
-            current = self.executor.get_balance() 
-            
-            # Calculate ONLY unrealized PnL from the PositionManager
+
+            # Pure cash balance (executor handles fees and ALL realized PnL)
+            current = self.executor.get_balance()
+
+            # Sum unrealized PnL from PositionState — already refreshed by
+            # _get_active_positions() above, so equity and positions are consistent.
             unrealized_pnl = 0.0
             if self.position_manager:
                 unrealized_pnl = sum(
-                    pos.unrealized_pnl 
-                    for pos in self.position_manager.positions.values() 
+                    pos.unrealized_pnl
+                    for pos in self.position_manager.positions.values()
                     if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
                 )
-            
+
             equity = current + unrealized_pnl
+
+            prices_age_seconds = None
+            if self._price_cache_refreshed_at:
+                prices_age_seconds = round(
+                    (datetime.now(timezone.utc) - self._price_cache_refreshed_at).total_seconds(), 1
+                )
 
             result["balance"] = {
                 "initial": initial,
@@ -662,12 +678,10 @@ class PaperTradingService:
                 "equity": equity,
                 "pnl": equity - initial,
                 "pnl_pct": ((equity - initial) / initial * 100) if initial > 0 else 0,
+                "prices_age_seconds": prices_age_seconds,
             }
         else:
             result["balance"] = None
-
-        # Active positions
-        result["positions"] = self._get_active_positions()
 
         # Statistics
         result["statistics"] = self.stats.to_dict()
@@ -959,6 +973,9 @@ class PaperTradingService:
                     self._price_cache[symbol] = price
             except Exception as e:
                 logger.debug(f"Price refresh failed for {symbol}: {e}")
+
+        if symbols:
+            self._price_cache_refreshed_at = datetime.now(timezone.utc)
 
     async def _run_scan(self):
         """Run a single scanner iteration."""
