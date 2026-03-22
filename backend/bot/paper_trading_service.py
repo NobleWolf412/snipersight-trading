@@ -829,31 +829,53 @@ class PaperTradingService:
                                         elif order.order_id in self._pending_plans and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
                                             plan = self._pending_plans.get(order.order_id)
                                             if plan:
-                                                position_id = self.position_manager.open_position(
-                                                    trade_plan=plan,
-                                                    entry_price=fill.price,
-                                                    quantity=fill.quantity,
-                                                    entry_order_id=order.order_id
-                                                )
-                                                
-                                                self.stats.signals_taken += 1
-                                                logger.info(
-                                                    f"PENDING ORDER FILLED: {plan.symbol} @ {fill.price:.2f} "
-                                                    f"| Opening position {position_id}"
-                                                )
-                                                
-                                                # Position opened — remove from pending tracking
-                                                self._pending_plans.pop(order.order_id, None)
-                                                self._pending_placed_at.pop(order.order_id, None)
+                                                # Re-check position cap at fill time. Multiple pending orders
+                                                # can fill in the same monitor tick, bypassing the cap that
+                                                # was checked when the signal was originally processed.
+                                                active_count_now = len(self._get_active_positions())
+                                                cap = self.config.max_positions if self.config else 3
+                                                if active_count_now >= cap:
+                                                    executor.cancel_order(order.order_id)
+                                                    self._pending_plans.pop(order.order_id, None)
+                                                    self._pending_placed_at.pop(order.order_id, None)
+                                                    logger.info(
+                                                        f"PENDING FILL BLOCKED (cap): {plan.symbol} "
+                                                        f"| active={active_count_now}/{cap} — order cancelled"
+                                                    )
+                                                    self._log_activity("pending_fill_blocked", {
+                                                        "order_id": order.order_id,
+                                                        "symbol": plan.symbol,
+                                                        "direction": plan.direction,
+                                                        "reason": "max_positions_reached_at_fill",
+                                                        "active_count": active_count_now,
+                                                        "cap": cap,
+                                                    })
+                                                else:
+                                                    position_id = self.position_manager.open_position(
+                                                        trade_plan=plan,
+                                                        entry_price=fill.price,
+                                                        quantity=fill.quantity,
+                                                        entry_order_id=order.order_id
+                                                    )
 
-                                                self._log_activity("trade_opened", {
-                                                    "position_id": position_id,
-                                                    "symbol": plan.symbol,
-                                                    "direction": plan.direction,
-                                                    "entry_price": fill.price,
-                                                    "quantity": fill.quantity,
-                                                    "status": "pending_filled"
-                                                })
+                                                    self.stats.signals_taken += 1
+                                                    logger.info(
+                                                        f"PENDING ORDER FILLED: {plan.symbol} @ {fill.price:.2f} "
+                                                        f"| Opening position {position_id}"
+                                                    )
+
+                                                    # Position opened — remove from pending tracking
+                                                    self._pending_plans.pop(order.order_id, None)
+                                                    self._pending_placed_at.pop(order.order_id, None)
+
+                                                    self._log_activity("trade_opened", {
+                                                        "position_id": position_id,
+                                                        "symbol": plan.symbol,
+                                                        "direction": plan.direction,
+                                                        "entry_price": fill.price,
+                                                        "quantity": fill.quantity,
+                                                        "status": "pending_filled"
+                                                    })
                                         elif not self._has_position(order.symbol) and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
                                             # This case handles orders that filled but haven't opened a position yet
                                             # (though _process_signal should handle most of these)
@@ -1352,26 +1374,63 @@ class PaperTradingService:
             # #endregion
             return
 
-        # Check if already in position for this symbol
+        # Check if already in position for this symbol.
+        # If the new signal is in the OPPOSITE direction, market structure has flipped —
+        # close the active position at the current market price and fall through to take
+        # the new signal. Same-direction signals are dropped (no pyramid on paper).
         if self._has_position(plan.symbol):
-            reason = "Already in position for symbol"
-            logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
-            self._log_signal(plan, "filtered", reason)
-            self._log_activity("signal_filtered", {
-                "symbol": plan.symbol, "direction": plan.direction,
-                "confluence": plan.confidence_score, "reason": reason,
-            })
-            # #region agent log
-            _dbg_log(
-                hypothesis_id="H4",
-                location="paper_trading_service._process_signal:has_position",
-                message="Signal filtered because position already open",
-                data={
-                    "symbol": plan.symbol,
-                },
+            existing_pos = next(
+                (p for p in self.position_manager.positions.values()
+                 if p.symbol == plan.symbol
+                 and p.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]),
+                None,
             )
-            # #endregion
-            return
+            existing_direction = getattr(existing_pos, "direction", None) if existing_pos else None
+            direction_flipped = existing_direction is not None and existing_direction != plan.direction
+
+            if direction_flipped and existing_pos is not None:
+                # Fetch price for the close; fall back to cached price so we always have a value.
+                try:
+                    close_price = await self._fetch_price(plan.symbol)
+                    self._price_cache[plan.symbol] = close_price
+                except Exception:
+                    close_price = self._price_cache.get(plan.symbol)
+
+                self.position_manager.close_position(
+                    existing_pos.position_id,
+                    reason="direction_flip",
+                    current_price=close_price,
+                )
+                logger.info(
+                    f"DIRECTION FLIP (active): {plan.symbol} | closed {existing_direction} position "
+                    f"{existing_pos.position_id} @ {close_price} | taking new {plan.direction} signal"
+                )
+                self._log_activity("position_closed_direction_flip", {
+                    "position_id": existing_pos.position_id,
+                    "symbol": plan.symbol,
+                    "closed_direction": existing_direction,
+                    "new_direction": plan.direction,
+                    "close_price": close_price,
+                    "new_confluence": plan.confidence_score,
+                })
+                # Fall through — continue to execute the new signal below.
+            else:
+                reason = "Already in position for symbol"
+                logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
+                self._log_signal(plan, "filtered", reason)
+                self._log_activity("signal_filtered", {
+                    "symbol": plan.symbol, "direction": plan.direction,
+                    "confluence": plan.confidence_score, "reason": reason,
+                })
+                # #region agent log
+                _dbg_log(
+                    hypothesis_id="H4",
+                    location="paper_trading_service._process_signal:has_position",
+                    message="Signal filtered because position already open (same direction)",
+                    data={"symbol": plan.symbol, "direction": plan.direction},
+                )
+                # #endregion
+                return
 
         # Check for existing pending orders for this symbol
         existing_order_id = next(
