@@ -995,8 +995,7 @@ class PaperTradingService:
                 from backend.strategy.planner.regime_engine import get_mode_recommendation  # type: ignore
                 
                 detector = get_regime_detector("stealth_balanced")
-                # Try to get existing confirmed regime, or fallback to whatever last computed
-                global_regime = detector._confirmed_regime
+                global_regime = detector.get_confirmed_regime()
                 
                 if global_regime and global_regime.composite != "unknown":
                     rec = get_mode_recommendation(
