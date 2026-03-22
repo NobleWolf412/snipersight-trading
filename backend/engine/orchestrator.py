@@ -1804,51 +1804,6 @@ class Orchestrator:
         # This is a stub - real implementer is in scanner_service.py
         pass
 
-    def _compute_indicators(self, multi_tf_data: MultiTimeframeData) -> IndicatorSet:
-        """
-        Compute technical indicators across all timeframes.
-
-        Args:
-            multi_tf_data: Multi-timeframe OHLCV data
-
-        Returns:
-            IndicatorSet with computed indicators
-        """
-        # This method is now replaced by a service call
-        raise NotImplementedError(
-            "This method should not be called directly. Use self.indicator_service.compute instead."
-        )
-
-    def _detect_smc_patterns(self, multi_tf_data: MultiTimeframeData) -> SMCSnapshot:
-        """
-        Detect Smart Money Concept patterns.
-
-        Args:
-            multi_tf_data: Multi-timeframe OHLCV data
-
-        Returns:
-            SMCSnapshot with detected patterns
-        """
-        # This method is now replaced by a service call
-        raise NotImplementedError(
-            "This method should not be called directly. Use self.smc_service.detect instead."
-        )
-
-    def _compute_confluence_score(self, context: SniperContext) -> ConfluenceBreakdown:
-        """
-        Compute confluence score from all available data.
-
-        Args:
-            context: SniperContext with data and indicators
-
-        Returns:
-            ConfluenceBreakdown with scoring details
-        """
-        # This method is now replaced by a service call
-        raise NotImplementedError(
-            "This method should not be called directly. Use self.confluence_service.score instead."
-        )
-
     def _generate_trade_plan(
         self,
         context: SniperContext,

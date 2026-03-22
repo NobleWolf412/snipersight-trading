@@ -490,6 +490,15 @@ class SMCDetectionService:
         swing_highs = _detect_swing_highs(df, swing_lookback)
         swing_lows = _detect_swing_lows(df, swing_lookback)
 
+        # Structure breaks MUST run first — detect_obs_from_bos() depends on them for Grade A OBs.
+        # FIX: was running at line ~573 (after OB detection), so bos_obs always received [] and returned [].
+        if tf_config.get("detect_bos", True):
+            result["structure_breaks"] = detect_structural_breaks(
+                df, tf_smc_config, mode_profile=self._mode_profile
+            )
+        else:
+            logger.debug("📐 %s: BOS detection SKIPPED (TF filter)", timeframe)
+
         # Order blocks (skip if detect_ob=False for this TF)
         if tf_config.get("detect_ob", True):
             try:
@@ -566,15 +575,6 @@ class SMCDetectionService:
             if atr_val > 0:
                 fvgs = merge_consecutive_fvgs(fvgs, max_gap_atr=0.5, atr_value=atr_val)
             result["fvgs"] = fvgs
-
-        # Structure breaks (use TF-specific config for break distance thresholds)
-        if tf_config.get("detect_bos", True):
-            # NEW: Pass mode_profile for volume filtering (Gap #4)
-            result["structure_breaks"] = detect_structural_breaks(
-                df, tf_smc_config, mode_profile=self._mode_profile
-            )
-        else:
-            logger.debug("📐 %s: BOS detection SKIPPED (TF filter)", timeframe)
 
         # Liquidity sweeps (use TF-specific config for sweep thresholds)
         if tf_config.get("detect_sweep", True):

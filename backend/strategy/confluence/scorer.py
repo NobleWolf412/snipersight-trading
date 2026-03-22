@@ -843,13 +843,17 @@ def evaluate_htf_momentum_gate(
     # Configure per Mode
     if mode_name == "overwatch" or profile == "macro_surveillance":
         # SWING: Look at Daily. Hard to turn. Needs extreme evidence.
+        # FIX: was 75.0 → threshold = 25. RSI 26 wasn't recognized as oversold for fades.
+        # Changed to 70.0 → threshold = 30, aligning with industry standard.
         momentum_tf = "1d"
-        fade_threshold_rsi = 75.0  # RSI > 75 (was 80) to fade - 25/75 is safer but catches more
+        fade_threshold_rsi = 70.0
 
     elif mode_name == "stealth" or profile == "stealth_balanced":
         # BALANCED: Look at 4H.
+        # FIX: was 75.0 → threshold = 100-75 = 25. RSI 26 (deep oversold) wasn't triggering climax.
+        # Changed to 70.0 → threshold = 30, matching standard oversold definition.
         momentum_tf = "4h"
-        fade_threshold_rsi = 75.0
+        fade_threshold_rsi = 70.0
 
     elif mode_name in ["surgical", "strike"] or profile in ("precision", "intraday_aggressive"):
         # SCALP: Look at 1H/4H. Quick turns allowed.
@@ -2102,6 +2106,25 @@ def calculate_confluence_score(
     # Liquidity Sweeps
     sweep_result = _score_liquidity_sweeps_incremental(smc_snapshot.liquidity_sweeps, direction)
     sweep_score = sweep_result["score"]
+
+    # LONG BIAS FIX: Apply HTF trend discount to sweep scoring.
+    # In a strong downtrend (1D or 4H swing structure = bearish), "sweep of lows" events are
+    # continuation traps, not reversals — they should NOT score 45-85 pts for LONG.
+    # Cap bullish sweep score at 30 when macro structure is bearish (and vice versa for shorts).
+    if sweep_score > 30.0 and smc_snapshot.swing_structure:
+        is_bullish_direction = _normalize_direction(direction) == "bullish"
+        htf_trend = "neutral"
+        for htf_tf in ["1d", "1D", "4h", "4H"]:
+            ss = smc_snapshot.swing_structure.get(htf_tf)
+            if ss:
+                htf_trend = ss.get("trend", "neutral") if isinstance(ss, dict) else getattr(ss, "trend", "neutral")
+                if htf_trend != "neutral":
+                    break
+        # If sweeping against the HTF trend (e.g., LONG sweep in a bearish trend): discount
+        if (is_bullish_direction and htf_trend == "bearish") or (not is_bullish_direction and htf_trend == "bullish"):
+            sweep_score = min(sweep_score, 30.0)
+            sweep_result = {**sweep_result, "score": sweep_score, "rationale": sweep_result.get("rationale", "") + f" [HTF {htf_trend} discount applied]"}
+
     factors.append(
         ConfluenceFactor(
             name="Liquidity Sweep",
@@ -2113,7 +2136,8 @@ def calculate_confluence_score(
 
     # Kill Zone Timing
     try:
-        from backend.strategy.confluence.scorer import get_current_kill_zone, _score_kill_zone_incremental
+        # FIX: removed circular self-import; get_current_kill_zone is imported from sessions at top of file
+        # and _score_kill_zone_incremental is defined in this same module — both are already in scope
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
         curr_kz = get_current_kill_zone(now)

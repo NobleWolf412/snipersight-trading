@@ -157,11 +157,6 @@ EQHL_MIN_TOUCHES: Dict[str, int] = {
 }
 
 
-def get_timeframe_minutes(timeframe: str) -> int:
-    """Get minutes for a timeframe string."""
-    return TIMEFRAME_MINUTES.get(timeframe, 240)  # Default to 4H
-
-
 def get_lookback_multiplier(timeframe: str) -> float:
     """
     Get lookback multiplier for a timeframe.

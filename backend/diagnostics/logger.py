@@ -85,6 +85,7 @@ class ProbeCategory(Enum):
     EXEC_NO_FILL = "exec_no_fill"
     EXEC_SLIPPAGE = "exec_slippage"
     EXEC_SUCCESS = "exec_success"
+    SIGNAL_FILTERED = "signal_filtered"  # Signal rejected at confluence/risk gate (not a plan quality issue)
 
     # Generic
     LOGIC_ERROR = "logic_error"

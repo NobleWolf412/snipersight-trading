@@ -448,45 +448,6 @@ def _calculate_displacement_bearish(df: pd.DataFrame, candle_idx: int, lookback:
     return displacement
 
 
-def calculate_displacement_strength(df: pd.DataFrame, ob: OrderBlock) -> float:
-    """
-    Calculate displacement strength for an existing order block.
-
-    Args:
-        df: DataFrame with OHLC data
-        ob: OrderBlock to analyze
-
-    Returns:
-        float: Displacement strength normalized to 0-100 scale
-    """
-    # Find the order block candle in the DataFrame
-    ob_candles = df[df.index == ob.timestamp]
-
-    if len(ob_candles) == 0:
-        return ob.displacement_strength  # Return existing value if candle not found
-
-    ob_idx = df.index.get_loc(ob.timestamp)
-
-    # Recalculate displacement
-    if ob.direction == "bullish":
-        displacement = _calculate_displacement_bullish(df, ob_idx, 5)
-    else:
-        displacement = _calculate_displacement_bearish(df, ob_idx, 5)
-
-    # Calculate in ATR units
-    from backend.indicators.volatility import compute_atr
-
-    atr = compute_atr(df, period=14)
-    atr_value = atr.iloc[ob_idx] if ob_idx < len(atr) else atr.iloc[-1]
-
-    displacement_atr = displacement / atr_value if atr_value > 0 else 0
-
-    # Normalize to 0-100 scale (1.5 ATR = 50, 3.0 ATR = 100)
-    normalized = min(100.0, (displacement_atr / 3.0) * 100.0)
-
-    return normalized
-
-
 def check_mitigation(df: pd.DataFrame, ob: OrderBlock) -> float:
     """
     Check how much an order block has been mitigated (revisited by price).

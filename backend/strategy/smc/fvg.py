@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 
 # Mode-specific FVG minimum sizes (in ATR units)
 MODE_FVG_MIN_SIZE = {
-    "macro_surveillance": 0.5,  # OVERWATCH: Large institutional gaps only
-    "stealth_balanced": 0.3,  # STEALTH: Balanced medium gaps (relaxed from 0.4)
-    "intraday_aggressive": 0.2,  # STRIKE: Smaller for faster intraday moves
-    "precision": 0.1,  # SURGICAL: Micro-gaps for precision scalp entries
+    "macro_surveillance": 0.568,  # OVERWATCH: Top 25% cleanest gaps
+    "stealth_balanced": 0.290,  # STEALTH: Top 50% core intraday gaps
+    "intraday_aggressive": 0.132,  # STRIKE: Top 75% rapid scalp gaps
+    "precision": 0.081,  # SURGICAL: Catch everything above pure noise
 }
 
 
@@ -158,6 +158,7 @@ def detect_fvgs(
                     bottom=gap_bottom,
                     timestamp=candle_2.name.to_pydatetime(),
                     size=gap_size,
+                    size_atr=gap_atr,  # FIX: was calculated but never passed — scorer +15 bonus now fires
                     overlap_with_price=0.0,  # Will be updated if price revisits
                     freshness_score=1.0,  # Start fresh, decay applied later
                     grade=grade,
@@ -204,6 +205,7 @@ def detect_fvgs(
                     bottom=gap_bottom,
                     timestamp=candle_2.name.to_pydatetime(),
                     size=gap_size,
+                    size_atr=gap_atr,  # FIX: was calculated but never passed — scorer +15 bonus now fires
                     overlap_with_price=0.0,
                     freshness_score=1.0,  # Start fresh, decay applied later
                     grade=grade,

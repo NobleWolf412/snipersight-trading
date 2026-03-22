@@ -127,7 +127,7 @@ def get_current_session(timestamp: datetime) -> Optional[TradingSession]:
 
         est_offset = timedelta(hours=-5)
         timestamp = (
-            timestamp.replace(tzinfo=None) + (timestamp.utcoffset() or timedelta(0)) - est_offset
+            timestamp.replace(tzinfo=None) + (timestamp.utcoffset() or timedelta(0)) + est_offset
         )
 
     current_time = timestamp.time()
@@ -155,7 +155,7 @@ def get_current_kill_zone(timestamp: datetime) -> Optional[KillZone]:
 
         est_offset = timedelta(hours=-5)
         timestamp = (
-            timestamp.replace(tzinfo=None) + (timestamp.utcoffset() or timedelta(0)) - est_offset
+            timestamp.replace(tzinfo=None) + (timestamp.utcoffset() or timedelta(0)) + est_offset
         )
 
     current_time = timestamp.time()

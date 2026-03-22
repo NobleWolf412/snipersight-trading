@@ -1321,8 +1321,16 @@ class PaperTradingService:
         # Log to diagnostics
         if self.diagnostic_logger:
             diag_sev = Severity.INFO if result == "executed" else Severity.WARNING
-            diag_cat = ProbeCategory.EXEC_SUCCESS if result == "executed" else ProbeCategory.PLAN_RR_LOW
-            
+            # FIX: was using PLAN_RR_LOW for ALL non-executed results (including "filtered"),
+            # which spammed anomalies.jsonl with 440+ false plan-quality warnings.
+            # Now: executed→EXEC_SUCCESS, filtered→SIGNAL_FILTERED, other (bad R:R)→PLAN_RR_LOW
+            if result == "executed":
+                diag_cat = ProbeCategory.EXEC_SUCCESS
+            elif result == "filtered":
+                diag_cat = ProbeCategory.SIGNAL_FILTERED
+            else:
+                diag_cat = ProbeCategory.PLAN_RR_LOW
+
             self.diagnostic_logger.log(
                 probe_id="SIG_001",
                 category=diag_cat,
