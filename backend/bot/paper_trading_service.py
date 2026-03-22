@@ -1938,6 +1938,19 @@ class PaperTradingService:
                 if pos.status == PositionStatus.EMERGENCY_EXIT:
                     exit_reason = "emergency"
 
+                # MFE/MAE as % of entry price.
+                # highest_price and lowest_price are now tracked for all directions
+                # (both initialized to entry_price in __post_init__).
+                _entry = pos.entry_price
+                _high = pos.highest_price or _entry
+                _low = pos.lowest_price or _entry
+                if pos.direction == "LONG":
+                    _mfe = max(0.0, (_high - _entry) / _entry * 100) if _entry else 0.0
+                    _mae = max(0.0, (_entry - _low) / _entry * 100) if _entry else 0.0
+                else:  # SHORT
+                    _mfe = max(0.0, (_entry - _low) / _entry * 100) if _entry else 0.0
+                    _mae = max(0.0, (_high - _entry) / _entry * 100) if _entry else 0.0
+
                 trade = CompletedTrade(
                     trade_id=pos.position_id,
                     symbol=pos.symbol,
@@ -1951,8 +1964,8 @@ class PaperTradingService:
                     pnl_pct=pos.pnl_percentage,
                     exit_reason=exit_reason,
                     targets_hit=[i for i, _ in enumerate(pos.targets_hit)],
-                    max_favorable=0.0,  # Would track during position
-                    max_adverse=0.0,
+                    max_favorable=_mfe,
+                    max_adverse=_mae,
                     trade_type=getattr(pos, "trade_type", "intraday"),
                 )
 

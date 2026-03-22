@@ -104,12 +104,11 @@ class PositionState:
 
     def __post_init__(self):
         """Initialize price tracking and anchor initial stop loss."""
-        if self.direction == "LONG":
-            self.highest_price = self.entry_price
-        else:
-            self.lowest_price = self.entry_price
-        
-        # Anchor the original stop loss and entry price forever to ensure 
+        # Track BOTH extremes from the start so MAE is available regardless of direction.
+        self.highest_price = self.entry_price
+        self.lowest_price = self.entry_price
+
+        # Anchor the original stop loss and entry price forever to ensure
         # risk and stagnation calculations remain based on the initial thesis.
         self.initial_stop_loss = self.stop_loss
         self.initial_entry_price = self.entry_price
@@ -125,15 +124,11 @@ class PositionState:
         self.updated_at = datetime.now(timezone.utc)
 
     def update_price_extremes(self, current_price: float):
-        """Track highest/lowest prices for trailing stops."""
-        if self.direction == "LONG":
-            highest = self.highest_price
-            if highest is None or current_price > highest:
-                self.highest_price = current_price
-        else:  # SHORT
-            lowest = self.lowest_price
-            if lowest is None or current_price < lowest:
-                self.lowest_price = current_price
+        """Track highest/lowest prices for trailing stops and MFE/MAE."""
+        if self.highest_price is None or current_price > self.highest_price:
+            self.highest_price = current_price
+        if self.lowest_price is None or current_price < self.lowest_price:
+            self.lowest_price = current_price
 
     @property
     def total_pnl(self) -> float:
