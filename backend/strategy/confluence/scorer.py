@@ -2998,8 +2998,13 @@ def _score_fvgs_incremental(
     """
     normalized_dir = _normalize_direction(direction)
     aligned_fvgs = [fvg for fvg in fvgs if fvg.direction == normalized_dir]
-    
+
     if not aligned_fvgs:
+        logger.debug(
+            "🔲 FVG scorer: 0 aligned %s FVGs from %d total — "
+            "score will be 0 (detection starvation vs genuine absence)",
+            normalized_dir, len(fvgs),
+        )
         return {"score": 0.0, "rationale": "No aligned FVGs", "components": []}
         
     # Find best FVG (prioritize historically-unfilled size)

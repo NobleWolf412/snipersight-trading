@@ -33,7 +33,7 @@ from backend.strategy.smc.order_blocks import (
     filter_overlapping_order_blocks,
     filter_obs_by_mode,  # NEW: Mode-specific OB filtering
 )
-from backend.strategy.smc.fvg import detect_fvgs, merge_consecutive_fvgs
+from backend.strategy.smc.fvg import detect_fvgs, merge_consecutive_fvgs, MODE_FVG_MIN_SIZE
 from backend.strategy.smc.bos_choch import (
     detect_structural_breaks,
     _detect_swing_highs,
@@ -402,6 +402,9 @@ class SMCDetectionService:
         # Update OB mitigation
         all_order_blocks = self._update_mitigation(multi_tf_data, all_order_blocks)
 
+        # Update FVG fill status — OBs get lifecycle tracking; FVGs need the same treatment
+        all_fvgs = self._update_fvg_status(multi_tf_data, all_fvgs)
+
         # --- Phase 2: Mode-specific sweep TF filtering ---
         sweep_tfs = MODE_SWEEP_TIMEFRAMES.get(self._mode, ("4h", "1h"))
         unfiltered_count = len(all_liquidity_sweeps)
@@ -554,14 +557,16 @@ class SMCDetectionService:
 
         # Fair value gaps (use TF-specific config for gap thresholds)
         if tf_config.get("detect_fvg", True):
-            # NEW: Pass mode_profile for size filtering (Gap #2)
-            fvgs_raw = detect_fvgs(df, tf_smc_config, mode_profile=None)  # Get unfiltered count
-            fvgs = detect_fvgs(df, tf_smc_config, mode_profile=self._mode_profile)
-
-            # Track for UI stats
-            self._filter_stats["fvg_detected"] = self._filter_stats.get("fvg_detected", 0) + len(
-                fvgs_raw
+            # Detect all FVGs once (no mode filter — size_atr is populated for every FVG).
+            # Then apply the mode min-size threshold as a post-filter using the already-computed
+            # size_atr field.  This avoids running the full detection loop twice per TF per cycle.
+            fvgs = detect_fvgs(df, tf_smc_config, mode_profile=None)
+            self._filter_stats["fvg_detected"] = (
+                self._filter_stats.get("fvg_detected", 0) + len(fvgs)
             )
+            if self._mode_profile and self._mode_profile in MODE_FVG_MIN_SIZE:
+                min_size = MODE_FVG_MIN_SIZE[self._mode_profile]
+                fvgs = [f for f in fvgs if getattr(f, "size_atr", 0.0) >= min_size]
 
             if atr_val > 0:
                 fvgs = merge_consecutive_fvgs(fvgs, max_gap_atr=0.5, atr_value=atr_val)
@@ -579,13 +584,14 @@ class SMCDetectionService:
         # Liquidity sweeps (use TF-specific config for sweep thresholds)
         if tf_config.get("detect_sweep", True):
             try:
-                sweeps_raw = detect_liquidity_sweeps(df, tf_smc_config, mode_profile=None)
+                # Detect once with mode profile (reversal window is detection-intrinsic,
+                # not separable as a post-filter).  Stats track the mode-filtered count.
                 sweeps = detect_liquidity_sweeps(df, tf_smc_config, mode_profile=self._mode_profile)
 
                 # Track for UI stats
                 self._filter_stats["sweep_detected"] = self._filter_stats.get(
                     "sweep_detected", 0
-                ) + len(sweeps_raw)
+                ) + len(sweeps)
 
                 # Set timeframe on each sweep for TF filtering and HTF context
                 from dataclasses import replace
@@ -806,6 +812,33 @@ class SMCDetectionService:
             logger.debug("Freshness recalc failed: %s", e)
 
         return order_blocks
+
+    def _update_fvg_status(self, multi_tf_data: MultiTimeframeData, fvgs: List) -> List:
+        """Update FVG fill status (fill_pct) using recent price action and drop filled gaps."""
+        if not fvgs:
+            return fvgs
+        try:
+            from backend.strategy.smc.mitigation_tracker import update_fvg_fill_status
+
+            ltf_df = (
+                multi_tf_data.timeframes.get("15m")
+                or multi_tf_data.timeframes.get("1h")
+                or multi_tf_data.timeframes.get("1H")
+            )
+            if ltf_df is not None and len(ltf_df) > 0:
+                fresh_fvgs, status = update_fvg_fill_status(fvgs, ltf_df, max_fill=0.5)
+                if status.fully_mitigated_count > 0 or status.partially_mitigated_count > 0:
+                    logger.info(
+                        "🔲 FVG Fill Update: %d/%d fresh (dropped %d filled, %d partial)",
+                        status.fresh_count,
+                        status.original_count,
+                        status.fully_mitigated_count,
+                        status.partially_mitigated_count,
+                    )
+                return fresh_fvgs
+        except Exception as e:
+            logger.debug("FVG fill update failed: %s", e)
+        return fvgs
 
     def _log_liquidity_pools_summary(self, pools: List):
         """Log summary of graded liquidity pools."""
