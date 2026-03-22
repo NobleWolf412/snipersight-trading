@@ -92,6 +92,9 @@ def detect_fvgs(
 
     fvgs = []
 
+    # Cache timeframe inference — constant for this DataFrame, no need to recalculate per-candle
+    _cached_tf = _infer_timeframe(df)
+
     # Diagnostic counters
     potential_bullish_gaps = 0
     bullish_overlap_fails = 0
@@ -121,7 +124,7 @@ def detect_fvgs(
                 bullish_overlap_fails += 1
                 logger.debug(
                     "⚠️ %s Bullish FVG @ %.2f-%.2f: overlap=%.1f%% > %.1f%% max",
-                    _infer_timeframe(df),
+                    _cached_tf,
                     gap_bottom,
                     gap_top,
                     overlap * 100,
@@ -138,7 +141,7 @@ def detect_fvgs(
                     bullish_size_fails += 1
                     logger.debug(
                         "⚠️ %s Bullish FVG rejected @ %.2f-%.2f: gap_atr=%.3f < %.3f required",
-                        _infer_timeframe(df),
+                        _cached_tf,
                         gap_bottom,
                         gap_top,
                         gap_atr,
@@ -152,7 +155,7 @@ def detect_fvgs(
                 grade = grade_pattern(gap_atr, grade_a_threshold, grade_b_threshold)
 
                 fvg = FVG(
-                    timeframe=_infer_timeframe(df),
+                    timeframe=_cached_tf,
                     direction="bullish",
                     top=gap_top,
                     bottom=gap_bottom,
@@ -161,6 +164,7 @@ def detect_fvgs(
                     overlap_with_price=0.0,  # Will be updated if price revisits
                     freshness_score=1.0,  # Start fresh, decay applied later
                     grade=grade,
+                    size_atr=gap_atr,  # ATR-normalised size enables scorer's +15 size bonus
                 )
                 fvgs.append(fvg)
 
@@ -184,7 +188,7 @@ def detect_fvgs(
                     bearish_size_fails += 1
                     logger.debug(
                         "⚠️ %s Bearish FVG rejected @ %.2f-%.2f: gap_atr=%.3f < %.3f required",
-                        _infer_timeframe(df),
+                        _cached_tf,
                         gap_bottom,
                         gap_top,
                         gap_atr,
@@ -198,7 +202,7 @@ def detect_fvgs(
                 grade = grade_pattern(gap_atr, grade_a_threshold, grade_b_threshold)
 
                 fvg = FVG(
-                    timeframe=_infer_timeframe(df),
+                    timeframe=_cached_tf,
                     direction="bearish",
                     top=gap_top,
                     bottom=gap_bottom,
@@ -207,6 +211,7 @@ def detect_fvgs(
                     overlap_with_price=0.0,
                     freshness_score=1.0,  # Start fresh, decay applied later
                     grade=grade,
+                    size_atr=gap_atr,  # ATR-normalised size enables scorer's +15 size bonus
                 )
                 fvgs.append(fvg)
 
@@ -216,27 +221,31 @@ def detect_fvgs(
         current_time = df.index[-1].to_pydatetime()
 
         # Get timeframe decay factor (similar to OB freshness)
-        tf_str = _infer_timeframe(df)
+        tf_str = _cached_tf
         decay_factor = _get_freshness_decay_factor(tf_str)
 
         for i, fvg in enumerate(fvgs):
             overlap = check_price_overlap(current_price, fvg)
+            fill_pct = _calculate_fill_pct(df, fvg)
 
-            # Calculate freshness based on candles since formation
+            # Freshness on 0-100 scale to match OrderBlock.freshness_score.
+            # Previous 0.0-1.0 scale was a latent mismatch: any code handling both
+            # OBs and FVGs with a shared threshold (e.g. > 40) would silently
+            # filter out FVGs at 40% remaining life (score=0.4) as if they were expired.
             candles_since = len(df[df.index > fvg.timestamp])
-            freshness = max(0.0, 1.0 - (candles_since * decay_factor))
+            freshness = max(0.0, min(100.0, (1.0 - candles_since * decay_factor) * 100.0))
 
             # Update FVG (since dataclass is frozen, we need to replace)
             from dataclasses import replace
 
-            fvgs[i] = replace(fvg, overlap_with_price=overlap, freshness_score=freshness)
+            fvgs[i] = replace(fvg, overlap_with_price=overlap, freshness_score=freshness, fill_pct=fill_pct)
 
     # Log diagnostic summary
     if potential_bullish_gaps > 0 or potential_bearish_gaps > 0:
         logger.info(
             "🔍 %s FVG Detection: Found %d bullish gaps (%d overlap fails, %d size fails) | "
             "%d bearish gaps (%d overlap fails, %d size fails) → %d FVGs passed",
-            _infer_timeframe(df),
+            _cached_tf,
             potential_bullish_gaps,
             bullish_overlap_fails,
             bullish_size_fails,
@@ -377,6 +386,45 @@ def check_fvg_fill(df: pd.DataFrame, fvg: FVG, use_wicks: bool = True) -> bool:
             # Conservative: only count closes above
             highest_price = future_candles["close"].max()
         return highest_price > fvg.top
+
+
+def _calculate_fill_pct(df: pd.DataFrame, fvg: FVG) -> float:
+    """
+    Calculate how much of an FVG has been historically traversed by price wicks.
+
+    This tracks the maximum wick penetration into the gap across all candles since
+    formation — distinct from overlap_with_price (current price position in gap).
+
+    A bullish FVG is "filled from above" when price drops back in from the top;
+    a bearish FVG is "filled from below" when price rises up into it from below.
+
+    Returns:
+        float: 0.0 (untouched) to 1.0 (fully traversed)
+    """
+    future_candles = df[df.index > fvg.timestamp]
+    if len(future_candles) == 0:
+        return 0.0
+
+    gap_size = fvg.top - fvg.bottom
+    if gap_size < 1e-10:
+        return 1.0
+
+    if fvg.direction == "bullish":
+        # For a bullish gap (demand zone), fill is measured by how far price
+        # has dropped back into the gap from the top.
+        lowest_wick = future_candles["low"].min()
+        if lowest_wick >= fvg.top:
+            return 0.0  # Never touched
+        penetration = fvg.top - max(lowest_wick, fvg.bottom)
+        return min(1.0, penetration / gap_size)
+    else:
+        # For a bearish gap (supply zone), fill is measured by how far price
+        # has risen back into the gap from the bottom.
+        highest_wick = future_candles["high"].max()
+        if highest_wick <= fvg.bottom:
+            return 0.0  # Never touched
+        penetration = min(highest_wick, fvg.top) - fvg.bottom
+        return min(1.0, penetration / gap_size)
 
 
 def filter_unfilled_fvgs(df: pd.DataFrame, fvgs: List[FVG]) -> List[FVG]:

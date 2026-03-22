@@ -219,7 +219,7 @@ def detect_order_blocks(
             if displacement_atr < smc_cfg.min_displacement_atr:
                 logger.debug(
                     "⚠️ %s Bullish OB rejected @ %.2f: wick_ratio=%.2f OK | disp_atr=%.2f < %.2f required",
-                    _infer_timeframe(df),
+                    inferred_tf,
                     candle["low"],
                     lower_wick / body if body > 0 else 0,
                     displacement_atr,
@@ -236,7 +236,7 @@ def detect_order_blocks(
             if not has_context and grade == "C":
                 logger.debug(
                     "⚠️ %s Bullish OB rejected @ %.2f: grade=C but no structure context",
-                    _infer_timeframe(df),
+                    inferred_tf,
                     candle["low"],
                 )
                 continue  # Skip weak OBs without structure context
@@ -273,7 +273,7 @@ def detect_order_blocks(
             median_price = (candle["high"] + candle["low"]) / 2
 
             ob = OrderBlock(
-                timeframe=_infer_timeframe(df),
+                timeframe=inferred_tf,
                 direction="bullish",
                 high=median_price,  # Tighter: median instead of full high
                 low=candle["low"],
@@ -299,7 +299,7 @@ def detect_order_blocks(
             if displacement_atr < smc_cfg.min_displacement_atr:
                 logger.debug(
                     "⚠️ %s Bearish OB rejected @ %.2f: wick_ratio=%.2f OK | disp_atr=%.2f < %.2f required",
-                    _infer_timeframe(df),
+                    inferred_tf,
                     candle["high"],
                     upper_wick / body if body > 0 else 0,
                     displacement_atr,
@@ -315,7 +315,7 @@ def detect_order_blocks(
             if not has_context and grade == "C":
                 logger.debug(
                     "⚠️ %s Bearish OB rejected @ %.2f: grade=C but no structure context",
-                    _infer_timeframe(df),
+                    inferred_tf,
                     candle["high"],
                 )
                 continue  # Skip weak OBs without structure context
@@ -352,7 +352,7 @@ def detect_order_blocks(
             median_price = (candle["high"] + candle["low"]) / 2
 
             ob = OrderBlock(
-                timeframe=_infer_timeframe(df),
+                timeframe=inferred_tf,
                 direction="bearish",
                 high=candle["high"],
                 low=median_price,  # Tighter: median instead of full low
@@ -884,6 +884,10 @@ def detect_obs_from_bos(
     order_blocks = []
     used_bos = set()  # Avoid duplicate OBs from same BOS
 
+    # Cache timeframe inference — constant for this DataFrame, no need to call per-BOS
+    _cached_tf = _infer_timeframe(df)
+    scaled_lookback = scale_lookback(lookback, _cached_tf)
+
     for bos in structural_breaks:
         bos_ts = getattr(bos, "timestamp", None)
         bos_dir = getattr(bos, "direction", None)
@@ -903,10 +907,6 @@ def detect_obs_from_bos(
         except KeyError:
             # BOS timestamp not in this dataframe (different TF)
             continue
-
-        # Scale lookback based on timeframe
-        tf = _infer_timeframe(df)
-        scaled_lookback = scale_lookback(lookback, tf)
 
         # Find last opposite-color candle before BOS
         ob_idx = None
@@ -1018,6 +1018,9 @@ def detect_order_blocks_structural(
     _close = df["close"].values
     _volume = df["volume"].values if "volume" in df.columns else np.ones(n)
 
+    # Cache timeframe inference — constant for this DataFrame
+    _vect_tf = _infer_timeframe(df)
+
     # Track which swing highs/lows have been crossed
     crossed_highs = set()
     crossed_lows = set()
@@ -1089,7 +1092,7 @@ def detect_order_blocks_structural(
             median_price = (_high[ob_idx] + _low[ob_idx]) / 2
 
             ob = OrderBlock(
-                timeframe=_infer_timeframe(df),
+                timeframe=_vect_tf,
                 direction="bullish",
                 high=median_price,  # Tighter: median instead of full high
                 low=_low[ob_idx],
@@ -1158,7 +1161,7 @@ def detect_order_blocks_structural(
             median_price = (_high[ob_idx] + _low[ob_idx]) / 2
 
             ob = OrderBlock(
-                timeframe=_infer_timeframe(df),
+                timeframe=_vect_tf,
                 direction="bearish",
                 high=_high[ob_idx],
                 low=median_price,  # Tighter: median instead of full low

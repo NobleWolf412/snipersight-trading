@@ -620,7 +620,9 @@ def evaluate_htf_structural_proximity(
             continue
         if fvg.size < atr:
             continue
-        if fvg.overlap_with_price > 0.5:
+        # Use fill_pct (historical traversal) — overlap_with_price is current position in gap,
+        # so price at gap midpoint (perfect entry) would wrongly read as ">50% filled"
+        if getattr(fvg, "fill_pct", fvg.overlap_with_price) > 0.5:
             continue
 
         fvg_dir_lower = fvg.direction.lower()
@@ -2982,15 +2984,17 @@ def _score_fvgs_incremental(
     if not aligned_fvgs:
         return {"score": 0.0, "rationale": "No aligned FVGs", "components": []}
         
-    # Find best FVG (prioritize unfilled size)
+    # Find best FVG (prioritize historically-unfilled size)
+    # Use fill_pct (historical wick traversal) not overlap_with_price (current position)
+    # so that price being inside the gap at the ideal entry level isn't penalised.
     best_fvg = max(
         aligned_fvgs,
-        key=lambda fvg: fvg.size * (1.0 - fvg.overlap_with_price)
+        key=lambda fvg: fvg.size * (1.0 - getattr(fvg, "fill_pct", fvg.overlap_with_price))
     )
-    
+
     score = 0.0
     components = []
-    
+
     # 1. Base Score by Grade
     grade = getattr(best_fvg, "grade", "B")
     if grade == "A":
@@ -3002,14 +3006,16 @@ def _score_fvgs_incremental(
     else:
         score += 20.0
         components.append(("Grade C", 20.0, "Marginal Gap"))
-        
-    # 2. Unfilled Bonus
-    if best_fvg.overlap_with_price == 0:
+
+    # 2. Fill Status — use fill_pct (historical traversal) not overlap_with_price (position)
+    # overlap_with_price == 0.5 means price is at the mid-gap ideal entry, not "50% filled"
+    _fill = getattr(best_fvg, "fill_pct", best_fvg.overlap_with_price)
+    if _fill == 0:
         score += 20.0
         components.append(("Virgin FVG", 20.0, "Completely unfilled"))
-    elif best_fvg.overlap_with_price > 0.5:
+    elif _fill > 0.5:
         score -= 15.0
-        components.append(("Filled", -15.0, f">50% filled ({best_fvg.overlap_with_price:.0%})"))
+        components.append(("Filled", -15.0, f">50% historically filled ({_fill:.0%})"))
         
     # 3. Size Bonus
     if getattr(best_fvg, "size_atr", 0.0) > 1.0:
@@ -4612,7 +4618,7 @@ def _get_fvg_rationale(fvgs: List[FVG], direction: str) -> str:
     if not aligned:
         return "No aligned FVGs"
 
-    unfilled = [fvg for fvg in aligned if fvg.overlap_with_price < 0.5]
+    unfilled = [fvg for fvg in aligned if getattr(fvg, "fill_pct", fvg.overlap_with_price) < 0.5]
     if unfilled:
         grades = [getattr(fvg, "grade", "B") for fvg in unfilled]
         grade_summary = (

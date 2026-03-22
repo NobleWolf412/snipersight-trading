@@ -126,8 +126,10 @@ def get_current_session(timestamp: datetime) -> Optional[TradingSession]:
         from datetime import timedelta
 
         est_offset = timedelta(hours=-5)
+        # UTC → EST: subtract 5 hours (est_offset = -5h, so adding it gives UTC + (-5h) = EST)
+        # BUG WAS: `- est_offset` = -(-5h) = +5h → produced UTC+5 (10 hours wrong)
         timestamp = (
-            timestamp.replace(tzinfo=None) + (timestamp.utcoffset() or timedelta(0)) - est_offset
+            timestamp.replace(tzinfo=None) + (timestamp.utcoffset() or timedelta(0)) + est_offset
         )
 
     current_time = timestamp.time()
@@ -154,8 +156,10 @@ def get_current_kill_zone(timestamp: datetime) -> Optional[KillZone]:
         from datetime import timedelta
 
         est_offset = timedelta(hours=-5)
+        # UTC → EST: subtract 5 hours (est_offset = -5h, so adding it gives UTC + (-5h) = EST)
+        # BUG WAS: `- est_offset` = -(-5h) = +5h → produced UTC+5 (10 hours wrong)
         timestamp = (
-            timestamp.replace(tzinfo=None) + (timestamp.utcoffset() or timedelta(0)) - est_offset
+            timestamp.replace(tzinfo=None) + (timestamp.utcoffset() or timedelta(0)) + est_offset
         )
 
     current_time = timestamp.time()
