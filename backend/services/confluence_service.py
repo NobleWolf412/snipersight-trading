@@ -405,39 +405,12 @@ class ConfluenceService:
                                             bullish_breakdown.total_score,
                                         )
 
-                                else:
-                                    # Structure also tied and scores not elite - genuinely no edge
-                                    logger.info(
-                                        "🔄 %s TIE (%.1f) with neutral regime AND tied structure (%d vs %d): skipping",
-                                        context.symbol,
-                                        bullish_breakdown.total_score,
-                                        bullish_structure,
-                                        bearish_structure,
-                                    )
-
-                                    context.metadata["chosen_direction"] = None
-                                    context.metadata["alt_confluence"] = {
-                                        "long": bullish_breakdown.total_score,
-                                        "short": bearish_breakdown.total_score,
-                                        "tie_break_used": "skipped_no_edge",
-                                        "bullish_structure": bullish_structure,
-                                        "bearish_structure": bearish_structure,
-                                        # FIX: Include factors for UI display (was missing!)
-                                        "long_factors": [
-                                            {"name": f.name, "score": f.score, "weight": f.weight, "rationale": f.rationale} 
-                                            for f in bullish_breakdown.factors
-                                        ],
-                                        "short_factors": [
-                                            {"name": f.name, "score": f.score, "weight": f.weight, "rationale": f.rationale} 
-                                            for f in bearish_breakdown.factors
-                                        ],
-                                    }
-
-                                    raise ConflictingDirectionsException(
-                                        f"Conflicting signals ({bullish_breakdown.total_score:.1f}% vs {bearish_breakdown.total_score:.1f}%) — both above gate, structure tied (<{DIRECTION_MARGIN:.0f}pt margin) in neutral market",
-                                        bullish_breakdown=bullish_breakdown,
-                                        bearish_breakdown=bearish_breakdown
-                                    )
+                                # NOTE: This else branch is unreachable. We are inside the
+                                # `if bullish > 70 and bearish > 70` block, so both_scores_high
+                                # (which checks >= 70) is always True here. The elif above always
+                                # matches. Dead code removed — ConflictingDirectionsException for
+                                # the neutral-regime tied-structure case is raised in the outer
+                                # `else` block below (non-scalp, scores <= 70).
 
                             else:
                                 # Scores not strong enough for structure override (<=70%).

@@ -230,8 +230,11 @@ export interface BTCCycleContextData {
     confidence: number;
     last_low: { date: string; price: number };
     expected_next_low: string;
-    is_danger_zone: boolean;
-    is_opportunity_zone: boolean;
+    days_until_expected_low: number;
+    zones: {
+      is_danger_zone: boolean;
+      is_opportunity_zone: boolean;
+    };
   };
   halving: {
     last_halving_date: string;

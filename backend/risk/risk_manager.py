@@ -272,41 +272,49 @@ class RiskManager:
                     limits_hit=limits_hit,
                 )
 
-        # Checks 4-6 don't need lock (use _get_period_loss which has its own considerations)
-        # Check 4: Daily loss limit
-        daily_loss = self._get_period_loss(hours=24)
-        max_daily_loss = self.account_balance * (self.max_daily_loss_pct / 100)
+            # Checks 4-6: hold the lock so daily/weekly loss reads are consistent
+            # with the position checks above. Without this, two concurrent validations
+            # could both read the same trade_history snapshot and both pass the loss
+            # limits before either trade has been recorded.
 
-        if daily_loss >= max_daily_loss:
-            return RiskCheck(
-                passed=False,
-                reason=f"Daily loss limit hit: ${daily_loss:.2f} >= ${max_daily_loss:.2f} "
-                f"({self.max_daily_loss_pct}% of account). Trading halted.",
-                limits_hit=["daily_loss_limit"],
-            )
+            # Check 4: Daily loss limit
+            cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+            daily_pnl = sum(t.pnl for t in self.trade_history if t.closed_at >= cutoff_24h)
+            daily_loss = abs(min(0, daily_pnl))
+            max_daily_loss = self.account_balance * (self.max_daily_loss_pct / 100)
 
-        # Check 5: Weekly loss limit
-        weekly_loss = self._get_period_loss(hours=168)  # 7 days
-        max_weekly_loss = self.account_balance * (self.max_weekly_loss_pct / 100)
+            if daily_loss >= max_daily_loss:
+                return RiskCheck(
+                    passed=False,
+                    reason=f"Daily loss limit hit: ${daily_loss:.2f} >= ${max_daily_loss:.2f} "
+                    f"({self.max_daily_loss_pct}% of account). Trading halted.",
+                    limits_hit=["daily_loss_limit"],
+                )
 
-        if weekly_loss >= max_weekly_loss:
-            return RiskCheck(
-                passed=False,
-                reason=f"Weekly loss limit hit: ${weekly_loss:.2f} >= ${max_weekly_loss:.2f} "
-                f"({self.max_weekly_loss_pct}% of account). Trading halted.",
-                limits_hit=["weekly_loss_limit"],
-            )
+            # Check 5: Weekly loss limit
+            cutoff_7d = datetime.now(timezone.utc) - timedelta(hours=168)
+            weekly_pnl = sum(t.pnl for t in self.trade_history if t.closed_at >= cutoff_7d)
+            weekly_loss = abs(min(0, weekly_pnl))
+            max_weekly_loss = self.account_balance * (self.max_weekly_loss_pct / 100)
 
-        # Check 6: Position concentration
-        max_position_value = self.account_balance * (self.max_position_concentration_pct / 100)
+            if weekly_loss >= max_weekly_loss:
+                return RiskCheck(
+                    passed=False,
+                    reason=f"Weekly loss limit hit: ${weekly_loss:.2f} >= ${max_weekly_loss:.2f} "
+                    f"({self.max_weekly_loss_pct}% of account). Trading halted.",
+                    limits_hit=["weekly_loss_limit"],
+                )
 
-        if position_value > max_position_value:
-            return RiskCheck(
-                passed=False,
-                reason=f"Position too large: ${position_value:.2f} > ${max_position_value:.2f} "
-                f"({self.max_position_concentration_pct}% of account)",
-                limits_hit=["position_concentration"],
-            )
+            # Check 6: Position concentration
+            max_position_value = self.account_balance * (self.max_position_concentration_pct / 100)
+
+            if position_value > max_position_value:
+                return RiskCheck(
+                    passed=False,
+                    reason=f"Position too large: ${position_value:.2f} > ${max_position_value:.2f} "
+                    f"({self.max_position_concentration_pct}% of account)",
+                    limits_hit=["position_concentration"],
+                )
 
         # All checks passed
         return RiskCheck(passed=True, reason="All risk checks passed")
@@ -480,9 +488,17 @@ class RiskManager:
         return ((self.initial_balance - current_equity) / self.initial_balance) * 100
 
     def reset_daily_stats(self) -> None:
-        """Reset daily statistics (call at start of each trading day)."""
-        # In production, this would track daily high water mark
-        # For now, we rely on trade history timestamps
+        """Reset daily statistics (call at start of each trading day).
+
+        Trims trade_history to only retain entries from the past 7 days so the
+        weekly loss calculation doesn't accumulate unboundedly across sessions.
+        The daily loss limit already works via timestamp filtering in
+        _get_period_loss(), so no separate counter is needed.
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        with self._lock:
+            self.trade_history = [t for t in self.trade_history if t.closed_at >= cutoff]
+        logger.info("reset_daily_stats: trade_history trimmed to last 7 days (%d entries)", len(self.trade_history))
 
     def get_position_count(self) -> int:
         """Get number of open positions."""

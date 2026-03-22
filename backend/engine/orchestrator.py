@@ -531,10 +531,10 @@ class Orchestrator:
                 # Categorize rejection
                 if rejection_info:
                     reason_type = rejection_info.get("reason_type", "errors")
-                    # DEBUG: Log what's being appended to rejection_stats
-                    logger.error(f"DEBUG APPEND rejection for {rejection_info.get('symbol')}: keys={list(rejection_info.keys())}, "
-                               f"bullish_factors={len(rejection_info.get('bullish_factors', []))} "  
-                               f"bearish_factors={len(rejection_info.get('bearish_factors', []))}")
+                    logger.debug("Appending rejection for %s: keys=%s, bullish_factors=%d, bearish_factors=%d",
+                               rejection_info.get('symbol'), list(rejection_info.keys()),
+                               len(rejection_info.get('bullish_factors', [])),
+                               len(rejection_info.get('bearish_factors', [])))
                     rejection_stats[reason_type].append(rejection_info)
                 logger.debug("⚪ %s: No qualifying setup", symbol)
 
@@ -1367,7 +1367,8 @@ class Orchestrator:
                             bull_score = score_val
                             bear_score = score_val
                             logger.debug(f"{symbol}: Parsed score {score_val} from error message")
-                    except: pass
+                    except Exception:
+                        pass
                 
                 gap = abs(bull_score - bear_score)
                 
