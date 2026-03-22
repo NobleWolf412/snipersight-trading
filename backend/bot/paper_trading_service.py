@@ -213,10 +213,13 @@ class PaperTradingStats:
         best_trade: Largest winning trade P&L
         worst_trade: Largest losing trade P&L
         max_drawdown: Maximum drawdown experienced
-        current_streak: Current win/loss streak
+        current_streak: Current win/loss streak (positive=wins, negative=losses)
         scans_completed: Number of scanner runs
         signals_generated: Total signals from scanner
         signals_taken: Signals that passed filters and were executed
+        exit_reasons: Count of trades by exit reason (target/stop_loss/stagnation/etc.)
+        by_trade_type: Per-type breakdown (scalp/intraday/swing) with wins, losses,
+                       win_rate, total_pnl, avg_win, avg_loss
     """
 
     total_trades: int = 0
@@ -235,6 +238,8 @@ class PaperTradingStats:
     scans_completed: int = 0
     signals_generated: int = 0
     signals_taken: int = 0
+    exit_reasons: Dict[str, int] = field(default_factory=dict)
+    by_trade_type: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -2067,6 +2072,37 @@ class PaperTradingService:
 
         if self.stats.avg_loss != 0:
             self.stats.avg_rr = abs(self.stats.avg_win / self.stats.avg_loss)
+
+        # --- Exit reason breakdown ---
+        reason = trade.exit_reason or "unknown"
+        self.stats.exit_reasons[reason] = self.stats.exit_reasons.get(reason, 0) + 1
+
+        # --- Per-trade-type breakdown ---
+        tt = trade.trade_type or "unknown"
+        if tt not in self.stats.by_trade_type:
+            self.stats.by_trade_type[tt] = {
+                "trades": 0,
+                "wins": 0,
+                "losses": 0,
+                "win_rate": 0.0,
+                "total_pnl": 0.0,
+                "avg_win": 0.0,
+                "avg_loss": 0.0,
+            }
+        bucket = self.stats.by_trade_type[tt]
+        bucket["trades"] += 1
+        bucket["total_pnl"] += trade.pnl
+        if trade.pnl > 0:
+            bucket["wins"] += 1
+            bucket["avg_win"] = (
+                bucket["avg_win"] * (bucket["wins"] - 1) + trade.pnl
+            ) / bucket["wins"]
+        else:
+            bucket["losses"] += 1
+            bucket["avg_loss"] = (
+                bucket["avg_loss"] * (bucket["losses"] - 1) + trade.pnl
+            ) / bucket["losses"]
+        bucket["win_rate"] = (bucket["wins"] / bucket["trades"]) * 100
 
         # Update max drawdown on each trade close
         self._update_drawdown()
