@@ -1007,9 +1007,9 @@ class PaperTradingService:
                 
                 if global_regime and global_regime.composite != "unknown":
                     rec = get_mode_recommendation(
-                        global_regime.trend, 
-                        global_regime.volatility, 
-                        global_regime.risk_appetite
+                        global_regime.dimensions.trend,
+                        global_regime.dimensions.volatility,
+                        global_regime.dimensions.risk_appetite,
                     )
                     recommended_mode = rec.get("mode", "stealth")
                     if recommended_mode != "stealth":
