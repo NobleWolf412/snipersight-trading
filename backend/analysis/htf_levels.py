@@ -269,7 +269,7 @@ class HTFLevelDetector:
         # Get timestamp for the swing
         try:
             swing_timestamp = recent.loc[high_idx, "timestamp"]
-        except:
+        except Exception:
             swing_timestamp = datetime.now()
 
         # Determine trend direction based on sequence

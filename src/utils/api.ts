@@ -230,8 +230,11 @@ export interface BTCCycleContextData {
     confidence: number;
     last_low: { date: string; price: number };
     expected_next_low: string;
-    is_danger_zone: boolean;
-    is_opportunity_zone: boolean;
+    days_until_expected_low: number;
+    zones: {
+      is_danger_zone: boolean;
+      is_opportunity_zone: boolean;
+    };
   };
   halving: {
     last_halving_date: string;
@@ -938,6 +941,16 @@ export interface CompletedPaperTrade {
   trade_type?: 'scalp' | 'intraday' | 'swing';
 }
 
+export interface TradeTypeBucket {
+  trades: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  total_pnl: number;
+  avg_win: number;
+  avg_loss: number;
+}
+
 export interface PaperTradingStats {
   total_trades: number;
   winning_trades: number;
@@ -955,6 +968,8 @@ export interface PaperTradingStats {
   scans_completed: number;
   signals_generated: number;
   signals_taken: number;
+  exit_reasons: Record<string, number>;
+  by_trade_type: Record<string, TradeTypeBucket>;
 }
 
 export interface PaperTradingActivity {

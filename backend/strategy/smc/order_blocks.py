@@ -1365,7 +1365,7 @@ def _check_structure_confirmation(
         try:
             closest_idx = df.index.get_indexer([ob.timestamp], method="nearest")[0]
             ob_idx = closest_idx
-        except:
+        except Exception:
             return False
 
     # Define confirmation window

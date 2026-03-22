@@ -34,25 +34,18 @@ export function SceneContainer({ children, className, isScanning = false }: Scen
 
                 {/* Post Processing Effects */}
                 <EffectComposer disableNormalPass>
-                    {/* 1. Bloom for that neon glow */}
                     <Bloom
                         luminanceThreshold={0.2}
                         mipmapBlur
                         intensity={1.5}
                         radius={0.4}
                     />
-
-                    {/* 2. Chromatic Aberration for holographic glitch feel */}
                     <ChromaticAberration
                         offset={isScanning ? new THREE.Vector2(0.002, 0.002) : new THREE.Vector2(0.0005, 0.0005)}
                         radialModulation={false}
                         modulationOffset={0}
                     />
-
-                    {/* 3. Noise/Grain for texture */}
                     <Noise opacity={0.1} blendFunction={BlendFunction.OVERLAY} />
-
-                    {/* 4. Scanlines (Subtle TV effect) */}
                     <Scanline density={1.5} opacity={0.05} />
                 </EffectComposer>
 

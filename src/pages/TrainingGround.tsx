@@ -1332,6 +1332,67 @@ export function TrainingGround() {
               </div>
             </div>
 
+            {/* Breakdown Row — By Trade Type + Exit Reasons */}
+            {status?.statistics && (
+              (Object.keys(status.statistics.by_trade_type || {}).length > 0 ||
+               Object.keys(status.statistics.exit_reasons || {}).length > 0) && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                {/* By Trade Type */}
+                {Object.keys(status.statistics.by_trade_type || {}).length > 0 && (
+                  <div className="glass-card p-4 rounded-2xl border-border/50">
+                    <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase mb-3">BY TRADE TYPE</div>
+                    <div className="flex flex-col gap-2">
+                      {((['scalp', 'intraday', 'swing'] as const).filter(tt => status.statistics.by_trade_type?.[tt]).concat(
+                        Object.keys(status.statistics.by_trade_type || {}).filter(tt => !['scalp','intraday','swing'].includes(tt)) as any
+                      ) as string[]).map(tt => {
+                        const b = status.statistics.by_trade_type![tt];
+                        if (!b) return null;
+                        const color = tt === 'scalp' ? 'text-purple-400' : tt === 'intraday' ? 'text-blue-400' : 'text-amber-400';
+                        const pnlColor = b.total_pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                        return (
+                          <div key={tt} className="flex items-center gap-3 text-xs font-mono">
+                            <span className={cn("w-16 font-bold uppercase tracking-tight shrink-0", color)}>{tt}</span>
+                            <div className="flex-1 bg-white/5 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full", b.win_rate >= 50 ? 'bg-green-400/60' : 'bg-red-400/60')}
+                                style={{ width: `${b.win_rate}%` }}
+                              />
+                            </div>
+                            <span className="w-10 text-right text-muted-foreground">{b.win_rate.toFixed(0)}%</span>
+                            <span className="w-12 text-right text-muted-foreground/60">{b.trades}T</span>
+                            <span className={cn("w-16 text-right", pnlColor)}>{b.total_pnl >= 0 ? '+' : ''}{b.total_pnl.toFixed(1)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Exit Reasons */}
+                {Object.keys(status.statistics.exit_reasons || {}).length > 0 && (
+                  <div className="glass-card p-4 rounded-2xl border-border/50">
+                    <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase mb-3">EXIT REASONS</div>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(status.statistics.exit_reasons || {})
+                        .sort(([, a], [, b]) => b - a)
+                        .map(([reason, count]) => {
+                          const label = reason === 'stop_loss' ? 'Stop' : reason === 'target' ? 'Target' : reason === 'stagnation' ? 'Stagnation' : reason === 'direction_flip' ? 'Flip' : reason === 'emergency' ? 'Emergency' : reason;
+                          const chipColor = reason === 'target' ? 'bg-green-400/15 border-green-400/30 text-green-400' : reason === 'stop_loss' ? 'bg-red-400/15 border-red-400/30 text-red-400' : reason === 'stagnation' ? 'bg-amber-400/15 border-amber-400/30 text-amber-400' : 'bg-white/5 border-border/40 text-muted-foreground';
+                          return (
+                            <div key={reason} className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-mono font-bold", chipColor)}>
+                              <span>{label}</span>
+                              <span className="opacity-60">×{count}</span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            ))}
+
             {/* Positions & Activity Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Active Positions */}

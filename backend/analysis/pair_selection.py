@@ -188,9 +188,10 @@ def select_symbols(
     else:
         majors_list = [s for s in all_symbols[:top_k]]
 
-    # Meme and alt derivations
-    memes_list = [s for s in all_symbols if _is_meme_symbol(s)]
-    alts_list = [s for s in all_symbols if s not in majors_list and not _is_meme_symbol(s)]
+    # Meme and alt derivations — classify once to avoid redundant CoinGecko lookups
+    meme_set = {s for s in all_symbols if _is_meme_symbol(s)}
+    memes_list = [s for s in all_symbols if s in meme_set]
+    alts_list = [s for s in all_symbols if s not in majors_list and s not in meme_set]
 
     # Build target according to toggles, preserving ranking within each bucket
     buckets: List[List[str]] = []
@@ -228,12 +229,8 @@ def select_symbols(
     try:
         fetched_cnt = len(all_symbols)
         majors_cnt = len(majors_list) if majors else 0
-        memes_cnt = len([s for s in all_symbols if _is_meme_symbol(s)]) if meme_mode else 0
-        alts_cnt = (
-            len([s for s in all_symbols if s not in majors_list and not _is_meme_symbol(s)])
-            if altcoins
-            else 0
-        )
+        memes_cnt = len(memes_list) if meme_mode else 0
+        alts_cnt = len(alts_list) if altcoins else 0
         logger.info(
             "selection adapter=%s limit=%s leverage=%s market=%s toggles majors=%s memes=%s alts=%s fetched=%s final=%s buckets majors=%s memes=%s alts=%s examples majors=%s memes=%s alts=%s",
             adapter.__class__.__name__,
@@ -249,10 +246,8 @@ def select_symbols(
             memes_cnt,
             alts_cnt,
             ",".join(majors_list[:3]),
-            ",".join([s for s in all_symbols if _is_meme_symbol(s)][:3]),
-            ",".join(
-                [s for s in all_symbols if s not in majors_list and not _is_meme_symbol(s)][:3]
-            ),
+            ",".join(memes_list[:3]),
+            ",".join(alts_list[:3]),
         )
     except Exception:
         # Logging must never break selection

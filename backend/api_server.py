@@ -101,7 +101,6 @@ orchestrator_logger.propagate = False
 
 # Thread-safe price cache with TTL to reduce exchange API load
 # Now uses unified CacheManager internally
-import threading
 from collections import OrderedDict
 
 
@@ -2078,8 +2077,11 @@ async def get_btc_cycle_context():
                         "price": fyc.last_fyc_low_price,
                     },
                     "expected_next_low": fyc.expected_next_low_date.isoformat(),
-                    "is_danger_zone": fyc.is_in_danger_zone,
-                    "is_opportunity_zone": fyc.is_in_opportunity_zone,
+                    "days_until_expected_low": fyc.days_until_expected_low,
+                    "zones": {
+                        "is_danger_zone": fyc.is_in_danger_zone,
+                        "is_opportunity_zone": fyc.is_in_opportunity_zone,
+                    },
                 },
                 "halving": {
                     "last_halving_date": halving["last_halving"]["date"],

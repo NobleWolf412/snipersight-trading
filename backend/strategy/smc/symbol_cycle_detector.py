@@ -303,7 +303,7 @@ def _detect_cycle(
             if original_idx >= 0:
                 ts = df.index[original_idx]
                 cycle_low_ts = ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else ts
-        except:
+        except Exception:
             pass
 
     # Find cycle high (highest point since cycle low)

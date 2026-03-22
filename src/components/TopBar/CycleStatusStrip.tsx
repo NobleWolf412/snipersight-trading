@@ -54,12 +54,12 @@ function CycleBadge({ label, day, range, translation, bias, isInWindow }: CycleB
 }
 
 export function CycleStatusStrip() {
-    const { btcContext, isLoading } = useSymbolCycles({
+    const { btcContext, loading } = useSymbolCycles({
         symbols: ['BTCUSDT'],
         exchange: 'phemex'
     });
 
-    if (isLoading || !btcContext) {
+    if (loading || !btcContext) {
         return (
             <div className="flex items-center gap-2 opacity-50">
                 <div className="h-6 w-20 bg-white/5 rounded animate-pulse" />
