@@ -563,6 +563,9 @@ class PaperTradingService:
             "session_stopped", {"session_id": self.session_id, "final_stats": self.stats.to_dict()}
         )
 
+        # Final state checkpoint before session report (captures last balance/stats)
+        self._save_state()
+
         # Generate comprehensive session report on disk
         report_path = self._generate_session_report()
         if report_path:
@@ -1686,6 +1689,7 @@ class PaperTradingService:
                     "confluence": plan.confidence_score,
                     "trade_type": getattr(plan, "trade_type", "unknown"),
                 })
+                self._save_state()
             else:
                 order_status = order.status.value if order.status else "unknown"
                 reason = (
@@ -2017,6 +2021,7 @@ class PaperTradingService:
                         },
                     },
                 )
+                self._save_state()
 
     async def _close_all_positions(self, reason: str):
         """Close all open positions."""
@@ -2106,6 +2111,65 @@ class PaperTradingService:
 
         # Update max drawdown on each trade close
         self._update_drawdown()
+
+    def _save_state(self) -> None:
+        """Write a crash-recovery checkpoint to state.json in the session log dir.
+
+        Called after every position open/close and on session stop so that a server
+        restart can show what was happening. Uses an atomic write (tmp → rename) to
+        avoid a corrupt checkpoint if the process dies mid-write.
+
+        Restoring from this file is a manual/future operation — it does not
+        automatically resume the session, but it gives enough context to reconstruct
+        what happened and what the final balance / open exposure was.
+        """
+        if not self._session_log_dir:
+            return
+        try:
+            # Serialize open/partial positions
+            positions_data = []
+            if self.position_manager:
+                for pos in self.position_manager.positions.values():
+                    if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]:
+                        positions_data.append(asdict(pos))
+
+            # Serialize pending orders — simplified (no full TradePlan graph needed)
+            pending_data = []
+            for order_id, plan in self._pending_plans.items():
+                placed_at = self._pending_placed_at.get(order_id)
+                pending_data.append({
+                    "order_id": order_id,
+                    "symbol": plan.symbol,
+                    "direction": plan.direction,
+                    "limit_price": getattr(plan.entry_zone, "near_entry", None),
+                    "stop_loss": getattr(plan.stop_loss, "level", None),
+                    "targets": [
+                        {"level": t.level, "percentage": t.percentage, "label": getattr(t, "label", "")}
+                        for t in (plan.targets or [])
+                    ],
+                    "trade_type": getattr(plan, "trade_type", "intraday"),
+                    "confluence": getattr(plan, "confidence_score", None),
+                    "placed_at": placed_at.isoformat() if placed_at else None,
+                })
+
+            state = {
+                "session_id": self.session_id,
+                "saved_at": datetime.now(timezone.utc).isoformat(),
+                "config": self.config.to_dict() if self.config else None,
+                "balance": self.executor.get_balance() if self.executor else None,
+                "stats": self.stats.to_dict(),
+                "positions": positions_data,
+                "pending_orders": pending_data,
+            }
+
+            state_path = self._session_log_dir / "state.json"
+            tmp_path = state_path.with_suffix(".tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2, default=str)
+            tmp_path.rename(state_path)
+
+        except Exception as e:
+            logger.warning(f"State checkpoint save failed: {e}")
 
     def _update_drawdown(self) -> None:
         """Recompute peak equity and max drawdown from current balance + unrealized PnL.

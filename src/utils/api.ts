@@ -938,6 +938,16 @@ export interface CompletedPaperTrade {
   trade_type?: 'scalp' | 'intraday' | 'swing';
 }
 
+export interface TradeTypeBucket {
+  trades: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  total_pnl: number;
+  avg_win: number;
+  avg_loss: number;
+}
+
 export interface PaperTradingStats {
   total_trades: number;
   winning_trades: number;
@@ -955,6 +965,8 @@ export interface PaperTradingStats {
   scans_completed: number;
   signals_generated: number;
   signals_taken: number;
+  exit_reasons: Record<string, number>;
+  by_trade_type: Record<string, TradeTypeBucket>;
 }
 
 export interface PaperTradingActivity {
