@@ -357,7 +357,13 @@ def detect_structural_breaks(
                     vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
                     if vol_req.get("require_volume") and "BOS" in vol_req.get("apply_to", []):
                         if volume_ratio < vol_req["min_volume_ratio"]:
-                            continue  # Skip weak BOS without sufficient volume
+                            logger.debug(
+                                "⚡ Bullish BOS dropped: vol_ratio=%.2f < %.2f required (%s) — "
+                                "level=%.4f @ %s. Downstream: Market Structure=0, derived OBs/FVGs lost.",
+                                volume_ratio, vol_req["min_volume_ratio"], mode_profile,
+                                last_swing_high, current_idx,
+                            )
+                            continue
 
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),
@@ -401,7 +407,13 @@ def detect_structural_breaks(
                     vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
                     if vol_req.get("require_volume") and "CHoCH" in vol_req.get("apply_to", []):
                         if volume_ratio < vol_req["min_volume_ratio"]:
-                            continue  # Skip weak CHoCH without sufficient volume
+                            logger.debug(
+                                "⚡ Bearish CHoCH (in uptrend) dropped: vol_ratio=%.2f < %.2f required (%s) — "
+                                "level=%.4f @ %s.",
+                                volume_ratio, vol_req["min_volume_ratio"], mode_profile,
+                                last_swing_low, current_idx,
+                            )
+                            continue
 
                 structural_break = StructuralBreak(
                     timeframe=_infer_timeframe(df),

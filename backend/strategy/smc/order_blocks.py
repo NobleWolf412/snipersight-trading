@@ -219,7 +219,7 @@ def detect_order_blocks(
             if displacement_atr < smc_cfg.min_displacement_atr:
                 logger.debug(
                     "⚠️ %s Bullish OB rejected @ %.2f: wick_ratio=%.2f OK | disp_atr=%.2f < %.2f required",
-                    _infer_timeframe(df),
+                    inferred_tf,
                     candle["low"],
                     lower_wick / body if body > 0 else 0,
                     displacement_atr,
@@ -236,7 +236,7 @@ def detect_order_blocks(
             if not has_context and grade == "C":
                 logger.debug(
                     "⚠️ %s Bullish OB rejected @ %.2f: grade=C but no structure context",
-                    _infer_timeframe(df),
+                    inferred_tf,
                     candle["low"],
                 )
                 continue  # Skip weak OBs without structure context
@@ -273,7 +273,7 @@ def detect_order_blocks(
             median_price = (candle["high"] + candle["low"]) / 2
 
             ob = OrderBlock(
-                timeframe=_infer_timeframe(df),
+                timeframe=inferred_tf,
                 direction="bullish",
                 high=median_price,  # Tighter: median instead of full high
                 low=candle["low"],
@@ -299,7 +299,7 @@ def detect_order_blocks(
             if displacement_atr < smc_cfg.min_displacement_atr:
                 logger.debug(
                     "⚠️ %s Bearish OB rejected @ %.2f: wick_ratio=%.2f OK | disp_atr=%.2f < %.2f required",
-                    _infer_timeframe(df),
+                    inferred_tf,
                     candle["high"],
                     upper_wick / body if body > 0 else 0,
                     displacement_atr,
@@ -315,7 +315,7 @@ def detect_order_blocks(
             if not has_context and grade == "C":
                 logger.debug(
                     "⚠️ %s Bearish OB rejected @ %.2f: grade=C but no structure context",
-                    _infer_timeframe(df),
+                    inferred_tf,
                     candle["high"],
                 )
                 continue  # Skip weak OBs without structure context
@@ -352,7 +352,7 @@ def detect_order_blocks(
             median_price = (candle["high"] + candle["low"]) / 2
 
             ob = OrderBlock(
-                timeframe=_infer_timeframe(df),
+                timeframe=inferred_tf,
                 direction="bearish",
                 high=candle["high"],
                 low=median_price,  # Tighter: median instead of full low
@@ -448,44 +448,6 @@ def _calculate_displacement_bearish(df: pd.DataFrame, candle_idx: int, lookback:
     return displacement
 
 
-def calculate_displacement_strength(df: pd.DataFrame, ob: OrderBlock) -> float:
-    """
-    Calculate displacement strength for an existing order block.
-
-    Args:
-        df: DataFrame with OHLC data
-        ob: OrderBlock to analyze
-
-    Returns:
-        float: Displacement strength normalized to 0-100 scale
-    """
-    # Find the order block candle in the DataFrame
-    ob_candles = df[df.index == ob.timestamp]
-
-    if len(ob_candles) == 0:
-        return ob.displacement_strength  # Return existing value if candle not found
-
-    ob_idx = df.index.get_loc(ob.timestamp)
-
-    # Recalculate displacement
-    if ob.direction == "bullish":
-        displacement = _calculate_displacement_bullish(df, ob_idx, 5)
-    else:
-        displacement = _calculate_displacement_bearish(df, ob_idx, 5)
-
-    # Calculate in ATR units
-    from backend.indicators.volatility import compute_atr
-
-    atr = compute_atr(df, period=14)
-    atr_value = atr.iloc[ob_idx] if ob_idx < len(atr) else atr.iloc[-1]
-
-    displacement_atr = displacement / atr_value if atr_value > 0 else 0
-
-    # Normalize to 0-100 scale (1.5 ATR = 50, 3.0 ATR = 100)
-    normalized = min(100.0, (displacement_atr / 3.0) * 100.0)
-
-    return normalized
-
 
 def check_mitigation(df: pd.DataFrame, ob: OrderBlock) -> float:
     """
@@ -538,102 +500,6 @@ def check_mitigation(df: pd.DataFrame, ob: OrderBlock) -> float:
             penetration = highest_revisit - ob.low
             return penetration / ob_range
 
-
-def check_mitigation_enhanced(df: pd.DataFrame, ob: OrderBlock) -> dict:
-    """
-    Enhanced mitigation tracking with quality grading.
-
-    Returns detailed mitigation info including:
-    - Tap count: How many times zone was revisited
-    - Tap depth: How deep the deepest penetration was
-    - Reaction quality: How strongly price bounced after tap
-    - Grade: fresh/tapped/partial/heavy/invalidated
-
-    Args:
-        df: DataFrame with OHLC data
-        ob: OrderBlock to check
-
-    Returns:
-        dict with level, grade, taps, deepest_penetration, best_reaction
-    """
-    future_candles = df[df.index > ob.timestamp]
-
-    if len(future_candles) == 0:
-        return {
-            "level": 0.0,
-            "grade": "fresh",
-            "taps": 0,
-            "deepest_penetration": 0.0,
-            "best_reaction": 0.0,
-        }
-
-    ob_range = ob.high - ob.low
-    if ob_range < 1e-10:
-        return {
-            "level": 0.0,
-            "grade": "fresh",
-            "taps": 0,
-            "deepest_penetration": 0.0,
-            "best_reaction": 0.0,
-        }
-
-    taps = 0
-    deepest_penetration = 0.0
-    best_reaction = 0.0
-
-    for i in range(len(future_candles)):
-        candle = future_candles.iloc[i]
-
-        if ob.direction == "bullish":
-            # Check if candle tapped the OB zone (wick or body entered)
-            if candle["low"] <= ob.high:
-                taps += 1
-                penetration = (ob.high - candle["low"]) / ob_range
-                deepest_penetration = max(deepest_penetration, penetration)
-
-                # Measure reaction quality (how far did it bounce after tap?)
-                # Look at next 3 candles
-                if i + 3 < len(future_candles):
-                    reaction_high = future_candles.iloc[i + 1 : i + 4]["high"].max()
-                    reaction = reaction_high - candle["low"]
-                    best_reaction = max(best_reaction, reaction)
-        else:  # bearish
-            # Check if candle tapped the OB zone
-            if candle["high"] >= ob.low:
-                taps += 1
-                penetration = (candle["high"] - ob.low) / ob_range
-                deepest_penetration = max(deepest_penetration, penetration)
-
-                # Measure reaction quality
-                if i + 3 < len(future_candles):
-                    reaction_low = future_candles.iloc[i + 1 : i + 4]["low"].min()
-                    reaction = candle["high"] - reaction_low
-                    best_reaction = max(best_reaction, reaction)
-
-    # Determine mitigation grade based on tap depth and count
-    if deepest_penetration >= 1.0:
-        grade = "invalidated"
-        level = 1.0
-    elif deepest_penetration > 0.7:
-        grade = "heavy"
-        level = deepest_penetration
-    elif deepest_penetration > 0.3:
-        grade = "partial"
-        level = deepest_penetration
-    elif taps > 0:
-        grade = "tapped"
-        level = deepest_penetration
-    else:
-        grade = "fresh"
-        level = 0.0
-
-    return {
-        "level": level,
-        "grade": grade,
-        "taps": taps,
-        "deepest_penetration": deepest_penetration,
-        "best_reaction": best_reaction,
-    }
 
 
 def calculate_freshness(ob: OrderBlock, current_time: datetime) -> float:
@@ -884,6 +750,10 @@ def detect_obs_from_bos(
     order_blocks = []
     used_bos = set()  # Avoid duplicate OBs from same BOS
 
+    # Cache timeframe inference — constant for this DataFrame, no need to call per-BOS
+    _cached_tf = _infer_timeframe(df)
+    scaled_lookback = scale_lookback(lookback, _cached_tf)
+
     for bos in structural_breaks:
         bos_ts = getattr(bos, "timestamp", None)
         bos_dir = getattr(bos, "direction", None)
@@ -903,10 +773,6 @@ def detect_obs_from_bos(
         except KeyError:
             # BOS timestamp not in this dataframe (different TF)
             continue
-
-        # Scale lookback based on timeframe
-        tf = _infer_timeframe(df)
-        scaled_lookback = scale_lookback(lookback, tf)
 
         # Find last opposite-color candle before BOS
         ob_idx = None
@@ -1018,6 +884,9 @@ def detect_order_blocks_structural(
     _close = df["close"].values
     _volume = df["volume"].values if "volume" in df.columns else np.ones(n)
 
+    # Cache timeframe inference — constant for this DataFrame
+    _vect_tf = _infer_timeframe(df)
+
     # Track which swing highs/lows have been crossed
     crossed_highs = set()
     crossed_lows = set()
@@ -1089,7 +958,7 @@ def detect_order_blocks_structural(
             median_price = (_high[ob_idx] + _low[ob_idx]) / 2
 
             ob = OrderBlock(
-                timeframe=_infer_timeframe(df),
+                timeframe=_vect_tf,
                 direction="bullish",
                 high=median_price,  # Tighter: median instead of full high
                 low=_low[ob_idx],
@@ -1158,7 +1027,7 @@ def detect_order_blocks_structural(
             median_price = (_high[ob_idx] + _low[ob_idx]) / 2
 
             ob = OrderBlock(
-                timeframe=_infer_timeframe(df),
+                timeframe=_vect_tf,
                 direction="bearish",
                 high=_high[ob_idx],
                 low=median_price,  # Tighter: median instead of full low

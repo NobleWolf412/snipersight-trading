@@ -897,8 +897,10 @@ def _calculate_entry_zone(
             # Score FVGs by quality (freshness, mitigation, displacement, TF weight)
             # mirrors _ob_score so FVG selection is not purely proximity-based
             def _fvg_score_bullish(fvg) -> float:
-                freshness = getattr(fvg, "freshness_score", 0.5)
-                mitigation = 1.0 - min(getattr(fvg, "overlap_with_price", 0.0), 1.0)
+                freshness = getattr(fvg, "freshness_score", 50.0)  # 0-100 scale (standardised)
+                # fill_pct = historical wick traversal; overlap_with_price = current position in gap.
+                # Use fill_pct so price being at the ideal mid-gap entry isn't penalised as "filled".
+                mitigation = 1.0 - min(getattr(fvg, "fill_pct", getattr(fvg, "overlap_with_price", 0.0)), 1.0)
                 displacement = 1.0 + getattr(fvg, "displacement_strength", 0.0) * planner_cfg.ob_displacement_weight
                 return freshness * mitigation * displacement * tf_weight.get(fvg.timeframe, 1.0)
 
@@ -1256,8 +1258,10 @@ def _calculate_entry_zone(
             # Score FVGs by quality (freshness, mitigation, displacement, TF weight)
             # mirrors _ob_score_bearish so FVG selection is not purely proximity-based
             def _fvg_score_bearish(fvg) -> float:
-                freshness = getattr(fvg, "freshness_score", 0.5)
-                mitigation = 1.0 - min(getattr(fvg, "overlap_with_price", 0.0), 1.0)
+                freshness = getattr(fvg, "freshness_score", 50.0)  # 0-100 scale (standardised)
+                # fill_pct = historical wick traversal; overlap_with_price = current position in gap.
+                # Use fill_pct so price being at the ideal mid-gap entry isn't penalised as "filled".
+                mitigation = 1.0 - min(getattr(fvg, "fill_pct", getattr(fvg, "overlap_with_price", 0.0)), 1.0)
                 displacement = 1.0 + getattr(fvg, "displacement_strength", 0.0) * planner_cfg.ob_displacement_weight
                 return freshness * mitigation * displacement * tf_weight.get(fvg.timeframe, 1.0)
 

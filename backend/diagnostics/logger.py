@@ -68,6 +68,7 @@ class ProbeCategory(Enum):
     PLAN_TARGET_ORDER_ERROR = "plan_target_order_error"
     PLAN_RR_LOW = "plan_rr_low"
     PLAN_MISSING_TARGETS = "plan_missing_targets"
+    SIGNAL_FILTERED = "signal_filtered"  # Signal passed confluence but was filtered by risk/mode gate
 
     # Risk
     RISK_REJECTION_UNCLEAR = "risk_rejection_unclear"

@@ -1007,9 +1007,9 @@ class PaperTradingService:
                 
                 if global_regime and global_regime.composite != "unknown":
                     rec = get_mode_recommendation(
-                        global_regime.trend, 
-                        global_regime.volatility, 
-                        global_regime.risk_appetite
+                        global_regime.dimensions.trend,
+                        global_regime.dimensions.volatility,
+                        global_regime.dimensions.risk_appetite,
                     )
                     recommended_mode = rec.get("mode", "stealth")
                     if recommended_mode != "stealth":
@@ -1321,7 +1321,12 @@ class PaperTradingService:
         # Log to diagnostics
         if self.diagnostic_logger:
             diag_sev = Severity.INFO if result == "executed" else Severity.WARNING
-            diag_cat = ProbeCategory.EXEC_SUCCESS if result == "executed" else ProbeCategory.PLAN_RR_LOW
+            if result == "executed":
+                diag_cat = ProbeCategory.EXEC_SUCCESS
+            elif result == "filtered":
+                diag_cat = ProbeCategory.SIGNAL_FILTERED
+            else:
+                diag_cat = ProbeCategory.PLAN_RR_LOW  # genuine bad R:R / plan rejection
             
             self.diagnostic_logger.log(
                 probe_id="SIG_001",

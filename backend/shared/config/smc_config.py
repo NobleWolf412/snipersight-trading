@@ -157,11 +157,6 @@ EQHL_MIN_TOUCHES: Dict[str, int] = {
 }
 
 
-def get_timeframe_minutes(timeframe: str) -> int:
-    """Get minutes for a timeframe string."""
-    return TIMEFRAME_MINUTES.get(timeframe, 240)  # Default to 4H
-
-
 def get_lookback_multiplier(timeframe: str) -> float:
     """
     Get lookback multiplier for a timeframe.
@@ -807,23 +802,19 @@ def get_enhanced_mitigation_config(preset: str) -> dict:
 
     Returns:
         dict with:
-            - use_enhanced: Use new check_mitigation_enhanced() function
             - invalidate_on_deep_tap: Invalidate OB on deep (>70%) penetration
             - max_taps_before_invalidate: Max taps before OB considered weak
     """
     configs = {
         "luxalgo_strict": {
-            "use_enhanced": True,
             "invalidate_on_deep_tap": True,
             "max_taps_before_invalidate": 2,  # Strict: 2 taps max
         },
         "defaults": {
-            "use_enhanced": True,
             "invalidate_on_deep_tap": True,
             "max_taps_before_invalidate": 3,
         },
         "sensitive": {
-            "use_enhanced": True,
             "invalidate_on_deep_tap": False,  # Keep more OBs for research
             "max_taps_before_invalidate": 5,
         },

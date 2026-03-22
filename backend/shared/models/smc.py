@@ -156,7 +156,7 @@ class FVG:
         timestamp: When the FVG was formed
         size: Gap size in price points
         overlap_with_price: Percentage of gap filled by price (0.0-1.0)
-        freshness_score: Recency score, decreases over time (0.0-1.0)
+        freshness_score: Recency score, decreases over time (0-100, matches OrderBlock scale)
     """
 
     timeframe: str
@@ -165,10 +165,13 @@ class FVG:
     bottom: float
     timestamp: datetime
     size: float
-    overlap_with_price: float  # 0.0 (fresh) to 1.0 (completely filled)
-    freshness_score: float = 1.0  # Time-based decay, similar to OB
+    overlap_with_price: float  # Position of current price within the gap (0.0=bottom, 1.0=top)
+    freshness_score: float = 100.0  # Time-based decay 0-100, matches OrderBlock.freshness_score
     grade: PatternGrade = "B"  # Quality grade: A (excellent), B (good), C (marginal)
     size_atr: float = 0.0  # ATR-normalized gap size for reference
+    fill_pct: float = 0.0  # Historical fill: max wick penetration into gap (0.0–1.0).
+    # fill_pct > 0.5 means more than half the gap has been historically traversed.
+    # This is distinct from overlap_with_price (current price position in the gap).
 
     def __post_init__(self):
         """Validate FVG data."""
@@ -185,8 +188,8 @@ class FVG:
 
     @property
     def is_fresh(self) -> bool:
-        """Check if FVG is fresh (freshness > 0.5 and less than 50% filled)."""
-        return self.freshness_score > 0.5 and self.overlap_with_price < 0.5
+        """Check if FVG is fresh (freshness > 50/100 and less than 50% historically filled)."""
+        return self.freshness_score > 50.0 and self.fill_pct < 0.5
 
     def contains_price(self, price: float) -> bool:
         """Check if a price is within the FVG."""

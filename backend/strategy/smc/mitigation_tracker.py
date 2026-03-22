@@ -162,7 +162,7 @@ def update_fvg_fill_status(
         new_fill = _calculate_fvg_fill(fvg, df)
 
         # Update the FVG with new fill level
-        updated_fvg = replace(fvg, overlap_with_price=new_fill)
+        updated_fvg = replace(fvg, overlap_with_price=new_fill, fill_pct=new_fill)
 
         if new_fill >= 1.0:
             fully_filled += 1

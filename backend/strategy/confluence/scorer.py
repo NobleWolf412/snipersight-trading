@@ -93,8 +93,8 @@ MODE_PENALTY_MULTIPLIERS = {
 # Maximum synergy bonus per mode. Aggressive modes allow more synergy to offset penalties.
 
 MODE_SYNERGY_CAPS = {
-    "overwatch": 10.0,
-    "macro_surveillance": 10.0,
+    "overwatch": 15.0,         # RAISED: 10→15 — conflict penalties can reach 42pts (35 cap × 1.2x multiplier); 10pt synergy cap was mathematically unable to offset them
+    "macro_surveillance": 15.0,
     "stealth_balanced": 12.0,
     "stealth": 12.0,
     "strike": 15.0,             # Aggressive: higher cap
@@ -620,7 +620,9 @@ def evaluate_htf_structural_proximity(
             continue
         if fvg.size < atr:
             continue
-        if fvg.overlap_with_price > 0.5:
+        # Use fill_pct (historical traversal) — overlap_with_price is current position in gap,
+        # so price at gap midpoint (perfect entry) would wrongly read as ">50% filled"
+        if getattr(fvg, "fill_pct", fvg.overlap_with_price) > 0.5:
             continue
 
         fvg_dir_lower = fvg.direction.lower()
@@ -844,12 +846,12 @@ def evaluate_htf_momentum_gate(
     if mode_name == "overwatch" or profile == "macro_surveillance":
         # SWING: Look at Daily. Hard to turn. Needs extreme evidence.
         momentum_tf = "1d"
-        fade_threshold_rsi = 75.0  # RSI > 75 (was 80) to fade - 25/75 is safer but catches more
+        fade_threshold_rsi = 70.0  # RSI > 70 (was 75) — 30/70 catches oversold/overbought reliably
 
     elif mode_name == "stealth" or profile == "stealth_balanced":
         # BALANCED: Look at 4H.
         momentum_tf = "4h"
-        fade_threshold_rsi = 75.0
+        fade_threshold_rsi = 70.0  # RSI > 70 (was 75) — 30/70 catches oversold/overbought reliably
 
     elif mode_name in ["surgical", "strike"] or profile in ("precision", "intraday_aggressive"):
         # SCALP: Look at 1H/4H. Quick turns allowed.
@@ -2102,6 +2104,24 @@ def calculate_confluence_score(
     # Liquidity Sweeps
     sweep_result = _score_liquidity_sweeps_incremental(smc_snapshot.liquidity_sweeps, direction)
     sweep_score = sweep_result["score"]
+
+    # HTF trending discount: in a confirmed trending market, cascade sweeps in the counter-trend
+    # direction are noise (e.g. many "sweep of low" events in a sell-off inflate LONG confidence).
+    # Cap their score at 30 so structural factors still dominate.
+    if regime is not None and sweep_score > 30.0:
+        regime_trend = getattr(regime, "trend", "sideways")
+        norm_sweep_dir = _normalize_direction(direction)
+        is_counter_trend_sweep = (
+            (norm_sweep_dir == "bullish" and regime_trend in ("down", "strong_down"))
+            or (norm_sweep_dir == "bearish" and regime_trend in ("up", "strong_up"))
+        )
+        if is_counter_trend_sweep:
+            logger.debug(
+                "💧 Sweep HTF discount: %.1f → 30.0 (counter-trend %s sweep in %s regime)",
+                sweep_score, norm_sweep_dir, regime_trend,
+            )
+            sweep_score = 30.0
+
     factors.append(
         ConfluenceFactor(
             name="Liquidity Sweep",
@@ -2112,9 +2132,9 @@ def calculate_confluence_score(
     )
 
     # Kill Zone Timing
+    # NOTE: get_current_kill_zone and _score_kill_zone_incremental are defined
+    # in this same module — use them directly (the previous self-import was dead weight).
     try:
-        from backend.strategy.confluence.scorer import get_current_kill_zone, _score_kill_zone_incremental
-        from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
         curr_kz = get_current_kill_zone(now)
         kz_result = _score_kill_zone_incremental(now, curr_kz)
@@ -2587,8 +2607,12 @@ def calculate_confluence_score(
     coverage_penalty = 0.0
     active_factors = len([f for f in factors if f.score > 0])
     quality_factors = len([f for f in factors if f.score >= 50])
-    if quality_factors < 6:
-        coverage_penalty = (6 - quality_factors) * 3.0  # up to 15 pts for near-empty setups
+    # Require 5 quality factors (down from 6) — many valid SMC setups lack nested OBs,
+    # divergence, or FVGs by design; the old rule taxed normal conditions as if they
+    # were low-quality signals. Cap at -6 (max 2 factors missing × 3pts) so the
+    # penalty catches truly sparse setups without crippling borderline ones.
+    if quality_factors < 5:
+        coverage_penalty = min((5 - quality_factors) * 3.0, 6.0)
     
     # Macro Adjustment
     macro_adj = 0.0
@@ -2974,19 +2998,26 @@ def _score_fvgs_incremental(
     """
     normalized_dir = _normalize_direction(direction)
     aligned_fvgs = [fvg for fvg in fvgs if fvg.direction == normalized_dir]
-    
+
     if not aligned_fvgs:
+        logger.debug(
+            "🔲 FVG scorer: 0 aligned %s FVGs from %d total — "
+            "score will be 0 (detection starvation vs genuine absence)",
+            normalized_dir, len(fvgs),
+        )
         return {"score": 0.0, "rationale": "No aligned FVGs", "components": []}
         
-    # Find best FVG (prioritize unfilled size)
+    # Find best FVG (prioritize historically-unfilled size)
+    # Use fill_pct (historical wick traversal) not overlap_with_price (current position)
+    # so that price being inside the gap at the ideal entry level isn't penalised.
     best_fvg = max(
         aligned_fvgs,
-        key=lambda fvg: fvg.size * (1.0 - fvg.overlap_with_price)
+        key=lambda fvg: fvg.size * (1.0 - getattr(fvg, "fill_pct", fvg.overlap_with_price))
     )
-    
+
     score = 0.0
     components = []
-    
+
     # 1. Base Score by Grade
     grade = getattr(best_fvg, "grade", "B")
     if grade == "A":
@@ -2998,14 +3029,16 @@ def _score_fvgs_incremental(
     else:
         score += 20.0
         components.append(("Grade C", 20.0, "Marginal Gap"))
-        
-    # 2. Unfilled Bonus
-    if best_fvg.overlap_with_price == 0:
+
+    # 2. Fill Status — use fill_pct (historical traversal) not overlap_with_price (position)
+    # overlap_with_price == 0.5 means price is at the mid-gap ideal entry, not "50% filled"
+    _fill = getattr(best_fvg, "fill_pct", best_fvg.overlap_with_price)
+    if _fill == 0:
         score += 20.0
         components.append(("Virgin FVG", 20.0, "Completely unfilled"))
-    elif best_fvg.overlap_with_price > 0.5:
+    elif _fill > 0.5:
         score -= 15.0
-        components.append(("Filled", -15.0, f">50% filled ({best_fvg.overlap_with_price:.0%})"))
+        components.append(("Filled", -15.0, f">50% historically filled ({_fill:.0%})"))
         
     # 3. Size Bonus
     if getattr(best_fvg, "size_atr", 0.0) > 1.0:
@@ -3898,30 +3931,32 @@ def _score_kill_zone_incremental(
     
     Returns detailed score and rationale components.
     """
-    score = 0.0
+    # Base score is 40 (neutral/acceptable) — outside a kill zone is not a red flag,
+    # it simply means no timing edge. Starting at 0 was causing kill zone to routinely
+    # trigger the coverage penalty during Sydney morning hours (UTC 8pm–6am = outside
+    # London/NY sessions), unfairly penalising structurally valid setups.
+    score = 40.0
     components = []
-    
+
     # NOTE: No weekend penalty for crypto - markets trade 24/7
     # (Traditional markets have liquidity drought on weekends, crypto does not)
-        
-    # 1. Session Active (+25 pts)
+
+    # 1. Session Active (+25 pts above neutral)
     if kill_zone:
         score += 25.0
         kz_name = kill_zone.value.replace("_", " ").title() if hasattr(kill_zone, "value") else str(kill_zone)
         components.append(("Active KZ", 25.0, f"{kz_name} active"))
-        
-    # 3. Overlap / Prime Session Check (+10 pts)
-    # Simple heuristic without timezone math: NY Open and London Open are prime
+
+    # 2. Prime Session bonus (+10 pts) — NY Open and London Open carry highest volume
     if kill_zone:
         kz_str = str(kill_zone).lower()
         if "new_york" in kz_str or "london_open" in kz_str:
-             # Major sessions get a "Prime Session" bonus
             score += 10.0
             components.append(("Prime Session", 10.0, "Major volume session"))
-            
+
     return {
         "score": max(0.0, min(100.0, score)),
-        "rationale": ", ".join([f"{c[0]}({c[1]:+.0f})" for c in components]) if components else "Outside kill zones",
+        "rationale": ", ".join([f"{c[0]}({c[1]:+.0f})" for c in components]) if components else "Outside kill zones (neutral)",
         "components": components,
         "in_zone": bool(kill_zone)
     }
@@ -4606,7 +4641,7 @@ def _get_fvg_rationale(fvgs: List[FVG], direction: str) -> str:
     if not aligned:
         return "No aligned FVGs"
 
-    unfilled = [fvg for fvg in aligned if fvg.overlap_with_price < 0.5]
+    unfilled = [fvg for fvg in aligned if getattr(fvg, "fill_pct", fvg.overlap_with_price) < 0.5]
     if unfilled:
         grades = [getattr(fvg, "grade", "B") for fvg in unfilled]
         grade_summary = (
