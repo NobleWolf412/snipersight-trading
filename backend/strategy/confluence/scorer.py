@@ -846,12 +846,12 @@ def evaluate_htf_momentum_gate(
     if mode_name == "overwatch" or profile == "macro_surveillance":
         # SWING: Look at Daily. Hard to turn. Needs extreme evidence.
         momentum_tf = "1d"
-        fade_threshold_rsi = 75.0  # RSI > 75 (was 80) to fade - 25/75 is safer but catches more
+        fade_threshold_rsi = 70.0  # RSI > 70 (was 75) — 30/70 catches oversold/overbought reliably
 
     elif mode_name == "stealth" or profile == "stealth_balanced":
         # BALANCED: Look at 4H.
         momentum_tf = "4h"
-        fade_threshold_rsi = 75.0
+        fade_threshold_rsi = 70.0  # RSI > 70 (was 75) — 30/70 catches oversold/overbought reliably
 
     elif mode_name in ["surgical", "strike"] or profile in ("precision", "intraday_aggressive"):
         # SCALP: Look at 1H/4H. Quick turns allowed.
@@ -2104,6 +2104,24 @@ def calculate_confluence_score(
     # Liquidity Sweeps
     sweep_result = _score_liquidity_sweeps_incremental(smc_snapshot.liquidity_sweeps, direction)
     sweep_score = sweep_result["score"]
+
+    # HTF trending discount: in a confirmed trending market, cascade sweeps in the counter-trend
+    # direction are noise (e.g. many "sweep of low" events in a sell-off inflate LONG confidence).
+    # Cap their score at 30 so structural factors still dominate.
+    if regime is not None and sweep_score > 30.0:
+        regime_trend = getattr(regime, "trend", "sideways")
+        norm_sweep_dir = _normalize_direction(direction)
+        is_counter_trend_sweep = (
+            (norm_sweep_dir == "bullish" and regime_trend in ("down", "strong_down"))
+            or (norm_sweep_dir == "bearish" and regime_trend in ("up", "strong_up"))
+        )
+        if is_counter_trend_sweep:
+            logger.debug(
+                "💧 Sweep HTF discount: %.1f → 30.0 (counter-trend %s sweep in %s regime)",
+                sweep_score, norm_sweep_dir, regime_trend,
+            )
+            sweep_score = 30.0
+
     factors.append(
         ConfluenceFactor(
             name="Liquidity Sweep",
