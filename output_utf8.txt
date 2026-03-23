@@ -1,0 +1,77 @@
+﻿python : 
+c:\Users\macca\Downloads\smc_service_diagnostic.py:371: 
+UserWarning: Discarding nonzero nanoseconds in conversion.
+At line:1 char:1
++ python c:\Users\macca\Downloads\smc_service_diagnostic.py 
+--csv test_ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo          : NotSpecified: (c:\Users\macca\.. 
+   . in conversion.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  current_time = df.index[-1].to_pydatetime()
+c:\Users\macca\Downloads\smc_service_diagnostic.py:110: 
+UserWarning: Discarding nonzero nanoseconds in conversion.
+  "timestamp": c.name.to_pydatetime(),
+c:\Users\macca\Downloads\smc_service_diagnostic.py:139: 
+UserWarning: Discarding nonzero nanoseconds in conversion.
+  "timestamp": df.index[oi].to_pydatetime(),
+c:\Users\macca\Downloads\smc_service_diagnostic.py:155: 
+UserWarning: Discarding nonzero nanoseconds in conversion.
+  "timestamp": df.index[oi].to_pydatetime(),
+c:\Users\macca\Downloads\smc_service_diagnostic.py:185: 
+UserWarning: Discarding nonzero nanoseconds in conversion.
+  "timestamp": oc.name.to_pydatetime(),
+c:\Users\macca\Downloads\smc_service_diagnostic.py:206: 
+UserWarning: Discarding nonzero nanoseconds in conversion.
+  
+"grade":grade(ga,2.0,0.5),"timestamp":c2.name.to_pydatetime()})
+c:\Users\macca\Downloads\smc_service_diagnostic.py:216: 
+UserWarning: Discarding nonzero nanoseconds in conversion.
+  
+"grade":grade(ga,2.0,0.5),"timestamp":c2.name.to_pydatetime()})
+c:\Users\macca\Downloads\smc_service_diagnostic.py:286: 
+UserWarning: Discarding nonzero nanoseconds in conversion.
+  "timestamp":c.name.to_pydatetime(),
+c:\Users\macca\Downloads\smc_service_diagnostic.py:304: 
+UserWarning: Discarding nonzero nanoseconds in conversion.
+  "timestamp":c.name.to_pydatetime(),
+Traceback (most recent call last):
+
+  File "c:\Users\macca\Downloads\smc_service_diagnostic.py", 
+line 840, in <module>
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+  SNIPERSIGHT ΓÇö SMC SERVICE DIAGNOSTIC
+  Mode: STRIKE
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+  Loading from CSV: test_data.csv
+  Timeframes loaded: ['15m']
+  Current price: 0.0208
+  Running SMC pipeline across all timeframes...
+  Processing 15m (100 candles)...
+
+  Cross-TF summary:
+    Total OBs pre-cross-TF: 4
+    LTF OBs rejected (no backing): 2
+    Grade A bypass: 2
+    Final validated OBs: 2
+    BOS ordering bug ΓÇö Grade A lost: 2
+    main()
+  File "c:\Users\macca\Downloads\smc_service_diagnostic.py", 
+line 834, in main
+    report = generate_report(sym, args.mode, tf_results, 
+cross, out_path=args.out)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\macca\Downloads\smc_service_diagnostic.py", 
+line 736, in generate_report
+    f.write(report)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", 
+line 19, in encode
+    return 
+codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in 
+position 0-71: character maps to <undefined>
