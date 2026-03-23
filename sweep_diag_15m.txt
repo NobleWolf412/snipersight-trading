@@ -1,0 +1,24 @@
+════════════════════════════════════════════════════════════════════════
+  SNIPERSIGHT — LIQUIDITY SWEEP DIAGNOSTIC REPORT
+  Symbol: BTC/USDT  |  Timeframe: 15m  |  2026-03-22 20:09:38
+════════════════════════════════════════════════════════════════════════
+
+  DATASET
+────────────────────────────────────────────────────────────────────────
+  Candles:          1000
+  Current Price:    67969.5000
+
+  PIPELINE FUNNEL
+────────────────────────────────────────────────────────────────────────
+  Total Sweeps Detected:  16
+    High Sweeps (Bearish Reversal): 12
+    Low Sweeps (Bullish Reversal):  4
+
+  QUALITY BREAKDOWN
+────────────────────────────────────────────────────────────────────────
+  By Grade:       A= 0   B= 0   C= 16 
+  By Conf Level:  L3= 3   L2= 1   L1= 9   L0= 3  
+  (L3=Climactic Vol, L2=Strong Vol, L1=Pattern Only, L0=None)
+  Reversal Pattern Found: 10 / 16
+
+════════════════════════════════════════════════════════════════════════

@@ -154,13 +154,16 @@ def detect_liquidity_sweeps(
         range_size = range_high - range_low if range_high > range_low else 1e-10
 
         # Look for swing points that are OLD ENOUGH to have real liquidity
+        if i < min_level_age_bars:
+            continue
+            
         valid_swing_highs = swing_highs[
             (swing_highs.index < current_idx)
-            & (swing_highs.index <= df.index[max(0, i - min_level_age_bars)])
+            & (swing_highs.index <= df.index[i - min_level_age_bars])
         ].tail(3)
         valid_swing_lows = swing_lows[
             (swing_lows.index < current_idx)
-            & (swing_lows.index <= df.index[max(0, i - min_level_age_bars)])
+            & (swing_lows.index <= df.index[i - min_level_age_bars])
         ].tail(3)
 
         if len(valid_swing_highs) == 0 and len(valid_swing_lows) == 0:
@@ -168,13 +171,12 @@ def detect_liquidity_sweeps(
 
         # Check for high sweep (bearish: price spikes above recent high then reverses)
         if len(valid_swing_highs) > 0:
-            target_high = valid_swing_highs.iloc[-1]
-
-            # FILTER 1: Range position - only sweep levels in top 35% of range
-            level_position = (target_high - range_low) / range_size
-            if level_position < (1 - range_position_threshold):  # Not in top 35%
-                pass  # Skip this level, not at range extreme
-            else:
+            for target_high in valid_swing_highs.values:
+                # FILTER 1: Range position - only sweep levels in top 35% of range
+                level_position = (target_high - range_low) / range_size
+                if level_position < (1 - range_position_threshold):  # Not in top 35%
+                    continue  # Skip this level, not at range extreme
+                
                 # Check penetration depth
                 penetration = current_candle["high"] - target_high
                 min_penetration = atr_value * min_penetration_atr if atr_value > 0 else 0
@@ -211,11 +213,12 @@ def detect_liquidity_sweeps(
                         if not require_volume_spike or volume_spike_moderate:
                             # Grade the sweep based on reversal strength
                             reversal_atr = reversal_distance / atr_value if atr_value > 0 else 0.0
-                            grade_a_threshold = smc_cfg.grade_a_threshold * min_reversal_atr
-                            grade_b_threshold = smc_cfg.grade_b_threshold * min_reversal_atr
-                            grade = grade_pattern(
-                                reversal_atr, grade_a_threshold, grade_b_threshold
-                            )
+                            if reversal_atr >= min_reversal_atr * 2.0:
+                                grade = "A"
+                            elif reversal_atr >= min_reversal_atr * 1.5:
+                                grade = "B"
+                            else:
+                                grade = "C"
 
                             # Phase 3: Check for reversal pattern
                             has_pattern = _check_reversal_pattern(df, i, "high", 3)
@@ -248,13 +251,12 @@ def detect_liquidity_sweeps(
 
         # Check for low sweep (bullish: price spikes below recent low then reverses)
         if len(valid_swing_lows) > 0:
-            target_low = valid_swing_lows.iloc[-1]
-
-            # FILTER 1: Range position - only sweep levels in bottom 35% of range
-            level_position = (target_low - range_low) / range_size
-            if level_position > range_position_threshold:  # Not in bottom 35%
-                pass  # Skip this level, not at range extreme
-            else:
+            for target_low in valid_swing_lows.values:
+                # FILTER 1: Range position - only sweep levels in bottom 35% of range
+                level_position = (target_low - range_low) / range_size
+                if level_position > range_position_threshold:  # Not in bottom 35%
+                    continue  # Skip this level, not at range extreme
+                
                 # Check penetration depth
                 penetration = target_low - current_candle["low"]
                 min_penetration = atr_value * min_penetration_atr if atr_value > 0 else 0
@@ -291,11 +293,12 @@ def detect_liquidity_sweeps(
                         if not require_volume_spike or volume_spike_moderate:
                             # Grade the sweep based on reversal strength
                             reversal_atr = reversal_distance / atr_value if atr_value > 0 else 0.0
-                            grade_a_threshold = smc_cfg.grade_a_threshold * min_reversal_atr
-                            grade_b_threshold = smc_cfg.grade_b_threshold * min_reversal_atr
-                            grade = grade_pattern(
-                                reversal_atr, grade_a_threshold, grade_b_threshold
-                            )
+                            if reversal_atr >= min_reversal_atr * 2.0:
+                                grade = "A"
+                            elif reversal_atr >= min_reversal_atr * 1.5:
+                                grade = "B"
+                            else:
+                                grade = "C"
 
                             # Phase 3: Check for reversal pattern
                             has_pattern = _check_reversal_pattern(df, i, "low", 3)
@@ -350,9 +353,13 @@ def _get_downside_reversal_distance(
     for i in range(sweep_idx + 1, min(sweep_idx + max_candles + 1, len(df))):
         candle = df.iloc[i]
 
-        # Check distance below the swept level
+        # Close confirmation (full distance)
         if candle["close"] < level:
             distance = level - candle["close"]
+            max_distance = max(max_distance, distance)
+        # Wick confirmation (discounted distance, e.g. 70%)
+        elif candle["low"] < level:
+            distance = (level - candle["low"]) * 0.7
             max_distance = max(max_distance, distance)
 
     return max_distance
@@ -379,9 +386,13 @@ def _get_upside_reversal_distance(
     for i in range(sweep_idx + 1, min(sweep_idx + max_candles + 1, len(df))):
         candle = df.iloc[i]
 
-        # Check distance above the swept level
+        # Close confirmation (full distance)
         if candle["close"] > level:
             distance = candle["close"] - level
+            max_distance = max(max_distance, distance)
+        # Wick confirmation (discounted distance, e.g. 70%)
+        elif candle["high"] > level:
+            distance = (candle["high"] - level) * 0.7
             max_distance = max(max_distance, distance)
 
     return max_distance
@@ -822,15 +833,19 @@ def check_double_sweep(
     return double_sweeps
 
 
-def validate_sweep_with_structure(sweep: LiquiditySweep, structural_breaks: List) -> bool:
+def validate_sweep_with_structure(
+    df: pd.DataFrame, sweep: LiquiditySweep, structural_breaks: List, max_candles: int = 10
+) -> bool:
     """
     Validate that a liquidity sweep preceded a structural break.
 
     Sweeps are more significant when followed by BOS/CHoCH.
 
     Args:
+        df: OHLCV DataFrame with DatetimeIndex
         sweep: Liquidity sweep to validate
         structural_breaks: List of StructuralBreak objects
+        max_candles: Maximum candles to wait for the break
 
     Returns:
         bool: True if sweep was followed by structural break
@@ -844,15 +859,15 @@ def validate_sweep_with_structure(sweep: LiquiditySweep, structural_breaks: List
     if not subsequent_breaks:
         return False
 
-    # Check if any break occurred within reasonable timeframe
-    # (Within next 10 candles worth of time - simplified)
+    # Check if nearest break is within max_candles
     nearest_break = min(subsequent_breaks, key=lambda sb: sb.timestamp)
 
-    time_diff = nearest_break.timestamp - sweep.timestamp
-
-    # If break happened within reasonable time, consider it related
-    # This is a simplified check - in practice would be more sophisticated
-    return time_diff.total_seconds() < 3600 * 24  # Within 24 hours
+    try:
+        sweep_idx = df.index.get_loc(sweep.timestamp)
+        break_idx = df.index.get_loc(nearest_break.timestamp)
+        return (break_idx - sweep_idx) <= max_candles
+    except KeyError:
+        return False
 
 
 def track_pool_sweeps(df: pd.DataFrame, pools: List[LiquidityPool]) -> List[LiquidityPool]:
@@ -884,28 +899,25 @@ def track_pool_sweeps(df: pd.DataFrame, pools: List[LiquidityPool]) -> List[Liqu
             updated_pools.append(pool)
             continue
 
-        swept = False
-        swept_idx = None
-        swept_ts = None
+        # Check for sweep using vectorized operations on df segment after pool was touched
+        if pool.last_touch and pool.last_touch in df.index:
+            try:
+                start_idx = df.index.get_loc(pool.last_touch)
+                future_df = df.iloc[start_idx:]
+            except KeyError:
+                future_df = df
+        else:
+            future_df = df
 
-        # Check each candle for sweep
-        for i in range(len(df)):
-            candle = df.iloc[i]
+        if pool.pool_type == "equal_highs":
+            swept_mask = future_df["close"] > pool.level
+        else:
+            swept_mask = future_df["close"] < pool.level
 
-            if pool.pool_type == "equal_highs":
-                # Pool swept when price closes above the level
-                if candle["close"] > pool.level:
-                    swept = True
-                    swept_idx = i
-                    swept_ts = df.index[i].to_pydatetime()
-                    break
-            else:  # equal_lows
-                # Pool swept when price closes below the level
-                if candle["close"] < pool.level:
-                    swept = True
-                    swept_idx = i
-                    swept_ts = df.index[i].to_pydatetime()
-                    break
+        if swept_mask.any():
+            swept = True
+            swept_ts = swept_mask.idxmax()
+            swept_idx = df.index.get_loc(swept_ts)
 
         if swept:
             updated_pool = replace(
@@ -997,7 +1009,13 @@ def check_scalp_sweep_entry(
             # After sweeping low, look for bullish entry patterns
 
             # Bullish Engulfing
-            if is_bullish and body > sweep_body * 0.8:
+            # Conf candle open <= sweep candle close, and conf candle close >= sweep candle open
+            if (
+                is_bullish 
+                and candle["open"] <= sweep_candle["close"] 
+                and candle["close"] >= sweep_candle["open"]
+                and body > sweep_body * 0.5  # Substantial enough to call engulfing
+            ):
                 result["entry_valid"] = True
                 result["entry_price"] = candle["close"]
                 result["pattern"] = "bullish_engulfing"
@@ -1014,7 +1032,13 @@ def check_scalp_sweep_entry(
             # After sweeping high, look for bearish entry patterns
 
             # Bearish Engulfing
-            if is_bearish and body > sweep_body * 0.8:
+            # Conf candle open >= sweep candle close, and conf candle close <= sweep candle open
+            if (
+                is_bearish 
+                and candle["open"] >= sweep_candle["close"] 
+                and candle["close"] <= sweep_candle["open"]
+                and body > sweep_body * 0.5
+            ):
                 result["entry_valid"] = True
                 result["entry_price"] = candle["close"]
                 result["pattern"] = "bearish_engulfing"

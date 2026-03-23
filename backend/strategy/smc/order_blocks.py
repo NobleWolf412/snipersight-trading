@@ -759,22 +759,22 @@ def filter_obs_by_mode(
         "macro_surveillance": {  # OVERWATCH: HTF institutional OBs
             "timeframes": {"4h", "1d", "1w", "4H", "1D", "1W"},
             "max_mitigation": 0.3,
-            "min_freshness": 40.0,
+            "min_freshness": 38.0,  # DERIVED: p60 true decay mapping
         },
         "stealth_balanced": {  # STEALTH: Balanced mix
             "timeframes": {"1h", "4h", "15m", "1d", "1H", "4H", "15m", "1D"},
             "max_mitigation": 0.4,
-            "min_freshness": 30.0,
+            "min_freshness": 19.0,  # DERIVED: p40 true decay mapping
         },
         "intraday_aggressive": {  # STRIKE: Intraday momentum
             "timeframes": {"15m", "1h", "5m", "1H"},
             "max_mitigation": 0.7,
-            "min_freshness": 20.0,
+            "min_freshness": 12.0,  # DERIVED: p20 extended decay mapping
         },
         "precision": {  # SURGICAL: LTF precision
             "timeframes": {"5m", "15m", "1h", "1H"},
             "max_mitigation": 0.5,
-            "min_freshness": 60.0,
+            "min_freshness": 12.0,  # DERIVED: p30 precision decay mapping
         },
     }
 

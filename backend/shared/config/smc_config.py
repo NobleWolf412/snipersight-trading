@@ -404,7 +404,7 @@ def get_tf_smc_config(timeframe: str, mode: str = "strike") -> dict:
 class SMCConfig:
     # Order Block parameters
     min_wick_ratio: float = 1.5  # RELAXED: Was 2.5 - allow standard rejections
-    min_displacement_atr: float = 1.2  # RELAXED: Was 1.5 - capture moderate impulses
+    min_displacement_atr: float = 2.70  # MATHEMATICALLY DERIVED NOISE FLOOR (was 1.2)
     ob_lookback_candles: int = 7  # Time to verify displacement
     ob_volume_threshold: float = 1.3  # Volume confirmation threshold
     ob_max_mitigation: float = 0.85  # Max mitigation level to keep OB
@@ -439,8 +439,8 @@ class SMCConfig:
 
     # Grade thresholds for pattern quality scoring (new grading system)
     # Patterns are graded A/B/C instead of rejected
-    grade_a_threshold: float = 1.0  # ATR multiplier for Grade A (excellent)
-    grade_b_threshold: float = 0.5  # ATR multiplier for Grade B (good)
+    grade_a_threshold: float = 5.70  # MATHEMATICALLY DERIVED SWING p75 (was 1.0)
+    grade_b_threshold: float = 3.80  # MATHEMATICALLY DERIVED CORE p40 (was 0.5)
     # Below grade_b_threshold = Grade C (marginal but still detected)
 
     @staticmethod

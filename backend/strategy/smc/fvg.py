@@ -147,9 +147,12 @@ def detect_fvgs(
                     continue
 
                 # Grade the FVG based on gap size (A = significant, B = moderate, C = small)
-                grade_a_threshold = smc_cfg.grade_a_threshold * min_gap_atr
-                grade_b_threshold = smc_cfg.grade_b_threshold * min_gap_atr
-                grade = grade_pattern(gap_atr, grade_a_threshold, grade_b_threshold)
+                if gap_atr >= min_gap_atr * 2.5:
+                    grade = "A"
+                elif gap_atr >= min_gap_atr * 1.5:
+                    grade = "B"
+                else:
+                    grade = "C"
 
                 fvg = FVG(
                     timeframe=_infer_timeframe(df),
@@ -194,9 +197,12 @@ def detect_fvgs(
                     continue
 
                 # Grade the FVG based on gap size (A = significant, B = moderate, C = small)
-                grade_a_threshold = smc_cfg.grade_a_threshold * min_gap_atr
-                grade_b_threshold = smc_cfg.grade_b_threshold * min_gap_atr
-                grade = grade_pattern(gap_atr, grade_a_threshold, grade_b_threshold)
+                if gap_atr >= min_gap_atr * 2.5:
+                    grade = "A"
+                elif gap_atr >= min_gap_atr * 1.5:
+                    grade = "B"
+                else:
+                    grade = "C"
 
                 fvg = FVG(
                     timeframe=_infer_timeframe(df),
@@ -316,29 +322,44 @@ def calculate_fvg_size(fvg: FVG) -> float:
 
 def check_price_overlap(price: float, fvg: FVG) -> float:
     """
-    Check if current price overlaps with an FVG.
+    Check how much an FVG has been filled/retested by current price.
+
+    Fill is measured from the entry side of the gap based on direction:
+    - Bullish FVG: price retests from above (top down). 0.0 = fresh/untested, 1.0 = fully filled or invalidated.
+    - Bearish FVG: price retests from below (bottom up). 0.0 = fresh/untested, 1.0 = fully filled or invalidated.
 
     Args:
         price: Current price level
         fvg: FVG to check
 
     Returns:
-        float: Overlap percentage (0.0 = no overlap, 1.0 = price at center of gap)
+        float: Fill percentage (0.0 = fresh/untested, 1.0 = fully filled or invalidated)
     """
-    if price < fvg.bottom or price > fvg.top:
-        return 0.0  # Price outside the gap
-
-    # Price is within the gap
     gap_size = fvg.top - fvg.bottom
 
     if gap_size < 1e-10:
-        return 1.0  # Avoid division by zero
+        return 1.0  # Degenerate gap — treat as filled
 
-    # Calculate how far into the gap the price is (from bottom)
-    penetration = price - fvg.bottom
-    overlap_ratio = penetration / gap_size
-
-    return min(1.0, max(0.0, overlap_ratio))
+    if fvg.direction == "bullish":
+        if price >= fvg.top:
+            # Price is above the gap — FVG is fresh/untested (normal state after bullish displacement)
+            return 0.0
+        elif price <= fvg.bottom:
+            # Price has broken down through the entire gap — fully invalidated
+            return 1.0
+        else:
+            # Price is inside the gap — measure fill from the top (bullish retest entry)
+            return (fvg.top - price) / gap_size
+    else:  # bearish
+        if price <= fvg.bottom:
+            # Price is below the gap — FVG is fresh/untested (normal state after bearish displacement)
+            return 0.0
+        elif price >= fvg.top:
+            # Price has broken up through the entire gap — fully invalidated
+            return 1.0
+        else:
+            # Price is inside the gap — measure fill from the bottom (bearish retest entry)
+            return (price - fvg.bottom) / gap_size
 
 
 def check_fvg_fill(df: pd.DataFrame, fvg: FVG, use_wicks: bool = True) -> bool:

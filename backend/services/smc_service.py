@@ -45,7 +45,7 @@ from backend.strategy.smc.liquidity_sweeps import (
     track_pool_sweeps,
 )
 from backend.strategy.smc.swing_structure import detect_swing_structure
-from backend.strategy.smc.mitigation_tracker import update_ob_mitigation
+from backend.strategy.smc.mitigation_tracker import update_ob_mitigation, update_fvg_fill_status
 from backend.strategy.smc.consolidation_detector import detect_consolidations
 from backend.indicators.volatility import compute_atr
 
@@ -401,6 +401,9 @@ class SMCDetectionService:
 
         # Update OB mitigation
         all_order_blocks = self._update_mitigation(multi_tf_data, all_order_blocks)
+
+        # Update FVG fill lifecycle (mirrors OB mitigation — previously FVGs had no state tracking)
+        all_fvgs = self._update_fvg_fill(multi_tf_data, all_fvgs)
 
         # --- Phase 2: Mode-specific sweep TF filtering ---
         sweep_tfs = MODE_SWEEP_TIMEFRAMES.get(self._mode, ("4h", "1h"))
@@ -806,6 +809,31 @@ class SMCDetectionService:
             logger.debug("Freshness recalc failed: %s", e)
 
         return order_blocks
+
+    def _update_fvg_fill(self, multi_tf_data: MultiTimeframeData, fvgs: List) -> List:
+        """Update FVG fill lifecycle using price action — mirrors OB mitigation."""
+        if not fvgs:
+            return fvgs
+
+        try:
+            ltf_df = (
+                multi_tf_data.timeframes.get("15m")
+                or multi_tf_data.timeframes.get("1H")
+                or multi_tf_data.timeframes.get("1h")
+            )
+            if ltf_df is not None and len(ltf_df) > 0:
+                fvgs, fill_status = update_fvg_fill_status(fvgs, ltf_df, max_fill=0.5)
+                if fill_status.fully_mitigated_count > 0 or fill_status.partially_mitigated_count > 0:
+                    logger.info(
+                        "🔲 FVG Fill: %d fully filled, %d partial, %d fresh",
+                        fill_status.fully_mitigated_count,
+                        fill_status.partially_mitigated_count,
+                        fill_status.fresh_count,
+                    )
+        except Exception as e:
+            logger.debug("FVG fill tracking failed: %s", e)
+
+        return fvgs
 
     def _log_liquidity_pools_summary(self, pools: List):
         """Log summary of graded liquidity pools."""

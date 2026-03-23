@@ -1,0 +1,128 @@
+════════════════════════════════════════════════════════════════════════
+  SNIPERSIGHT — ORDER BLOCK DIAGNOSTIC REPORT
+  Symbol: BTC/USDT  |  Timeframe: 4h  |  2026-03-22 19:58:51
+════════════════════════════════════════════════════════════════════════
+
+  DATASET
+────────────────────────────────────────────────────────────────────────
+  Candles:          500
+  Current Price:    67851.2900
+  Structural Breaks detected: 10
+
+  ⚡ BOS ORDERING BUG — GRADE A PIPELINE IMPACT
+────────────────────────────────────────────────────────────────────────
+  OBs with BOS detected FIRST (correct):  132
+  OBs with BOS detected AFTER (bug):      122
+  Grade A BOS-linked OBs killed by bug:   10
+  Impact: 7.6% of total raw OBs are Grade A that your
+          current code NEVER PRODUCES. Fix = reorder detection.
+
+  PIPELINE FUNNEL
+────────────────────────────────────────────────────────────────────────
+  Stage 1 — Raw detection (3 methods):  132
+    Rejection wick/engulfing:            112
+    Structural (swing cross):            10
+    BOS-linked Grade A:                  10
+  Stage 2 — Grade/mitigation/freshness: (pass-through)
+  Stage 3 — Overlap dedup (>70%):       82
+  Stage 4 — Active (mitigation filter): 14
+  → Active OBs feeding scorer:          14
+
+  ACTIVE OB BREAKDOWN
+────────────────────────────────────────────────────────────────────────
+  By grade:   A=14  B=0  C=0  (total=14)
+  By method:  rejection=11  structural=3  bos_linked=0
+  By dir:     bullish=3  bearish=11
+
+  DISPLACEMENT_ATR DISTRIBUTION (active OBs)
+────────────────────────────────────────────────────────────────────────
+   2.149- 2.409 │█████████████████████████████████████████████│   3 (21.4%)
+   2.409- 2.670 │███████████████                              │   1 ( 7.1%)
+   2.670- 2.930 │                                             │   0 ( 0.0%)
+   2.930- 3.190 │███████████████                              │   1 ( 7.1%)
+   3.190- 3.451 │                                             │   0 ( 0.0%)
+   3.451- 3.711 │███████████████                              │   1 ( 7.1%)
+   3.711- 3.971 │███████████████                              │   1 ( 7.1%)
+   3.971- 4.232 │                                             │   0 ( 0.0%)
+   4.232- 4.492 │                                             │   0 ( 0.0%)
+   4.492- 4.752 │                                             │   0 ( 0.0%)
+   4.752- 5.013 │███████████████                              │   1 ( 7.1%)
+   5.013- 5.273 │█████████████████████████████████████████████│   3 (21.4%)
+   5.273- 5.533 │                                             │   0 ( 0.0%)
+   5.533- 5.794 │███████████████                              │   1 ( 7.1%)
+   5.794- 6.054 │██████████████████████████████               │   2 (14.3%)
+
+  Stats: min=2.149  p25=2.646  median=4.466  p75=5.261  max=6.054
+
+  FRESHNESS DISTRIBUTION (active OBs)
+────────────────────────────────────────────────────────────────────────
+   0.001- 2.427 │█████████████████████████████████████████████│  12 (85.7%)
+   2.427- 4.853 │███                                          │   1 ( 7.1%)
+   4.853- 7.279 │                                             │   0 ( 0.0%)
+   7.279- 9.705 │                                             │   0 ( 0.0%)
+   9.705-12.131 │                                             │   0 ( 0.0%)
+  12.131-14.557 │                                             │   0 ( 0.0%)
+  14.557-16.983 │                                             │   0 ( 0.0%)
+  16.983-19.409 │                                             │   0 ( 0.0%)
+  19.409-21.835 │                                             │   0 ( 0.0%)
+  21.835-24.261 │                                             │   0 ( 0.0%)
+  24.261-26.687 │                                             │   0 ( 0.0%)
+  26.687-29.113 │                                             │   0 ( 0.0%)
+  29.113-31.539 │                                             │   0 ( 0.0%)
+  31.539-33.965 │                                             │   0 ( 0.0%)
+  33.965-36.391 │███                                          │   1 ( 7.1%)
+
+  MODE FILTER RESULTS  (timeframe=4h)
+────────────────────────────────────────────────────────────────────────
+
+  OVERWATCH (macro_surveillance)
+    TF check (4h):    ✓
+    max_mitigation:    0.3
+    min_freshness:     40.0
+    Surviving OBs:     0/14 (0.0%)  
+    Grades:            A=0  B=0  C=0
+    Methods:           rejection=0  structural=0  bos_linked=0
+
+  STEALTH (stealth_balanced)
+    TF check (4h):    ✓
+    max_mitigation:    0.4
+    min_freshness:     30.0
+    Surviving OBs:     1/14 (7.1%)  ▓▓▓
+    Grades:            A=1  B=0  C=0
+    Methods:           rejection=1  structural=0  bos_linked=0
+
+  STRIKE (intraday_aggressive)
+    TF check (4h):    ✗ TF MISMATCH
+    max_mitigation:    0.7
+    min_freshness:     20.0
+    Surviving OBs:     0/14 (0.0%)  
+    Grades:            A=0  B=0  C=0
+    Methods:           rejection=0  structural=0  bos_linked=0
+    ⚠️  STRIKE allows 70% mitigation — consider tightening to 0.5
+
+  SURGICAL (precision)
+    TF check (4h):    ✗ TF MISMATCH
+    max_mitigation:    0.5
+    min_freshness:     60.0
+    Surviving OBs:     0/14 (0.0%)  
+    Grades:            A=0  B=0  C=0
+    Methods:           rejection=0  structural=0  bos_linked=0
+
+  RECOMMENDATIONS FOR YOUR DATA
+────────────────────────────────────────────────────────────────────────
+  1. FIX BOS ORDERING BUG in smc_service.py:
+     Move detect_structural_breaks() BEFORE detect_obs_from_bos().
+     This immediately unlocks 10 Grade A OBs per 4h scan.
+
+  2. DISPLACEMENT_ATR thresholds from your data:
+     grade_a_threshold: 5.26  (p75 of active OBs)
+     grade_b_threshold: 3.74  (p40 of active OBs)
+     min_displacement:  2.22  (p15 — noise floor)
+
+  3. FRESHNESS thresholds from your data (4h):
+     OVERWATCH min_freshness: 0.0  (p60)
+     STEALTH   min_freshness: 0.0  (p40)
+     STRIKE    min_freshness: 0.0  (p20)
+     SURGICAL  min_freshness: 0.0  (p30 — not p60+)
+
+════════════════════════════════════════════════════════════════════════

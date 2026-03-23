@@ -1,0 +1,175 @@
+════════════════════════════════════════════════════════════════════════
+  SNIPERSIGHT — LIQUIDITY SWEEP DIAGNOSTIC REPORT
+  Symbol: BTC/USDT  |  Timeframe: 1m  |  2026-03-22 20:16:39
+════════════════════════════════════════════════════════════════════════
+
+  DATASET
+────────────────────────────────────────────────────────────────────────
+  Candles:          1000
+  Current Price:    67842.3700
+
+  PIPELINE FUNNEL
+────────────────────────────────────────────────────────────────────────
+  Total Sweeps Detected:  15
+    High Sweeps (Bearish Reversal): 8
+    Low Sweeps (Bullish Reversal):  7
+
+  QUALITY BREAKDOWN
+────────────────────────────────────────────────────────────────────────
+  By Grade:       A= 0   B= 0   C= 15 
+  By Conf Level:  L3= 3   L2= 3   L1= 7   L0= 2  
+  (L3=Climactic Vol, L2=Strong Vol, L1=Pattern Only, L0=None)
+  Reversal Pattern Found: 11 / 15
+
+════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════
+  SNIPERSIGHT — LIQUIDITY SWEEP DIAGNOSTIC REPORT
+  Symbol: BTC/USDT  |  Timeframe: 5m  |  2026-03-22 20:16:42
+════════════════════════════════════════════════════════════════════════
+
+  DATASET
+────────────────────────────────────────────────────────────────────────
+  Candles:          1000
+  Current Price:    67871.7600
+
+  PIPELINE FUNNEL
+────────────────────────────────────────────────────────────────────────
+  Total Sweeps Detected:  11
+    High Sweeps (Bearish Reversal): 3
+    Low Sweeps (Bullish Reversal):  8
+
+  QUALITY BREAKDOWN
+────────────────────────────────────────────────────────────────────────
+  By Grade:       A= 0   B= 0   C= 11 
+  By Conf Level:  L3= 2   L2= 0   L1= 7   L0= 2  
+  (L3=Climactic Vol, L2=Strong Vol, L1=Pattern Only, L0=None)
+  Reversal Pattern Found: 8 / 11
+
+════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════
+  SNIPERSIGHT — LIQUIDITY SWEEP DIAGNOSTIC REPORT
+  Symbol: BTC/USDT  |  Timeframe: 15m  |  2026-03-22 20:16:46
+════════════════════════════════════════════════════════════════════════
+
+  DATASET
+────────────────────────────────────────────────────────────────────────
+  Candles:          1000
+  Current Price:    67894.9100
+
+  PIPELINE FUNNEL
+────────────────────────────────────────────────────────────────────────
+  Total Sweeps Detected:  16
+    High Sweeps (Bearish Reversal): 12
+    Low Sweeps (Bullish Reversal):  4
+
+  QUALITY BREAKDOWN
+────────────────────────────────────────────────────────────────────────
+  By Grade:       A= 0   B= 0   C= 16 
+  By Conf Level:  L3= 3   L2= 1   L1= 9   L0= 3  
+  (L3=Climactic Vol, L2=Strong Vol, L1=Pattern Only, L0=None)
+  Reversal Pattern Found: 10 / 16
+
+════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════
+  SNIPERSIGHT — LIQUIDITY SWEEP DIAGNOSTIC REPORT
+  Symbol: BTC/USDT  |  Timeframe: 1h  |  2026-03-22 20:16:49
+════════════════════════════════════════════════════════════════════════
+
+  DATASET
+────────────────────────────────────────────────────────────────────────
+  Candles:          1000
+  Current Price:    67889.3200
+
+  PIPELINE FUNNEL
+────────────────────────────────────────────────────────────────────────
+  Total Sweeps Detected:  39
+    High Sweeps (Bearish Reversal): 21
+    Low Sweeps (Bullish Reversal):  18
+
+  QUALITY BREAKDOWN
+────────────────────────────────────────────────────────────────────────
+  By Grade:       A= 0   B= 0   C= 39 
+  By Conf Level:  L3= 9   L2= 7   L1= 13  L0= 10 
+  (L3=Climactic Vol, L2=Strong Vol, L1=Pattern Only, L0=None)
+  Reversal Pattern Found: 21 / 39
+
+════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════
+  SNIPERSIGHT — LIQUIDITY SWEEP DIAGNOSTIC REPORT
+  Symbol: BTC/USDT  |  Timeframe: 4h  |  2026-03-22 20:16:53
+════════════════════════════════════════════════════════════════════════
+
+  DATASET
+────────────────────────────────────────────────────────────────────────
+  Candles:          1000
+  Current Price:    67906.2800
+
+  PIPELINE FUNNEL
+────────────────────────────────────────────────────────────────────────
+  Total Sweeps Detected:  45
+    High Sweeps (Bearish Reversal): 26
+    Low Sweeps (Bullish Reversal):  19
+
+  QUALITY BREAKDOWN
+────────────────────────────────────────────────────────────────────────
+  By Grade:       A= 0   B= 0   C= 45 
+  By Conf Level:  L3= 2   L2= 8   L1= 23  L0= 12 
+  (L3=Climactic Vol, L2=Strong Vol, L1=Pattern Only, L0=None)
+  Reversal Pattern Found: 26 / 45
+
+════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════
+  SNIPERSIGHT — LIQUIDITY SWEEP DIAGNOSTIC REPORT
+  Symbol: BTC/USDT  |  Timeframe: 1d  |  2026-03-22 20:16:55
+════════════════════════════════════════════════════════════════════════
+
+  DATASET
+────────────────────────────────────────────────────────────────────────
+  Candles:          300
+  Current Price:    67895.7700
+
+  PIPELINE FUNNEL
+────────────────────────────────────────────────────────────────────────
+  Total Sweeps Detected:  17
+    High Sweeps (Bearish Reversal): 4
+    Low Sweeps (Bullish Reversal):  13
+
+  QUALITY BREAKDOWN
+────────────────────────────────────────────────────────────────────────
+  By Grade:       A= 0   B= 0   C= 17 
+  By Conf Level:  L3= 3   L2= 3   L1= 9   L0= 2  
+  (L3=Climactic Vol, L2=Strong Vol, L1=Pattern Only, L0=None)
+  Reversal Pattern Found: 11 / 17
+
+════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════
+  SNIPERSIGHT — LIQUIDITY SWEEP DIAGNOSTIC REPORT
+  Symbol: BTC/USDT  |  Timeframe: 1w  |  2026-03-22 20:16:58
+════════════════════════════════════════════════════════════════════════
+
+  DATASET
+────────────────────────────────────────────────────────────────────────
+  Candles:          100
+  Current Price:    67909.0000
+
+  PIPELINE FUNNEL
+────────────────────────────────────────────────────────────────────────
+  Total Sweeps Detected:  2
+    High Sweeps (Bearish Reversal): 2
+    Low Sweeps (Bullish Reversal):  0
+
+  QUALITY BREAKDOWN
+────────────────────────────────────────────────────────────────────────
+  By Grade:       A= 0   B= 0   C= 2  
+  By Conf Level:  L3= 0   L2= 0   L1= 1   L0= 1  
+  (L3=Climactic Vol, L2=Strong Vol, L1=Pattern Only, L0=None)
+  Reversal Pattern Found: 1 / 2
+
+════════════════════════════════════════════════════════════════════════
+
