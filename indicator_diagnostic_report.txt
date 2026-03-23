@@ -1,9 +1,9 @@
 ════════════════════════════════════════════════════════════════════════
   SNIPERSIGHT — INDICATOR DIAGNOSTIC REPORT
-  Symbol: BTC/USDT  |  TF: 15m  |  2026-03-22 22:03:28
+  Symbol: BTC/USDT  |  TF: 15m  |  2026-03-22 22:39:47
 ════════════════════════════════════════════════════════════════════════
 
-  DATASET  (500 candles, price=67903.8700)
+  DATASET  (500 candles, price=68213.9800)
 ────────────────────────────────────────────────────────────────────────
   NaN counts:       {'open': 0, 'high': 0, 'low': 0, 'close': 0, 'volume': 0}
   Zero volume:      0.0%  OK
@@ -15,35 +15,35 @@
 
   MOMENTUM
 ────────────────────────────────────────────────────────────────────────
-     RSI         latest=   45.6222  nan= 0.0%
-     StochRSI K  latest=   60.2465  nan= 0.4%
-     StochRSI D  latest=   66.4862  nan= 0.8%
-     MFI         latest=   55.9101  nan= 0.0%
-     MACD        latest= -117.1947  nan= 0.0%
-     MACD Sig    latest= -134.3502  nan= 0.0%
-     MACD Hist   latest=   17.1556  nan= 0.0%
-     ADX           latest=     31.85  +DI=11.95  -DI=21.25
+     RSI         latest=   59.6154  nan= 0.0%
+     StochRSI K  latest=   77.5981  nan= 0.4%
+     StochRSI D  latest=   66.3461  nan= 0.8%
+     MFI         latest=   53.5116  nan= 0.0%
+     MACD        latest=  -63.3347  nan= 0.0%
+     MACD Sig    latest= -113.1769  nan= 0.0%
+     MACD Hist   latest=   49.8422  nan= 0.0%
+     ADX           latest=     24.86  +DI=17.29  -DI=16.82
 
   VOLATILITY
 ────────────────────────────────────────────────────────────────────────
-     ATR          latest=    272.5922  (0.4014% of price)
-     BB Width     752.7606  (1.109% of price)
-     BB Upper      latest=  68359.1198  nan=3.8%
-     BB Mid        latest=  67982.7395  nan=3.8%
-     BB Lower      latest=  67606.3592  nan=3.8%
-     KC Upper      latest=  68532.5318  nan=0.0%
-     KC Mid        latest=  68018.9368  nan=0.0%
-     KC Lower      latest=  67505.3418  nan=0.0%
-     Realized Vol% latest=      4.5809  nan=4.0%
+     ATR          latest=    295.0799  (0.4326% of price)
+     BB Width     789.4509  (1.157% of price)
+     BB Upper      latest=  68415.5614  nan=3.8%
+     BB Mid        latest=   68020.836  nan=3.8%
+     BB Lower      latest=  67626.1106  nan=3.8%
+     KC Upper      latest=  68630.5624  nan=0.0%
+     KC Mid        latest=   68054.388  nan=0.0%
+     KC Lower      latest=  67478.2136  nan=0.0%
+     Realized Vol% latest=      5.2898  nan=4.0%
 
   VOLUME
 ────────────────────────────────────────────────────────────────────────
-     OBV          latest=     -551.6823  nan=0.0%
-     VWAP         latest=     70569.603  dev=3.93% from price
-     RVOL         latest=        0.2301
+     OBV          latest=     -562.1182  nan=0.0%
+     VWAP         latest=    70556.4736  dev=3.43% from price
+     RVOL         latest=        0.3035
      Vol Spikes   count=35  latest_bar=False
-     Current vol  4  avg20=18  RVOL=0.23x
-     Acceleration neutral  slope=-0.331  consec=0  active=False
+     Current vol  5  avg20=16  RVOL=0.304x
+     Acceleration neutral  slope=-0.029  consec=0  active=False
 
   DIVERGENCE
 ────────────────────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@
 
   5. CUMULATIVE VWAP DRIFT (volume.py)
      compute_vwap() without reset anchors from bar 1 of dataset.
-     Current deviation: 3.93%  |  For intraday, pass reset_period='D'
+     Current deviation: 3.43%  |  For intraday, pass reset_period='D'
 
   6. ZERO VOLUME THRESHOLD (validation_utils.py)
      Errors at >50%, warns at >10%. Current: 0.0%
@@ -85,12 +85,12 @@
 
   CURRENT SNAPSHOT
 ────────────────────────────────────────────────────────────────────────
-  Price:  67903.8700
-  RSI:    45.6222  (neutral)
-  MFI:    55.9101
-  StochK: 60.2465
-  ADX:    31.85  (trending)
-  ATR:    272.5922  (0.4014%)
-  RVOL:   0.23x
+  Price:  68213.9800
+  RSI:    59.6154  (neutral)
+  MFI:    53.5116
+  StochK: 77.5981
+  ADX:    24.86  (ranging)
+  ATR:    295.0799  (0.4326%)
+  RVOL:   0.304x
 
 ════════════════════════════════════════════════════════════════════════

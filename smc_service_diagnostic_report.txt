@@ -1,32 +1,28 @@
 ════════════════════════════════════════════════════════════════════════
   SNIPERSIGHT — SMC SERVICE DIAGNOSTIC REPORT
-  Symbol: BTC/USDT  |  Mode: STRIKE  |  2026-03-22 21:11:35
+  Symbol: test_data  |  Mode: STRIKE  |  2026-03-22 22:30:11
 ════════════════════════════════════════════════════════════════════════
 
   PER-TIMEFRAME DETECTION SUMMARY
 ────────────────────────────────────────────────────────────────────────
   TF     Cndles   ATR%  OBraw  OBact  OBmode  FVGraw  FVGmode  BOS  CHoCH  Sweeps
   ------ ------ ------ ------ ------ ------- ------- -------- ---- ------ -------
-  5m        500  0.267    132     19      10     112       62   14      1       0
-  15m       500  0.504    145     27      13      92       52   12      1      14
-  1h        300  0.775     74      7       6      54       28   11      1      13
-  4h        200  1.316     50      5       0      38       25    3      1       0
-  1d        100  3.566     19      6       0      21       13    0      0       0
+  15m       100 7836.619     15      4       4     102       80    2      0       4
 
   ⚡ BOS ORDERING BUG — GRADE A PIPELINE
 ────────────────────────────────────────────────────────────────────────
-  Grade A BOS-linked OBs lost to bug (all TFs): 43
-  As % of all raw OBs:  10.2%  ▓▓▓
+  Grade A BOS-linked OBs lost to bug (all TFs): 2
+  As % of all raw OBs:  13.3%  ▓▓▓▓
   Fix: Move detect_structural_breaks() BEFORE detect_obs_from_bos()
        in _detect_timeframe_patterns(). One reorder, instant fix.
 
   🔁 DOUBLE-CALL WASTE
 ────────────────────────────────────────────────────────────────────────
   FVG detection called TWICE per TF (once for stats, once filtered).
-  Total FVG detections wasted: 317 across 5 timeframes
+  Total FVG detections wasted: 102 across 1 timeframes
   Sweep detection called TWICE per TF (same pattern).
-  Total sweep detections wasted: 62 across 5 timeframes
-  Fix: Run once, capture len() before mode filter. Save ~379 iterations/scan.
+  Total sweep detections wasted: 4 across 1 timeframes
+  Fix: Run once, capture len() before mode filter. Save ~106 iterations/scan.
 
   🕳  FVG MITIGATION NEVER UPDATED
 ────────────────────────────────────────────────────────────────────────
@@ -34,45 +30,33 @@
   → freshness recalc → staleness filter.
   FVGs get: initial overlap_with_price at detection time. Nothing after.
   update_fvg_fill_status() exists in mitigation_tracker.py but is NEVER called.
-  FVGs with potential stale fill on current data: 180
+  FVGs with potential stale fill on current data: 22
   Fix: Add _update_fvg_status() alongside _update_mitigation() in detect().
 
   🔗 CROSS-TF HTF BACKING FILTER
 ────────────────────────────────────────────────────────────────────────
-  HTF zones built:     84  (OBs + FVGs from HTF timeframes)
-  LTF OBs evaluated:   46
-  LTF OBs backed:      40  (87.0%)
-  Grade A bypass:      6
-  LTF OBs rejected:    0  (0.0%)
-  Final validated OBs: 64
+  HTF zones built:     0  (OBs + FVGs from HTF timeframes)
+  LTF OBs evaluated:   4
+  LTF OBs backed:      0  (0.0%)
+  Grade A bypass:      2
+  LTF OBs rejected:    2  (50.0%)
+  Final validated OBs: 2
 
   🎯 MODE OB FILTER DETAIL  (mode=STRIKE)
 ────────────────────────────────────────────────────────────────────────
   Allowed TFs:     ['15m', '1H', '1h', '5m']
   max_mitigation:  0.7
   min_freshness:   20.0
-  5m      TF:✓              active→mode: 19→10  grades A=10 B=0 C=0
-  15m     TF:✓              active→mode: 27→13  grades A=13 B=0 C=0
-  1h      TF:✓              active→mode: 7→6  grades A=6 B=0 C=0
-  4h      TF:✗ TF MISMATCH  active→mode: 5→0  grades A=0 B=0 C=0
-  1d      TF:✗ TF MISMATCH  active→mode: 6→0  grades A=0 B=0 C=0
+  15m     TF:✓              active→mode: 4→4  grades A=2 B=1 C=1
 
   🔲 FVG FILTER DETAIL  (mode=STRIKE)
 ────────────────────────────────────────────────────────────────────────
-  5m      raw=112 → mode= 62 (55% survive, min_atr≥0.2)  A=1 B=26 C=35
-  15m     raw= 92 → mode= 52 (57% survive, min_atr≥0.2)  A=1 B=21 C=30
-  1h      raw= 54 → mode= 28 (52% survive, min_atr≥0.2)  A=1 B=7 C=20
-  4h      raw= 38 → mode= 25 (66% survive, min_atr≥0.2)  A=0 B=10 C=15
-  1d      raw= 21 → mode= 13 (62% survive, min_atr≥0.2)  A=0 B=7 C=6
+  15m     raw=102 → mode= 80 (78% survive, min_atr≥0.2)  A=2 B=56 C=22
 
   💧 SWEEP TF FILTER  (mode=STRIKE)
 ────────────────────────────────────────────────────────────────────────
   Allowed sweep TFs: ['15m', '1H', '1h']
-  5m      raw= 18 → mode=  0  ✗ filtered out  A=0 B=0 C=0
-  15m     raw= 14 → mode= 14  ✓  A=0 B=2 C=12
-  1h      raw= 13 → mode= 13  ✓  A=2 B=4 C=7
-  4h      raw= 16 → mode=  0  ✗ filtered out  A=0 B=0 C=0
-  1d      raw=  1 → mode=  0  ✗ filtered out  A=0 B=0 C=0
+  15m     raw=  4 → mode=  4  ✓  A=0 B=1 C=3
 
   🐛 SWEEP RANGE POSITION FILTER BUG
 ────────────────────────────────────────────────────────────────────────
@@ -86,10 +70,10 @@
 
   KNOWN ISSUES SUMMARY
 ────────────────────────────────────────────────────────────────────────
-  [P1] BOS ordering bug                         → 43 Grade A OBs dead every scan cycle
-  [P1] FVG mitigation never updated             → 180 potentially stale FVGs feeding scorer
-  [P2] FVG double-call                          → 317 wasted FVG iterations per cycle
-  [P2] Sweep double-call                        → 62 wasted sweep iterations per cycle
+  [P1] BOS ordering bug                         → 2 Grade A OBs dead every scan cycle
+  [P1] FVG mitigation never updated             → 22 potentially stale FVGs feeding scorer
+  [P2] FVG double-call                          → 102 wasted FVG iterations per cycle
+  [P2] Sweep double-call                        → 4 wasted sweep iterations per cycle
   [P2] Sweep range filter (pass bug)            → 100% of sweep levels checked — filter is dead
   [P3] Sweep only checks last swing             → 2 of 3 valid swing levels discarded per candle
   [P3] Sweep reversal: close only               → Wick-confirmed reversals missed entirely
@@ -97,8 +81,8 @@
 
   RECOMMENDATIONS FROM YOUR DATA
 ────────────────────────────────────────────────────────────────────────
-  OB displacement_atr (active): p25=2.85  median=4.11  p75=5.90
-    grade_a_threshold: 5.90  grade_b_threshold: 3.56
-  FVG gap_atr (mode-filtered):  p25=0.295  median=0.418  p75=0.709
+  OB displacement_atr (active): p25=-0.22  median=0.06  p75=0.53
+    grade_a_threshold: 0.53  grade_b_threshold: 0.02
+  FVG gap_atr (mode-filtered):  p25=0.477  median=0.735  p75=1.011
 
 ════════════════════════════════════════════════════════════════════════

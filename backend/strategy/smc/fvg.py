@@ -241,7 +241,20 @@ def detect_fvgs(
         decay_factor = _get_freshness_decay_factor(tf_str)
 
         for i, fvg in enumerate(fvgs):
-            overlap = check_price_overlap(current_price, fvg)
+            # Get candles after the FVG formation to find the maximum fill (mitigation)
+            future_pd = df.index > fvg.timestamp
+            if future_pd.any():
+                future_candles = df[future_pd]
+                if fvg.direction == "bullish":
+                    # Bullish FVG: retested from above, so lowest price determines the fill
+                    relevant_price = future_candles["low"].min()
+                else:
+                    # Bearish FVG: retested from below, so highest price determines the fill
+                    relevant_price = future_candles["high"].max()
+                
+                overlap = check_price_overlap(relevant_price, fvg)
+            else:
+                overlap = 0.0
 
             # Calculate freshness based on candles since formation
             candles_since = len(df[df.index > fvg.timestamp])

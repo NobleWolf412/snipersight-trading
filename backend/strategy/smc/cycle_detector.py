@@ -591,22 +591,21 @@ def _determine_phase(
 
     # Determine phase based on timing and price position.
     # Conditions are strictly non-overlapping so the first match wins cleanly.
-
-    # Falling price after confirmed high — evaluate BEFORE distribution/markup
-    # so a retrace from an established high doesn't mis-classify as distribution.
     if high_price and current_price < high_price * 0.95 and price_position < 0.5:
+        # Falling price after confirmed high — evaluate BEFORE distribution/markup
+        # so a retrace from an established high doesn't mis-classify as distribution.
         return CyclePhase.MARKDOWN
 
-    # Early in cycle (first third of timing) + near lows = accumulation
-    if dcl_days <= config.dcl_early_zone and price_position < 0.3:
+    elif dcl_days <= config.dcl_early_zone and price_position < 0.3:
+        # Early in cycle (first third of timing) + near lows = accumulation
         return CyclePhase.ACCUMULATION
 
-    # Late timing or high price position = distribution
-    if price_position > 0.7 or dcl_days >= config.dcl_max_days:
+    elif price_position > 0.7 or dcl_days >= config.dcl_max_days:
+        # Late timing or high price position = distribution
         return CyclePhase.DISTRIBUTION
 
-    # Middle timing + rising price = markup (0.3 – 0.7 range)
-    if 0.3 <= price_position <= 0.7 and dcl_days < config.dcl_max_days:
+    elif 0.3 <= price_position <= 0.7 and dcl_days < config.dcl_max_days:
+        # Middle timing + rising price = markup (0.3 – 0.7 range)
         return CyclePhase.MARKUP
 
     return CyclePhase.UNKNOWN
