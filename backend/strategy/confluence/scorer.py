@@ -4450,9 +4450,13 @@ def _calculate_synergy_bonus(
         bonus = -8.0 - (excess * 0.4)
         logger.debug("Synergy diminishing applied (negative): excess %.1f -> %.1f", excess, excess * 0.4)
 
-    # Mode-aware synergy cap (symmetric: clamp both positive and negative)
+    # Mode-aware synergy cap.
+    # Clamp to [0, cap]: synergy_bonus is additive-only in the scoring formula.
+    # Negative cycle penalties (Gate 1/2) reduce synergy to 0 at worst — they
+    # don't push the value below zero. Actual opposing-signal penalization lives
+    # in _calculate_conflict_penalty, which has its own validated channel.
     cap = MODE_SYNERGY_CAPS.get(profile, 12.0)
-    result = max(-cap, min(bonus, cap))
+    result = max(0.0, min(bonus, cap))
     logger.debug("Synergy bonus: %.1f (cap=%.1f for %s mode)", result, cap, profile)
     return result
 
@@ -4517,9 +4521,42 @@ def _calculate_conflict_penalty(
             penalty += 8.0
             logger.debug("HTF neutral penalty: score %.1f → +8", htf_factor.score)
 
+    # === OPPOSING STRUCTURAL BREAK PENALTY ===
+    # BOS/CHoCH in the opposite direction of the trade is a direct structural conflict.
+    # Previously this was never checked — opposing breaks were silently ignored.
+    if smc:
+        breaks = getattr(smc, "structural_breaks", []) or []
+        opposing_dir = "bearish" if direction in ("bullish", "long", "LONG") else "bullish"
+        opposing_breaks = [b for b in breaks if getattr(b, "direction", "") == opposing_dir]
+        aligned_breaks  = [b for b in breaks if getattr(b, "direction", "") != opposing_dir]
+
+        if opposing_breaks:
+            # Grade the worst opposing break (A = most concerning)
+            best_opposing_grade = min(
+                (getattr(b, "grade", "C") for b in opposing_breaks),
+                key=lambda g: {"A": 0, "B": 1, "C": 2}.get(g, 2),
+            )
+            # Penalty is higher when opposing break outgrades or equals the aligned structure
+            best_aligned_grade = min(
+                (getattr(b, "grade", "C") for b in aligned_breaks),
+                key=lambda g: {"A": 0, "B": 1, "C": 2}.get(g, 2),
+            ) if aligned_breaks else "C"
+
+            grade_order = {"A": 0, "B": 1, "C": 2}
+            if grade_order[best_opposing_grade] <= grade_order[best_aligned_grade]:
+                struct_conflict_penalty = 12.0  # Opposing at least as strong as aligned
+            else:
+                struct_conflict_penalty = 6.0   # Opposing weaker grade than aligned
+
+            penalty += struct_conflict_penalty
+            logger.debug(
+                "Opposing structure penalty: %d %s break(s) [best grade %s] → +%.1f",
+                len(opposing_breaks), opposing_dir, best_opposing_grade, struct_conflict_penalty,
+            )
+
     # Cap penalty to 35 (limit downside impact)
     penalty = min(penalty, 35.0)
-    
+
     # === APPLY CONFLUENCE OVERRIDE ===
     # Strong confluence can reduce or eliminate penalties
     if smc and mode_config and penalty > 0:
