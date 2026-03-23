@@ -1398,6 +1398,7 @@ class Orchestrator:
                 # Build the payload with all available data
                 payload = {
                     "symbol": symbol,
+                    "direction": "LONG" if bull_score >= bear_score else "SHORT",
                     "reason": error_msg,
                     "reason_type": "low_confluence",
                     "detail": "Bullish and bearish confluence scores too close to determine direction",
@@ -1556,6 +1557,7 @@ class Orchestrator:
 
             return None, {
                 "symbol": symbol,
+                "direction": context.metadata.get("chosen_direction", "LONG"),
                 "reason_type": "low_confluence",
                 "reason": readable_reason,
                 "score": score,
@@ -1798,6 +1800,7 @@ class Orchestrator:
             reason = context.metadata.get("plan_failure_reason", "No trade plan generated")
             return None, {
                 "symbol": symbol,
+                "direction": context.metadata.get("chosen_direction", "LONG"),
                 "reason": reason,
                 "reason_type": "risk_validation" if "revalidation" in reason else "no_trade_plan",
                 "details": {"context": context.metadata},

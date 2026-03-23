@@ -2664,7 +2664,7 @@ def calculate_confluence_score(
         synergy_bonus=synergy_bonus,
         conflict_penalty=conflict_penalty,
         regime=_detect_regime(smc_snapshot, indicators),
-        htf_aligned=any(f.name == "HTF Alignment" and f.score > 55 for f in factors),
+        htf_aligned=any(f.name in ("HTF Alignment", "HTF Structure Bias") and f.score > 55 for f in factors),
         btc_impulse_gate=not any(f.name == "BTC Impulse Gate" and f.score < 50 for f in factors),
         weekly_stoch_rsi_gate=True,
         weekly_stoch_rsi_bonus=next((f.score-50 for f in factors if f.name == "Weekly StochRSI Bonus"), 0.0),

@@ -275,23 +275,27 @@ class ConfluenceService:
                             )
 
 
-                    if regime_trend == "bearish":
+                    # SymbolRegime.trend uses "strong_up"/"up"/"sideways"/"down"/"strong_down"
+                    # — NOT "bearish"/"bullish". Fixed to match actual SymbolRegime vocab.
+                    if regime_trend in ("down", "strong_down"):
                         chosen = bearish_breakdown
                         chosen_direction = "SHORT"
                         tie_break_used = "regime_bearish"
                         logger.info(
-                            "🔄 %s TIE (%.1f) broken by regime: SHORT (bearish regime)",
+                            "🔄 %s TIE (%.1f) broken by regime: SHORT (%s regime)",
                             context.symbol,
                             bearish_breakdown.total_score,
+                            regime_trend,
                         )
-                    elif regime_trend == "bullish":
+                    elif regime_trend in ("up", "strong_up"):
                         chosen = bullish_breakdown
                         chosen_direction = "LONG"
                         tie_break_used = "regime_bullish"
                         logger.info(
-                            "🔄 %s TIE (%.1f) broken by regime: LONG (bullish regime)",
+                            "🔄 %s TIE (%.1f) broken by regime: LONG (%s regime)",
                             context.symbol,
                             bullish_breakdown.total_score,
+                            regime_trend,
                         )
                     else:
                         # True neutral with tied scores - MODE-AWARE behavior
