@@ -10,6 +10,7 @@ These patterns identify shifts in market structure and potential trend changes.
 
 from typing import List, Optional, Tuple, TYPE_CHECKING
 from datetime import datetime
+import bisect
 import pandas as pd
 
 from backend.shared.models.smc import StructuralBreak, grade_pattern
@@ -20,12 +21,16 @@ if TYPE_CHECKING:
     from backend.shared.models.smc import CycleContext
 
 
-# Flag to enable 4-swing pattern validation.
-# NOTE: _build_swing_sequence and _detect_bos_choch_pattern are fully implemented but
-# require per-candle sequence slicing to work correctly (sequence must be filtered to
-# <= current_idx at each iteration). That wiring is not yet done — simple trend tracking
-# is active. Set True only after per-candle wiring is implemented.
-USE_4SWING_PATTERN = False
+# Mode-aware 4-swing structural validation.
+# "4swing" modes require a confirmed alternating swing sequence (e.g. [-1,1,-1,1]) plus
+# ascending/descending structure before accepting a break. "simple" modes use close vs
+# last swing level only — faster but noisier.
+MODE_BOS_VALIDATION = {
+    "macro_surveillance": "4swing",    # OVERWATCH — institutional quality, sequence required
+    "stealth_balanced":   "4swing",    # STEALTH — quality intraday breaks
+    "intraday_aggressive": "simple",   # STRIKE — speed first, confirmation second
+    "precision":          "simple",    # SURGICAL — scalp speed, simple detection
+}
 
 
 # Mode-specific volume confirmation requirements
@@ -280,6 +285,20 @@ def detect_structural_breaks(
     swing_highs = _detect_swing_highs(df, swing_lookback)
     swing_lows = _detect_swing_lows(df, swing_lookback)
 
+    # Determine if this mode uses 4-swing structural validation
+    use_4swing = (
+        mode_profile is not None
+        and MODE_BOS_VALIDATION.get(mode_profile) == "4swing"
+    )
+
+    # Pre-build swing sequence for per-candle 4-swing validation.
+    # Built once upfront; each candle slices it with bisect (O(log n)) to get the
+    # visible sequence up to that point in time.
+    if use_4swing:
+        _hl_order, _level_order, _idx_order = _build_swing_sequence(swing_highs, swing_lows)
+    else:
+        _hl_order, _level_order, _idx_order = [], [], []
+
     # Track market structure and detect breaks
     structural_breaks = []
 
@@ -328,157 +347,123 @@ def detect_structural_breaks(
             volume_ratio = current_volume / avg_volume.iloc[i]
             volume_confirmed = volume_ratio >= 1.5  # 1.5x average = confirmed
 
+        # 4-swing structural pattern check.
+        # Called once per candle; result drives detection for 4-swing modes.
+        # bisect_right into the pre-sorted index gives the visible slice in O(log n).
+        _4swing_break_type, _4swing_direction, _4swing_level = None, None, 0.0
+        if use_4swing and len(_idx_order) >= 4:
+            pos = bisect.bisect_right(_idx_order, current_idx)
+            if pos >= 4:
+                _4swing_break_type, _4swing_direction, _4swing_level, _ = _detect_bos_choch_pattern(
+                    _hl_order[:pos], _level_order[:pos], _idx_order[:pos],
+                    current_close, current_high, current_low,
+                )
+
+        # ─── Helpers to resolve the detection condition and broken level per mode ────
+        # For 4-swing modes: pattern result IS the detection — no simple price check needed.
+        # For simple modes: state-machine price check as before.
+        # In both cases a shared body handles grade/volume/HTF/emit below.
+        def _bos_triggered(direction: str) -> tuple:
+            """Returns (fired: bool, level: float, break_dist: float)"""
+            if use_4swing:
+                if _4swing_break_type == "BOS" and _4swing_direction == direction:
+                    dist = abs(current_close - _4swing_level)
+                    return True, _4swing_level, dist
+                return False, 0.0, 0.0
+            else:
+                ref = last_swing_high if direction == "bullish" else last_swing_low
+                dist = (current_close - ref) if direction == "bullish" else (ref - current_close)
+                return dist > min_break, ref, dist
+
+        def _choch_triggered(direction: str) -> tuple:
+            """Returns (fired: bool, level: float, break_dist: float)"""
+            if use_4swing:
+                if _4swing_break_type == "CHoCH" and _4swing_direction == direction:
+                    dist = abs(current_close - _4swing_level)
+                    return True, _4swing_level, dist
+                return False, 0.0, 0.0
+            else:
+                ref = last_swing_low if direction == "bearish" else last_swing_high
+                dist = (ref - current_close) if direction == "bearish" else (current_close - ref)
+                return dist > min_break, ref, dist
+        # ─────────────────────────────────────────────────────────────────────────────
+
         # Check for breaks in uptrend
         if current_trend == "uptrend":
-            # BOS: Break above previous swing high (continuation)
-            # Require minimum break distance to filter noise
-            break_distance = current_close - last_swing_high
-            if break_distance > min_break:  # FIXED: Enforce minimum break distance
-                # Calculate break in ATR units for grading
-                break_atr = break_distance / atr_value if atr_value > 0 else 0.0
+            # BOS: continuation break above prior swing high
+            _fired, _level, _dist = _bos_triggered("bullish")
+            if _fired:
+                break_atr = _dist / atr_value if atr_value > 0 else 0.0
                 grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
-
-                # Volume boost: Upgrade grade if volume confirmed (2x+ volume)
                 if volume_confirmed and volume_ratio >= 2.0:
-                    # Strong volume confirmation: upgrade B->A, C->B
-                    if grade == "B":
-                        grade = "A"
-                    elif grade == "C":
-                        grade = "B"
-
-                # HTF alignment: BOS in uptrend aligns if HTF is also uptrend or unknown
+                    grade = "A" if grade == "B" else ("B" if grade == "C" else grade)
                 htf_aligned = _check_bos_htf_alignment("uptrend", computed_htf_trend)
-
-                # NEW: Mode-specific volume filtering (Gap #4)
                 if mode_profile and mode_profile in MODE_VOLUME_REQUIREMENTS:
                     vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
                     if vol_req.get("require_volume") and "BOS" in vol_req.get("apply_to", []):
                         if volume_ratio < vol_req["min_volume_ratio"]:
-                            continue  # Skip weak BOS without sufficient volume
-
-                structural_break = StructuralBreak(
-                    timeframe=_infer_timeframe(df),
-                    break_type="BOS",
-                    direction="bullish",  # BOS in uptrend = bullish continuation
-                    level=last_swing_high,
-                    timestamp=current_idx.to_pydatetime(),
-                    htf_aligned=htf_aligned,
-                    grade=grade,
-                )
-                structural_breaks.append(structural_break)
-
-                # CRITICAL: Update last_swing_high to current high to prevent
-                # duplicate BOS triggers on the same level
+                            continue
+                structural_breaks.append(StructuralBreak(
+                    timeframe=_infer_timeframe(df), break_type="BOS", direction="bullish",
+                    level=_level, timestamp=current_idx.to_pydatetime(),
+                    htf_aligned=htf_aligned, grade=grade,
+                ))
                 last_swing_high = current_high
 
-            # CHoCH: Break below previous swing low (reversal)
-            # Require minimum break distance to filter noise
-            break_distance = last_swing_low - current_close
-            if break_distance > min_break:  # FIXED: Enforce minimum break distance
-                # Calculate break in ATR units for grading
-                break_atr = break_distance / atr_value if atr_value > 0 else 0.0
+            # CHoCH: reversal break below prior swing low
+            _fired, _level, _dist = _choch_triggered("bearish")
+            if _fired:
+                break_atr = _dist / atr_value if atr_value > 0 else 0.0
                 grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
-
-                # Volume boost: Upgrade grade if volume confirmed (2x+ volume)
                 if volume_confirmed and volume_ratio >= 2.0:
-                    # Strong volume confirmation: upgrade B->A, C->B
-                    if grade == "B":
-                        grade = "A"
-                    elif grade == "C":
-                        grade = "B"
-
-                # HTF alignment: CHoCH in uptrend aligns if HTF is downtrend
-                # Or bypassed if at cycle extreme (structure broken at cycle low/high)
-                htf_aligned = _check_choch_htf_alignment(
-                    "uptrend", computed_htf_trend, cycle_context
-                )
-
-                # Mode-specific volume filtering — gates the SIGNAL only, not the trend flip.
-                # Using continue here would lock the state machine in "uptrend" indefinitely
-                # during low-volume breakdowns (e.g. grinding bear markets).
+                    grade = "A" if grade == "B" else ("B" if grade == "C" else grade)
+                htf_aligned = _check_choch_htf_alignment("uptrend", computed_htf_trend, cycle_context)
+                # Signal gate: volume and 4-swing both gate the signal; trend flip is unconditional.
                 skip_signal = False
                 if mode_profile and mode_profile in MODE_VOLUME_REQUIREMENTS:
                     vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
                     if vol_req.get("require_volume") and "CHoCH" in vol_req.get("apply_to", []):
                         if volume_ratio < vol_req["min_volume_ratio"]:
-                            skip_signal = True  # No signal emitted but trend flip still executes
-
+                            skip_signal = True
                 if not skip_signal:
-                    structural_break = StructuralBreak(
-                        timeframe=_infer_timeframe(df),
-                        break_type="CHoCH",
-                        direction="bearish",  # CHoCH in uptrend = turning bearish
-                        level=last_swing_low,
-                        timestamp=current_idx.to_pydatetime(),
-                        htf_aligned=htf_aligned,
-                        grade=grade,
-                    )
-                    structural_breaks.append(structural_break)
-
-                # CRITICAL: Trend flip and swing update execute regardless of volume filter.
-                # Price has broken structure whether or not volume confirmed it.
+                    structural_breaks.append(StructuralBreak(
+                        timeframe=_infer_timeframe(df), break_type="CHoCH", direction="bearish",
+                        level=_level, timestamp=current_idx.to_pydatetime(),
+                        htf_aligned=htf_aligned, grade=grade,
+                    ))
+                # CRITICAL: trend flip is unconditional — price broke structure regardless of signal gate
                 current_trend = "downtrend"
                 last_swing_low = current_low
 
         # Check for breaks in downtrend
         elif current_trend == "downtrend":
-            # BOS: Break below previous swing low (continuation)
-            # Require minimum break distance to filter noise
-            break_distance = last_swing_low - current_close
-            if break_distance > min_break:  # FIXED: Enforce minimum break distance
-                # Calculate break in ATR units for grading
-                break_atr = break_distance / atr_value if atr_value > 0 else 0.0
+            # BOS: continuation break below prior swing low
+            _fired, _level, _dist = _bos_triggered("bearish")
+            if _fired:
+                break_atr = _dist / atr_value if atr_value > 0 else 0.0
                 grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
-
-                # Volume boost: Upgrade grade if volume confirmed (2x+ volume)
                 if volume_confirmed and volume_ratio >= 2.0:
-                    # Strong volume confirmation: upgrade B->A, C->B
-                    if grade == "B":
-                        grade = "A"
-                    elif grade == "C":
-                        grade = "B"
-
-                # HTF alignment: BOS in downtrend aligns if HTF is also downtrend or unknown
+                    grade = "A" if grade == "B" else ("B" if grade == "C" else grade)
                 htf_aligned = _check_bos_htf_alignment("downtrend", computed_htf_trend)
-
-                # Mode-specific volume filtering — safe to use continue here since
-                # bearish BOS does not flip trend state
                 if mode_profile and mode_profile in MODE_VOLUME_REQUIREMENTS:
                     vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
                     if vol_req.get("require_volume") and "BOS" in vol_req.get("apply_to", []):
                         if volume_ratio < vol_req["min_volume_ratio"]:
-                            continue  # Skip weak bearish BOS without sufficient volume
-
-                structural_break = StructuralBreak(
-                    timeframe=_infer_timeframe(df),
-                    break_type="BOS",
-                    direction="bearish",  # BOS in downtrend = bearish continuation
-                    level=last_swing_low,
-                    timestamp=current_idx.to_pydatetime(),
-                    htf_aligned=htf_aligned,
-                    grade=grade,
-                )
-                structural_breaks.append(structural_break)
-
-                # CRITICAL: Update last_swing_low to current low to prevent
-                # duplicate BOS triggers on the same level
+                            continue
+                structural_breaks.append(StructuralBreak(
+                    timeframe=_infer_timeframe(df), break_type="BOS", direction="bearish",
+                    level=_level, timestamp=current_idx.to_pydatetime(),
+                    htf_aligned=htf_aligned, grade=grade,
+                ))
                 last_swing_low = current_low
 
-            # CHoCH: Break above previous swing high (reversal)
-            # Require minimum break distance to filter noise
-            break_distance = current_close - last_swing_high
-            if break_distance > min_break:  # FIXED: Enforce minimum break distance
-                # Calculate break in ATR units for grading
-                break_atr = break_distance / atr_value if atr_value > 0 else 0.0
+            # CHoCH: reversal break above prior swing high
+            _fired, _level, _dist = _choch_triggered("bullish")
+            if _fired:
+                break_atr = _dist / atr_value if atr_value > 0 else 0.0
                 grade = grade_pattern(break_atr, grade_a_threshold, grade_b_threshold)
-
-                # Volume boost: Upgrade grade if volume confirmed (2x+ volume)
                 if volume_confirmed and volume_ratio >= 2.0:
-                    # Strong volume confirmation: upgrade B->A, C->B
-                    if grade == "B":
-                        grade = "A"
-                    elif grade == "C":
-                        grade = "B"
+                    grade = "A" if grade == "B" else ("B" if grade == "C" else grade)
 
                 # HTF alignment: CHoCH in downtrend aligns if HTF is uptrend
                 # Or bypassed if at cycle extreme (structure broken at cycle low/high)
@@ -486,26 +471,25 @@ def detect_structural_breaks(
                     "downtrend", computed_htf_trend, cycle_context
                 )
 
-                # Mode-specific volume filtering — gates the SIGNAL only, not the trend flip.
-                # Same pattern as uptrend CHoCH: trend flip is unconditional.
+                # Signal gate: volume only — 4-swing is already handled by _choch_triggered.
+                # Trend flip is unconditional regardless of skip_signal.
                 skip_signal = False
                 if mode_profile and mode_profile in MODE_VOLUME_REQUIREMENTS:
                     vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
                     if vol_req.get("require_volume") and "CHoCH" in vol_req.get("apply_to", []):
                         if volume_ratio < vol_req["min_volume_ratio"]:
-                            skip_signal = True  # No signal emitted but trend flip still executes
+                            skip_signal = True
 
                 if not skip_signal:
-                    structural_break = StructuralBreak(
+                    structural_breaks.append(StructuralBreak(
                         timeframe=_infer_timeframe(df),
                         break_type="CHoCH",
                         direction="bullish",  # CHoCH in downtrend = turning bullish
-                        level=last_swing_high,
+                        level=_level,
                         timestamp=current_idx.to_pydatetime(),
                         htf_aligned=htf_aligned,
                         grade=grade,
-                    )
-                    structural_breaks.append(structural_break)
+                    ))
 
                 # CRITICAL: Trend flip and swing update execute regardless of volume filter.
                 current_trend = "uptrend"

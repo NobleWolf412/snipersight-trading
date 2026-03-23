@@ -1,0 +1,221 @@
+════════════════════════════════════════════════════════════════════════
+  SNIPERSIGHT — REVERSAL DETECTOR DIAGNOSTIC
+════════════════════════════════════════════════════════════════════════
+
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+  DIRECTION: LONG (bullish)
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+
+  CONFIDENCE SURFACE — all 16 component combinations
+────────────────────────────────────────────────────────────────────────
+  Combo                        Comps    Conf  Valid  HTFByp  Bar
+  ---------------------------- -----  ------  -----  ------  ----------------------------------------
+   cycle   choch   vol   sweep      0     35%      ✗       -  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+   cycle   choch   vol  [sweep]     1     60%      ✓       -  ████████████████████████░░░░░░░░░░░░░░░░
+   cycle   choch  [vol]  sweep      1     60%      ✓       -  ████████████████████████░░░░░░░░░░░░░░░░
+   cycle   choch  [vol] [sweep]     2     85%      ✓       -  ██████████████████████████████████░░░░░░
+   cycle  [choch]  vol   sweep      1     60%      ✓       -  ████████████████████████░░░░░░░░░░░░░░░░
+   cycle  [choch]  vol  [sweep]     2     85%      ✓       ✓  ██████████████████████████████████░░░░░░
+   cycle  [choch] [vol]  sweep      2     85%      ✓       ✓  ██████████████████████████████████░░░░░░
+   cycle  [choch] [vol] [sweep]     3    100%      ✓       ✓  ████████████████████████████████████████
+  [cycle]  choch   vol   sweep      1     45%      ✗       -  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  [cycle]  choch   vol  [sweep]     2     70%      ✓       -  ████████████████████████████░░░░░░░░░░░░
+  [cycle]  choch  [vol]  sweep      2     70%      ✓       -  ████████████████████████████░░░░░░░░░░░░
+  [cycle]  choch  [vol] [sweep]     3     95%      ✓       -  ██████████████████████████████████████░░
+  [cycle] [choch]  vol   sweep      2     70%      ✓       -  ████████████████████████████░░░░░░░░░░░░
+  [cycle] [choch]  vol  [sweep]     3     95%      ✓       ✓  ██████████████████████████████████████░░
+  [cycle] [choch] [vol]  sweep      3     95%      ✓       ✓  ██████████████████████████████████████░░
+  [cycle] [choch] [vol] [sweep]     4    100%      ✓       ✓  ████████████████████████████████████████
+
+  Valid setups:  14/16
+  HTF bypass:    6/16
+  Conf range:    60% – 100%
+  Conf median:   85%
+
+  DEAD ZONES (combos that never fire)
+────────────────────────────────────────────────────────────────────────
+   cycle   choch   vol   sweep   → cycle_aligned=False (hard gate)
+  [cycle]  choch   vol   sweep   → only 1 component(s) — needs ≥2
+
+  MODE PROFILE GATE MATRIX
+────────────────────────────────────────────────────────────────────────
+  Combo                         overwatch   stealth   strike   surgical
+  ---------------------------- ----------  --------  -------  ---------
+   cycle   choch   vol   sweep           ✗         ✗        ✗          ✗
+   cycle   choch   vol  [sweep]          ✓         ✓        ✓          ✗
+   cycle   choch  [vol]  sweep           ✓         ✓        ✓          ✗
+   cycle   choch  [vol] [sweep]          ✓         ✓        ✓          ✓
+   cycle  [choch]  vol   sweep           ✓         ✗        ✓          ✗
+   cycle  [choch]  vol  [sweep]          ✓         ✓        ✓          ✓
+   cycle  [choch] [vol]  sweep           ✓         ✓        ✓          ✓
+   cycle  [choch] [vol] [sweep]          ✓         ✓        ✓          ✓
+  [cycle]  choch   vol   sweep           ✗         ✗        ✗          ✗
+  [cycle]  choch   vol  [sweep]          ✓         ✓        ✓          ✗
+  [cycle]  choch  [vol]  sweep           ✓         ✓        ✓          ✗
+  [cycle]  choch  [vol] [sweep]          ✓         ✓        ✓          ✓
+  [cycle] [choch]  vol   sweep           ✓         ✗        ✓          ✗
+  [cycle] [choch]  vol  [sweep]          ✓         ✓        ✓          ✓
+  [cycle] [choch] [vol]  sweep           ✓         ✓        ✓          ✓
+  [cycle] [choch] [vol] [sweep]          ✓         ✓        ✓          ✓
+
+  Combos passing each mode gate:
+    overwatch   : 14/16 (87.5%)  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+    stealth     : 12/16 (75.0%)  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+    strike      : 14/16 (87.5%)  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+    surgical    :  8/16 (50.0%)  ▓▓▓▓▓▓▓▓▓▓
+
+  SYNERGY BONUS SURFACE (combine_reversal_with_cycle_bonus)
+────────────────────────────────────────────────────────────────────────
+  Combo                           Conf   Bonus    Total  Bar
+  ----------------------------  ------  ------  -------  ----------------------------------------
+   cycle   choch   vol  [sweep]     60%     +12      72%  ████████████████████████████░░░░░░░░░░░░
+   cycle   choch  [vol]  sweep      60%      +0      60%  ████████████████████████░░░░░░░░░░░░░░░░
+   cycle   choch  [vol] [sweep]     85%     +12      97%  ██████████████████████████████████████░░
+   cycle  [choch]  vol   sweep      60%      +0      60%  ████████████████████████░░░░░░░░░░░░░░░░
+   cycle  [choch]  vol  [sweep]     85%     +17     102%  ████████████████████████████████████████
+   cycle  [choch] [vol]  sweep      85%      +5      90%  ████████████████████████████████████░░░░
+   cycle  [choch] [vol] [sweep]    100%     +17     117%  ████████████████████████████████████████
+  [cycle]  choch   vol  [sweep]     70%     +12      82%  ████████████████████████████████░░░░░░░░
+  [cycle]  choch  [vol]  sweep      70%      +0      70%  ████████████████████████████░░░░░░░░░░░░
+  [cycle]  choch  [vol] [sweep]     95%     +12     107%  ████████████████████████████████████████
+  [cycle] [choch]  vol   sweep      70%     +15      85%  ██████████████████████████████████░░░░░░
+  [cycle] [choch]  vol  [sweep]     95%     +32     127%  ████████████████████████████████████████
+  [cycle] [choch] [vol]  sweep      95%     +20     115%  ████████████████████████████████████████
+  [cycle] [choch] [vol] [sweep]    100%     +32     132%  ████████████████████████████████████████
+
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+  DIRECTION: SHORT (bearish)
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+
+  CONFIDENCE SURFACE — all 16 component combinations
+────────────────────────────────────────────────────────────────────────
+  Combo                        Comps    Conf  Valid  HTFByp  Bar
+  ---------------------------- -----  ------  -----  ------  ----------------------------------------
+   cycle   choch   vol   sweep      0      0%      ✗       -  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+   cycle   choch   vol  [sweep]     1     25%      ✗       -  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+   cycle   choch  [vol]  sweep      1     25%      ✗       -  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+   cycle   choch  [vol] [sweep]     2     50%      ✗       -  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+   cycle  [choch]  vol   sweep      1     25%      ✗       -  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+   cycle  [choch]  vol  [sweep]     2     50%      ✗       -  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+   cycle  [choch] [vol]  sweep      2     50%      ✗       -  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+   cycle  [choch] [vol] [sweep]     3     75%      ✗       ✓  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  [cycle]  choch   vol   sweep      1     40%      ✗       -  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  [cycle]  choch   vol  [sweep]     2     65%      ✓       -  ██████████████████████████░░░░░░░░░░░░░░
+  [cycle]  choch  [vol]  sweep      2     65%      ✓       -  ██████████████████████████░░░░░░░░░░░░░░
+  [cycle]  choch  [vol] [sweep]     3     90%      ✓       -  ████████████████████████████████████░░░░
+  [cycle] [choch]  vol   sweep      2     65%      ✓       -  ██████████████████████████░░░░░░░░░░░░░░
+  [cycle] [choch]  vol  [sweep]     3     90%      ✓       ✓  ████████████████████████████████████░░░░
+  [cycle] [choch] [vol]  sweep      3     90%      ✓       ✓  ████████████████████████████████████░░░░
+  [cycle] [choch] [vol] [sweep]     4    100%      ✓       ✓  ████████████████████████████████████████
+
+  Valid setups:  7/16
+  HTF bypass:    3/16
+  Conf range:    65% – 100%
+  Conf median:   90%
+
+  DEAD ZONES (combos that never fire)
+────────────────────────────────────────────────────────────────────────
+   cycle   choch   vol   sweep   → cycle_aligned=False (hard gate)
+   cycle   choch   vol  [sweep]  → cycle_aligned=False (hard gate)
+   cycle   choch  [vol]  sweep   → cycle_aligned=False (hard gate)
+   cycle   choch  [vol] [sweep]  → cycle_aligned=False (hard gate)
+   cycle  [choch]  vol   sweep   → cycle_aligned=False (hard gate)
+   cycle  [choch]  vol  [sweep]  → cycle_aligned=False (hard gate)
+   cycle  [choch] [vol]  sweep   → cycle_aligned=False (hard gate)
+   cycle  [choch] [vol] [sweep]  → cycle_aligned=False (hard gate)
+  [cycle]  choch   vol   sweep   → only 1 component(s) — needs ≥2
+
+  MODE PROFILE GATE MATRIX
+────────────────────────────────────────────────────────────────────────
+  Combo                         overwatch   stealth   strike   surgical
+  ---------------------------- ----------  --------  -------  ---------
+   cycle   choch   vol   sweep           ✗         ✗        ✗          ✗
+   cycle   choch   vol  [sweep]          ✗         ✗        ✗          ✗
+   cycle   choch  [vol]  sweep           ✗         ✗        ✗          ✗
+   cycle   choch  [vol] [sweep]          ✗         ✗        ✗          ✗
+   cycle  [choch]  vol   sweep           ✗         ✗        ✗          ✗
+   cycle  [choch]  vol  [sweep]          ✗         ✗        ✗          ✗
+   cycle  [choch] [vol]  sweep           ✗         ✗        ✗          ✗
+   cycle  [choch] [vol] [sweep]          ✗         ✗        ✗          ✗
+  [cycle]  choch   vol   sweep           ✗         ✗        ✗          ✗
+  [cycle]  choch   vol  [sweep]          ✓         ✓        ✓          ✗
+  [cycle]  choch  [vol]  sweep           ✓         ✓        ✓          ✗
+  [cycle]  choch  [vol] [sweep]          ✓         ✓        ✓          ✓
+  [cycle] [choch]  vol   sweep           ✓         ✗        ✓          ✗
+  [cycle] [choch]  vol  [sweep]          ✓         ✓        ✓          ✓
+  [cycle] [choch] [vol]  sweep           ✓         ✓        ✓          ✓
+  [cycle] [choch] [vol] [sweep]          ✓         ✓        ✓          ✓
+
+  Combos passing each mode gate:
+    overwatch   :  7/16 (43.8%)  ▓▓▓▓▓▓▓▓
+    stealth     :  6/16 (37.5%)  ▓▓▓▓▓▓▓
+    strike      :  7/16 (43.8%)  ▓▓▓▓▓▓▓▓
+    surgical    :  4/16 (25.0%)  ▓▓▓▓▓
+
+  SYNERGY BONUS SURFACE (combine_reversal_with_cycle_bonus)
+────────────────────────────────────────────────────────────────────────
+  Combo                           Conf   Bonus    Total  Bar
+  ----------------------------  ------  ------  -------  ----------------------------------------
+  [cycle]  choch   vol  [sweep]     65%     +12      77%  ██████████████████████████████░░░░░░░░░░
+  [cycle]  choch  [vol]  sweep      65%      +0      65%  ██████████████████████████░░░░░░░░░░░░░░
+  [cycle]  choch  [vol] [sweep]     90%     +12     102%  ████████████████████████████████████████
+  [cycle] [choch]  vol   sweep      65%     +15      80%  ████████████████████████████████░░░░░░░░
+  [cycle] [choch]  vol  [sweep]     90%     +32     122%  ████████████████████████████████████████
+  [cycle] [choch] [vol]  sweep      90%     +20     110%  ████████████████████████████████████████
+  [cycle] [choch] [vol] [sweep]    100%     +32     132%  ████████████████████████████████████████
+
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+  KNOWN ISSUES
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+
+  1. LONG/SHORT CYCLE ALIGNMENT IS ASYMMETRIC
+     Long:  fires on phase=accumulation OR in_dcl_zone OR in_wcl_zone
+     Short: fires on translation=ltr OR phase=distribution OR phase=markdown
+     
+     The long path has 3 independent triggers for cycle_aligned=True.
+     The short path also has 3 but they're more restrictive — LTR translation
+     is only set by the cycle engine if the cycle topped before midpoint.
+     In practice SHORT cycle_aligned fires far less often than LONG.
+     Impact: shorts are structurally harder to qualify than longs on the same data.
+
+  2. CONFIDENCE CAP AT 100 HIDES REAL SIGNAL STRENGTH
+     max(100.0, confidence) means a 4-component setup with all bonuses
+     looks identical to a 3-component setup that hits the cap.
+     The scorer can't distinguish between them.
+     Fix: Consider a raw_confidence field that isn't capped, use it for
+     tie-breaking when both long and short are valid simultaneously.
+
+  3. detect_short_reversal HAS A DEAD BRANCH (lines 302-310)
+     Midpoint/price check block ends with 'pass' — no logic fires.
+     Carries the same structural problem as the range filter in liquidity_sweeps.py.
+     Fix: either implement or remove the block entirely.
+
+  4. detect_reversal_context RETURNS STRONGER OF TWO BUT DISCARDS THE OTHER
+     If both long and short are valid simultaneously (possible in choppy markets
+     with both bull and bear CHoCH present), the weaker one is silently dropped.
+     The scorer never sees there was a conflicting signal.
+     Fix: Return both in a tuple or include conflict_detected flag in ReversalContext.
+
+  5. _find_bullish_choch / _find_bearish_choch USE MOST RECENT ONLY
+     Only the latest CHoCH counts. If a CHoCH formed 10 candles ago and price
+     has since BOS'd twice, that CHoCH is still the one being evaluated.
+     It may be stale and no longer valid as a reversal signal.
+     Fix: Add a recency check — CHoCH timestamp within N candles of current bar.
+
+  6. HTF BYPASS REQUIRES choch_detected AS MANDATORY
+     htf_bypass = component_count >= 3 AND choch_detected
+     This means cycle+vol+sweep (3 components, no CHoCH) = no bypass.
+     But cycle+choch+vol (3 components, CHoCH present) = bypass granted.
+     The bypass gate is more about CHoCH than about component count.
+     This is arguably correct but not documented — if you're debugging
+     why a 3-component setup isn't bypassing, check for CHoCH specifically.
+
+  7. validate_reversal_profile SURGICAL GATE HAS OR LOGIC THAT UNDERMINES INTENT
+     Surgical passes if: conf>=75 OR htf_bypass_active OR comp_count>=3
+     htf_bypass_active already requires CHoCH + 3 comps.
+     So surgical can pass with: cycle+choch+sweep (75% conf, bypass=True)
+     even without volume displacement — which is the weakest signal class.
+     The spirit of surgical (precision, high conviction) may warrant requiring
+     all 4 components rather than 3.
+
+════════════════════════════════════════════════════════════════════════
