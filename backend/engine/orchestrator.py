@@ -1477,12 +1477,28 @@ class Orchestrator:
                 " [CLOSE CALL - near threshold]" if is_close_call else "",
             )
 
+            _br = context.confluence_breakdown
             self.diagnostics["confluence_rejections"].append(
                 {
                     "symbol": symbol,
                     "trace_id": trace_id,
-                    "score": context.confluence_breakdown.total_score,
+                    "score": _br.total_score,
                     "threshold": self.config.min_confluence_score,
+                    "direction": context.metadata.get("chosen_direction", "LONG"),
+                    "regime": getattr(_br, "regime", "unknown"),
+                    "htf_aligned": getattr(_br, "htf_aligned", False),
+                    "synergy_bonus": getattr(_br, "synergy_bonus", 0.0),
+                    "conflict_penalty": getattr(_br, "conflict_penalty", 0.0),
+                    "factors": [
+                        {
+                            "name": f.name,
+                            "score": round(f.score, 1),
+                            "weight": round(f.weight, 4),
+                            "contrib": round(f.score * f.weight, 2),
+                            "rationale": f.rationale or "",
+                        }
+                        for f in (_br.factors if getattr(_br, "factors", None) else [])
+                    ],
                 }
             )
 

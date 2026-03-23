@@ -2251,6 +2251,14 @@ class PaperTradingService:
             if self.config:
                 with open(log_dir / "config.json", "w", encoding="utf-8") as f:
                     json.dump(self.config.to_dict(), f, indent=2, default=str)
+
+            # Confluence rejection breakdown (full factor data for every scored signal)
+            if self.orchestrator and hasattr(self.orchestrator, "diagnostics"):
+                rejections = self.orchestrator.diagnostics.get("confluence_rejections", [])
+                if rejections:
+                    with open(log_dir / "confluence_breakdown.jsonl", "w", encoding="utf-8") as f:
+                        for rec in rejections:
+                            f.write(json.dumps(rec, default=str) + "\n")
         except Exception as e:
             logger.error(f"Failed to persist raw session data: {e}")
 
@@ -2377,6 +2385,121 @@ class PaperTradingService:
             else:
                 lines.append("*No signal data recorded.*\n")
 
+            # --- Confluence Scoring Deep Dive ---
+            conf_rejections = []
+            if self.orchestrator and hasattr(self.orchestrator, "diagnostics"):
+                conf_rejections = self.orchestrator.diagnostics.get("confluence_rejections", [])
+
+            if conf_rejections:
+                lines.append("\n## Confluence Scoring Deep Dive\n")
+                lines.append(
+                    f"*{len(conf_rejections)} signals reached the confluence gate and were scored. "
+                    f"Everything below explains exactly why each one passed or failed.*\n"
+                )
+
+                # --- Gate Funnel ---
+                lines.append("### Scoring Gate Funnel\n")
+                gate_threshold = conf_rejections[0].get("threshold", 70.0) if conf_rejections else 70.0
+                above_gate = [r for r in conf_rejections if r["score"] >= gate_threshold]
+                close_calls = [r for r in conf_rejections if gate_threshold - 15 <= r["score"] < gate_threshold]
+                far_below = [r for r in conf_rejections if r["score"] < gate_threshold - 15]
+                lines.append("| Gate | Count | % of Scored |")
+                lines.append("|------|-------|-------------|")
+                total_conf = len(conf_rejections)
+                lines.append(f"| ✅ Passed (≥{gate_threshold:.0f}%) | {len(above_gate)} | {len(above_gate)/total_conf*100:.1f}% |")
+                lines.append(f"| 🟡 Close Call ({gate_threshold-15:.0f}–{gate_threshold:.0f}%) | {len(close_calls)} | {len(close_calls)/total_conf*100:.1f}% |")
+                lines.append(f"| 🔴 Far Below (<{gate_threshold-15:.0f}%) | {len(far_below)} | {len(far_below)/total_conf*100:.1f}% |")
+                lines.append("")
+
+                # --- Per-Symbol Score Summary ---
+                lines.append("### Score Summary by Symbol\n")
+                sym_scores: Dict[str, list] = {}
+                for r in conf_rejections:
+                    sym = r.get("symbol", "?")
+                    sym_scores.setdefault(sym, []).append(r["score"])
+                lines.append("| Symbol | Signals Scored | Avg Score | Max Score | Min Score | Best Direction |")
+                lines.append("|--------|---------------|-----------|-----------|-----------|----------------|")
+                for sym in sorted(sym_scores.keys()):
+                    scores = sym_scores[sym]
+                    sym_recs = [r for r in conf_rejections if r.get("symbol") == sym]
+                    best = max(sym_recs, key=lambda r: r["score"])
+                    lines.append(
+                        f"| {sym} | {len(scores)} | {sum(scores)/len(scores):.1f}% | "
+                        f"{max(scores):.1f}% | {min(scores):.1f}% | "
+                        f"{best.get('direction', '?')} ({best['score']:.1f}%) |"
+                    )
+                lines.append("")
+
+                # --- Factor Frequency Analysis ---
+                lines.append("### Factor Analysis — What's Dragging Scores Down\n")
+                lines.append(
+                    "*Sorted by avg score (ascending) — factors near the top are most responsible for rejections.*\n"
+                )
+                factor_stats: Dict[str, Dict] = {}
+                for rec in conf_rejections:
+                    for f in rec.get("factors", []):
+                        name = f["name"]
+                        if name not in factor_stats:
+                            factor_stats[name] = {"scores": [], "zero_count": 0, "weight": f["weight"]}
+                        factor_stats[name]["scores"].append(f["score"])
+                        if f["score"] == 0:
+                            factor_stats[name]["zero_count"] += 1
+
+                lines.append("| Factor | Weight | Avg Score | Zero Count | % Zero | Avg Contrib |")
+                lines.append("|--------|--------|-----------|------------|--------|-------------|")
+                for name, data in sorted(factor_stats.items(), key=lambda x: sum(x[1]["scores"]) / len(x[1]["scores"])):
+                    scores = data["scores"]
+                    avg_score = sum(scores) / len(scores)
+                    avg_contrib = avg_score * data["weight"]
+                    zero_pct = data["zero_count"] / len(scores) * 100
+                    zero_flag = " 🚨" if zero_pct >= 50 else (" ⚠️" if zero_pct >= 25 else "")
+                    lines.append(
+                        f"| `{name}` | {data['weight']:.3f} | {avg_score:.1f}% | "
+                        f"{data['zero_count']} | {zero_pct:.0f}%{zero_flag} | {avg_contrib:.2f} |"
+                    )
+                lines.append("")
+
+                # --- Top Rejections — Full Factor Breakdown ---
+                lines.append("### Top Rejections — Full Factor Breakdown\n")
+                lines.append("*Top 10 close-call rejections (highest score that still failed the gate):*\n")
+                failed = [r for r in conf_rejections if r["score"] < r.get("threshold", 70.0)]
+                top_failed = sorted(failed, key=lambda r: r["score"], reverse=True)[:10]
+
+                for i, rec in enumerate(top_failed, 1):
+                    sym = rec.get("symbol", "?")
+                    score = rec["score"]
+                    thresh = rec.get("threshold", 70.0)
+                    gap = thresh - score
+                    direction = rec.get("direction", "?")
+                    regime = rec.get("regime", "?")
+                    htf = "✓" if rec.get("htf_aligned") else "✗"
+                    synergy = rec.get("synergy_bonus", 0.0)
+                    penalty = rec.get("conflict_penalty", 0.0)
+
+                    lines.append(
+                        f"#### {i}. {sym} {direction} — {score:.1f}% "
+                        f"(gate: {thresh:.0f}%, gap: -{gap:.1f}pt)\n"
+                    )
+                    lines.append(
+                        f"Regime: `{regime}` | HTF Aligned: {htf} | "
+                        f"Synergy: +{synergy:.1f} | Conflict Penalty: -{penalty:.1f}\n"
+                    )
+
+                    factors = sorted(rec.get("factors", []), key=lambda f: f["contrib"], reverse=True)
+                    if factors:
+                        lines.append("| Factor | Score | Weight | Contrib | Rationale |")
+                        lines.append("|--------|-------|--------|---------|-----------|")
+                        for f in factors:
+                            score_icon = "✅" if f["score"] >= 70 else ("⚠️" if f["score"] >= 40 else "🔴")
+                            rat = (f.get("rationale") or "")[:80]
+                            if len(f.get("rationale", "")) > 80:
+                                rat += "…"
+                            lines.append(
+                                f"| `{f['name']}` | {score_icon} {f['score']:.1f}% | "
+                                f"{f['weight']:.3f} | **{f['contrib']:.2f}** | {rat} |"
+                            )
+                        lines.append("")
+
             # --- Issues & Anomalies ---
             lines.append("\n## Issues Detected During Session\n")
             # Scan activity log for errors/warnings
@@ -2430,6 +2553,7 @@ class PaperTradingService:
             lines.append(f"- `{log_dir / 'signals.jsonl'}` — Every signal processed (full history, not truncated)")
             lines.append(f"- `{log_dir / 'activity.jsonl'}` — Every lifecycle event (scans, fills, closes, errors)")
             lines.append(f"- `{log_dir / 'trades.jsonl'}` — Completed trade details with P&L")
+            lines.append(f"- `{log_dir / 'confluence_breakdown.jsonl'}` — Full factor-by-factor scoring for every confluence rejection")
             lines.append(f"- `{log_dir / 'stats.json'}` — Final session statistics")
             lines.append(f"- `{log_dir / 'config.json'}` — Configuration used\n")
 
@@ -2465,6 +2589,35 @@ class PaperTradingService:
                         f"**{confluence_fails}/{len(all_signals)} signals failed confluence** — "
                         "The min_confluence_score threshold may be too high for current market conditions."
                     )
+
+            # Factor-specific recommendations from confluence deep dive
+            if conf_rejections:
+                factor_agg: Dict[str, list] = {}
+                for rec in conf_rejections:
+                    for f in rec.get("factors", []):
+                        factor_agg.setdefault(f["name"], []).append(f["score"])
+                # Flag factors that are zero >50% of the time
+                chronic_zeros = [
+                    (name, scores)
+                    for name, scores in factor_agg.items()
+                    if len(scores) >= 3 and sum(1 for s in scores if s == 0) / len(scores) >= 0.5
+                ]
+                if chronic_zeros:
+                    names = ", ".join(f"`{n}`" for n, _ in sorted(chronic_zeros, key=lambda x: -sum(1 for s in x[1] if s == 0)))
+                    recs.append(
+                        f"**Chronically-zero factors: {names}** — These score 0 on more than half of setups. "
+                        "Check that the underlying detectors are producing data (OBs/FVGs/sweeps present on those timeframes)."
+                    )
+                # Best score still below gate — all close calls
+                if conf_rejections:
+                    best_score = max(r["score"] for r in conf_rejections)
+                    gate = conf_rejections[0].get("threshold", 70.0)
+                    if best_score < gate and best_score >= gate - 10:
+                        recs.append(
+                            f"**Best score this session was {best_score:.1f}% (gate: {gate:.0f}%)** — "
+                            "Consistently near but below threshold. Market may be choppy/low confluence. "
+                            "Consider lowering `min_confluence_score` by 5–8 points or waiting for a trending session."
+                        )
 
             if recs:
                 for i, rec in enumerate(recs, 1):
