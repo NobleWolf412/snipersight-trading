@@ -534,11 +534,27 @@ class ConfluenceService:
                 ob_factor = next((f for f in chosen.factors if f.name == "Order Block"), None)
                 has_ob = ob_factor is not None and ob_factor.score >= 50
 
-                # Soft conditions from metadata (divergence, pullback patterns)
-                has_divergence = bool(
-                    context.metadata.get("divergence_direction") == chosen_direction.lower()
+                # Soft conditions — divergence read directly from chosen breakdown factors.
+                # context.metadata["divergence_direction"] was never populated upstream,
+                # so we check the "Price-Indicator Divergence" factor score instead.
+                # Score >= 60 means a meaningful direction-aligned divergence was detected
+                # (the scorer is already called with the chosen direction, so any score
+                # above noise level confirms alignment).
+                div_factor = next(
+                    (f for f in chosen.factors if f.name == "Price-Indicator Divergence"), None
                 )
-                has_pullback = bool(context.metadata.get("pullback_entry"))
+                has_divergence = div_factor is not None and div_factor.score >= 60
+
+                # pullback_entry: check Close Momentum and Multi-Candle Confirmation factors
+                # as a proxy for pullback quality (metadata key never populated upstream).
+                close_mom = next((f for f in chosen.factors if f.name == "Close Momentum"), None)
+                multi_candle = next(
+                    (f for f in chosen.factors if f.name == "Multi-Candle Confirmation"), None
+                )
+                has_pullback = (
+                    (close_mom is not None and close_mom.score >= 50)
+                    or (multi_candle is not None and multi_candle.score >= 50)
+                )
 
                 soft_conditions_met = has_any_sweep or has_structure_shift or has_divergence or has_pullback
 
