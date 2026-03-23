@@ -68,11 +68,12 @@ def detect_reversal_context(
 
     # Return stronger setup
     if long_reversal.is_reversal_setup and short_reversal.is_reversal_setup:
-        return (
-            long_reversal
-            if long_reversal.confidence >= short_reversal.confidence
-            else short_reversal
-        )
+        if long_reversal.confidence >= short_reversal.confidence:
+            stronger = long_reversal
+        else:
+            stronger = short_reversal
+        stronger.conflict_detected = True
+        return stronger
     elif long_reversal.is_reversal_setup:
         return long_reversal
     elif short_reversal.is_reversal_setup:
@@ -434,6 +435,15 @@ def _find_bullish_choch(structural_breaks: List[StructuralBreak]) -> Optional[St
 
     # Get most recent CHoCH
     latest = max(chochs, key=lambda c: c.timestamp)
+
+    # Recency check: approximate "now" using the most recent structural break
+    if structural_breaks:
+        latest_break_ts = max(sb.timestamp for sb in structural_breaks)
+        age = latest_break_ts - latest.timestamp
+        # If CHoCH is more than 3 days older than the latest break, consider it stale
+        if age.total_seconds() > 3 * 24 * 3600:
+            return None
+
     return latest
 
 
@@ -462,6 +472,15 @@ def _find_bearish_choch(structural_breaks: List[StructuralBreak]) -> Optional[St
 
     # Get most recent CHoCH
     latest = max(chochs, key=lambda c: c.timestamp)
+
+    # Recency check: approximate "now" using the most recent structural break
+    if structural_breaks:
+        latest_break_ts = max(sb.timestamp for sb in structural_breaks)
+        age = latest_break_ts - latest.timestamp
+        # If CHoCH is more than 3 days older than the latest break, consider it stale
+        if age.total_seconds() > 3 * 24 * 3600:
+            return None
+
     return latest
 
 
@@ -665,27 +684,23 @@ def validate_reversal_profile(
 
     # 1. Surgical/Precision (Strict Quality)
     if profile in ("surgical", "precision"):
-        # Require High Confidence OR 3+ Components
-        # htf_bypass_active usually implies high structural quality
-        is_high_quality = reversal.confidence >= 75.0 or reversal.htf_bypass_active
-        if not is_high_quality:
-            # Check component count manually if htf_bypass not active
-            comp_count = sum(
-                [
-                    reversal.cycle_aligned,
-                    reversal.choch_detected,
-                    reversal.volume_displacement,
-                    reversal.liquidity_swept,
-                ]
-            )
-            if comp_count < 3:
-                reject_reason = f"Surgical requires High Conf (75%+) or 3+ Signals. Current: {reversal.confidence:.0f}% / {comp_count}"
+        comp_count = sum(
+            [
+                reversal.cycle_aligned,
+                reversal.choch_detected,
+                reversal.volume_displacement,
+                reversal.liquidity_swept,
+            ]
+        )
+        # Require High Confidence OR ALL 4 Components (bypass doesn't auto-pass anymore)
+        if reversal.confidence < 75.0 and comp_count < 4:
+            reject_reason = f"Surgical requires High Conf (75%+) or all 4 Signals. Current: {reversal.confidence:.0f}% / {comp_count}"
 
     # 2. Overwatch/Macro (Strict Structure/Cycle)
     elif profile in ("overwatch", "macro_surveillance"):
-        # Must be cycle aligned (TopDown approach)
-        if not reversal.cycle_aligned:
-            reject_reason = "Overwatch requires Cycle Alignment (DCL/WCL/LTR)"
+        # Must be cycle aligned + have CHoCH (TopDown approach)
+        if not (reversal.cycle_aligned and reversal.choch_detected):
+            reject_reason = "Overwatch requires Cycle Alignment + CHoCH detection"
 
     # 3. Stealth (Smart Money Footprint)
     elif "stealth" in profile:

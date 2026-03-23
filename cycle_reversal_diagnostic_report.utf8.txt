@@ -1,0 +1,121 @@
+════════════════════════════════════════════════════════════════════════
+  SNIPERSIGHT — CYCLE + REVERSAL DIAGNOSTIC REPORT
+  Symbol: BTC/USDT  |  Bars: 300  |  2026-03-22 21:03:45
+════════════════════════════════════════════════════════════════════════
+
+  CURRENT CYCLE STATE
+────────────────────────────────────────────────────────────────────────
+  Price:         67578.0500
+
+  DCL
+    Price:       65620.01
+    Days ago:    15
+    Conf:        unconfirmed
+    In zone:     True  (window=15-28 days)
+
+  WCL
+    Price:       60000.0
+    Days ago:    45
+    Conf:        confirmed
+    In zone:     True  (window=30-50 days)
+
+  Translation:   left_translated  (39.1% of expected cycle)
+  Phase:         accumulation
+  Trade Bias:    LONG  (70% confidence)
+
+  REVERSAL GATE MATRIX  (all signal combinations vs mode gates)
+────────────────────────────────────────────────────────────────────────
+  cycle_aligned=True  htf_bypass=True  confidence=70%
+
+  Comp  CHoCH  Sweep   Vol  Surgical  Overwatch  Stealth  Strike
+  ----  -----  -----  ----  --------  ---------  -------  ------
+     2      ✗      ✗     ✓         ✓          ✓        ✓       ✓
+     3      ✓      ✗     ✓         ✓          ✓        ✓       ✓
+     2      ✗      ✓     ✗         ✓          ✓        ✓       ✓
+     3      ✓      ✓     ✗         ✓          ✓        ✓       ✓
+     3      ✗      ✓     ✓         ✓          ✓        ✓       ✓
+     4      ✓      ✓     ✓         ✓          ✓        ✓       ✓
+     1      ✗      ✗     ✗         ✓          ✓        ✗       ✓
+     2      ✓      ✗     ✗         ✓          ✓        ✗       ✓
+
+  Mode pass rate (out of 8 combinations):
+    surgical    8/8 ( 100%)  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+    overwatch   8/8 ( 100%)  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+    stealth     6/8 (  75%)  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+    strike      8/8 ( 100%)  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+
+  ROLLING ANALYSIS  (23 windows)
+────────────────────────────────────────────────────────────────────────
+
+  Phase distribution:
+    distribution     9 (  39%)  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+    markup           8 (  35%)  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+    markdown         4 (  17%)  ▓▓▓▓▓▓▓▓
+    accumulation     2 (   9%)  ▓▓▓▓
+
+  Translation distribution:
+    left_translated       11 (  48%)  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+    mid_translated         7 (  30%)  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+    right_translated       5 (  22%)  ▓▓▓▓▓▓▓▓▓▓
+
+  Bias distribution:
+    SHORT     10 (  43%)  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+    NEUTRAL    8 (  35%)  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+    LONG       5 (  22%)  ▓▓▓▓▓▓▓▓▓▓
+
+  DCL confirmation distribution:
+    unconfirmed     15 (  65%)
+    cancelled        4 (  17%)
+    confirmed        4 (  17%)
+
+  Confidence distribution:
+    50.0-  52.5 │████████████████████████████████████████│   8 (34.8%)
+    52.5-  55.0 │                                        │   0 ( 0.0%)
+    55.0-  57.5 │                                        │   0 ( 0.0%)
+    57.5-  60.0 │                                        │   0 ( 0.0%)
+    60.0-  62.5 │████████████████████                    │   4 (17.4%)
+    62.5-  65.0 │                                        │   0 ( 0.0%)
+    65.0-  67.5 │███████████████                         │   3 (13.0%)
+    67.5-  70.0 │                                        │   0 ( 0.0%)
+    70.0-  72.5 │██████████                              │   2 ( 8.7%)
+    72.5-  75.0 │                                        │   0 ( 0.0%)
+    75.0-  77.5 │███████████████                         │   3 (13.0%)
+    77.5-  80.0 │███████████████                         │   3 (13.0%)
+
+  In DCL zone: 7/23 (30%)
+  In WCL zone: 8/23 (35%)
+
+  KNOWN ISSUES — DATA-BACKED
+────────────────────────────────────────────────────────────────────────
+
+  1. _calculate_trade_bias() — CHoCH direction always True
+     has_bullish_choch = True  (hardcoded, direction never checked)
+     Bearish CHoCH signals never register. Inflates LONG bias.
+     Fix: Pass CHoCH direction from structural_breaks.
+
+  2. _calculate_temporal_bias() — only Mon/Fri activate window
+     Hour check (00-02, 14-16 UTC) cannot fire alone on other days.
+     Fix: Score day and hour independently.
+
+  3. _determine_phase() — overlapping conditions
+     MARKUP (pos>0.3, pos<0.7) and DISTRIBUTION (pos>0.7) share no
+     guard at pos=0.7. Evaluation order determines winner, not logic.
+     Fix: Use elif or explicit non-overlapping bounds.
+
+  4. symbol_cycle_detector — translation_pct denominator
+     Uses bars_since_low as denominator, not expected_cycle_length.
+     Early in cycle this produces inflated RTR readings.
+     Fix: Use (min+max)/2 as denominator (as cycle_detector.py does).
+
+  5. validate_reversal_profile — Surgical htf_bypass override
+     htf_bypass_active bypasses the 3+ component check entirely.
+     Current state: 8/8 combos bypass Surgical gate.
+     ⚠️  ALL combos bypass — Surgical gate disabled with current cycle state.
+
+  6. Overwatch gate requires cycle_aligned but no CHoCH requirement
+     cycle_aligned passes if in_dcl_zone OR in_wcl_zone OR confirmed.
+     Current: cycle_aligned=True. If True, ALL Overwatch combos pass
+     regardless of whether a CHoCH or any other SMC signal fired.
+     ⚠️  8/8 combos pass Overwatch — gate too permissive right now.
+
+════════════════════════════════════════════════════════════════════════

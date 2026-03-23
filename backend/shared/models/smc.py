@@ -713,6 +713,9 @@ class ReversalContext:
     # Bypass flag for HTF alignment
     htf_bypass_active: bool = False
 
+    # Conflict state (long and short both valid)
+    conflict_detected: bool = False
+
     # Details
     signals: List[str] = field(default_factory=list)
     confidence: float = 0.0

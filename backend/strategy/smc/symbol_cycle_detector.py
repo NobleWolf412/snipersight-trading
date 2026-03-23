@@ -316,15 +316,16 @@ def _detect_cycle(
         cycle_high_price = current_price
         peak_bar = bars_since_low
 
+    # Calculate midpoint for buffer logic and exact cycle length
+    midpoint = (min_len + max_len) / 2
+    expected_cycle_length = min_len + (max_len - min_len) / 2
+
     # Calculate translation percentage (where peak occurred)
-    # Translation = where did the peak occur relative to current cycle progress?
+    # Translation = where did the peak occur relative to expected cycle length
     if bars_since_low > 0:
-        translation_pct = (peak_bar / bars_since_low) * 100
+        translation_pct = (peak_bar / expected_cycle_length) * 100
     else:
         translation_pct = 50.0
-
-    # Calculate midpoint for buffer logic
-    midpoint = (min_len + max_len) / 2
 
     # Determine translation with buffer (3 weeks for WCL, 1 week for DCL)
     translation = _determine_translation(

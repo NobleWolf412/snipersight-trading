@@ -524,29 +524,27 @@ def _calculate_temporal_bias(ts: datetime) -> Tuple[float, bool]:
 
     # 1. Day of Week Analysis (0=Mon, 6=Sun)
     day = ts.weekday()
+    day_score = 0.0
 
     if day == 0:  # Monday
-        score += 40.0
-        active = True
+        day_score = 40.0
     elif day == 4:  # Friday
-        score += 20.0
-        active = True
+        day_score = 20.0
 
     # 2. Intraday Analysis (UTC Hour)
     hour = ts.hour
+    hour_score = 0.0
 
     # Daily Open Zone (00:00 - 02:00 UTC)
     if 0 <= hour <= 2:
-        score += 15.0
-        active = True
-
+        hour_score = 15.0
     # NY Mid-Day / London Close (14:00 - 16:00 UTC)
     elif 14 <= hour <= 16:
-        score += 15.0
-        active = True
+        hour_score = 15.0
 
-    # Cap score
-    score = min(100.0, score)
+    # Combine independently
+    active = (day_score > 0) or (hour_score > 0)
+    score = min(100.0, day_score + hour_score)
 
     return score, active
 
@@ -598,19 +596,19 @@ def _determine_phase(
         return CyclePhase.ACCUMULATION
 
     # Middle timing + rising price = markup
-    if price_position > 0.3 and price_position < 0.7 and dcl_days < config.dcl_max_days:
+    elif 0.3 <= price_position <= 0.7 and dcl_days < config.dcl_max_days:
         return CyclePhase.MARKUP
 
     # Late timing or high price position = distribution
-    if price_position > 0.7 or dcl_days >= config.dcl_max_days:
+    elif price_position > 0.7 or dcl_days >= config.dcl_max_days:
         return CyclePhase.DISTRIBUTION
 
     # Falling price after high = markdown
-    if high_price and current_price < high_price * 0.95 and price_position < 0.5:
+    elif high_price and current_price < high_price * 0.95 and price_position < 0.5:
         return CyclePhase.MARKDOWN
 
     # Default to markup if unclear
-    if price_position >= 0.3:
+    elif price_position >= 0.3:
         return CyclePhase.MARKUP
 
     return CyclePhase.UNKNOWN
@@ -665,11 +663,12 @@ def _calculate_trade_bias(
     if structural_breaks:
         for sb in structural_breaks:
             if sb.break_type == "CHoCH":
-                # Determine CHoCH direction from recent price action
-                # CHoCH in downtrend = turning bullish
-                # CHoCH in uptrend = turning bearish
-                # For now, use timestamp proximity as proxy
-                has_bullish_choch = True  # Simplified - would need context
+                # Determine CHoCH direction based on struct
+                direction = getattr(sb, "direction", None)
+                if direction == "bullish":
+                    has_bullish_choch = True
+                elif direction == "bearish":
+                    has_bearish_choch = True
 
     # === LONG BIAS CONDITIONS ===
 
