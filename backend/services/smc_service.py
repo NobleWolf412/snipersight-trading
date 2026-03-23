@@ -566,13 +566,14 @@ class SMCDetectionService:
 
         # Fair value gaps (use TF-specific config for gap thresholds)
         if tf_config.get("detect_fvg", True):
-            # NEW: Pass mode_profile for size filtering (Gap #2)
-            fvgs_raw = detect_fvgs(df, tf_smc_config, mode_profile=None)  # Get unfiltered count
-            fvgs = detect_fvgs(df, tf_smc_config, mode_profile=self._mode_profile)
+            # Single detection pass: _return_raw_count gives pre-mode count without a second scan.
+            fvgs, raw_fvg_count = detect_fvgs(
+                df, tf_smc_config, mode_profile=self._mode_profile, _return_raw_count=True
+            )
 
             # Track for UI stats
-            self._filter_stats["fvg_detected"] = self._filter_stats.get("fvg_detected", 0) + len(
-                fvgs_raw
+            self._filter_stats["fvg_detected"] = (
+                self._filter_stats.get("fvg_detected", 0) + raw_fvg_count
             )
 
             if atr_val > 0:

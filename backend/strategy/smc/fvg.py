@@ -29,8 +29,11 @@ MODE_FVG_MIN_SIZE = {
 
 
 def detect_fvgs(
-    df: pd.DataFrame, config: SMCConfig | dict | None = None, mode_profile: Optional[str] = None
-) -> List[FVG]:
+    df: pd.DataFrame,
+    config: SMCConfig | dict | None = None,
+    mode_profile: Optional[str] = None,
+    _return_raw_count: bool = False,
+) -> "List[FVG] | tuple[List[FVG], int]":
     """
     Detect Fair Value Gaps in price data.
 
@@ -44,9 +47,12 @@ def detect_fvgs(
             - min_gap_atr: Minimum gap size in ATR units (default 0.3)
             - max_overlap: Maximum allowed overlap percentage (default 0.1)
         mode_profile: Scanner mode profile for size filtering (optional)
+        _return_raw_count: If True, returns (fvgs, raw_count) tuple where raw_count
+            is the number of FVGs that passed overlap/structure checks before the
+            mode size filter. Lets callers track both without a second detection pass.
 
     Returns:
-        List[FVG]: Detected fair value gaps
+        List[FVG] normally; (List[FVG], int) when _return_raw_count=True
 
     Raises:
         ValueError: If df is too short or missing required columns
@@ -91,6 +97,9 @@ def detect_fvgs(
     atr = compute_atr(df, period=14)
 
     fvgs = []
+    # Tracks FVGs that passed overlap/structure checks BEFORE the mode size filter.
+    # Used when _return_raw_count=True to avoid a second detection pass in callers.
+    _pre_mode_count = 0
 
     # Diagnostic counters
     potential_bullish_gaps = 0
@@ -132,6 +141,8 @@ def detect_fvgs(
                 # Calculate gap size in ATR units
                 atr_value = atr.iloc[i] if pd.notna(atr.iloc[i]) else 0
                 gap_atr = gap_size / atr_value if atr_value > 0 else 0.0
+
+                _pre_mode_count += 1  # Passed overlap check — counts as raw regardless of mode size
 
                 # Mode-specific filtering: Skip FVGs below minimum size
                 if gap_atr < min_gap_atr:
@@ -182,6 +193,8 @@ def detect_fvgs(
                 # Calculate gap size in ATR units
                 atr_value = atr.iloc[i] if pd.notna(atr.iloc[i]) else 0
                 gap_atr = gap_size / atr_value if atr_value > 0 else 0.0
+
+                _pre_mode_count += 1  # Passed overlap check — counts as raw regardless of mode size
 
                 # Mode-specific filtering: Skip FVGs below minimum size
                 if gap_atr < min_gap_atr:
@@ -254,6 +267,8 @@ def detect_fvgs(
             len(fvgs),
         )
 
+    if _return_raw_count:
+        return fvgs, _pre_mode_count
     return fvgs
 
 

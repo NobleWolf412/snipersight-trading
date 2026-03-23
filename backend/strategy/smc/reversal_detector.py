@@ -210,12 +210,11 @@ def detect_long_reversal(
     if vol_exhaust:
         confidence += 8.0
 
-    # Bonus for cycle context quality
-    if cycle_context.phase == CyclePhase.ACCUMULATION:
-        confidence += 10.0
-
-    if cycle_context.dcl_confirmation == CycleConfirmation.CONFIRMED:
-        confidence += 10.0
+    # Cycle quality bonus — graduated by cycle_score rather than binary phase/confirmation checks.
+    # 0.4 multiplier keeps peak contribution ~18-22 pts at realistic cycle_score values (45-55).
+    # Granular: in_wcl_zone alone contributes more than just in_dcl_zone; accumulation+confirmed
+    # contributes most. Replaces hard-coded +10/+10 phase/dcl flat bonuses.
+    confidence += cycle_score * 0.4
 
     # === DETERMINE IF VALID REVERSAL ===
     # Need at least 2 components for valid reversal, 3+ for HTF bypass
@@ -226,7 +225,7 @@ def detect_long_reversal(
     if is_reversal:
         rationale = f"Bullish reversal: {component_count}/4 components. "
         if component_flags["cycle_aligned"]:
-            rationale += f"At {cycle_context.phase.value} phase. "
+            rationale += f"At {cycle_context.phase.value} phase (cycle score {cycle_score:.0f}). "
         if component_flags["choch_detected"]:
             rationale += "CHoCH confirmed structure break. "
         if htf_bypass:
@@ -300,16 +299,6 @@ def detect_short_reversal(
         signals.append("Markdown phase (falling from cycle high)")
         cycle_score += 15.0
 
-    # Price below cycle midpoint = bearish structure
-    if (
-        cycle_context.cycle_midpoint_price
-        and cycle_context.dcl_price
-        and indicators
-        and hasattr(indicators, "close")
-    ):
-        # Can check if current price below midpoint
-        pass  # Would need current price passed in
-
     # === 2. CHoCH DETECTION ===
     # Look for bearish CHoCH (in uptrend, breaking downward)
     bearish_choch = _find_bearish_choch(smc_snapshot.structural_breaks)
@@ -373,12 +362,9 @@ def detect_short_reversal(
     if vol_exhaust:
         confidence += 8.0
 
-    # Bonus for strong LTR + distribution combo
-    if cycle_context.translation == CycleTranslation.LTR and cycle_context.phase in [
-        CyclePhase.DISTRIBUTION,
-        CyclePhase.MARKDOWN,
-    ]:
-        confidence += 15.0
+    # Cycle quality bonus — graduated by cycle_score rather than binary LTR+phase checks.
+    # 0.4 multiplier keeps peak contribution ~18-22 pts at realistic cycle_score values (45-55).
+    confidence += cycle_score * 0.4
 
     # === DETERMINE IF VALID REVERSAL ===
     is_reversal = component_count >= 2 and component_flags["cycle_aligned"]
@@ -391,6 +377,7 @@ def detect_short_reversal(
             rationale += "LTR cycle (topped early). "
         if component_flags["choch_detected"]:
             rationale += "CHoCH confirmed structure break. "
+        rationale += f"At {cycle_context.phase.value} phase (cycle score {cycle_score:.0f}). "
         if htf_bypass:
             rationale += "HTF alignment bypassed."
     else:

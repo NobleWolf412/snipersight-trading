@@ -589,26 +589,24 @@ def _determine_phase(
     else:
         price_position = 0.5  # Unknown position
 
-    # Determine phase based on timing and price position
+    # Determine phase based on timing and price position.
+    # Conditions are strictly non-overlapping so the first match wins cleanly.
+
+    # Falling price after confirmed high — evaluate BEFORE distribution/markup
+    # so a retrace from an established high doesn't mis-classify as distribution.
+    if high_price and current_price < high_price * 0.95 and price_position < 0.5:
+        return CyclePhase.MARKDOWN
 
     # Early in cycle (first third of timing) + near lows = accumulation
     if dcl_days <= config.dcl_early_zone and price_position < 0.3:
         return CyclePhase.ACCUMULATION
 
-    # Middle timing + rising price = markup
-    elif 0.3 <= price_position <= 0.7 and dcl_days < config.dcl_max_days:
-        return CyclePhase.MARKUP
-
     # Late timing or high price position = distribution
-    elif price_position > 0.7 or dcl_days >= config.dcl_max_days:
+    if price_position > 0.7 or dcl_days >= config.dcl_max_days:
         return CyclePhase.DISTRIBUTION
 
-    # Falling price after high = markdown
-    elif high_price and current_price < high_price * 0.95 and price_position < 0.5:
-        return CyclePhase.MARKDOWN
-
-    # Default to markup if unclear
-    elif price_position >= 0.3:
+    # Middle timing + rising price = markup (0.3 – 0.7 range)
+    if 0.3 <= price_position <= 0.7 and dcl_days < config.dcl_max_days:
         return CyclePhase.MARKUP
 
     return CyclePhase.UNKNOWN
@@ -654,69 +652,85 @@ def _calculate_trade_bias(
     Returns:
         Tuple of (direction, confidence)
     """
-    confidence = 50.0  # Base confidence
-
-    # Check for CHoCH in structural breaks
+    # Check for CHoCH direction in structural breaks.
+    # These flags are used below to adjust confidence — a CHoCH that AGREES with the
+    # cycle bias adds conviction; one that CONTRADICTS it reduces it.
     has_bullish_choch = False
     has_bearish_choch = False
 
     if structural_breaks:
         for sb in structural_breaks:
             if sb.break_type == "CHoCH":
-                # Determine CHoCH direction based on struct
                 direction = getattr(sb, "direction", None)
                 if direction == "bullish":
                     has_bullish_choch = True
                 elif direction == "bearish":
                     has_bearish_choch = True
 
-    # === LONG BIAS CONDITIONS ===
+    # === DETERMINE BASE BIAS FROM CYCLE PHASE / TRANSLATION ===
+    # Collect (bias, confidence) without returning immediately so CHoCH modifier can be applied.
 
     # Strong long: Confirmed DCL/WCL in accumulation
     if phase == CyclePhase.ACCUMULATION:
         if dcl_confirmation == CycleConfirmation.CONFIRMED:
-            confidence = 80.0
+            bias, confidence = "LONG", 80.0
         elif in_dcl_zone or in_wcl_zone:
-            confidence = 70.0
+            bias, confidence = "LONG", 70.0
         else:
-            confidence = 60.0
-        return ("LONG", confidence)
+            bias, confidence = "LONG", 60.0
 
-    # Moderate long: Markup phase with RTR
-    if phase == CyclePhase.MARKUP:
+    # Moderate long: Markup phase
+    elif phase == CyclePhase.MARKUP:
         if translation == CycleTranslation.RTR:
-            return ("LONG", 75.0)
+            bias, confidence = "LONG", 75.0
         elif translation == CycleTranslation.MTR:
-            return ("LONG", 60.0)
+            bias, confidence = "LONG", 60.0
         else:  # LTR in markup = cautious
-            return ("NEUTRAL", 50.0)
+            bias, confidence = "NEUTRAL", 50.0
 
-    # === SHORT BIAS CONDITIONS ===
-
-    # Strong short: Distribution with LTR
-    if phase == CyclePhase.DISTRIBUTION:
+    # Strong short: Distribution
+    elif phase == CyclePhase.DISTRIBUTION:
         if translation == CycleTranslation.LTR:
-            return ("SHORT", 80.0)
+            bias, confidence = "SHORT", 80.0
         elif translation == CycleTranslation.MTR:
-            return ("SHORT", 65.0)
+            bias, confidence = "SHORT", 65.0
         else:  # RTR in distribution = less clear
-            return ("NEUTRAL", 50.0)
+            bias, confidence = "NEUTRAL", 50.0
 
-    # Moderate short: Markdown phase
-    if phase == CyclePhase.MARKDOWN:
+    # Moderate short: Markdown
+    elif phase == CyclePhase.MARKDOWN:
         if translation == CycleTranslation.LTR:
-            return ("SHORT", 75.0)
+            bias, confidence = "SHORT", 75.0
         else:
-            return ("SHORT", 60.0)
+            bias, confidence = "SHORT", 60.0
 
-    # === TRANSLATION-BASED BIAS (when phase unclear) ===
-
-    if translation == CycleTranslation.LTR:
-        return ("SHORT", 60.0)
+    # Translation-based fallback (phase unclear)
+    elif translation == CycleTranslation.LTR:
+        bias, confidence = "SHORT", 60.0
     elif translation == CycleTranslation.RTR:
-        return ("LONG", 60.0)
+        bias, confidence = "LONG", 60.0
+    else:
+        bias, confidence = "NEUTRAL", 50.0
 
-    return ("NEUTRAL", 50.0)
+    # === APPLY CHoCH CONFIDENCE MODIFIER ===
+    # A CHoCH in the SAME direction as the bias adds structural confirmation (+10).
+    # A CHoCH in the OPPOSITE direction signals structure disagreement (-10).
+    # NEUTRAL bias is not adjusted — no directional conviction to reinforce.
+    if bias == "LONG":
+        if has_bullish_choch:
+            confidence += 10.0   # Structure confirms cycle long
+        elif has_bearish_choch:
+            confidence -= 10.0   # Structure disagrees with cycle long
+    elif bias == "SHORT":
+        if has_bearish_choch:
+            confidence += 10.0   # Structure confirms cycle short
+        elif has_bullish_choch:
+            confidence -= 10.0   # Structure disagrees with cycle short
+
+    # Clamp: floor at 50 (minimum viable bias), ceiling at 100
+    confidence = max(50.0, min(100.0, confidence))
+
+    return (bias, confidence)
 
 
 def _calculate_atr(df: pd.DataFrame, period: int = 14) -> float:

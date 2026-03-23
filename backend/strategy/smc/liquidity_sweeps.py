@@ -62,6 +62,11 @@ def detect_liquidity_sweeps(
 
     Raises:
         ValueError: If df is too short or missing required columns
+
+    TODO: The smc_service caller runs this twice (once with mode_profile=None for raw count,
+    once with mode for filtered result). A true single-pass fix requires storing reversal_bar
+    on LiquiditySweep so mode window can be applied as a post-filter rather than baked
+    into the detection loop.
     """
     required_cols = ["high", "low", "close", "volume"]
     missing_cols = [col for col in required_cols if col not in df.columns]
