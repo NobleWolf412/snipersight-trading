@@ -560,11 +560,20 @@ class ConfluenceService:
 
                 inst_seq_confirmed = has_confirmed_sweep and has_structure_shift and has_ob
 
-                # Check global regime volatility — ranging markets require less confirmation
+                # Check global regime volatility — ranging markets require less confirmation.
+                # MarketRegime stores volatility at .dimensions.volatility, not as a top-level
+                # attribute. getattr(_global_regime, "volatility") always returns "normal"
+                # (the fallback), so is_ranging was permanently False. Fixed to read from
+                # .dimensions first, then fall back to a direct .volatility attr (SymbolRegime).
                 _global_regime = context.metadata.get("global_regime")
-                global_volatility = (
-                    getattr(_global_regime, "volatility", "normal") if _global_regime else "normal"
-                )
+                if _global_regime:
+                    _dims = getattr(_global_regime, "dimensions", None)
+                    global_volatility = (
+                        getattr(_dims, "volatility", None)
+                        or getattr(_global_regime, "volatility", "normal")
+                    )
+                else:
+                    global_volatility = "normal"
                 is_ranging = global_volatility in ("compressed", "coiling", "low", "sideways")
 
                 if not soft_conditions_met and not is_ranging:
