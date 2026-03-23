@@ -503,15 +503,28 @@ def _calculate_temporal_bias(ts: datetime) -> Tuple[float, bool]:
     """
     Calculate temporal probability score based on Camel Finance statistics.
 
-    Statistical Edges:
-    1. Day of Week:
-       - Monday: 40% probability of WCL (Bullish for Lows)
-       - Friday: 20% probability of WCL (Bullish for Lows)
-       - Wednesday/Thursday: Higher probability of Highs
+    Crypto markets trade 24/7 — every day has statistical significance.
+    Scoring is split into two independent components (day + hour) so a
+    strong hour signal fires even on a low-probability day, and vice versa.
+
+    Statistical Edges (Camel Finance, adapted for crypto):
+    1. Day of Week (0=Mon, 6=Sun):
+       - Monday  (40): Highest WCL/DCL probability — most DCLs print Mon
+       - Tuesday (15): Early markup/continuation, neutral baseline
+       - Wednesday (30): Cycle high probability zone — mid-week reversal
+       - Thursday (25): Secondary cycle high zone — often confirms Wed high
+       - Friday  (20): Secondary WCL probability — late-week reversal
+       - Saturday (15): Crypto-active, lower institutional participation
+       - Sunday  (15): Crypto-active; some weekly DCLs print Sun evening
 
     2. Time of Day (UTC):
-       - 00:00-02:00: Daily Open (High volume/reversal zone)
-       - 14:00-16:00: NY Mid-Day (Reversal zone)
+       - 00:00–02:00: Daily Open / Asian open (reversal + volume spike)
+       - 07:00–09:00: London Open (often sets daily direction)
+       - 14:00–16:00: NY Open / London Close (daily high/low frequently prints)
+
+    Note: Intraday kill zones (London/NY sessions) are scored separately
+    in _score_kill_zone_incremental. Hour windows here target macro reversal
+    probability (daily high/low print times), not session overlap scalps.
 
     Args:
         ts: Timestamp to analyze
@@ -519,32 +532,37 @@ def _calculate_temporal_bias(ts: datetime) -> Tuple[float, bool]:
     Returns:
         Tuple of (score 0-100, is_active_window)
     """
-    score = 0.0
-    active = False
+    # 1. Day of Week Analysis (0=Mon, 6=Sun) — all 7 days scored
+    DAY_SCORES = {
+        0: 40.0,  # Monday   — primary WCL/DCL window
+        1: 15.0,  # Tuesday  — neutral baseline
+        2: 30.0,  # Wednesday — cycle high zone (SHORT-relevant)
+        3: 25.0,  # Thursday  — secondary cycle high zone
+        4: 20.0,  # Friday    — secondary WCL window
+        5: 15.0,  # Saturday  — crypto-live, lower institutional flow
+        6: 15.0,  # Sunday    — crypto-live; weekly DCLs sometimes print
+    }
+    day_score = DAY_SCORES[ts.weekday()]
 
-    # 1. Day of Week Analysis (0=Mon, 6=Sun)
-    day = ts.weekday()
-    day_score = 0.0
-
-    if day == 0:  # Monday
-        day_score = 40.0
-    elif day == 4:  # Friday
-        day_score = 20.0
-
-    # 2. Intraday Analysis (UTC Hour)
+    # 2. Intraday Analysis (UTC Hour) — independent of day
     hour = ts.hour
-    hour_score = 0.0
-
-    # Daily Open Zone (00:00 - 02:00 UTC)
     if 0 <= hour <= 2:
+        # Daily Open / Asian open — volume spike, frequent reversal
         hour_score = 15.0
-    # NY Mid-Day / London Close (14:00 - 16:00 UTC)
+    elif 7 <= hour <= 9:
+        # London Open — often where daily direction sets
+        hour_score = 12.0
     elif 14 <= hour <= 16:
+        # NY Open / London Close — daily high/low frequently prints here
         hour_score = 15.0
+    else:
+        hour_score = 0.0
 
-    # Combine independently
-    active = (day_score > 0) or (hour_score > 0)
+    # Combine independently; active whenever either component is meaningful.
+    # Threshold at >= 20: Friday (day=20) and London open on any day (15+12=27)
+    # both qualify; Tue/Sat/Sun at quiet hours (15+0=15) correctly do not.
     score = min(100.0, day_score + hour_score)
+    active = score >= 20.0
 
     return score, active
 
