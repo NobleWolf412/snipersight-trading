@@ -10,6 +10,7 @@ Detects price-indicator divergences for trading signals:
 Works with RSI, MACD, and volume indicators.
 """
 
+import math
 from typing import List, Dict, Optional
 import pandas as pd
 from loguru import logger
@@ -185,9 +186,10 @@ def detect_regular_bullish_divergence(
     indicator_pivot_1 = min(recent_indicator_lows, key=lambda x: abs(x - price_pivot_1))
 
     # Check if indicator pivots align reasonably with price pivots
-    if abs(indicator_pivot_2 - price_pivot_2) > lookback * 2:
+    # TIGHTENED: Alignment must be within 3 bars (Issue #2)
+    if abs(indicator_pivot_2 - price_pivot_2) > 3:
         return None
-    if abs(indicator_pivot_1 - price_pivot_1) > lookback * 2:
+    if abs(indicator_pivot_1 - price_pivot_1) > 3:
         return None
 
     # Get values
@@ -204,8 +206,9 @@ def detect_regular_bullish_divergence(
             abs((indicator_value_2 - indicator_value_1) / max(indicator_value_1, 1)) * 100
         )
 
-        # Strength: higher when both price and indicator diverge significantly
-        strength = min(100, (price_change_pct + indicator_change_pct) * 5)
+        # Log-scale strength: differentiates moderate vs extreme divergences.
+        # log1p(1%)≈28, log1p(3%)≈55, log1p(5%)≈72, log1p(10%)≈96 — avoids linear capping.
+        strength = min(100, math.log1p(price_change_pct + indicator_change_pct) * 40)
 
         return DivergenceResult(
             divergence_type="regular_bullish",
@@ -276,9 +279,10 @@ def detect_regular_bearish_divergence(
     indicator_pivot_1 = min(recent_indicator_highs, key=lambda x: abs(x - price_pivot_1))
 
     # Check if indicator pivots align reasonably with price pivots
-    if abs(indicator_pivot_2 - price_pivot_2) > lookback * 2:
+    # TIGHTENED: Alignment must be within 3 bars (Issue #2)
+    if abs(indicator_pivot_2 - price_pivot_2) > 3:
         return None
-    if abs(indicator_pivot_1 - price_pivot_1) > lookback * 2:
+    if abs(indicator_pivot_1 - price_pivot_1) > 3:
         return None
 
     # Get values
@@ -295,8 +299,8 @@ def detect_regular_bearish_divergence(
             abs((indicator_value_2 - indicator_value_1) / max(indicator_value_1, 1)) * 100
         )
 
-        # Strength: higher when both price and indicator diverge significantly
-        strength = min(100, (price_change_pct + indicator_change_pct) * 5)
+        # Log-scale strength — same scale as regular bullish for symmetry.
+        strength = min(100, math.log1p(price_change_pct + indicator_change_pct) * 40)
 
         return DivergenceResult(
             divergence_type="regular_bearish",
@@ -361,9 +365,10 @@ def detect_hidden_bullish_divergence(
     indicator_pivot_2 = min(recent_indicator_lows, key=lambda x: abs(x - price_pivot_2))
     indicator_pivot_1 = min(recent_indicator_lows, key=lambda x: abs(x - price_pivot_1))
 
-    if abs(indicator_pivot_2 - price_pivot_2) > lookback * 2:
+    # TIGHTENED: Alignment must be within 3 bars (Issue #2)
+    if abs(indicator_pivot_2 - price_pivot_2) > 3:
         return None
-    if abs(indicator_pivot_1 - price_pivot_1) > lookback * 2:
+    if abs(indicator_pivot_1 - price_pivot_1) > 3:
         return None
 
     price_value_1 = df["low"].iloc[price_pivot_1]
@@ -377,7 +382,8 @@ def detect_hidden_bullish_divergence(
         indicator_change_pct = (
             abs((indicator_value_2 - indicator_value_1) / max(indicator_value_1, 1)) * 100
         )
-        strength = min(100, (price_change_pct + indicator_change_pct) * 4)
+        # Log-scale strength — hidden divergences (continuation) score ~80% of regular.
+        strength = min(100, math.log1p(price_change_pct + indicator_change_pct) * 32)
 
         return DivergenceResult(
             divergence_type="hidden_bullish",
@@ -442,9 +448,10 @@ def detect_hidden_bearish_divergence(
     indicator_pivot_2 = min(recent_indicator_highs, key=lambda x: abs(x - price_pivot_2))
     indicator_pivot_1 = min(recent_indicator_highs, key=lambda x: abs(x - price_pivot_1))
 
-    if abs(indicator_pivot_2 - price_pivot_2) > lookback * 2:
+    # TIGHTENED: Alignment must be within 3 bars (Issue #2)
+    if abs(indicator_pivot_2 - price_pivot_2) > 3:
         return None
-    if abs(indicator_pivot_1 - price_pivot_1) > lookback * 2:
+    if abs(indicator_pivot_1 - price_pivot_1) > 3:
         return None
 
     price_value_1 = df["high"].iloc[price_pivot_1]
@@ -458,7 +465,8 @@ def detect_hidden_bearish_divergence(
         indicator_change_pct = (
             abs((indicator_value_2 - indicator_value_1) / max(indicator_value_1, 1)) * 100
         )
-        strength = min(100, (price_change_pct + indicator_change_pct) * 4)
+        # Log-scale strength — hidden divergences (continuation) score ~80% of regular.
+        strength = min(100, math.log1p(price_change_pct + indicator_change_pct) * 32)
 
         return DivergenceResult(
             divergence_type="hidden_bearish",

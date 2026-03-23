@@ -264,6 +264,7 @@ class LiquiditySweep:
     confirmation_level: int = 0  # 0=none, 1=volume, 2=volume+pattern, 3=volume+structure
     has_reversal_pattern: bool = False  # Engulfing/hammer after sweep
     has_structure_break: bool = False  # BOS/CHoCH followed sweep
+    reversal_bar_count: int = 0  # NEW: Candles taken to confirm reversal (for mode filtering)
 
     @property
     def is_confirmed(self) -> bool:
@@ -713,8 +714,9 @@ class ReversalContext:
     # Bypass flag for HTF alignment
     htf_bypass_active: bool = False
 
-    # Conflict state (long and short both valid)
+    # Conflict state (long and short both valid simultaneously)
     conflict_detected: bool = False
+    conflict_confidence: float = 0.0  # Confidence of the opposing direction when conflict exists
 
     # Details
     signals: List[str] = field(default_factory=list)

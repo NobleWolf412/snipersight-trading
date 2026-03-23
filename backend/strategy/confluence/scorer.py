@@ -4267,6 +4267,17 @@ def _calculate_synergy_bonus(
         except ImportError:
             pass
 
+        # Conflict penalty — opposing direction also qualified, reduce conviction
+        if reversal_context.conflict_detected:
+            margin = reversal_context.confidence - reversal_context.conflict_confidence
+            # Small margin (< 10 pts) = near-tie = heavy penalty; wide margin = mild penalty
+            conflict_penalty = max(5.0, 15.0 - margin * 0.5)
+            bonus -= conflict_penalty
+            logger.debug(
+                "Conflict penalty: -%.1f (margin %.1f vs opposing %.1f)",
+                conflict_penalty, margin, reversal_context.conflict_confidence,
+            )
+
     # Direct cycle context bonuses/gates (when reversal_context not available or not a setup)
     if cycle_context:
         try:

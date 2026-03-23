@@ -82,7 +82,7 @@ def compute_rsi(df: pd.DataFrame, period: int = 14, validate_input: bool = True)
 
     # Use pandas-ta if available (faster, C-optimized under the hood)
     if PANDAS_TA_AVAILABLE:
-        result = ta.rsi(df["close"], length=period)
+        result = pta.rsi(df["close"], length=period)
         # pandas-ta returns None on error, handle gracefully
         if result is not None:
             return result
@@ -96,7 +96,7 @@ def compute_rsi(df: pd.DataFrame, period: int = 14, validate_input: bool = True)
     avg_losses = losses.ewm(span=period, adjust=False).mean()
     rs = avg_gains / avg_losses
     rsi = 100 - (100 / (1 + rs))
-    rsi = rsi.fillna(100)
+    rsi = rsi.fillna(50)  # Neutral fill instead of 100 to avoid warmup spikes
 
     return rsi
 
@@ -133,7 +133,7 @@ def compute_macd(
 
     # Use pandas-ta if available
     if PANDAS_TA_AVAILABLE:
-        macd_df = ta.macd(df["close"], fast=fast, slow=slow, signal=signal)
+        macd_df = pta.macd(df["close"], fast=fast, slow=slow, signal=signal)
         if macd_df is not None and not macd_df.empty:
             # pandas-ta column naming: MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9
             macd_col = f"MACD_{fast}_{slow}_{signal}"
@@ -193,9 +193,8 @@ def compute_stoch_rsi(
     if not df.columns.is_unique:
         df = df.loc[:, ~df.columns.duplicated()]
 
-    # Use pandas-ta if available
-    if PANDAS_TA_AVAILABLE:
-        stoch_df = ta.stochrsi(
+    if PANDAS_TA_AVAILABLE and pta is not None:
+        stoch_df = pta.stochrsi(
             df["close"], length=rsi_period, rsi_length=stoch_period, k=smooth_k, d=smooth_d
         )
         if stoch_df is not None and not stoch_df.empty:
@@ -252,7 +251,7 @@ def compute_mfi(df: pd.DataFrame, period: int = 14) -> pd.Series:
 
     # Use pandas-ta if available
     if PANDAS_TA_AVAILABLE:
-        result = ta.mfi(df["high"], df["low"], df["close"], df["volume"], length=period)
+        result = pta.mfi(df["high"], df["low"], df["close"], df["volume"], length=period)
         if result is not None:
             return result
         logger.warning("pandas-ta MFI returned None, falling back to manual implementation")
@@ -267,7 +266,7 @@ def compute_mfi(df: pd.DataFrame, period: int = 14) -> pd.Series:
     negative_mf_sum = negative_flow.rolling(window=period).sum()
     mf_ratio = positive_mf_sum / negative_mf_sum
     mfi = 100 - (100 / (1 + mf_ratio))
-    mfi = mfi.fillna(100)
+    mfi = mfi.fillna(50)  # Neutral fill — avoids warmup spike from zero negative flow
 
     return mfi
 

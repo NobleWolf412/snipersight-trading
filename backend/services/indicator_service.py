@@ -136,7 +136,13 @@ class IndicatorService:
         # Volume indicators
         volume_spike = detect_volume_spike(df)
         obv = compute_obv(df)
-        _ = compute_vwap(df)  # Computed for side effects
+        
+        # VWAP: Use daily reset for intraday timeframes (Issue #5)
+        # Timeframes like 1m, 5m, 15m, 1h, 4h should reset 'D'
+        # 1d and above stay None (cumulative)
+        vwap_reset = 'D' if timeframe not in ['1d', '1w', '1M'] else None
+        vwap_series = compute_vwap(df, reset_period=vwap_reset)
+        
         volume_ratio = self._safe_compute_volume_ratio(df, timeframe)
         vol_accel_data = self._safe_compute_volume_acceleration(df, timeframe)
 
@@ -210,8 +216,7 @@ class IndicatorService:
         ema_50 = close.ewm(span=50, adjust=False).mean().iloc[-1] if len(df) >= 50 else None
         ema_200 = close.ewm(span=200, adjust=False).mean().iloc[-1] if len(df) >= 200 else None
 
-        # VWAP (already computed but need to capture the value)
-        vwap_series = compute_vwap(df)
+        # VWAP value (already computed above)
         vwap_value = (
             vwap_series.iloc[-1] if vwap_series is not None and len(vwap_series) > 0 else None
         )

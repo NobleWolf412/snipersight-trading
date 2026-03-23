@@ -1,0 +1,96 @@
+════════════════════════════════════════════════════════════════════════
+  SNIPERSIGHT — INDICATOR DIAGNOSTIC REPORT
+  Symbol: BTC/USDT  |  TF: 15m  |  2026-03-22 22:03:28
+════════════════════════════════════════════════════════════════════════
+
+  DATASET  (500 candles, price=67903.8700)
+────────────────────────────────────────────────────────────────────────
+  NaN counts:       {'open': 0, 'high': 0, 'low': 0, 'close': 0, 'volume': 0}
+  Zero volume:      0.0%  OK
+  Inverted candles: 0  OK
+
+  🐛 PANDAS-TA NAMING BUG  (momentum.py)
+────────────────────────────────────────────────────────────────────────
+  pandas-ta installed: False   naming bug active: False
+
+  MOMENTUM
+────────────────────────────────────────────────────────────────────────
+     RSI         latest=   45.6222  nan= 0.0%
+     StochRSI K  latest=   60.2465  nan= 0.4%
+     StochRSI D  latest=   66.4862  nan= 0.8%
+     MFI         latest=   55.9101  nan= 0.0%
+     MACD        latest= -117.1947  nan= 0.0%
+     MACD Sig    latest= -134.3502  nan= 0.0%
+     MACD Hist   latest=   17.1556  nan= 0.0%
+     ADX           latest=     31.85  +DI=11.95  -DI=21.25
+
+  VOLATILITY
+────────────────────────────────────────────────────────────────────────
+     ATR          latest=    272.5922  (0.4014% of price)
+     BB Width     752.7606  (1.109% of price)
+     BB Upper      latest=  68359.1198  nan=3.8%
+     BB Mid        latest=  67982.7395  nan=3.8%
+     BB Lower      latest=  67606.3592  nan=3.8%
+     KC Upper      latest=  68532.5318  nan=0.0%
+     KC Mid        latest=  68018.9368  nan=0.0%
+     KC Lower      latest=  67505.3418  nan=0.0%
+     Realized Vol% latest=      4.5809  nan=4.0%
+
+  VOLUME
+────────────────────────────────────────────────────────────────────────
+     OBV          latest=     -551.6823  nan=0.0%
+     VWAP         latest=     70569.603  dev=3.93% from price
+     RVOL         latest=        0.2301
+     Vol Spikes   count=35  latest_bar=False
+     Current vol  4  avg20=18  RVOL=0.23x
+     Acceleration neutral  slope=-0.331  consec=0  active=False
+
+  DIVERGENCE
+────────────────────────────────────────────────────────────────────────
+  — Regular Bullish
+  — Regular Bearish
+  — Hidden Bullish
+  — Hidden Bearish
+
+  KNOWN ISSUES
+────────────────────────────────────────────────────────────────────────
+
+  1. PANDAS-TA NAMING BUG (momentum.py)
+     `ta.rsi()` etc. called but `ta` is undefined — NameError → manual fallback always.
+     ADX uses `pta.adx()` correctly. All other momentum functions broken.
+     Fix: s/ta\./pta\./g in compute_rsi, compute_macd, compute_stoch_rsi, compute_mfi
+
+  2. DIVERGENCE PIVOT ALIGNMENT (divergence.py lines 184-190)
+     Matches indicator pivot to nearest by index — no distance cap beyond lookback*2.
+     Can pair unrelated swing points as divergence. Alignment issues: 0
+     Fix: Reject if abs(indicator_pivot - price_pivot) > 3 bars.
+
+  3. DIVERGENCE STRENGTH FORMULA (divergence.py)
+     strength = min(100, (price_pct + ind_pct) × 5)
+     1%+5% = 30  |  10%+20% = capped 100  |  Large divergences all score 100.
+     No meaningful differentiation between moderate and extreme divergences.
+     Fix: Normalize against rolling distribution of divergence magnitudes.
+
+  4. RSI fillna(100) warmup spike (momentum.py)
+     When all early candles are up, avg_losses=0 → RS=inf → NaN → fillna(100).
+     RSI NaN count: 0 (0 after fillna, but creates spike at warmup)
+
+  5. CUMULATIVE VWAP DRIFT (volume.py)
+     compute_vwap() without reset anchors from bar 1 of dataset.
+     Current deviation: 3.93%  |  For intraday, pass reset_period='D'
+
+  6. ZERO VOLUME THRESHOLD (validation_utils.py)
+     Errors at >50%, warns at >10%. Current: 0.0%
+     Low-liquidity crypto assets will trigger this incorrectly on weekends.
+
+  CURRENT SNAPSHOT
+────────────────────────────────────────────────────────────────────────
+  Price:  67903.8700
+  RSI:    45.6222  (neutral)
+  MFI:    55.9101
+  StochK: 60.2465
+  ADX:    31.85  (trending)
+  ATR:    272.5922  (0.4014%)
+  RVOL:   0.23x
+
+════════════════════════════════════════════════════════════════════════

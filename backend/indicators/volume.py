@@ -324,7 +324,7 @@ def compute_vwap(df: pd.DataFrame, reset_period: str = None) -> pd.Series:
 
     # Use pandas-ta for cumulative VWAP (no reset_period)
     if reset_period is None and PANDAS_TA_AVAILABLE:
-        result = ta.vwap(df["high"], df["low"], df["close"], df["volume"])
+        result = pta.vwap(df["high"], df["low"], df["close"], df["volume"])
         if result is not None:
             return result
         logger.warning("pandas-ta VWAP returned None, falling back to manual implementation")
@@ -334,22 +334,37 @@ def compute_vwap(df: pd.DataFrame, reset_period: str = None) -> pd.Series:
     pv = typical_price * df["volume"]
 
     if reset_period:
-        # Reset VWAP at specified period
+        # Reset VWAP at specified period — requires DatetimeIndex
         if not isinstance(df.index, pd.DatetimeIndex):
-            raise ValueError("DataFrame must have DatetimeIndex for period-based VWAP")
+            logger.warning(
+                "DataFrame index is not DatetimeIndex; cannot apply VWAP reset_period='%s'. "
+                "Falling back to cumulative VWAP.",
+                reset_period,
+            )
+            return pv.cumsum() / df["volume"].cumsum()
 
-        # Group by period and calculate VWAP within each group
-        grouped = df.groupby(pd.Grouper(freq=reset_period))
-        vwap_groups = []
+        try:
+            # Group by period and calculate VWAP within each group
+            grouped = df.groupby(pd.Grouper(freq=reset_period))
+            vwap_groups = []
 
-        for _, group in grouped:
-            if len(group) > 0:
-                group_tp = (group["high"] + group["low"] + group["close"]) / 3
-                group_pv = group_tp * group["volume"]
-                group_vwap = group_pv.cumsum() / group["volume"].cumsum()
-                vwap_groups.append(group_vwap)
+            for _, group in grouped:
+                if len(group) > 0:
+                    group_tp = (group["high"] + group["low"] + group["close"]) / 3
+                    group_pv = group_tp * group["volume"]
+                    group_vwap = group_pv.cumsum() / group["volume"].cumsum()
+                    vwap_groups.append(group_vwap)
 
-        vwap = pd.concat(vwap_groups)
+            if not vwap_groups:
+                raise ValueError("No groups produced by Grouper")
+
+            vwap = pd.concat(vwap_groups)
+        except Exception as e:
+            logger.warning(
+                "VWAP groupby failed (reset_period='%s'): %s — falling back to cumulative VWAP.",
+                reset_period, e,
+            )
+            vwap = pv.cumsum() / df["volume"].cumsum()
     else:
         # Cumulative VWAP
         vwap = pv.cumsum() / df["volume"].cumsum()

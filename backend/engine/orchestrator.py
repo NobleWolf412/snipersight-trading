@@ -1217,6 +1217,29 @@ class Orchestrator:
             except Exception as e:
                 logger.warning(f"Reversal validation failed: {e}")
 
+            # Conflict detection — both directions valid simultaneously
+            # Flag each context so downstream can apply tighter thresholds or skip.
+            if (
+                rev_ctx_long
+                and rev_ctx_short
+                and rev_ctx_long.is_reversal_setup
+                and rev_ctx_short.is_reversal_setup
+            ):
+                rev_ctx_long.conflict_detected = True
+                rev_ctx_long.conflict_confidence = rev_ctx_short.confidence
+                rev_ctx_long.rationale += (
+                    f" ⚠️ CONFLICT: opposing SHORT signal at {rev_ctx_short.confidence:.0f} confidence."
+                )
+                rev_ctx_short.conflict_detected = True
+                rev_ctx_short.conflict_confidence = rev_ctx_long.confidence
+                rev_ctx_short.rationale += (
+                    f" ⚠️ CONFLICT: opposing LONG signal at {rev_ctx_long.confidence:.0f} confidence."
+                )
+                logger.warning(
+                    f"Reversal conflict detected — LONG: {rev_ctx_long.confidence:.0f}, "
+                    f"SHORT: {rev_ctx_short.confidence:.0f}. Both flagged."
+                )
+
             # 3. HTF Context (passed into service as htf_ctx_long/short)
             htf_ctx_long, htf_ctx_short = self._extract_htf_context(
                 multi_tf_data=context.multi_tf_data,

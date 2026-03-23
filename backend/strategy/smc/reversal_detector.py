@@ -66,13 +66,17 @@ def detect_reversal_context(
         elif direction.upper() == "SHORT":
             return short_reversal
 
-    # Return stronger setup
+    # Return stronger setup — flag conflict so callers can widen threshold or skip
     if long_reversal.is_reversal_setup and short_reversal.is_reversal_setup:
         if long_reversal.confidence >= short_reversal.confidence:
-            stronger = long_reversal
+            stronger, weaker = long_reversal, short_reversal
         else:
-            stronger = short_reversal
+            stronger, weaker = short_reversal, long_reversal
         stronger.conflict_detected = True
+        stronger.conflict_confidence = weaker.confidence
+        stronger.rationale += (
+            f" ⚠️ CONFLICT: opposing {weaker.direction} signal at {weaker.confidence:.0f} confidence."
+        )
         return stronger
     elif long_reversal.is_reversal_setup:
         return long_reversal

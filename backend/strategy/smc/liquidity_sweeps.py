@@ -39,7 +39,8 @@ def detect_liquidity_sweeps(
     df: pd.DataFrame,
     config: SMCConfig | dict | None = None,
     mode_profile: Optional[str] = None,  # NEW: Mode-specific reversal windows
-) -> List[LiquiditySweep]:
+    _return_raw_count: bool = False,     # NEW: Single-pass optimization
+) -> "List[LiquiditySweep] | tuple[List[LiquiditySweep], int]":
     """
     Detect liquidity sweeps in price data.
 
@@ -104,6 +105,10 @@ def detect_liquidity_sweeps(
         max_sweep_candles = MODE_REVERSAL_WINDOWS[mode_profile]
     else:
         max_sweep_candles = smc_cfg.sweep_max_sweep_candles
+        
+    # Single-pass optimization: detect with largest window (12) to capture raw count
+    # then filter by mode_profile if provided.
+    detection_window = max(max_sweep_candles, 12) if _return_raw_count else max_sweep_candles
 
     min_reversal_atr = smc_cfg.sweep_min_reversal_atr
     min_penetration_atr = getattr(smc_cfg, "sweep_min_penetration_atr", 0.3)
@@ -251,6 +256,7 @@ def detect_liquidity_sweeps(
                                 grade=grade,
                                 has_reversal_pattern=has_pattern,
                                 confirmation_level=conf_level,
+                                reversal_bar_count=reversal_bars
                             )
                             liquidity_sweeps.append(sweep)
 
@@ -331,9 +337,12 @@ def detect_liquidity_sweeps(
                                 grade=grade,
                                 has_reversal_pattern=has_pattern,
                                 confirmation_level=conf_level,
+                                reversal_bar_count=reversal_bars
                             )
                             liquidity_sweeps.append(sweep)
 
+    if _return_raw_count:
+        return liquidity_sweeps, raw_count
     return liquidity_sweeps
 
 
