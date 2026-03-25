@@ -199,6 +199,14 @@ interface SymbolLastSeen {
   stop_loss: number;
   timestamp: string;
   scan_number: number;
+  // Critical factor convergence
+  setup_state?: 'READY' | 'DEVELOPING' | 'WATCHING' | 'NOISE';
+  convergence_score?: number;
+  convergence_critical_count?: number;
+  convergence_critical_total?: number;
+  convergence_missing?: string[];
+  veto_blocked?: boolean;
+  active_vetoes?: string[];
 }
 
 // ─── Funnel bar ───────────────────────────────────────────────────────────────
@@ -251,17 +259,35 @@ function FunnelBar({
   );
 }
 
+// ─── Setup state badge config ─────────────────────────────────────────────────
+
+const SETUP_STATE_CONFIG = {
+  READY:      { label: 'READY',      color: 'text-green-400',  bg: 'bg-green-500/15',  border: 'border-green-500/40' },
+  DEVELOPING: { label: 'DEV',        color: 'text-amber-300',  bg: 'bg-amber-500/15',  border: 'border-amber-400/40' },
+  WATCHING:   { label: 'WATCH',      color: 'text-sky-400',    bg: 'bg-sky-500/15',    border: 'border-sky-500/40'  },
+  NOISE:      { label: 'NOISE',      color: 'text-zinc-500',   bg: 'bg-zinc-800/30',   border: 'border-zinc-700/30' },
+} as const;
+
 // ─── Signal row ───────────────────────────────────────────────────────────────
 
 function SignalRow({ entry }: { entry: SymbolLastSeen }) {
   const [open, setOpen] = useState(false);
   const cfg = STAGE_CONFIG[entry.stage];
   const isLong = entry.direction === 'LONG';
+  const ss = entry.setup_state ? SETUP_STATE_CONFIG[entry.setup_state] : null;
+
+  // For CONFLUENCE-filtered signals, if setup_state is DEVELOPING or WATCHING
+  // we highlight the row slightly to make it stand out from NOISE
+  const isDeveloping = entry.stage === 'CONFLUENCE' && (entry.setup_state === 'DEVELOPING' || entry.setup_state === 'WATCHING');
 
   return (
     <div
       className={`rounded-lg border cursor-pointer transition-all ${
-        open ? `${cfg.bgColor} ${cfg.borderColor}` : 'bg-background/40 border-border/30 hover:border-border/60'
+        open
+          ? `${cfg.bgColor} ${cfg.borderColor}`
+          : isDeveloping
+            ? 'bg-amber-500/5 border-amber-500/20 hover:border-amber-400/40'
+            : 'bg-background/40 border-border/30 hover:border-border/60'
       }`}
       onClick={() => setOpen(!open)}
     >
@@ -270,6 +296,13 @@ function SignalRow({ entry }: { entry: SymbolLastSeen }) {
         <span className={`shrink-0 text-[9px] font-bold tracking-widest px-1.5 py-0.5 rounded border ${cfg.bgColor} ${cfg.borderColor} ${cfg.color}`}>
           {cfg.shortLabel}
         </span>
+
+        {/* Setup state badge — only show for confluence-filtered signals */}
+        {ss && entry.stage === 'CONFLUENCE' && (
+          <span className={`shrink-0 text-[8px] font-bold tracking-widest px-1 py-0.5 rounded border ${ss.bg} ${ss.border} ${ss.color}`}>
+            {ss.label}
+          </span>
+        )}
 
         {/* Direction + Symbol */}
         <span className={`font-bold shrink-0 ${isLong ? 'text-green-400' : 'text-red-400'}`}>
@@ -284,12 +317,10 @@ function SignalRow({ entry }: { entry: SymbolLastSeen }) {
           {entry.confluence.toFixed(0)}%
         </span>
 
-        {/* R:R */}
-        {entry.rr !== null && (
-          <span className="text-muted-foreground shrink-0 w-12 text-right">
-            {entry.rr.toFixed(1)}R
-          </span>
-        )}
+        {/* R:R — only show when a real trade plan exists (rr > 0) */}
+        <span className="text-muted-foreground shrink-0 w-12 text-right">
+          {entry.rr != null && entry.rr > 0 ? `${entry.rr.toFixed(1)}R` : '—'}
+        </span>
 
         {/* Reason truncated */}
         <span className="flex-1 truncate text-muted-foreground/70 pl-2 border-l border-border/20 italic">
@@ -305,11 +336,39 @@ function SignalRow({ entry }: { entry: SymbolLastSeen }) {
       {open && (
         <div className="px-3 pb-3 pt-1 border-t border-border/20 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-[10px] font-mono text-muted-foreground">
           <div><span className="text-muted-foreground/50">scan# </span>{entry.scan_number}</div>
-          <div><span className="text-muted-foreground/50">entry </span>${entry.entry_zone.toFixed(4)}</div>
-          <div><span className="text-muted-foreground/50">stop </span>${entry.stop_loss.toFixed(4)}</div>
-          {entry.rr !== null && (
+          <div><span className="text-muted-foreground/50">entry </span>{entry.entry_zone > 0 ? `$${entry.entry_zone.toFixed(4)}` : '—'}</div>
+          <div><span className="text-muted-foreground/50">stop </span>{entry.stop_loss > 0 ? `$${entry.stop_loss.toFixed(4)}` : '—'}</div>
+          {entry.rr != null && entry.rr > 0 && (
             <div><span className="text-muted-foreground/50">r:r </span>{entry.rr.toFixed(2)}</div>
           )}
+
+          {/* Critical factor convergence — only for confluence-filtered signals */}
+          {entry.stage === 'CONFLUENCE' && entry.convergence_score !== undefined && (
+            <>
+              <div className="col-span-full pt-1 flex items-center gap-2 flex-wrap">
+                <span className="text-muted-foreground/50">convergence </span>
+                <span className={`font-bold ${
+                  (entry.convergence_score ?? 0) >= 62.5 ? 'text-amber-300' :
+                  (entry.convergence_score ?? 0) >= 50   ? 'text-sky-400'   : 'text-zinc-500'
+                }`}>
+                  {entry.convergence_critical_count ?? 0}/{entry.convergence_critical_total ?? 8} critical
+                  ({(entry.convergence_score ?? 0).toFixed(0)}%)
+                </span>
+                {entry.veto_blocked && (
+                  <span className="text-red-400 font-bold">
+                    🚫 {(entry.active_vetoes ?? []).join(', ')}
+                  </span>
+                )}
+              </div>
+              {(entry.convergence_missing ?? []).length > 0 && (
+                <div className="col-span-full text-zinc-500">
+                  <span className="text-muted-foreground/50">missing </span>
+                  {(entry.convergence_missing ?? []).join(' · ')}
+                </div>
+              )}
+            </>
+          )}
+
           <div className="col-span-full pt-1">
             <span className="text-muted-foreground/50">reason </span>
             <span className={cfg.color}>{entry.reason}</span>
@@ -372,6 +431,13 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
           stop_loss: s.stop_loss,
           timestamp: s.timestamp,
           scan_number: s.scan_number,
+          setup_state: s.setup_state,
+          convergence_score: s.convergence_score,
+          convergence_critical_count: s.convergence_critical_count,
+          convergence_critical_total: s.convergence_critical_total,
+          convergence_missing: s.convergence_missing,
+          veto_blocked: s.veto_blocked,
+          active_vetoes: s.active_vetoes,
         });
       }
     }

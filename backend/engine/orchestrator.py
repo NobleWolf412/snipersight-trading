@@ -1285,12 +1285,13 @@ class Orchestrator:
             self.diagnostics["confluence_rejections"].extend(rejections)
 
         except Exception as e:
-            import traceback
+            import traceback as _tb
 
             error_msg = str(e)
-            
+            full_tb = _tb.format_exc()
+
             logger.error(f"Confluence service failed for {symbol}: {error_msg}")
-            logger.debug(f"Full traceback:\n{traceback.format_exc()}")
+            logger.error(f"Full traceback:\n{full_tb}")  # Promoted to ERROR so it lands in logs
 
             # ========== UNIFIED DIRECTIONAL CONFLICT HANDLING ==========
             # Check if this is a directional conflict exception by message content
@@ -1412,8 +1413,16 @@ class Orchestrator:
                     "bullish_conflict": bull_conflict,
                     "bearish_synergy": bear_synergy,
                     "bearish_conflict": bear_conflict,
+                    # Critical factor convergence (from winning direction breakdown if available)
+                    "convergence_score": (context.confluence_breakdown.metadata or {}).get("convergence_score", 0) if context.confluence_breakdown else 0,
+                    "convergence_critical_count": (context.confluence_breakdown.metadata or {}).get("convergence_critical_count", 0) if context.confluence_breakdown else 0,
+                    "convergence_critical_total": (context.confluence_breakdown.metadata or {}).get("convergence_critical_total", 8) if context.confluence_breakdown else 8,
+                    "convergence_missing": (context.confluence_breakdown.metadata or {}).get("convergence_missing", []) if context.confluence_breakdown else [],
+                    "veto_blocked": (context.confluence_breakdown.metadata or {}).get("veto_blocked", False) if context.confluence_breakdown else False,
+                    "active_vetoes": (context.confluence_breakdown.metadata or {}).get("active_vetoes", []) if context.confluence_breakdown else [],
+                    "setup_state": (context.confluence_breakdown.metadata or {}).get("setup_state", "NOISE") if context.confluence_breakdown else "NOISE",
                 }
-                
+
                 # Log telemetry event
                 try:
                     self.telemetry.log_event(
@@ -1440,11 +1449,19 @@ class Orchestrator:
                 
                 return None, payload
 
-            # Generic error fallback - include full error for debugging
+            # Generic error fallback — include direction and traceback for debugging
+            # Note: direction may not be set yet if error happened before direction selection
+            _err_direction = context.metadata.get("chosen_direction") or "UNKNOWN"
+            # Grab last 3 lines of traceback for signal log (enough to locate the crash)
+            _tb_lines = [l for l in full_tb.strip().splitlines() if l.strip()]
+            _tb_hint = " | ".join(_tb_lines[-3:]) if _tb_lines else ""
             return None, {
                 "symbol": symbol,
+                "direction": _err_direction,
                 "reason": f"Confluence scoring failed: {error_msg}",
                 "reason_type": "errors",
+                "traceback_hint": _tb_hint,
+                "score": 0,
             }
         finally:
             # ALWAYS restore profile — even if the except handler returns early.
@@ -1579,6 +1596,14 @@ class Orchestrator:
                 "conflict_penalty": context.confluence_breakdown.conflict_penalty,
                 "htf_aligned": context.confluence_breakdown.htf_aligned,
                 "btc_impulse_gate": context.confluence_breakdown.btc_impulse_gate,
+                # Critical factor convergence metadata (from scorer)
+                "convergence_score": (context.confluence_breakdown.metadata or {}).get("convergence_score", 0),
+                "convergence_critical_count": (context.confluence_breakdown.metadata or {}).get("convergence_critical_count", 0),
+                "convergence_critical_total": (context.confluence_breakdown.metadata or {}).get("convergence_critical_total", 8),
+                "convergence_missing": (context.confluence_breakdown.metadata or {}).get("convergence_missing", []),
+                "veto_blocked": (context.confluence_breakdown.metadata or {}).get("veto_blocked", False),
+                "active_vetoes": (context.confluence_breakdown.metadata or {}).get("active_vetoes", []),
+                "setup_state": (context.confluence_breakdown.metadata or {}).get("setup_state", "NOISE"),
             }
 
         # Log confluence pass
@@ -1596,7 +1621,42 @@ class Orchestrator:
         logger.debug("%s [%s]: Generating trade plan", symbol, trace_id)
         # current_price already computed above for cooldown check
         chosen_direction = context.metadata.get("chosen_direction", "UNKNOWN")
-        cascade_types = getattr(self.scanner_mode, "cascade_trade_types", None)
+        cascade_types = list(getattr(self.scanner_mode, "cascade_trade_types", None) or [])
+
+        # ── Regime-aware trade type capping (DCL/WCL awareness) ─────────────────
+        # In a compressed UP or DOWN regime, counter-trend SWING trades are the
+        # primary source of losses — price is coiling inside a range before the
+        # next directional push. Cap counter-trend setups to intraday max so the
+        # bot doesn't hold overnight into the trend resumption.
+        if cascade_types:
+            _regime = context.metadata.get("symbol_regime") or context.metadata.get("global_regime")
+            if _regime:
+                _trend = getattr(_regime, "trend", None)
+                if _trend is None:
+                    _dims = getattr(_regime, "dimensions", None)
+                    _trend = getattr(_dims, "trend", "neutral") if _dims else "neutral"
+                _vol = getattr(_regime, "volatility", None)
+                if _vol is None:
+                    _dims = getattr(_regime, "dimensions", None)
+                    _vol = getattr(_dims, "volatility", "normal") if _dims else "normal"
+
+                _is_counter_trend = (
+                    (_trend in ("up", "strong_up") and chosen_direction == "SHORT") or
+                    (_trend in ("down", "strong_down") and chosen_direction == "LONG")
+                )
+                _is_compressed = _vol in ("compressed", "low")
+
+                if _is_counter_trend and _is_compressed and "swing" in cascade_types:
+                    # Remove swing from cascade — counter-trend swing in compressed regime
+                    # is the DCL/WCL trap. Allow intraday/scalp only.
+                    cascade_types = [t for t in cascade_types if t != "swing"]
+                    context.metadata["regime_swing_cap"] = True
+                    logger.info(
+                        "%s [%s]: ⚡ Regime cap — counter-trend swing blocked "
+                        "(trend=%s vol=%s dir=%s). Cascade capped to: %s",
+                        symbol, trace_id, _trend, _vol, chosen_direction, cascade_types,
+                    )
+        # ── End regime-aware capping ─────────────────────────────────────────────
         logger.info(
             "%s [%s]: 🎯 Plan generation (direction=%s, score=%.1f, cascade=%s)",
             symbol,
@@ -1798,12 +1858,21 @@ class Orchestrator:
         else:
             # Construct meaningful rejection info from metadata
             reason = context.metadata.get("plan_failure_reason", "No trade plan generated")
-            return None, {
+            _bd_meta = (context.confluence_breakdown.metadata or {}) if context.confluence_breakdown else {}
+        return None, {
                 "symbol": symbol,
                 "direction": context.metadata.get("chosen_direction", "LONG"),
                 "reason": reason,
                 "reason_type": "risk_validation" if "revalidation" in reason else "no_trade_plan",
                 "details": {"context": context.metadata},
+                # Critical factor convergence (pass-through so UI can show setup state)
+                "convergence_score": _bd_meta.get("convergence_score", 0),
+                "convergence_critical_count": _bd_meta.get("convergence_critical_count", 0),
+                "convergence_critical_total": _bd_meta.get("convergence_critical_total", 8),
+                "convergence_missing": _bd_meta.get("convergence_missing", []),
+                "veto_blocked": _bd_meta.get("veto_blocked", False),
+                "active_vetoes": _bd_meta.get("active_vetoes", []),
+                "setup_state": _bd_meta.get("setup_state", "NOISE"),
             }
 
     def _ingest_data(self, symbol: str) -> Optional[MultiTimeframeData]:
@@ -2474,6 +2543,8 @@ class Orchestrator:
         Returns the plan with the highest effective score, or None if all scales fail.
         """
         candidates: List[tuple] = []
+        # Track every cascade attempt so diagnostics and signal_log can show them
+        cascade_attempts: List[dict] = []
 
         for trade_type in cascade_types:
             try:
@@ -2491,6 +2562,7 @@ class Orchestrator:
                     )
                     effective = plan.confidence_score + bonus
                     candidates.append((plan, effective, trade_type))
+                    cascade_attempts.append({"type": trade_type, "result": "pass", "score": plan.confidence_score})
                     logger.info(
                         "🔀 %s CASCADE %s → %s plan (conf=%.1f, effective=%.1f)",
                         context.symbol,
@@ -2499,10 +2571,20 @@ class Orchestrator:
                         plan.confidence_score,
                         effective,
                     )
+                else:
+                    cascade_attempts.append({"type": trade_type, "result": "no_plan"})
+                    logger.info(
+                        "🔀 %s CASCADE %s → no valid plan (entry/stop/RR failed)",
+                        context.symbol, trade_type,
+                    )
             except Exception as exc:
-                logger.debug(
-                    "🔀 %s CASCADE %s scale failed: %s", context.symbol, trade_type, exc
+                cascade_attempts.append({"type": trade_type, "result": "error", "error": str(exc)})
+                logger.info(
+                    "🔀 %s CASCADE %s → exception: %s", context.symbol, trade_type, exc
                 )
+
+        # Store cascade results in context for downstream visibility
+        context.metadata["cascade_attempts"] = cascade_attempts
 
         if not candidates:
             return None

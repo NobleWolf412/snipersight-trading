@@ -1062,6 +1062,14 @@ export interface SignalLogEntry {
   balance?: number;
   order_status?: string;
   timeframe?: string; // Signal timeframe (e.g. '4h', '1h', '15m')
+  // Critical factor convergence — populated for filtered signals
+  setup_state?: 'READY' | 'DEVELOPING' | 'WATCHING' | 'NOISE';
+  convergence_score?: number;           // 0–100 % of critical factors firing
+  convergence_critical_count?: number;  // e.g. 6
+  convergence_critical_total?: number;  // always 8
+  convergence_missing?: string[];       // factor names below threshold
+  veto_blocked?: boolean;
+  active_vetoes?: string[];
 }
 
 export interface PaperTradingStartResponse {

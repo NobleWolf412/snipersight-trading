@@ -685,11 +685,31 @@ class ConfluenceService:
         current_price: float,
     ) -> ConfluenceBreakdown:
         """Score a single direction using the existing scorer."""
+        # Derive htf_trend from symbol_regime so the "HTF Alignment" factor actually fires.
+        # Previously htf_trend was never passed → the factor was never added → 0.15 weight
+        # was permanently dead. Now we read the symbol regime trend (or fall back to global)
+        # and map it to the scorer's "bullish"/"bearish" vocabulary.
+        htf_trend_str: Optional[str] = None
+        symbol_regime = context.metadata.get("symbol_regime")
+        if not symbol_regime:
+            symbol_regime = context.metadata.get("global_regime")
+        if symbol_regime:
+            # SymbolRegime exposes .trend directly; MarketRegime exposes .dimensions.trend
+            raw_trend = getattr(symbol_regime, "trend", None)
+            if raw_trend is None:
+                dims = getattr(symbol_regime, "dimensions", None)
+                raw_trend = getattr(dims, "trend", "neutral") if dims else "neutral"
+            htf_trend_str = {
+                "strong_up": "bullish", "up": "bullish",
+                "strong_down": "bearish", "down": "bearish",
+            }.get(raw_trend)  # None for sideways/neutral → factor not added
+
         return calculate_confluence_score(
             smc_snapshot=context.smc_snapshot,
             indicators=context.multi_tf_indicators,
             config=self._config,
             direction=direction,
+            htf_trend=htf_trend_str,
             htf_context=htf_context,
             cycle_context=cycle_context,
             reversal_context=reversal_context,

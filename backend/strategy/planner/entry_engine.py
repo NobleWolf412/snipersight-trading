@@ -1357,10 +1357,12 @@ def _calculate_entry_zone(
         )
     else:
         # Bearish fallback: price rallies up into the zone.
-        # near_entry = first touch (bottom of zone, lower price), far_entry = deeper resistance (higher price).
+        # near_entry = TOP of zone (higher price, first hit as price rallies into resistance).
+        # far_entry = BOTTOM of zone (lower price, deeper / more conservative entry).
+        # Convention: near_entry > far_entry for SHORT setups.
         entry_zone = EntryZone(
-            near_entry=current_price + fallback_offset * 0.5,
-            far_entry=current_price + fallback_offset,
+            near_entry=current_price + fallback_offset,
+            far_entry=current_price + fallback_offset * 0.5,
             rationale=f"ATR fallback entry zone (no SMC structure found): offset={fallback_offset:.4f}",
         )
     entry_zone.entry_tf_used = "N/A"  # type: ignore

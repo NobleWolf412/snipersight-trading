@@ -6,16 +6,18 @@ import { Robot, StopCircle, Target, CheckCircle, XCircle, TrendUp, CaretDown, Ca
 import { useState, useEffect } from 'react';
 import { PriceDisplay } from '@/components/PriceDisplay';
 import { LiveTicker } from '@/components/LiveTicker';
-import { ActivityFeed } from '@/components/telemetry/ActivityFeed';
 import { telemetryService, type TelemetryAnalytics } from '@/services/telemetryService';
 import { PageShell } from '@/components/layout/PageShell';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { PositionsPanel } from '@/components/bot/PositionsPanel';
+import { WatchlistRadar } from '@/components/bot/WatchlistRadar';
+import { api, PaperTradingStatusResponse } from '@/utils/api';
 
 export function BotStatus() {
   const navigate = useNavigate();
   const [isActive, setIsActive] = useState(true);
   const [analytics, setAnalytics] = useState<TelemetryAnalytics | null>(null);
+  const [botStatus, setBotStatus] = useState<PaperTradingStatusResponse | null>(null);
   const [showStatus, setShowStatus] = useState(true);
   const [showAnalytics, setShowAnalytics] = useState(true);
 
@@ -29,11 +31,25 @@ export function BotStatus() {
       }
     };
 
+    const loadBotStatus = async () => {
+      try {
+        const data = await api.getPaperTradingStatus();
+        setBotStatus(data);
+      } catch {
+        // bot may not be running — silently ignore
+      }
+    };
+
     loadAnalytics();
-    
-    const interval = setInterval(loadAnalytics, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    loadBotStatus();
+
+    const analyticsInterval = setInterval(loadAnalytics, 30000);
+    const statusInterval = setInterval(loadBotStatus, 5000);
+    return () => {
+      clearInterval(analyticsInterval);
+      clearInterval(statusInterval);
+    };
+  }, [];
 
   const handleAbortMission = () => {
     setIsActive(false);
@@ -230,9 +246,15 @@ export function BotStatus() {
         <div className="space-y-4">
           <h2 className="text-2xl font-bold heading-hud flex items-center gap-3">
             <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
-            LIVE ACTIVITY FEED
+            WATCHLIST RADAR
           </h2>
-          <ActivityFeed limit={100} autoScroll={true} showFilters={true} pollInterval={3000} />
+          {botStatus ? (
+            <WatchlistRadar status={botStatus} />
+          ) : (
+            <div className="glass-card p-5 rounded-2xl border border-zinc-700/30 text-center text-muted-foreground text-sm py-10">
+              Bot is not running — start the bot to see live watchlist health.
+            </div>
+          )}
         </div>
       </div>
     </PageShell>

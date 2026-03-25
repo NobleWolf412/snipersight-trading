@@ -46,28 +46,6 @@ _PENDING_TTL_MINUTES: Dict[str, float] = {
 }
 
 
-# #region agent log
-def _dbg_log(hypothesis_id: str, location: str, message: str, data: Dict[str, Any]) -> None:
-    """
-    Lightweight NDJSON logger for debug session 587019.
-    Writes a single line to debug-587019.log; failures are silently ignored.
-    """
-    try:
-        payload = {
-            "sessionId": "587019",
-            "runId": "paper-trading",
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(time.time() * 1000),
-        }
-        with open("debug-587019.log", "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, default=str) + "\n")
-    except Exception:
-        # Never let debug logging break the trading loop
-        pass
-# #endregion
 
 class PaperBotStatus(Enum):
     """Paper trading bot status."""
@@ -120,7 +98,7 @@ class PaperTradingConfig:
     majors: bool = True
     altcoins: bool = False
     meme_mode: bool = False
-    slippage_bps: float = 5.0
+    slippage_bps: float = 15.0  # Realistic for alt-crypto limit fills (was 5.0)
     fee_rate: float = 0.001
     max_hours_open: float = 72.0
     max_pending_scans: int = 2  # Cancel pending limit orders after this many scan cycles
@@ -414,22 +392,6 @@ class PaperTradingService:
             scan_config.planner = planner_cfg
             scan_config.enable_fusion = True  # Bot uses Dynamic Logic Fusion — scanner stays on pure Stealth weights
 
-            # #region agent log
-            _dbg_log(
-                hypothesis_id="H1",
-                location="paper_trading_service.start:scan_config",
-                message="Initialized ScanConfig for paper trading session",
-                data={
-                    "profile": scan_config.profile,
-                    "timeframes": list(scan_config.timeframes),
-                    "min_confluence_score": scan_config.min_confluence_score,
-                    "min_rr_ratio": scan_config.min_rr_ratio,
-                    "pd_compliance_required": planner_cfg.pd_compliance_required,
-                    "stop_buffer_by_regime": planner_cfg.stop_buffer_by_regime,
-                    "user_min_confluence": config.min_confluence,
-                },
-            )
-            # #endregion
 
             self.orchestrator = Orchestrator(config=scan_config, exchange_adapter=adapter)
         except Exception as e:
@@ -1046,21 +1008,6 @@ class PaperTradingService:
         self._log_activity("scan_started", {"mode": actual_scan_mode})
         self.stats.scans_completed += 1
 
-        # #region agent log
-        _dbg_log(
-            hypothesis_id="H2",
-            location="paper_trading_service._run_scan:start",
-            message="Starting scan cycle",
-            data={
-                "actual_scan_mode": actual_scan_mode,
-                "requested_sniper_mode": conf.sniper_mode,
-                "symbols_configured": len(getattr(conf, "symbols", []) or []),
-                "majors": getattr(conf, "majors", True),
-                "altcoins": getattr(conf, "altcoins", False),
-                "meme_mode": getattr(conf, "meme_mode", False),
-            },
-        )
-        # #endregion
 
         try:
             # Build symbol list — single code path (fixes dual-path bug)
@@ -1262,9 +1209,19 @@ class PaperTradingService:
                     )
                     
                     self._log_signal(
-                        mock_plan, 
-                        result="filtered", 
-                        reason=item.get('reason', f"Scanner Filter: {reason_type}")
+                        mock_plan,
+                        result="filtered",
+                        reason=item.get('reason', f"Scanner Filter: {reason_type}"),
+                        # Critical factor convergence — surface DEVELOPING/WATCHING in UI
+                        setup_state=item.get('setup_state', 'NOISE'),
+                        convergence_score=item.get('convergence_score', 0),
+                        convergence_critical_count=item.get('convergence_critical_count', 0),
+                        convergence_critical_total=item.get('convergence_critical_total', 9),
+                        convergence_missing=item.get('convergence_missing', []),
+                        veto_blocked=item.get('veto_blocked', False),
+                        active_vetoes=item.get('active_vetoes', []),
+                        # Crash traceback hint — non-empty only for 'errors' reason_type
+                        traceback_hint=item.get('traceback_hint', ''),
                     )
 
             self._log_activity(
@@ -1362,20 +1319,6 @@ class PaperTradingService:
         assert position_manager is not None
 
 
-        # #region agent log
-        _dbg_log(
-            hypothesis_id="H3",
-            location="paper_trading_service._process_signal:entry",
-            message="Processing trade plan",
-            data={
-                "symbol": plan.symbol,
-                "direction": getattr(plan, "direction", None),
-                "confidence": getattr(plan, "confidence_score", None),
-                "trade_type": getattr(plan, "trade_type", None),
-                "risk_reward": getattr(plan, "risk_reward_ratio", None),
-            },
-        )
-        # #endregion
 
         # Check if we can take more positions.
         # Only count ACTIVE (filled) positions against the cap — pending limit orders
@@ -1391,19 +1334,6 @@ class PaperTradingService:
                 "symbol": plan.symbol, "direction": plan.direction,
                 "confluence": plan.confidence_score, "reason": reason,
             })
-            # #region agent log
-            _dbg_log(
-                hypothesis_id="H4",
-                location="paper_trading_service._process_signal:max_positions",
-                message="Signal filtered by max_positions gate",
-                data={
-                    "symbol": plan.symbol,
-                    "active_count": active_count,
-                    "pending_count": len(self._pending_plans),
-                    "max_positions": config.max_positions,
-                },
-            )
-            # #endregion
             return
 
         # Check if already in position for this symbol.
@@ -1454,14 +1384,6 @@ class PaperTradingService:
                     "symbol": plan.symbol, "direction": plan.direction,
                     "confluence": plan.confidence_score, "reason": reason,
                 })
-                # #region agent log
-                _dbg_log(
-                    hypothesis_id="H4",
-                    location="paper_trading_service._process_signal:has_position",
-                    message="Signal filtered because position already open (same direction)",
-                    data={"symbol": plan.symbol, "direction": plan.direction},
-                )
-                # #endregion
                 return
 
         # Check for existing pending orders for this symbol
@@ -1531,18 +1453,6 @@ class PaperTradingService:
                 "symbol": plan.symbol, "direction": plan.direction,
                 "confluence": plan.confidence_score, "reason": reason,
             })
-            # #region agent log
-            _dbg_log(
-                hypothesis_id="H5",
-                location="paper_trading_service._process_signal:confluence_gate",
-                message="Signal filtered by confluence gate",
-                data={
-                    "symbol": plan.symbol,
-                    "confidence": plan.confidence_score,
-                    "min_score": min_score,
-                },
-            )
-            # #endregion
             return
 
         # Calculate position size
@@ -1560,20 +1470,6 @@ class PaperTradingService:
                 "symbol": plan.symbol, "direction": plan.direction,
                 "confluence": plan.confidence_score, "reason": reason,
             })
-            # #region agent log
-            _dbg_log(
-                hypothesis_id="H6",
-                location="paper_trading_service._process_signal:position_size",
-                message="Signal filtered due to invalid position size",
-                data={
-                    "symbol": plan.symbol,
-                    "balance": balance,
-                    "entry_near": plan.entry_zone.near_entry,
-                    "stop": plan.stop_loss.level,
-                    "position_size": position_size,
-                },
-            )
-            # #endregion
             return
 
 
@@ -1627,19 +1523,6 @@ class PaperTradingService:
                         "confluence": plan.confidence_score,
                         "reason": reason,
                     })
-                    # #region agent log
-                    _dbg_log(
-                        hypothesis_id="H7",
-                        location="paper_trading_service._process_signal:pullback_probability",
-                        message="Signal filtered by pullback_probability heuristic",
-                        data={
-                            "symbol": plan.symbol,
-                            "pullback_probability": pb,
-                            "limit_price": limit_price,
-                            "current_price": current_price,
-                        },
-                    )
-                    # #endregion
                     return
         except Exception as _e:
             # Never let heuristics block execution; fall back to original behavior.
@@ -1844,10 +1727,9 @@ class PaperTradingService:
             # 2 consecutive losses: cut risk to 75%
             adapted = base_risk * 0.75
             return adapted
-        elif streak >= 3:
-            # 3+ consecutive wins: slight increase (max 25% boost)
-            adapted = min(base_risk * 1.25, base_risk + 0.5)
-            return adapted
+        # NOTE: Winning streak risk increase removed.
+        # Crypto winning streaks often precede mean-reversion / regime flips.
+        # Sizing up into a hot streak adds correlated exposure at the worst time.
 
         return base_risk
 

@@ -740,26 +740,21 @@ class PositionManager:
         return None
 
     def _move_to_breakeven(self, position: PositionState):
-        """Move stop loss to soft breakeven (50% of risk distance)."""
+        """Move stop loss to true breakeven (entry price = 0R)."""
         if position.breakeven_active:
             return  # Already at breakeven
 
         old_stop = position.stop_loss
-        
-        # FIX: Use initial_stop_loss to ensure 50% jump is calculated 
-        # from the original risk distance, not the current trailing level.
-        risk_distance = abs(position.entry_price - position.initial_stop_loss)
 
-        if position.direction == "LONG":
-            position.stop_loss = position.initial_stop_loss + (risk_distance * 0.5)
-        else:
-            position.stop_loss = position.initial_stop_loss - (risk_distance * 0.5)
+        # True breakeven: stop at entry price.
+        # Previously this was entry ± (risk * 0.5) which is -0.5R, not breakeven.
+        position.stop_loss = position.entry_price
 
         position.breakeven_active = True
 
         logger.info(
-            f"SOFT BREAKEVEN: {position.position_id} | {position.symbol} | "
-            f"Stop moved: {old_stop} -> {position.stop_loss}"
+            f"BREAKEVEN: {position.position_id} | {position.symbol} | "
+            f"Stop moved: {old_stop:.6f} -> {position.stop_loss:.6f} (entry)"
         )
 
     def _check_trailing_activation(self, position: PositionState, current_price: float):

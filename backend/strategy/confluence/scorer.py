@@ -40,16 +40,40 @@ from backend.analysis.fibonacci import (
 )
 
 # === FILE LOGGING FOR CONFLUENCE BREAKDOWN ===
-# Automatically write detailed breakdowns to file for investigation
+# Uses a RotatingFileHandler so the file never grows unbounded.
+# Max 5 MB per file, 3 backups kept (≤15 MB total on disk).
+
+import logging as _stdlib_logging
+from logging.handlers import RotatingFileHandler as _RotatingFileHandler
 
 BREAKDOWN_LOG_PATH = "logs/confluence_breakdown.log"
 BREAKDOWN_LOG_LOCK = threading.Lock()
-try:
-    BREAKDOWN_LOG_FILE = open(BREAKDOWN_LOG_PATH, "a", buffering=1)  # Line buffered
-    logger.info(f"📝 Confluence breakdown logging to: {BREAKDOWN_LOG_PATH}")
-except Exception as e:
-    BREAKDOWN_LOG_FILE = None
-    logger.warning(f"Could not open breakdown log file: {e}")
+
+def _make_breakdown_logger() -> Optional[_stdlib_logging.Logger]:
+    """Create a dedicated rotating-file logger for confluence breakdowns."""
+    try:
+        import os
+        os.makedirs("logs", exist_ok=True)
+        _lg = _stdlib_logging.getLogger("confluence_breakdown")
+        _lg.setLevel(_stdlib_logging.DEBUG)
+        if not _lg.handlers:
+            _rh = _RotatingFileHandler(
+                BREAKDOWN_LOG_PATH,
+                maxBytes=5 * 1024 * 1024,  # 5 MB
+                backupCount=3,
+                encoding="utf-8",
+            )
+            _rh.setFormatter(_stdlib_logging.Formatter("%(message)s"))
+            _lg.addHandler(_rh)
+            _lg.propagate = False  # don't bubble up to root logger
+        return _lg
+    except Exception as _e:
+        logger.warning(f"Could not create breakdown logger: {_e}")
+        return None
+
+BREAKDOWN_LOG_FILE = _make_breakdown_logger()
+if BREAKDOWN_LOG_FILE:
+    logger.info(f"📝 Confluence breakdown logging (rotating) to: {BREAKDOWN_LOG_PATH}")
 
 # Conditional imports for type hints
 if TYPE_CHECKING:
@@ -322,20 +346,25 @@ def calculate_confluence_override(
     smc: SMCSnapshot,
     mode_config: "ScanConfig",
     direction: str,
+    regime: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Calculate penalty reduction based on confluence strength.
-    
+
     When multiple SMC/indicator confirmations align, penalties should be
     reduced or eliminated. A complete Institutional Sequence (Sweep->Shift->OB)
     provides maximum override.
-    
+
+    Regime-aware: counter-trend trades in strongly trending or compressed markets
+    have their override cap halved so regime penalties are never fully wiped out.
+
     Args:
         factors: List of scored confluence factors
         smc: SMC snapshot with patterns
         mode_config: Scan configuration with mode profile
         direction: Trade direction ('bullish'/'bearish' or 'long'/'short')
-        
+        regime: Optional SymbolRegime or MarketRegime for counter-trend cap logic
+
     Returns:
         Dict with:
             - reduction: 0.0-1.0 (penalty multiplier reduction)
@@ -620,7 +649,7 @@ def evaluate_htf_structural_proximity(
             continue
         if fvg.size < atr:
             continue
-        if fvg.overlap_with_price > 0.5:
+        if fvg.overlap_with_price > 0.7:  # Allow partial retest (was 0.5 — too aggressive, filtered valid retested FVGs)
             continue
 
         fvg_dir_lower = fvg.direction.lower()
@@ -2053,17 +2082,6 @@ def calculate_confluence_score(
     def get_w(key: str, default: float) -> float:
         return MODE_FACTOR_WEIGHTS.get(current_profile, {}).get(key, default)
 
-    # #region agent log
-    try:
-        _ob = getattr(smc_snapshot, "order_blocks", None) or []
-        _fv = getattr(smc_snapshot, "fvgs", None) or []
-        _sw = getattr(smc_snapshot, "liquidity_sweeps", None) or []
-        _tf_count = len(getattr(indicators, "by_timeframe", None) or {})
-        with open("debug-587019.log", "a", encoding="utf-8") as _f:
-            _f.write(json.dumps({"sessionId": "587019", "hypothesisId": "H1", "location": "scorer.calculate_confluence_score:entry", "message": "Confluence inputs", "data": {"symbol": symbol, "direction": direction, "profile": current_profile, "n_order_blocks": len(_ob), "n_fvgs": len(_fv), "n_liquidity_sweeps": len(_sw), "indicator_tf_count": _tf_count}, "timestamp": int(time.time() * 1000)}, default=str) + "\n")
-    except Exception:
-        pass
-    # #endregion
 
     # --- SMC Pattern Scoring ---
 
@@ -2588,20 +2606,11 @@ def calculate_confluence_score(
         for i in range(len(factors)):
             factors[i] = ConfluenceFactor(name=factors[i].name, score=factors[i].score, weight=factors[i].weight/total_w, rationale=factors[i].rationale or "Factor details")
 
-    # #region agent log
-    try:
-        _sum_w = sum(f.weight for f in factors)
-        _factors_summary = [{"name": f.name, "score": round(f.score, 2), "weight": round(f.weight, 4)} for f in factors]
-        with open("debug-587019.log", "a", encoding="utf-8") as _f:
-            _f.write(json.dumps({"sessionId": "587019", "hypothesisId": "H2", "location": "scorer.calculate_confluence_score:weights", "message": "Weights and factors", "data": {"symbol": symbol, "total_weight": round(_sum_w, 6), "n_factors": len(factors), "factors": _factors_summary}, "timestamp": int(time.time() * 1000)}, default=str) + "\n")
-    except Exception:
-        pass
-    # #endregion
 
     # --- Final Score Calculation ---
     weighted_score = sum(f.score * f.weight for f in factors)
     synergy_bonus = _calculate_synergy_bonus(factors, smc_snapshot, cycle_context=cycle_context, reversal_context=reversal_context, direction=direction, mode_config=config)
-    conflict_penalty = _calculate_conflict_penalty(factors, direction, smc=smc_snapshot, mode_config=config)
+    conflict_penalty = _calculate_conflict_penalty(factors, direction, smc=smc_snapshot, mode_config=config, regime=regime)
     
     # Coverage Penalty for low-evidence setups
     # Uses quality-factor count (score >= 50) instead of any-non-zero count.
@@ -2611,8 +2620,13 @@ def calculate_confluence_score(
     coverage_penalty = 0.0
     active_factors = len([f for f in factors if f.score > 0])
     quality_factors = len([f for f in factors if f.score >= 50])
+    # Require at least 6 quality factors. 3 pts per missing factor, capped at 25.
+    # Threshold of 8 was too aggressive — many structural factors (OB, FVG, Sweep)
+    # score 0 simply because they're absent in the current market, not because the
+    # setup is weak. Absent factors already hurt the weighted sum; double-penalising
+    # them through coverage suppressed all scores below 50% in normal conditions.
     if quality_factors < 6:
-        coverage_penalty = (6 - quality_factors) * 3.0  # up to 15 pts for near-empty setups
+        coverage_penalty = min(25.0, (6 - quality_factors) * 3.0)
     
     # Macro Adjustment
     macro_adj = 0.0
@@ -2622,37 +2636,20 @@ def calculate_confluence_score(
     raw_score = weighted_score + synergy_bonus - conflict_penalty - coverage_penalty + macro_adj
     raw_score = max(0.0, min(100.0, raw_score))
 
-    # Structural Minimum Gate
-    if structural_minimum_failed: raw_score = min(raw_score, 60.0)
+    # Structural Minimum Gate — cap hard at 30 so it can never pass any mode gate
+    if structural_minimum_failed: raw_score = min(raw_score, 30.0)
 
-    # Variance Amplification Curve (Centre on mode threshold)
-    # NOTE: Boost is only applied to scores already at or above T.
-    # Sub-threshold scores are never pushed over the line — they must earn it.
-    T = float(getattr(config, "min_confluence_score", 70.0))
-    if raw_score >= T + 3:
-        final_score = raw_score + 2.0
-    elif raw_score >= T:
-        # Already passing — small clarity boost
-        boost = (raw_score - T) * 0.4
-        final_score = raw_score + boost
-    elif raw_score >= T - 5:
-        # Near threshold but below — no adjustment (previously inflated via 0.8 multiplier)
-        final_score = raw_score
-    elif raw_score >= 50:
-        dampen = (T - 5 - raw_score) * 0.5
-        final_score = raw_score - dampen
+    # Score is the weighted sum — no post-hoc amplification.
+    # Inflating passing scores distorts the distribution and makes tier
+    # differentiation meaningless. The raw weighted score is the ground truth.
+    # Quadratic decay below 40 to hard-suppress genuine garbage (<40 raw → ≤32).
+    if raw_score < 40.0:
+        final_score = raw_score * (raw_score / 40.0)
     else:
-        final_score = raw_score * (raw_score / 50.0)  # Quadratic decay for garbage signals
+        final_score = raw_score
 
     final_score = max(0.0, min(100.0, final_score))
 
-    # #region agent log
-    try:
-        with open("debug-587019.log", "a", encoding="utf-8") as _f:
-            _f.write(json.dumps({"sessionId": "587019", "hypothesisId": "H3", "location": "scorer.calculate_confluence_score:formula", "message": "Score formula", "data": {"symbol": symbol, "weighted_score": round(weighted_score, 4), "synergy_bonus": round(synergy_bonus, 4), "conflict_penalty": round(conflict_penalty, 4), "coverage_penalty": round(coverage_penalty, 4), "macro_adj": round(macro_adj, 4), "raw_score": round(raw_score, 4), "final_score": round(final_score, 4), "active_factors": active_factors, "structural_minimum_failed": structural_minimum_failed}, "timestamp": int(time.time() * 1000)}, default=str) + "\n")
-    except Exception:
-        pass
-    # #endregion
 
     # Determine Signal Tier
     strong_factors = sum(1 for f in factors if f.score >= 65)
@@ -2676,14 +2673,78 @@ def calculate_confluence_score(
     if not hasattr(breakdown, "metadata") or breakdown.metadata is None: breakdown.metadata = {}
     breakdown.metadata["signal_tier"] = tier
 
-    # #region agent log
-    try:
-        _zero = [{"name": f.name, "rationale": (f.rationale or "")[:80]} for f in factors if f.score <= 0]
-        with open("debug-587019.log", "a", encoding="utf-8") as _f:
-            _f.write(json.dumps({"sessionId": "587019", "hypothesisId": "H4", "location": "scorer.calculate_confluence_score:zero_factors", "message": "Zero-score factors", "data": {"symbol": symbol, "zero_count": len(_zero), "zero_factors": _zero}, "timestamp": int(time.time() * 1000)}, default=str) + "\n")
-    except Exception:
-        pass
-    # #endregion
+    # ── Critical Factor Convergence ────────────────────────────────────────────
+    # These are the factors that genuinely matter for a high-probability setup.
+    # Weighted average can be dragged down by zeroed factors (no FVG in market,
+    # compressed regime, etc.). Convergence tells us: of the things that CAN fire,
+    # how many are actually aligned? Used to surface DEVELOPING setups in the UI.
+    CRITICAL_FACTORS: dict = {
+        "Order Block":               65,   # must have a valid OB to trade from
+        "FVG":                       60,   # imbalance zone — fast momentum setups need this
+        "Market Structure":          55,   # BOS/CHoCH — structural shift required
+        "Liquidity Sweep":           50,   # confirmed sweep of buy/sell-side liq
+        "Multi-Candle Confirmation": 70,   # momentum confirmation candles
+        "HTF Structure Bias":        60,   # higher-timeframe trend alignment
+        "HTF Structural Proximity":  70,   # price near HTF OB/FVG/level
+        "HTF Momentum Gate":         70,   # HTF momentum not opposing trade
+        "BTC Impulse Gate":          70,   # BTC not in opposing impulse
+    }
+    # NOTE: FVG and Order Block are complementary — a setup strong in one but not
+    # the other still achieves convergence. This is intentional: momentum moves
+    # often lack an OB but have a clear FVG, and vice versa for structural setups.
+    VETO_FACTORS = {"MACD Veto"}           # score < 50 → hard block
+
+    # Count how many critical factors are present AND above their threshold
+    # (factors not scored this run are simply absent from `factors` list)
+    factor_map = {f.name: f.score for f in factors}
+    critical_firing = sum(
+        1 for name, threshold in CRITICAL_FACTORS.items()
+        if factor_map.get(name, 0) >= threshold
+    )
+    critical_total = len(CRITICAL_FACTORS)
+    convergence_pct = round(critical_firing / critical_total * 100, 1)
+
+    # Hard vetoes — any veto factor scoring < 50 means signal is blocked
+    veto_blocked = any(
+        factor_map.get(name, 100) < 50 for name in VETO_FACTORS
+    )
+
+    # Missing critical factors (present in map but below threshold, or absent)
+    missing_critical = [
+        name for name, threshold in CRITICAL_FACTORS.items()
+        if factor_map.get(name, 0) < threshold
+    ]
+    active_vetoes = [
+        name for name in VETO_FACTORS
+        if factor_map.get(name, 100) < 50
+    ]
+
+    # Setup state: what does this setup look like right now?
+    # Anchored to factor counts (not percentages) so adding/removing factors
+    # doesn't silently shift the bar.  With 9 critical factors:
+    #   DEVELOPING = 5+ firing  (≈55.6%)
+    #   WATCHING   = 4+ firing  (≈44.4%)
+    # T comes from the user's mode config — the same threshold the trade gate uses.
+    # Fallback to 60 only if config doesn't carry a threshold (e.g. bare test fixtures).
+    T = getattr(config, "min_confluence_score", None) or 60.0
+    if final_score >= T and not veto_blocked:
+        setup_state = "READY"          # fires normally through gate
+    elif critical_firing >= 5 and not veto_blocked:
+        setup_state = "DEVELOPING"     # 5/9 critical factors aligned, no veto
+    elif critical_firing >= 4:
+        setup_state = "WATCHING"       # 4/9 aligned — worth monitoring
+    else:
+        setup_state = "NOISE"          # not enough confluence even directionally
+
+    breakdown.metadata["convergence_score"]          = convergence_pct
+    breakdown.metadata["convergence_critical_count"] = critical_firing
+    breakdown.metadata["convergence_critical_total"] = critical_total
+    breakdown.metadata["convergence_missing"]        = missing_critical
+    breakdown.metadata["veto_blocked"]               = veto_blocked
+    breakdown.metadata["active_vetoes"]              = active_vetoes
+    breakdown.metadata["setup_state"]                = setup_state
+    # ── End Critical Factor Convergence ───────────────────────────────────────
+
 
     # Final Logging
     logger.info(f"📊 CONFLUENCE [{symbol} {direction}]: {final_score:.1f} ({tier}) | Factors: {active_factors} | Synergy: +{synergy_bonus:.1f} | Conflict: -{conflict_penalty:.1f}")
@@ -4467,12 +4528,16 @@ def _calculate_conflict_penalty(
     direction: str,
     smc: Optional[SMCSnapshot] = None,
     mode_config: Optional["ScanConfig"] = None,
+    regime: Optional[Any] = None,
 ) -> float:
     """
     Calculate penalty for conflicting signals with mode-awareness and confluence override.
-    
+
     Penalties are reduced when strong confluence exists (Institutional Sequence, etc.)
     and scaled by mode risk tolerance (Surgical = 0.6x, Strike = 0.75x, etc.)
+
+    Regime-aware: the override cap is halved for counter-trend trades in strongly
+    trending or compressed markets so regime penalties are never fully wiped out.
     """
     penalty = 0.0
 
@@ -4558,18 +4623,41 @@ def _calculate_conflict_penalty(
     penalty = min(penalty, 35.0)
 
     # === APPLY CONFLUENCE OVERRIDE ===
-    # Strong confluence can reduce or eliminate penalties
+    # Strong confluence can reduce or eliminate penalties — but regime context
+    # caps how much reduction is allowed for counter-trend trades in trending markets.
     if smc and mode_config and penalty > 0:
-        override = calculate_confluence_override(factors, smc, mode_config, direction)
+        override = calculate_confluence_override(factors, smc, mode_config, direction, regime=regime)
         if override["reduction"] > 0:
+            raw_reduction = override["reduction"]
+
+            # --- Regime-aware override cap ---
+            # Counter-trend in a clearly trending or compressed market should never
+            # fully erase regime penalties even with a perfect institutional sequence.
+            # Cap the reduction at 50% (0.5) in those conditions.
+            regime_cap_applied = False
+            if regime is not None:
+                _dims = getattr(regime, "dimensions", None)
+                _trend = getattr(_dims, "trend", None) or getattr(regime, "trend", "neutral")
+                _vol   = getattr(_dims, "volatility", None) or getattr(regime, "volatility", "normal")
+                _norm  = direction.lower()
+                _is_counter = (
+                    (_trend in ("up", "strong_up")   and _norm in ("bearish", "short")) or
+                    (_trend in ("down", "strong_down") and _norm in ("bullish", "long"))
+                )
+                _is_trending_or_compressed = _trend in ("up", "strong_up", "down", "strong_down") or _vol in ("compressed", "low")
+                if _is_counter and _is_trending_or_compressed and raw_reduction > 0.5:
+                    raw_reduction = 0.5
+                    regime_cap_applied = True
+
             original_penalty = penalty
-            penalty = penalty * (1.0 - override["reduction"])
+            penalty = penalty * (1.0 - raw_reduction)
             logger.info(
-                "🎯 Confluence override [%s]: %.0f%% reduction (%.1f → %.1f) - %s",
+                "🎯 Confluence override [%s]: %.0f%% reduction (%.1f → %.1f)%s - %s",
                 override["triggered_by"],
-                override["reduction"] * 100,
+                raw_reduction * 100,
                 original_penalty,
                 penalty,
+                " [regime-capped]" if regime_cap_applied else "",
                 override["rationale"]
             )
     

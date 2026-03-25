@@ -49,6 +49,7 @@ import {
   SignalLogEntry,
 } from '@/utils/api';
 import { GauntletBreakdown } from '@/components/bot/GauntletBreakdown';
+import { WatchlistRadar } from '@/components/bot/WatchlistRadar';
 
 // Format time duration
 function formatDuration(seconds: number): string {
@@ -166,7 +167,7 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
   majors: true,
   altcoins: false,
   meme_mode: false,
-  slippage_bps: 5,
+  slippage_bps: 15,
   fee_rate: 0.001,
   max_hours_open: 72,
 };
@@ -1464,32 +1465,8 @@ export function TrainingGround() {
                 </div>
               </section>
 
-              {/* Activity Feed */}
-              <section className="glass-card glow-border-blue p-5 rounded-2xl h-full flex flex-col relative overflow-hidden group">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-
-                <div className="flex items-center justify-between mb-6 relative z-10">
-                  <h2 className="text-xl lg:text-2xl font-semibold hud-headline font-bold text-blue-400 tracking-wide flex items-center gap-3 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]">
-                    <Pulse size={24} className="text-primary" />
-                    ACTIVITY FEED
-                  </h2>
-                </div>
-
-                <div className="relative z-10">
-                  {status?.recent_activity && status.recent_activity.length > 0 ? (
-                    <div className="space-y-2 max-h-80 overflow-y-auto">
-                      {status.recent_activity.slice(-15).reverse().map((event, i) => (
-                        <ActivityItem key={i} event={event} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 border border-border border-dashed rounded-lg bg-background/50">
-                      <ListBullets size={32} className="mx-auto mb-3 opacity-20 text-primary" />
-                      <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground/50">No activity yet</p>
-                    </div>
-                  )}
-                </div>
-              </section>
+              {/* Watchlist Radar */}
+              {status && <WatchlistRadar status={status} />}
             </div>
 
             {/* Trade History */}
@@ -1528,8 +1505,8 @@ export function TrainingGround() {
             </section>
             {/* Signal Intelligence Panel */}
             {status?.signal_log && status.signal_log.length > 0 && (
-              <GauntletBreakdown 
-                signals={status.signal_log} 
+              <GauntletBreakdown
+                signals={status.signal_log}
                 minConfluence={status?.config?.min_confluence ?? undefined}
               />
             )}
