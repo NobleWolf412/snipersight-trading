@@ -1220,6 +1220,26 @@ def _calculate_stop_loss(
             distance_atr = fallback_atr_mult
             used_structure = False
 
+    # Minimum stop distance floor: stop must be at least 0.15% away from entry.
+    # In compressed regimes ATR shrinks to near zero, producing stops only a few
+    # pips from entry — these hit every minor wick and are physically unworkable.
+    # Using far_entry as the reference ensures the floor covers the worst fill price.
+    _ref_price = entry_zone.far_entry if entry_zone else stop_level
+    _min_stop_dist = _ref_price * 0.0015  # 0.15% of entry price
+    _actual_dist = abs(_ref_price - stop_level)
+    if _ref_price > 0 and _actual_dist < _min_stop_dist:
+        if is_bullish:
+            stop_level = _ref_price - _min_stop_dist
+        else:
+            stop_level = _ref_price + _min_stop_dist
+        rationale = (
+            f"{rationale} [floored to 0.15% min distance — compressed ATR]"
+        )
+        logger.debug(
+            "Stop distance %.4f was below 0.15%% floor (%.4f); adjusted to %.4f",
+            _actual_dist, _min_stop_dist, abs(_ref_price - stop_level),
+        )
+
     stop_loss = StopLoss(level=stop_level, distance_atr=distance_atr, rationale=rationale)
     # Attach structure_tf_used for metadata tracking
     stop_loss.structure_tf_used = structure_tf_used  # type: ignore

@@ -52,6 +52,7 @@ from backend.strategy.smc.volume_profile import calculate_volume_profile
 
 from backend.engine.context import SniperContext
 from backend.strategy.planner.planner_service import generate_trade_plan
+from backend.strategy.confluence.scorer import run_pre_scoring_gates
 from backend.risk.risk_manager import RiskManager
 from backend.risk.position_sizer import PositionSizer
 from backend.analysis.macro_context import MacroContext
@@ -1270,6 +1271,50 @@ class Orchestrator:
                     )
             # ─────────────────────────────────────────────────────────────────────
 
+            # ── PRE-SCORING HARD GATES ────────────────────────────────────────────
+            # Run structural/regime/BTC/conflict gates BEFORE scoring.
+            # A gate failure skips scoring entirely — soft penalties cannot compensate.
+            _symbol_regime = context.metadata.get("symbol_regime")
+            _btc_impulse = None
+            if context.macro_context and "BTC" not in symbol.upper():
+                _btc_dir = getattr(context.macro_context, "btc_dir", "flat") or "flat"
+                _btc_impulse = {
+                    "up": "strong_up", "strong_up": "strong_up",
+                    "down": "strong_down", "strong_down": "strong_down",
+                }.get(_btc_dir.lower())
+            _is_btc = "BTC" in symbol.upper()
+
+            if context.smc_snapshot:
+                _gate = run_pre_scoring_gates(
+                    smc_snapshot=context.smc_snapshot,
+                    config=self.config,
+                    direction=context.metadata.get("chosen_direction", "LONG"),
+                    regime=_symbol_regime,
+                    btc_impulse=_btc_impulse,
+                    is_btc=_is_btc,
+                )
+                if not _gate.passed:
+                    logger.info(
+                        "%s: ❌ GATE REJECTED [%s] — %s",
+                        symbol, _gate.gate_name, _gate.reason,
+                    )
+                    self.diagnostics["confluence_rejections"].append({
+                        "symbol": symbol,
+                        "trace_id": trace_id,
+                        "score": 0.0,
+                        "threshold": self.config.min_confluence_score,
+                        "gate": _gate.gate_name,
+                    })
+                    return None, {
+                        "symbol": symbol,
+                        "direction": context.metadata.get("chosen_direction", "LONG"),
+                        "reason_type": _gate.gate_name,
+                        "reason": _gate.reason,
+                        "score": 0.0,
+                        "threshold": self.config.min_confluence_score,
+                    }
+            # ─────────────────────────────────────────────────────────────────────
+
             context.confluence_breakdown = self.confluence_service.score(
                 context=context,
                 current_price=current_price_val,
@@ -1606,6 +1651,32 @@ class Orchestrator:
                 "setup_state": (context.confluence_breakdown.metadata or {}).get("setup_state", "NOISE"),
             }
 
+        # Hard veto check — if scorer set veto_blocked=True, reject before trade planning.
+        # Previously veto_blocked was captured in metadata for UI display but was never
+        # checked here, so a MACD-vetoed signal could still execute if other factors
+        # compensated past the score gate. Now it is an unconditional hard stop.
+        _meta = (context.confluence_breakdown.metadata or {}) if context.confluence_breakdown else {}
+        _veto_blocked = _meta.get("veto_blocked", False)
+        if _veto_blocked:
+            _active_vetoes = _meta.get("active_vetoes", [])
+            _veto_label = ", ".join(_active_vetoes) if _active_vetoes else "MACD Veto"
+            logger.info(
+                "%s: ❌ REJECTED (veto_blocked) | Vetoes: %s | Score was: %.1f%%",
+                symbol,
+                _veto_label,
+                context.confluence_breakdown.total_score if context.confluence_breakdown else 0,
+            )
+            self._progress("GATE_FAIL", {"symbol": symbol, "gate": "veto_blocked", "vetoes": _active_vetoes})
+            return None, {
+                "symbol": symbol,
+                "direction": context.metadata.get("chosen_direction", "LONG"),
+                "reason_type": "veto_blocked",
+                "reason": f"Signal hard-vetoed by: {_veto_label}",
+                "veto_blocked": True,
+                "active_vetoes": _active_vetoes,
+                "score": context.confluence_breakdown.total_score if context.confluence_breakdown else 0,
+            }
+
         # Log confluence pass
         logger.info(
             "✅ %s: Confluence PASS | Score: %.1f%% >= %.1f%% | Direction: %s",
@@ -1621,6 +1692,21 @@ class Orchestrator:
         logger.debug("%s [%s]: Generating trade plan", symbol, trace_id)
         # current_price already computed above for cooldown check
         chosen_direction = context.metadata.get("chosen_direction", "UNKNOWN")
+
+        # Hard direction guard — "UNKNOWN" means the confluence scorer couldn't
+        # resolve a bias. Without a validated direction, is_bullish=False (SHORT)
+        # by default in planner_service.py, silently inverting bullish signals.
+        if chosen_direction not in ("LONG", "SHORT"):
+            logger.warning(
+                "%s [%s]: ❌ Plan aborted — direction '%s' not resolved by confluence scorer",
+                symbol, trace_id, chosen_direction,
+            )
+            return None, {
+                "symbol": symbol,
+                "direction": chosen_direction,
+                "reason_type": "direction_unresolved",
+                "reason": f"chosen_direction='{chosen_direction}' is not LONG or SHORT; scoring failed to resolve bias",
+            }
         cascade_types = list(getattr(self.scanner_mode, "cascade_trade_types", None) or [])
 
         # ── Regime-aware trade type capping (DCL/WCL awareness) ─────────────────

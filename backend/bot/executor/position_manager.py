@@ -98,9 +98,20 @@ class PositionState:
     regime_volatility: str = "normal"  # "compressed", "normal", "elevated", "chaotic"
     regime_trend: str = "sideways"  # "strong_up", "up", "sideways", "down", "strong_down"
 
-    # Price history for progress detection (sampled hourly)
+    # Price history for progress detection (sampled every 30 minutes)
     _price_samples: List[float] = field(default_factory=list)
     _last_sample_time: Optional[datetime] = field(default=None)
+
+    # Stagnation strike counter — consecutive monitor cycles where stagnation
+    # conditions are met. Exit only fires when this reaches _STAGNATION_EXIT_THRESHOLD.
+    # Prevents a single flat candle from triggering premature exit.
+    _stagnation_strikes: int = field(default=0)
+
+    # Separate timestamp used ONLY for orphan detection.
+    # updated_at is reset every monitor cycle (via update_unrealized_pnl),
+    # so it cannot measure true staleness. _last_monitored_at is set only when
+    # the price feed successfully returns a price for this position.
+    _last_monitored_at: Optional[datetime] = field(default=None)
 
     def __post_init__(self):
         """Initialize price tracking and anchor initial stop loss."""
@@ -186,10 +197,16 @@ class PositionManager:
     # should be allowed to develop before we start checking for stagnation.
     # PARTIAL trades (where at least one target has been hit) get a 2x bonus
     # to the timer to allow the "runner" portion of the trade to develop.
+    #
+    # Scalp raised 3h→5h: crypto scalp setups at SMC levels routinely need
+    # 4-6 hours to play out, especially at HTF demand zones where accumulation
+    # is slow. 3h was causing exits on trades that broke out at hour 4-6.
+    # Intraday raised 10h→14h: covers full 24h crypto session with room for
+    # overnight continuation without needing swing classification.
     TRADE_TYPE_BASE_HOURS = {
-        "scalp": 3.0,       # Scalps should resolve within a few hours
-        "intraday": 10.0,   # Intraday trades need a full session
-        "swing": 48.0,      # Swing trades need days to develop
+        "scalp": 5.0,       # was 3.0 — crypto scalps need 4-6h to resolve
+        "intraday": 14.0,   # was 10.0 — covers full 24h session
+        "swing": 48.0,      # unchanged
     }
 
     # Minimum P&L threshold (%) before stagnation exit is considered.
@@ -415,6 +432,42 @@ class PositionManager:
             except Exception as e:
                 logger.error(f"Error monitoring position {position.position_id}: {e}")
 
+        # Orphan detection: if a position's price feed has been silent for more than
+        # 2x its adaptive stagnation budget, force-close at last known price.
+        # Uses _last_monitored_at (set only on successful price-feed delivery) rather
+        # than updated_at (which is reset every cycle by update_unrealized_pnl and
+        # therefore can never measure real staleness).
+        now = datetime.now(timezone.utc)
+        for position in open_positions:
+            try:
+                stagnation_hours = self._get_adaptive_stagnation_hours(position)
+                staleness_limit = timedelta(hours=stagnation_hours * 2)
+                # Use _last_monitored_at; fall back to created_at for brand-new positions
+                # that haven't received their first successful price tick yet.
+                _last_seen = position._last_monitored_at or position.created_at
+                if (now - _last_seen) > staleness_limit:
+                    try:
+                        last_price = self.price_fetcher(position.symbol)
+                    except Exception:
+                        last_price = position.entry_price
+                    _stale_hours = (now - _last_seen).total_seconds() / 3600
+                    logger.error(
+                        f"ORPHAN DETECTED: {position.position_id} | {position.symbol} | "
+                        f"No price feed for {_stale_hours:.1f}h "
+                        f"(limit: {stagnation_hours*2:.1f}h). Force-closing at {last_price}."
+                    )
+                    with self._lock:
+                        position.update_unrealized_pnl(last_price)
+                        position.realized_pnl += position.unrealized_pnl
+                        position.unrealized_pnl = 0.0
+                        position.status = PositionStatus.EMERGENCY_EXIT
+                        position.exit_reason = "orphan_price_feed_failure"
+                        position.exit_price = last_price
+                        position.remaining_quantity = 0.0
+                        position.updated_at = now
+            except Exception as e:
+                logger.error(f"Orphan check failed for {position.position_id}: {e}")
+
     async def _monitor_position(self, position: PositionState):
         """
         Monitor single position and execute risk management logic.
@@ -443,6 +496,12 @@ class PositionManager:
         position.update_unrealized_pnl(current_price)
         position.update_price_extremes(current_price)
 
+        # Stamp successful price-feed delivery for orphan detection.
+        # updated_at is reset every cycle by update_unrealized_pnl so it cannot
+        # measure staleness. _last_monitored_at is only set here — if the price_fetcher
+        # throws before reaching this line, the stamp never updates, triggering orphan.
+        position._last_monitored_at = datetime.now(timezone.utc)
+
         # --- Adaptive Stagnation Check ---
         # Uses trade type + regime to determine how long to hold before cutting.
         # Also checks whether price is making progress toward targets.
@@ -467,13 +526,30 @@ class PositionManager:
             making_progress = self._is_making_progress(position, current_price)
 
             if position.pnl_percentage <= adaptive_pnl and not making_progress:
+                # Increment strike counter — require 2 consecutive failures before
+                # closing. A single flat/poor candle at the stagnation boundary is
+                # not sufficient evidence; crypto often consolidates briefly before
+                # continuing. Two consecutive failures means the move has genuinely stalled.
+                position._stagnation_strikes += 1
+                _STAGNATION_EXIT_THRESHOLD = 2
+
                 stagnation_label = "PARTIAL_STAGNATION" if is_partial else "STAGNATION"
+                if position._stagnation_strikes < _STAGNATION_EXIT_THRESHOLD:
+                    logger.info(
+                        f"{stagnation_label} WARNING ({position._stagnation_strikes}/{_STAGNATION_EXIT_THRESHOLD}): "
+                        f"{position.position_id} | {position.symbol} | "
+                        f"open {hours_open:.1f}h | P&L: {position.pnl_percentage:.2f}% | "
+                        f"waiting for confirmation ({_STAGNATION_EXIT_THRESHOLD - position._stagnation_strikes} more)"
+                    )
+                    return  # Hold — wait for next cycle to confirm
+
                 logger.warning(
                     f"{stagnation_label} EXIT: {position.position_id} | {position.symbol} "
                     f"open {hours_open:.1f}h (limit: {stagnation_hours:.1f}h) | "
                     f"P&L: {position.pnl_percentage:.2f}% (threshold: {adaptive_pnl:.2f}%) | "
                     f"Type: {position.trade_type} | Progress: {making_progress} | "
-                    f"Regime: trend={position.regime_trend}, vol={position.regime_volatility}"
+                    f"Regime: trend={position.regime_trend}, vol={position.regime_volatility} | "
+                    f"Strikes: {position._stagnation_strikes}/{_STAGNATION_EXIT_THRESHOLD}"
                 )
                 if self.order_executor:
                     success = await self._execute_exit(position, current_price, "TIME_STAGNATION")
@@ -490,6 +566,10 @@ class PositionManager:
                     position.exit_price = current_price
                     position.remaining_quantity = 0.0
                 return
+            else:
+                # Progress detected or P&L above threshold — reset strike counter
+                # so recovery after a brief stall doesn't carry over stale strikes.
+                position._stagnation_strikes = 0
             elif making_progress:
                 logger.info(
                     f"STAGNATION SPARED: {position.position_id} | {position.symbol} "
@@ -511,14 +591,22 @@ class PositionManager:
                 if not success:
                     return  # Critical: don't settle position if order failed
 
+            # Apply stop-loss slippage: stops fill slightly worse than the trigger price
+            # in real execution (0.05% is conservative for crypto; reality can be 0.1-0.5%).
+            _STOP_SLIPPAGE_PCT = 0.0005
+            if position.direction == "LONG":
+                settlement_price = current_price * (1 - _STOP_SLIPPAGE_PCT)
+            else:
+                settlement_price = current_price * (1 + _STOP_SLIPPAGE_PCT)
+
             with self._lock:
                 # Settle P&L before zeroing remaining_quantity
-                position.update_unrealized_pnl(current_price)
+                position.update_unrealized_pnl(settlement_price)
                 position.realized_pnl += position.unrealized_pnl
                 position.unrealized_pnl = 0.0
                 position.status = PositionStatus.STOPPED_OUT
                 position.exit_reason = "stop_loss"
-                position.exit_price = current_price
+                position.exit_price = settlement_price
                 position.remaining_quantity = 0.0
 
             return  # Position closed, no further checks
@@ -693,25 +781,39 @@ class PositionManager:
 
             # Progress = recent lows are higher than earlier lows
             # AND latest price is closer to target than the ORIGINAL entry
+            # AND at least 10% of the entry-to-target distance has been covered
+            # (prevents micro-oscillations within noise from deferring stagnation exit)
             lows_rising = second_half_min > first_half_min
             closer_to_target = abs(tp1 - latest) < abs(tp1 - position.initial_entry_price)
+            initial_distance = abs(tp1 - position.initial_entry_price)
+            current_distance = abs(tp1 - latest)
+            meaningful_progress = (
+                initial_distance > 0
+                and current_distance < initial_distance * 0.90
+            )
 
-            return lows_rising and closer_to_target
+            return lows_rising and closer_to_target and meaningful_progress
 
         else:  # SHORT
             # Split recent samples into two halves and compare
             mid = len(recent) // 2
             first_half = [recent[i] for i in range(0, mid)]
             second_half = [recent[i] for i in range(mid, len(recent))]
-            
+
             first_half_max = max(first_half)
             second_half_max = max(second_half)
             latest = recent[-1]
 
             highs_falling = second_half_max < first_half_max
             closer_to_target = abs(tp1 - latest) < abs(tp1 - position.initial_entry_price)
+            initial_distance = abs(tp1 - position.initial_entry_price)
+            current_distance = abs(tp1 - latest)
+            meaningful_progress = (
+                initial_distance > 0
+                and current_distance < initial_distance * 0.90
+            )
 
-            return highs_falling and closer_to_target
+            return highs_falling and closer_to_target and meaningful_progress
 
     def _check_stop_hit(self, position: PositionState, current_price: float) -> bool:
         """Check if stop loss was hit."""
@@ -740,21 +842,26 @@ class PositionManager:
         return None
 
     def _move_to_breakeven(self, position: PositionState):
-        """Move stop loss to true breakeven (entry price = 0R)."""
+        """Move stop loss to breakeven plus a 0.1R buffer to absorb spread/wick noise."""
         if position.breakeven_active:
             return  # Already at breakeven
 
         old_stop = position.stop_loss
 
-        # True breakeven: stop at entry price.
-        # Previously this was entry ± (risk * 0.5) which is -0.5R, not breakeven.
-        position.stop_loss = position.entry_price
+        # Add 0.1R buffer above/below entry so crypto spread/wick noise doesn't produce
+        # a zero-P&L (or negative-after-fees) stop-out on the runner.
+        risk = abs(position.initial_entry_price - position.initial_stop_loss)
+        buffer = risk * 0.1
+        if position.direction == "LONG":
+            position.stop_loss = position.entry_price + buffer
+        else:
+            position.stop_loss = position.entry_price - buffer
 
         position.breakeven_active = True
 
         logger.info(
             f"BREAKEVEN: {position.position_id} | {position.symbol} | "
-            f"Stop moved: {old_stop:.6f} -> {position.stop_loss:.6f} (entry)"
+            f"Stop moved: {old_stop:.6f} -> {position.stop_loss:.6f} (entry + 0.1R buffer: {buffer:.6f})"
         )
 
     def _check_trailing_activation(self, position: PositionState, current_price: float):
@@ -788,9 +895,12 @@ class PositionManager:
         if not position.trailing_active:
             return
 
-        # Calculate trail distance as a multiple of initial risk
+        # Calculate trail distance scaled by trade type — scalps need tight trails,
+        # swings need room to breathe during normal retracements.
+        _TRAIL_DISTANCE_BY_TYPE = {"scalp": 0.3, "intraday": 0.5, "swing": 1.0}
         risk = abs(position.entry_price - position.initial_stop_loss)
-        trail_distance = risk * self.trailing_stop_distance
+        type_distance = _TRAIL_DISTANCE_BY_TYPE.get(position.trade_type, self.trailing_stop_distance)
+        trail_distance = risk * type_distance
         
         if position.direction == "LONG":
             highest = position.highest_price

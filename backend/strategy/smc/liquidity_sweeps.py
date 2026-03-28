@@ -27,11 +27,21 @@ from backend.shared.config.smc_config import (
 )
 
 # Mode-specific reversal timing windows (candles to wait for reversal confirmation)
+# Canonical profile names AND legacy/internal aliases both map here so the lookup
+# never silently falls back to the config default when a recognisable name is passed.
 MODE_REVERSAL_WINDOWS = {
+    # Canonical internal keys
     "macro_surveillance": 12,  # OVERWATCH: Patient HTF reversals
-    "stealth_balanced": 6,  # STEALTH: Balanced
+    "stealth_balanced":    6,  # STEALTH: Balanced
     "intraday_aggressive": 4,  # STRIKE: Fast intraday
-    "precision": 3,  # SURGICAL: Immediate micro-reversals
+    "precision":           3,  # SURGICAL: Immediate micro-reversals
+    # Scanner-mode aliases (what the orchestrator actually passes)
+    "overwatch":           12,
+    "stealth":             6,
+    "strike":              4,
+    "surgical":            3,
+    "intraday_aggressive_alt": 4,
+    "precision_alt":       3,
 }
 
 
@@ -100,15 +110,18 @@ def detect_liquidity_sweeps(
     inferred_tf = _infer_timeframe(df)
     swing_lookback = scale_lookback(smc_cfg.sweep_swing_lookback, inferred_tf)
 
-    # Mode-specific reversal window (Gap #3)
+    # Mode-specific reversal window for post-filtering.
+    # Detection always uses the maximum window (12 bars) so reversal_bar_count is
+    # stored on every sweep and mode filtering is applied as a post-step rather than
+    # baked into the detection loop — this enables single-pass raw count support.
+    _MAX_WINDOW = max(MODE_REVERSAL_WINDOWS.values())  # 12
     if mode_profile and mode_profile in MODE_REVERSAL_WINDOWS:
-        max_sweep_candles = MODE_REVERSAL_WINDOWS[mode_profile]
+        mode_window = MODE_REVERSAL_WINDOWS[mode_profile]
     else:
-        max_sweep_candles = smc_cfg.sweep_max_sweep_candles
-        
-    # Single-pass optimization: detect with largest window (12) to capture raw count
-    # then filter by mode_profile if provided.
-    detection_window = max(max_sweep_candles, 12) if _return_raw_count else max_sweep_candles
+        mode_window = smc_cfg.sweep_max_sweep_candles
+
+    max_sweep_candles = _MAX_WINDOW  # always detect with full window
+    detection_window = _MAX_WINDOW   # kept for clarity; used below
 
     min_reversal_atr = smc_cfg.sweep_min_reversal_atr
     min_penetration_atr = getattr(smc_cfg, "sweep_min_penetration_atr", 0.3)
@@ -203,8 +216,8 @@ def detect_liquidity_sweeps(
                     and upper_wick >= min_wick
                     and current_candle["close"] < target_high
                 ):
-                    # Check for reversal and get distance for grading
-                    reversal_distance = _get_downside_reversal_distance(
+                    # Check for reversal and get distance + bar count for grading
+                    reversal_distance, reversal_bars = _get_downside_reversal_distance(
                         df, i, max_sweep_candles, target_high
                     )
 
@@ -284,8 +297,8 @@ def detect_liquidity_sweeps(
                     and lower_wick >= min_wick
                     and current_candle["close"] > target_low
                 ):
-                    # Check for reversal and get distance for grading
-                    reversal_distance = _get_upside_reversal_distance(
+                    # Check for reversal and get distance + bar count for grading
+                    reversal_distance, reversal_bars = _get_upside_reversal_distance(
                         df, i, max_sweep_candles, target_low
                     )
 
@@ -341,6 +354,19 @@ def detect_liquidity_sweeps(
                             )
                             liquidity_sweeps.append(sweep)
 
+    # Raw count = all sweeps detected with the full 12-bar window (pre mode-filter).
+    raw_count = len(liquidity_sweeps)
+
+    # Post-filter by mode-specific reversal window: keep only sweeps whose close
+    # confirmation arrived within the tighter mode window.  Sweeps with
+    # reversal_bar_count == 0 had wick-only confirmation (no close through level)
+    # and are kept regardless — they still represent a genuine price reaction.
+    if mode_profile:
+        liquidity_sweeps = [
+            s for s in liquidity_sweeps
+            if s.reversal_bar_count == 0 or s.reversal_bar_count <= mode_window
+        ]
+
     if _return_raw_count:
         return liquidity_sweeps, raw_count
     return liquidity_sweeps
@@ -348,7 +374,7 @@ def detect_liquidity_sweeps(
 
 def _get_downside_reversal_distance(
     df: pd.DataFrame, sweep_idx: int, max_candles: int, level: float
-) -> float:
+) -> tuple[float, int]:
     """
     Get the maximum downside reversal distance after sweeping a high.
 
@@ -359,29 +385,34 @@ def _get_downside_reversal_distance(
         level: The level that was swept
 
     Returns:
-        float: Maximum distance below the level (0 if no reversal)
+        tuple[float, int]: (max_distance_below_level, bars_to_first_close_confirmation)
+            bars_to_first_close_confirmation is 0 if no close confirmation within window.
     """
     max_distance = 0.0
+    bars_to_close_confirm = 0
 
-    # Check subsequent candles
-    for i in range(sweep_idx + 1, min(sweep_idx + max_candles + 1, len(df))):
+    for offset, i in enumerate(
+        range(sweep_idx + 1, min(sweep_idx + max_candles + 1, len(df))), start=1
+    ):
         candle = df.iloc[i]
 
-        # Close confirmation (full distance)
+        # Close confirmation (full distance) — record bar index on first occurrence
         if candle["close"] < level:
             distance = level - candle["close"]
             max_distance = max(max_distance, distance)
-        # Wick confirmation (discounted distance, e.g. 70%)
+            if bars_to_close_confirm == 0:
+                bars_to_close_confirm = offset
+        # Wick confirmation (discounted distance, 70%)
         elif candle["low"] < level:
             distance = (level - candle["low"]) * 0.7
             max_distance = max(max_distance, distance)
 
-    return max_distance
+    return max_distance, bars_to_close_confirm
 
 
 def _get_upside_reversal_distance(
     df: pd.DataFrame, sweep_idx: int, max_candles: int, level: float
-) -> float:
+) -> tuple[float, int]:
     """
     Get the maximum upside reversal distance after sweeping a low.
 
@@ -392,24 +423,29 @@ def _get_upside_reversal_distance(
         level: The level that was swept
 
     Returns:
-        float: Maximum distance above the level (0 if no reversal)
+        tuple[float, int]: (max_distance_above_level, bars_to_first_close_confirmation)
+            bars_to_first_close_confirmation is 0 if no close confirmation within window.
     """
     max_distance = 0.0
+    bars_to_close_confirm = 0
 
-    # Check subsequent candles
-    for i in range(sweep_idx + 1, min(sweep_idx + max_candles + 1, len(df))):
+    for offset, i in enumerate(
+        range(sweep_idx + 1, min(sweep_idx + max_candles + 1, len(df))), start=1
+    ):
         candle = df.iloc[i]
 
-        # Close confirmation (full distance)
+        # Close confirmation (full distance) — record bar index on first occurrence
         if candle["close"] > level:
             distance = candle["close"] - level
             max_distance = max(max_distance, distance)
-        # Wick confirmation (discounted distance, e.g. 70%)
+            if bars_to_close_confirm == 0:
+                bars_to_close_confirm = offset
+        # Wick confirmation (discounted distance, 70%)
         elif candle["high"] > level:
             distance = (candle["high"] - level) * 0.7
             max_distance = max(max_distance, distance)
 
-    return max_distance
+    return max_distance, bars_to_close_confirm
 
 
 def _check_downside_reversal(

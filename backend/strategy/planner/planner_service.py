@@ -447,6 +447,16 @@ def generate_trade_plan(
             targets[-1].percentage += (100.0 - current_sum)
             targets[-1].percentage = round(targets[-1].percentage, 1)
 
+        # Validate each percentage stays in [0, 100] — the adjustment above can
+        # push the last target below 0 or above 100 if upstream rounding drifted
+        # significantly (e.g. sum was 103 before adjustment, last target becomes -3).
+        for _t in targets:
+            if not (0.0 <= _t.percentage <= 100.0):
+                raise ValueError(
+                    f"Target percentage out of bounds after normalisation: "
+                    f"{_t.label}={_t.percentage:.1f}% — upstream distribution is broken"
+                )
+
         logger.debug(f"Target percentages assigned: {[t.percentage for t in targets]} (Sum: {sum(t.percentage for t in targets)}%)")
 
     # === 6. Determine Trade Type (Delegate to Risk Engine) ===
@@ -668,7 +678,10 @@ def generate_trade_plan(
 
         # === MINIMUM R:R VALIDATION ===
         # Enforce mode-specific R:R requirements (e.g., Overwatch = 2.0R minimum)
-        min_rr = getattr(config, "min_rr_ratio", 0.0)
+        # Default 1.5 means every mode without an explicit min_rr_ratio still
+        # enforces a positive expectancy floor. 0.0 previously accepted sub-1R
+        # setups when the config field was absent.
+        min_rr = getattr(config, "min_rr_ratio", 1.5)
         actual_rr = plan.risk_reward_ratio
 
         # Use a small epsilon to avoid floating point false rejections.

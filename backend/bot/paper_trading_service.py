@@ -25,6 +25,8 @@ import time
 
 from backend.bot.executor.paper_executor import PaperExecutor, OrderStatus, OrderType
 from backend.bot.executor.position_manager import PositionManager, PositionStatus
+from backend.bot.telemetry.storage import TelemetryStorage
+from backend.bot.telemetry.events import TelemetryEvent, EventType
 from backend.engine.orchestrator import Orchestrator
 from backend.shared.config.scanner_modes import get_mode, ScannerMode
 from backend.shared.config.defaults import ScanConfig
@@ -102,7 +104,7 @@ class PaperTradingConfig:
     fee_rate: float = 0.001
     max_hours_open: float = 72.0
     max_pending_scans: int = 2  # Cancel pending limit orders after this many scan cycles
-    max_drawdown_pct: Optional[float] = None  # Kill switch: stop session if balance drops X% from start
+    max_drawdown_pct: Optional[float] = 10.0  # Kill switch: stop session if peak-to-trough drawdown exceeds X%
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -300,6 +302,9 @@ class PaperTradingService:
         # Diagnostics
         self.diagnostic_logger: Optional[DiagnosticLogger] = None
 
+        # Telemetry persistence (initialized on start)
+        self.telemetry_storage: Optional[TelemetryStorage] = None
+
         logger.info("PaperTradingService initialized")
 
     async def start(self, config: PaperTradingConfig) -> Dict[str, Any]:
@@ -413,6 +418,13 @@ class PaperTradingService:
         project_root = Path(__file__).parent.parent.parent
         self._session_log_dir = project_root / "logs" / "paper_trading" / f"session_{self.session_id}"
         self._session_log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Initialize telemetry DB persistence
+        try:
+            self.telemetry_storage = TelemetryStorage()  # default: backend/cache/telemetry.db
+        except Exception as e:
+            logger.error(f"Failed to initialize telemetry storage: {e}")
+            self.telemetry_storage = None
 
         # Start session
         self.started_at = datetime.now(timezone.utc)
@@ -755,23 +767,17 @@ class PaperTradingService:
                     asyncio.create_task(self.stop())
                     break
 
-            # Max drawdown kill switch
-            if config.max_drawdown_pct is not None and self.executor:
-                current_equity = self.executor.get_balance()
-                if self.position_manager:
-                    current_equity += sum(
-                        pos.unrealized_pnl
-                        for pos in self.position_manager.positions.values()
-                        if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
-                    )
-                loss_pct = (config.initial_balance - current_equity) / config.initial_balance * 100
-                if loss_pct >= config.max_drawdown_pct:
+            # Max drawdown kill switch — use peak-to-trough (same metric as monitor loop)
+            if config.max_drawdown_pct is not None:
+                self._update_drawdown()  # ensure stats are fresh after each scan cycle
+                if self.stats.max_drawdown >= config.max_drawdown_pct:
                     logger.warning(
-                        f"Max drawdown kill switch triggered: {loss_pct:.1f}% loss >= {config.max_drawdown_pct}% limit"
+                        f"Max drawdown kill switch triggered (scan loop): "
+                        f"{self.stats.max_drawdown:.1f}% >= {config.max_drawdown_pct}% limit"
                     )
                     self._log_activity("session_stopped", {
-                        "reason": f"max_drawdown_kill_switch",
-                        "loss_pct": round(loss_pct, 2),
+                        "reason": "max_drawdown_kill_switch",
+                        "drawdown_pct": round(self.stats.max_drawdown, 2),
                         "limit_pct": config.max_drawdown_pct,
                     })
                     asyncio.create_task(self.stop())
@@ -911,7 +917,9 @@ class PaperTradingService:
                         self._last_drawdown_check = _now
 
                         # Check for drawdown limit
-                        if self.config and self.stats.max_drawdown >= self.config.max_drawdown_pct:
+                        if (self.config
+                                and self.config.max_drawdown_pct is not None
+                                and self.stats.max_drawdown >= self.config.max_drawdown_pct):
                             logger.warning(
                                 f"🛑 MAX DRAWDOWN LIMIT REACHED ({self.stats.max_drawdown:.2f}% >= {self.config.max_drawdown_pct}%)"
                             )
@@ -1464,7 +1472,10 @@ class PaperTradingService:
                 f"entry={plan.entry_zone.near_entry:.2f}, "
                 f"stop={plan.stop_loss.level:.2f})"
             )
-            logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
+            # WARNING not INFO — zero size means a valid setup was silently skipped.
+            # Common cause: lot_size rounding floors a small quantity to 0.
+            # Operator needs to know this is happening to diagnose sizing constraints.
+            logger.warning(f"⚠️ SIGNAL SKIPPED (zero size): {plan.symbol} {plan.direction} | {reason}")
             self._log_signal(plan, "filtered", reason, balance=balance)
             self._log_activity("signal_filtered", {
                 "symbol": plan.symbol, "direction": plan.direction,
@@ -1650,7 +1661,13 @@ class PaperTradingService:
             return 0.0
 
         balance = executor.get_balance()
-
+        # Include unrealized P&L so we don't oversize into an existing drawdown
+        if self.position_manager:
+            balance += sum(
+                pos.unrealized_pnl
+                for pos in self.position_manager.get_open_positions()
+            )
+        balance = max(balance, 0.0)  # Never size off negative effective equity
 
         # Apply streak-based risk adaptation
         effective_risk_pct = self._get_adapted_risk_pct()
@@ -1886,12 +1903,60 @@ class PaperTradingService:
 
                 self.completed_trades.append(trade)
                 self._completed_trade_ids.add(trade.trade_id)
-                
+
+                # Persist trade to telemetry DB for queryable historical data
+                if self.telemetry_storage:
+                    try:
+                        _evt_type = (
+                            EventType.STOP_LOSS_HIT
+                            if exit_reason == "stop_loss"
+                            else EventType.POSITION_CLOSED
+                        )
+                        self.telemetry_storage.store_event(TelemetryEvent(
+                            event_type=_evt_type,
+                            timestamp=trade.exit_time or datetime.now(timezone.utc),
+                            run_id=self.session_id,
+                            symbol=trade.symbol,
+                            data={
+                                "trade_id": trade.trade_id,
+                                "direction": trade.direction,
+                                "entry_price": trade.entry_price,
+                                "exit_price": trade.exit_price,
+                                "quantity": trade.quantity,
+                                "pnl": trade.pnl,
+                                "pnl_pct": trade.pnl_pct,
+                                "exit_reason": trade.exit_reason,
+                                "trade_type": trade.trade_type,
+                                "targets_hit": trade.targets_hit,
+                                "max_favorable": trade.max_favorable,
+                                "max_adverse": trade.max_adverse,
+                            },
+                        ))
+                    except Exception as e:
+                        logger.warning(f"Failed to persist trade to telemetry DB: {e}")
+
                 # CRITICAL: Remove from position manager to prevent "Zombie" active positions
                 # and memory leaks. The trade is now in completed_trades.
                 self.position_manager.positions.pop(pos.position_id, None)
                 logger.info(f"💾 Trade {pos.position_id} archived and removed from active tracking")
                 self._update_stats(trade)
+
+                # Register stop-loss cooldown in orchestrator so the symbol is
+                # locked out of re-entry for _cooldown_hours. Without this call the
+                # orchestrator's CooldownManager never learns about runtime stop-outs
+                # (which are fired by the position_manager, not the orchestrator itself),
+                # so the same broken level can be re-entered seconds later.
+                if exit_reason == "stop_loss" and self.orchestrator:
+                    try:
+                        self.orchestrator.register_stop_out(
+                            symbol=pos.symbol,
+                            direction=pos.direction,
+                            price=trade.exit_price or pos.entry_price,
+                        )
+                    except Exception as _e:
+                        logger.warning(
+                            f"Failed to register stop-out cooldown for {pos.symbol}: {_e}"
+                        )
 
                 self._log_activity(
                     "trade_closed",
