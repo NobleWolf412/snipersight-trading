@@ -198,13 +198,22 @@ class TradePlan:
         if not 0 <= self.confidence_score <= 100:
             raise ValueError(f"Confidence score must be 0-100, got {self.confidence_score}")
 
-        # Validate entries and stops make sense for direction
+        # Validate entries and stops make sense for direction.
+        # Both near_entry AND far_entry must clear the stop — far_entry is the
+        # deepest potential fill price, so if far_entry is inside the stop the
+        # actual risk at fill is larger than modelled (and can be negative R).
         if self.direction == "LONG":
-            # For longs: entry > stop
+            # For longs: ALL entry levels must be above stop
+            _long_far = min(self.entry_zone.far_entry, self.entry_zone.near_entry)
             if self.entry_zone.near_entry <= self.stop_loss.level:
                 raise ValueError(
-                    f"LONG: Entry ({self.entry_zone.near_entry}) must be > "
+                    f"LONG: near_entry ({self.entry_zone.near_entry}) must be > "
                     f"stop ({self.stop_loss.level})"
+                )
+            if _long_far <= self.stop_loss.level:
+                raise ValueError(
+                    f"LONG: far_entry ({self.entry_zone.far_entry}) is at or below "
+                    f"stop ({self.stop_loss.level}); fill at far_entry would invert the trade"
                 )
             # For longs: targets > entry
             for target in self.targets:
@@ -214,11 +223,17 @@ class TradePlan:
                         f"entry ({self.entry_zone.near_entry})"
                     )
         else:  # SHORT
-            # For shorts: entry < stop
+            # For shorts: ALL entry levels must be below stop
+            _short_far = max(self.entry_zone.far_entry, self.entry_zone.near_entry)
             if self.entry_zone.near_entry >= self.stop_loss.level:
                 raise ValueError(
-                    f"SHORT: Entry ({self.entry_zone.near_entry}) must be < "
+                    f"SHORT: near_entry ({self.entry_zone.near_entry}) must be < "
                     f"stop ({self.stop_loss.level})"
+                )
+            if _short_far >= self.stop_loss.level:
+                raise ValueError(
+                    f"SHORT: far_entry ({self.entry_zone.far_entry}) is at or above "
+                    f"stop ({self.stop_loss.level}); fill at far_entry would invert the trade"
                 )
             # For shorts: targets < entry
             for target in self.targets:

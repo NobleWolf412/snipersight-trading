@@ -20,11 +20,20 @@ logger = logging.getLogger(__name__)
 
 
 # Mode-specific FVG minimum sizes (in ATR units)
+# Both the canonical internal keys AND scanner-mode aliases are listed so the
+# lookup never silently falls back to the config default (0.3 ATR) when the
+# orchestrator passes the short profile name (e.g. "stealth", "strike").
 MODE_FVG_MIN_SIZE = {
-    "macro_surveillance": 0.568,  # OVERWATCH: Top 25% cleanest gaps
-    "stealth_balanced": 0.290,  # STEALTH: Top 50% core intraday gaps
+    # Canonical internal keys
+    "macro_surveillance": 0.568,   # OVERWATCH: Top 25% cleanest gaps
+    "stealth_balanced":   0.290,   # STEALTH: Top 50% core intraday gaps
     "intraday_aggressive": 0.132,  # STRIKE: Top 75% rapid scalp gaps
-    "precision": 0.081,  # SURGICAL: Catch everything above pure noise
+    "precision":          0.081,   # SURGICAL: Catch everything above pure noise
+    # Scanner-mode aliases (what the orchestrator actually passes)
+    "overwatch":  0.568,
+    "stealth":    0.290,
+    "strike":     0.132,
+    "surgical":   0.081,
 }
 
 

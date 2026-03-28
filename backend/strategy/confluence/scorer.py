@@ -82,6 +82,208 @@ if TYPE_CHECKING:
 
 
 # ==============================================================================
+# PRE-SCORING GATE SYSTEM
+# ==============================================================================
+# Hard gates that run BEFORE the confluence scoring engine.
+# If any gate fails, scoring is skipped entirely and the symbol is rejected
+# with a reason code. This prevents soft penalties being offset by synergy bonuses.
+
+
+from dataclasses import dataclass as _dataclass, field as _field
+
+
+@_dataclass
+class GateResult:
+    """Result of a pre-scoring gate check."""
+    passed: bool
+    gate_name: str = ""
+    reason: str = ""
+    metadata: dict = _field(default_factory=dict)
+
+
+def run_pre_scoring_gates(
+    smc_snapshot: "SMCSnapshot",
+    config: "ScanConfig",
+    direction: str,
+    regime: Optional[Any] = None,
+    btc_impulse: Optional[str] = None,
+    is_btc: bool = False,
+) -> GateResult:
+    """
+    Run all pre-scoring hard gates. Returns on the first failure.
+
+    Gates (in order):
+      1. Structural Anchor  — at least one quality OB, FVG, or confirmed Sweep
+      2. Regime Alignment   — mode-aware hard block on counter-trend in strong trend
+      3. BTC Impulse        — reject alts when BTC in opposing strong impulse
+      4. Conflict Density   — reject if 3+ conflict conditions simultaneously active
+    """
+    profile = getattr(config, "profile", "stealth_balanced").lower()
+    norm_dir = direction.lower()
+    is_long = norm_dir in ("long", "bullish")
+
+    # ── Gate 1: Structural Anchor (ALL modes) ──────────────────────────────────
+    # At least one of OB (grade A/B, fresh), FVG (grade A/B, size ≥ 1 ATR),
+    # or confirmed Sweep must be present.
+    #
+    # Sweep confirmation threshold is mode-aware:
+    #   OVERWATCH / STEALTH — require level ≥ 2 (volume + pattern or 2× volume)
+    #   STRIKE / SURGICAL / intraday modes — accept level ≥ 1 (pattern OR volume)
+    #     These modes operate in faster, lower-volume conditions where institutional
+    #     volume spikes are rare; a reversal pattern alone is sufficient evidence.
+    ob_direction = "bullish" if is_long else "bearish"
+    fvg_direction = "bullish" if is_long else "bearish"
+    sweep_type = "low" if is_long else "high"
+
+    # Profiles that accept a lower sweep confirmation bar (pattern-only counts)
+    _SWEEP_LEVEL1_PROFILES = {
+        "strike", "intraday_aggressive", "surgical", "precision",
+        "intraday_aggressive_alt", "precision_alt",
+    }
+    _min_sweep_level = 1 if profile in _SWEEP_LEVEL1_PROFILES else 2
+
+    has_quality_ob = any(
+        ob.grade in ("A", "B")
+        and ob.freshness_score >= 50.0
+        and not ob.invalidated
+        and ob.direction == ob_direction
+        for ob in smc_snapshot.order_blocks
+    )
+    has_quality_fvg = any(
+        fvg.grade in ("A", "B")
+        and fvg.size_atr >= 1.0
+        and fvg.overlap_with_price < 0.7
+        and fvg.direction == fvg_direction
+        for fvg in smc_snapshot.fvgs
+    )
+    has_confirmed_sweep = any(
+        s.confirmation_level >= _min_sweep_level and s.sweep_type == sweep_type
+        for s in smc_snapshot.liquidity_sweeps
+    )
+
+    if not (has_quality_ob or has_quality_fvg or has_confirmed_sweep):
+        return GateResult(
+            passed=False,
+            gate_name="structural_anchor",
+            reason=(
+                f"No quality structural anchor for {direction}: "
+                f"need OB(grade A/B, fresh) or FVG(grade A/B, ≥1 ATR) "
+                f"or Sweep(level ≥{_min_sweep_level})"
+            ),
+            metadata={
+                "has_quality_ob": has_quality_ob,
+                "has_quality_fvg": has_quality_fvg,
+                "has_confirmed_sweep": has_confirmed_sweep,
+                "sweep_min_level": _min_sweep_level,
+            },
+        )
+
+    # ── Gate 2: Regime Alignment (mode-aware hard block) ──────────────────────
+    # OVERWATCH/STEALTH: reject counter-trend trades in strong trends (hard block).
+    # STRIKE: reject UNLESS a confirmed structure shift (CHoCH) in trade direction exists
+    #         — a CHoCH signals the trend is already reversing, validating the fade.
+    # SURGICAL: exempt — scalps can fade extremes.
+    if profile not in ("surgical", "precision") and regime is not None:
+        regime_trend = getattr(regime, "trend", "sideways")
+
+        # OVERWATCH/STEALTH are patient, high-conviction modes — they should never
+        # trade against a trending regime even a regular "down/up" trend (not just
+        # "strong_down/strong_up"). Entering LONG into a downtrend for these modes
+        # caused consecutive losses (e.g. XRP LONG with HTF bearish every scan).
+        # STRIKE/intraday_aggressive are faster and can fade trends WITH a CHoCH
+        # confirmation, so they only hard-block on "strong" opposing regime.
+        _strict_profiles = {"overwatch", "macro_surveillance", "stealth", "stealth_balanced"}
+        if profile in _strict_profiles:
+            is_strongly_bearish = regime_trend in ("strong_down", "down")
+            is_strongly_bullish = regime_trend in ("strong_up", "up")
+        else:
+            is_strongly_bearish = regime_trend == "strong_down"
+            is_strongly_bullish = regime_trend == "strong_up"
+
+        opposing_long  = is_long and is_strongly_bearish
+        opposing_short = not is_long and is_strongly_bullish
+
+        if opposing_long or opposing_short:
+            # STRIKE/intraday_aggressive: allow through if a confirmed CHoCH exists in
+            # the trade direction — this validates fading a strong trend.
+            if profile in ("strike", "intraday_aggressive"):
+                _confirmed_choch = False
+                for _sb in smc_snapshot.structural_breaks:
+                    _sb_type = getattr(_sb, "break_type", "").upper()
+                    _sb_dir  = getattr(_sb, "direction", "")
+                    if _sb_type == "CHOCH":
+                        _sb_bullish = _sb_dir in ("bullish", "up", "LONG")
+                        if is_long and _sb_bullish:
+                            _confirmed_choch = True
+                            break
+                        if not is_long and not _sb_bullish:
+                            _confirmed_choch = True
+                            break
+                if _confirmed_choch:
+                    pass  # divergence exception — CHoCH confirms trend reversal, allow scoring
+                else:
+                    return GateResult(
+                        passed=False,
+                        gate_name="regime_alignment",
+                        reason=(
+                            f"{'LONG' if is_long else 'SHORT'} rejected: regime is "
+                            f"{'strong_down' if is_long else 'strong_up'} with no confirming CHoCH (mode={profile})"
+                        ),
+                        metadata={"regime_trend": regime_trend, "direction": direction, "choch_checked": True},
+                    )
+            else:
+                # OVERWATCH/STEALTH/macro_surveillance/stealth_balanced: hard block, no exception
+                return GateResult(
+                    passed=False,
+                    gate_name="regime_alignment",
+                    reason=f"{'LONG' if is_long else 'SHORT'} rejected: regime is {'strong_down' if is_long else 'strong_up'} (mode={profile})",
+                    metadata={"regime_trend": regime_trend, "direction": direction},
+                )
+
+    # ── Gate 3: BTC Impulse (alts only) ───────────────────────────────────────
+    if not is_btc and btc_impulse is not None:
+        btc_strongly_up = btc_impulse in ("strong_up", "extreme_up")
+        btc_strongly_down = btc_impulse in ("strong_down", "extreme_down")
+        if is_long and btc_strongly_down:
+            return GateResult(
+                passed=False,
+                gate_name="btc_impulse",
+                reason=f"LONG alt rejected: BTC in opposing strong impulse ({btc_impulse})",
+                metadata={"btc_impulse": btc_impulse},
+            )
+        if not is_long and btc_strongly_up:
+            return GateResult(
+                passed=False,
+                gate_name="btc_impulse",
+                reason=f"SHORT alt rejected: BTC in opposing strong impulse ({btc_impulse})",
+                metadata={"btc_impulse": btc_impulse},
+            )
+
+    # ── Gate 4: Conflict Density (ALL modes) ──────────────────────────────────
+    # Count active conflict signals (opposing structural breaks in direction).
+    conflict_count = 0
+    for sb in smc_snapshot.structural_breaks:
+        sb_dir = getattr(sb, "direction", "bullish")
+        is_opposing = (is_long and sb_dir == "bearish") or (not is_long and sb_dir == "bullish")
+        if is_opposing:
+            conflict_count += 1
+    # Include opposing OBs close to price as additional conflict signals
+    for ob in smc_snapshot.order_blocks:
+        if ob.direction != ob_direction and not ob.invalidated and ob.grade in ("A", "B"):
+            conflict_count += 1
+
+    if conflict_count >= 3:
+        return GateResult(
+            passed=False,
+            gate_name="conflict_density",
+            reason=f"{conflict_count} simultaneous conflict conditions detected",
+            metadata={"conflict_count": conflict_count},
+        )
+
+    return GateResult(passed=True)
+
+
+# ==============================================================================
 # SCORING CALIBRATION CONSTANTS
 # ==============================================================================
 # Tuning parameters for gradient scoring and category capping.
@@ -121,10 +323,10 @@ MODE_SYNERGY_CAPS = {
     "macro_surveillance": 10.0,
     "stealth_balanced": 12.0,
     "stealth": 12.0,
-    "strike": 15.0,             # Aggressive: higher cap
-    "intraday_aggressive": 15.0,
-    "surgical": 18.0,           # Scalping: highest cap
-    "precision": 18.0,
+    "strike": 10.0,             # Tightened from 15 — prevents noise-score inflation past gate
+    "intraday_aggressive": 10.0,
+    "surgical": 12.0,           # Tightened from 18 — still highest but bounded
+    "precision": 12.0,
 }
 
 
@@ -158,18 +360,18 @@ MODE_SYNERGY_CAPS = {
 #   Sequence:        institutional_sequence, multi_tf_reversal, liquidity_draw
 
 _OVERWATCH_WEIGHTS = {
-    # --- SMC Core ---
-    "order_block":           0.25,  # Institutional demand/supply; primary entry signal
-    "fvg":                   0.18,  # Imbalance confirmation; strong for swing
-    "market_structure":      0.20,  # BOS/CHoCH; directional bias anchor
-    "liquidity_sweep":       0.18,  # Sweep precedes the real move; critical for swing
+    # --- SMC Core (structural anchors promoted — entry needs a real level) ---
+    "order_block":           0.30,  # Primary entry anchor; must be present
+    "fvg":                   0.22,  # Secondary anchor; imbalance confirmation
+    "market_structure":      0.22,  # BOS/CHoCH; directional bias
+    "liquidity_sweep":       0.22,  # Sweep precedes real move; critical for swing
     # --- OB Precision ---
-    "inside_ob":             0.10,  # Price inside OB = textbook entry
-    "nested_ob":             0.10,  # LTF OB inside HTF OB = precision layer
-    "opposing_structure":    0.06,  # Walls in the way; penalty factor
+    "inside_ob":             0.10,
+    "nested_ob":             0.10,
+    "opposing_structure":    0.06,
     # --- Indicators ---
     "momentum":              0.08,
-    "divergence":            0.15,  # Divergence on swing = high-conviction reversal signal
+    "divergence":            0.15,
     "volume":                0.10,
     "vwap":                  0.04,
     "volatility":            0.08,
@@ -178,19 +380,15 @@ _OVERWATCH_WEIGHTS = {
     "multi_close_confirm":   0.08,
     # --- MACD ---
     "macd_veto":             0.08,
-    # --- HTF / Regime ---
-    "htf_alignment":         0.25,  # HTF trend alignment is the backbone of swing trades
-    "htf_structure_bias":    0.15,
-    "htf_proximity":         0.15,
-    "htf_momentum_gate":     0.10,
-    "htf_inflection":        0.18,  # HTF turning point; powerful for swing entries
-    "regime_alignment":      0.10,
+    # --- HTF / Regime (5 correlated inputs collapsed to 1 composite) ---
+    "htf_composite":         0.30,  # Replaces htf_alignment+bias+proximity+momentum+inflection
+    "regime_alignment":      0.18,  # Promoted from 0.10 — regime is now a meaningful filter
     # --- BTC / Macro ---
     "btc_impulse":           0.12,
-    "weekly_stoch_rsi":      0.12,  # Weekly StochRSI is a meaningful filter for swing
+    "weekly_stoch_rsi":      0.12,
     "fibonacci":             0.08,
     # --- Timing ---
-    "kill_zone":             0.03,  # Kill zones matter less on swing TFs
+    "kill_zone":             0.03,
     "premium_discount":      0.12,
     # --- Sequence ---
     "institutional_sequence": 0.15,
@@ -199,20 +397,20 @@ _OVERWATCH_WEIGHTS = {
 }
 
 _STRIKE_WEIGHTS = {
-    # --- SMC Core ---
-    "order_block":           0.18,
-    "fvg":                   0.12,
-    "market_structure":      0.28,  # Structure breaks drive intraday momentum entries
+    # --- SMC Core (OB/FVG now required contributors — no pure indicator path) ---
+    "order_block":           0.22,  # was 0.18 — structural entry level required
+    "fvg":                   0.16,  # was 0.12 — imbalance confirmation required
+    "market_structure":      0.28,
     "liquidity_sweep":       0.12,
     # --- OB Precision ---
     "inside_ob":             0.10,
     "nested_ob":             0.08,
     "opposing_structure":    0.10,
     # --- Indicators ---
-    "momentum":              0.15,  # Momentum confirmation is key for intraday strikes
-    "divergence":            0.18,  # Divergence is strong entry trigger intraday
+    "momentum":              0.15,
+    "divergence":            0.18,
     "volume":                0.10,
-    "vwap":                  0.08,  # VWAP more relevant on intraday TFs
+    "vwap":                  0.08,
     "volatility":            0.10,
     # --- Close Quality ---
     "close_momentum":        0.08,
@@ -220,12 +418,8 @@ _STRIKE_WEIGHTS = {
     # --- MACD ---
     "macd_veto":             0.08,
     # --- HTF / Regime ---
-    "htf_alignment":         0.12,
-    "htf_structure_bias":    0.10,
-    "htf_proximity":         0.10,
-    "htf_momentum_gate":     0.07,
-    "htf_inflection":        0.10,
-    "regime_alignment":      0.07,
+    "htf_composite":         0.15,  # Replaces 5 HTF factors
+    "regime_alignment":      0.10,  # was 0.07
     # --- BTC / Macro ---
     "btc_impulse":           0.08,
     "weekly_stoch_rsi":      0.06,
@@ -240,13 +434,13 @@ _STRIKE_WEIGHTS = {
 }
 
 _SURGICAL_WEIGHTS = {
-    # --- SMC Core ---
-    "order_block":           0.15,
-    "fvg":                   0.10,
-    "market_structure":      0.30,  # Structure quality is the dominant filter for scalps
+    # --- SMC Core (entry needs a real level even for scalps) ---
+    "order_block":           0.22,  # was 0.15 — scalp entries need a structural level
+    "fvg":                   0.16,  # was 0.10
+    "market_structure":      0.28,  # was 0.30 — slight reduction to make room
     "liquidity_sweep":       0.10,
     # --- OB Precision ---
-    "inside_ob":             0.12,  # Being inside a valid OB is a hard entry requirement for scalp
+    "inside_ob":             0.12,
     "nested_ob":             0.10,
     "opposing_structure":    0.12,
     # --- Indicators ---
@@ -254,25 +448,21 @@ _SURGICAL_WEIGHTS = {
     "divergence":            0.10,
     "volume":                0.08,
     "vwap":                  0.05,
-    "volatility":            0.12,  # Volatility conditions matter more at scalp precision
+    "volatility":            0.12,
     # --- Close Quality ---
-    "close_momentum":        0.09,  # Close quality is critical; scalps need candle confirmation
+    "close_momentum":        0.09,
     "multi_close_confirm":   0.06,
     # --- MACD ---
     "macd_veto":             0.08,
-    # --- HTF / Regime ---
-    "htf_alignment":         0.05,  # HTF is a backdrop filter; scalp entries don't need full alignment
-    "htf_structure_bias":    0.08,
-    "htf_proximity":         0.08,
-    "htf_momentum_gate":     0.05,
-    "htf_inflection":        0.08,
+    # --- HTF / Regime (scalp: HTF is a light backdrop only) ---
+    "htf_composite":         0.08,  # Replaces 5 HTF factors; low weight for scalps
     "regime_alignment":      0.05,
     # --- BTC / Macro ---
     "btc_impulse":           0.05,
     "weekly_stoch_rsi":      0.03,
     "fibonacci":             0.06,
     # --- Timing ---
-    "kill_zone":             0.12,  # Kill zones are high-priority for scalp entries
+    "kill_zone":             0.15,  # Kill zones are high-priority for scalp entries
     "premium_discount":      0.09,
     # --- Sequence ---
     "institutional_sequence": 0.10,
@@ -282,10 +472,10 @@ _SURGICAL_WEIGHTS = {
 
 _STEALTH_WEIGHTS = {
     # --- SMC Core ---
-    "order_block":           0.15,
-    "fvg":                   0.08,
+    "order_block":           0.18,  # was 0.15
+    "fvg":                   0.10,
     "market_structure":      0.20,
-    "liquidity_sweep":       0.10,
+    "liquidity_sweep":       0.12,  # was 0.10
     # --- OB Precision ---
     "inside_ob":             0.08,
     "nested_ob":             0.06,
@@ -302,12 +492,8 @@ _STEALTH_WEIGHTS = {
     # --- MACD ---
     "macd_veto":             0.05,
     # --- HTF / Regime ---
-    "htf_alignment":         0.15,
-    "htf_structure_bias":    0.10,
-    "htf_proximity":         0.10,
-    "htf_momentum_gate":     0.07,
-    "htf_inflection":        0.10,
-    "regime_alignment":      0.08,
+    "htf_composite":         0.22,  # Replaces 5 HTF factors
+    "regime_alignment":      0.10,  # was 0.08
     # --- BTC / Macro ---
     "btc_impulse":           0.07,
     "weekly_stoch_rsi":      0.06,
@@ -412,8 +598,14 @@ def calculate_confluence_override(
             "🎯 INSTITUTIONAL SEQUENCE OVERRIDE: Sweep=%s, Shift=%s, OB=%s → 100%% penalty reduction",
             sweep_confirmed, has_structure_shift, has_ob
         )
+        _inst_reduction = 1.0
+        # In sideways/ranging regimes, cap override at 50% so conflict penalties
+        # are never fully erased — choppy markets remain costly.
+        _regime_composite = getattr(regime, "composite", "") or ""
+        if any(s in _regime_composite.lower() for s in ("sideways", "ranging", "chop", "compressed")):
+            _inst_reduction = min(_inst_reduction, 0.50)
         return {
-            "reduction": 1.0,  # Full penalty elimination
+            "reduction": _inst_reduction,
             "triggered_by": "institutional_sequence",
             "matches": inst_seq_matches,
             "rationale": "Complete Sweep→Shift→OB sequence detected",
@@ -539,8 +731,17 @@ def calculate_confluence_override(
             "matches": strong_factors,
             "rationale": f"{strong_factors} factors scored 70+",
         }
-    
+
     return override_result
+
+
+def _apply_sideways_override_cap(result: Dict[str, Any], regime: Optional[Any]) -> Dict[str, Any]:
+    """Cap override reduction at 50% in sideways/ranging regimes."""
+    _composite = getattr(regime, "composite", "") or ""
+    if any(s in _composite.lower() for s in ("sideways", "ranging", "chop", "compressed")):
+        result = dict(result)
+        result["reduction"] = min(result.get("reduction", 0.0), 0.50)
+    return result
 
 
 # ==============================================================================
@@ -614,7 +815,7 @@ def evaluate_htf_structural_proximity(
         ob_grade = getattr(ob, "grade", "B")
         if ob_grade not in ("A", "B"):
             continue
-        if ob.freshness_score < 0.5:
+        if ob.freshness_score < 50.0:  # freshness_score is 0-100 scale (calculate_freshness returns * 100)
             continue
 
         ob_center = (ob.high + ob.low) / 2
@@ -2401,10 +2602,17 @@ def calculate_confluence_score(
     else:
         factors.append(ConfluenceFactor(name="MACD Veto", score=100.0, weight=get_w("macd_veto", 0.05), rationale="MACD alignment confirmed"))
 
-    # --- HTF Alignment & Proximity ---
+    # --- HTF Composite Sub-scores (aggregated below into a single factor) ---
+    # Collecting 5 correlated HTF inputs so they contribute as one composite weight,
+    # preventing cascade inflation when all score high in a trending market.
+    _htf_sub_scores: Dict[str, float] = {}
+    _htf_sub_rationale: Dict[str, str] = {}
+
+    # --- HTF Alignment ---
     if htf_trend:
         htf_align_res = _score_htf_alignment_incremental(htf_trend, direction, htf_indicators=htf_indicators, indicator_set=indicators)
-        factors.append(ConfluenceFactor(name="HTF Alignment", score=htf_align_res["score"], weight=get_w("htf_alignment", 0.10), rationale=htf_align_res["rationale"] or f"HTF {htf_trend} baseline"))
+        _htf_sub_scores["htf_alignment"] = htf_align_res["score"]
+        _htf_sub_rationale["htf_alignment"] = htf_align_res["rationale"] or f"HTF {htf_trend} baseline"
 
     # --- BTC Impulse Gate ---
     if btc_impulse:
@@ -2430,7 +2638,8 @@ def calculate_confluence_score(
     # --- HTF Structure Bias ---
     if smc_snapshot.swing_structure:
         bias_res = _score_htf_structure_bias(swing_structure=smc_snapshot.swing_structure, direction=direction)
-        factors.append(ConfluenceFactor(name="HTF Structure Bias", score=max(0.0, min(100.0, 50.0 + bias_res["bonus"] * 5.0)), weight=get_w("htf_structure_bias", 0.05), rationale=bias_res["reason"] or "HTF structure bias neutral"))
+        _htf_sub_scores["htf_structure_bias"] = max(0.0, min(100.0, 50.0 + bias_res["bonus"] * 5.0))
+        _htf_sub_rationale["htf_structure_bias"] = bias_res["reason"] or "HTF structure bias neutral"
 
     # ===========================================================================
     # === CRITICAL HTF GATES ===
@@ -2440,19 +2649,18 @@ def calculate_confluence_score(
     # Entry must be at meaningful HTF structural level
     # === Gate 1: HTF Structural Proximity ===
     if entry_price:
-        # Corrected positional arguments: smc, indicators, entry_price, direction, mode_config
         prox_res = evaluate_htf_structural_proximity(smc_snapshot, indicators, entry_price, direction, config)
         prox_base = 100.0 if prox_res.get("valid", True) else 0.0
         prox_score = max(0.0, min(100.0, prox_base + prox_res.get("score_adjustment", 0.0)))
-        prox_rat = prox_res.get("nearest_structure", "HTF structural proximity check")
-        factors.append(ConfluenceFactor(name="HTF Structural Proximity", score=prox_score, weight=get_w("htf_proximity", 0.08), rationale=prox_rat))
-    
-    # === Gate 2: HTF Momentum Gate ===
+        _htf_sub_scores["htf_proximity"] = prox_score
+        _htf_sub_rationale["htf_proximity"] = prox_res.get("nearest_structure", "HTF structural proximity check")
+
+    # === HTF Momentum Gate ===
     m_gate = evaluate_htf_momentum_gate(indicators=indicators, direction=direction, mode_config=config, swing_structure=smc_snapshot.swing_structure, reversal_context=reversal_context)
-    # Map gate to Factor score: Allowed=100, Blocked=0. Adjust by momentum bonus/penalty.
     m_gate_base = 100.0 if m_gate["allowed"] else 0.0
     m_gate_score = max(0.0, min(100.0, m_gate_base + m_gate.get("score_adjustment", 0.0)))
-    factors.append(ConfluenceFactor(name="HTF Momentum Gate", score=m_gate_score, weight=get_w("htf_momentum_gate", 0.06), rationale=m_gate["reason"] or "HTF momentum allowed"))
+    _htf_sub_scores["htf_momentum_gate"] = m_gate_score
+    _htf_sub_rationale["htf_momentum_gate"] = m_gate["reason"] or "HTF momentum allowed"
 
     # --- Premium/Discount Zone ---
     pd_score, pd_rat = 50.0, "Equilibrium zone"
@@ -2556,34 +2764,51 @@ def calculate_confluence_score(
     except Exception as e:
         logger.debug("Opposing structure penalty failed: %s", e)
 
-    # --- NEW: HTF Inflection Point Bonus ---
-    # Big bonus when at HTF support (for LONG) or HTF resistance (for SHORT)
-    # This can tip direction organically when at major reversal zones
+    # --- HTF Inflection Point ---
     try:
         if current_price and smc_snapshot.order_blocks:
-            # Need ATR for scaling
             target_tf = getattr(config, "primary_planning_timeframe", "4h")
             atr_ind = indicators.by_timeframe.get(target_tf)
             atr_val = getattr(atr_ind, "atr", current_price * 0.01) if atr_ind else current_price * 0.01
-            
             if atr_val > 0:
                 for ob in smc_snapshot.order_blocks:
                     if ob.timeframe in ("1w", "1d", "4h"):
                         target_price = ob.high if direction in ("long", "bullish") else ob.low
                         dist_atr = abs(current_price - target_price) / atr_val
-                        if dist_atr < 1.0: # Within 1 ATR of major HTF level
+                        if dist_atr < 1.0:
                             inflection_score = min(100.0, max(0.0, 100.0 - (dist_atr * 50.0)))
-                            factors.append(
-                                ConfluenceFactor(
-                                    name="HTF Inflection Point", 
-                                    score=inflection_score, 
-                                    weight=get_w("htf_inflection", 0.10), 
-                                    rationale=f"Near {ob.timeframe} HTF inflection zone ({dist_atr:.1f} ATR)"
-                                )
-                            )
+                            _htf_sub_scores["htf_inflection"] = inflection_score
+                            _htf_sub_rationale["htf_inflection"] = f"Near {ob.timeframe} HTF inflection zone ({dist_atr:.1f} ATR)"
                             break
     except Exception as e:
-        logger.debug("HTF inflation point bonus failed: %s", e)
+        logger.debug("HTF inflection point scoring failed: %s", e)
+
+    # --- HTF Composite Factor (single aggregated factor replacing 5 correlated inputs) ---
+    # Internal sub-weights are fixed — only htf_composite weight participates in normalization.
+    _HTF_INTERNAL_WEIGHTS = {
+        "htf_alignment":      0.35,
+        "htf_structure_bias": 0.25,
+        "htf_proximity":      0.20,
+        "htf_momentum_gate":  0.12,
+        "htf_inflection":     0.08,
+    }
+    _htf_total_w = sum(_HTF_INTERNAL_WEIGHTS[k] for k in _HTF_INTERNAL_WEIGHTS if k in _htf_sub_scores)
+    if _htf_total_w > 0:
+        _htf_composite = sum(
+            _htf_sub_scores[k] * _HTF_INTERNAL_WEIGHTS[k]
+            for k in _HTF_INTERNAL_WEIGHTS if k in _htf_sub_scores
+        ) / _htf_total_w
+        _htf_composite = max(0.0, min(100.0, _htf_composite))
+        _htf_top_rationale = next(
+            (_htf_sub_rationale[k] for k in ("htf_alignment", "htf_proximity", "htf_structure_bias") if k in _htf_sub_rationale),
+            "HTF composite"
+        )
+        factors.append(ConfluenceFactor(
+            name="HTF Composite",
+            score=_htf_composite,
+            weight=get_w("htf_composite", 0.15),
+            rationale=_htf_top_rationale,
+        ))
 
     # --- Institutional Sequence ---
     seq_score, seq_rat = _score_institutional_sequence(smc_snapshot, direction)
@@ -2600,7 +2825,10 @@ def calculate_confluence_score(
         logger.warning("Liquidity draw scoring failed: %s", e)
 
     # --- FINAL WEIGHT NORMALIZATION ---
-    # This prevents weight dilution - all weights sum to 100% exactly
+    # Normalize by the sum of PRESENT factors only so weights add to 1.0 among what
+    # was actually computed. Missing factors are handled by the coverage penalty below —
+    # using the full mode table sum here causes double-penalisation and mathematically
+    # caps scores at 40–47 regardless of individual factor quality.
     total_w = sum(f.weight for f in factors)
     if total_w > 0:
         for i in range(len(factors)):
@@ -2612,21 +2840,20 @@ def calculate_confluence_score(
     synergy_bonus = _calculate_synergy_bonus(factors, smc_snapshot, cycle_context=cycle_context, reversal_context=reversal_context, direction=direction, mode_config=config)
     conflict_penalty = _calculate_conflict_penalty(factors, direction, smc=smc_snapshot, mode_config=config, regime=regime)
     
-    # Coverage Penalty for low-evidence setups
-    # Uses quality-factor count (score >= 50) instead of any-non-zero count.
-    # The original active_factors < 4 never fires because housekeeping factors
-    # (MACD Veto, Volatility, Regime, VWAP) always produce a non-zero score.
-    # Quality count penalizes setups where meaningful signal factors are absent.
+    # Coverage Penalty for low-evidence setups.
+    # Threshold=6 matches the ~6 "housekeeping" factors (MACD Veto, Volatility, Regime
+    # Alignment, VWAP, BTC Impulse, Close Momentum) that reliably score ≥50 in any scan.
+    # A setup at threshold=6 has passed baseline checks; signal factors (OB, FVG, HTF,
+    # Sweep, Structure) add quality on top. The conflict penalty handles the heavy
+    # suppression of structurally poor setups — coverage is a secondary nudge.
     coverage_penalty = 0.0
     active_factors = len([f for f in factors if f.score > 0])
     quality_factors = len([f for f in factors if f.score >= 50])
-    # Require at least 6 quality factors. 3 pts per missing factor, capped at 25.
-    # Threshold of 8 was too aggressive — many structural factors (OB, FVG, Sweep)
-    # score 0 simply because they're absent in the current market, not because the
-    # setup is weak. Absent factors already hurt the weighted sum; double-penalising
-    # them through coverage suppressed all scores below 50% in normal conditions.
-    if quality_factors < 6:
-        coverage_penalty = min(25.0, (6 - quality_factors) * 3.0)
+    _COVERAGE_THRESHOLD = 6
+    _COVERAGE_PER_MISSING = 3.0
+    _COVERAGE_CAP = 20.0
+    if quality_factors < _COVERAGE_THRESHOLD:
+        coverage_penalty = min(_COVERAGE_CAP, (_COVERAGE_THRESHOLD - quality_factors) * _COVERAGE_PER_MISSING)
     
     # Macro Adjustment
     macro_adj = 0.0
@@ -2639,21 +2866,42 @@ def calculate_confluence_score(
     # Structural Minimum Gate — cap hard at 30 so it can never pass any mode gate
     if structural_minimum_failed: raw_score = min(raw_score, 30.0)
 
-    # Score is the weighted sum — no post-hoc amplification.
-    # Inflating passing scores distorts the distribution and makes tier
-    # differentiation meaningless. The raw weighted score is the ground truth.
-    # Quadratic decay below 40 to hard-suppress genuine garbage (<40 raw → ≤32).
-    if raw_score < 40.0:
-        final_score = raw_score * (raw_score / 40.0)
-    else:
-        final_score = raw_score
+    # Raw weighted score is the ground truth. The gate threshold (70–78 per mode),
+    # conflict penalty (up to 35 pts), and coverage penalty already suppress weak
+    # setups below the gate — quadratic decay would only double-penalise setups that
+    # are already mathematically unable to pass.
+    final_score = raw_score
 
     final_score = max(0.0, min(100.0, final_score))
 
 
-    # Determine Signal Tier
-    strong_factors = sum(1 for f in factors if f.score >= 65)
-    tier = "APEX" if strong_factors >= 7 else ("A" if strong_factors >= 5 else ("B" if strong_factors >= 3 else "C"))
+    # Determine Signal Tier — conviction-based (quality of anchor factors, not raw count)
+    # Anchor factors are the structural/directional pillars each mode depends on.
+    # Conviction = 60% anchor quality + 40% breadth of other strong factors.
+    _TIER_ANCHOR_FACTORS: Dict[str, List[str]] = {
+        "overwatch":           ["Order Block", "Liquidity Sweep", "HTF Composite", "Market Structure"],
+        "macro_surveillance":  ["Order Block", "Liquidity Sweep", "HTF Composite", "Market Structure"],
+        "strike":              ["Market Structure", "Order Block", "FVG", "Momentum"],
+        "intraday_aggressive": ["Market Structure", "Order Block", "FVG", "Momentum"],
+        "surgical":            ["Order Block", "FVG", "Market Structure", "Kill Zone"],
+        "precision":           ["Order Block", "FVG", "Market Structure", "Kill Zone"],
+        "stealth":             ["Order Block", "Market Structure", "HTF Composite", "FVG"],
+        "stealth_balanced":    ["Order Block", "Market Structure", "HTF Composite", "FVG"],
+    }
+    _tier_anchors = _TIER_ANCHOR_FACTORS.get(current_profile, ["Order Block", "Market Structure", "HTF Composite", "Liquidity Sweep"])
+    _anchor_scores = [f.score for f in factors if f.name in _tier_anchors]
+    _non_anchor_strong = sum(1 for f in factors if f.name not in _tier_anchors and f.score >= 65)
+
+    _anchor_avg = sum(_anchor_scores) / len(_anchor_scores) if _anchor_scores else 0.0
+    _breadth_score = min(100.0, _non_anchor_strong * 14.0)  # 7+ non-anchor → 98
+    _conviction_score = (_anchor_avg * 0.60) + (_breadth_score * 0.40)
+
+    tier = (
+        "APEX" if _conviction_score >= 82 else
+        "A"    if _conviction_score >= 68 else
+        "B"    if _conviction_score >= 50 else
+        "C"
+    )
 
     breakdown = ConfluenceBreakdown(
         total_score=final_score,
@@ -4626,7 +4874,10 @@ def _calculate_conflict_penalty(
     # Strong confluence can reduce or eliminate penalties — but regime context
     # caps how much reduction is allowed for counter-trend trades in trending markets.
     if smc and mode_config and penalty > 0:
-        override = calculate_confluence_override(factors, smc, mode_config, direction, regime=regime)
+        override = _apply_sideways_override_cap(
+            calculate_confluence_override(factors, smc, mode_config, direction, regime=regime),
+            regime,
+        )
         if override["reduction"] > 0:
             raw_reduction = override["reduction"]
 

@@ -531,10 +531,13 @@ class SMCDetectionService:
             except Exception as e:
                 logger.warning("📦 %s: BOS-linked OB detection FAILED: %s", timeframe, e)
 
-            # Deduplicate overlapping OBs (prefer stronger ones)
+            # Deduplicate overlapping OBs (prefer stronger ones).
+            # max_overlap=0.5 means two OBs must share >50% of the same price zone
+            # before the weaker is removed — previously 0.70 allowed near-duplicate
+            # zones to both survive and inflate conflict density counts.
             if result["order_blocks"]:
                 result["order_blocks"] = filter_overlapping_order_blocks(
-                    result["order_blocks"], max_overlap=0.7
+                    result["order_blocks"], max_overlap=0.5
                 )
 
                 # NEW: Mode-specific filtering (Gap #1 - SMC Enhancements)
@@ -581,15 +584,22 @@ class SMCDetectionService:
             result["fvgs"] = fvgs
 
         # Liquidity sweeps (use TF-specific config for sweep thresholds)
+        # Single-pass: _return_raw_count=True detects with the full 12-bar window,
+        # applies mode-window post-filtering internally, and returns both the
+        # filtered list and the pre-filter raw count — no duplicate detection run.
         if tf_config.get("detect_sweep", True):
             try:
-                sweeps_raw = detect_liquidity_sweeps(df, tf_smc_config, mode_profile=None)
-                sweeps = detect_liquidity_sweeps(df, tf_smc_config, mode_profile=self._mode_profile)
+                sweeps, raw_sweep_count = detect_liquidity_sweeps(
+                    df,
+                    tf_smc_config,
+                    mode_profile=self._mode_profile,
+                    _return_raw_count=True,
+                )
 
-                # Track for UI stats
-                self._filter_stats["sweep_detected"] = self._filter_stats.get(
-                    "sweep_detected", 0
-                ) + len(sweeps_raw)
+                # Track for UI stats (raw = full-window count before mode filtering)
+                self._filter_stats["sweep_detected"] = (
+                    self._filter_stats.get("sweep_detected", 0) + raw_sweep_count
+                )
 
                 # Set timeframe on each sweep for TF filtering and HTF context
                 from dataclasses import replace
