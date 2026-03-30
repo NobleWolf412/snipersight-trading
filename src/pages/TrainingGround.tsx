@@ -35,6 +35,7 @@ import {
 } from '@phosphor-icons/react';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { HomeButton } from '@/components/layout/HomeButton';
+import sniperLogo from '@/assets/images/1000016768.png';
 import { TacticalPanel } from '@/components/TacticalPanel';
 import { PaperTradingConfig } from '@/components/PaperTradingConfig';
 import {
@@ -391,537 +392,505 @@ export function TrainingGround() {
             </div>
           </div>
         ) : isIdle ? (
-          <div className="space-y-6 mt-6">
-            <section className="glass-card glow-border-green rounded-2xl p-6 md:p-8 flex flex-col items-center text-center space-y-6 relative overflow-hidden group transition-all duration-500 hover:shadow-[0_0_50px_rgba(0,255,170,0.15)]">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-green-500/10 via-transparent to-transparent opacity-40 pointer-events-none group-hover:opacity-60 transition-opacity duration-1000" />
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#00ff88]/50 to-transparent opacity-50" />
-              <div className="relative z-10 w-full flex flex-col items-center text-center space-y-6">
-                <Target size={64} className="text-accent opacity-50 mb-2" />
-                <div className="max-w-xl mx-auto space-y-2">
-                  <h2 className="text-3xl lg:text-4xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-green-50 to-green-400/80 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]">PHANTOM INITIALIZATION</h2>
-                  <div className="h-1 w-24 mx-auto bg-gradient-to-r from-transparent via-green-500/50 to-transparent rounded-full mb-4" />
-                  <p className="text-base text-green-100/80 leading-relaxed font-light">
-                    Phantom is an autonomous, regime-adaptive execution layer running strictly limit-only entries with a scaled ladder approach.
-                  </p>
+          <div className="space-y-5 mt-6">
+
+            {/* ── HERO ────────────────────────────────────────────────────────── */}
+            <section className="glass-card glow-border-green rounded-2xl p-8 md:p-10 flex flex-col items-center text-center space-y-6 relative overflow-hidden group transition-all duration-500 hover:shadow-[0_0_60px_rgba(0,255,170,0.15)]">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-green-500/10 via-transparent to-transparent opacity-50 pointer-events-none group-hover:opacity-70 transition-opacity duration-1000" />
+              <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-[#00ff88]/60 to-transparent" />
+              <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-[#00ff88]/20 to-transparent" />
+
+              <div className="relative z-10 w-full flex flex-col items-center space-y-5">
+                {/* Standing by badge */}
+                <div className="inline-flex items-center gap-2.5 px-4 py-1.5 glass-card-subtle glow-border-green rounded-full">
+                  <div className="w-2 h-2 bg-accent rounded-full animate-pulse shadow-[0_0_8px_rgba(0,255,170,0.8)]" />
+                  <span className="text-xs tracking-[0.3em] text-accent/80 uppercase font-mono">Standing By</span>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full">
-                  {/* Leverage */}
-                  <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-accent/30 transition-colors">
-                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Leverage</div>
+                {/* Sniper logo + halo ring */}
+                <div className="relative inline-block">
+                  <div
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none"
+                    style={{
+                      width: '220%',
+                      height: '220%',
+                      zIndex: -1,
+                      background: 'radial-gradient(circle, transparent 30%, rgba(0, 255, 136, 0.22) 52%, rgba(0, 255, 136, 0.08) 70%, transparent 82%)',
+                      filter: 'blur(18px)',
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-accent/20 blur-[50px] rounded-full z-[-1]" />
+                  <img
+                    src={sniperLogo}
+                    alt="SniperSight Phantom"
+                    className="relative h-16 md:h-20 w-auto drop-shadow-[0_0_25px_rgba(0,255,170,0.55)]"
+                  />
+                </div>
+
+                {/* Title */}
+                <div className="space-y-1">
+                  <h2 className="text-4xl lg:text-6xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-green-50 to-green-400/80 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]">
+                    PHANTOM
+                  </h2>
+                  <div className="text-[10px] font-mono tracking-[0.45em] text-accent/50 uppercase">Initialization Protocol</div>
+                  <div className="h-px w-16 mx-auto bg-gradient-to-r from-transparent via-green-500/50 to-transparent mt-1" />
+                </div>
+
+                {/* AI advisory */}
+                {recommendation && (
+                  <div className="flex flex-col items-center gap-2 max-w-xl">
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-mono tracking-[0.2em] uppercase shadow-[0_0_10px_rgba(0,255,136,0.15)]">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                      AI Advisory Online
+                    </div>
+                    <p className="text-sm text-green-100/60 leading-relaxed font-light italic">
+                      "{recommendation.reason}"
+                    </p>
+                    {recommendation.warning && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-[10px] font-mono mt-0.5">
+                        <Warning size={10} weight="fill" />
+                        {recommendation.warning}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Quick stat chips */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-xl">
+                  <div className="p-3 rounded-xl bg-black/50 border border-border/60 hover:border-accent/40 transition-colors text-center group/chip">
+                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1 font-mono">Leverage</div>
                     <div className="text-2xl font-mono font-bold text-accent">{config.leverage}x</div>
-                    <div className="text-[9px] text-muted-foreground mt-1 opacity-60">Adjustable below</div>
                   </div>
-                  {/* Risk */}
-                  <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-border/60 transition-colors">
-                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Risk Profile</div>
+                  <div className="p-3 rounded-xl bg-black/50 border border-border/60 hover:border-border/80 transition-colors text-center">
+                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1 font-mono">Risk</div>
                     <div className="text-2xl font-mono font-bold text-foreground">{config.risk_per_trade ?? 2}%</div>
-                    <div className="text-[9px] text-muted-foreground mt-1 opacity-60">3-part scale-in</div>
                   </div>
-                  {/* Regime */}
-                  <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-primary/30 transition-colors relative overflow-hidden">
+                  <div className="p-3 rounded-xl bg-black/50 border border-border/60 hover:border-primary/30 transition-colors text-center relative overflow-hidden">
                     {recommendation?.regime?.composite && (
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,_var(--tw-gradient-stops))] from-blue-500/10 to-transparent pointer-events-none" />
                     )}
-                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Regime State</div>
-                    <div className="flex items-center gap-1.5">
-                      <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", recommendation?.regime?.composite ? "bg-primary animate-pulse" : "bg-muted-foreground/40")} />
-                      <div className="text-lg font-mono font-bold text-primary capitalize truncate">
-                        {recommendation?.regime?.composite
-                          ? recommendation.regime.composite.replace(/_/g, ' — ')
-                          : 'Adaptive'}
-                      </div>
+                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1 font-mono">Regime</div>
+                    <div className="text-sm font-mono font-bold text-primary capitalize leading-tight relative z-10 flex items-center justify-center gap-1 min-h-[28px]">
+                      <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", recommendation?.regime?.composite ? "bg-primary animate-pulse" : "bg-muted-foreground/30")} />
+                      <span className="truncate">{recommendation?.regime?.composite ? recommendation.regime.composite.replace(/_/g, ' ') : 'Adaptive'}</span>
                     </div>
-                    {recommendation?.reason && (
-                      <div className="text-[9px] text-muted-foreground mt-1 leading-tight truncate opacity-70">
-                        {recommendation.reason}
-                      </div>
-                    )}
                   </div>
-                  {/* Confluence Gate */}
-                  <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-yellow-400/30 transition-colors">
-                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Confluence Gate</div>
+                  <div className="p-3 rounded-xl bg-black/50 border border-border/60 hover:border-yellow-400/30 transition-colors text-center">
+                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1 font-mono">Gate</div>
                     <div className="text-2xl font-mono font-bold text-yellow-400">
-                      {config.min_confluence != null ? `≥${config.min_confluence}%` : 'AUTO'}
-                    </div>
-                    <div className="text-[9px] text-muted-foreground mt-1 opacity-60">
-                      {config.min_confluence != null ? 'Signal threshold' : 'Backend adaptive'}
+                      {config.min_confluence != null ? `${config.min_confluence}%` : 'AUTO'}
                     </div>
                   </div>
-                </div>
-
-                <div className="w-full max-w-2xl pt-4 space-y-6">
-                  {/* Engine Mode — Fixed to Stealth */}
-                  <div className="space-y-3">
-                    <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Engine Mode</label>
-                    <div className="bg-gradient-to-r from-purple-500/10 via-accent/5 to-blue-500/10 border border-purple-500/30 rounded-xl p-4 relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-purple-400/50 to-transparent" />
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <Lightning size={18} weight="fill" className="text-purple-400" />
-                          <span className="text-sm font-black tracking-widest text-purple-400">STEALTH</span>
-                          {recommendation?.mode && recommendation.mode !== 'stealth' ? (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Badge variant="outline" className="text-[8px] border-accent/40 text-accent bg-accent/10 px-1.5 py-0 capitalize cursor-help transition-all hover:bg-accent/20">
-                                    ADAPTING TO {recommendation.mode} PROFILE
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-[240px] border-accent/30 bg-black/90 p-3 shadow-[0_0_20px_rgba(0,255,170,0.1)]">
-                                  <div className="space-y-1.5">
-                                    <div className="flex items-center gap-1.5 text-accent font-bold text-[10px] uppercase tracking-wider">
-                                      <Lightning size={12} weight="fill" />
-                                      {recommendation.mode} Mode Active
-                                    </div>
-                                    <p className="text-[10px] text-muted-foreground leading-relaxed italic">
-                                      "Market is currently high-risk. I'm being extra picky with trades—waiting for perfect signals and double-checking volume to ensure we don't get trapped by fake moves. Prioritizing safety over speed."
-                                    </p>
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          ) : (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Badge variant="outline" className="text-[8px] border-purple-500/30 text-purple-300/80 bg-purple-500/10 px-1.5 py-0 cursor-help">
-                                    LOCKED
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="bg-black/90 border-purple-500/30 text-[10px] p-2">
-                                  Stealth engine is in standard autonomous mode.
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                        </div>
-                        <ShieldCheck size={18} className="text-accent/40" />
-                      </div>
-                      <p className="text-[11px] text-muted-foreground/80 leading-relaxed mb-3">
-                        Stealth is the optimal paper trading engine — it covers the full timeframe range (D→5m) and adaptively selects between scalp, intraday, and swing setups based on what the market structure dictates.
-                      </p>
-                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">R:R Min</div>
-                          <div className="text-sm font-mono font-bold text-accent">1.8</div>
-                        </div>
-                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Range</div>
-                          <div className="text-sm font-mono font-bold text-foreground">D→5m</div>
-                        </div>
-                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Direction</div>
-                          <div className="text-sm font-mono font-bold text-foreground">L + S</div>
-                        </div>
-                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Types</div>
-                          <div className="text-sm font-mono font-bold text-foreground">Scalp / Intraday / Swing</div>
-                        </div>
-                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Scan Every</div>
-                          <div className="text-sm font-mono font-bold text-accent">{config.scan_interval_minutes ?? 5}m</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ── Parameters Grid ── */}
-                  <div className="space-y-1.5 text-left">
-                    <div className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1 mb-2">Session Parameters</div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      
-                      {/* Starting Balance */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Starting Balance ($)</label>
-                        </div>
-                        <input
-                          type="number"
-                          value={config.initial_balance}
-                          onChange={e => setConfig({ ...config, initial_balance: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[1000, 5000, 10000, 50000].map(preset => (
-                            <button
-                              key={preset}
-                              onClick={() => setConfig({ ...config, initial_balance: preset })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.initial_balance === preset
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {preset >= 1000 ? `${preset / 1000}k` : preset}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Leverage */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Leverage (x)</label>
-                        </div>
-                        <input
-                          type="number"
-                          min="1"
-                          max="100"
-                          value={config.leverage}
-                          onChange={e => setConfig({ ...config, leverage: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[1, 5, 10, 20].map(preset => (
-                            <button
-                              key={preset}
-                              onClick={() => setConfig({ ...config, leverage: preset })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.leverage === preset
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {preset}x
-                            </button>
-                          ))}
-                        </div>
-                        {(() => {
-                          const exposure = (config.leverage ?? 1) * (config.risk_per_trade ?? 2);
-                          const color = exposure >= 20 ? 'text-red-400' : exposure >= 10 ? 'text-yellow-400' : 'text-muted-foreground/50';
-                          return (
-                            <p className={`text-[9px] font-mono pl-1 leading-snug ${color}`}>
-                              Effective exposure per trade: {exposure.toFixed(1)}%
-                            </p>
-                          );
-                        })()}
-                      </div>
-
-                      {/* Risk Per Trade */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Risk Per Trade (%)</label>
-                        </div>
-                        <input
-                          type="number"
-                          min="0.1"
-                          max="10"
-                          step="0.5"
-                          value={config.risk_per_trade ?? 2}
-                          onChange={e => setConfig({ ...config, risk_per_trade: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[0.5, 1, 2, 3].map(preset => (
-                            <button
-                              key={preset}
-                              onClick={() => setConfig({ ...config, risk_per_trade: preset })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.risk_per_trade === preset
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {preset}%
-                            </button>
-                          ))}
-                        </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">% of balance risked per entry across 3 scale-in levels</p>
-                      </div>
-
-                      {/* Duration */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Session Duration (h)</label>
-                        </div>
-                        <input
-                          type="number"
-                          min="1"
-                          max="720"
-                          value={config.duration_hours}
-                          onChange={e => setConfig({ ...config, duration_hours: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[8, 24, 72, 168].map(preset => (
-                            <button
-                              key={preset}
-                              onClick={() => setConfig({ ...config, duration_hours: preset })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.duration_hours === preset
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {preset >= 168 ? '1w' : preset >= 72 ? '3d' : `${preset}h`}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Min Confluence */}
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Min Confluence %</label>
-                          {recommendation?.recommended_confluence && (
-                            <div
-                              onClick={() => setConfig({ ...config, min_confluence: recommendation.recommended_confluence ?? 82 })}
-                              className="text-[8px] text-accent/80 hover:text-accent cursor-pointer border border-accent/20 bg-accent/5 px-1.5 py-0 rounded transition-colors"
-                            >
-                              Suggested: {recommendation.recommended_confluence}%
-                            </div>
-                          )}
-                        </div>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={config.min_confluence ?? ''}
-                          placeholder="AUTO"
-                          onChange={e => setConfig({ ...config, min_confluence: e.target.value === '' ? null : Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-yellow-400/40 text-foreground placeholder:text-yellow-400/60"
-                        />
-                        <div className="flex gap-1.5">
-                          {[{ l: 'AUTO', v: null }, { l: '70', v: 70 }, { l: '75', v: 75 }, { l: '82', v: 82 }].map(({ l, v }) => (
-                            <button
-                              key={l}
-                              onClick={() => setConfig({ ...config, min_confluence: v })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.min_confluence === v
-                                  ? "bg-yellow-400/15 border-yellow-400/50 text-yellow-400"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {l}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Max Trade Duration */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Max Trade Duration (h)</label>
-                        </div>
-                        <input
-                          type="number"
-                          min="1"
-                          max="720"
-                          value={config.max_hours_open}
-                          onChange={e => setConfig({ ...config, max_hours_open: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[24, 48, 72, 168].map(preset => (
-                            <button
-                              key={preset}
-                              onClick={() => setConfig({ ...config, max_hours_open: preset })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.max_hours_open === preset
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {preset}h
-                            </button>
-                          ))}
-                        </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Auto-closes any trade that hasn't exited after this period</p>
-                      </div>
-
-                      {/* Max Drawdown Kill Switch */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-red-400/80 uppercase tracking-widest pl-1">Max Drawdown Limit (%)</label>
-                        </div>
-                        <input
-                          type="number"
-                          min="1"
-                          max="100"
-                          value={config.max_drawdown_pct ?? ''}
-                          placeholder="NONE"
-                          onChange={e => setConfig({ ...config, max_drawdown_pct: e.target.value === '' ? null : Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-red-500/20 rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-red-400/40 text-foreground placeholder:text-muted-foreground/30"
-                        />
-                        <div className="flex gap-1.5">
-                          {[{ l: 'OFF', v: null }, { l: '10%', v: 10 }, { l: '15%', v: 15 }, { l: '25%', v: 25 }].map(({ l, v }) => (
-                            <button
-                              key={l}
-                              onClick={() => setConfig({ ...config, max_drawdown_pct: v })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.max_drawdown_pct === v
-                                  ? "bg-red-500/15 border-red-500/50 text-red-400"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {l}
-                            </button>
-                          ))}
-                        </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Stop session if balance drops by this % from start</p>
-                      </div>
-
-                      {/* Scan Interval */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Scan Every (m)</label>
-                          <div className="text-[8px] text-accent/60 border border-accent/20 bg-accent/5 px-1.5 py-0 rounded">
-                            Suggested: 5m
-                          </div>
-                        </div>
-                        <input
-                          type="number"
-                          min="1"
-                          max="60"
-                          value={config.scan_interval_minutes}
-                          onChange={e => setConfig({ ...config, scan_interval_minutes: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[2, 5, 15, 30].map(m => (
-                            <button
-                              key={m}
-                              onClick={() => setConfig({ ...config, scan_interval_minutes: m })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.scan_interval_minutes === m
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {m}m
-                            </button>
-                          ))}
-                        </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Fast scans (2-5m) catch Scalp entries on lower timeframes</p>
-                      </div>
-
-                      {/* Max Assets */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Max Concurrent Assets</label>
-                          <div className="text-[8px] text-accent/60 border border-accent/20 bg-accent/5 px-1.5 py-0 rounded">
-                            Suggested: 3
-                          </div>
-                        </div>
-                        <input
-                          type="number"
-                          min="1"
-                          max="10"
-                          value={config.max_positions}
-                          onChange={e => setConfig({ ...config, max_positions: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[1, 3, 5, 10].map(v => (
-                            <button
-                              key={v}
-                              onClick={() => setConfig({ ...config, max_positions: v })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.max_positions === v
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {v}
-                            </button>
-                          ))}
-                        </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Limit of concurrent active symbol slots (Positions + Pending)</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Symbol Selection UI */}
-                  <div className="bg-background/40 border border-border/50 rounded-xl p-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Target Asset Buckets</label>
-                      <span className="text-[9px] text-muted-foreground font-mono italic">Volume adaptive</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div
-                              onClick={() => setConfig({ ...config, majors: !config.majors })}
-                              className={cn(
-                                "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all",
-                                config.majors ? "bg-accent/10 border-accent text-accent shadow-[0_0_10px_rgba(0,255,170,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
-                              )}
-                            >
-                              <Trophy size={16} weight={config.majors ? "fill" : "regular"} />
-                              <span className="text-xs font-mono font-bold tracking-tight">MAJORS</span>
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="bg-black/90 border-border text-[10px] p-2 max-w-[200px]">
-                            BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, DOT, LINK
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-
-                      <div
-                        onClick={() => setConfig({ ...config, altcoins: !config.altcoins })}
-                        className={cn(
-                          "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all",
-                          config.altcoins ? "bg-primary/10 border-primary text-primary shadow-[0_0_10px_rgba(59,130,246,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
-                        )}
-                      >
-                        <ChartLine size={16} weight={config.altcoins ? "fill" : "regular"} />
-                        <span className="text-xs font-mono font-bold tracking-tight">ALTS</span>
-                      </div>
-
-                      <div
-                        onClick={() => setConfig({ ...config, meme_mode: !config.meme_mode })}
-                        className={cn(
-                          "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all",
-                          config.meme_mode ? "bg-purple-500/10 border-purple-500 text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
-                        )}
-                      >
-                        <Crosshair size={16} weight={config.meme_mode ? "fill" : "regular"} />
-                        <span className="text-xs font-mono font-bold tracking-tight">MEME HUNTER</span>
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-border/30">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2 block font-mono">Custom symbols (comma separated)</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. BTC/USDT, ETH/USDT, LINK/USDT"
-                        value={config.symbols?.join(', ') || ''}
-                        onChange={(e) => {
-                          const syms = e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
-                          setConfig({ ...config, symbols: syms });
-                        }}
-                        className="w-full h-10 bg-black/40 border border-border rounded-md px-3 font-mono text-xs focus:outline-none focus:border-accent/40 placeholder:text-muted-foreground/30 text-foreground"
-                      />
-                    </div>
-                  </div>
-                  <p className="text-center text-[10px] text-muted-foreground/40 font-mono italic">
-                    Simulated execution only — no real funds at risk
-                  </p>
-                  <Button
-                    onClick={handleStart}
-                    disabled={isLoading}
-                    className="w-full h-14 bg-[#00ff88] hover:bg-[#00cc6a] text-black font-bold tracking-widest text-lg border-2 border-white/20 shadow-[0_0_30px_rgba(0,255,136,0.4)] hover:shadow-[0_0_50px_rgba(0,255,136,0.6)] hover:scale-105 transition-all duration-300 relative overflow-hidden group/btn"
-                  >
-                    <div className="absolute inset-0 bg-white/40 skew-x-12 -translate-x-full group-hover/btn:animate-shimmer" />
-                    {isLoading ? <ArrowsClockwise size={20} className="animate-spin mr-2" /> : <PlayCircle size={24} weight="fill" className="mr-2" />}
-                    {isLoading ? 'ARMING...' : 'ARM PHANTOM'}
-                  </Button>
                 </div>
               </div>
             </section>
+
+            {/* ── CONFIGURATION PANEL ─────────────────────────────────────────── */}
+            <section className="glass-card rounded-2xl overflow-hidden">
+              <div className="p-6 md:p-8 space-y-8">
+
+                {/* STEALTH Engine Mode */}
+                <div className="space-y-2">
+                  <div className="text-[10px] text-accent font-bold uppercase tracking-widest">Engine Mode</div>
+                  <div className="bg-gradient-to-r from-purple-500/10 via-accent/5 to-blue-500/10 border border-purple-500/30 rounded-xl p-4 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-purple-400/50 to-transparent" />
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Lightning size={18} weight="fill" className="text-purple-400" />
+                        <span className="text-sm font-black tracking-widest text-purple-400">STEALTH</span>
+                        {recommendation?.mode && recommendation.mode !== 'stealth' ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="text-[8px] border-accent/40 text-accent bg-accent/10 px-1.5 py-0 capitalize cursor-help hover:bg-accent/20 transition-colors">
+                                  ADAPTING TO {recommendation.mode.toUpperCase()} PROFILE
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[240px] border-accent/30 bg-black/90 p-3 shadow-[0_0_20px_rgba(0,255,170,0.1)]">
+                                <p className="text-[10px] text-muted-foreground leading-relaxed italic">
+                                  "Market is currently high-risk. Being extra selective — waiting for perfect signals and double-checking volume. Prioritizing safety over speed."
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : (
+                          <Badge variant="outline" className="text-[8px] border-purple-500/30 text-purple-300/80 bg-purple-500/10 px-1.5 py-0">LOCKED</Badge>
+                        )}
+                      </div>
+                      <ShieldCheck size={18} className="text-accent/40" />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground/80 leading-relaxed mb-3">
+                      Stealth is the optimal paper trading engine — covers the full timeframe range (D→5m) and adaptively selects between scalp, intraday, and swing setups based on what market structure dictates.
+                    </p>
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                      {[
+                        { label: 'R:R Min', value: '1.8' },
+                        { label: 'Range', value: 'D→5m' },
+                        { label: 'Direction', value: 'L + S' },
+                        { label: 'Types', value: 'Scalp/Intraday/Swing' },
+                        { label: 'Scan Every', value: `${config.scan_interval_minutes ?? 5}m` },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
+                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">{label}</div>
+                          <div className="text-sm font-mono font-bold text-accent leading-tight">{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Core Risk + Session Control — 2 columns */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* ── Core Risk ── */}
+                  <div className="space-y-4">
+                    <div className="text-[10px] text-accent font-bold uppercase tracking-widest border-b border-accent/20 pb-1.5 flex items-center gap-2">
+                      <div className="w-1 h-3 bg-accent rounded-full" />
+                      Core Risk
+                    </div>
+
+                    {/* Balance */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono pl-1">Starting Balance ($)</label>
+                      <input
+                        type="number"
+                        value={config.initial_balance}
+                        onChange={e => setConfig({ ...config, initial_balance: Number(e.target.value) })}
+                        className="w-full h-11 bg-black/40 border border-border/80 rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/50 focus:shadow-[0_0_12px_rgba(0,255,170,0.1)] text-foreground transition-all"
+                      />
+                      <div className="flex gap-1.5">
+                        {[{ l: '1k', v: 1000 }, { l: '5k', v: 5000 }, { l: '10k', v: 10000 }, { l: '50k', v: 50000 }].map(({ l, v }) => (
+                          <button key={l} onClick={() => setConfig({ ...config, initial_balance: v })}
+                            className={cn("flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                              config.initial_balance === v ? "bg-accent/15 border-accent/50 text-accent" : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground")}
+                          >{l}</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Leverage */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono pl-1">Leverage (x)</label>
+                      <input
+                        type="number" min="1" max="100"
+                        value={config.leverage}
+                        onChange={e => setConfig({ ...config, leverage: Number(e.target.value) })}
+                        className="w-full h-11 bg-black/40 border border-border/80 rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/50 focus:shadow-[0_0_12px_rgba(0,255,170,0.1)] text-foreground transition-all"
+                      />
+                      <div className="flex gap-1.5">
+                        {[{ l: '1x', v: 1 }, { l: '5x', v: 5 }, { l: '10x', v: 10 }, { l: '20x', v: 20 }].map(({ l, v }) => (
+                          <button key={l} onClick={() => setConfig({ ...config, leverage: v })}
+                            className={cn("flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                              config.leverage === v ? "bg-accent/15 border-accent/50 text-accent" : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground")}
+                          >{l}</button>
+                        ))}
+                      </div>
+                      {(() => {
+                        const exp = (config.leverage ?? 1) * (config.risk_per_trade ?? 2);
+                        const color = exp >= 20 ? 'text-red-400' : exp >= 10 ? 'text-yellow-400' : 'text-muted-foreground/40';
+                        return <p className={`text-[9px] font-mono pl-1 leading-snug ${color}`}>Effective exposure per trade: {exp.toFixed(1)}%</p>;
+                      })()}
+                    </div>
+
+                    {/* Risk Per Trade */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono pl-1">Risk Per Trade (%)</label>
+                      <input
+                        type="number" min="0.1" max="10" step="0.5"
+                        value={config.risk_per_trade ?? 2}
+                        onChange={e => setConfig({ ...config, risk_per_trade: Number(e.target.value) })}
+                        className="w-full h-11 bg-black/40 border border-border/80 rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/50 focus:shadow-[0_0_12px_rgba(0,255,170,0.1)] text-foreground transition-all"
+                      />
+                      <div className="flex gap-1.5">
+                        {[{ l: '0.5%', v: 0.5 }, { l: '1%', v: 1 }, { l: '2%', v: 2 }, { l: '3%', v: 3 }].map(({ l, v }) => (
+                          <button key={l} onClick={() => setConfig({ ...config, risk_per_trade: v })}
+                            className={cn("flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                              config.risk_per_trade === v ? "bg-accent/15 border-accent/50 text-accent" : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground")}
+                          >{l}</button>
+                        ))}
+                      </div>
+                      <p className="text-[9px] text-muted-foreground/40 font-mono pl-1">% of balance risked per entry across 3 scale-in levels</p>
+                    </div>
+                  </div>
+
+                  {/* ── Session Control ── */}
+                  <div className="space-y-4">
+                    <div className="text-[10px] text-accent font-bold uppercase tracking-widest border-b border-accent/20 pb-1.5 flex items-center gap-2">
+                      <div className="w-1 h-3 bg-accent rounded-full" />
+                      Session Control
+                    </div>
+
+                    {/* Session Duration */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono pl-1">Session Duration (h)</label>
+                      <input
+                        type="number" min="1" max="720"
+                        value={config.duration_hours}
+                        onChange={e => setConfig({ ...config, duration_hours: Number(e.target.value) })}
+                        className="w-full h-11 bg-black/40 border border-border/80 rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/50 focus:shadow-[0_0_12px_rgba(0,255,170,0.1)] text-foreground transition-all"
+                      />
+                      <div className="flex gap-1.5">
+                        {[{ l: '8h', v: 8 }, { l: '24h', v: 24 }, { l: '3d', v: 72 }, { l: '1w', v: 168 }].map(({ l, v }) => (
+                          <button key={l} onClick={() => setConfig({ ...config, duration_hours: v })}
+                            className={cn("flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                              config.duration_hours === v ? "bg-accent/15 border-accent/50 text-accent" : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground")}
+                          >{l}</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Max Drawdown */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-red-400/70 uppercase tracking-widest font-mono pl-1">Max Drawdown Limit (%)</label>
+                      <input
+                        type="number" min="1" max="100"
+                        value={config.max_drawdown_pct ?? ''}
+                        placeholder="NONE"
+                        onChange={e => setConfig({ ...config, max_drawdown_pct: e.target.value === '' ? null : Number(e.target.value) })}
+                        className="w-full h-11 bg-black/40 border border-red-500/20 rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-red-400/40 focus:shadow-[0_0_12px_rgba(239,68,68,0.08)] text-foreground placeholder:text-muted-foreground/30 transition-all"
+                      />
+                      <div className="flex gap-1.5">
+                        {[{ l: 'OFF', v: null }, { l: '10%', v: 10 }, { l: '15%', v: 15 }, { l: '25%', v: 25 }].map(({ l, v }) => (
+                          <button key={l} onClick={() => setConfig({ ...config, max_drawdown_pct: v })}
+                            className={cn("flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                              config.max_drawdown_pct === v ? "bg-red-500/15 border-red-500/50 text-red-400" : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground")}
+                          >{l}</button>
+                        ))}
+                      </div>
+                      <p className="text-[9px] text-muted-foreground/40 font-mono pl-1">Stop session if balance drops by this % from start</p>
+                    </div>
+
+                    {/* Scan Interval */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono pl-1">Scan Every (m)</label>
+                        <span className="text-[8px] text-accent/60 border border-accent/20 bg-accent/5 px-1.5 py-0.5 rounded font-mono">Suggested: 5m</span>
+                      </div>
+                      <input
+                        type="number" min="1" max="60"
+                        value={config.scan_interval_minutes}
+                        onChange={e => setConfig({ ...config, scan_interval_minutes: Number(e.target.value) })}
+                        className="w-full h-11 bg-black/40 border border-border/80 rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/50 focus:shadow-[0_0_12px_rgba(0,255,170,0.1)] text-foreground transition-all"
+                      />
+                      <div className="flex gap-1.5">
+                        {[{ l: '2m', v: 2 }, { l: '5m', v: 5 }, { l: '15m', v: 15 }, { l: '30m', v: 30 }].map(({ l, v }) => (
+                          <button key={l} onClick={() => setConfig({ ...config, scan_interval_minutes: v })}
+                            className={cn("flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                              config.scan_interval_minutes === v ? "bg-accent/15 border-accent/50 text-accent" : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground")}
+                          >{l}</button>
+                        ))}
+                      </div>
+                      <p className="text-[9px] text-muted-foreground/40 font-mono pl-1">Fast scans (2-5m) catch scalp entries on lower timeframes</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quality Gate + Slots — 2 columns */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Min Confluence — highlighted in yellow */}
+                  <div className="space-y-2 p-4 rounded-xl border border-yellow-400/25 bg-yellow-400/5 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-400/40 to-transparent" />
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] text-yellow-400/80 font-bold uppercase tracking-widest">Confluence Gate</label>
+                      {recommendation?.recommended_confluence && (
+                        <div
+                          onClick={() => setConfig({ ...config, min_confluence: recommendation.recommended_confluence ?? null })}
+                          className="text-[8px] text-accent/80 hover:text-accent cursor-pointer border border-accent/20 bg-accent/5 px-1.5 py-0.5 rounded transition-colors font-mono"
+                        >
+                          AI Suggestion: {recommendation.recommended_confluence}%
+                        </div>
+                      )}
+                    </div>
+                    <input
+                      type="number" min="0" max="100"
+                      value={config.min_confluence ?? ''}
+                      placeholder="AUTO"
+                      onChange={e => setConfig({ ...config, min_confluence: e.target.value === '' ? null : Number(e.target.value) })}
+                      className="w-full h-11 bg-black/40 border border-yellow-400/20 rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-yellow-400/50 focus:shadow-[0_0_12px_rgba(234,179,8,0.1)] text-foreground placeholder:text-yellow-400/50 transition-all"
+                    />
+                    <div className="flex gap-1.5">
+                      {[{ l: 'AUTO', v: null }, { l: '70', v: 70 }, { l: '75', v: 75 }, { l: '82', v: 82 }].map(({ l, v }) => (
+                        <button key={l} onClick={() => setConfig({ ...config, min_confluence: v })}
+                          className={cn("flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                            config.min_confluence === v ? "bg-yellow-400/15 border-yellow-400/50 text-yellow-400" : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground")}
+                        >{l}</button>
+                      ))}
+                    </div>
+                    <p className="text-[9px] text-muted-foreground/40 font-mono">Quality floor. AUTO uses mode default (~66%). Higher = fewer but stronger entries.</p>
+                  </div>
+
+                  {/* Max Positions + Max Trade Duration */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono pl-1">Max Concurrent Assets</label>
+                        <span className="text-[8px] text-accent/60 border border-accent/20 bg-accent/5 px-1.5 py-0.5 rounded font-mono">Suggested: 3</span>
+                      </div>
+                      <input
+                        type="number" min="1" max="10"
+                        value={config.max_positions}
+                        onChange={e => setConfig({ ...config, max_positions: Number(e.target.value) })}
+                        className="w-full h-11 bg-black/40 border border-border/80 rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/50 focus:shadow-[0_0_12px_rgba(0,255,170,0.1)] text-foreground transition-all"
+                      />
+                      <div className="flex gap-1.5">
+                        {[{ l: '1', v: 1 }, { l: '3', v: 3 }, { l: '5', v: 5 }, { l: '10', v: 10 }].map(({ l, v }) => (
+                          <button key={l} onClick={() => setConfig({ ...config, max_positions: v })}
+                            className={cn("flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                              config.max_positions === v ? "bg-accent/15 border-accent/50 text-accent" : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground")}
+                          >{l}</button>
+                        ))}
+                      </div>
+                      <p className="text-[9px] text-muted-foreground/40 font-mono pl-1">Limit of concurrent active symbol slots (positions + pending)</p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono pl-1">Max Trade Duration (h)</label>
+                      <input
+                        type="number" min="1" max="720"
+                        value={config.max_hours_open}
+                        onChange={e => setConfig({ ...config, max_hours_open: Number(e.target.value) })}
+                        className="w-full h-11 bg-black/40 border border-border/80 rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/50 focus:shadow-[0_0_12px_rgba(0,255,170,0.1)] text-foreground transition-all"
+                      />
+                      <div className="flex gap-1.5">
+                        {[{ l: '24h', v: 24 }, { l: '48h', v: 48 }, { l: '72h', v: 72 }, { l: '168h', v: 168 }].map(({ l, v }) => (
+                          <button key={l} onClick={() => setConfig({ ...config, max_hours_open: v })}
+                            className={cn("flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
+                              config.max_hours_open === v ? "bg-accent/15 border-accent/50 text-accent" : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground")}
+                          >{l}</button>
+                        ))}
+                      </div>
+                      <p className="text-[9px] text-muted-foreground/40 font-mono pl-1">Auto-closes any trade that hasn't exited after this period</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Target Asset Buckets */}
+                <div className="space-y-3">
+                  <div className="text-[10px] text-accent font-bold uppercase tracking-widest border-b border-accent/20 pb-1.5 flex items-center gap-2">
+                    <div className="w-1 h-3 bg-accent rounded-full" />
+                    Target Asset Buckets
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => setConfig({ ...config, majors: !config.majors })}
+                            className={cn(
+                              "flex flex-col items-center gap-2 px-4 py-4 rounded-xl border cursor-pointer transition-all",
+                              config.majors
+                                ? "bg-accent/10 border-accent text-accent shadow-[0_0_20px_rgba(0,255,170,0.15)]"
+                                : "bg-black/20 border-border text-muted-foreground hover:border-border/80 hover:text-foreground/60"
+                            )}
+                          >
+                            <Trophy size={22} weight={config.majors ? "fill" : "regular"} />
+                            <span className="text-xs font-mono font-bold tracking-tight">MAJORS</span>
+                            <span className="text-[9px] opacity-50 font-mono">BTC ETH SOL BNB XRP</span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="bg-black/90 border-border text-[10px] p-2 max-w-[220px]">
+                          BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, DOT, LINK
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+
+                    <button
+                      onClick={() => setConfig({ ...config, altcoins: !config.altcoins })}
+                      className={cn(
+                        "flex flex-col items-center gap-2 px-4 py-4 rounded-xl border cursor-pointer transition-all",
+                        config.altcoins
+                          ? "bg-primary/10 border-primary text-primary shadow-[0_0_20px_rgba(59,130,246,0.15)]"
+                          : "bg-black/20 border-border text-muted-foreground hover:border-border/80 hover:text-foreground/60"
+                      )}
+                    >
+                      <ChartLine size={22} weight={config.altcoins ? "fill" : "regular"} />
+                      <span className="text-xs font-mono font-bold tracking-tight">ALTS</span>
+                      <span className="text-[9px] opacity-50 font-mono">Mid-cap altcoins</span>
+                    </button>
+
+                    <button
+                      onClick={() => setConfig({ ...config, meme_mode: !config.meme_mode })}
+                      className={cn(
+                        "flex flex-col items-center gap-2 px-4 py-4 rounded-xl border cursor-pointer transition-all",
+                        config.meme_mode
+                          ? "bg-purple-500/10 border-purple-500 text-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.15)]"
+                          : "bg-black/20 border-border text-muted-foreground hover:border-border/80 hover:text-foreground/60"
+                      )}
+                    >
+                      <Fire size={22} weight={config.meme_mode ? "fill" : "regular"} />
+                      <span className="text-xs font-mono font-bold tracking-tight">MEME HUNTER</span>
+                      <span className="text-[9px] opacity-50 font-mono">PEPE SHIB DOGE+</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5 pt-1">
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Custom symbols (comma separated)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. BTC/USDT, ETH/USDT, LINK/USDT"
+                      value={config.symbols?.join(', ') || ''}
+                      onChange={(e) => {
+                        const syms = e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
+                        setConfig({ ...config, symbols: syms });
+                      }}
+                      className="w-full h-10 bg-black/40 border border-border rounded-md px-3 font-mono text-xs focus:outline-none focus:border-accent/40 placeholder:text-muted-foreground/30 text-foreground"
+                    />
+                  </div>
+                </div>
+
+                {/* ── MISSION BRIEF + ARM ─────────────────────────────────────── */}
+                <div className="space-y-4 pt-2">
+                  {/* Pre-launch summary */}
+                  <div className="rounded-xl border border-border/50 bg-black/40 p-4 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-accent/20 to-transparent" />
+                    <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
+                      Mission Brief
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-[11px] font-mono">
+                      {[
+                        { label: 'Balance', value: `$${(config.initial_balance || 0).toLocaleString()}`, color: 'text-foreground/80' },
+                        { label: 'Leverage', value: `${config.leverage}x`, color: 'text-accent' },
+                        { label: 'Risk', value: `${config.risk_per_trade ?? 2}% / trade`, color: 'text-foreground/80' },
+                        { label: 'Duration', value: `${config.duration_hours}h`, color: 'text-foreground/80' },
+                        { label: 'Scan', value: `${config.scan_interval_minutes}m interval`, color: 'text-foreground/80' },
+                        { label: 'Max DD', value: config.max_drawdown_pct ? `${config.max_drawdown_pct}%` : 'Off', color: config.max_drawdown_pct ? 'text-red-400/70' : 'text-muted-foreground/40' },
+                        { label: 'Gate', value: config.min_confluence != null ? `${config.min_confluence}%` : 'AUTO', color: 'text-yellow-400/80' },
+                        { label: 'Slots', value: `${config.max_positions} max`, color: 'text-foreground/80' },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="flex justify-between gap-2">
+                          <span className="text-muted-foreground/50">{label}</span>
+                          <span className={color}>{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <p className="text-center text-[10px] text-muted-foreground/30 font-mono italic">
+                    Simulated execution only — no real funds at risk
+                  </p>
+
+                  {/* ARM PHANTOM button with pulse ring */}
+                  <div className="relative">
+                    {!isLoading && (
+                      <div className="absolute inset-0 rounded-xl bg-[#00ff88]/8 animate-ping opacity-20 pointer-events-none scale-[1.02]" />
+                    )}
+                    <Button
+                      onClick={handleStart}
+                      disabled={isLoading}
+                      className="w-full h-14 bg-[#00ff88] hover:bg-[#00cc6a] text-black font-bold tracking-widest text-lg border-2 border-white/20 shadow-[0_0_30px_rgba(0,255,136,0.4)] hover:shadow-[0_0_60px_rgba(0,255,136,0.7)] hover:scale-[1.02] transition-all duration-300 relative overflow-hidden group/btn rounded-xl"
+                    >
+                      <div className="absolute inset-0 bg-white/25 skew-x-12 -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
+                      {isLoading
+                        ? <><ArrowsClockwise size={20} className="animate-spin mr-2" />ARMING...</>
+                        : <><PlayCircle size={24} weight="fill" className="mr-2" />ARM PHANTOM</>
+                      }
+                    </Button>
+                  </div>
+                </div>
+
+              </div>
+            </section>
           </div>
+
         ) : (
           <div className="space-y-6 mt-6">
             {/* Control Bar */}
@@ -1001,17 +970,27 @@ export function TrainingGround() {
                       <div className="text-xs text-muted-foreground uppercase tracking-widest font-mono">
                         MARKET REGIME
                       </div>
-                      <div className="mt-1 flex items-center gap-2">
+                      <div className="mt-1 flex items-center gap-2 flex-wrap">
                         <span className={cn(
                           "font-mono text-sm font-bold tracking-tight",
-                          status.regime.trend.includes('up') ? 'text-green-400' : status.regime.trend.includes('down') ? 'text-red-400' : 'text-blue-400'
+                          status.regime.trend?.includes('up') ? 'text-green-400' : status.regime.trend?.includes('down') ? 'text-red-400' : 'text-blue-400'
                         )}>
-                          {status.regime.trend.toUpperCase()}
+                          {(status.regime.trend ?? 'unknown').toUpperCase()}
                         </span>
                         <span className="text-muted-foreground/30 font-mono text-xs">—</span>
                         <span className="text-xs font-mono text-muted-foreground/80 uppercase">
-                          {status.regime.volatility}
+                          {status.regime.volatility ?? '—'}
                         </span>
+                        {status.regime.score != null && (
+                          <span className={cn(
+                            "text-[10px] font-mono px-1.5 py-0.5 rounded border",
+                            status.regime.score >= 60 ? "text-green-400/70 border-green-400/20" :
+                            status.regime.score >= 40 ? "text-yellow-400/70 border-yellow-400/20" :
+                            "text-red-400/70 border-red-400/20"
+                          )}>
+                            {status.regime.score.toFixed(0)}%
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1171,6 +1150,38 @@ export function TrainingGround() {
                     <span className="opacity-30">•</span>
                     <span>{trades.length} trades</span>
                   </div>
+
+                  {/* Drawdown kill-switch progress */}
+                  {status?.balance?.current_drawdown_pct != null && config.max_drawdown_pct != null && (
+                    <div className="mt-3 space-y-1">
+                      <div className="flex items-center justify-between text-[9px] font-mono uppercase tracking-widest">
+                        <span className="text-muted-foreground/60">Drawdown</span>
+                        <span className={cn(
+                          "font-bold",
+                          status.balance.current_drawdown_pct >= config.max_drawdown_pct * 0.8
+                            ? "text-red-400"
+                            : status.balance.current_drawdown_pct >= config.max_drawdown_pct * 0.5
+                            ? "text-amber-400"
+                            : "text-muted-foreground/60"
+                        )}>
+                          {status.balance.current_drawdown_pct.toFixed(1)}% / {config.max_drawdown_pct}%
+                        </span>
+                      </div>
+                      <div className="h-1 bg-muted/20 rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all duration-500",
+                            status.balance.current_drawdown_pct >= config.max_drawdown_pct * 0.8
+                              ? "bg-red-500"
+                              : status.balance.current_drawdown_pct >= config.max_drawdown_pct * 0.5
+                              ? "bg-amber-500"
+                              : "bg-green-500/60"
+                          )}
+                          style={{ width: `${Math.min(100, (status.balance.current_drawdown_pct / config.max_drawdown_pct) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1743,11 +1754,11 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
         </div>
         <div>
           <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Entry</div>
-          <div className="font-mono">${position.entry_price.toFixed(2)}</div>
+          <div className="font-mono">{fmtPrice(position.entry_price)}</div>
         </div>
         <div>
           <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Current</div>
-          <div className="font-mono font-bold">${position.current_price.toFixed(2)}</div>
+          <div className="font-mono font-bold">{fmtPrice(position.current_price)}</div>
         </div>
 
         <div>
@@ -1759,9 +1770,9 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
           <div className="font-mono text-red-400 font-bold" title="Total Realized + Stop Loss PnL">{formatCurrency(position.risk_pnl)}</div>
         </div>
         <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">TP / SL</div>
-          <div className="font-mono text-[10px] opacity-80" title="Target price and Stop Loss price">
-            <span className="text-green-500/80">${tp1.toFixed(2)}</span><span className="mx-1 opacity-30">/</span><span className="text-red-500/80">${position.stop_loss.toFixed(2)}</span>
+          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">TP1 / SL</div>
+          <div className="font-mono text-[10px] opacity-80" title="Next target price and current Stop Loss">
+            <span className="text-green-500/80">{fmtPrice(tp1)}</span><span className="mx-1 opacity-30">/</span><span className="text-red-500/80">{fmtPrice(position.stop_loss)}</span>
           </div>
         </div>
       </div>
@@ -1781,20 +1792,39 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
         </div>
       </div>
 
-      {/* Phantom Scale-In Ladder */}
-      <div className="mt-2 pt-3 border-t border-border/50">
-        <div className="flex items-center justify-between text-[9px] uppercase font-bold text-muted-foreground mb-1.5 tracking-widest">
-          <span className="flex items-center gap-1"><Gear size={10} className="animate-spin-slow" /> Phantom Scale Ladder</span>
-          <span className="text-accent/80 font-mono">Fill: 100% (L1)</span>
-        </div>
-        <div className="flex gap-1.5">
-          <div className={cn("h-1.5 flex-1 rounded-sm relative overflow-hidden", isLong ? "bg-green-400/50" : "bg-red-400/50")} title="L1 (100%) Filled">
-            <div className="absolute inset-0 bg-white/20 animate-pulse" />
+      {/* Target Ladder */}
+      {position.initial_targets && position.initial_targets.length > 0 && (
+        <div className="mt-2 pt-3 border-t border-border/50">
+          <div className="flex items-center justify-between text-[9px] uppercase font-bold text-muted-foreground mb-1.5 tracking-widest">
+            <span className="flex items-center gap-1"><Crosshair size={10} /> Target Ladder</span>
+            <span className="text-accent/80 font-mono">{position.targets_hit}/{position.initial_targets.length} hit</span>
           </div>
-          <div className={cn("h-1.5 flex-1 rounded-sm bg-muted/20 border border-border/30")} title="L2 (Adaptive)" />
-          <div className={cn("h-1.5 flex-1 rounded-sm bg-muted/20 border border-border/30")} title="L3 (Adaptive)" />
+          <div className="flex gap-1.5 flex-wrap">
+            {position.initial_targets.map((lvl, idx) => {
+              const hit = idx < (position.targets_hit_count ?? position.targets_hit);
+              const isCurrent = !hit && idx === (position.targets_hit_count ?? position.targets_hit);
+              return (
+                <div
+                  key={idx}
+                  title={`TP${idx + 1}: ${fmtPrice(lvl)}`}
+                  className={cn(
+                    "flex-1 min-w-[40px] px-1.5 py-1 rounded text-[9px] font-mono text-center border transition-all",
+                    hit
+                      ? "bg-green-500/10 border-green-500/40 text-green-400"
+                      : isCurrent
+                      ? cn("border-accent/50 text-accent", isLong ? "bg-green-500/5" : "bg-red-500/5")
+                      : "bg-muted/5 border-border/20 text-muted-foreground/40"
+                  )}
+                >
+                  <div className="font-bold">TP{idx + 1}</div>
+                  <div className="opacity-80">{fmtPrice(lvl)}</div>
+                  {hit && <div className="text-green-400/70 text-[8px]">✓</div>}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="mt-3 flex items-center gap-2 text-xs">
         {position.breakeven_active && (
@@ -1812,8 +1842,11 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
 }
 
 // Pending Order Card Component
-function PendingOrderCard({ order }: { order: any }) {
+type PendingOrder = PaperTradingStatusResponse['pending_orders'][number];
+
+function PendingOrderCard({ order }: { order: PendingOrder }) {
   const isLong = order.direction === 'LONG';
+  const filledPct = order.quantity > 0 ? (order.filled_qty / order.quantity) * 100 : 0;
 
   return (
     <div className="p-3 bg-background/40 rounded-lg border border-amber-500/20 border-dashed hover:border-amber-500/40 transition-all duration-300 group">
@@ -1836,19 +1869,25 @@ function PendingOrderCard({ order }: { order: any }) {
           )}
           <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest bg-amber-500/10 px-1 py-0 rounded">Waiting Fill</span>
         </div>
-        <div className="text-xs font-bold font-mono text-amber-400/80">
-          ${order.limit_price.toFixed(2)}
+        <div className="text-right">
+          <div className="text-xs font-bold font-mono text-amber-400/80">
+            {fmtPrice(order.limit_price)}
+          </div>
+          <div className="text-[9px] font-mono text-muted-foreground/50">limit</div>
         </div>
       </div>
 
       <div className="flex items-center justify-between text-[10px]">
         <div className="flex items-center gap-3">
           <span className="text-muted-foreground opacity-60">Qty: {order.quantity.toFixed(4)}</span>
-          <span className="text-muted-foreground opacity-60">Conf: {order.confluence.toFixed(0)}%</span>
+          <span className="text-muted-foreground opacity-60">Conf: {(order.confluence ?? 0).toFixed(0)}%</span>
+          {filledPct > 0 && (
+            <span className="text-blue-400/70">Fill: {filledPct.toFixed(0)}%</span>
+          )}
         </div>
         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/40 border border-border/30">
           <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
-          <span className="text-[9px] font-mono tracking-tighter opacity-70 uppercase">Market Monitoring Active</span>
+          <span className="text-[9px] font-mono tracking-tighter opacity-70 uppercase">Awaiting Fill</span>
         </div>
       </div>
     </div>
@@ -1946,6 +1985,16 @@ function ActivityItem({ event }: { event: PaperTradingActivity }) {
 }
 
 // Trade History Item Component
+/** Format a price with adaptive precision — handles micro-prices like PEPE/SHIB */
+function fmtPrice(p: number | null | undefined): string {
+  if (p == null || p === 0) return '—';
+  if (p < 0.0001) return p.toExponential(2);
+  if (p < 0.01) return p.toPrecision(4);
+  if (p < 1) return p.toFixed(5);
+  if (p < 100) return p.toFixed(4);
+  return p.toFixed(2);
+}
+
 function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = trade.direction === 'LONG';
@@ -1959,14 +2008,26 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
     return formatDuration(Math.floor(ms / 1000));
   }, [trade.entry_time, trade.exit_time]);
 
-  const displayReason = useMemo(() => {
-    let reason = trade.exit_reason || 'unknown';
-    if (trade.exit_reason === 'stop_loss') {
-      if (trade.pnl > 0) reason = 'trailing_stop';
-      else if (Math.abs(trade.pnl) < 1) reason = 'breakeven_stop';
+  // Reason badge label + color
+  const { reasonLabel, reasonColor } = useMemo(() => {
+    const r = trade.exit_reason || 'unknown';
+    if (r === 'stop_loss') {
+      if (trade.trailing_active) return { reasonLabel: 'Trailing Stop', reasonColor: 'text-amber-400 border-amber-400/30' };
+      if (trade.breakeven_active) return { reasonLabel: 'Breakeven Stop', reasonColor: 'text-sky-400 border-sky-400/30' };
+      return { reasonLabel: 'Stop Loss', reasonColor: 'text-red-400 border-red-400/30' };
     }
-    return reason.replace(/_/g, ' ');
-  }, [trade.exit_reason, trade.pnl]);
+    if (r === 'target') return { reasonLabel: `TP${trade.targets_hit?.length || 1} Hit`, reasonColor: 'text-green-400 border-green-400/30' };
+    if (r === 'stagnation') return { reasonLabel: 'Stagnation', reasonColor: 'text-amber-400 border-amber-400/30' };
+    if (r === 'direction_flip') return { reasonLabel: 'Direction Flip', reasonColor: 'text-orange-400 border-orange-400/30' };
+    if (r === 'emergency') return { reasonLabel: 'Emergency', reasonColor: 'text-red-500 border-red-500/30' };
+    if (r === 'session_stopped') return { reasonLabel: 'Session End', reasonColor: 'text-muted-foreground border-border/50' };
+    return { reasonLabel: r.replace(/_/g, ' '), reasonColor: 'text-muted-foreground border-border/50' };
+  }, [trade.exit_reason, trade.trailing_active, trade.breakeven_active, trade.targets_hit]);
+
+  // R multiple display
+  const rDisplay = trade.r_multiple != null && trade.r_multiple !== 0
+    ? `${trade.r_multiple > 0 ? '+' : ''}${trade.r_multiple.toFixed(1)}R`
+    : null;
 
   return (
     <div
@@ -1976,48 +2037,140 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
       )}
       onClick={() => setExpanded(!expanded)}
     >
-      <div className="flex items-center justify-between p-3">
-        <div className="flex items-center gap-3">
+      {/* ── Collapsed row ─────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between p-3 gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {/* Direction badge */}
           <Badge
             variant={isLong ? 'default' : 'destructive'}
             className={cn(
-              "text-xs px-2 py-0.5 border-none",
+              "text-xs px-2 py-0.5 border-none shrink-0",
               isLong ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
             )}
           >
             {trade.direction}
           </Badge>
-          <div className="flex flex-col">
-            <div className="font-bold flex items-center gap-2">
-              {trade.symbol}
-              <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-border/50">
-                {displayReason}
+
+          <div className="flex flex-col min-w-0">
+            {/* Row 1: symbol + reason + trade type */}
+            <div className="font-bold flex items-center gap-1.5 flex-wrap">
+              <span className="shrink-0">{trade.symbol}</span>
+              <span className={cn("text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded-full border shrink-0", reasonColor)}>
+                {reasonLabel}
               </span>
               {trade.trade_type && (
-                <span className="text-[9px] font-mono text-blue-400/60 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-blue-400/20">
+                <span className="text-[9px] font-mono text-blue-400/60 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-blue-400/20 shrink-0">
                   {trade.trade_type}
                 </span>
               )}
+              {rDisplay && (
+                <span className={cn(
+                  "text-[9px] font-mono font-bold tracking-widest px-1.5 py-0.5 rounded-full border shrink-0",
+                  isProfitable ? "text-green-400/80 border-green-400/20" : "text-red-400/80 border-red-400/20"
+                )}>
+                  {rDisplay}
+                </span>
+              )}
             </div>
-            <div className="text-xs text-muted-foreground flex items-center gap-2">
-              <span>${trade.entry_price.toFixed(4)} <span className="text-muted-foreground/30 mx-1">→</span> ${trade.exit_price.toFixed(4)}</span>
+
+            {/* Row 2: entry → exit prices + SL + TP1 */}
+            <div className="text-xs text-muted-foreground font-mono flex items-center gap-1 mt-0.5 flex-wrap">
+              <span>Entry <span className="text-foreground/70">{fmtPrice(trade.entry_price)}</span></span>
+              <span className="text-muted-foreground/30 mx-0.5">→</span>
+              <span>Exit <span className="text-foreground/70">{fmtPrice(trade.exit_price)}</span></span>
+              {trade.initial_stop_loss != null && trade.initial_stop_loss > 0 && (
+                <>
+                  <span className="text-muted-foreground/30 mx-0.5">·</span>
+                  <span className="text-red-400/50">SL {fmtPrice(trade.initial_stop_loss)}</span>
+                </>
+              )}
+              {trade.initial_targets && trade.initial_targets.length > 0 && (
+                <>
+                  <span className="text-muted-foreground/30 mx-0.5">·</span>
+                  <span className={cn(
+                    trade.targets_hit?.includes(0) ? "text-green-400/70" : "text-muted-foreground/40"
+                  )}>
+                    TP1 {fmtPrice(trade.initial_targets[0])}
+                    {trade.targets_hit?.includes(0) && <span className="text-green-400 ml-0.5">✓</span>}
+                  </span>
+                </>
+              )}
             </div>
+
+            {/* Row 3: exit note — full text, no truncation */}
+            {trade.exit_note && (
+              <div className="text-[10px] text-muted-foreground/50 italic mt-0.5">
+                {trade.exit_note}
+              </div>
+            )}
           </div>
         </div>
-        <div className="text-right">
-          <div className={cn("font-mono font-bold text-sm", isProfitable ? 'text-green-400' : 'text-red-400')}>
-            {formatCurrency(trade.pnl)}
+
+        {/* P&L + expand chevron */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="text-right">
+            <div className={cn("font-mono font-bold text-sm", isProfitable ? 'text-green-400' : 'text-red-400')}>
+              {formatCurrency(trade.pnl)}
+            </div>
+            <div className={cn("text-[10px] font-mono", isProfitable ? 'text-green-400/70' : 'text-red-400/70')}>
+              {formatPct(trade.pnl_pct)}
+            </div>
           </div>
-          <div className={cn("text-[10px] font-mono", isProfitable ? 'text-green-400/70' : 'text-red-400/70')}>
-            {formatPct(trade.pnl_pct)}
-          </div>
+          <CaretDown
+            size={14}
+            className={cn(
+              "text-muted-foreground/40 transition-transform duration-200 shrink-0",
+              expanded && "rotate-180"
+            )}
+          />
         </div>
       </div>
 
+      {/* ── Expanded detail ───────────────────────────────────────────────── */}
       {expanded && (
-        <div className="px-4 pb-4 pt-1 border-t border-border/30 bg-black/20">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
-            {/* Times */}
+        <div className="px-4 pb-4 pt-1 border-t border-border/30 bg-black/20 space-y-3">
+
+          {/* Trade plan snapshot: SL + TP levels */}
+          {(trade.initial_stop_loss || (trade.initial_targets && trade.initial_targets.length > 0)) && (
+            <div className="mt-3">
+              <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-1.5">Trade Plan</div>
+              <div className="flex flex-wrap gap-2 text-[11px] font-mono">
+                {/* Initial SL */}
+                {trade.initial_stop_loss != null && trade.initial_stop_loss > 0 && (
+                  <div className="flex items-center gap-1 bg-red-500/5 border border-red-500/20 rounded px-2 py-1">
+                    <span className="text-red-400/60">SL</span>
+                    <span className="text-red-400/90 font-bold">{fmtPrice(trade.initial_stop_loss)}</span>
+                  </div>
+                )}
+                {/* TP levels */}
+                {(trade.initial_targets || []).map((level, idx) => {
+                  const wasHit = (trade.targets_hit || []).includes(idx);
+                  return (
+                    <div
+                      key={idx}
+                      className={cn(
+                        "flex items-center gap-1 rounded px-2 py-1 border",
+                        wasHit
+                          ? "bg-green-500/10 border-green-500/30"
+                          : "bg-white/5 border-border/30 opacity-50"
+                      )}
+                    >
+                      <span className={wasHit ? "text-green-400/70" : "text-muted-foreground/50"}>
+                        TP{idx + 1}
+                      </span>
+                      <span className={cn("font-bold", wasHit ? "text-green-400" : "text-foreground/40")}>
+                        {fmtPrice(level)}
+                      </span>
+                      {wasHit && <span className="text-green-400 text-[9px]">✓</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-1">
+            {/* Timing */}
             <div className="space-y-1">
               <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">Timing</div>
               <div className="text-xs font-mono text-foreground/80 flex flex-col gap-0.5">
@@ -2065,13 +2218,17 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
               <div className="text-xs font-mono flex flex-col gap-0.5">
                 <span className="flex justify-between">
                   <span className="text-muted-foreground/50">Targets Hit:</span>
-                  <span className="text-amber-400/80">{trade.targets_hit?.length || 0}</span>
-                </span>
-                {trade.targets_hit && trade.targets_hit.length > 0 && (
-                  <span className="text-[9px] text-muted-foreground/50 text-right truncate">
-                    ({trade.targets_hit.map((_, i) => `TP${i + 1}`).join(', ')})
+                  <span className="text-amber-400/80">
+                    {trade.targets_hit?.length || 0}
+                    {trade.initial_targets?.length ? ` / ${trade.initial_targets.length}` : ''}
                   </span>
-                )}
+                </span>
+                <span className="flex justify-between">
+                  <span className="text-muted-foreground/50">R Achieved:</span>
+                  <span className={cn("font-bold", isProfitable ? "text-green-400/80" : "text-red-400/80")}>
+                    {rDisplay ?? '—'}
+                  </span>
+                </span>
                 <span className="flex justify-between mt-0.5 pt-0.5 border-t border-border/30">
                   <span className="text-muted-foreground/50">Type:</span>
                   <span className="text-foreground/80">{trade.trade_type || 'Unknown'}</span>
@@ -2079,7 +2236,7 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
               </div>
             </div>
 
-            {/* Results breakdown */}
+            {/* Final result */}
             <div className="space-y-1 flex flex-col items-end justify-center bg-background/40 p-2 rounded border border-border/50">
               <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest mb-1">Final Result</div>
               <div className={cn("text-lg font-mono font-bold tracking-tight", isProfitable ? 'text-green-400' : 'text-red-400')}>

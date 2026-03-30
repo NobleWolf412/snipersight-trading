@@ -25,6 +25,9 @@ export type GauntletStage =
   | 'HAS_POSITION'
   | 'PENDING_ORDER'
   | 'CONFLUENCE'
+  | 'VETO_BLOCKED'
+  | 'TRADE_TYPE'
+  | 'NO_PLAN'
   | 'POSITION_SIZE'
   | 'PULLBACK_PROB'
   | 'PRICE_FETCH'
@@ -88,6 +91,33 @@ const STAGE_CONFIG: Record<GauntletStage, StageConfig> = {
     borderColor: 'border-purple-500/30',
     description: 'score below min_confluence threshold',
     gate: 5,
+  },
+  VETO_BLOCKED: {
+    label: 'Veto blocked',
+    shortLabel: 'VETO',
+    color: 'text-red-300',
+    bgColor: 'bg-red-400/10',
+    borderColor: 'border-red-400/30',
+    description: 'MACD or active indicator veto prevented execution',
+    gate: 5,
+  },
+  TRADE_TYPE: {
+    label: 'Geometry mismatch',
+    shortLabel: 'GEOMETRY',
+    color: 'text-orange-300',
+    bgColor: 'bg-orange-400/10',
+    borderColor: 'border-orange-400/30',
+    description: 'all cascade scales rejected — setup geometry incompatible with mode',
+    gate: 6,
+  },
+  NO_PLAN: {
+    label: 'No trade plan',
+    shortLabel: 'NO PLAN',
+    color: 'text-zinc-400',
+    bgColor: 'bg-zinc-500/10',
+    borderColor: 'border-zinc-500/30',
+    description: 'planner could not construct a valid entry/stop/target plan',
+    gate: 6,
   },
   POSITION_SIZE: {
     label: 'Position size invalid',
@@ -176,6 +206,31 @@ export function classifyStage(signal: SignalLogEntry): GauntletStage {
     return 'PENDING_ORDER';
   if (r.includes('confluence') || r.includes('below min'))
     return 'CONFLUENCE';
+  // MACD / indicator veto blocked execution
+  if (r.includes('veto_blocked') || r.includes('veto blocked') || r.includes('macd veto'))
+    return 'VETO_BLOCKED';
+  // Planner geometry / trade-type cascade failures
+  // Note: reason field may be the snake_case reason_type key OR human-readable text
+  if (
+    r.includes('trade type mismatch') ||
+    r.includes('trade_type_mismatch') ||
+    r.includes('cascade attempt rejected') ||
+    r.includes('cascade scale') ||
+    r.includes('not compatible with') ||
+    r.includes('geometry') ||
+    r.includes('setup geometry') ||
+    r.includes('derived trade type') ||
+    (r.includes('not supported') && r.includes('mode'))
+  )
+    return 'TRADE_TYPE';
+  // Planner returned no valid plan (all cascades exhausted or structural failure)
+  if (
+    r.includes('no trade plan') ||
+    r.includes('no valid plan') ||
+    r.includes('plan failed') ||
+    r.includes('no_trade_plan')
+  )
+    return 'NO_PLAN';
   if (r.includes('invalid position size') || r.includes('position size'))
     return 'POSITION_SIZE';
   if (r.includes('pullback probability') || r.includes('low pullback'))

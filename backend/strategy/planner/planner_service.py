@@ -504,9 +504,14 @@ def generate_trade_plan(
     )
     
     if allowed_types and trade_type not in allowed_types:
-        # Build a human-readable, mode-aware rejection message
+        # Build a human-readable, cascade-context-aware rejection message.
+        # NOTE: This validation fires per-cascade-attempt (e.g. the swing scale attempt
+        # inside a stealth cascade). "allowed_types" reflects the current cascade slice,
+        # NOT the top-level mode's full allowed set — so messages must describe the
+        # cascade attempt, not the mode itself.
         geometry_summary = f"TP1 move: {tp1_move_pct:.1f}% · Stop: {stop_loss.distance_atr:.1f} ATR"
-        
+        allowed_label = "/".join(allowed_types)
+
         mode_messages = {
             "macro_surveillance": (
                 f"Setup geometry is {trade_type}-sized ({geometry_summary}), "
@@ -525,29 +530,28 @@ def generate_trade_plan(
                 f"This move is too large for Strike's risk parameters. "
                 f"Try Overwatch for swing-sized setups."
             ),
-            # Both "stealth" (raw profile) and "stealth_balanced" (after apply_mode) are valid keys
-            "stealth_balanced": (
-                f"Derived trade type '{trade_type}' ({geometry_summary}) "
-                f"is not supported in Stealth mode. "
-                f"Stealth accepts swing, intraday, and scalp setups — "
-                f"the detected geometry falls outside supported bounds."
-            ),
-            "stealth": (
-                f"Derived trade type '{trade_type}' ({geometry_summary}) "
-                f"is not supported in Stealth mode. "
-                f"Stealth accepts swing, intraday, and scalp setups — "
-                f"the detected geometry falls outside supported bounds."
-            ),
         }
-        
-        rejection_msg = mode_messages.get(
-            mode_name,
-            (
-                f"Trade type mismatch: market structure produced a '{trade_type}' setup "
-                f"({geometry_summary}), which is not compatible with {mode_name} mode. "
-                f"Allowed types: {', '.join(allowed_types)}."
+
+        # For balanced/cascade modes (stealth, stealth_balanced) the validation fires
+        # on a per-scale cascade attempt whose allowed_types is a single-element slice
+        # (e.g. ("swing",)).  Build a cascade-specific message instead of falsely
+        # claiming the whole mode rejects this trade type.
+        _cascade_scale = allowed_types[0] if len(allowed_types) == 1 else None
+        if _cascade_scale and mode_name in ("stealth", "stealth_balanced"):
+            rejection_msg = (
+                f"{_cascade_scale.capitalize()}-scale cascade mismatch: "
+                f"{symbol} geometry ({geometry_summary}) was classified as '{trade_type}', "
+                f"not '{_cascade_scale}'. Trying next cascade scale."
             )
-        )
+        else:
+            rejection_msg = mode_messages.get(
+                mode_name,
+                (
+                    f"Geometry mismatch for {mode_name}: market structure produced a '{trade_type}' setup "
+                    f"({geometry_summary}), which is not compatible with the '{allowed_label}' "
+                    f"scale in this mode."
+                ),
+            )
         
         logger.warning(f"❌ {symbol} REJECTED ({mode_name}) | {trade_type} setup not allowed | {geometry_summary}")
         
