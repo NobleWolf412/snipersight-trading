@@ -39,6 +39,25 @@ from backend.diagnostics.report import ReportGenerator, ModeStats
 
 logger = logging.getLogger(__name__)
 
+
+def _fmt_price(v: float) -> float:
+    """Round price to useful precision regardless of magnitude.
+
+    Standard round(v, 2) truncates micro-cap prices like 3.31e-06 to 0.0, which
+    corrupts stop-loss values in signals.jsonl and downstream trailing-stop logic.
+    This helper adapts decimal places to the scale of the value.
+    """
+    if v == 0.0:
+        return 0.0
+    if v < 0.0001:
+        return round(v, 10)
+    if v < 0.01:
+        return round(v, 8)
+    if v < 1.0:
+        return round(v, 6)
+    return round(v, 2)
+
+
 # Pending order TTL by trade type. Swing limit orders targeting HTF demand zones
 # may not get retested for hours; the old flat 10-min TTL was silently killing them.
 _PENDING_TTL_MINUTES: Dict[str, float] = {
@@ -866,6 +885,19 @@ class PaperTradingService:
                                                         "quantity": fill.quantity,
                                                         "status": "pending_filled"
                                                     })
+
+                                                    # Write "executed" to signals.jsonl for the
+                                                    # pending fill path. Without this, limit-order
+                                                    # fills are invisible in Signal Intelligence
+                                                    # (only the initial "pending" entry was written).
+                                                    self._log_signal(
+                                                        plan,
+                                                        result="executed",
+                                                        reason="pending_order_filled",
+                                                        fill_price=fill.price,
+                                                        fill_quantity=fill.quantity,
+                                                        position_id=position_id,
+                                                    )
                                         elif not self._has_position(order.symbol) and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
                                             # This case handles orders that filled but haven't opened a position yet
                                             # (though _process_signal should handle most of these)
@@ -1264,8 +1296,8 @@ class PaperTradingService:
             "setup_type": getattr(plan, "setup_type", "unknown"),
             "trade_type": getattr(plan, "trade_type", "unknown"),
             "timeframe": getattr(plan, "primary_timeframe", None) or getattr(plan, "signal_timeframe", None),
-            "entry_zone": round(plan.entry_zone.near_entry, 2),
-            "stop_loss": round(plan.stop_loss.level, 2),
+            "entry_zone": _fmt_price(plan.entry_zone.near_entry),
+            "stop_loss": _fmt_price(plan.stop_loss.level),
             "rr": round(plan.risk_reward, 2) if hasattr(plan, "risk_reward") else None,
             "result": result,  # "executed", "filtered", "error"
             "reason": reason,
@@ -1941,11 +1973,15 @@ class PaperTradingService:
                 logger.info(f"💾 Trade {pos.position_id} archived and removed from active tracking")
                 self._update_stats(trade)
 
-                # Register stop-loss cooldown in orchestrator so the symbol is
-                # locked out of re-entry for _cooldown_hours. Without this call the
-                # orchestrator's CooldownManager never learns about runtime stop-outs
-                # (which are fired by the position_manager, not the orchestrator itself),
-                # so the same broken level can be re-entered seconds later.
+                # Register cooldown in orchestrator so the symbol is locked out of
+                # re-entry. Without this call the orchestrator's CooldownManager never
+                # learns about runtime exits (fired by position_manager), so the same
+                # level can be re-entered seconds later.
+                #
+                # • stop_loss      → full configured cooldown (e.g. 4h)
+                # • stagnation /
+                #   direction_flip → half cooldown on same direction only; opposite
+                #                    direction is still permitted for reversal setups
                 if exit_reason == "stop_loss" and self.orchestrator:
                     try:
                         self.orchestrator.register_stop_out(
@@ -1956,6 +1992,20 @@ class PaperTradingService:
                     except Exception as _e:
                         logger.warning(
                             f"Failed to register stop-out cooldown for {pos.symbol}: {_e}"
+                        )
+                elif exit_reason in ("stagnation", "direction_flip") and self.orchestrator:
+                    try:
+                        _stag_hours = (self.orchestrator._cooldown_hours or 4.0) / 2.0
+                        self.orchestrator.register_stop_out(
+                            symbol=pos.symbol,
+                            direction=pos.direction,
+                            price=trade.exit_price or pos.entry_price,
+                            cooldown_hours=_stag_hours,
+                            reason="stagnation",
+                        )
+                    except Exception as _e:
+                        logger.warning(
+                            f"Failed to register stagnation cooldown for {pos.symbol}: {_e}"
                         )
 
                 self._log_activity(

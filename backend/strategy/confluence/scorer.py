@@ -240,6 +240,60 @@ def run_pre_scoring_gates(
                     metadata={"regime_trend": regime_trend, "direction": direction},
                 )
 
+    # ── Gate 2.5: Sideways regime — require directional conviction ────────────
+    # STEALTH and OVERWATCH are patient, high-conviction modes that should not
+    # enter a ranging market unless there is clear directional evidence.
+    # Without this gate, the bot enters LONG/SHORT on sideways structure 3×+
+    # in the same session with no edge (e.g. AVAX 3 consecutive LONG entries
+    # in a flat sideways regime, all exiting via stagnation or stop-loss).
+    #
+    # Conviction is satisfied by EITHER:
+    #   • a quality OB (grade A/B, fresh) in the trade direction — already
+    #     computed by Gate 1's has_quality_ob check above
+    #   • a confirmed CHoCH structural break in the trade direction — indicates
+    #     the market has chosen a direction within the range
+    #
+    # STRIKE/SURGICAL are short-duration modes that intentionally trade ranges,
+    # so they are exempt from this gate.
+    _sideways_strict_profiles = {"overwatch", "macro_surveillance", "stealth", "stealth_balanced"}
+    if profile in _sideways_strict_profiles and regime is not None:
+        _g25_trend = getattr(regime, "trend", "")
+        if _g25_trend == "sideways":
+            _choch_in_direction = False
+            for _sb in smc_snapshot.structural_breaks:
+                if getattr(_sb, "break_type", "").upper() == "CHOCH":
+                    _sb_dir = getattr(_sb, "direction", "")
+                    if is_long and _sb_dir in ("bullish", "up", "LONG"):
+                        _choch_in_direction = True
+                        break
+                    if not is_long and _sb_dir in ("bearish", "down", "SHORT"):
+                        _choch_in_direction = True
+                        break
+
+            if not has_quality_ob and not _choch_in_direction:
+                return GateResult(
+                    passed=False,
+                    gate_name="sideways_no_directional_evidence",
+                    reason=(
+                        f"{'LONG' if is_long else 'SHORT'} rejected: sideways regime with "
+                        f"no quality OB and no confirming CHoCH (mode={profile})"
+                    ),
+                    metadata={
+                        "regime_trend": _g25_trend,
+                        "direction": direction,
+                        "has_quality_ob": has_quality_ob,
+                        "choch_in_direction": _choch_in_direction,
+                    },
+                )
+            else:
+                logger.debug(
+                    "Gate 2.5 PASSED (sideways): has_ob=%s choch=%s (mode=%s dir=%s)",
+                    has_quality_ob,
+                    _choch_in_direction,
+                    profile,
+                    direction,
+                )
+
     # ── Gate 3: BTC Impulse (alts only) ───────────────────────────────────────
     if not is_btc and btc_impulse is not None:
         btc_strongly_up = btc_impulse in ("strong_up", "extreme_up")

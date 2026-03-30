@@ -9,7 +9,7 @@ Handles risk management calculations for the Trade Planner, including:
 """
 
 import logging
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 import pandas as pd
 
 from backend.shared.models.planner import Target, StopLoss, EntryZone
@@ -1864,6 +1864,66 @@ def _calculate_swing_structural_targets(
     return targets
 
 
+# ── TP R:R caps by trade type ────────────────────────────────────────────────
+# Structural HTF targets (swings, Fib extensions) routinely land at 8–41R in
+# ranging markets. A 24-hour STEALTH session cannot reach a 41R target.
+# These caps bound each TP slot to a realistic per-session maximum; if the
+# structural level exceeds the cap for that slot, we substitute a level at
+# exactly the cap R:R so the plan remains actionable.
+_TP_RR_CAPS: Dict[str, List[float]] = {
+    "scalp":    [2.0,  3.0,  5.0,  8.0],
+    "intraday": [4.0,  6.0,  9.0, 12.0],
+    "swing":    [8.0, 14.0, 20.0, 30.0],
+}
+
+
+def _cap_targets_by_rr(
+    targets: List[Target],
+    trade_type: str,
+    avg_entry: float,
+    risk_distance: float,
+    is_bullish: bool,
+) -> List[Target]:
+    """Clamp each target so its R:R does not exceed the per-type cap for that slot.
+
+    Structural targets (HTF swings, Fib 1.618 extensions, daily levels) can land
+    far beyond what is reachable in the time horizon of the trade type. If a target
+    exceeds its slot cap, its level is replaced with one at exactly the cap R:R while
+    preserving the original label, weight, and rationale (with a "[capped]" suffix).
+    """
+    caps = _TP_RR_CAPS.get(trade_type, _TP_RR_CAPS["intraday"])
+    capped: List[Target] = []
+    for i, t in enumerate(targets):
+        max_rr = caps[i] if i < len(caps) else caps[-1]
+        if t.rr_ratio > max_rr:
+            new_level = (
+                avg_entry + risk_distance * max_rr
+                if is_bullish
+                else max(avg_entry * 0.001, avg_entry - risk_distance * max_rr)
+            )
+            capped.append(
+                Target(
+                    level=new_level,
+                    label=t.label,
+                    rr_ratio=max_rr,
+                    weight=t.weight,
+                    rationale=f"{t.rationale} [capped at {max_rr:.1f}R]",
+                )
+            )
+            logger.debug(
+                "TP%d capped: %.4f (%.1fR) → %.4f (%.1fR) [%s]",
+                i + 1,
+                t.level,
+                t.rr_ratio,
+                new_level,
+                max_rr,
+                trade_type,
+            )
+        else:
+            capped.append(t)
+    return capped
+
+
 def _calculate_targets(
     is_bullish: bool,
     entry_zone: EntryZone,
@@ -1917,6 +1977,15 @@ def _calculate_targets(
     # Range setups rely on bands/levels, not generic R:R
     use_structural_targets = (
         is_swing_mode or setup_archetype == "RANGE_REVERSION" or regime_label == "compressed"
+    )
+
+    # Derive trade_type for TP R:R caps — maps archetype name to session time horizon.
+    # "intraday" is the safe default for any unknown archetype.
+    _archetype_val = getattr(setup_archetype, "value", str(setup_archetype)).upper()
+    _trade_type_for_cap = (
+        "scalp"    if _archetype_val in ("SCALP", "MICRO_SCALP")
+        else "swing"   if _archetype_val in ("SWING_TREND", "MACRO_SWING", "POSITION")
+        else "intraday"
     )
 
     if use_structural_targets:
@@ -2044,6 +2113,8 @@ def _calculate_targets(
             # Pick top 3-4 distinct levels
             targets = structural_targets[:4]
             logger.info(f"Using {len(targets)} structural targets for {mode_profile} mode")
+            # Cap each TP slot to avoid unreachable 8–41R structural levels
+            targets = _cap_targets_by_rr(targets, _trade_type_for_cap, avg_entry, risk_distance, is_bullish)
             # Filter targets blocked by opposing OB structures
             targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
             return targets
@@ -2081,6 +2152,10 @@ def _calculate_targets(
                         f"swing targets (HVN conflicts removed)"
                     )
 
+            # Cap each TP slot to avoid unreachable structural levels
+            swing_targets = _cap_targets_by_rr(
+                swing_targets, _trade_type_for_cap, avg_entry, risk_distance, is_bullish
+            )
             # Filter targets blocked by opposing OB structures
             return _filter_targets_by_opposing_structure(
                 swing_targets, smc_snapshot, is_bullish, atr

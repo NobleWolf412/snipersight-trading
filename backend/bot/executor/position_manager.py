@@ -865,7 +865,14 @@ class PositionManager:
         )
 
     def _check_trailing_activation(self, position: PositionState, current_price: float):
-        """Check if trailing stop should be activated."""
+        """Check if trailing stop should be activated.
+
+        Activation uses a dual-trigger approach — whichever fires first:
+          a) Configured R-multiple threshold (e.g. 2R) — good for tight stops
+          b) 1.5% favorable move from entry — prevents wide-stop trades from
+             requiring an 8%+ move before any trailing protection kicks in.
+             (Example: AVAX with 4% stop → 2R = 8% move. Pct floor activates at 1.5%.)
+        """
         if position.trailing_active:
             return
 
@@ -882,11 +889,25 @@ class PositionManager:
 
         profit_r = profit / risk
 
-        if profit_r >= self.trailing_stop_activation:
+        # Pct-of-entry floor: trailing activates even if 2R hasn't been reached yet,
+        # as long as the position has moved at least 1.5% in favour. This ensures
+        # wide-stop trades (e.g. 4% SL) get protection without needing an 8% move.
+        _PCT_FLOOR = 0.015  # 1.5% of entry price
+        _pct_profit = profit / position.entry_price if position.entry_price else 0.0
+
+        _r_threshold_met   = profit_r   >= self.trailing_stop_activation
+        _pct_threshold_met = _pct_profit >= _PCT_FLOOR
+
+        if _r_threshold_met or _pct_threshold_met:
+            activation_reason = (
+                f"{profit_r:.2f}R"
+                if _r_threshold_met
+                else f"{_pct_profit * 100:.2f}% move"
+            )
             position.trailing_active = True
             logger.info(
                 f"TRAILING ACTIVATED: {position.position_id} | {position.symbol} | "
-                f"Profit: {profit_r:.2f}R"
+                f"Trigger: {activation_reason}"
             )
             self._update_trailing_stop(position)
 

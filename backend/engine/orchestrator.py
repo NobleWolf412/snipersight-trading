@@ -3284,36 +3284,49 @@ class Orchestrator:
     # ======================== COOLDOWN MANAGEMENT ========================
 
     def register_stop_out(
-        self, symbol: str, price: float, direction: str, timestamp: Optional[datetime] = None
+        self,
+        symbol: str,
+        price: float,
+        direction: str,
+        timestamp: Optional[datetime] = None,
+        cooldown_hours: Optional[float] = None,
+        reason: str = "stop_out",
     ) -> None:
         """
         Register a stop-out event to prevent immediate re-entry.
 
-        Called after a trade hits its stop-loss. Prevents the system from
-        immediately generating a new signal at the same price level.
+        Called after a trade hits its stop-loss (or stagnation/direction-flip).
+        Prevents the system from immediately generating a new signal at the same
+        price level.
 
         Args:
             symbol: Trading pair (e.g., 'BTC/USDT')
             price: Stop-out price level
             direction: Trade direction ('LONG' or 'SHORT')
             timestamp: When the stop-out occurred (defaults to now)
+            cooldown_hours: Override the default cooldown duration. When None the
+                            orchestrator's configured _cooldown_hours is used.
+            reason: Cooldown reason label (default 'stop_out'; use 'stagnation' for
+                    non-stop-loss exits so logs are distinguishable).
         """
         ts = timestamp or datetime.now(timezone.utc)
+        effective_hours = cooldown_hours if cooldown_hours is not None else self._cooldown_hours
 
         self.cooldown_manager.add_cooldown(
             symbol=symbol,
             direction=direction,
             price=price,
-            reason="stop_out",
-            duration_hours=self._cooldown_hours,
+            reason=reason,
+            duration_hours=effective_hours,
         )
 
         logger.info(
-            "🚫 %s: Registered stop-out (dir=%s, price=%.4f) - cooldown for %d hours",
+            "🚫 %s: Registered %s (dir=%s, price=%.4f) - cooldown for %.1f hours",
             symbol,
+            reason,
             direction,
             price,
-            self._cooldown_hours,
+            effective_hours,
         )
 
         # Log telemetry event
@@ -3325,8 +3338,8 @@ class Orchestrator:
                     "symbol": symbol,
                     "direction": direction,
                     "stop_price": price,
-                    "cooldown_hours": self._cooldown_hours,
-                    "cooldown_expires": (ts.timestamp() + self._cooldown_hours * 3600),
+                    "cooldown_hours": effective_hours,
+                    "cooldown_expires": (ts.timestamp() + effective_hours * 3600),
                 },
             )
         )
