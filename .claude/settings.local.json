@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"C:/Users/macca/snipersight-trading\" stash push -m \"local changes before pull\")",
+      "Bash(git -C \"C:/Users/macca/snipersight-trading\" pull origin main)",
+      "Bash(git -C \"C:/Users/macca/snipersight-trading\" stash pop)",
+      "Bash(git -C \"C:/Users/macca/snipersight-trading\" add backend/bot/executor/position_manager.py backend/bot/paper_trading_service.py backend/shared/config/scanner_modes.py backend/strategy/confluence/scorer.py backend/strategy/smc/liquidity_sweeps.py src/context/ScannerContext.tsx src/types/sniperMode.ts)",
+      "Bash(git -C \"C:/Users/macca/snipersight-trading\" status)",
+      "Bash(git -C:*)"
+    ]
+  }
+}
