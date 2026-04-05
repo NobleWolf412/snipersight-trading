@@ -889,6 +889,45 @@ class PaperTradingService:
                                     executor.cancel_order(order_id)
                                     self._pending_plans.pop(order_id, None)
                                     self._pending_placed_at.pop(order_id, None)
+
+                                    # Ghost-position cleanup: if this order was PARTIALLY_FILLED
+                                    # before expiry, the executor still holds the partial in its
+                                    # positions dict. Zero it out so equity calculations don't
+                                    # include an unmanaged phantom position.
+                                    expired_order = executor.get_order(order_id)
+                                    if (
+                                        expired_order is not None
+                                        and expired_order.filled_quantity > 0
+                                    ):
+                                        ghost_qty = executor.positions.get(plan.symbol, 0.0)
+                                        if abs(ghost_qty) > 1e-9:
+                                            ghost_price = self._price_cache.get(plan.symbol, 0.0)
+                                            logger.warning(
+                                                f"GHOST POSITION CLEANUP: {plan.symbol} "
+                                                f"| partial fill {expired_order.filled_quantity:.6f} "
+                                                f"from expired order {order_id} "
+                                                f"| zeroing executor position {ghost_qty:.6f} "
+                                                f"@ {ghost_price:.4f}"
+                                            )
+                                            # Settle the ghost at current market price
+                                            # so balance reflects the real outcome.
+                                            if ghost_price > 0:
+                                                close_side = "SELL" if ghost_qty > 0 else "BUY"
+                                                close_order = executor.place_order(
+                                                    symbol=plan.symbol,
+                                                    side=close_side,
+                                                    order_type="MARKET",
+                                                    quantity=abs(ghost_qty),
+                                                    price=ghost_price,
+                                                )
+                                                executor.execute_market_order(
+                                                    close_order.order_id, ghost_price
+                                                )
+                                            else:
+                                                # No price available — force zero directly
+                                                executor.positions[plan.symbol] = 0.0
+                                                executor.position_avg_price[plan.symbol] = 0.0
+
                                     logger.info(
                                         f"PENDING ORDER EXPIRED: {plan.symbol} [{trade_type}] | "
                                         f"age={(now - placed_at).total_seconds() / 60:.1f}min "
@@ -1365,6 +1404,24 @@ class PaperTradingService:
                     self._price_cache[plan.symbol] = close_price
                 except Exception:
                     close_price = self._price_cache.get(plan.symbol)
+
+                # IMPORTANT: fire the exit order through the executor BEFORE
+                # closing in the PositionManager so the executor's positions dict
+                # and balance accounting are reconciled with the close.
+                if executor and existing_pos.remaining_quantity > 0 and close_price:
+                    close_side = "SELL" if existing_direction == "LONG" else "BUY"
+                    try:
+                        await self._execute_exit_order(
+                            symbol=plan.symbol,
+                            side=close_side,
+                            quantity=existing_pos.remaining_quantity,
+                            price=close_price,
+                        )
+                    except Exception as _ex:
+                        logger.warning(
+                            f"DIRECTION FLIP: executor close failed for {plan.symbol}: {_ex} — "
+                            f"continuing with PositionManager close"
+                        )
 
                 self.position_manager.close_position(
                     existing_pos.position_id,

@@ -472,11 +472,12 @@ class PositionManager:
         """
         Monitor single position and execute risk management logic.
 
-        Order of checks:
+        Order of checks (stop loss FIRST to ensure correct exit classification):
         1. Stop loss hit (immediate exit)
-        2. Target hit (partial exit)
-        3. Breakeven logic
-        4. Trailing stop update
+        2. Adaptive stagnation check
+        3. Target hit (partial exit)
+        4. Breakeven logic
+        5. Trailing stop update
         """
         # Fetch current price
         try:
@@ -501,6 +502,42 @@ class PositionManager:
         # measure staleness. _last_monitored_at is only set here — if the price_fetcher
         # throws before reaching this line, the stamp never updates, triggering orphan.
         position._last_monitored_at = datetime.now(timezone.utc)
+
+        # --- Check Stop Loss FIRST ---
+        # Must run before stagnation to ensure stop-level exits are classified
+        # as "stop_loss" and not "stagnation" when both conditions are true.
+        if self._check_stop_hit(position, current_price):
+            logger.warning(
+                f"STOP HIT: {position.position_id} | {position.symbol} | "
+                f"Price: {current_price} | SL: {position.stop_loss} | "
+                f"P&L: {position.total_pnl:.2f}"
+            )
+
+            if self.order_executor:
+                # Execute market close
+                success = await self._execute_exit(position, current_price, "STOP_LOSS")
+                if not success:
+                    return  # Critical: don't settle position if order failed
+
+            # Apply stop-loss slippage: stops fill slightly worse than the trigger price
+            # in real execution (0.05% is conservative for crypto; reality can be 0.1-0.5%).
+            _STOP_SLIPPAGE_PCT = 0.0005
+            if position.direction == "LONG":
+                settlement_price = current_price * (1 - _STOP_SLIPPAGE_PCT)
+            else:
+                settlement_price = current_price * (1 + _STOP_SLIPPAGE_PCT)
+
+            with self._lock:
+                # Settle P&L before zeroing remaining_quantity
+                position.update_unrealized_pnl(settlement_price)
+                position.realized_pnl += position.unrealized_pnl
+                position.unrealized_pnl = 0.0
+                position.status = PositionStatus.STOPPED_OUT
+                position.exit_reason = "stop_loss"
+                position.exit_price = settlement_price
+                position.remaining_quantity = 0.0
+
+            return  # Position closed, no further checks
 
         # --- Adaptive Stagnation Check ---
         # Uses trade type + regime to determine how long to hold before cutting.
@@ -576,40 +613,6 @@ class PositionManager:
                     f"past {stagnation_hours:.1f}h limit but making progress toward target | "
                     f"P&L: {position.pnl_percentage:.2f}%"
                 )
-
-        # --- Check Stop Loss ---
-        if self._check_stop_hit(position, current_price):
-            logger.warning(
-                f"STOP HIT: {position.position_id} | {position.symbol} | "
-                f"Price: {current_price} | SL: {position.stop_loss} | "
-                f"P&L: {position.total_pnl:.2f}"
-            )
-
-            if self.order_executor:
-                # Execute market close
-                success = await self._execute_exit(position, current_price, "STOP_LOSS")
-                if not success:
-                    return  # Critical: don't settle position if order failed
-
-            # Apply stop-loss slippage: stops fill slightly worse than the trigger price
-            # in real execution (0.05% is conservative for crypto; reality can be 0.1-0.5%).
-            _STOP_SLIPPAGE_PCT = 0.0005
-            if position.direction == "LONG":
-                settlement_price = current_price * (1 - _STOP_SLIPPAGE_PCT)
-            else:
-                settlement_price = current_price * (1 + _STOP_SLIPPAGE_PCT)
-
-            with self._lock:
-                # Settle P&L before zeroing remaining_quantity
-                position.update_unrealized_pnl(settlement_price)
-                position.realized_pnl += position.unrealized_pnl
-                position.unrealized_pnl = 0.0
-                position.status = PositionStatus.STOPPED_OUT
-                position.exit_reason = "stop_loss"
-                position.exit_price = settlement_price
-                position.remaining_quantity = 0.0
-
-            return  # Position closed, no further checks
 
         # --- Check Targets ---
         target_hit = self._check_targets_hit(position, current_price)
@@ -997,6 +1000,10 @@ class PositionManager:
         """
         Emergency close all open positions.
 
+        Calls order_executor for each position so the executor's position dict
+        and balance are correctly updated — without this, the executor's margin
+        accounting would still show open positions after an emergency shutdown.
+
         Use in case of system shutdown, critical error, or risk event.
         """
         logger.critical(f"EMERGENCY CLOSE ALL: {reason}")
@@ -1006,8 +1013,41 @@ class PositionManager:
         for position in open_positions:
             try:
                 current_price = self.price_fetcher(position.symbol)
-                # Set EMERGENCY_EXIT status BEFORE close_position so the status
-                # isn't temporarily CLOSED (which _sync_closed_positions could see).
+
+                # Fire exit order through executor BEFORE settling the PositionState
+                # so the executor's positions dict and balance reflect the close.
+                if self.order_executor and position.remaining_quantity > 0 and current_price > 0:
+                    import asyncio
+                    order_side = "SELL" if position.direction == "LONG" else "BUY"
+                    try:
+                        # order_executor is async; run it synchronously here since
+                        # emergency_close_all is called from non-async contexts.
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            asyncio.ensure_future(
+                                self.order_executor(
+                                    symbol=position.symbol,
+                                    side=order_side,
+                                    quantity=position.remaining_quantity,
+                                    price=current_price,
+                                )
+                            )
+                        else:
+                            loop.run_until_complete(
+                                self.order_executor(
+                                    symbol=position.symbol,
+                                    side=order_side,
+                                    quantity=position.remaining_quantity,
+                                    price=current_price,
+                                )
+                            )
+                    except Exception as exec_err:
+                        logger.warning(
+                            f"Emergency executor close failed for {position.position_id}: {exec_err}"
+                        )
+
+                # Set EMERGENCY_EXIT status BEFORE settling so _sync_closed_positions
+                # can distinguish this from a normal CLOSED status.
                 with self._lock:
                     position.status = PositionStatus.EMERGENCY_EXIT
                     position.exit_reason = f"EMERGENCY: {reason}"
@@ -1018,6 +1058,7 @@ class PositionManager:
                     position.realized_pnl += position.unrealized_pnl
                     position.unrealized_pnl = 0.0
                 position.remaining_quantity = 0.0
+                position.exit_price = current_price
                 position.updated_at = datetime.now(timezone.utc)
 
                 logger.info(

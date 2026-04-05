@@ -162,6 +162,7 @@ def detect_liquidity_sweeps(
     swing_lows = _detect_swing_lows(df, swing_lookback)
 
     liquidity_sweeps = []
+    raw_sweep_count = 0  # Track total sweeps detected (for _return_raw_count)
 
     # Scan for sweeps
     for i in range(swing_lookback * 2, len(df) - max_sweep_candles):
@@ -222,6 +223,7 @@ def detect_liquidity_sweeps(
                     )
 
                     if reversal_distance > 0:  # Any reversal detected
+                        raw_sweep_count += 1
                         # Enhanced volume confirmation with multiple tiers
                         volume_ratio = (
                             current_candle["volume"] / avg_volume.iloc[i]
@@ -260,6 +262,11 @@ def detect_liquidity_sweeps(
                                 )  # Moderate volume (1.5x+) with/without pattern
                             elif has_pattern:
                                 conf_level = 1  # Pattern only, no volume = minimal confidence
+
+                            # Calculate how many bars the reversal took
+                            reversal_bars = _get_reversal_bar_count(
+                                df, i, max_sweep_candles, target_high, "high"
+                            )
 
                             sweep = LiquiditySweep(
                                 level=target_high,
@@ -303,6 +310,7 @@ def detect_liquidity_sweeps(
                     )
 
                     if reversal_distance > 0:  # Any reversal detected
+                        raw_sweep_count += 1
                         # Enhanced volume confirmation with multiple tiers
                         volume_ratio = (
                             current_candle["volume"] / avg_volume.iloc[i]
@@ -342,6 +350,11 @@ def detect_liquidity_sweeps(
                             elif has_pattern:
                                 conf_level = 1  # Pattern only, no volume = minimal confidence
 
+                            # Calculate how many bars the reversal took
+                            reversal_bars = _get_reversal_bar_count(
+                                df, i, max_sweep_candles, target_low, "low"
+                            )
+
                             sweep = LiquiditySweep(
                                 level=target_low,
                                 sweep_type="low",
@@ -368,7 +381,7 @@ def detect_liquidity_sweeps(
         ]
 
     if _return_raw_count:
-        return liquidity_sweeps, raw_count
+        return liquidity_sweeps, raw_sweep_count
     return liquidity_sweeps
 
 
@@ -446,6 +459,54 @@ def _get_upside_reversal_distance(
             max_distance = max(max_distance, distance)
 
     return max_distance, bars_to_close_confirm
+
+
+def _get_reversal_bar_count(
+    df: pd.DataFrame, sweep_idx: int, max_candles: int, level: float, sweep_type: str
+) -> int:
+    """
+    Count how many bars after the sweep candle the maximum reversal occurred.
+
+    Args:
+        df: OHLCV DataFrame
+        sweep_idx: Index of the sweep candle
+        max_candles: Maximum candles to check for reversal
+        level: The level that was swept
+        sweep_type: 'high' (downside reversal) or 'low' (upside reversal)
+
+    Returns:
+        int: Number of bars from sweep to best reversal (0 if none)
+    """
+    max_distance = 0.0
+    best_bar = 0
+
+    for offset, i in enumerate(
+        range(sweep_idx + 1, min(sweep_idx + max_candles + 1, len(df))), start=1
+    ):
+        candle = df.iloc[i]
+
+        if sweep_type == "high":
+            # Downside reversal: how far below the swept high?
+            if candle["close"] < level:
+                distance = level - candle["close"]
+            elif candle["low"] < level:
+                distance = (level - candle["low"]) * 0.7
+            else:
+                distance = 0.0
+        else:
+            # Upside reversal: how far above the swept low?
+            if candle["close"] > level:
+                distance = candle["close"] - level
+            elif candle["high"] > level:
+                distance = (candle["high"] - level) * 0.7
+            else:
+                distance = 0.0
+
+        if distance > max_distance:
+            max_distance = distance
+            best_bar = offset
+
+    return best_bar
 
 
 def _check_downside_reversal(

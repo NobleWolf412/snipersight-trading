@@ -24,7 +24,7 @@ export const SNIPER_MODES: Record<SniperMode, SniperModeConfig> = {
     name: '🔭 Overwatch',
     description: 'Patient positioning. Monitor from distance, strike when opportunity is perfect.',
     timeframes: ['1d', '4h', '1h'],
-    minConfluence: 80,
+    minConfluence: 72,
     holdingPeriod: 'Days to weeks',
     riskReward: 3.5,
     icon: '🔭'
@@ -44,7 +44,7 @@ export const SNIPER_MODES: Record<SniperMode, SniperModeConfig> = {
     name: '⚡ Strike',
     description: 'Tactical execution. Fast deployment, precise timing, quick extraction.',
     timeframes: ['1h', '15m', '5m'],
-    minConfluence: 70,
+    minConfluence: 62,
     holdingPeriod: 'Minutes to hours',
     riskReward: 2.5,
     icon: '⚡'
@@ -54,7 +54,7 @@ export const SNIPER_MODES: Record<SniperMode, SniperModeConfig> = {
     name: '🎯 Surgical',
     description: 'Precision-focused lower timeframe analysis. For experienced traders seeking exact entries.',
     timeframes: ['1h', '15m', '5m'],
-    minConfluence: 60,
+    minConfluence: 65,
     holdingPeriod: 'Minutes to hours',
     riskReward: 2.2,
     icon: '🎯'

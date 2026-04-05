@@ -2824,37 +2824,86 @@ def calculate_confluence_score(
     except Exception as e:
         logger.warning("Liquidity draw scoring failed: %s", e)
 
-    # --- FINAL WEIGHT NORMALIZATION ---
-    # Normalize by the sum of PRESENT factors only so weights add to 1.0 among what
-    # was actually computed. Missing factors are handled by the coverage penalty below —
-    # using the full mode table sum here causes double-penalisation and mathematically
-    # caps scores at 40–47 regardless of individual factor quality.
-    total_w = sum(f.weight for f in factors)
-    if total_w > 0:
-        for i in range(len(factors)):
-            factors[i] = ConfluenceFactor(name=factors[i].name, score=factors[i].score, weight=factors[i].weight/total_w, rationale=factors[i].rationale or "Factor details")
+    # --- FINAL WEIGHT NORMALIZATION (FIX #1: Absent-factor weight redistribution) ---
+    # Only normalise across factors that have actual data to contribute (score > 0).
+    # Factors that score 0 because the pattern is simply absent in the market
+    # (no FVG, no Sweep, no Divergence) carry ZERO information and should not eat
+    # the weight budget. Their weight is redistributed to informative factors so the
+    # weighted average reflects what IS present, not what is absent.
+    # Exception: factors with a non-zero weight that are explicitly structural
+    # requirements (e.g. Structural Minimum gate) keep weight=0 to preserve the cap.
+    informative_w = sum(f.weight for f in factors if f.score > 0)
+    if informative_w > 0:
+        norm_factors = []
+        for f in factors:
+            if f.score > 0:
+                norm_factors.append(
+                    ConfluenceFactor(
+                        name=f.name,
+                        score=f.score,
+                        weight=f.weight / informative_w,
+                        rationale=f.rationale or "Factor details",
+                    )
+                )
+            else:
+                # Absent factor — zero weight so it doesn't dilute the pool
+                norm_factors.append(
+                    ConfluenceFactor(
+                        name=f.name,
+                        score=0.0,
+                        weight=0.0,
+                        rationale=f.rationale or "Factor not present in current market",
+                    )
+                )
+        factors = norm_factors
+    else:
+        # All factors scored 0 — normalise uniformly (edge case, score will be 0)
+        total_w = sum(f.weight for f in factors)
+        if total_w > 0:
+            factors = [
+                ConfluenceFactor(name=f.name, score=0.0, weight=f.weight / total_w,
+                                 rationale=f.rationale or "Factor details")
+                for f in factors
+            ]
 
 
     # --- Final Score Calculation ---
     weighted_score = sum(f.score * f.weight for f in factors)
     synergy_bonus = _calculate_synergy_bonus(factors, smc_snapshot, cycle_context=cycle_context, reversal_context=reversal_context, direction=direction, mode_config=config)
     conflict_penalty = _calculate_conflict_penalty(factors, direction, smc=smc_snapshot, mode_config=config, regime=regime)
-    
-    # Coverage Penalty for low-evidence setups.
-    # Threshold=6 matches the ~6 "housekeeping" factors (MACD Veto, Volatility, Regime
-    # Alignment, VWAP, BTC Impulse, Close Momentum) that reliably score ≥50 in any scan.
-    # A setup at threshold=6 has passed baseline checks; signal factors (OB, FVG, HTF,
-    # Sweep, Structure) add quality on top. The conflict penalty handles the heavy
-    # suppression of structurally poor setups — coverage is a secondary nudge.
+
+    # --- FIX #2: Mode-aware coverage penalty (no double-counting) ---
+    # The old fixed threshold of 6 quality factors with 3pts/missing was double-penalising:
+    # absent factors already score 0 (dragging weighted_score down), then the coverage
+    # penalty hit them AGAIN. With FIX #1 in place (weight redistribution) the weighted
+    # sum already reflects real signal density. Coverage penalty is now a small,
+    # mode-calibrated safety net for setups with very few quality signals, not a
+    # second punch for the absence of optional patterns like FVG or Sweep.
+    #
+    # Mode thresholds (quality_factors = factors scoring >= 50):
+    #   Swing/Macro (overwatch, stealth_balanced):  require 5 quality factors
+    #   Intraday (strike, intraday_aggressive):      require 4 quality factors
+    #   Scalp/Precision (surgical, precision):       require 3 quality factors
     coverage_penalty = 0.0
-    active_factors = len([f for f in factors if f.score > 0])
     quality_factors = len([f for f in factors if f.score >= 50])
-    _COVERAGE_THRESHOLD = 6
-    _COVERAGE_PER_MISSING = 3.0
-    _COVERAGE_CAP = 20.0
-    if quality_factors < _COVERAGE_THRESHOLD:
-        coverage_penalty = min(_COVERAGE_CAP, (_COVERAGE_THRESHOLD - quality_factors) * _COVERAGE_PER_MISSING)
-    
+    active_factors  = len([f for f in factors if f.score > 0])
+
+    _cp_profile = current_profile
+    if _cp_profile in ("macro_surveillance", "overwatch", "stealth_balanced", "stealth"):
+        _cp_threshold, _cp_pts, _cp_cap = 5, 2.5, 15.0   # Swing: need 5 quality signals
+    elif _cp_profile in ("intraday_aggressive", "strike"):
+        _cp_threshold, _cp_pts, _cp_cap = 4, 2.0, 12.0   # Intraday: need 4
+    else:  # surgical, precision, balanced
+        _cp_threshold, _cp_pts, _cp_cap = 3, 1.5, 10.0   # Scalp: need 3
+
+    if quality_factors < _cp_threshold:
+        coverage_penalty = min(_cp_cap, (_cp_threshold - quality_factors) * _cp_pts)
+        logger.debug(
+            "📉 Coverage penalty [%s]: quality_factors=%d < threshold=%d → -%.1f pts",
+            _cp_profile, quality_factors, _cp_threshold, coverage_penalty,
+        )
+
+
     # Macro Adjustment
     macro_adj = 0.0
     if config and getattr(config, "macro_overlay_enabled", False) and macro_context:
@@ -2863,14 +2912,21 @@ def calculate_confluence_score(
     raw_score = weighted_score + synergy_bonus - conflict_penalty - coverage_penalty + macro_adj
     raw_score = max(0.0, min(100.0, raw_score))
 
-    # Structural Minimum Gate — cap hard at 30 so it can never pass any mode gate
-    if structural_minimum_failed: raw_score = min(raw_score, 30.0)
+    # Structural Minimum Gate — hard-cap at 30 when swing mode has no OB/FVG/Sweep
+    if structural_minimum_failed:
+        raw_score = min(raw_score, 30.0)
 
-    # Raw weighted score is the ground truth. The gate threshold (70–78 per mode),
-    # conflict penalty (up to 35 pts), and coverage penalty already suppress weak
-    # setups below the gate — quadratic decay would only double-penalise setups that
-    # are already mathematically unable to pass.
-    final_score = raw_score
+    # --- FIX #3: Replace quadratic decay with a gentle linear floor ---
+    # The old quadratic (raw * raw/40) was far too aggressive — a legitimate 38-point
+    # setup (good structure, missing one or two rare events) was crushed to 36.1,
+    # making it mathematically impossible to reach any mode gate from below 40.
+    # New rule: only hard-compress TRUE garbage (raw < 20) by a modest 15%;
+    # everything else passes through linearly so real-world setups can reach their gate.
+    if raw_score < 20.0:
+        # Below 20 = noise (equivalent to the old below-40 quadratic zone for garbage)
+        final_score = raw_score * 0.85
+    else:
+        final_score = raw_score
 
     final_score = max(0.0, min(100.0, final_score))
 
