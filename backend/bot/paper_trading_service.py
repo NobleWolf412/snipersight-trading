@@ -172,6 +172,13 @@ class CompletedTrade:
     max_favorable: float = 0.0
     max_adverse: float = 0.0
     trade_type: str = "intraday"  # "scalp", "intraday", "swing"
+    # Detailed trade plan snapshot — populated at close time from PositionState
+    initial_stop_loss: float = 0.0          # Original stop level set at entry
+    initial_targets: List[float] = field(default_factory=list)  # All TP levels (hit + missed), ordered
+    r_multiple: float = 0.0                 # R multiples achieved at exit (negative = loss)
+    exit_note: str = ""                     # Human-readable sentence explaining how the trade closed
+    trailing_active: bool = False           # Was trailing stop active at close?
+    breakeven_active: bool = False          # Was breakeven stop active at close?
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API response."""
@@ -191,6 +198,12 @@ class CompletedTrade:
             "max_favorable": self.max_favorable,
             "max_adverse": self.max_adverse,
             "trade_type": self.trade_type,
+            "initial_stop_loss": self.initial_stop_loss,
+            "initial_targets": self.initial_targets,
+            "r_multiple": self.r_multiple,
+            "exit_note": self.exit_note,
+            "trailing_active": self.trailing_active,
+            "breakeven_active": self.breakeven_active,
         }
 
 
@@ -673,6 +686,12 @@ class PaperTradingService:
                     (datetime.now(timezone.utc) - self._price_cache_refreshed_at).total_seconds(), 1
                 )
 
+            # Current drawdown from peak equity (live progress toward kill-switch)
+            _current_dd_pct = (
+                max(0.0, (self._peak_equity - equity) / self._peak_equity * 100)
+                if self._peak_equity > 0 else 0.0
+            )
+
             result["balance"] = {
                 "initial": initial,
                 "current": current,
@@ -680,6 +699,8 @@ class PaperTradingService:
                 "pnl": equity - initial,
                 "pnl_pct": ((equity - initial) / initial * 100) if initial > 0 else 0,
                 "prices_age_seconds": prices_age_seconds,
+                "current_drawdown_pct": round(_current_dd_pct, 2),
+                "peak_equity": round(self._peak_equity, 2),
             }
         else:
             result["balance"] = None
@@ -1877,6 +1898,12 @@ class PaperTradingService:
                     "tp_final": pos.targets[-1].level if pos.targets else (pos.targets_hit[-1].level if pos.targets_hit else 0.0),
                     "trade_type": getattr(pos, "trade_type", "intraday"),
                     "initial_stop_loss": getattr(pos, "initial_stop_loss", pos.stop_loss),
+                    # Full ordered target ladder (hit + remaining) — used by PositionCard target display
+                    "initial_targets": sorted(
+                        [t.level for t in pos.targets_hit] + [t.level for t in pos.targets],
+                        reverse=(pos.direction == "SHORT"),
+                    ),
+                    "targets_hit_count": len(pos.targets_hit),
                 }
             )
 
@@ -1915,12 +1942,63 @@ class PaperTradingService:
                     _mfe = max(0.0, (_entry - _low) / _entry * 100) if _entry else 0.0
                     _mae = max(0.0, (_high - _entry) / _entry * 100) if _entry else 0.0
 
+                _exit_px = pos.exit_price or self._price_cache.get(pos.symbol, pos.entry_price)
+
+                # All target levels, ordered in entry-direction (ascending for LONG, descending for SHORT)
+                _all_targets = sorted(
+                    [t.level for t in pos.targets_hit] + [t.level for t in pos.targets],
+                    reverse=(pos.direction == "SHORT"),
+                )
+
+                # R multiple achieved at exit (negative = loss)
+                _risk = abs(pos.initial_entry_price - pos.initial_stop_loss)
+                if _risk > 0 and pos.initial_entry_price > 0:
+                    _r = (
+                        (_exit_px - pos.initial_entry_price) / _risk
+                        if pos.direction == "LONG"
+                        else (pos.initial_entry_price - _exit_px) / _risk
+                    )
+                else:
+                    _r = 0.0
+
+                # Human-readable exit note
+                def _fmt_px(p: float) -> str:
+                    """Format price with appropriate precision for micro/normal prices."""
+                    if p == 0:
+                        return "0"
+                    if p < 0.0001:
+                        return f"{p:.2e}"
+                    if p < 0.01:
+                        return f"{p:.8g}"
+                    return f"{p:.6g}"
+
+                _n_hit = len(pos.targets_hit)
+                if exit_reason == "stop_loss":
+                    if pos.trailing_active:
+                        _exit_note = f"Trailing stop triggered at {_fmt_px(_exit_px)}"
+                    elif pos.breakeven_active:
+                        _exit_note = f"Breakeven stop triggered at {_fmt_px(_exit_px)}"
+                    else:
+                        _exit_note = f"Initial stop hit at {_fmt_px(_exit_px)}"
+                elif exit_reason == "target":
+                    _exit_note = f"TP{_n_hit} hit at {_fmt_px(_exit_px)}"
+                elif exit_reason == "stagnation":
+                    _exit_note = "Stagnation timeout — no progress toward TP"
+                elif exit_reason == "direction_flip":
+                    _exit_note = f"Direction flip exit at {_fmt_px(_exit_px)}"
+                elif exit_reason == "session_stopped":
+                    _exit_note = f"Session stopped at {_fmt_px(_exit_px)}"
+                elif exit_reason == "emergency":
+                    _exit_note = f"Emergency exit at {_fmt_px(_exit_px)}"
+                else:
+                    _exit_note = f"Exited at {_fmt_px(_exit_px)} ({exit_reason})"
+
                 trade = CompletedTrade(
                     trade_id=pos.position_id,
                     symbol=pos.symbol,
                     direction=pos.direction,
                     entry_price=pos.entry_price,
-                    exit_price=pos.exit_price or self._price_cache.get(pos.symbol, pos.entry_price),
+                    exit_price=_exit_px,
                     quantity=pos.quantity,
                     entry_time=pos.created_at,
                     exit_time=pos.updated_at,
@@ -1931,6 +2009,12 @@ class PaperTradingService:
                     max_favorable=_mfe,
                     max_adverse=_mae,
                     trade_type=getattr(pos, "trade_type", "intraday"),
+                    initial_stop_loss=pos.initial_stop_loss,
+                    initial_targets=_all_targets,
+                    r_multiple=round(_r, 2),
+                    exit_note=_exit_note,
+                    trailing_active=pos.trailing_active,
+                    breakeven_active=pos.breakeven_active,
                 )
 
                 self.completed_trades.append(trade)

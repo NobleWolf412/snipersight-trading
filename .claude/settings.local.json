@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/tmp/**)",
+      "Bash(unzip -q \"C:\\\\Users\\\\macca\\\\OneDrive\\\\Desktop\\\\snipersight_scoring_audit.docx\" -d docx_extracted)",
+      "Bash(sed 's/&lt;/</g; s/&gt;/>/g; s/&amp;/\\\\&/g')",
+      "Read(//c/Users/macca/**)",
+      "Bash(rm -rf /tmp/docx_extracted)",
+      "Bash(xargs grep:*)",
+      "Bash(python3 -c \"import sys,json; [print\\(json.dumps\\(json.loads\\(l\\), indent=2\\)\\) for l in sys.stdin]\")",
+      "Bash(node -e \":*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

@@ -921,6 +921,8 @@ export interface PaperTradingPosition {
   opened_at: string;
   trade_type?: 'scalp' | 'intraday' | 'swing';
   initial_stop_loss?: number;
+  initial_targets?: number[];    // All TP price levels (hit + remaining), ordered
+  targets_hit_count?: number;    // Redundant count for display convenience
 }
 
 export interface CompletedPaperTrade {
@@ -939,6 +941,13 @@ export interface CompletedPaperTrade {
   max_favorable: number;
   max_adverse: number;
   trade_type?: 'scalp' | 'intraday' | 'swing';
+  // Detailed trade plan snapshot (populated at close time)
+  initial_stop_loss?: number;    // Original stop level set at entry
+  initial_targets?: number[];    // All TP price levels (hit + missed), ordered
+  r_multiple?: number;           // R multiples achieved at exit (negative = loss)
+  exit_note?: string;            // Human-readable sentence explaining how the trade closed
+  trailing_active?: boolean;     // Was trailing stop active at close?
+  breakeven_active?: boolean;    // Was breakeven stop active at close?
 }
 
 export interface TradeTypeBucket {
@@ -987,6 +996,8 @@ export interface PaperTradingBalance {
   equity: number;
   pnl: number;
   pnl_pct: number;
+  current_drawdown_pct?: number;   // Live drawdown from peak equity (toward kill-switch)
+  peak_equity?: number;            // Highest equity reached this session
 }
 
 export interface PaperTradingStatusResponse {
