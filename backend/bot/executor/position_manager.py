@@ -603,16 +603,16 @@ class PositionManager:
                     position.exit_price = current_price
                     position.remaining_quantity = 0.0
                 return
-            else:
-                # Progress detected or P&L above threshold — reset strike counter
-                # so recovery after a brief stall doesn't carry over stale strikes.
-                position._stagnation_strikes = 0
             elif making_progress:
                 logger.info(
                     f"STAGNATION SPARED: {position.position_id} | {position.symbol} "
                     f"past {stagnation_hours:.1f}h limit but making progress toward target | "
                     f"P&L: {position.pnl_percentage:.2f}%"
                 )
+            else:
+                # Progress detected or P&L above threshold — reset strike counter
+                # so recovery after a brief stall doesn't carry over stale strikes.
+                position._stagnation_strikes = 0
 
         # --- Check Targets ---
         target_hit = self._check_targets_hit(position, current_price)
