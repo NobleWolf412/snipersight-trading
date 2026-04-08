@@ -19,6 +19,7 @@ import json
 import os
 from pathlib import Path
 from datetime import datetime, timezone
+from collections import defaultdict
 from typing import Dict, List, Optional, Any, Callable
 import logging
 import time
@@ -394,15 +395,17 @@ class Orchestrator:
 
         signals = []
         rejected_count = 0
-        rejection_stats: Dict[str, List[Dict[str, Any]]] = {
+        # defaultdict so pre-scoring gate names (structural_anchor, btc_impulse,
+        # regime_alignment, conflict_density) don't KeyError when appended below.
+        rejection_stats: Dict[str, List[Dict[str, Any]]] = defaultdict(list, {
             "low_confluence": [],
             "no_data": [],
             "missing_critical_tf": [],
             "risk_validation": [],
             "no_trade_plan": [],
-            "cooldown_active": [],  # Added: symbols in cooldown after recent stop-out
+            "cooldown_active": [],
             "errors": [],
-        }
+        })
 
         # Direction analytics tracking
         direction_stats = {

@@ -20,6 +20,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 // ─── Gauntlet stage definitions (same order as _process_signal) ─────────────
 
 export type GauntletStage =
+  // ── Pre-scoring hard gates (orchestrator, before confluence scoring) ──
+  | 'STRUCTURAL_ANCHOR'
+  | 'REGIME_ALIGNMENT'
+  | 'BTC_IMPULSE'
+  | 'CONFLICT_DENSITY'
+  // ── Post-scoring service gates ────────────────────────────────────────
   | 'REGIME_VETO'
   | 'MAX_POSITIONS'
   | 'HAS_POSITION'
@@ -44,6 +50,44 @@ interface StageConfig {
 }
 
 const STAGE_CONFIG: Record<GauntletStage, StageConfig> = {
+  // ── Pre-scoring hard gates ────────────────────────────────────────────────
+  STRUCTURAL_ANCHOR: {
+    label: 'No structural anchor',
+    shortLabel: 'NO ANCHOR',
+    color: 'text-rose-400',
+    bgColor: 'bg-rose-500/10',
+    borderColor: 'border-rose-500/30',
+    description: 'no quality OB, FVG, or confirmed sweep in trade direction',
+    gate: 0,
+  },
+  REGIME_ALIGNMENT: {
+    label: 'Regime alignment blocked',
+    shortLabel: 'REGIME ALIGN',
+    color: 'text-orange-500',
+    bgColor: 'bg-orange-600/10',
+    borderColor: 'border-orange-600/30',
+    description: 'counter-trend trade rejected — no confirming CHoCH vs strong regime',
+    gate: 0,
+  },
+  BTC_IMPULSE: {
+    label: 'BTC impulse veto',
+    shortLabel: 'BTC VETO',
+    color: 'text-yellow-500',
+    bgColor: 'bg-yellow-600/10',
+    borderColor: 'border-yellow-600/30',
+    description: 'alt trade rejected — BTC in opposing strong impulse',
+    gate: 0,
+  },
+  CONFLICT_DENSITY: {
+    label: 'Conflict density',
+    shortLabel: 'CONFLICT',
+    color: 'text-fuchsia-400',
+    bgColor: 'bg-fuchsia-500/10',
+    borderColor: 'border-fuchsia-500/30',
+    description: '3+ simultaneous opposing structural conditions active',
+    gate: 0,
+  },
+  // ── Post-scoring service gates ────────────────────────────────────────────
   REGIME_VETO: {
     label: 'Regime veto',
     shortLabel: 'REGIME',
@@ -166,6 +210,17 @@ export function classifyStage(signal: SignalLogEntry): GauntletStage {
   if (r.includes('waiting for limit fill') || (r.includes('pending') && r.includes('fill')))
     return 'PENDING_FILL';
 
+  // ── Pre-scoring hard gates ──────────────────────────────────────────────────
+  if (r.includes('structural anchor') || r.includes('quality structural'))
+    return 'STRUCTURAL_ANCHOR';
+  if (r.includes('regime is') || (r.includes('rejected') && r.includes('choch')))
+    return 'REGIME_ALIGNMENT';
+  if (r.includes('btc in opposing') || r.includes('opposing strong impulse'))
+    return 'BTC_IMPULSE';
+  if (r.includes('simultaneous conflict') || r.includes('conflict conditions detected'))
+    return 'CONFLICT_DENSITY';
+
+  // ── Post-scoring service gates ──────────────────────────────────────────────
   if (r.includes('regime veto') || r.includes('extreme regime') || r.includes('chaotic'))
     return 'REGIME_VETO';
   if (r.includes('max position'))
