@@ -996,6 +996,19 @@ class PositionManager:
                 if p.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
             ]
 
+    def remove_position(self, position_id: str) -> Optional[PositionState]:
+        """
+        Atomically remove a position from the tracking dict.
+
+        Used after a trade has been archived to ``completed_trades`` so the
+        caller never reaches into ``self.positions`` directly. Returns the
+        removed :class:`PositionState` (or ``None`` if it had already been
+        removed). Acquiring ``self._lock`` guarantees this cannot race with
+        the monitor loop's iteration over ``get_open_positions``.
+        """
+        with self._lock:
+            return self.positions.pop(position_id, None)
+
     def emergency_close_all(self, reason: str = "EMERGENCY"):
         """
         Emergency close all open positions.
@@ -1020,27 +1033,47 @@ class PositionManager:
                     import asyncio
                     order_side = "SELL" if position.direction == "LONG" else "BUY"
                     try:
-                        # order_executor is async; run it synchronously here since
-                        # emergency_close_all is called from non-async contexts.
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
+                        # order_executor is async; emergency_close_all may be
+                        # called from either an async context (shutdown hook)
+                        # or a sync thread (signal handler / tests).
+                        #
+                        # ``asyncio.get_event_loop()`` is deprecated in 3.12+
+                        # when there is no running loop: prefer
+                        # ``get_running_loop`` (which raises cleanly if none
+                        # exists) and fall back to creating a fresh loop only
+                        # as a last resort.
+                        try:
+                            running_loop = asyncio.get_running_loop()
+                        except RuntimeError:
+                            running_loop = None
+
+                        if running_loop is not None:
                             asyncio.ensure_future(
                                 self.order_executor(
                                     symbol=position.symbol,
                                     side=order_side,
                                     quantity=position.remaining_quantity,
                                     price=current_price,
-                                )
+                                ),
+                                loop=running_loop,
                             )
                         else:
-                            loop.run_until_complete(
-                                self.order_executor(
-                                    symbol=position.symbol,
-                                    side=order_side,
-                                    quantity=position.remaining_quantity,
-                                    price=current_price,
+                            # No running loop — create a throwaway one so the
+                            # executor coroutine runs to completion before we
+                            # settle the position. Closed explicitly to avoid
+                            # ResourceWarning.
+                            _tmp_loop = asyncio.new_event_loop()
+                            try:
+                                _tmp_loop.run_until_complete(
+                                    self.order_executor(
+                                        symbol=position.symbol,
+                                        side=order_side,
+                                        quantity=position.remaining_quantity,
+                                        price=current_price,
+                                    )
                                 )
-                            )
+                            finally:
+                                _tmp_loop.close()
                     except Exception as exec_err:
                         logger.warning(
                             f"Emergency executor close failed for {position.position_id}: {exec_err}"

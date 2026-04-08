@@ -386,11 +386,20 @@ class PaperTradingService:
                 "explosive": 0.65,
             }
 
-            # Create ScanConfig from paper trading config
+            # Create ScanConfig from paper trading config.
+            # NOTE: use explicit None-check instead of ``or`` — a legitimate
+            # override of ``min_confluence=0`` (used when forcing raw signals
+            # through for diagnostics) is falsy and would otherwise silently
+            # fall back to the mode default.
+            _min_conf = (
+                config.min_confluence
+                if config.min_confluence is not None
+                else self.mode.min_confluence_score
+            )
             scan_config = ScanConfig(
                 profile=self.mode.profile,
                 timeframes=tuple(self.mode.timeframes),
-                min_confluence_score=config.min_confluence or self.mode.min_confluence_score,
+                min_confluence_score=_min_conf,
                 min_rr_ratio=min_rr,
                 max_symbols=20,
             )
@@ -448,9 +457,17 @@ class PaperTradingService:
             "session_started", {"session_id": self.session_id, "config": config.to_dict()}
         )
 
-        # Start background tasks
-        self._scan_task = asyncio.create_task(self._scan_loop())
-        self._monitor_task = asyncio.create_task(self._monitor_loop())
+        # Start background tasks. Both tasks run for the lifetime of the
+        # session; attach a done-callback so exceptions surface immediately
+        # instead of being swallowed by the event loop.
+        self._scan_task = asyncio.create_task(
+            self._scan_loop(), name=f"paper_scan_loop_{self.session_id}"
+        )
+        self._scan_task.add_done_callback(self._task_done_callback)
+        self._monitor_task = asyncio.create_task(
+            self._monitor_loop(), name=f"paper_monitor_loop_{self.session_id}"
+        )
+        self._monitor_task.add_done_callback(self._task_done_callback)
 
         logger.info(f"Paper trading started: session={self.session_id}, mode={config.sniper_mode}")
 
@@ -663,7 +680,19 @@ class PaperTradingService:
                 "prices_age_seconds": prices_age_seconds,
             }
         else:
-            result["balance"] = None
+            # Return a fully-populated schema instead of ``None`` so the
+            # frontend can always read ``status.balance.equity`` without
+            # null-guarding every field. Values all default to zero when
+            # the bot is not running / executor is not initialized.
+            initial = self.config.initial_balance if self.config else 0
+            result["balance"] = {
+                "initial": initial,
+                "current": initial,
+                "equity": initial,
+                "pnl": 0.0,
+                "pnl_pct": 0.0,
+                "prices_age_seconds": None,
+            }
 
         # Statistics
         result["statistics"] = self.stats.to_dict()
@@ -764,7 +793,10 @@ class PaperTradingService:
                 elapsed = self._get_uptime_seconds()
                 if elapsed >= config.duration_hours * 3600:
                     logger.info("Duration limit reached, stopping")
-                    asyncio.create_task(self.stop())
+                    _stop_task = asyncio.create_task(
+                        self.stop(), name="paper_stop_duration_limit"
+                    )
+                    _stop_task.add_done_callback(self._task_done_callback)
                     break
 
             # Max drawdown kill switch — use peak-to-trough (same metric as monitor loop)
@@ -780,7 +812,10 @@ class PaperTradingService:
                         "drawdown_pct": round(self.stats.max_drawdown, 2),
                         "limit_pct": config.max_drawdown_pct,
                     })
-                    asyncio.create_task(self.stop())
+                    _stop_task = asyncio.create_task(
+                        self.stop(), name="paper_stop_max_drawdown_scan"
+                    )
+                    _stop_task.add_done_callback(self._task_done_callback)
                     break
 
             # Wait for next interval
@@ -966,7 +1001,10 @@ class PaperTradingService:
                                 "drawdown": self.stats.max_drawdown,
                                 "limit": self.config.max_drawdown_pct
                             })
-                            asyncio.create_task(self.stop())
+                            _stop_task = asyncio.create_task(
+                                self.stop(), name="paper_stop_max_drawdown_monitor"
+                            )
+                            _stop_task.add_done_callback(self._task_done_callback)
                             break
 
             except Exception as e:
@@ -1506,9 +1544,13 @@ class PaperTradingService:
                     "limit_price": plan.entry_zone.near_entry,
                 })
 
-        # Check confluence threshold - use same rounding as scanner to avoid asymmetry
-        min_score = config.min_confluence or (
-            self.mode.min_confluence_score if self.mode else 60
+        # Check confluence threshold - use same rounding as scanner to avoid asymmetry.
+        # Explicit None-check: a caller may legitimately set min_confluence=0 to
+        # capture every signal for diagnostics; ``or`` would swallow that.
+        min_score = (
+            config.min_confluence
+            if config.min_confluence is not None
+            else (self.mode.min_confluence_score if self.mode else 60)
         )
         if round(plan.confidence_score, 1) < round(min_score, 1):
             reason = f"Confluence {plan.confidence_score:.1f}% below min {min_score:.0f}%"
@@ -1562,9 +1604,15 @@ class PaperTradingService:
         # - fewer “12h → 1 pending that never fills”
         # - frees slots for intraday/scalp setups that are actually reachable
         try:
+            # Note: TradePlan.metadata defaults to ``{}`` (empty dict, falsy),
+            # so a truthy check silently skips lookups on plans that simply
+            # happen to carry no metadata yet. Use an explicit isinstance
+            # check so an empty dict is still probed (and returns None
+            # naturally via .get).
             pullback_prob = None
-            if getattr(plan, "metadata", None):
-                pullback_prob = plan.metadata.get("pullback_probability")
+            _meta = getattr(plan, "metadata", None)
+            if isinstance(_meta, dict):
+                pullback_prob = _meta.get("pullback_probability")
             if pullback_prob is None:
                 # Backward compat: some plans may carry it on the entry_zone
                 pullback_prob = getattr(plan.entry_zone, "pullback_probability", None)
@@ -1992,9 +2040,12 @@ class PaperTradingService:
                     except Exception as e:
                         logger.warning(f"Failed to persist trade to telemetry DB: {e}")
 
-                # CRITICAL: Remove from position manager to prevent "Zombie" active positions
-                # and memory leaks. The trade is now in completed_trades.
-                self.position_manager.positions.pop(pos.position_id, None)
+                # CRITICAL: Remove from position manager to prevent "Zombie" active
+                # positions and memory leaks. The trade is now in completed_trades.
+                # Use the public, lock-guarded helper instead of mutating the
+                # underlying dict directly — otherwise this races with the
+                # monitor loop's iteration over get_open_positions().
+                self.position_manager.remove_position(pos.position_id)
                 logger.info(f"💾 Trade {pos.position_id} archived and removed from active tracking")
                 self._update_stats(trade)
 
@@ -2205,6 +2256,40 @@ class PaperTradingService:
             drawdown = (self._peak_equity - current_equity) / self._peak_equity * 100
             if drawdown > self.stats.max_drawdown:
                 self.stats.max_drawdown = drawdown
+
+    def _task_done_callback(self, task: "asyncio.Task") -> None:
+        """
+        Done-callback for fire-and-forget ``asyncio.create_task`` jobs.
+
+        Without this, exceptions raised by background tasks (scan loop,
+        monitor loop, self-stop triggers) are swallowed by the event loop
+        and only emitted at GC time as ``Task exception was never retrieved``.
+        This makes real failures invisible in the activity log / UI.
+        """
+        try:
+            if task.cancelled():
+                return
+            exc = task.exception()
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            logger.exception(f"Error reading background task result: {e}")
+            return
+
+        if exc is not None:
+            task_name = getattr(task, "get_name", lambda: "<task>")()
+            logger.exception(
+                f"Background task {task_name!r} failed: {exc}",
+                exc_info=exc,
+            )
+            try:
+                self._log_activity(
+                    "background_task_error",
+                    {"task_name": task_name, "error": str(exc)},
+                )
+            except Exception:
+                # _log_activity must never re-raise from inside a callback
+                pass
 
     def _log_activity(self, event_type: str, data: Dict[str, Any]):
         """Add event to activity log."""
@@ -2533,16 +2618,66 @@ class PaperTradingService:
 
         raise ValueError(f"Could not get price for {symbol} from ticker or OHLCV cache")
 
-    async def _execute_exit_order(self, symbol: str, side: str, quantity: float, price: float):
-        """Execute exit order (called by position manager)."""
+    async def _execute_exit_order(
+        self, symbol: str, side: str, quantity: float, price: float
+    ) -> bool:
+        """
+        Execute exit order (called by position manager).
+
+        Returns True on successful fill, False on any failure. The position
+        manager checks the return value to decide whether to clear the
+        position state — swallowing exceptions silently here previously
+        left positions in a "half-closed" state where internal bookkeeping
+        thought the exit had executed but the paper executor never filled.
+        """
         if not self.executor:
-            return
+            logger.error(
+                f"_execute_exit_order: no executor configured for {symbol} "
+                f"{side} qty={quantity} price={price}"
+            )
+            return False
 
-        order = self.executor.place_order(
-            symbol=symbol, side=side, order_type="MARKET", quantity=quantity, price=price
-        )
+        if quantity <= 0 or price <= 0:
+            logger.error(
+                f"_execute_exit_order: invalid args for {symbol} "
+                f"side={side} qty={quantity} price={price}"
+            )
+            return False
 
-        self.executor.execute_market_order(order.order_id, price)
+        try:
+            order = self.executor.place_order(
+                symbol=symbol,
+                side=side,
+                order_type="MARKET",
+                quantity=quantity,
+                price=price,
+            )
+            if order is None:
+                logger.error(
+                    f"_execute_exit_order: place_order returned None for {symbol} "
+                    f"side={side} qty={quantity} price={price}"
+                )
+                return False
+
+            fill = self.executor.execute_market_order(order.order_id, price)
+            if not fill:
+                logger.error(
+                    f"_execute_exit_order: execute_market_order returned falsy fill "
+                    f"for {symbol} order_id={order.order_id} price={price}"
+                )
+                return False
+
+            logger.info(
+                f"✅ Exit order filled: {symbol} {side} qty={quantity} @ {price:.6f} "
+                f"order_id={order.order_id}"
+            )
+            return True
+        except Exception as e:
+            logger.exception(
+                f"_execute_exit_order failed for {symbol} side={side} "
+                f"qty={quantity} price={price}: {e}"
+            )
+            return False
 
 
 # Global instance for API endpoints
