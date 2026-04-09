@@ -527,88 +527,117 @@ function StructuralAnchorDetail() {
 
 // ─── Confluence breakdown ─────────────────────────────────────────────────────
 
+/** Single factor row — compact, never overflows */
+function FactorRow({ factor }: { factor: NonNullable<RejectionInfo['all_factors']>[number] }) {
+    const scoreColor = factor.score >= 70 ? 'text-green-400' : factor.score >= 40 ? 'text-amber-400' : 'text-red-400';
+    const barColor   = factor.score >= 70 ? 'bg-green-500/50' : factor.score >= 40 ? 'bg-amber-500/50' : 'bg-red-500/40';
+    const contrib    = factor.weighted_contribution;
+    const contribPos = contrib >= 0;
+
+    return (
+        <div className="px-3 py-1.5 border-b border-zinc-800/30 last:border-0 hover:bg-zinc-800/20 transition-colors">
+            {/* name · bar · score · contrib */}
+            <div className="flex items-center gap-2 min-w-0">
+                <span
+                    className="text-[11px] font-mono text-zinc-300 shrink-0 w-[7.5rem] truncate"
+                    title={factor.name}
+                >
+                    {factor.name}
+                </span>
+                <div className="flex-1 h-1 bg-zinc-800/80 rounded-full overflow-hidden min-w-0">
+                    <div
+                        className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                        style={{ width: `${Math.min(Math.max(factor.score, 0), 100)}%` }}
+                    />
+                </div>
+                <span className={`text-[11px] font-mono tabular-nums w-7 text-right shrink-0 ${scoreColor}`}>
+                    {factor.score.toFixed(0)}
+                </span>
+                <span className={`text-[11px] font-mono tabular-nums w-10 text-right shrink-0 ${contribPos ? 'text-zinc-400' : 'text-red-400/70'}`}>
+                    {contribPos ? '+' : ''}{contrib.toFixed(1)}
+                </span>
+            </div>
+            {/* rationale — wraps, never clips */}
+            {factor.rationale && (
+                <p className="text-[9px] text-zinc-600 leading-snug mt-0.5 pl-[7.75rem] break-words">
+                    {factor.rationale}
+                </p>
+            )}
+        </div>
+    );
+}
+
 function ConfluenceBreakdown({ rejection, config }: {
     rejection: RejectionInfo;
     config: typeof REASON_CONFIG[keyof typeof REASON_CONFIG];
 }) {
-    const score = rejection.score ?? 0;
+    const score     = rejection.score ?? 0;
     const threshold = rejection.threshold ?? 60;
-    const percentage = (score / threshold) * 100;
-    const gap = threshold - score;
+    const gap       = threshold - score;
+    const pct       = Math.min((score / Math.max(threshold, 1)) * 100, 100);
+
+    const hasSynergy  = rejection.synergy_bonus  != null && rejection.synergy_bonus  !== 0;
+    const hasConflict = rejection.conflict_penalty != null && rejection.conflict_penalty !== 0;
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-amber-500/5 border border-amber-500/30 rounded-lg">
-                <div>
-                    <div className="text-sm font-mono text-amber-400 font-bold uppercase tracking-wider">Below Threshold</div>
-                    <div className="text-xs text-amber-400/70 mt-1">Confluence score didn't meet minimum requirement</div>
+        <div className="space-y-3">
+            {/* ── compact score header ── */}
+            <div className="flex items-center gap-3 px-1">
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1 text-[10px] font-mono">
+                        <span className="text-zinc-500 uppercase tracking-widest">confluence</span>
+                        <span className="text-zinc-400 tabular-nums">
+                            <span className={gap > 0 ? 'text-amber-400' : 'text-green-400'}>{score.toFixed(1)}</span>
+                            <span className="text-zinc-600"> / </span>
+                            <span className="text-zinc-500">{threshold.toFixed(0)}</span>
+                        </span>
+                    </div>
+                    <div className="h-2 bg-zinc-900 rounded-full overflow-hidden">
+                        <div
+                            className={cn('h-full rounded-full transition-all duration-500', config.bg)}
+                            style={{ width: `${pct}%` }}
+                        />
+                    </div>
                 </div>
-                <div className="text-right">
-                    <div className="text-2xl font-mono font-bold text-amber-400">{gap.toFixed(1)}pts</div>
-                    <div className="text-xs text-amber-400/70">gap to threshold</div>
+                <div className="shrink-0 text-right">
+                    <div className="text-lg font-mono font-bold text-amber-400 tabular-nums">−{gap.toFixed(1)}</div>
+                    <div className="text-[9px] text-zinc-600 uppercase tracking-wider">pts short</div>
                 </div>
             </div>
 
-            <div>
-                <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-mono text-zinc-400 uppercase tracking-wider">Confluence Score</span>
-                    <span className="text-sm font-mono text-zinc-300">{score.toFixed(1)} / {threshold.toFixed(1)}</span>
-                </div>
-                <div className="h-2 bg-zinc-900 rounded-full overflow-hidden">
-                    <div
-                        className={cn('h-full transition-all duration-500', config.bg)}
-                        style={{ width: `${Math.min(percentage, 100)}%` }}
-                    />
-                </div>
-            </div>
-
-            {rejection.all_factors && rejection.all_factors.length > 0 && (
-                <div>
-                    <div className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <Pulse size={12} weight="fill" />
-                        Factor Breakdown
-                    </div>
-                    <div className="bg-zinc-900/50 rounded-lg border border-zinc-800/40 overflow-hidden">
-                        <div className="max-h-64 overflow-y-auto">
-                            {rejection.all_factors.map((factor, idx) => (
-                                <div
-                                    key={idx}
-                                    className="px-4 py-3 border-b border-zinc-800/40 last:border-0 hover:bg-zinc-800/30 transition-colors grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center"
-                                >
-                                    <div className="min-w-0">
-                                        <div className="text-sm font-mono text-zinc-200 truncate">{factor.name}</div>
-                                        {factor.rationale && (
-                                            <div className="text-xs text-zinc-500 mt-1 truncate" title={factor.rationale}>
-                                                {factor.rationale}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className={cn('text-xs font-mono text-right', factor.score >= 70 ? 'text-green-400' : factor.score >= 40 ? 'text-amber-400' : 'text-red-400')}>
-                                        {factor.score.toFixed(1)}
-                                    </div>
-                                    <div className="text-xs font-mono text-zinc-500 text-right">×{factor.weight.toFixed(2)}</div>
-                                    <div className="text-xs font-mono text-zinc-300 font-bold text-right">={factor.weighted_contribution.toFixed(1)}</div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+            {/* ── synergy / conflict badges inline ── */}
+            {(hasSynergy || hasConflict) && (
+                <div className="flex gap-2 px-1">
+                    {hasSynergy && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-green-500/20 bg-green-500/5 text-green-400">
+                            synergy +{rejection.synergy_bonus!.toFixed(1)}
+                        </span>
+                    )}
+                    {hasConflict && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-red-500/20 bg-red-500/5 text-red-400">
+                            conflict −{rejection.conflict_penalty!.toFixed(1)}
+                        </span>
+                    )}
                 </div>
             )}
 
-            {(rejection.synergy_bonus !== undefined || rejection.conflict_penalty !== undefined) && (
-                <div className="grid grid-cols-2 gap-3">
-                    {rejection.synergy_bonus !== undefined && rejection.synergy_bonus !== 0 && (
-                        <div className="px-3 py-2 rounded-lg border border-green-500/20 bg-green-500/5">
-                            <div className="text-xs text-green-400/70 uppercase tracking-wider">Synergy Bonus</div>
-                            <div className="text-lg font-mono text-green-400 font-bold">+{rejection.synergy_bonus.toFixed(1)}</div>
-                        </div>
-                    )}
-                    {rejection.conflict_penalty !== undefined && rejection.conflict_penalty !== 0 && (
-                        <div className="px-3 py-2 rounded-lg border border-red-500/20 bg-red-500/5">
-                            <div className="text-xs text-red-400/70 uppercase tracking-wider">Conflict Penalty</div>
-                            <div className="text-lg font-mono text-red-400 font-bold">-{rejection.conflict_penalty.toFixed(1)}</div>
-                        </div>
-                    )}
+            {/* ── factor table ── */}
+            {rejection.all_factors && rejection.all_factors.length > 0 && (
+                <div className="rounded-lg border border-zinc-800/40 overflow-hidden">
+                    {/* column headers */}
+                    <div className="flex items-center gap-2 px-3 py-1 bg-zinc-900/60 border-b border-zinc-800/40">
+                        <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest w-[7.5rem] shrink-0 flex items-center gap-1">
+                            <Pulse size={9} weight="fill" /> factor
+                        </span>
+                        <div className="flex-1" />
+                        <span className="text-[9px] font-mono text-zinc-600 w-7 text-right shrink-0">scr</span>
+                        <span className="text-[9px] font-mono text-zinc-600 w-10 text-right shrink-0">pts</span>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto">
+                        {rejection.all_factors.map((factor, idx) => (
+                            <FactorRow key={idx} factor={factor} />
+                        ))}
+                    </div>
                 </div>
             )}
         </div>
@@ -737,15 +766,15 @@ function DualDirectionBreakdown({ rejection, config }: {
                         <div className="h-full transition-all duration-500 bg-green-500/30" style={{ width: `${Math.min((bullishScore / threshold) * 100, 100)}%` }} />
                     </div>
                     {rejection.bullish_factors && rejection.bullish_factors.length > 0 && (
-                        <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
+                        <div className="rounded-lg border border-green-500/20 overflow-hidden max-h-48 overflow-y-auto">
                             {rejection.bullish_factors.map((factor, idx) => (
-                                <div key={idx} className="text-xs">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-green-300 font-mono truncate flex-1">{factor.name}</span>
-                                        <span className="text-green-400 font-mono font-bold ml-2">{factor.weighted_contribution.toFixed(1)}</span>
+                                <div key={idx} className="px-2 py-1 border-b border-green-500/10 last:border-0 hover:bg-green-500/5 transition-colors">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className="text-[10px] font-mono text-green-300 flex-1 min-w-0 truncate" title={factor.name}>{factor.name}</span>
+                                        <span className="text-[10px] font-mono text-green-400 font-bold shrink-0 tabular-nums">+{factor.weighted_contribution.toFixed(1)}</span>
                                     </div>
                                     {factor.rationale && (
-                                        <div className="text-green-400/50 mt-0.5 truncate" title={factor.rationale}>{factor.rationale}</div>
+                                        <p className="text-[9px] text-green-400/40 mt-0.5 leading-snug break-words">{factor.rationale}</p>
                                     )}
                                 </div>
                             ))}
@@ -779,15 +808,15 @@ function DualDirectionBreakdown({ rejection, config }: {
                         <div className="h-full transition-all duration-500 bg-red-500/30" style={{ width: `${Math.min((bearishScore / threshold) * 100, 100)}%` }} />
                     </div>
                     {rejection.bearish_factors && rejection.bearish_factors.length > 0 && (
-                        <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
+                        <div className="rounded-lg border border-red-500/20 overflow-hidden max-h-48 overflow-y-auto">
                             {rejection.bearish_factors.map((factor, idx) => (
-                                <div key={idx} className="text-xs">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-red-300 font-mono truncate flex-1">{factor.name}</span>
-                                        <span className="text-red-400 font-mono font-bold ml-2">{factor.weighted_contribution.toFixed(1)}</span>
+                                <div key={idx} className="px-2 py-1 border-b border-red-500/10 last:border-0 hover:bg-red-500/5 transition-colors">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className="text-[10px] font-mono text-red-300 flex-1 min-w-0 truncate" title={factor.name}>{factor.name}</span>
+                                        <span className="text-[10px] font-mono text-red-400 font-bold shrink-0 tabular-nums">+{factor.weighted_contribution.toFixed(1)}</span>
                                     </div>
                                     {factor.rationale && (
-                                        <div className="text-red-400/50 mt-0.5 truncate" title={factor.rationale}>{factor.rationale}</div>
+                                        <p className="text-[9px] text-red-400/40 mt-0.5 leading-snug break-words">{factor.rationale}</p>
                                     )}
                                 </div>
                             ))}
