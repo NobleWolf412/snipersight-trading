@@ -5,11 +5,12 @@
  * signal's reason string to its exact gauntlet stage. Shows a live funnel
  * so you can see exactly where pairs are dying.
  *
+ * Detail Mode: toggle "DETAIL" in the header to auto-expand every row and
+ * show a score-vs-threshold bar, reason-type badge, timeframe, and full
+ * convergence data for every stage (not just confluence).
+ *
  * Drop-in usage:
  *   <GauntletBreakdown signals={status.signal_log} />
- *
- * Replace the existing SignalIntelligencePanel in TrainingGround.tsx with this,
- * or render both side by side — they use the same signal_log prop.
  */
 
 import { useState, useMemo } from 'react';
@@ -254,6 +255,10 @@ interface SymbolLastSeen {
   stop_loss: number;
   timestamp: string;
   scan_number: number;
+  timeframe?: string;
+  // Gate meta
+  reason_type?: string;
+  threshold?: number;
   // Critical factor convergence
   setup_state?: 'READY' | 'DEVELOPING' | 'WATCHING' | 'NOISE';
   convergence_score?: number;
@@ -262,6 +267,56 @@ interface SymbolLastSeen {
   convergence_missing?: string[];
   veto_blocked?: boolean;
   active_vetoes?: string[];
+}
+
+// ─── Score vs threshold bar ───────────────────────────────────────────────────
+
+function ScoreBar({
+  score,
+  threshold,
+  color,
+}: {
+  score: number;
+  threshold: number;
+  color: string;
+}) {
+  const pct = Math.min((score / Math.max(threshold, 1)) * 100, 100);
+  const gap = threshold - score;
+  const fillColor =
+    score >= threshold
+      ? 'bg-green-500/60'
+      : score >= threshold * 0.85
+      ? 'bg-amber-500/60'
+      : 'bg-red-500/50';
+
+  return (
+    <div className="col-span-full pt-1.5">
+      <div className="flex items-center justify-between mb-1 text-[9px] font-mono">
+        <span className="text-muted-foreground/50 uppercase tracking-widest">score vs threshold</span>
+        <span className={gap > 0 ? 'text-red-400' : 'text-green-400'}>
+          {score.toFixed(1)}
+          <span className="text-muted-foreground/40"> / </span>
+          {threshold.toFixed(0)}%
+          {gap > 0 && (
+            <span className="text-red-400/70 ml-1">(−{gap.toFixed(1)} short)</span>
+          )}
+        </span>
+      </div>
+      <div className="relative h-2 bg-background/60 rounded-full overflow-visible">
+        {/* filled portion */}
+        <div
+          className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${fillColor}`}
+          style={{ width: `${pct}%` }}
+        />
+        {/* threshold marker */}
+        <div
+          className="absolute inset-y-0 w-px bg-white/30"
+          style={{ left: '100%', transform: 'translateX(-1px)' }}
+          title={`Threshold: ${threshold}%`}
+        />
+      </div>
+    </div>
+  );
 }
 
 // ─── Funnel bar ───────────────────────────────────────────────────────────────
@@ -317,28 +372,44 @@ function FunnelBar({
 // ─── Setup state badge config ─────────────────────────────────────────────────
 
 const SETUP_STATE_CONFIG = {
-  READY:      { label: 'READY',      color: 'text-green-400',  bg: 'bg-green-500/15',  border: 'border-green-500/40' },
-  DEVELOPING: { label: 'DEV',        color: 'text-amber-300',  bg: 'bg-amber-500/15',  border: 'border-amber-400/40' },
-  WATCHING:   { label: 'WATCH',      color: 'text-sky-400',    bg: 'bg-sky-500/15',    border: 'border-sky-500/40'  },
-  NOISE:      { label: 'NOISE',      color: 'text-zinc-500',   bg: 'bg-zinc-800/30',   border: 'border-zinc-700/30' },
+  READY:      { label: 'READY', color: 'text-green-400', bg: 'bg-green-500/15',  border: 'border-green-500/40' },
+  DEVELOPING: { label: 'DEV',   color: 'text-amber-300', bg: 'bg-amber-500/15',  border: 'border-amber-400/40' },
+  WATCHING:   { label: 'WATCH', color: 'text-sky-400',   bg: 'bg-sky-500/15',    border: 'border-sky-500/40'  },
+  NOISE:      { label: 'NOISE', color: 'text-zinc-500',  bg: 'bg-zinc-800/30',   border: 'border-zinc-700/30' },
 } as const;
 
 // ─── Signal row ───────────────────────────────────────────────────────────────
 
-function SignalRow({ entry }: { entry: SymbolLastSeen }) {
+function SignalRow({
+  entry,
+  detailMode,
+}: {
+  entry: SymbolLastSeen;
+  detailMode: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const cfg = STAGE_CONFIG[entry.stage];
   const isLong = entry.direction === 'LONG';
   const ss = entry.setup_state ? SETUP_STATE_CONFIG[entry.setup_state] : null;
 
-  // For CONFLUENCE-filtered signals, if setup_state is DEVELOPING or WATCHING
-  // we highlight the row slightly to make it stand out from NOISE
-  const isDeveloping = entry.stage === 'CONFLUENCE' && (entry.setup_state === 'DEVELOPING' || entry.setup_state === 'WATCHING');
+  const isExpanded = open || detailMode;
+
+  const isDeveloping =
+    entry.stage === 'CONFLUENCE' &&
+    (entry.setup_state === 'DEVELOPING' || entry.setup_state === 'WATCHING');
+
+  // Show convergence data when available, even outside the CONFLUENCE stage
+  const hasConvergence =
+    entry.convergence_score !== undefined && entry.convergence_critical_count !== undefined;
+
+  // Show score bar when we have both score and threshold
+  const hasScoreBar =
+    entry.threshold != null && entry.threshold > 0 && entry.confluence >= 0;
 
   return (
     <div
       className={`rounded-lg border cursor-pointer transition-all ${
-        open
+        isExpanded
           ? `${cfg.bgColor} ${cfg.borderColor}`
           : isDeveloping
             ? 'bg-amber-500/5 border-amber-500/20 hover:border-amber-400/40'
@@ -346,15 +417,20 @@ function SignalRow({ entry }: { entry: SymbolLastSeen }) {
       }`}
       onClick={() => setOpen(!open)}
     >
+      {/* ── Collapsed row ── */}
       <div className="flex items-center gap-2 px-3 py-2 text-xs font-mono">
         {/* Stage badge */}
-        <span className={`shrink-0 text-[9px] font-bold tracking-widest px-1.5 py-0.5 rounded border ${cfg.bgColor} ${cfg.borderColor} ${cfg.color}`}>
+        <span
+          className={`shrink-0 text-[9px] font-bold tracking-widest px-1.5 py-0.5 rounded border ${cfg.bgColor} ${cfg.borderColor} ${cfg.color}`}
+        >
           {cfg.shortLabel}
         </span>
 
         {/* Setup state badge — only show for confluence-filtered signals */}
         {ss && entry.stage === 'CONFLUENCE' && (
-          <span className={`shrink-0 text-[8px] font-bold tracking-widest px-1 py-0.5 rounded border ${ss.bg} ${ss.border} ${ss.color}`}>
+          <span
+            className={`shrink-0 text-[8px] font-bold tracking-widest px-1 py-0.5 rounded border ${ss.bg} ${ss.border} ${ss.color}`}
+          >
             {ss.label}
           </span>
         )}
@@ -368,14 +444,27 @@ function SignalRow({ entry }: { entry: SymbolLastSeen }) {
         </span>
 
         {/* Confluence */}
-        <span className={`shrink-0 w-10 text-right ${entry.confluence >= 75 ? 'text-green-400' : entry.confluence >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>
-          {entry.confluence.toFixed(0)}%
+        <span
+          className={`shrink-0 w-10 text-right ${
+            entry.confluence >= 75
+              ? 'text-green-400'
+              : entry.confluence >= 60
+              ? 'text-yellow-400'
+              : 'text-red-400'
+          }`}
+        >
+          {entry.confluence > 0 ? `${entry.confluence.toFixed(0)}%` : '—'}
         </span>
 
         {/* R:R — only show when a real trade plan exists (rr > 0) */}
         <span className="text-muted-foreground shrink-0 w-12 text-right">
           {entry.rr != null && entry.rr > 0 ? `${entry.rr.toFixed(1)}R` : '—'}
         </span>
+
+        {/* Timeframe — only in detail mode to avoid clutter */}
+        {detailMode && entry.timeframe && (
+          <span className="text-sky-400/60 shrink-0 text-[9px] font-mono">{entry.timeframe}</span>
+        )}
 
         {/* Reason truncated */}
         <span className="flex-1 truncate text-muted-foreground/70 pl-2 border-l border-border/20 italic">
@@ -384,30 +473,82 @@ function SignalRow({ entry }: { entry: SymbolLastSeen }) {
 
         {/* Time */}
         <span className="text-muted-foreground/40 shrink-0 text-[9px]">
-          {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          {new Date(entry.timestamp).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          })}
         </span>
       </div>
 
-      {open && (
-        <div className="px-3 pb-3 pt-1 border-t border-border/20 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-[10px] font-mono text-muted-foreground">
-          <div><span className="text-muted-foreground/50">scan# </span>{entry.scan_number}</div>
-          <div><span className="text-muted-foreground/50">entry </span>{entry.entry_zone > 0 ? `$${entry.entry_zone.toFixed(4)}` : '—'}</div>
-          <div><span className="text-muted-foreground/50">stop </span>{entry.stop_loss > 0 ? `$${entry.stop_loss.toFixed(4)}` : '—'}</div>
-          {entry.rr != null && entry.rr > 0 && (
-            <div><span className="text-muted-foreground/50">r:r </span>{entry.rr.toFixed(2)}</div>
+      {/* ── Expanded detail panel ── */}
+      {isExpanded && (
+        <div
+          className="px-3 pb-3 pt-1 border-t border-border/20 space-y-2 text-[10px] font-mono text-muted-foreground"
+          onClick={e => e.stopPropagation()} // prevent collapse-on-click while in detail
+        >
+          {/* ── Score vs threshold bar ── */}
+          {hasScoreBar && (
+            <ScoreBar
+              score={entry.confluence}
+              threshold={entry.threshold!}
+              color={cfg.color}
+            />
           )}
 
-          {/* Critical factor convergence — only for confluence-filtered signals */}
-          {entry.stage === 'CONFLUENCE' && entry.convergence_score !== undefined && (
-            <>
-              <div className="col-span-full pt-1 flex items-center gap-2 flex-wrap">
-                <span className="text-muted-foreground/50">convergence </span>
-                <span className={`font-bold ${
-                  (entry.convergence_score ?? 0) >= 62.5 ? 'text-amber-300' :
-                  (entry.convergence_score ?? 0) >= 50   ? 'text-sky-400'   : 'text-zinc-500'
-                }`}>
-                  {entry.convergence_critical_count ?? 0}/{entry.convergence_critical_total ?? 8} critical
-                  ({(entry.convergence_score ?? 0).toFixed(0)}%)
+          {/* ── Core fields grid ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 pt-1">
+            <div>
+              <span className="text-muted-foreground/50">scan# </span>
+              {entry.scan_number}
+            </div>
+            <div>
+              <span className="text-muted-foreground/50">entry </span>
+              {entry.entry_zone > 0 ? `$${entry.entry_zone.toFixed(4)}` : '—'}
+            </div>
+            <div>
+              <span className="text-muted-foreground/50">stop </span>
+              {entry.stop_loss > 0 ? `$${entry.stop_loss.toFixed(4)}` : '—'}
+            </div>
+            {entry.rr != null && entry.rr > 0 && (
+              <div>
+                <span className="text-muted-foreground/50">r:r </span>
+                {entry.rr.toFixed(2)}
+              </div>
+            )}
+            {entry.timeframe && (
+              <div>
+                <span className="text-muted-foreground/50">tf </span>
+                <span className="text-sky-400">{entry.timeframe}</span>
+              </div>
+            )}
+            {entry.reason_type && (
+              <div className="col-span-2">
+                <span className="text-muted-foreground/50">gate </span>
+                <span className={`${cfg.color} font-bold`}>{entry.reason_type}</span>
+              </div>
+            )}
+          </div>
+
+          {/* ── Convergence / critical factor data ── */}
+          {hasConvergence && (
+            <div className="pt-1 space-y-1 border-t border-border/20">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-muted-foreground/50 uppercase tracking-widest text-[9px]">
+                  convergence
+                </span>
+                <span
+                  className={`font-bold ${
+                    (entry.convergence_score ?? 0) >= 62.5
+                      ? 'text-amber-300'
+                      : (entry.convergence_score ?? 0) >= 50
+                      ? 'text-sky-400'
+                      : 'text-zinc-500'
+                  }`}
+                >
+                  {entry.convergence_critical_count ?? 0}/
+                  {entry.convergence_critical_total ?? 8} critical (
+                  {(entry.convergence_score ?? 0).toFixed(0)}%)
                 </span>
                 {entry.veto_blocked && (
                   <span className="text-red-400 font-bold">
@@ -416,19 +557,22 @@ function SignalRow({ entry }: { entry: SymbolLastSeen }) {
                 )}
               </div>
               {(entry.convergence_missing ?? []).length > 0 && (
-                <div className="col-span-full text-zinc-500">
+                <div className="text-zinc-500">
                   <span className="text-muted-foreground/50">missing </span>
                   {(entry.convergence_missing ?? []).join(' · ')}
                 </div>
               )}
-            </>
+            </div>
           )}
 
-          <div className="col-span-full pt-1">
-            <span className="text-muted-foreground/50">reason </span>
-            <span className={cfg.color}>{entry.reason}</span>
+          {/* ── Full reason + gate description ── */}
+          <div className="pt-1 border-t border-border/20 space-y-0.5">
+            <div>
+              <span className="text-muted-foreground/50">reason </span>
+              <span className={cfg.color}>{entry.reason}</span>
+            </div>
+            <div className="text-muted-foreground/40">{cfg.description}</div>
           </div>
-          <div className="col-span-full text-muted-foreground/40 pt-0.5">{cfg.description}</div>
         </div>
       )}
     </div>
@@ -445,15 +589,29 @@ interface Props {
 export function GauntletBreakdown({ signals, minConfluence }: Props) {
   const [selectedStage, setSelectedStage] = useState<GauntletStage | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [detailMode, setDetailMode] = useState(false);
 
   // Map each signal to its stage
-  const staged = useMemo(() => signals.map(s => ({ ...s, stage: classifyStage(s) })), [signals]);
+  const staged = useMemo(
+    () => signals.map(s => ({ ...s, stage: classifyStage(s) })),
+    [signals]
+  );
 
-  // Count per stage (filtered only — exclude EXECUTED and PENDING_FILL from funnel)
-  const filterStages: GauntletStage[] = [
+  // ── Pre-scoring gates shown in the funnel panel ──────────────────────────
+  const preScoringStages: GauntletStage[] = [
+    'STRUCTURAL_ANCHOR',
+    'REGIME_ALIGNMENT',
+    'BTC_IMPULSE',
+    'CONFLICT_DENSITY',
+  ];
+
+  // ── Post-scoring service gates ───────────────────────────────────────────
+  const postScoringStages: GauntletStage[] = [
     'REGIME_VETO', 'MAX_POSITIONS', 'HAS_POSITION', 'PENDING_ORDER',
     'CONFLUENCE', 'POSITION_SIZE', 'PULLBACK_PROB', 'PRICE_FETCH', 'EXEC_ERROR',
   ];
+
+  const allFilterStages = [...preScoringStages, ...postScoringStages];
 
   const stageCounts = useMemo(() => {
     const counts: Partial<Record<GauntletStage, number>> = {};
@@ -463,7 +621,7 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
     return counts;
   }, [staged]);
 
-  const totalFiltered = filterStages.reduce((acc, s) => acc + (stageCounts[s] ?? 0), 0);
+  const totalFiltered = allFilterStages.reduce((acc, s) => acc + (stageCounts[s] ?? 0), 0);
   const totalExecuted = stageCounts['EXECUTED'] ?? 0;
   const totalPending = stageCounts['PENDING_FILL'] ?? 0;
   const totalSignals = staged.length;
@@ -486,6 +644,9 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
           stop_loss: s.stop_loss,
           timestamp: s.timestamp,
           scan_number: s.scan_number,
+          timeframe: s.timeframe,
+          reason_type: s.reason_type,
+          threshold: s.threshold,
           setup_state: s.setup_state,
           convergence_score: s.convergence_score,
           convergence_critical_count: s.convergence_critical_count,
@@ -528,25 +689,53 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 mb-5">
         <h2 className="text-xl font-semibold hud-headline tracking-wide flex items-center gap-2 text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="shrink-0">
-            <path d="M3 4h14M5 8h10M7 12h6M9 16h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <path
+              d="M3 4h14M5 8h10M7 12h6M9 16h2"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
           </svg>
           GAUNTLET BREAKDOWN
         </h2>
+
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] font-mono text-muted-foreground/60 uppercase tracking-widest">
             {totalSignals} signals
           </span>
-          <Badge variant="outline" className="font-mono text-[10px] bg-green-500/10 text-green-400 border-green-500/30">
+          <Badge
+            variant="outline"
+            className="font-mono text-[10px] bg-green-500/10 text-green-400 border-green-500/30"
+          >
             {totalExecuted} EXEC
           </Badge>
           {totalPending > 0 && (
-            <Badge variant="outline" className="font-mono text-[10px] bg-blue-500/10 text-blue-400 border-blue-500/30">
+            <Badge
+              variant="outline"
+              className="font-mono text-[10px] bg-blue-500/10 text-blue-400 border-blue-500/30"
+            >
               {totalPending} WAIT
             </Badge>
           )}
-          <Badge variant="outline" className="font-mono text-[10px] bg-red-500/10 text-red-400 border-red-500/30">
+          <Badge
+            variant="outline"
+            className="font-mono text-[10px] bg-red-500/10 text-red-400 border-red-500/30"
+          >
             {totalFiltered} FILT
           </Badge>
+
+          {/* Detail mode toggle */}
+          <button
+            onClick={() => setDetailMode(!detailMode)}
+            className={`text-[10px] font-mono font-bold tracking-widest px-2.5 py-1 rounded-lg border transition-all ${
+              detailMode
+                ? 'bg-purple-500/20 border-purple-500/50 text-purple-300'
+                : 'bg-background/40 border-border/40 text-muted-foreground hover:text-foreground hover:border-border/70'
+            }`}
+            title="Toggle detailed breakdown for every pair"
+          >
+            {detailMode ? '◈ DETAIL ON' : '◇ DETAIL'}
+          </button>
         </div>
       </div>
 
@@ -558,7 +747,7 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
             Filter gates (click to filter)
           </div>
 
-          {/* pass-through row */}
+          {/* pass-through rows */}
           <button
             onClick={() => setSelectedStage(selectedStage === 'EXECUTED' ? null : 'EXECUTED')}
             className={`w-full text-left p-2 rounded-lg border transition-all ${
@@ -568,14 +757,18 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-bold tracking-widest text-green-400">EXECUTED</span>
+              <span className="text-[10px] font-mono font-bold tracking-widest text-green-400">
+                EXECUTED
+              </span>
               <span className="text-xs font-mono font-bold text-green-400">{totalExecuted}</span>
             </div>
           </button>
 
           {totalPending > 0 && (
             <button
-              onClick={() => setSelectedStage(selectedStage === 'PENDING_FILL' ? null : 'PENDING_FILL')}
+              onClick={() =>
+                setSelectedStage(selectedStage === 'PENDING_FILL' ? null : 'PENDING_FILL')
+              }
               className={`w-full text-left p-2 rounded-lg border transition-all ${
                 selectedStage === 'PENDING_FILL'
                   ? 'bg-blue-500/10 border-blue-500/30'
@@ -583,7 +776,9 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono font-bold tracking-widest text-blue-400">WAIT FILL</span>
+                <span className="text-[10px] font-mono font-bold tracking-widest text-blue-400">
+                  WAIT FILL
+                </span>
                 <span className="text-xs font-mono font-bold text-blue-400">{totalPending}</span>
               </div>
             </button>
@@ -591,7 +786,36 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
 
           <div className="my-2 border-t border-border/30" />
 
-          {filterStages.map(stage => {
+          {/* ── Pre-scoring hard gates ── */}
+          {preScoringStages.some(s => (stageCounts[s] ?? 0) > 0) && (
+            <>
+              <div className="text-[8px] uppercase tracking-widest text-muted-foreground/35 font-bold pl-1 pb-0.5">
+                Pre-scoring gates
+              </div>
+              {preScoringStages.map(stage => {
+                const count = stageCounts[stage] ?? 0;
+                if (count === 0) return null;
+                return (
+                  <FunnelBar
+                    key={stage}
+                    stage={stage}
+                    count={count}
+                    total={totalFiltered}
+                    threshold={minConfluence}
+                    isSelected={selectedStage === stage}
+                    onClick={() => setSelectedStage(selectedStage === stage ? null : stage)}
+                  />
+                );
+              })}
+              <div className="my-1.5 border-t border-border/20" />
+              <div className="text-[8px] uppercase tracking-widest text-muted-foreground/35 font-bold pl-1 pb-0.5">
+                Execution gates
+              </div>
+            </>
+          )}
+
+          {/* ── Post-scoring / execution gates ── */}
+          {postScoringStages.map(stage => {
             const count = stageCounts[stage] ?? 0;
             if (count === 0) return null;
             return (
@@ -627,7 +851,9 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
             <div className="h-1.5 bg-background/60 rounded-full overflow-hidden">
               <div
                 className="h-full bg-green-500/50 rounded-full"
-                style={{ width: `${totalSignals > 0 ? (totalExecuted / totalSignals) * 100 : 0}%` }}
+                style={{
+                  width: `${totalSignals > 0 ? (totalExecuted / totalSignals) * 100 : 0}%`,
+                }}
               />
             </div>
             <div className="flex justify-between opacity-60">
@@ -635,7 +861,7 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
               <span>
                 {totalFiltered > 0
                   ? STAGE_CONFIG[
-                      filterStages.reduce((a, b) =>
+                      allFilterStages.reduce((a, b) =>
                         (stageCounts[a] ?? 0) >= (stageCounts[b] ?? 0) ? a : b
                       )
                     ].shortLabel
@@ -662,10 +888,14 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
               </button>
             )}
           </div>
-          <ScrollArea className="h-[420px]">
+          <ScrollArea className={detailMode ? 'h-[620px]' : 'h-[420px]'}>
             <div className="space-y-1 pr-2">
               {displayEntries.map((entry, idx) => (
-                <SignalRow key={`${entry.symbol}:${entry.direction}:${idx}`} entry={entry} />
+                <SignalRow
+                  key={`${entry.symbol}:${entry.direction}:${idx}`}
+                  entry={entry}
+                  detailMode={detailMode}
+                />
               ))}
               {displayEntries.length === 0 && (
                 <div className="text-center text-muted-foreground/50 text-xs py-10 italic">

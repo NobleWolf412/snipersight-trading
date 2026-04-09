@@ -1297,6 +1297,10 @@ class PaperTradingService:
                         mock_plan,
                         result="filtered",
                         reason=item.get('reason', f"Scanner Filter: {reason_type}"),
+                        # Gate category — surfaces as badge in Signal Intelligence panel
+                        reason_type=reason_type,
+                        # Score vs threshold — lets the UI draw a gap bar
+                        threshold=item.get('threshold'),
                         # Critical factor convergence — surface DEVELOPING/WATCHING in UI
                         setup_state=item.get('setup_state', 'NOISE'),
                         convergence_score=item.get('convergence_score', 0),
@@ -1555,7 +1559,11 @@ class PaperTradingService:
         if round(plan.confidence_score, 1) < round(min_score, 1):
             reason = f"Confluence {plan.confidence_score:.1f}% below min {min_score:.0f}%"
             logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
-            self._log_signal(plan, "filtered", reason)
+            self._log_signal(
+                plan, "filtered", reason,
+                reason_type="low_confluence",
+                threshold=round(min_score, 1),
+            )
             self._log_activity("signal_filtered", {
                 "symbol": plan.symbol, "direction": plan.direction,
                 "confluence": plan.confidence_score, "reason": reason,

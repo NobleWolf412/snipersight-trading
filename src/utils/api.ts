@@ -1070,6 +1070,9 @@ export interface SignalLogEntry {
   convergence_missing?: string[];       // factor names below threshold
   veto_blocked?: boolean;
   active_vetoes?: string[];
+  // Gate category + scoring threshold — populated for scanner-level rejections
+  reason_type?: string;   // e.g. 'btc_impulse', 'low_confluence', 'conflict_density'
+  threshold?: number;     // min score required at this gate (for score-vs-threshold bar)
 }
 
 export interface PaperTradingStartResponse {
