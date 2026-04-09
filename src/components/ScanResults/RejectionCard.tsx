@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { XCircle, WarningCircle, Prohibit, Bug, CaretDown, Pulse, Copy, Check } from '@phosphor-icons/react';
+import { XCircle, WarningCircle, Prohibit, Bug, CaretDown, Pulse, Copy, Check, Lightning, ArrowDown, ArrowUp, GitFork } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 
 export interface RejectionInfo {
     symbol: string;
-    reason_type: 'low_confluence' | 'no_data' | 'missing_critical_tf' | 'risk_validation' | 'no_trade_plan' | 'cooldown_active' | 'errors';
+    reason_type: 'low_confluence' | 'no_data' | 'missing_critical_tf' | 'risk_validation' | 'no_trade_plan' | 'cooldown_active' | 'errors'
+        | 'btc_impulse' | 'structural_anchor' | 'regime_alignment' | 'conflict_density';
     reason: string;
     trace_id?: string;
     // Confluence-specific fields
@@ -52,50 +53,171 @@ interface RejectionCardProps {
 }
 
 const REASON_CONFIG = {
-    low_confluence: { icon: WarningCircle, color: 'text-amber-400', border: 'border-amber-500/20', bg: 'bg-amber-500/10', glow: 'hover:shadow-[0_0_15px_rgba(251,191,36,0.15)] hover:border-amber-500/40' },
-    no_data: { icon: Prohibit, color: 'text-zinc-400', border: 'border-zinc-500/20', bg: 'bg-zinc-500/10', glow: 'hover:shadow-[0_0_15px_rgba(113,113,122,0.15)] hover:border-zinc-500/40' },
-    missing_critical_tf: { icon: Prohibit, color: 'text-orange-400', border: 'border-orange-500/20', bg: 'bg-orange-500/10', glow: 'hover:shadow-[0_0_15px_rgba(251,146,60,0.15)] hover:border-orange-500/40' },
-    risk_validation: { icon: XCircle, color: 'text-red-400', border: 'border-red-500/20', bg: 'bg-red-500/10', glow: 'hover:shadow-[0_0_15px_rgba(248,113,113,0.15)] hover:border-red-500/40' },
-    no_trade_plan: { icon: XCircle, color: 'text-zinc-400', border: 'border-zinc-500/20', bg: 'bg-zinc-500/10', glow: 'hover:shadow-[0_0_15px_rgba(161,161,170,0.15)] hover:border-zinc-500/40' },
-    cooldown_active: { icon: Prohibit, color: 'text-blue-400', border: 'border-blue-500/20', bg: 'bg-blue-500/10', glow: 'hover:shadow-[0_0_15px_rgba(96,165,250,0.15)] hover:border-blue-500/40' },
-    errors: { icon: Bug, color: 'text-pink-400', border: 'border-pink-500/20', bg: 'bg-pink-500/10', glow: 'hover:shadow-[0_0_15px_rgba(244,114,182,0.15)] hover:border-pink-500/40' },
+    // ── Post-scoring gauntlet gates ─────────────────────────────────────────
+    low_confluence: {
+        icon: WarningCircle,
+        color: 'text-amber-400',
+        border: 'border-amber-500/20',
+        bg: 'bg-amber-500/10',
+        glow: 'hover:shadow-[0_0_15px_rgba(251,191,36,0.15)] hover:border-amber-500/40',
+    },
+    no_data: {
+        icon: Prohibit,
+        color: 'text-zinc-400',
+        border: 'border-zinc-500/20',
+        bg: 'bg-zinc-500/10',
+        glow: 'hover:shadow-[0_0_15px_rgba(113,113,122,0.15)] hover:border-zinc-500/40',
+    },
+    missing_critical_tf: {
+        icon: Prohibit,
+        color: 'text-orange-400',
+        border: 'border-orange-500/20',
+        bg: 'bg-orange-500/10',
+        glow: 'hover:shadow-[0_0_15px_rgba(251,146,60,0.15)] hover:border-orange-500/40',
+    },
+    risk_validation: {
+        icon: XCircle,
+        color: 'text-red-400',
+        border: 'border-red-500/20',
+        bg: 'bg-red-500/10',
+        glow: 'hover:shadow-[0_0_15px_rgba(248,113,113,0.15)] hover:border-red-500/40',
+    },
+    no_trade_plan: {
+        icon: XCircle,
+        color: 'text-zinc-400',
+        border: 'border-zinc-500/20',
+        bg: 'bg-zinc-500/10',
+        glow: 'hover:shadow-[0_0_15px_rgba(161,161,170,0.15)] hover:border-zinc-500/40',
+    },
+    cooldown_active: {
+        icon: Prohibit,
+        color: 'text-blue-400',
+        border: 'border-blue-500/20',
+        bg: 'bg-blue-500/10',
+        glow: 'hover:shadow-[0_0_15px_rgba(96,165,250,0.15)] hover:border-blue-500/40',
+    },
+    errors: {
+        icon: Bug,
+        color: 'text-pink-400',
+        border: 'border-pink-500/20',
+        bg: 'bg-pink-500/10',
+        glow: 'hover:shadow-[0_0_15px_rgba(244,114,182,0.15)] hover:border-pink-500/40',
+    },
+    // ── Pre-scoring hard gates (orchestrator, before confluence scoring) ────
+    btc_impulse: {
+        icon: Lightning,
+        color: 'text-yellow-400',
+        border: 'border-yellow-500/20',
+        bg: 'bg-yellow-500/10',
+        glow: 'hover:shadow-[0_0_15px_rgba(234,179,8,0.15)] hover:border-yellow-500/40',
+    },
+    structural_anchor: {
+        icon: XCircle,
+        color: 'text-rose-400',
+        border: 'border-rose-500/20',
+        bg: 'bg-rose-500/10',
+        glow: 'hover:shadow-[0_0_15px_rgba(251,113,133,0.15)] hover:border-rose-500/40',
+    },
+    regime_alignment: {
+        icon: ArrowDown,
+        color: 'text-orange-400',
+        border: 'border-orange-500/20',
+        bg: 'bg-orange-500/10',
+        glow: 'hover:shadow-[0_0_15px_rgba(251,146,60,0.15)] hover:border-orange-500/40',
+    },
+    conflict_density: {
+        icon: GitFork,
+        color: 'text-fuchsia-400',
+        border: 'border-fuchsia-500/20',
+        bg: 'bg-fuchsia-500/10',
+        glow: 'hover:shadow-[0_0_15px_rgba(232,121,249,0.15)] hover:border-fuchsia-500/40',
+    },
 };
+
+// ── Pre-scoring gate descriptors ──────────────────────────────────────────────
+
+const GATE_DESCRIPTOR: Record<string, {
+    title: string;
+    subtitle: string;
+    what: string;
+    fix: string;
+}> = {
+    btc_impulse: {
+        title: 'BTC Impulse Veto',
+        subtitle: 'Hard gate — fires before confluence scoring',
+        what: 'Blocks alt trades when BTC is in a strong opposing impulse. Entering an alt LONG while BTC is dumping hard produces correlated drawdowns — this gate prevents that.',
+        fix: 'Wait for BTC to stabilise or show a reversal signal (CHoCH / BOS on the 1h or 4h). Once BTC\'s impulse tag clears, alt longs will be re-evaluated.',
+    },
+    structural_anchor: {
+        title: 'No Structural Anchor',
+        subtitle: 'Hard gate — fires before confluence scoring',
+        what: 'Every valid entry needs an anchor: a bullish/bearish order block, a fair value gap, or a confirmed liquidity sweep. Without one, there\'s no price level to target an entry from.',
+        fix: 'Wait for a sweep of an obvious high/low, or for price to create and mitigate a new FVG or OB on the primary timeframe.',
+    },
+    regime_alignment: {
+        title: 'Regime Alignment Failed',
+        subtitle: 'Hard gate — fires before confluence scoring',
+        what: 'The trade direction is counter to a confirmed strong regime. A LONG in a strong_down regime (or SHORT in strong_up) requires a CHoCH (Change of Character) to justify the counter-trend move — none was detected.',
+        fix: 'Either wait for a structural CHoCH confirmation on the primary timeframe, or let the regime shift before re-scanning.',
+    },
+    conflict_density: {
+        title: 'Conflict Density Too High',
+        subtitle: 'Hard gate — fires before confluence scoring',
+        what: 'Too many opposing structural signals are active at the same time. Multiple timeframes, OBs, FVGs, and sweeps are all pointing in different directions — the model has no confident read on the next move.',
+        fix: 'Wait for the market to resolve. A strong impulse, a clean sweep, or a consolidation breakout will flush conflicting signals and create a cleaner structural picture.',
+    },
+};
+
+// ── Parse helpers ─────────────────────────────────────────────────────────────
+
+/** Extract direction + BTC state from btc_impulse reason string */
+function parseBtcImpulse(reason: string): { direction: string; btcState: string } {
+    const dirMatch = reason.match(/^(LONG|SHORT)/i);
+    const stateMatch = reason.match(/\(([^)]+)\)/);
+    return {
+        direction: dirMatch?.[1]?.toUpperCase() ?? 'LONG',
+        btcState: stateMatch?.[1] ?? 'strong_down',
+    };
+}
+
+/** Extract conflict count from conflict_density reason string */
+function parseConflictCount(reason: string): number | null {
+    const m = reason.match(/(\d+)\s+simultaneous/i);
+    return m ? parseInt(m[1], 10) : null;
+}
+
+/** Extract regime from regime_alignment reason string */
+function parseRegime(reason: string): string {
+    const m = reason.match(/regime is\s+(\S+)/i);
+    return m?.[1] ?? 'unknown';
+}
 
 export function RejectionCard({ rejection }: RejectionCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [showDebug, setShowDebug] = useState(false);
     const [copied, setCopied] = useState(false);
-    const config = REASON_CONFIG[rejection.reason_type] || REASON_CONFIG.errors;
-    const Icon = config.icon;
 
+    const config = REASON_CONFIG[rejection.reason_type as keyof typeof REASON_CONFIG] ?? REASON_CONFIG.errors;
+    const Icon = config.icon;
     const isConflicted = !!(rejection.bullish_score !== undefined && rejection.bearish_score !== undefined);
 
-    // DEBUG: Log rejection data to console to verify factors
-    console.log('[RejectionCard] Rejection data:', {
-        symbol: rejection.symbol,
-        reason_type: rejection.reason_type,
-        has_bullish_factors: !!rejection.bullish_factors,
-        bullish_factors_length: rejection.bullish_factors?.length,
-        has_bearish_factors: !!rejection.bearish_factors,
-        bearish_factors_length: rejection.bearish_factors?.length,
-        bullish_score: rejection.bullish_score,
-        bearish_score: rejection.bearish_score,
-        detail: rejection.detail,
-        all_keys: Object.keys(rejection)
-    });
+    // Pre-scoring hard gates always have something useful to show when expanded
+    const isPreScoringGate = ['btc_impulse', 'structural_anchor', 'regime_alignment', 'conflict_density'].includes(rejection.reason_type);
 
     const hasDetails =
-        (rejection.reason_type === 'low_confluence' && (rejection.all_factors?.length || (rejection.bullish_factors?.length && rejection.bearish_factors?.length))) ||
-        (rejection.reason_type === 'low_confluence' && (rejection.bullish_score !== undefined && rejection.bearish_score !== undefined)) ||
+        isPreScoringGate ||
+        (rejection.reason_type === 'low_confluence' && (
+            rejection.all_factors?.length ||
+            (rejection.bullish_factors?.length && rejection.bearish_factors?.length) ||
+            (rejection.bullish_score !== undefined && rejection.bearish_score !== undefined)
+        )) ||
         rejection.detail ||
         (rejection.reason_type === 'missing_critical_tf' && rejection.missing_timeframes?.length) ||
         rejection.trace_id ||
-        Object.keys(rejection).length > 4; // Has extra metadata
+        Object.keys(rejection).length > 4;
 
     const toggleExpand = () => {
-        if (hasDetails) {
-            setIsExpanded(!isExpanded);
-        }
+        if (hasDetails) setIsExpanded(!isExpanded);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -119,18 +241,18 @@ export function RejectionCard({ rejection }: RejectionCardProps) {
     return (
         <div
             className={cn(
-                "w-full p-6 mb-4 bg-[#0a0f0a] border border-zinc-800/60 rounded-xl transition-all duration-300",
+                'w-full p-6 mb-4 bg-[#0a0f0a] border border-zinc-800/60 rounded-xl transition-all duration-300',
                 config.glow,
-                hasDetails && "cursor-pointer hover:border-zinc-700/80"
+                hasDetails && 'cursor-pointer hover:border-zinc-700/80'
             )}
             onClick={toggleExpand}
             onKeyDown={handleKeyDown}
             tabIndex={hasDetails ? 0 : undefined}
-            role={hasDetails ? "button" : undefined}
+            role={hasDetails ? 'button' : undefined}
             aria-expanded={isExpanded}
         >
             <div className="flex items-start gap-6">
-                <div className={cn("flex items-center justify-center w-12 h-12 rounded-xl border flex-shrink-0", config.bg, config.border, config.color)}>
+                <div className={cn('flex items-center justify-center w-12 h-12 rounded-xl border flex-shrink-0', config.bg, config.border, config.color)}>
                     <Icon size={28} weight="bold" />
                 </div>
 
@@ -139,9 +261,9 @@ export function RejectionCard({ rejection }: RejectionCardProps) {
                         <span className="text-xl font-bold tracking-tight text-zinc-200">{rejection.symbol}</span>
                         <div className="flex items-center gap-2">
                             <span className={cn(
-                                "text-xs font-mono uppercase px-2 py-1 rounded border",
+                                'text-xs font-mono uppercase px-2 py-1 rounded border',
                                 isConflicted
-                                    ? "bg-orange-500/10 border-orange-500/30 text-orange-400"
+                                    ? 'bg-orange-500/10 border-orange-500/30 text-orange-400'
                                     : cn(config.bg, config.border, config.color)
                             )}>
                                 {isConflicted ? 'CONFLICTED' : rejection.reason_type.replace(/_/g, ' ')}
@@ -149,10 +271,7 @@ export function RejectionCard({ rejection }: RejectionCardProps) {
                             {hasDetails && (
                                 <CaretDown
                                     size={16}
-                                    className={cn(
-                                        "transition-transform duration-200 text-zinc-500",
-                                        isExpanded && "rotate-180"
-                                    )}
+                                    className={cn('transition-transform duration-200 text-zinc-500', isExpanded && 'rotate-180')}
                                 />
                             )}
                         </div>
@@ -162,24 +281,30 @@ export function RejectionCard({ rejection }: RejectionCardProps) {
                         {rejection.reason}
                     </p>
 
-                    {/* Expanded Details with Animation */}
-                    <div
-                        className={cn(
-                            "grid transition-all duration-300 overflow-hidden",
-                            isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-                        )}
-                    >
+                    {/* Expanded Details */}
+                    <div className={cn(
+                        'grid transition-all duration-300 overflow-hidden',
+                        isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    )}>
                         <div className="min-h-0">
                             {isExpanded && hasDetails && (
-                                <div className="mt-6 pt-6 border-t border-zinc-800/60 space-y-4" onClick={(e) => e.stopPropagation()}>
-                                    {/* Type-specific breakdowns */}
-                                    {rejection.reason_type === 'low_confluence' && ((rejection.bullish_factors && rejection.bearish_factors) || (rejection.bullish_score !== undefined && rejection.bearish_score !== undefined)) ? (
-                                        <DualDirectionBreakdown rejection={rejection} config={config} />
-                                    ) : rejection.reason_type === 'low_confluence' && rejection.score !== undefined ? (
-                                        <ConfluenceBreakdown rejection={rejection} config={config} />
-                                    ) : null}
+                                <div className="mt-6 pt-6 border-t border-zinc-800/60 space-y-4" onClick={e => e.stopPropagation()}>
 
-                                    {/* Generic Detail Fallback */}
+                                    {/* ── Pre-scoring hard gate breakdowns ── */}
+                                    {isPreScoringGate && (
+                                        <GateRejectionBreakdown rejection={rejection} config={config} />
+                                    )}
+
+                                    {/* ── Low confluence breakdowns ── */}
+                                    {rejection.reason_type === 'low_confluence' && (
+                                        isConflicted
+                                            ? <DualDirectionBreakdown rejection={rejection} config={config} />
+                                            : rejection.score !== undefined
+                                                ? <ConfluenceBreakdown rejection={rejection} config={config} />
+                                                : null
+                                    )}
+
+                                    {/* ── Other type-specific breakdowns ── */}
                                     {rejection.detail && !rejection.bullish_factors && !rejection.all_factors && (
                                         <div className="p-3 bg-zinc-800/30 rounded border border-zinc-700/30 text-xs text-zinc-300 mb-4">
                                             {rejection.detail}
@@ -189,7 +314,7 @@ export function RejectionCard({ rejection }: RejectionCardProps) {
                                         <TimeframeBreakdown rejection={rejection} />
                                     )}
                                     {rejection.reason_type === 'risk_validation' && (
-                                        <GenericBreakdown rejection={rejection} title="Risk Validation Details" />
+                                        <RiskValidationBreakdown rejection={rejection} />
                                     )}
                                     {rejection.reason_type === 'no_trade_plan' && (
                                         <GenericBreakdown rejection={rejection} title="Trade Plan Validation" />
@@ -198,44 +323,27 @@ export function RejectionCard({ rejection }: RejectionCardProps) {
                                         <GenericBreakdown rejection={rejection} title="Error Details" />
                                     )}
 
-                                    {/* Debug Mode Toggle & Actions */}
+                                    {/* ── Debug / Copy footer ── */}
                                     <div className="flex items-center justify-between pt-4 border-t border-zinc-800/40">
                                         <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setShowDebug(!showDebug);
-                                            }}
+                                            onClick={e => { e.stopPropagation(); setShowDebug(!showDebug); }}
                                             className="text-xs font-mono text-zinc-500 hover:text-zinc-300 transition-colors"
                                         >
                                             {showDebug ? '▼ Hide' : '▶'} Debug Info
                                         </button>
                                         <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                copyToClipboard();
-                                            }}
+                                            onClick={e => { e.stopPropagation(); copyToClipboard(); }}
                                             className={cn(
-                                                "flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all",
+                                                'flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all',
                                                 copied
-                                                    ? "bg-green-500/10 border-green-500/30 text-green-400"
-                                                    : "bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:bg-zinc-700/50 hover:border-zinc-600"
+                                                    ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                                                    : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:bg-zinc-700/50 hover:border-zinc-600'
                                             )}
                                         >
-                                            {copied ? (
-                                                <>
-                                                    <Check size={14} weight="bold" />
-                                                    Copied!
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Copy size={14} />
-                                                    Copy JSON
-                                                </>
-                                            )}
+                                            {copied ? <><Check size={14} weight="bold" /> Copied!</> : <><Copy size={14} /> Copy JSON</>}
                                         </button>
                                     </div>
 
-                                    {/* Debug Info */}
                                     {showDebug && (
                                         <div className="bg-black/40 rounded-lg p-4 border border-zinc-800/60">
                                             <div className="text-xs font-mono text-zinc-500 mb-2">DEBUG METADATA</div>
@@ -258,9 +366,7 @@ export function RejectionCard({ rejection }: RejectionCardProps) {
                     </div>
 
                     {rejection.trace_id && !isExpanded && (
-                        <div className="mt-3 text-xs text-zinc-600 font-mono">
-                            Trace ID: {rejection.trace_id}
-                        </div>
+                        <div className="mt-3 text-xs text-zinc-600 font-mono">Trace ID: {rejection.trace_id}</div>
                     )}
                 </div>
             </div>
@@ -268,15 +374,146 @@ export function RejectionCard({ rejection }: RejectionCardProps) {
     );
 }
 
-function ConfluenceBreakdown({ rejection, config }: { rejection: RejectionInfo; config: typeof REASON_CONFIG[keyof typeof REASON_CONFIG] }) {
-    const score = rejection.score || 0;
-    const threshold = rejection.threshold || 60;
+// ─── Pre-scoring gate breakdown ───────────────────────────────────────────────
+
+function GateRejectionBreakdown({ rejection, config }: {
+    rejection: RejectionInfo;
+    config: typeof REASON_CONFIG[keyof typeof REASON_CONFIG];
+}) {
+    const descriptor = GATE_DESCRIPTOR[rejection.reason_type];
+    if (!descriptor) return null;
+
+    return (
+        <div className="space-y-4">
+            {/* Gate identity card */}
+            <div className={cn('p-4 rounded-lg border', config.bg, config.border)}>
+                <div className={cn('text-sm font-mono font-bold uppercase tracking-wider mb-0.5', config.color)}>
+                    {descriptor.title}
+                </div>
+                <div className="text-xs text-zinc-500">{descriptor.subtitle}</div>
+            </div>
+
+            {/* Type-specific inline detail */}
+            {rejection.reason_type === 'btc_impulse' && <BtcImpulseDetail rejection={rejection} config={config} />}
+            {rejection.reason_type === 'conflict_density' && <ConflictDensityDetail rejection={rejection} config={config} />}
+            {rejection.reason_type === 'regime_alignment' && <RegimeAlignmentDetail rejection={rejection} config={config} />}
+            {rejection.reason_type === 'structural_anchor' && <StructuralAnchorDetail />}
+
+            {/* What this gate checks */}
+            <div className="space-y-2">
+                <div className="text-xs font-mono text-zinc-500 uppercase tracking-wider">What this gate checks</div>
+                <p className="text-sm text-zinc-400 leading-relaxed">{descriptor.what}</p>
+            </div>
+
+            {/* What to do */}
+            <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800/40">
+                <div className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-1.5">How to get past this gate</div>
+                <p className="text-sm text-zinc-300 leading-relaxed">{descriptor.fix}</p>
+            </div>
+        </div>
+    );
+}
+
+function BtcImpulseDetail({ rejection, config }: { rejection: RejectionInfo; config: any }) {
+    const { direction, btcState } = parseBtcImpulse(rejection.reason);
+    const isDown = btcState.includes('down');
+    const isLong = direction === 'LONG';
+
+    return (
+        <div className="grid grid-cols-2 gap-3">
+            <div className={cn('p-3 rounded-lg border', isLong ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20')}>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1">Trade direction</div>
+                <div className={cn('text-lg font-mono font-bold flex items-center gap-1.5', isLong ? 'text-green-400' : 'text-red-400')}>
+                    {isLong ? <ArrowUp size={18} weight="bold" /> : <ArrowDown size={18} weight="bold" />}
+                    {direction}
+                </div>
+            </div>
+            <div className={cn('p-3 rounded-lg border', isDown ? 'bg-red-500/5 border-red-500/20' : 'bg-green-500/5 border-green-500/20')}>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1">BTC impulse state</div>
+                <div className={cn('text-lg font-mono font-bold', isDown ? 'text-red-400' : 'text-green-400')}>
+                    {btcState.replace(/_/g, ' ')}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ConflictDensityDetail({ rejection, config }: { rejection: RejectionInfo; config: any }) {
+    const count = parseConflictCount(rejection.reason);
+    const severity = count == null ? 'unknown' : count >= 30 ? 'extreme' : count >= 15 ? 'high' : 'elevated';
+    const severityColor = severity === 'extreme' ? 'text-red-400 border-red-500/30 bg-red-500/5'
+        : severity === 'high' ? 'text-orange-400 border-orange-500/30 bg-orange-500/5'
+        : 'text-yellow-400 border-yellow-500/30 bg-yellow-500/5';
+
+    return (
+        <div className={cn('p-4 rounded-lg border flex items-center justify-between', severityColor)}>
+            <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1">Active conflict conditions</div>
+                <div className="text-xs text-zinc-400">Opposing structural signals simultaneously active</div>
+            </div>
+            {count != null && (
+                <div className="text-right">
+                    <div className="text-3xl font-mono font-bold">{count}</div>
+                    <div className={cn('text-[10px] font-mono uppercase tracking-wider', severityColor.split(' ')[0])}>
+                        {severity}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function RegimeAlignmentDetail({ rejection, config }: { rejection: RejectionInfo; config: any }) {
+    const regime = parseRegime(rejection.reason);
+    const isBearish = regime.includes('down');
+    const isBullish = regime.includes('up');
+
+    return (
+        <div className={cn(
+            'p-3 rounded-lg border flex items-center gap-3',
+            isBearish ? 'bg-red-500/5 border-red-500/20' : isBullish ? 'bg-green-500/5 border-green-500/20' : 'bg-zinc-800/30 border-zinc-700/30'
+        )}>
+            <div className="flex-1">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1">Detected regime</div>
+                <div className={cn('text-base font-mono font-bold', isBearish ? 'text-red-400' : isBullish ? 'text-green-400' : 'text-zinc-300')}>
+                    {regime.replace(/_/g, ' ')}
+                </div>
+            </div>
+            <div className="text-xs text-zinc-500 text-right max-w-[160px]">
+                {isBearish ? 'Strong downtrend — longs need CHoCH confirmation'
+                    : isBullish ? 'Strong uptrend — shorts need CHoCH confirmation'
+                    : 'Regime misaligned with trade direction'}
+            </div>
+        </div>
+    );
+}
+
+function StructuralAnchorDetail() {
+    return (
+        <div className="grid grid-cols-3 gap-2 text-xs font-mono text-center">
+            {['Order Block', 'Fair Value Gap', 'Liquidity Sweep'].map(label => (
+                <div key={label} className="p-2 rounded-lg border border-red-500/20 bg-red-500/5">
+                    <div className="text-red-400/50 line-through">{label}</div>
+                    <div className="text-[9px] text-zinc-600 mt-0.5">not found</div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// ─── Confluence breakdown ─────────────────────────────────────────────────────
+
+function ConfluenceBreakdown({ rejection, config }: {
+    rejection: RejectionInfo;
+    config: typeof REASON_CONFIG[keyof typeof REASON_CONFIG];
+}) {
+    const score = rejection.score ?? 0;
+    const threshold = rejection.threshold ?? 60;
     const percentage = (score / threshold) * 100;
     const gap = threshold - score;
 
     return (
         <div className="space-y-4">
-            {/* Header: Below Threshold Warning - styled like Conflicted Market */}
             <div className="flex items-center justify-between p-4 bg-amber-500/5 border border-amber-500/30 rounded-lg">
                 <div>
                     <div className="text-sm font-mono text-amber-400 font-bold uppercase tracking-wider">Below Threshold</div>
@@ -288,23 +525,19 @@ function ConfluenceBreakdown({ rejection, config }: { rejection: RejectionInfo; 
                 </div>
             </div>
 
-            {/* Score Progress */}
             <div>
                 <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-mono text-zinc-400 uppercase tracking-wider">Confluence Score</span>
-                    <span className="text-sm font-mono text-zinc-300">
-                        {score.toFixed(1)} / {threshold.toFixed(1)}
-                    </span>
+                    <span className="text-sm font-mono text-zinc-300">{score.toFixed(1)} / {threshold.toFixed(1)}</span>
                 </div>
                 <div className="h-2 bg-zinc-900 rounded-full overflow-hidden">
                     <div
-                        className={cn("h-full transition-all duration-500", config.bg)}
+                        className={cn('h-full transition-all duration-500', config.bg)}
                         style={{ width: `${Math.min(percentage, 100)}%` }}
                     />
                 </div>
             </div>
 
-            {/* Factor Breakdown Table */}
             {rejection.all_factors && rejection.all_factors.length > 0 && (
                 <div>
                     <div className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -316,10 +549,7 @@ function ConfluenceBreakdown({ rejection, config }: { rejection: RejectionInfo; 
                             {rejection.all_factors.map((factor, idx) => (
                                 <div
                                     key={idx}
-                                    className={cn(
-                                        "px-4 py-3 border-b border-zinc-800/40 last:border-0 hover:bg-zinc-800/30 transition-colors",
-                                        "grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center"
-                                    )}
+                                    className="px-4 py-3 border-b border-zinc-800/40 last:border-0 hover:bg-zinc-800/30 transition-colors grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center"
                                 >
                                     <div className="min-w-0">
                                         <div className="text-sm font-mono text-zinc-200 truncate">{factor.name}</div>
@@ -329,15 +559,11 @@ function ConfluenceBreakdown({ rejection, config }: { rejection: RejectionInfo; 
                                             </div>
                                         )}
                                     </div>
-                                    <div className="text-xs font-mono text-zinc-400 text-right">
+                                    <div className={cn('text-xs font-mono text-right', factor.score >= 70 ? 'text-green-400' : factor.score >= 40 ? 'text-amber-400' : 'text-red-400')}>
                                         {factor.score.toFixed(1)}
                                     </div>
-                                    <div className="text-xs font-mono text-zinc-500 text-right">
-                                        ×{factor.weight.toFixed(2)}
-                                    </div>
-                                    <div className="text-xs font-mono text-zinc-300 font-bold text-right">
-                                        ={factor.weighted_contribution.toFixed(1)}
-                                    </div>
+                                    <div className="text-xs font-mono text-zinc-500 text-right">×{factor.weight.toFixed(2)}</div>
+                                    <div className="text-xs font-mono text-zinc-300 font-bold text-right">={factor.weighted_contribution.toFixed(1)}</div>
                                 </div>
                             ))}
                         </div>
@@ -345,7 +571,6 @@ function ConfluenceBreakdown({ rejection, config }: { rejection: RejectionInfo; 
                 </div>
             )}
 
-            {/* Adjustments */}
             {(rejection.synergy_bonus !== undefined || rejection.conflict_penalty !== undefined) && (
                 <div className="grid grid-cols-2 gap-3">
                     {rejection.synergy_bonus !== undefined && rejection.synergy_bonus !== 0 && (
@@ -365,6 +590,8 @@ function ConfluenceBreakdown({ rejection, config }: { rejection: RejectionInfo; 
         </div>
     );
 }
+
+// ─── Timeframe breakdown ──────────────────────────────────────────────────────
 
 function TimeframeBreakdown({ rejection }: { rejection: RejectionInfo }) {
     return (
@@ -393,16 +620,39 @@ function TimeframeBreakdown({ rejection }: { rejection: RejectionInfo }) {
     );
 }
 
+// ─── Risk validation breakdown ────────────────────────────────────────────────
+
+function RiskValidationBreakdown({ rejection }: { rejection: RejectionInfo }) {
+    const rr = rejection.risk_reward;
+    return (
+        <div className="space-y-3">
+            {rr !== undefined && (
+                <div className="flex items-center justify-between p-4 bg-red-500/5 border border-red-500/20 rounded-lg">
+                    <div>
+                        <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1">Actual R:R ratio</div>
+                        <div className="text-xs text-zinc-500">Minimum required: 1.5:1</div>
+                    </div>
+                    <div className="text-right">
+                        <div className={cn('text-2xl font-mono font-bold', rr >= 1.5 ? 'text-green-400' : 'text-red-400')}>
+                            {rr.toFixed(2)}:1
+                        </div>
+                    </div>
+                </div>
+            )}
+            <GenericBreakdown rejection={rejection} title="Risk Validation Details" />
+        </div>
+    );
+}
+
+// ─── Generic breakdown ────────────────────────────────────────────────────────
+
 function GenericBreakdown({ rejection, title }: { rejection: RejectionInfo; title: string }) {
-    // Extract relevant metadata (exclude standard fields)
     const excludeKeys = ['symbol', 'reason_type', 'reason', 'trace_id'];
     const metadata = Object.entries(rejection)
         .filter(([key]) => !excludeKeys.includes(key))
         .filter(([, value]) => value !== undefined && value !== null);
 
-    if (metadata.length === 0) {
-        return null;
-    }
+    if (metadata.length === 0) return null;
 
     return (
         <div>
@@ -410,7 +660,7 @@ function GenericBreakdown({ rejection, title }: { rejection: RejectionInfo; titl
             <div className="bg-zinc-900/50 rounded-lg border border-zinc-800/40 p-4 space-y-2">
                 {metadata.map(([key, value]) => (
                     <div key={key} className="flex justify-between items-start gap-4">
-                        <span className="text-xs font-mono text-zinc-400 capitalize">
+                        <span className="text-xs font-mono text-zinc-400 capitalize shrink-0">
                             {key.replace(/_/g, ' ')}:
                         </span>
                         <span className="text-xs font-mono text-zinc-200 text-right max-w-xs break-all">
@@ -423,15 +673,19 @@ function GenericBreakdown({ rejection, title }: { rejection: RejectionInfo; titl
     );
 }
 
-function DualDirectionBreakdown({ rejection, config }: { rejection: RejectionInfo; config: typeof REASON_CONFIG[keyof typeof REASON_CONFIG] }) {
-    const bullishScore = rejection.bullish_score || 0;
-    const bearishScore = rejection.bearish_score || 0;
-    const gap = rejection.gap || 0;
-    const threshold = rejection.threshold || 60;
+// ─── Dual direction breakdown ─────────────────────────────────────────────────
+
+function DualDirectionBreakdown({ rejection, config }: {
+    rejection: RejectionInfo;
+    config: typeof REASON_CONFIG[keyof typeof REASON_CONFIG];
+}) {
+    const bullishScore = rejection.bullish_score ?? 0;
+    const bearishScore = rejection.bearish_score ?? 0;
+    const gap = rejection.gap ?? 0;
+    const threshold = rejection.threshold ?? 60;
 
     return (
         <div className="space-y-4">
-            {/* Header: Gap Warning */}
             <div className="flex items-center justify-between p-4 bg-orange-500/5 border border-orange-500/30 rounded-lg">
                 <div className="flex-1">
                     <div className="text-sm font-mono text-orange-400 font-bold uppercase tracking-wider">Conflicted Market</div>
@@ -448,23 +702,16 @@ function DualDirectionBreakdown({ rejection, config }: { rejection: RejectionInf
                 </div>
             </div>
 
-
-            {/* Side-by-Side Score Comparison */}
             <div className="grid grid-cols-2 gap-4">
-                {/* Bullish Column */}
+                {/* Bullish */}
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
                         <span className="text-sm font-mono text-green-400 uppercase tracking-wider font-bold">Bullish</span>
                         <span className="text-sm font-mono text-green-400">{bullishScore.toFixed(1)} / {threshold.toFixed(1)}</span>
                     </div>
                     <div className="h-2 bg-zinc-900 rounded-full overflow-hidden">
-                        <div
-                            className="h-full transition-all duration-500 bg-green-500/30"
-                            style={{ width: `${Math.min((bullishScore / threshold) * 100, 100)}%` }}
-                        />
+                        <div className="h-full transition-all duration-500 bg-green-500/30" style={{ width: `${Math.min((bullishScore / threshold) * 100, 100)}%` }} />
                     </div>
-
-                    {/* Bullish Factors */}
                     {rejection.bullish_factors && rejection.bullish_factors.length > 0 && (
                         <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
                             {rejection.bullish_factors.map((factor, idx) => (
@@ -474,16 +721,12 @@ function DualDirectionBreakdown({ rejection, config }: { rejection: RejectionInf
                                         <span className="text-green-400 font-mono font-bold ml-2">{factor.weighted_contribution.toFixed(1)}</span>
                                     </div>
                                     {factor.rationale && (
-                                        <div className="text-green-400/50 mt-0.5 truncate" title={factor.rationale}>
-                                            {factor.rationale}
-                                        </div>
+                                        <div className="text-green-400/50 mt-0.5 truncate" title={factor.rationale}>{factor.rationale}</div>
                                     )}
                                 </div>
                             ))}
                         </div>
                     )}
-
-                    {/* Bullish Adjustments */}
                     {(rejection.bullish_synergy !== undefined || rejection.bullish_conflict !== undefined) && (
                         <div className="space-y-1">
                             {rejection.bullish_synergy !== undefined && rejection.bullish_synergy !== 0 && (
@@ -502,20 +745,15 @@ function DualDirectionBreakdown({ rejection, config }: { rejection: RejectionInf
                     )}
                 </div>
 
-                {/* Bearish Column */}
+                {/* Bearish */}
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
                         <span className="text-sm font-mono text-red-400 uppercase tracking-wider font-bold">Bearish</span>
                         <span className="text-sm font-mono text-red-400">{bearishScore.toFixed(1)} / {threshold.toFixed(1)}</span>
                     </div>
                     <div className="h-2 bg-zinc-900 rounded-full overflow-hidden">
-                        <div
-                            className="h-full transition-all duration-500 bg-red-500/30"
-                            style={{ width: `${Math.min((bearishScore / threshold) * 100, 100)}%` }}
-                        />
+                        <div className="h-full transition-all duration-500 bg-red-500/30" style={{ width: `${Math.min((bearishScore / threshold) * 100, 100)}%` }} />
                     </div>
-
-                    {/* Bearish Factors */}
                     {rejection.bearish_factors && rejection.bearish_factors.length > 0 && (
                         <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
                             {rejection.bearish_factors.map((factor, idx) => (
@@ -525,16 +763,12 @@ function DualDirectionBreakdown({ rejection, config }: { rejection: RejectionInf
                                         <span className="text-red-400 font-mono font-bold ml-2">{factor.weighted_contribution.toFixed(1)}</span>
                                     </div>
                                     {factor.rationale && (
-                                        <div className="text-red-400/50 mt-0.5 truncate" title={factor.rationale}>
-                                            {factor.rationale}
-                                        </div>
+                                        <div className="text-red-400/50 mt-0.5 truncate" title={factor.rationale}>{factor.rationale}</div>
                                     )}
                                 </div>
                             ))}
                         </div>
                     )}
-
-                    {/* Bearish Adjustments */}
                     {(rejection.bearish_synergy !== undefined || rejection.bearish_conflict !== undefined) && (
                         <div className="space-y-1">
                             {rejection.bearish_synergy !== undefined && rejection.bearish_synergy !== 0 && (
@@ -556,4 +790,3 @@ function DualDirectionBreakdown({ rejection, config }: { rejection: RejectionInf
         </div>
     );
 }
-

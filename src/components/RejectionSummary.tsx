@@ -1,4 +1,4 @@
-import { Warning, XCircle, TrendDown, Database, Code, Info, ChartLineUp, ChartLineDown, Stack, Target } from '@phosphor-icons/react';
+import { Warning, XCircle, TrendDown, Database, Code, Info, ChartLineUp, ChartLineDown, Stack, Target, Lightning, GitFork } from '@phosphor-icons/react';
 import { Card } from '@/components/ui/card';
 import {
   Collapsible,
@@ -71,6 +71,7 @@ const reasonConfig: Record<string, {
   color: string;
   description: string;
 }> = {
+  // ── Post-scoring gauntlet gates ───────────────────────────────────────────
   low_confluence: {
     icon: TrendDown,
     label: 'Low Confluence Score',
@@ -106,6 +107,31 @@ const reasonConfig: Record<string, {
     label: 'Missing Critical Timeframes',
     color: 'text-purple-400',
     description: 'Required higher timeframe data unavailable or incomplete',
+  },
+  // ── Pre-scoring hard gates (orchestrator, before confluence scoring) ────
+  btc_impulse: {
+    icon: Lightning,
+    label: 'BTC Impulse Veto',
+    color: 'text-yellow-500',
+    description: 'Alt trade blocked — BTC in opposing strong impulse',
+  },
+  structural_anchor: {
+    icon: XCircle,
+    label: 'No Structural Anchor',
+    color: 'text-rose-400',
+    description: 'No quality OB, FVG, or confirmed sweep in trade direction',
+  },
+  regime_alignment: {
+    icon: ChartLineDown,
+    label: 'Regime Alignment Failed',
+    color: 'text-orange-500',
+    description: 'Counter-trend trade rejected — no CHoCH confirmation vs strong regime',
+  },
+  conflict_density: {
+    icon: GitFork,
+    label: 'Conflict Density',
+    color: 'text-fuchsia-400',
+    description: 'Too many opposing structural conditions active simultaneously',
   },
 };
 
