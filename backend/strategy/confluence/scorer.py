@@ -3032,33 +3032,74 @@ def calculate_confluence_score(
     final_score = max(0.0, min(100.0, final_score))
 
 
-    # Determine Signal Tier — conviction-based (quality of anchor factors, not raw count)
+    # ── Signal Tier — per-anchor conviction (Section 5, scoring audit) ───────────
+    #
     # Anchor factors are the structural/directional pillars each mode depends on.
-    # Conviction = 60% anchor quality + 40% breadth of other strong factors.
-    _TIER_ANCHOR_FACTORS: Dict[str, List[str]] = {
-        "overwatch":           ["Order Block", "Liquidity Sweep", "HTF Composite", "Market Structure"],
-        "macro_surveillance":  ["Order Block", "Liquidity Sweep", "HTF Composite", "Market Structure"],
-        "strike":              ["Market Structure", "Order Block", "FVG", "Momentum"],
-        "intraday_aggressive": ["Market Structure", "Order Block", "FVG", "Momentum"],
-        "surgical":            ["Order Block", "FVG", "Market Structure", "Kill Zone"],
-        "precision":           ["Order Block", "FVG", "Market Structure", "Kill Zone"],
-        "stealth":             ["Order Block", "Market Structure", "HTF Composite", "FVG"],
-        "stealth_balanced":    ["Order Block", "Market Structure", "HTF Composite", "FVG"],
+    # Tier is determined by how many of those pillars individually exceed quality
+    # thresholds — NOT by averaging them.  A single anchor at 40 and another at 100
+    # averaging to 70 is NOT a conviction signal; both must be genuinely strong.
+    #
+    # An anchor entry that is itself a list = OR logic: the best-scoring factor of
+    # that group counts (used for "Order Block OR Fair Value Gap" in Strike mode).
+    #
+    # Tier definitions:
+    #   APEX — every anchor >= 70 AND score >= gate+10 AND no active vetoes
+    #   A    — 3+ anchors >= 70    AND score >= gate+5  AND no active vetoes
+    #   B    — 2+ anchors >= 60    AND score >= gate
+    #   C    — passed gate, but anchors too weak for A/B
+    _TIER_ANCHOR_FACTORS: Dict[str, list] = {
+        # Overwatch: macro swing mode — HTF structure + institutional footprint mandatory
+        "overwatch":          ["Order Block", "Market Structure", "Liquidity Sweep",
+                               "HTF Composite", "Institutional Sequence"],
+        "macro_surveillance": ["Order Block", "Market Structure", "Liquidity Sweep",
+                               "HTF Composite", "Institutional Sequence"],
+        # Strike: intraday momentum — structure + momentum + entry level + timing
+        "strike":             ["Market Structure", "Momentum",
+                               ["Order Block", "Fair Value Gap"],   # OR: either entry level counts
+                               "Kill Zone Timing"],
+        "intraday_aggressive":["Market Structure", "Momentum",
+                               ["Order Block", "Fair Value Gap"],
+                               "Kill Zone Timing"],
+        # Surgical: precision scalp — nested OB entry + timing + premium/discount zone
+        "surgical":           ["Order Block", "Inside Order Block", "Momentum",
+                               "Kill Zone Timing", "Premium/Discount Zone"],
+        "precision":          ["Order Block", "Inside Order Block", "Momentum",
+                               "Kill Zone Timing", "Premium/Discount Zone"],
+        # Stealth: balanced swing/intraday — HTF structure + institutional footprint
+        "stealth":            ["Order Block", "Market Structure",
+                               "HTF Composite", "Institutional Sequence"],
+        "stealth_balanced":   ["Order Block", "Market Structure",
+                               "HTF Composite", "Institutional Sequence"],
     }
-    _tier_anchors = _TIER_ANCHOR_FACTORS.get(current_profile, ["Order Block", "Market Structure", "HTF Composite", "Liquidity Sweep"])
-    _anchor_scores = [f.score for f in factors if f.name in _tier_anchors]
-    _non_anchor_strong = sum(1 for f in factors if f.name not in _tier_anchors and f.score >= 65)
+    _default_anchors: list = ["Order Block", "Market Structure", "HTF Composite", "Liquidity Sweep"]
+    _raw_anchors = _TIER_ANCHOR_FACTORS.get(current_profile, _default_anchors)
+    _fm_tier = {f.name: f.score for f in factors}
 
-    _anchor_avg = sum(_anchor_scores) / len(_anchor_scores) if _anchor_scores else 0.0
-    _breadth_score = min(100.0, _non_anchor_strong * 14.0)  # 7+ non-anchor → 98
-    _conviction_score = (_anchor_avg * 0.60) + (_breadth_score * 0.40)
+    def _resolve_anchor(req: object) -> float:
+        """Score for one anchor requirement.  List = OR (best of group)."""
+        if isinstance(req, list):
+            return max(_fm_tier.get(n, 0.0) for n in req)
+        return _fm_tier.get(req, 0.0)  # type: ignore[arg-type]
+
+    _resolved = [_resolve_anchor(req) for req in _raw_anchors]
+    _n_anchors         = len(_resolved)
+    _all_above_70      = _n_anchors > 0 and all(s >= 70 for s in _resolved)
+    _count_above_70    = sum(1 for s in _resolved if s >= 70)
+    _count_above_60    = sum(1 for s in _resolved if s >= 60)
+
+    # Veto check: MACD Veto factor < 50 = hard block (blocks APEX and A)
+    _tier_has_veto = _fm_tier.get("MACD Veto", 100.0) < 50.0
+
+    # Gate threshold — same T the confluence gate uses
+    _T = getattr(config, "min_confluence_score", None) or 60.0
 
     tier = (
-        "APEX" if _conviction_score >= 82 else
-        "A"    if _conviction_score >= 68 else
-        "B"    if _conviction_score >= 50 else
+        "APEX" if (_all_above_70 and final_score >= _T + 10 and not _tier_has_veto) else
+        "A"    if (_count_above_70 >= 3 and final_score >= _T + 5 and not _tier_has_veto) else
+        "B"    if (_count_above_60 >= 2 and final_score >= _T) else
         "C"
     )
+    # ── end tier ──────────────────────────────────────────────────────────────
 
     breakdown = ConfluenceBreakdown(
         total_score=final_score,
@@ -3085,7 +3126,7 @@ def calculate_confluence_score(
     # how many are actually aligned? Used to surface DEVELOPING setups in the UI.
     CRITICAL_FACTORS: dict = {
         "Order Block":               65,   # must have a valid OB to trade from
-        "FVG":                       60,   # imbalance zone — fast momentum setups need this
+        "Fair Value Gap":            60,   # imbalance zone — fast momentum setups need this
         "Market Structure":          55,   # BOS/CHoCH — structural shift required
         "Liquidity Sweep":           50,   # confirmed sweep of buy/sell-side liq
         "Multi-Candle Confirmation": 70,   # momentum confirmation candles
