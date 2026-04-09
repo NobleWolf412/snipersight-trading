@@ -2832,9 +2832,15 @@ class Orchestrator:
                     ),
                 )
             )
-            # Honor the existing min_confluence_score if explicitly set by caller (>0), otherwise adopt baseline
+            # Always enforce the mode's min_confluence_score as a floor.
+            # Using `<` (not `<= 0`) ensures that:
+            #   • overwatch (mode=72.0) upgrades a default config 65.0 → 72.0, fixing
+            #     setup_state="READY" being computed with T=65 when gate is actually 72
+            #   • a user-set threshold above the mode floor (e.g. paper trading at 70
+            #     for stealth mode=65) is preserved — the higher value stays
+            # The old check (`<= 0`) never fired because ScanConfig defaults to 65.0.
             if hasattr(self.config, "min_confluence_score"):
-                if getattr(self.config, "min_confluence_score", 0) <= 0:
+                if getattr(self.config, "min_confluence_score", 0) < mode.min_confluence_score:
                     self.config.min_confluence_score = mode.min_confluence_score
 
             # Wire planner-specific knobs from mode into config

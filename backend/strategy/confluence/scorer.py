@@ -263,9 +263,49 @@ def run_pre_scoring_gates(
                         ),
                         metadata={"regime_trend": regime_trend, "direction": direction, "choch_checked": True},
                     )
+
+            # ── STEALTH/stealth_balanced: CHoCH exception for scalp bounces ──────
+            # Stealth is a patient swing mode, so it never trades against a trend
+            # for swing/intraday setups. However, a confirmed CHoCH on the 15m+
+            # represents a genuine short-term reversal (the engulfing/BOS flip that
+            # creates a scalp bounce opportunity). Allowing CHoCH-confirmed counter-
+            # trend LONGs through to scoring lets the confluence gate decide whether
+            # the bounce has enough quality — overwatch/macro_surveillance remain
+            # fully hard-blocked (no scalp cascade, no CHoCH exception).
+            elif profile in ("stealth", "stealth_balanced"):
+                _confirmed_choch = False
+                for _sb in smc_snapshot.structural_breaks:
+                    _sb_type = getattr(_sb, "break_type", "").upper()
+                    _sb_dir  = getattr(_sb, "direction", "")
+                    if _sb_type == "CHOCH":
+                        _sb_bullish = _sb_dir in ("bullish", "up", "LONG")
+                        if is_long and _sb_bullish:
+                            _confirmed_choch = True
+                            break
+                        if not is_long and not _sb_bullish:
+                            _confirmed_choch = True
+                            break
+                if _confirmed_choch:
+                    logger.debug(
+                        "Gate 2 stealth CHoCH bypass: confirming CHoCH → counter-trend allowed "
+                        "(regime=%s, mode=%s) — confluence gate still applies",
+                        regime_trend, profile,
+                    )
+                    pass  # allow to scoring — confluence + MACD still must clear
+                else:
+                    return GateResult(
+                        passed=False,
+                        gate_name="regime_alignment",
+                        reason=(
+                            f"{'LONG' if is_long else 'SHORT'} rejected: regime is "
+                            f"{'strong_down' if is_long else 'strong_up'} with no confirming CHoCH (mode={profile})"
+                        ),
+                        metadata={"regime_trend": regime_trend, "direction": direction, "choch_checked": True},
+                    )
             else:
-                # OVERWATCH/STEALTH/macro_surveillance/stealth_balanced: hard block
-                # (no WCL/DCL zone, no CHoCH — nothing justifies counter-trend here)
+                # OVERWATCH/macro_surveillance: hard block — no exceptions.
+                # These are pure swing modes; counter-trend scalps are out of scope.
+                # WCL/DCL bypass above handles the only legitimate counter-trend case.
                 return GateResult(
                     passed=False,
                     gate_name="regime_alignment",
@@ -3130,9 +3170,11 @@ def calculate_confluence_score(
         "Market Structure":          55,   # BOS/CHoCH — structural shift required
         "Liquidity Sweep":           50,   # confirmed sweep of buy/sell-side liq
         "Multi-Candle Confirmation": 70,   # momentum confirmation candles
-        "HTF Structure Bias":        60,   # higher-timeframe trend alignment
-        "HTF Structural Proximity":  70,   # price near HTF OB/FVG/level
-        "HTF Momentum Gate":         70,   # HTF momentum not opposing trade
+        # NOTE: "HTF Structure Bias", "HTF Structural Proximity", "HTF Momentum Gate"
+        # are computed internally but NEVER emitted as standalone ConfluenceFactor
+        # entries — they are aggregated into "HTF Composite". Using their names here
+        # caused convergence to show them as permanently missing. Fixed: single entry.
+        "HTF Composite":             65,   # rolls up structure bias + proximity + momentum gate
         "BTC Impulse Gate":          70,   # BTC not in opposing impulse
     }
     # NOTE: FVG and Order Block are complementary — a setup strong in one but not
