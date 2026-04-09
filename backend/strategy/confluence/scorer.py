@@ -108,6 +108,7 @@ def run_pre_scoring_gates(
     regime: Optional[Any] = None,
     btc_impulse: Optional[str] = None,
     is_btc: bool = False,
+    cycle_context: Optional[Any] = None,
 ) -> GateResult:
     """
     Run all pre-scoring hard gates. Returns on the first failure.
@@ -204,9 +205,40 @@ def run_pre_scoring_gates(
         opposing_short = not is_long and is_strongly_bullish
 
         if opposing_long or opposing_short:
-            # STRIKE/intraday_aggressive: allow through if a confirmed CHoCH exists in
-            # the trade direction — this validates fading a strong trend.
-            if profile in ("strike", "intraday_aggressive"):
+            # ── WCL / DCL zone bypass (cycle low exceptions) ─────────────────
+            # A Weekly Cycle Low (WCL) is exactly the kind of major macro swing
+            # bottom that overwatch exists to catch.  When cycle_context confirms
+            # we are inside a WCL zone the regime "down" tag reflects the PRIOR
+            # trend — not the current opportunity.  Allow counter-trend LONGs
+            # through for ALL modes when WCL is active.
+            # DCL zones (shorter-term daily cycle lows) grant a bypass only for
+            # faster modes (strike / intraday_aggressive) — overwatch should wait
+            # for the stronger WCL confirmation.
+            _in_wcl = cycle_context is not None and getattr(cycle_context, "in_wcl_zone", False)
+            _in_dcl = cycle_context is not None and getattr(cycle_context, "in_dcl_zone", False)
+            _wcl_bypass = opposing_long and _in_wcl   # WCL → long bypass for all modes
+            _dcl_bypass = (
+                opposing_long
+                and _in_dcl
+                and not _in_wcl  # WCL bypass already covers this
+                and profile in ("strike", "intraday_aggressive")
+            )
+
+            if _wcl_bypass:
+                logger.debug(
+                    "Gate 2 WCL bypass: in_wcl_zone → counter-trend LONG allowed (regime=%s, mode=%s)",
+                    regime_trend, profile,
+                )
+                pass  # allow scoring — confluence must still pass
+            elif _dcl_bypass:
+                logger.debug(
+                    "Gate 2 DCL bypass: in_dcl_zone → counter-trend LONG allowed (regime=%s, mode=%s)",
+                    regime_trend, profile,
+                )
+                pass  # allow scoring — confluence must still pass
+
+            # ── STRIKE/intraday_aggressive: CHoCH exception (no cycle zone needed) ──
+            elif profile in ("strike", "intraday_aggressive"):
                 _confirmed_choch = False
                 for _sb in smc_snapshot.structural_breaks:
                     _sb_type = getattr(_sb, "break_type", "").upper()
@@ -220,7 +252,7 @@ def run_pre_scoring_gates(
                             _confirmed_choch = True
                             break
                 if _confirmed_choch:
-                    pass  # divergence exception — CHoCH confirms trend reversal, allow scoring
+                    pass  # CHoCH confirms trend reversal, allow scoring
                 else:
                     return GateResult(
                         passed=False,
@@ -232,7 +264,8 @@ def run_pre_scoring_gates(
                         metadata={"regime_trend": regime_trend, "direction": direction, "choch_checked": True},
                     )
             else:
-                # OVERWATCH/STEALTH/macro_surveillance/stealth_balanced: hard block, no exception
+                # OVERWATCH/STEALTH/macro_surveillance/stealth_balanced: hard block
+                # (no WCL/DCL zone, no CHoCH — nothing justifies counter-trend here)
                 return GateResult(
                     passed=False,
                     gate_name="regime_alignment",
@@ -241,7 +274,21 @@ def run_pre_scoring_gates(
                 )
 
     # ── Gate 3: BTC Impulse (alts only) ───────────────────────────────────────
-    if not is_btc and btc_impulse is not None:
+    # OVERWATCH / macro_surveillance: bypass this gate.
+    #
+    # Overwatch targets weekly/daily macro swing setups. A short-term BTC
+    # impulse tag (computed from the hourly/daily btc_dir) does not invalidate
+    # a weekly demand zone — the macro structure itself is the anchor. If the
+    # regime_alignment gate (Gate 2) already rejected a counter-trend setup
+    # for overwatch, re-checking BTC's short-term impulse is redundant and
+    # causes all alt longs to be killed even when BTC's weekly trend is mixed
+    # or the setup is a deep-pullback entry on a confirmed HTF OB.
+    _btc_impulse_applies = (
+        not is_btc
+        and btc_impulse is not None
+        and profile not in ("overwatch", "macro_surveillance")
+    )
+    if _btc_impulse_applies:
         btc_strongly_up = btc_impulse in ("strong_up", "extreme_up")
         btc_strongly_down = btc_impulse in ("strong_down", "extreme_down")
         if is_long and btc_strongly_down:
@@ -260,24 +307,60 @@ def run_pre_scoring_gates(
             )
 
     # ── Gate 4: Conflict Density (ALL modes) ──────────────────────────────────
-    # Count active conflict signals (opposing structural breaks in direction).
+    # Count active conflict signals (opposing structural breaks and OBs).
+    # Build a human-readable list of each condition so the UI can surface
+    # exactly which structures are causing the conflict, not just the count.
     conflict_count = 0
+    conflict_conditions: list = []
+
     for sb in smc_snapshot.structural_breaks:
         sb_dir = getattr(sb, "direction", "bullish")
         is_opposing = (is_long and sb_dir == "bearish") or (not is_long and sb_dir == "bullish")
         if is_opposing:
             conflict_count += 1
-    # Include opposing OBs close to price as additional conflict signals
+            break_type = getattr(sb, "break_type", "BOS")
+            tf = getattr(sb, "timeframe", None)
+            level = getattr(sb, "level", None) or getattr(sb, "price_level", None)
+            label = f"{sb_dir} {break_type}"
+            if level is not None:
+                label += f" @ {float(level):.4f}"
+            if tf:
+                label += f" [{tf}]"
+            conflict_conditions.append(label)
+
     for ob in smc_snapshot.order_blocks:
         if ob.direction != ob_direction and not ob.invalidated and ob.grade in ("A", "B"):
             conflict_count += 1
+            tf = getattr(ob, "timeframe", None)
+            top = getattr(ob, "top", None)
+            bot = getattr(ob, "bottom", None)
+            level_str = ""
+            if top is not None and bot is not None:
+                level_str = f" @ {float(bot):.4f}–{float(top):.4f}"
+            elif top is not None:
+                level_str = f" @ {float(top):.4f}"
+            elif bot is not None:
+                level_str = f" @ {float(bot):.4f}"
+            label = f"{ob.direction} OB({ob.grade}){level_str}"
+            if tf:
+                label += f" [{tf}]"
+            conflict_conditions.append(label)
 
-    if conflict_count >= 3:
+    # Raise the threshold for overwatch/macro modes: they use weekly/daily data
+    # which naturally produces more historical OBs and structural breaks. The
+    # standard threshold of 3 fires on every legitimate swing setup and
+    # produces nothing but rejections. 5 is still conservative for HTF scans.
+    _conflict_threshold = 5 if profile in ("overwatch", "macro_surveillance") else 3
+
+    if conflict_count >= _conflict_threshold:
         return GateResult(
             passed=False,
             gate_name="conflict_density",
             reason=f"{conflict_count} simultaneous conflict conditions detected",
-            metadata={"conflict_count": conflict_count},
+            metadata={
+                "conflict_count": conflict_count,
+                "conflict_conditions": conflict_conditions,
+            },
         )
 
     return GateResult(passed=True)

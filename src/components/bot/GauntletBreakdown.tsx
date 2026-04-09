@@ -259,6 +259,9 @@ interface SymbolLastSeen {
   // Gate meta
   reason_type?: string;
   threshold?: number;
+  // Conflict density
+  conflict_conditions?: string[];
+  conflict_count?: number;
   // Critical factor convergence
   setup_state?: 'READY' | 'DEVELOPING' | 'WATCHING' | 'NOISE';
   convergence_score?: number;
@@ -565,6 +568,30 @@ function SignalRow({
             </div>
           )}
 
+          {/* ── Conflict conditions (CONFLICT_DENSITY gate) ── */}
+          {entry.stage === 'CONFLICT_DENSITY' && (entry.conflict_conditions?.length ?? 0) > 0 && (
+            <div className="pt-1 space-y-1.5 border-t border-border/20">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground/50 uppercase tracking-widest text-[9px]">
+                  conflict conditions
+                </span>
+                <span className="text-fuchsia-400 font-bold text-[10px]">
+                  {entry.conflict_count ?? entry.conflict_conditions!.length} active
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {entry.conflict_conditions!.map((cond, i) => (
+                  <span
+                    key={i}
+                    className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-300"
+                  >
+                    {cond}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ── Full reason + gate description ── */}
           <div className="pt-1 border-t border-border/20 space-y-0.5">
             <div>
@@ -647,6 +674,8 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
           timeframe: s.timeframe,
           reason_type: s.reason_type,
           threshold: s.threshold,
+          conflict_conditions: s.conflict_conditions,
+          conflict_count: s.conflict_count,
           setup_state: s.setup_state,
           convergence_score: s.convergence_score,
           convergence_critical_count: s.convergence_critical_count,

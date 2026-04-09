@@ -1071,8 +1071,11 @@ export interface SignalLogEntry {
   veto_blocked?: boolean;
   active_vetoes?: string[];
   // Gate category + scoring threshold — populated for scanner-level rejections
-  reason_type?: string;   // e.g. 'btc_impulse', 'low_confluence', 'conflict_density'
-  threshold?: number;     // min score required at this gate (for score-vs-threshold bar)
+  reason_type?: string;       // e.g. 'btc_impulse', 'low_confluence', 'conflict_density'
+  threshold?: number;         // min score required at this gate (for score-vs-threshold bar)
+  // Conflict density details — list of opposing structural conditions (e.g. "bearish BOS @ 1.2345 [4h]")
+  conflict_conditions?: string[];
+  conflict_count?: number;
 }
 
 export interface PaperTradingStartResponse {

@@ -1301,6 +1301,10 @@ class PaperTradingService:
                         reason_type=reason_type,
                         # Score vs threshold — lets the UI draw a gap bar
                         threshold=item.get('threshold'),
+                        # Conflict density details — list of specific conflicting
+                        # structural breaks + OBs, empty for non-conflict gates
+                        conflict_conditions=item.get('conflict_conditions', []),
+                        conflict_count=item.get('conflict_count'),
                         # Critical factor convergence — surface DEVELOPING/WATCHING in UI
                         setup_state=item.get('setup_state', 'NOISE'),
                         convergence_score=item.get('convergence_score', 0),

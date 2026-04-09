@@ -42,6 +42,9 @@ export interface RejectionInfo {
     bullish_conflict?: number;
     bearish_synergy?: number;
     bearish_conflict?: number;
+    // Conflict density specific fields
+    conflict_conditions?: string[];
+    conflict_count?: number;
     // Other rejection-specific fields
     missing_timeframes?: string[];
     required_timeframes?: string[];
@@ -439,23 +442,44 @@ function BtcImpulseDetail({ rejection, config }: { rejection: RejectionInfo; con
 }
 
 function ConflictDensityDetail({ rejection, config }: { rejection: RejectionInfo; config: any }) {
-    const count = parseConflictCount(rejection.reason);
-    const severity = count == null ? 'unknown' : count >= 30 ? 'extreme' : count >= 15 ? 'high' : 'elevated';
+    const count = rejection.conflict_count ?? parseConflictCount(rejection.reason);
+    const conditions = rejection.conflict_conditions ?? [];
+    const severity = count == null ? 'unknown' : count >= 8 ? 'extreme' : count >= 5 ? 'high' : 'elevated';
     const severityColor = severity === 'extreme' ? 'text-red-400 border-red-500/30 bg-red-500/5'
         : severity === 'high' ? 'text-orange-400 border-orange-500/30 bg-orange-500/5'
         : 'text-yellow-400 border-yellow-500/30 bg-yellow-500/5';
 
     return (
-        <div className={cn('p-4 rounded-lg border flex items-center justify-between', severityColor)}>
-            <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1">Active conflict conditions</div>
-                <div className="text-xs text-zinc-400">Opposing structural signals simultaneously active</div>
+        <div className="space-y-3">
+            <div className={cn('p-4 rounded-lg border flex items-center justify-between', severityColor)}>
+                <div>
+                    <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1">Active conflict conditions</div>
+                    <div className="text-xs text-zinc-400">Opposing structural signals simultaneously active</div>
+                </div>
+                {count != null && (
+                    <div className="text-right">
+                        <div className="text-3xl font-mono font-bold">{count}</div>
+                        <div className={cn('text-[10px] font-mono uppercase tracking-wider', severityColor.split(' ')[0])}>
+                            {severity}
+                        </div>
+                    </div>
+                )}
             </div>
-            {count != null && (
-                <div className="text-right">
-                    <div className="text-3xl font-mono font-bold">{count}</div>
-                    <div className={cn('text-[10px] font-mono uppercase tracking-wider', severityColor.split(' ')[0])}>
-                        {severity}
+
+            {conditions.length > 0 && (
+                <div className="space-y-1.5">
+                    <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                        Conflicting structures ({conditions.length})
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {conditions.map((cond, i) => (
+                            <span
+                                key={i}
+                                className="px-2 py-1 rounded text-xs font-mono bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-300"
+                            >
+                                {cond}
+                            </span>
+                        ))}
                     </div>
                 </div>
             )}

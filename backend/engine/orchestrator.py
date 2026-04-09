@@ -1295,6 +1295,7 @@ class Orchestrator:
                     regime=_symbol_regime,
                     btc_impulse=_btc_impulse,
                     is_btc=_is_btc,
+                    cycle_context=cycle_context,
                 )
                 if not _gate.passed:
                     logger.info(
@@ -1308,7 +1309,11 @@ class Orchestrator:
                         "threshold": self.config.min_confluence_score,
                         "gate": _gate.gate_name,
                     })
-                    return None, {
+                    # Build rejection info, forwarding useful gate metadata so
+                    # the UI can render detailed breakdowns instead of just the
+                    # reason string.  Only safe scalar/list values are forwarded
+                    # (no complex objects) to keep the dict JSON-serialisable.
+                    _rejection_info: dict = {
                         "symbol": symbol,
                         "direction": context.metadata.get("chosen_direction", "LONG"),
                         "reason_type": _gate.gate_name,
@@ -1316,6 +1321,14 @@ class Orchestrator:
                         "score": 0.0,
                         "threshold": self.config.min_confluence_score,
                     }
+                    _FORWARD_KEYS = {
+                        "conflict_count", "conflict_conditions",
+                        "btc_impulse", "regime_trend",
+                    }
+                    for _k, _v in _gate.metadata.items():
+                        if _k in _FORWARD_KEYS:
+                            _rejection_info[_k] = _v
+                    return None, _rejection_info
             # ─────────────────────────────────────────────────────────────────────
 
             context.confluence_breakdown = self.confluence_service.score(
