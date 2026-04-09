@@ -166,8 +166,8 @@ const GATE_DESCRIPTOR: Record<string, {
     conflict_density: {
         title: 'Conflict Density Too High',
         subtitle: 'Hard gate — fires before confluence scoring',
-        what: 'Too many opposing structural signals are active at the same time. Multiple timeframes, OBs, FVGs, and sweeps are all pointing in different directions — the model has no confident read on the next move.',
-        fix: 'Wait for the market to resolve. A strong impulse, a clean sweep, or a consolidation breakout will flush conflicting signals and create a cleaner structural picture.',
+        what: 'Too many opposing BOS (Break of Structure) signals and order blocks are active at the same time. Note: CHoCH (Change of Character) patterns are intentionally excluded — they are reversal markers that may have created the setup, not active opposing conditions.',
+        fix: 'Wait for opposing BOS structures to be mitigated or invalidated. A clean sweep of a key level or a confirmed BOS in the trade direction will reduce conflict count and allow the setup to pass.',
     },
 };
 

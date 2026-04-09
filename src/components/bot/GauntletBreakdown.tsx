@@ -85,7 +85,7 @@ const STAGE_CONFIG: Record<GauntletStage, StageConfig> = {
     color: 'text-fuchsia-400',
     bgColor: 'bg-fuchsia-500/10',
     borderColor: 'border-fuchsia-500/30',
-    description: '3+ simultaneous opposing structural conditions active',
+    description: 'too many opposing BOS + OBs active — excludes CHoCH (reversal markers, not continuation)',
     gate: 0,
   },
   // ── Post-scoring service gates ────────────────────────────────────────────

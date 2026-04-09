@@ -310,15 +310,33 @@ def run_pre_scoring_gates(
     # Count active conflict signals (opposing structural breaks and OBs).
     # Build a human-readable list of each condition so the UI can surface
     # exactly which structures are causing the conflict, not just the count.
+    #
+    # IMPORTANT: Only BOS (Break of Structure) counts as a conflict.
+    # CHoCH (Change of Character) is a REVERSAL MARKER — it shows where the
+    # prior trend already flipped. Counting historical CHoCH patterns as
+    # "opposing active conditions" is wrong because:
+    #   1. A bearish CHoCH may be what CREATED the long opportunity (sweep +
+    #      CHoCH + OB retest is a textbook SMC long setup).
+    #   2. CHoCH accumulates across TFs — overwatch's weekly/daily data will
+    #      always have several from prior swings, drowning valid setups.
+    #   3. Gate 2 (regime alignment) already handles CHoCH for counter-trend
+    #      logic; double-penalising here is redundant.
+    # BOS confirms trend CONTINUATION in the opposing direction — that is
+    # genuinely a reason to question a trade and belongs in this gate.
     conflict_count = 0
     conflict_conditions: list = []
 
     for sb in smc_snapshot.structural_breaks:
         sb_dir = getattr(sb, "direction", "bullish")
+        break_type = getattr(sb, "break_type", "BOS").upper()
+
+        # Skip CHoCH — reversal markers, not continuation signals
+        if break_type == "CHOCH":
+            continue
+
         is_opposing = (is_long and sb_dir == "bearish") or (not is_long and sb_dir == "bullish")
         if is_opposing:
             conflict_count += 1
-            break_type = getattr(sb, "break_type", "BOS")
             tf = getattr(sb, "timeframe", None)
             level = getattr(sb, "level", None) or getattr(sb, "price_level", None)
             label = f"{sb_dir} {break_type}"
