@@ -1043,6 +1043,7 @@ class PaperTradingConfigRequest(BaseModel):
     slippage_bps: float = Field(default=5.0, ge=0, le=50)
     fee_rate: float = Field(default=0.001, ge=0, le=0.01)
     max_drawdown_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    max_hours_open: Optional[int] = Field(default=72, ge=1, le=720)  # Auto-close stale trades
 
 
 @app.post("/api/paper-trading/start")
@@ -1082,6 +1083,7 @@ async def start_paper_trading(config: PaperTradingConfigRequest):
             slippage_bps=config.slippage_bps,
             fee_rate=config.fee_rate,
             max_drawdown_pct=config.max_drawdown_pct,
+            max_hours_open=config.max_hours_open,
         )
 
         result = await service.start(paper_config)

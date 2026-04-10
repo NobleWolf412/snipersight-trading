@@ -887,6 +887,8 @@ export interface PaperTradingConfigRequest {
   trailing_activation?: number;
   breakeven_after_target?: number;
   min_confluence?: number | null;
+  sensitivity_preset?: 'conservative' | 'balanced' | 'aggressive' | 'custom';
+  confluence_soft_floor?: number | null;
   symbols?: string[];
   exclude_symbols?: string[];
   majors?: boolean;

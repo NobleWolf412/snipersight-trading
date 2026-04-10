@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   Timer,
   TrendUp,
+  Funnel,
 } from '@phosphor-icons/react';
 import type { PaperTradingConfigRequest } from '@/utils/api';
 
@@ -41,6 +42,50 @@ const EXCHANGES = [
   { value: 'okx', label: 'OKX' },
   { value: 'bitget', label: 'Bitget' },
 ];
+
+type SensitivityPreset = 'conservative' | 'balanced' | 'aggressive' | 'custom';
+
+const SENSITIVITY_PRESETS: Record<SensitivityPreset, {
+  label: string;
+  gate: number;
+  floor: number;
+  description: string;
+  tradeFreq: string;
+  color: string;
+}> = {
+  conservative: {
+    label: 'Conservative',
+    gate: 72,
+    floor: 62,
+    description: 'Only takes the highest-conviction setups at full size. Near-misses still get entered at half position size.',
+    tradeFreq: '2–5 trades/week in normal markets',
+    color: 'text-blue-400 border-blue-500/40 bg-blue-500/10',
+  },
+  balanced: {
+    label: 'Balanced',
+    gate: 65,
+    floor: 55,
+    description: 'Good setups trade fully. Decent setups trade at half size. Noise is skipped. The default for most sessions.',
+    tradeFreq: '5–12 trades/week in normal markets',
+    color: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10',
+  },
+  aggressive: {
+    label: 'Aggressive',
+    gate: 58,
+    floor: 48,
+    description: 'Casts a wider net. Lower bar for full entries, captures weaker setups at half size. More signals, more noise.',
+    tradeFreq: '10–20+ trades/week in normal markets',
+    color: 'text-orange-400 border-orange-500/40 bg-orange-500/10',
+  },
+  custom: {
+    label: 'Custom',
+    gate: 65,
+    floor: 55,
+    description: 'Set your own gate and floor thresholds.',
+    tradeFreq: 'Depends on your settings',
+    color: 'text-purple-400 border-purple-500/40 bg-purple-500/10',
+  },
+};
 
 export function PaperTradingConfig({ config, onChange, disabled }: PaperTradingConfigProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -218,6 +263,131 @@ export function PaperTradingConfig({ config, onChange, disabled }: PaperTradingC
         </CardContent>
       </Card>
 
+      {/* Signal Sensitivity */}
+      <Card className="border-accent/20">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-lg heading-hud">
+            <Funnel size={20} className="text-accent" />
+            SIGNAL SENSITIVITY
+          </CardTitle>
+          <CardDescription>How aggressively the bot enters trades</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Preset Buttons */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {(Object.keys(SENSITIVITY_PRESETS) as SensitivityPreset[]).map((preset) => {
+              const p = SENSITIVITY_PRESETS[preset];
+              const isSelected = (config.sensitivity_preset ?? 'balanced') === preset;
+              return (
+                <button
+                  key={preset}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    if (preset !== 'custom') {
+                      updateConfig({
+                        sensitivity_preset: preset,
+                        min_confluence: null,
+                        confluence_soft_floor: null,
+                      });
+                    } else {
+                      updateConfig({
+                        sensitivity_preset: 'custom',
+                        min_confluence: config.min_confluence ?? 65,
+                        confluence_soft_floor: config.confluence_soft_floor ?? 55,
+                      });
+                    }
+                  }}
+                  className={`relative flex flex-col items-center justify-center gap-1 p-3 rounded-lg border text-sm font-semibold transition-all ${
+                    isSelected
+                      ? `${p.color} border-opacity-80`
+                      : 'border-border text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground'
+                  } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  <span className="text-xs font-bold tracking-wide uppercase">{p.label}</span>
+                  {preset !== 'custom' && (
+                    <span className="text-[10px] opacity-70 font-mono">{p.gate}/{p.floor}</span>
+                  )}
+                  {isSelected && (
+                    <span className="absolute top-1 right-1.5 text-[8px] font-bold opacity-60">✓</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Custom Inputs */}
+          {(config.sensitivity_preset ?? 'balanced') === 'custom' && (
+            <div className="grid grid-cols-2 gap-4 p-3 rounded-lg border border-purple-500/20 bg-purple-500/5">
+              <div className="space-y-1.5">
+                <Label htmlFor="custom-gate" className="text-xs">Gate — Full Size (%)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="custom-gate"
+                    type="number"
+                    min={40}
+                    max={100}
+                    step={1}
+                    value={config.min_confluence ?? 65}
+                    onChange={(e) => updateConfig({ min_confluence: parseFloat(e.target.value) || 65 })}
+                    disabled={disabled}
+                    className="font-mono w-20"
+                  />
+                  <span className="text-muted-foreground text-sm">%</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground/70">Score ≥ gate → 100% size</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="custom-floor" className="text-xs">Floor — Half Size (%)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="custom-floor"
+                    type="number"
+                    min={30}
+                    max={100}
+                    step={1}
+                    value={config.confluence_soft_floor ?? 55}
+                    onChange={(e) => updateConfig({ confluence_soft_floor: parseFloat(e.target.value) || 55 })}
+                    disabled={disabled}
+                    className="font-mono w-20"
+                  />
+                  <span className="text-muted-foreground text-sm">%</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground/70">Floor ≤ score &lt; gate → 50% size</p>
+              </div>
+            </div>
+          )}
+
+          {/* Description Panel */}
+          {(() => {
+            const preset = (config.sensitivity_preset ?? 'balanced') as SensitivityPreset;
+            const p = SENSITIVITY_PRESETS[preset];
+            const gate  = preset === 'custom' ? (config.min_confluence ?? 65) : p.gate;
+            const floor = preset === 'custom' ? (config.confluence_soft_floor ?? 55) : p.floor;
+            return (
+              <div className={`rounded-lg border p-3 space-y-2 ${p.color}`}>
+                <p className="text-xs leading-relaxed opacity-90">{p.description}</p>
+                <div className="grid grid-cols-3 gap-2 text-[10px] font-mono">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="opacity-60 uppercase tracking-wider">Full size</span>
+                    <span className="font-bold">≥ {gate}%</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="opacity-60 uppercase tracking-wider">Half size</span>
+                    <span className="font-bold">{floor}–{gate}%</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="opacity-60 uppercase tracking-wider">Skip</span>
+                    <span className="font-bold">&lt; {floor}%</span>
+                  </div>
+                </div>
+                <p className="text-[10px] opacity-60 italic">{p.tradeFreq}</p>
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
       {/* Automation Settings */}
       <Card className="border-primary/30">
         <CardHeader className="pb-4">
@@ -287,28 +457,6 @@ export function PaperTradingConfig({ config, onChange, disabled }: PaperTradingC
           <CollapsibleContent>
             <CardContent className="space-y-4 pt-0">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Min Confluence */}
-                <div className="space-y-2">
-                  <Label htmlFor="min-confluence">Min Confluence Score</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="min-confluence"
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={config.min_confluence ?? ''}
-                      placeholder="Auto (from mode)"
-                      onChange={(e) => updateConfig({
-                        min_confluence: e.target.value ? parseFloat(e.target.value) : null
-                      })}
-                      disabled={disabled}
-                      className="font-mono"
-                    />
-                    <span className="text-muted-foreground">%</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Leave empty to use mode default</p>
-                </div>
-
                 {/* Trailing Activation */}
                 <div className="space-y-2">
                   <Label htmlFor="trailing-activation">Trailing Activation (R)</Label>

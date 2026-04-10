@@ -159,9 +159,9 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
   trailing_stop: true,
   trailing_activation: 2.0, // WAS 1.0 - changed to 2.0 to give trade room to breathe
   breakeven_after_target: 1, // Move to BE after TP1 is hit
-  // Default to Stealth baseline (backend mode default) unless user explicitly tightens it.
-  // 82% is extremely strict and can lead to "12h → 1 trade" behavior.
-  min_confluence: null,
+  sensitivity_preset: 'balanced',
+  min_confluence: null,          // null = use preset gate (resolved backend-side)
+  confluence_soft_floor: null,   // null = use preset floor (resolved backend-side)
   symbols: [],
   exclude_symbols: [],
   majors: true,
@@ -438,14 +438,17 @@ export function TrainingGround() {
                       </div>
                     )}
                   </div>
-                  {/* Confluence Gate */}
+                  {/* Signal Sensitivity */}
                   <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-yellow-400/30 transition-colors">
-                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Confluence Gate</div>
-                    <div className="text-2xl font-mono font-bold text-yellow-400">
-                      {config.min_confluence != null ? `≥${config.min_confluence}%` : 'AUTO'}
+                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Sensitivity</div>
+                    <div className="text-xl font-mono font-bold text-yellow-400 capitalize">
+                      {config.sensitivity_preset ?? 'balanced'}
                     </div>
                     <div className="text-[9px] text-muted-foreground mt-1 opacity-60">
-                      {config.min_confluence != null ? 'Signal threshold' : 'Backend adaptive'}
+                      {config.sensitivity_preset === 'conservative' ? '72/62 gate/floor' :
+                       config.sensitivity_preset === 'aggressive' ? '58/48 gate/floor' :
+                       config.sensitivity_preset === 'custom' ? `${config.min_confluence ?? 65}/${config.confluence_soft_floor ?? 55}` :
+                       '65/55 gate/floor'}
                     </div>
                   </div>
                 </div>
@@ -664,44 +667,76 @@ export function TrainingGround() {
                         </div>
                       </div>
 
-                      {/* Min Confluence */}
-                      <div className="space-y-2">
+                      {/* Signal Sensitivity */}
+                      <div className="space-y-2 md:col-span-2">
                         <div className="flex justify-between items-center h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Min Confluence %</label>
-                          {recommendation?.recommended_confluence && (
-                            <div
-                              onClick={() => setConfig({ ...config, min_confluence: recommendation.recommended_confluence ?? 82 })}
-                              className="text-[8px] text-accent/80 hover:text-accent cursor-pointer border border-accent/20 bg-accent/5 px-1.5 py-0 rounded transition-colors"
-                            >
-                              Suggested: {recommendation.recommended_confluence}%
-                            </div>
-                          )}
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Signal Sensitivity</label>
+                          <span className="text-[8px] text-muted-foreground/50 font-mono italic">gate / floor / near-miss</span>
                         </div>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={config.min_confluence ?? ''}
-                          placeholder="AUTO"
-                          onChange={e => setConfig({ ...config, min_confluence: e.target.value === '' ? null : Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-yellow-400/40 text-foreground placeholder:text-yellow-400/60"
-                        />
                         <div className="flex gap-1.5">
-                          {[{ l: 'AUTO', v: null }, { l: '70', v: 70 }, { l: '75', v: 75 }, { l: '82', v: 82 }].map(({ l, v }) => (
-                            <button
-                              key={l}
-                              onClick={() => setConfig({ ...config, min_confluence: v })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.min_confluence === v
-                                  ? "bg-yellow-400/15 border-yellow-400/50 text-yellow-400"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {l}
-                            </button>
-                          ))}
+                          {([
+                            { key: 'conservative', label: 'Conservative', gate: 72, floor: 62, color: 'blue' },
+                            { key: 'balanced',     label: 'Balanced',     gate: 65, floor: 55, color: 'emerald' },
+                            { key: 'aggressive',   label: 'Aggressive',   gate: 58, floor: 48, color: 'orange' },
+                            { key: 'custom',       label: 'Custom',       gate: null, floor: null, color: 'purple' },
+                          ] as const).map(({ key, label, gate, floor, color }) => {
+                            const isSelected = (config.sensitivity_preset ?? 'balanced') === key;
+                            const selectedCls = {
+                              blue:    'bg-blue-500/15 border-blue-500/60 text-blue-400',
+                              emerald: 'bg-emerald-500/15 border-emerald-500/60 text-emerald-400',
+                              orange:  'bg-orange-500/15 border-orange-500/60 text-orange-400',
+                              purple:  'bg-purple-500/15 border-purple-500/60 text-purple-400',
+                            }[color];
+                            return (
+                              <button
+                                key={key}
+                                onClick={() => setConfig({
+                                  ...config,
+                                  sensitivity_preset: key,
+                                  min_confluence: key === 'custom' ? (config.min_confluence ?? 65) : null,
+                                  confluence_soft_floor: key === 'custom' ? (config.confluence_soft_floor ?? 55) : null,
+                                })}
+                                className={cn(
+                                  "flex-1 py-1.5 rounded text-[9px] font-mono font-bold tracking-tight border transition-all flex flex-col items-center gap-0.5",
+                                  isSelected ? selectedCls : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
+                                )}
+                              >
+                                <span>{label}</span>
+                                {gate !== null && <span className="opacity-60 text-[8px]">{gate}/{floor}</span>}
+                              </button>
+                            );
+                          })}
                         </div>
+                        {/* Custom gate/floor inputs */}
+                        {(config.sensitivity_preset ?? 'balanced') === 'custom' && (
+                          <div className="flex gap-3 mt-1">
+                            <div className="flex-1 space-y-1">
+                              <label className="text-[9px] text-purple-400/70 uppercase tracking-widest pl-0.5">Gate % (full size)</label>
+                              <input
+                                type="number" min="40" max="100"
+                                value={config.min_confluence ?? 65}
+                                onChange={e => setConfig({ ...config, min_confluence: Number(e.target.value) || 65 })}
+                                className="w-full h-10 bg-background border border-purple-500/30 rounded-lg px-3 font-mono text-center text-base focus:outline-none focus:border-purple-400/60 text-foreground"
+                              />
+                            </div>
+                            <div className="flex-1 space-y-1">
+                              <label className="text-[9px] text-purple-400/70 uppercase tracking-widest pl-0.5">Floor % (half size)</label>
+                              <input
+                                type="number" min="30" max="100"
+                                value={config.confluence_soft_floor ?? 55}
+                                onChange={e => setConfig({ ...config, confluence_soft_floor: Number(e.target.value) || 55 })}
+                                className="w-full h-10 bg-background border border-purple-500/30 rounded-lg px-3 font-mono text-center text-base focus:outline-none focus:border-purple-400/60 text-foreground"
+                              />
+                            </div>
+                          </div>
+                        )}
+                        {/* Description line */}
+                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">
+                          {config.sensitivity_preset === 'conservative' ? 'Highest-conviction only — 2–5 trades/week' :
+                           config.sensitivity_preset === 'aggressive'   ? 'Wider net, more near-misses — 10–20+ trades/week' :
+                           config.sensitivity_preset === 'custom'       ? 'Score ≥ gate → 100% size · floor ≤ score < gate → 50% size' :
+                           'Good setups full size, near-misses half size — 5–12 trades/week'}
+                        </p>
                       </div>
 
                       {/* Max Trade Duration */}
