@@ -1288,9 +1288,26 @@ class Orchestrator:
             _is_btc = "BTC" in symbol.upper()
 
             if context.smc_snapshot:
+                # For cascade-enabled modes (stealth), Gate 2 (regime alignment)
+                # is deferred to per-scale evaluation inside the cascade loop.
+                # Each cascade scale uses its own profile:
+                #   scalp    → precision      (Gate 2 exempt — LTF bounces can fade HTF trend)
+                #   intraday → intraday_aggressive (blocks strong_* only + CHoCH bypass)
+                #   swing    → stealth_balanced  (strict — unchanged)
+                # At session level we pass precision so Gates 1/3/4 (structural,
+                # BTC impulse, conflict density) still run without Gate 2 over-blocking
+                # scalp and intraday cascade candidates before the cascade starts.
+                _cascade_mode = bool(getattr(self.scanner_mode, "cascade_trade_types", None))
+                if _cascade_mode:
+                    import copy as _c
+                    _session_gate_config = _c.copy(self.config)
+                    _session_gate_config.profile = "precision"  # Gate 2 exempt; re-run per scale
+                else:
+                    _session_gate_config = self.config
+
                 _gate = run_pre_scoring_gates(
                     smc_snapshot=context.smc_snapshot,
-                    config=self.config,
+                    config=_session_gate_config,
                     direction=context.metadata.get("chosen_direction", "LONG"),
                     regime=_symbol_regime,
                     btc_impulse=_btc_impulse,
@@ -2577,8 +2594,22 @@ class Orchestrator:
     # Scale-specific config overrides per trade type.
     # These are applied on top of the mode's base config so TF responsibility,
     # stop widths, and ATR limits match the expected trade geometry.
+    #
+    # PROFILE ROUTING: Each scale sets its own `profile` so that Gate 2 (regime
+    # alignment) and confluence factor weights use the correct logic for the trade's
+    # timescale — rather than inheriting the session-level stealth_balanced profile
+    # and applying swing-strength regime gating to all three cascade scales equally.
+    #
+    #   swing    → "stealth_balanced"   strict gate (blocks down/up + strong), HTF-heavy weights
+    #   intraday → "intraday_aggressive" softer gate (blocks strong_* only + CHoCH bypass),
+    #                                    momentum-biased weights
+    #   scalp    → "precision"           fully exempt from Gate 2 (LTF bounces can fade
+    #                                    HTF trend), kill-zone-heavy weights, minimal HTF weight
+    #
+    # _build_cascade_config() applies these via setattr, so no other changes needed.
     _CASCADE_SCALE_SETTINGS: dict = {
         "swing": {
+            "profile": "stealth_balanced",
             "primary_planning_timeframe": "4h",
             "entry_timeframes": ("4h", "1h", "15m"),
             "structure_timeframes": ("1d", "4h", "1h", "15m"),
@@ -2589,6 +2620,7 @@ class Orchestrator:
             "allowed_trade_types": ("swing",),
         },
         "intraday": {
+            "profile": "intraday_aggressive",
             "primary_planning_timeframe": "1h",
             "entry_timeframes": ("1h", "15m", "5m"),
             "structure_timeframes": ("4h", "1h", "15m"),
@@ -2604,6 +2636,7 @@ class Orchestrator:
             "expected_trade_type": "intraday_cascade",
         },
         "scalp": {
+            "profile": "precision",
             "primary_planning_timeframe": "15m",
             "entry_timeframes": ("15m", "5m"),
             "structure_timeframes": ("1h", "15m", "5m"),
@@ -2648,9 +2681,47 @@ class Orchestrator:
         # Track every cascade attempt so diagnostics and signal_log can show them
         cascade_attempts: List[dict] = []
 
+        # Resolve BTC impulse and regime for per-scale gate calls.
+        _c_is_btc = "BTC" in context.symbol.upper()
+        _c_btc_impulse = None
+        if context.macro_context and not _c_is_btc:
+            _c_btc_dir = getattr(context.macro_context, "btc_dir", "flat") or "flat"
+            _c_btc_impulse = {
+                "up": "strong_up", "strong_up": "strong_up",
+                "down": "strong_down", "strong_down": "strong_down",
+            }.get(_c_btc_dir.lower())
+        _c_regime = context.metadata.get("symbol_regime")
+        _c_direction = context.metadata.get("chosen_direction", "LONG")
+
         for trade_type in cascade_types:
             try:
                 scale_cfg = self._build_cascade_config(trade_type)
+
+                # Re-run Gate 2 (regime alignment) with the scale-specific profile.
+                # Gates 1/3/4 already passed at session level; only the regime gate
+                # needs per-scale evaluation because its strictness is profile-dependent.
+                if context.smc_snapshot:
+                    _scale_gate = run_pre_scoring_gates(
+                        smc_snapshot=context.smc_snapshot,
+                        config=scale_cfg,
+                        direction=_c_direction,
+                        regime=_c_regime,
+                        btc_impulse=_c_btc_impulse,
+                        is_btc=_c_is_btc,
+                    )
+                    if not _scale_gate.passed:
+                        cascade_attempts.append({
+                            "type": trade_type,
+                            "result": "gate_rejected",
+                            "gate": _scale_gate.gate_name,
+                            "reason": _scale_gate.reason,
+                        })
+                        logger.info(
+                            "🔀 %s CASCADE %s → GATE [%s] rejected: %s",
+                            context.symbol, trade_type, _scale_gate.gate_name, _scale_gate.reason,
+                        )
+                        continue
+
                 plan = self._generate_trade_plan(
                     context,
                     current_price,
