@@ -2354,14 +2354,31 @@ def _derive_trade_type(
         )
         return "swing"
 
+    # Scalp cascade override: when the cascade is explicitly attempting the scalp scale,
+    # the config has already enforced max_stop_atr=2.5 and structure_timeframes=("15m","5m").
+    # If structure is LTF-only we should classify as scalp regardless of stop width —
+    # the 1.5 ATR hard gate below would otherwise create a dead zone (1.5–2.5 ATR) where
+    # valid LTF setups fall through to intraday and get rejected by allowed_trade_types.
+    if expected_trade_type == "scalp" and ltf_only:
+        logger.info(
+            f"✅ SCALP (scalp cascade + LTF-only structure: "
+            f"stop={stop_distance_atr:.2f}ATR, target={target_move_pct:.2f}%)"
+        )
+        return "scalp"
+
     # Tight stops with LTF-only structure = scalp
     if stop_distance_atr <= 1.5 and ltf_only:
         logger.info(f"✅ SCALP (tight stop: {stop_distance_atr:.2f}ATR <= 1.5ATR + LTF only)")
         return "scalp"
 
-    # Small moves with LTF context
-    if target_move_pct < 0.6 and primary_tf in LTF:
-        logger.info(f"✅ SCALP (small move: {target_move_pct:.2f}% < 0.6% + LTF primary)")
+    # Small moves with LTF context.
+    # In scalp cascade mode crypto scalps routinely target 0.8–2.0%, so the 0.6%
+    # threshold is too conservative — raise it to 2.0% for scalp-specific runs.
+    _small_target_threshold = 2.0 if expected_trade_type == "scalp" else 0.6
+    if target_move_pct < _small_target_threshold and primary_tf in LTF:
+        logger.info(
+            f"✅ SCALP (small move: {target_move_pct:.2f}% < {_small_target_threshold:.1f}% + LTF primary)"
+        )
         return "scalp"
 
     # MTF or LTF structure with moderate moves = intraday (SURGICAL, STRIKE)
