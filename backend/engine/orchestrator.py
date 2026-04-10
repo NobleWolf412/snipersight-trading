@@ -2639,12 +2639,21 @@ class Orchestrator:
             "profile": "precision",
             "primary_planning_timeframe": "15m",
             "entry_timeframes": ("15m", "5m"),
-            "structure_timeframes": ("1h", "15m", "5m"),
+            # Structure is LTF-only so _derive_trade_type sees ltf_only=True and
+            # correctly classifies the plan as "scalp" via Rule 5 (stop ≤ 1.5 ATR
+            # + ltf_only).  Including 1h here causes ltf_only=False, which falls
+            # through to the intraday fallback and gets rejected by allowed_trade_types.
+            # 1h levels are still available for target discovery via target_timeframes.
+            "structure_timeframes": ("15m", "5m"),
             "stop_timeframes": ("15m", "5m"),
             "target_timeframes": ("1h", "15m"),
             "min_stop_atr": 0.2,
             "max_stop_atr": 2.5,
             "allowed_trade_types": ("scalp",),
+            # Sentinel: raises swing_target_threshold to 8% (same as intraday_cascade
+            # does for intraday scale) so a coincidentally large 15m target doesn't
+            # get auto-promoted to swing and rejected by allowed_trade_types.
+            "expected_trade_type": "scalp",
         },
     }
 

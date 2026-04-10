@@ -1251,14 +1251,22 @@ class PaperTradingService:
             assert orch is not None
             orch.apply_mode(self.mode)
             
-            # Apply sensitivity preset thresholds to the orchestrator's ScanConfig
-            # so the scorer's setup_state and convergence use the same gate.
-            if getattr(conf, "min_confluence", None) is not None:
-                orch.config.min_confluence_score = conf.min_confluence
-            if getattr(conf, "confluence_soft_floor", None) is not None:
-                orch.config.confluence_soft_floor = conf.confluence_soft_floor
-            if getattr(conf, "sensitivity_preset", None):
-                orch.config.sensitivity_preset = conf.sensitivity_preset
+            # Apply sensitivity preset or explicit min_confluence override
+            _rt_preset = (getattr(conf, "sensitivity_preset", None) or "").lower()
+            _rt_min_conf = getattr(conf, "min_confluence", None)
+            if _rt_min_conf is not None:
+                # Explicit numeric override wins
+                orch.config.min_confluence_score = _rt_min_conf
+                _rt_floor = getattr(conf, "confluence_soft_floor", None)
+                if _rt_floor is not None:
+                    orch.config.confluence_soft_floor = _rt_floor
+                else:
+                    orch.config.confluence_soft_floor = max(0.0, _rt_min_conf - 10.0)
+            elif _rt_preset in _SENSITIVITY_PRESETS:
+                orch.config.min_confluence_score = _SENSITIVITY_PRESETS[_rt_preset]["gate"]
+                orch.config.confluence_soft_floor = _SENSITIVITY_PRESETS[_rt_preset]["floor"]
+            if _rt_preset:
+                orch.config.sensitivity_preset = _rt_preset
                 
             loop = asyncio.get_running_loop()
             trade_plans, rejection_summary = await loop.run_in_executor(
@@ -1355,6 +1363,7 @@ class PaperTradingService:
                         mock_plan,
                         result="filtered",
                         reason=item.get('reason', f"Scanner Filter: {reason_type}"),
+                        gate_name=reason_type,  # machine-readable gate label for shutdown report analysis
                         # Gate category — surfaces as badge in Signal Intelligence panel
                         reason_type=reason_type,
                         # Score vs threshold — lets the UI draw a gap bar
@@ -2643,27 +2652,107 @@ class PaperTradingService:
                 total_signals = len(all_signals)
                 executed = [s for s in all_signals if s.get("result") == "executed"]
                 filtered = [s for s in all_signals if s.get("result") == "filtered"]
-                pending = [s for s in all_signals if s.get("result") == "pending"]
+                pending  = [s for s in all_signals if s.get("result") == "pending"]
 
                 lines.append(f"**Total signals processed:** {total_signals}  ")
                 lines.append(f"**Executed:** {len(executed)} | **Filtered:** {len(filtered)} | **Pending:** {len(pending)}\n")
 
-                # Rejection reasons breakdown
-                reason_counts: Dict[str, int] = {}
+                # ── Gate Kill Breakdown ──────────────────────────────────────────────────
+                gate_counts: Dict[str, int] = {}
                 for sig in filtered:
-                    reason = sig.get("reason", "unknown")
-                    reason_counts[reason] = reason_counts.get(reason, 0) + 1
-
-                if reason_counts:
-                    lines.append("### Filter Reasons\n")
-                    lines.append("| Reason | Count | % of Filtered |")
-                    lines.append("|--------|-------|---------------|")
-                    for reason, count in sorted(reason_counts.items(), key=lambda x: -x[1]):
+                    gate = sig.get("gate_name") or sig.get("reason_type") or "unknown"
+                    gate_counts[gate] = gate_counts.get(gate, 0) + 1
+                if gate_counts:
+                    lines.append("### Gate Kill Breakdown\n")
+                    lines.append("| Gate | Count | % of Filtered |")
+                    lines.append("|------|-------|---------------|")
+                    for gate, count in sorted(gate_counts.items(), key=lambda x: -x[1]):
                         pct = count / len(filtered) * 100 if filtered else 0
-                        lines.append(f"| {reason} | {count} | {pct:.1f}% |")
+                        lines.append(f"| {gate} | {count} | {pct:.1f}% |")
                     lines.append("")
 
-                # Rejected signals by symbol
+                # ── Score Distribution Histogram ─────────────────────────────────────────
+                score_buckets = {"<40%": 0, "40–50%": 0, "50–55%": 0, "55–60%": 0, "60–65%": 0, "65–70%": 0, "≥70%": 0}
+                for sig in filtered:
+                    sc = sig.get("confluence", 0) or 0
+                    if sc < 40:   score_buckets["<40%"] += 1
+                    elif sc < 50: score_buckets["40–50%"] += 1
+                    elif sc < 55: score_buckets["50–55%"] += 1
+                    elif sc < 60: score_buckets["55–60%"] += 1
+                    elif sc < 65: score_buckets["60–65%"] += 1
+                    elif sc < 70: score_buckets["65–70%"] += 1
+                    else:         score_buckets["≥70%"] += 1
+                lines.append("### Score Distribution (Filtered Signals)\n")
+                lines.append("| Band | Count |")
+                lines.append("|------|-------|")
+                for band, cnt in score_buckets.items():
+                    bar = "█" * min(cnt, 20)
+                    lines.append(f"| {band} | {cnt} {bar} |")
+                lines.append("")
+
+                # ── Near-Miss Signals ────────────────────────────────────────────────────
+                # Signals that passed soft floor (55%) but didn't reach hard gate (65%) — closest-to-firing
+                gate_threshold = getattr(self.orchestrator.config, "min_confluence_score", 65.0) if self.orchestrator else 65.0
+                soft_floor     = getattr(self.orchestrator.config, "confluence_soft_floor", None) if self.orchestrator else None
+                if soft_floor is None:
+                    soft_floor = max(0.0, gate_threshold - 10.0)
+                near_misses = [
+                    s for s in filtered
+                    if (s.get("confluence") or 0) >= soft_floor
+                    and (s.get("confluence") or 0) < gate_threshold
+                ]
+                if near_misses:
+                    lines.append(f"### Near-Miss Signals ({len(near_misses)} signals scored {soft_floor:.0f}–{gate_threshold:.0f}%)\n")
+                    lines.append("| Symbol | Dir | Score | Missing Factors | Gate |")
+                    lines.append("|--------|-----|-------|-----------------|------|")
+                    for nm in sorted(near_misses, key=lambda x: -(x.get("confluence") or 0))[:20]:
+                        missing = ", ".join(nm.get("convergence_missing", [])[:3]) or "—"
+                        lines.append(
+                            f"| {nm.get('symbol','?')} | {nm.get('direction','?')} | "
+                            f"{nm.get('confluence',0):.1f}% | {missing} | {nm.get('gate_name','?')} |"
+                        )
+                    if len(near_misses) > 20:
+                        lines.append(f"\n*...and {len(near_misses) - 20} more near-miss signals.*")
+                    lines.append("")
+                else:
+                    lines.append(f"*No near-miss signals in the {soft_floor:.0f}–{gate_threshold:.0f}% band.*\n")
+
+                # ── Missing Critical Factor Frequency ────────────────────────────────────
+                factor_absent: Dict[str, int] = {}
+                for sig in filtered:
+                    for f in sig.get("convergence_missing", []):
+                        factor_absent[f] = factor_absent.get(f, 0) + 1
+                if factor_absent:
+                    lines.append("### Most Frequently Missing Critical Factors\n")
+                    lines.append("| Factor | Absent In | % of Filtered |")
+                    lines.append("|--------|-----------|---------------|")
+                    for factor, cnt in sorted(factor_absent.items(), key=lambda x: -x[1])[:10]:
+                        pct = cnt / len(filtered) * 100 if filtered else 0
+                        lines.append(f"| {factor} | {cnt} | {pct:.1f}% |")
+                    lines.append("")
+
+                # ── Per-Symbol Closest Approach ───────────────────────────────────────────
+                symbol_best: Dict[str, dict] = {}
+                all_symbols = set(s.get("symbol") for s in all_signals)
+                for sym in all_symbols:
+                    sym_signals = [s for s in all_signals if s.get("symbol") == sym]
+                    best = max(sym_signals, key=lambda x: x.get("confluence") or 0)
+                    symbol_best[sym] = best
+                if symbol_best:
+                    lines.append("### Per-Symbol Closest Approach\n")
+                    lines.append("| Symbol | Best Score | Gate | Top Missing | Executed? |")
+                    lines.append("|--------|------------|------|-------------|-----------|")
+                    for sym, best in sorted(symbol_best.items(), key=lambda x: -(x[1].get("confluence") or 0)):
+                        missing_top = (best.get("convergence_missing", []) or [])
+                        missing_str = missing_top[0] if missing_top else "—"
+                        did_exec = "✅" if any(s.get("symbol") == sym and s.get("result") == "executed" for s in all_signals) else "❌"
+                        lines.append(
+                            f"| {sym} | {best.get('confluence', 0):.1f}% | "
+                            f"{best.get('gate_name', '?')} | {missing_str} | {did_exec} |"
+                        )
+                    lines.append("")
+
+                # ── Rejections by Symbol ─────────────────────────────────────────────────
                 symbol_rejected: Dict[str, int] = {}
                 for sig in filtered:
                     sym = sig.get("symbol", "?")
@@ -2672,7 +2761,6 @@ class PaperTradingService:
                     lines.append("### Rejections by Symbol\n")
                     lines.append("| Symbol | Rejected | Executed |")
                     lines.append("|--------|----------|----------|")
-                    all_symbols = set(s.get("symbol") for s in all_signals)
                     for sym in sorted(all_symbols):
                         rej = symbol_rejected.get(sym, 0)
                         exe = len([s for s in executed if s.get("symbol") == sym])
