@@ -2699,6 +2699,59 @@ class Orchestrator:
             setattr(cfg, attr, val)
         return cfg
 
+    def _derive_cascade_direction(
+        self,
+        smc_snapshot: "SMCSnapshot",
+        structure_tfs: set,
+        fallback: str,
+    ) -> str:
+        """
+        Lightweight direction scoring for a cascade scale.
+
+        Counts grade A/B OBs and BOS breaks on the scale's structure
+        timeframes to determine which direction the scale's structure
+        actually favours — independent of the HTF-dominant session direction.
+
+        Weighting:
+          - Grade A OB  → 2 points (strong, institutional)
+          - Grade B OB  → 1 point  (moderate)
+          - BOS break   → 1 point  (trend continuation confirmation)
+          - CHoCH       → excluded (reversal marker, not continuation)
+
+        Falls back to the session-level direction on a tie (zero score counts
+        as tie so an empty TF slice doesn't flip direction arbitrarily).
+        """
+        bull = 0
+        bear = 0
+
+        for ob in smc_snapshot.order_blocks:
+            if ob.timeframe not in structure_tfs:
+                continue
+            if ob.invalidated or ob.grade not in ("A", "B"):
+                continue
+            weight = 2 if ob.grade == "A" else 1
+            if ob.direction == "bullish":
+                bull += weight
+            else:
+                bear += weight
+
+        for sb in smc_snapshot.structural_breaks:
+            if sb.timeframe not in structure_tfs:
+                continue
+            if getattr(sb, "break_type", "BOS").upper() == "CHOCH":
+                continue  # CHoCH is a reversal marker — not a directional vote
+            sb_dir = getattr(sb, "direction", "bullish")
+            if sb_dir == "bullish":
+                bull += 1
+            else:
+                bear += 1
+
+        if bear > bull:
+            return "SHORT"
+        if bull > bear:
+            return "LONG"
+        return fallback  # Tie or no signals on these TFs → keep session direction
+
     def _cascade_plan_generation(
         self,
         context: "SniperContext",
@@ -2735,20 +2788,51 @@ class Orchestrator:
                 "down": "strong_down", "strong_down": "strong_down",
             }.get(_c_btc_dir.lower())
         _c_regime = context.metadata.get("symbol_regime")
-        _c_direction = context.metadata.get("chosen_direction", "LONG")
+        _session_direction = context.metadata.get("chosen_direction", "LONG")
 
         for trade_type in cascade_types:
             try:
                 scale_cfg = self._build_cascade_config(trade_type)
 
-                # Re-run Gate 2 (regime alignment) with the scale-specific profile.
-                # Gates 1/3/4 already passed at session level; only the regime gate
-                # needs per-scale evaluation because its strictness is profile-dependent.
+                # ── Per-scale direction scoring ───────────────────────────────────
+                # The session-level direction is HTF-dominated (1D/4H structure wins
+                # the bull_score vs bear_score vote).  For intraday and scalp scales,
+                # the relevant timeframes are MTF/LTF — those may favour the opposite
+                # direction.  Re-derive direction using only this scale's structure TFs
+                # so each scale trades the structure that actually matters for its
+                # geometry, rather than inheriting a swing-biased direction decision.
+                _scale_structure_tfs = set(
+                    self._CASCADE_SCALE_SETTINGS.get(trade_type, {}).get(
+                        "structure_timeframes", ()
+                    )
+                )
+                _scale_direction = (
+                    self._derive_cascade_direction(
+                        smc_snapshot=context.smc_snapshot,
+                        structure_tfs=_scale_structure_tfs,
+                        fallback=_session_direction,
+                    )
+                    if context.smc_snapshot and _scale_structure_tfs
+                    else _session_direction
+                )
+                if _scale_direction != _session_direction:
+                    logger.info(
+                        "🔀 %s CASCADE %s: direction %s→%s "
+                        "(scale TF structure override, session was %s)",
+                        context.symbol, trade_type,
+                        _session_direction, _scale_direction, _session_direction,
+                    )
+                # Write into context so _generate_trade_plan reads the right direction
+                context.metadata["chosen_direction"] = _scale_direction
+
+                # Re-run ALL pre-scoring gates with the scale's profile AND direction.
+                # Conflict-density must be evaluated with the scale direction because
+                # opposing OBs differ per TF slice.
                 if context.smc_snapshot:
                     _scale_gate = run_pre_scoring_gates(
                         smc_snapshot=context.smc_snapshot,
                         config=scale_cfg,
-                        direction=_c_direction,
+                        direction=_scale_direction,
                         regime=_c_regime,
                         btc_impulse=_c_btc_impulse,
                         is_btc=_c_is_btc,
