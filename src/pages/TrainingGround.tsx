@@ -155,7 +155,7 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
   leverage: 1, // Default 1x
   max_drawdown_pct: 10, // 10% session drawdown kill-switch
   duration_hours: 24,
-  scan_interval_minutes: 5,
+  scan_interval_minutes: 2,
   trailing_stop: true,
   trailing_activation: 2.0, // WAS 1.0 - changed to 2.0 to give trade room to breathe
   breakeven_after_target: 1, // Move to BE after TP1 is hit
@@ -523,7 +523,7 @@ export function TrainingGround() {
                         </div>
                         <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
                           <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Scan Every</div>
-                          <div className="text-sm font-mono font-bold text-accent">{config.scan_interval_minutes ?? 5}m</div>
+                          <div className="text-sm font-mono font-bold text-accent">{config.scan_interval_minutes ?? 2}m</div>
                         </div>
                       </div>
                     </div>
@@ -809,7 +809,7 @@ export function TrainingGround() {
                         <div className="flex items-center justify-between h-4 mb-0.5">
                           <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Scan Every (m)</label>
                           <div className="text-[8px] text-accent/60 border border-accent/20 bg-accent/5 px-1.5 py-0 rounded">
-                            Suggested: 5m
+                            Suggested: 2m
                           </div>
                         </div>
                         <input

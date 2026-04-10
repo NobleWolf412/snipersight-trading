@@ -1025,7 +1025,7 @@ class PaperTradingConfigRequest(BaseModel):
     max_positions: int = Field(default=3, ge=1, le=10)
     leverage: int = Field(default=1, ge=1, le=100)
     duration_hours: int = Field(default=24, ge=0, le=168)  # 0 = manual, max 1 week
-    scan_interval_minutes: int = Field(default=5, ge=1, le=60)
+    scan_interval_minutes: int = Field(default=2, ge=1, le=60)
     trailing_stop: bool = True
     trailing_activation: float = Field(default=1.5, ge=1.0, le=5.0)
     breakeven_after_target: int = Field(default=1, ge=1, le=3)

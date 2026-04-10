@@ -114,7 +114,7 @@ class PaperTradingConfig:
     max_positions: int = 3
     leverage: int = 1
     duration_hours: int = 24
-    scan_interval_minutes: int = 5
+    scan_interval_minutes: int = 2
     trailing_stop: bool = True
     trailing_activation: float = 1.5
     breakeven_after_target: int = 1
@@ -825,7 +825,7 @@ class PaperTradingService:
                 await asyncio.sleep(5)
                 continue
 
-            interval = (config.scan_interval_minutes or 5) * 60
+            interval = (config.scan_interval_minutes or 2) * 60
 
             try:
                 await self._run_scan()

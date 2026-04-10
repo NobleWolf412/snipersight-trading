@@ -408,8 +408,8 @@ export function PaperTradingConfig({ config, onChange, disabled }: PaperTradingC
                   type="number"
                   min={1}
                   max={60}
-                  value={config.scan_interval_minutes ?? 5}
-                  onChange={(e) => updateConfig({ scan_interval_minutes: parseInt(e.target.value) || 5 })}
+                  value={config.scan_interval_minutes ?? 2}
+                  onChange={(e) => updateConfig({ scan_interval_minutes: parseInt(e.target.value) || 2 })}
                   disabled={disabled}
                   className="font-mono w-20"
                 />
