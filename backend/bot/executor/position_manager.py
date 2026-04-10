@@ -544,6 +544,31 @@ class PositionManager:
         # Also checks whether price is making progress toward targets.
         hours_open = (datetime.now(timezone.utc) - position.created_at).total_seconds() / 3600.0
 
+        # --- Hard max_hours_open cap ---
+        # Enforced BEFORE adaptive stagnation so the user's configured cap is
+        # always respected regardless of progress/stagnation state.
+        # adaptive stagnation can be more lenient for trending regimes (1.5× base),
+        # which would silently exceed a user-set max_hours_open without this check.
+        if self.max_hours_open and hours_open >= self.max_hours_open:
+            logger.warning(
+                f"MAX_HOURS_OPEN: {position.position_id} | {position.symbol} "
+                f"open {hours_open:.1f}h >= hard cap {self.max_hours_open:.1f}h | "
+                f"P&L: {position.pnl_percentage:.2f}% | type={position.trade_type}"
+            )
+            if self.order_executor:
+                success = await self._execute_exit(position, current_price, "MAX_HOURS_OPEN")
+                if not success:
+                    return  # Retry next tick
+            with self._lock:
+                position.update_unrealized_pnl(current_price)
+                position.realized_pnl += position.unrealized_pnl
+                position.unrealized_pnl = 0.0
+                position.status = PositionStatus.CLOSED
+                position.exit_reason = "max_hours_open"
+                position.exit_price = current_price
+                position.remaining_quantity = 0.0
+            return
+
         # Sample price hourly for progress detection
         self._record_price_sample(position, current_price)
 

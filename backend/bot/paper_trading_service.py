@@ -981,7 +981,15 @@ class PaperTradingService:
                                     ):
                                         ghost_qty = executor.positions.get(plan.symbol, 0.0)
                                         if abs(ghost_qty) > 1e-9:
-                                            ghost_price = self._price_cache.get(plan.symbol, 0.0)
+                                            # Prefer live price; fall back to the partial fill
+                                            # price recorded on the order so cleanup never
+                                            # silently skips when the price cache is cold.
+                                            ghost_price = (
+                                                self._price_cache.get(plan.symbol)
+                                                or getattr(expired_order, "avg_fill_price", 0.0)
+                                                or getattr(expired_order, "fill_price", 0.0)
+                                                or 0.0
+                                            )
                                             logger.warning(
                                                 f"GHOST POSITION CLEANUP: {plan.symbol} "
                                                 f"| partial fill {expired_order.filled_quantity:.6f} "
