@@ -23,6 +23,7 @@ import uuid
 from pathlib import Path
 import time
 
+from backend.strategy.smc.sessions import get_current_kill_zone
 from backend.bot.executor.paper_executor import PaperExecutor, OrderStatus, OrderType
 from backend.bot.executor.position_manager import PositionManager, PositionStatus
 from backend.bot.telemetry.storage import TelemetryStorage
@@ -45,6 +46,23 @@ _PENDING_TTL_MINUTES: Dict[str, float] = {
     "swing": 240.0,    # 4 hours
     "intraday": 60.0,  # 1 hour
     "scalp": 10.0,     # 2 scan cycles
+}
+
+# Signal Sensitivity preset definitions.
+# gate  = minimum score for full-size entry
+# floor = minimum score for near-miss half-size entry; below floor = skipped
+# Tier ordering: aggressive < balanced < conservative (tightening direction)
+_SENSITIVITY_PRESETS: Dict[str, Dict[str, float]] = {
+    "conservative": {"gate": 72.0, "floor": 62.0},
+    "balanced":     {"gate": 65.0, "floor": 55.0},
+    "aggressive":   {"gate": 58.0, "floor": 48.0},
+}
+# One tier up from each preset (for drawdown-linked tightening)
+_PRESET_TIER_UP: Dict[str, str] = {
+    "aggressive":   "balanced",
+    "balanced":     "conservative",
+    "conservative": "conservative",   # already at top
+    "custom":       "conservative",   # custom always caps at conservative
 }
 
 
@@ -405,25 +423,20 @@ class PaperTradingService:
                 else self.mode.min_confluence_score
             )
 
-            # Resolve soft floor from sensitivity preset.
+            # Resolve soft floor from sensitivity preset using module-level dict.
             # "custom" uses the explicit confluence_soft_floor value;
             # named presets carry their own floor regardless of min_confluence.
-            _PRESET_THRESHOLDS: dict = {
-                "conservative": {"gate": 72.0, "floor": 62.0},
-                "balanced":     {"gate": 65.0, "floor": 55.0},
-                "aggressive":   {"gate": 58.0, "floor": 48.0},
-            }
             _preset = (config.sensitivity_preset or "balanced").lower()
-            if _preset in _PRESET_THRESHOLDS:
+            if _preset in _SENSITIVITY_PRESETS:
                 # Named preset: override gate + floor with preset values unless
                 # the user also sent an explicit min_confluence override (custom gate).
-                _preset_gate  = _PRESET_THRESHOLDS[_preset]["gate"]
-                _preset_floor = _PRESET_THRESHOLDS[_preset]["floor"]
+                _preset_gate  = _SENSITIVITY_PRESETS[_preset]["gate"]
+                _preset_floor = _SENSITIVITY_PRESETS[_preset]["floor"]
                 if config.min_confluence is None:
                     _min_conf = _preset_gate
                 _soft_floor = _preset_floor
             else:
-                # "custom" preset: use explicit floor if provided, else no band
+                # "custom" preset: use explicit floor if provided, else 10-point band
                 _soft_floor = config.confluence_soft_floor if config.confluence_soft_floor is not None else max(0.0, _min_conf - 10.0)
 
             scan_config = ScanConfig(
@@ -1608,23 +1621,40 @@ class PaperTradingService:
         if soft_floor is None:
             soft_floor = max(0.0, min_score - 10.0)   # fallback: 10-point band
 
+        _preset = getattr(config, "sensitivity_preset", "balanced")
+
+        # Apply dynamic adjustments (Phase 2: drawdown tightening,
+        # Phase 3: kill zone floor relaxation)
+        gate_r, floor_r, _adjustments = self._get_effective_sensitivity_thresholds(
+            base_gate=min_score,
+            base_floor=soft_floor,
+            preset=_preset,
+        )
+        gate_r  = round(gate_r, 1)
+        floor_r = round(floor_r, 1)
         score_r = round(plan.confidence_score, 1)
-        gate_r  = round(min_score, 1)
-        floor_r = round(soft_floor, 1)
+
+        if _adjustments:
+            logger.debug(
+                "Sensitivity thresholds adjusted for %s %s: %s",
+                plan.symbol, plan.direction, " | ".join(_adjustments),
+            )
 
         if score_r >= gate_r:
             size_modifier = 1.0   # full conviction — normal execution
         elif score_r >= floor_r:
             size_modifier = 0.5   # near-miss — half size, still trade
+            _adj_note = f" [{'; '.join(_adjustments)}]" if _adjustments else ""
             logger.info(
                 f"NEAR-MISS ENTRY: {plan.symbol} {plan.direction} "
-                f"| confluence {score_r:.1f}% in band [{floor_r:.0f}–{gate_r:.0f}%] "
+                f"| confluence {score_r:.1f}% in band [{floor_r:.0f}–{gate_r:.0f}%]{_adj_note} "
                 f"| taking at 50% position size"
             )
         else:
+            _adj_note = f" [{'; '.join(_adjustments)}]" if _adjustments else ""
             reason = (
                 f"Confluence {score_r:.1f}% below floor {floor_r:.0f}% "
-                f"(gate={gate_r:.0f}%, preset={getattr(config, 'sensitivity_preset', 'balanced')})"
+                f"(gate={gate_r:.0f}%, preset={_preset}{_adj_note})"
             )
             logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
             self._log_signal(
@@ -1825,6 +1855,94 @@ class PaperTradingService:
         for pos in open_positions:
             pos.regime_trend = self._current_regime_trend
             pos.regime_volatility = self._current_regime_volatility
+
+    def _get_current_drawdown_pct(self) -> float:
+        """Return the live peak-to-trough drawdown for the current session (0.0 if none).
+
+        Distinct from stats.max_drawdown (session worst-ever) — this reflects the
+        current drawdown from peak so dynamic gate tightening responds to live
+        conditions rather than a historical worst-case that may have recovered.
+        """
+        if not self.executor or self._peak_equity <= 0:
+            return 0.0
+        current_equity = self.executor.get_balance()
+        if self.position_manager:
+            current_equity += sum(
+                pos.unrealized_pnl
+                for pos in self.position_manager.positions.values()
+                if pos.status in [PositionStatus.OPEN, PositionStatus.PARTIAL]
+            )
+        current_equity = max(0.0, current_equity)
+        if current_equity >= self._peak_equity:
+            return 0.0
+        return (self._peak_equity - current_equity) / self._peak_equity * 100
+
+    def _get_effective_sensitivity_thresholds(
+        self,
+        base_gate: float,
+        base_floor: float,
+        preset: str,
+    ) -> tuple:
+        """Apply dynamic adjustments to the sensitivity gate and floor.
+
+        Two automatic adjustments run on every signal evaluation:
+
+        Phase 2 — Drawdown-linked gate tightening:
+          current drawdown ≥ 8% → hard cap to conservative (gate=72, floor=62)
+            regardless of chosen preset — prevents digging deeper with weak setups.
+          current drawdown ≥ 5% → shift up one preset tier automatically.
+            aggressive → balanced, balanced → conservative, conservative stays.
+
+        Phase 3 — Kill zone floor relaxation:
+          Active kill zone detected → floor -= 3 (min 40).
+          Kill zone timing is already a quality signal confirmed by time-of-day;
+          the floor can widen slightly to capture setups that timing has validated.
+          Gate is unchanged — full-size entries still need the same quality bar.
+
+        Returns:
+            (effective_gate, effective_floor, adjustments: list[str])
+            adjustments is a list of human-readable strings describing what fired,
+            empty list if no adjustments were made.
+        """
+        gate  = base_gate
+        floor = base_floor
+        adjustments: list = []
+
+        # ── Phase 2: Drawdown-linked gate tightening ──────────────────────────
+        current_dd = self._get_current_drawdown_pct()
+        if current_dd >= 8.0:
+            new_gate, new_floor = 72.0, 62.0   # hard cap to conservative
+            if gate != new_gate or floor != new_floor:
+                adjustments.append(
+                    f"drawdown {current_dd:.1f}% ≥ 8% → hard-capped at conservative "
+                    f"(gate {gate:.0f}→{new_gate:.0f}, floor {floor:.0f}→{new_floor:.0f})"
+                )
+            gate, floor = new_gate, new_floor
+        elif current_dd >= 5.0:
+            tier_name = _PRESET_TIER_UP.get(preset, "conservative")
+            tier = _SENSITIVITY_PRESETS.get(tier_name, _SENSITIVITY_PRESETS["conservative"])
+            new_gate, new_floor = tier["gate"], tier["floor"]
+            if gate != new_gate or floor != new_floor:
+                adjustments.append(
+                    f"drawdown {current_dd:.1f}% ≥ 5% → shifted to {tier_name} "
+                    f"(gate {gate:.0f}→{new_gate:.0f}, floor {floor:.0f}→{new_floor:.0f})"
+                )
+            gate, floor = new_gate, new_floor
+
+        # ── Phase 3: Kill zone floor relaxation ───────────────────────────────
+        try:
+            active_kz = get_current_kill_zone(datetime.now(timezone.utc))
+            if active_kz is not None:
+                relaxed_floor = max(40.0, floor - 3.0)
+                if relaxed_floor != floor:
+                    adjustments.append(
+                        f"kill zone active ({active_kz}) → floor {floor:.0f}→{relaxed_floor:.0f}"
+                    )
+                floor = relaxed_floor
+        except Exception:
+            pass  # never let kill zone lookup block a signal
+
+        return gate, floor, adjustments
 
     def _calculate_position_size(self, plan: TradePlan, size_modifier: float = 1.0) -> float:
         """
