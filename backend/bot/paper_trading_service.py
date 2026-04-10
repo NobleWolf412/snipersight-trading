@@ -76,7 +76,13 @@ class PaperTradingConfig:
         trailing_stop: Enable trailing stops
         trailing_activation: R-multiple to activate trailing
         breakeven_after_target: Move SL to entry after Nth target
-        min_confluence: Minimum confluence score to take trade (None = use mode default)
+        min_confluence: Minimum confluence score for full-size entry (None = use mode default).
+            Part of the Signal Sensitivity system — acts as the "full-size gate".
+        confluence_soft_floor: Signals between this and min_confluence execute at half size.
+            Signals below the floor are skipped entirely. None = no near-miss band
+            (hard gate only). Resolved automatically from sensitivity_preset if not set.
+        sensitivity_preset: Which preset the user chose — "conservative", "balanced",
+            "aggressive", or "custom". Drives gate/floor defaults and appears in logs.
         symbols: Specific pairs to trade (empty = use scanner defaults)
         exclude_symbols: Pairs to exclude
         slippage_bps: Simulated slippage (basis points)
@@ -95,6 +101,8 @@ class PaperTradingConfig:
     trailing_activation: float = 1.5
     breakeven_after_target: int = 1
     min_confluence: Optional[float] = None
+    confluence_soft_floor: Optional[float] = None
+    sensitivity_preset: str = "balanced"
     symbols: List[str] = field(default_factory=list)
     exclude_symbols: List[str] = field(default_factory=list)
     majors: bool = True
@@ -396,10 +404,34 @@ class PaperTradingService:
                 if config.min_confluence is not None
                 else self.mode.min_confluence_score
             )
+
+            # Resolve soft floor from sensitivity preset.
+            # "custom" uses the explicit confluence_soft_floor value;
+            # named presets carry their own floor regardless of min_confluence.
+            _PRESET_THRESHOLDS: dict = {
+                "conservative": {"gate": 72.0, "floor": 62.0},
+                "balanced":     {"gate": 65.0, "floor": 55.0},
+                "aggressive":   {"gate": 58.0, "floor": 48.0},
+            }
+            _preset = (config.sensitivity_preset or "balanced").lower()
+            if _preset in _PRESET_THRESHOLDS:
+                # Named preset: override gate + floor with preset values unless
+                # the user also sent an explicit min_confluence override (custom gate).
+                _preset_gate  = _PRESET_THRESHOLDS[_preset]["gate"]
+                _preset_floor = _PRESET_THRESHOLDS[_preset]["floor"]
+                if config.min_confluence is None:
+                    _min_conf = _preset_gate
+                _soft_floor = _preset_floor
+            else:
+                # "custom" preset: use explicit floor if provided, else no band
+                _soft_floor = config.confluence_soft_floor if config.confluence_soft_floor is not None else max(0.0, _min_conf - 10.0)
+
             scan_config = ScanConfig(
                 profile=self.mode.profile,
                 timeframes=tuple(self.mode.timeframes),
                 min_confluence_score=_min_conf,
+                confluence_soft_floor=_soft_floor,
+                sensitivity_preset=_preset,
                 min_rr_ratio=min_rr,
                 max_symbols=20,
             )
@@ -1198,9 +1230,14 @@ class PaperTradingService:
             assert orch is not None
             orch.apply_mode(self.mode)
             
-            # Apply user's custom min confluence override if specified
+            # Apply sensitivity preset thresholds to the orchestrator's ScanConfig
+            # so the scorer's setup_state and convergence use the same gate.
             if getattr(conf, "min_confluence", None) is not None:
                 orch.config.min_confluence_score = conf.min_confluence
+            if getattr(conf, "confluence_soft_floor", None) is not None:
+                orch.config.confluence_soft_floor = conf.confluence_soft_floor
+            if getattr(conf, "sensitivity_preset", None):
+                orch.config.sensitivity_preset = conf.sensitivity_preset
                 
             loop = asyncio.get_running_loop()
             trade_plans, rejection_summary = await loop.run_in_executor(
@@ -1552,21 +1589,48 @@ class PaperTradingService:
                     "limit_price": plan.entry_zone.near_entry,
                 })
 
-        # Check confluence threshold - use same rounding as scanner to avoid asymmetry.
-        # Explicit None-check: a caller may legitimately set min_confluence=0 to
-        # capture every signal for diagnostics; ``or`` would swallow that.
+        # ── Signal Sensitivity gate (three-tier) ─────────────────────────────
+        # Replaces the old binary threshold with a gate + soft-floor band:
+        #   score >= gate       → full position size  (size_modifier = 1.0)
+        #   floor <= score < gate → half position size (size_modifier = 0.5)  "near-miss"
+        #   score < floor       → skip entirely
+        #
+        # gate and floor come from the sensitivity preset chosen at session start
+        # (conservative/balanced/aggressive/custom) and are stored on ScanConfig.
+        # Explicit None-check: a caller may set min_confluence=0 to force all
+        # signals through for diagnostics; ``or`` would silently swallow that.
         min_score = (
             config.min_confluence
             if config.min_confluence is not None
             else (self.mode.min_confluence_score if self.mode else 60)
         )
-        if round(plan.confidence_score, 1) < round(min_score, 1):
-            reason = f"Confluence {plan.confidence_score:.1f}% below min {min_score:.0f}%"
+        soft_floor = getattr(config, "confluence_soft_floor", None)
+        if soft_floor is None:
+            soft_floor = max(0.0, min_score - 10.0)   # fallback: 10-point band
+
+        score_r = round(plan.confidence_score, 1)
+        gate_r  = round(min_score, 1)
+        floor_r = round(soft_floor, 1)
+
+        if score_r >= gate_r:
+            size_modifier = 1.0   # full conviction — normal execution
+        elif score_r >= floor_r:
+            size_modifier = 0.5   # near-miss — half size, still trade
+            logger.info(
+                f"NEAR-MISS ENTRY: {plan.symbol} {plan.direction} "
+                f"| confluence {score_r:.1f}% in band [{floor_r:.0f}–{gate_r:.0f}%] "
+                f"| taking at 50% position size"
+            )
+        else:
+            reason = (
+                f"Confluence {score_r:.1f}% below floor {floor_r:.0f}% "
+                f"(gate={gate_r:.0f}%, preset={getattr(config, 'sensitivity_preset', 'balanced')})"
+            )
             logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
             self._log_signal(
                 plan, "filtered", reason,
                 reason_type="low_confluence",
-                threshold=round(min_score, 1),
+                threshold=gate_r,
             )
             self._log_activity("signal_filtered", {
                 "symbol": plan.symbol, "direction": plan.direction,
@@ -1574,9 +1638,9 @@ class PaperTradingService:
             })
             return
 
-        # Calculate position size
+        # Calculate position size (size_modifier applies near-miss halving)
         balance = executor.get_balance()
-        position_size = self._calculate_position_size(plan)
+        position_size = self._calculate_position_size(plan, size_modifier=size_modifier)
         if position_size <= 0:
             reason = (
                 f"Invalid position size (balance={balance:.2f}, "
@@ -1687,13 +1751,16 @@ class PaperTradingService:
                 
                 # ... already handled by immediate fill logic ...
 
+                _is_near_miss = size_modifier < 1.0
                 logger.info(
-                    f"TRADE OPENED: {plan.symbol} {plan.direction} @ {fill.price:.2f} "
+                    f"TRADE OPENED{'  ⚡ NEAR-MISS' if _is_near_miss else ''}: "
+                    f"{plan.symbol} {plan.direction} @ {fill.price:.2f} "
                     f"| qty={fill.quantity:.6f} (Requested: {position_size:.6f}) | SL={plan.stop_loss.level:.2f} "
-                    f"| confluence={plan.confidence_score:.1f}%"
+                    f"| confluence={plan.confidence_score:.1f}% | size={size_modifier*100:.0f}%"
                 )
                 self._log_signal(
-                    plan, "executed", "Trade opened successfully",
+                    plan, "executed",
+                    "Near-miss entry at 50% size" if _is_near_miss else "Trade opened successfully",
                     fill_price=fill.price, fill_qty=fill.quantity,
                     position_id=position_id,
                 )
@@ -1707,6 +1774,9 @@ class PaperTradingService:
                     "targets": [t.level for t in plan.targets],
                     "confluence": plan.confidence_score,
                     "trade_type": getattr(plan, "trade_type", "unknown"),
+                    "size_modifier": size_modifier,
+                    "near_miss": _is_near_miss,
+                    "sensitivity_preset": getattr(self.config, "sensitivity_preset", "balanced"),
                 })
                 self._save_state()
             else:
@@ -1756,7 +1826,7 @@ class PaperTradingService:
             pos.regime_trend = self._current_regime_trend
             pos.regime_volatility = self._current_regime_volatility
 
-    def _calculate_position_size(self, plan: TradePlan) -> float:
+    def _calculate_position_size(self, plan: TradePlan, size_modifier: float = 1.0) -> float:
         """
         Calculate position size based on risk parameters with regime-aware adjustment.
 
@@ -1765,9 +1835,11 @@ class PaperTradingService:
         - position_size = risk_amount / risk_per_unit (how many units to risk $100)
         - Leverage only affects MARGIN required, NOT risk amount
         - Regime policy adjusts position size up/down based on market conditions
+        - size_modifier: 1.0 = full size, 0.5 = near-miss half-size (Signal Sensitivity band)
 
         Args:
             plan: Trade plan with stop loss
+            size_modifier: Multiplier from signal sensitivity tier (1.0 full, 0.5 near-miss)
 
         Returns:
             Position size in base currency
@@ -1786,8 +1858,10 @@ class PaperTradingService:
             )
         balance = max(balance, 0.0)  # Never size off negative effective equity
 
-        # Apply streak-based risk adaptation
-        effective_risk_pct = self._get_adapted_risk_pct()
+        # Apply streak-based risk adaptation, then signal-sensitivity modifier.
+        # size_modifier=0.5 (near-miss band) stacks with streak adaptation:
+        # e.g. 3-loss streak (50%) + near-miss (50%) = 25% of configured risk.
+        effective_risk_pct = self._get_adapted_risk_pct() * size_modifier
         risk_amount = balance * (effective_risk_pct / 100)
 
         # Calculate risk per unit

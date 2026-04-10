@@ -21,6 +21,12 @@ class ScanConfig:
     profile: str = "balanced"
     timeframes: Tuple[str, ...] = ("1W", "1D", "4H", "1H", "15m", "5m")
     min_confluence_score: float = 65.0
+    # Signal Sensitivity system — replaces the single hard gate with a two-threshold band.
+    # confluence_soft_floor: signals between floor and min_confluence_score execute at
+    #   half position size ("near-miss" band). Signals below floor are skipped entirely.
+    # sensitivity_preset: tracks which preset the user chose for logging / diagnostics.
+    confluence_soft_floor: float = 55.0
+    sensitivity_preset: str = "balanced"
     min_rr_ratio: float = 1.5  # Default minimum R:R; overridden per-mode via scanner_modes.py
     btc_impulse_gate_enabled: bool = True
     # Weekly StochRSI gate - universal directional filter
