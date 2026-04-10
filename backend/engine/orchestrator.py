@@ -1315,37 +1315,72 @@ class Orchestrator:
                     cycle_context=cycle_context,
                 )
                 if not _gate.passed:
-                    logger.info(
-                        "%s: ❌ GATE REJECTED [%s] — %s",
-                        symbol, _gate.gate_name, _gate.reason,
-                    )
-                    self.diagnostics["confluence_rejections"].append({
-                        "symbol": symbol,
-                        "trace_id": trace_id,
-                        "score": 0.0,
-                        "threshold": self.config.min_confluence_score,
-                        "gate": _gate.gate_name,
-                    })
-                    # Build rejection info, forwarding useful gate metadata so
-                    # the UI can render detailed breakdowns instead of just the
-                    # reason string.  Only safe scalar/list values are forwarded
-                    # (no complex objects) to keep the dict JSON-serialisable.
-                    _rejection_info: dict = {
-                        "symbol": symbol,
-                        "direction": context.metadata.get("chosen_direction", "LONG"),
-                        "reason_type": _gate.gate_name,
-                        "reason": _gate.reason,
-                        "score": 0.0,
-                        "threshold": self.config.min_confluence_score,
-                    }
-                    _FORWARD_KEYS = {
-                        "conflict_count", "conflict_conditions",
-                        "btc_impulse", "regime_trend",
-                    }
-                    for _k, _v in _gate.metadata.items():
-                        if _k in _FORWARD_KEYS:
-                            _rejection_info[_k] = _v
-                    return None, _rejection_info
+                    # ── Conflict-density direction flip ──────────────────────────────
+                    # When conflict_density fires, the "conflicts" are opposing OBs/BOS
+                    # for the chosen direction.  Those same structures are ALIGNED for
+                    # the opposite direction — e.g. 3 bearish OBs opposing LONG are a
+                    # strong SHORT signal.  Retry with the flip before giving up.
+                    _flip_succeeded = False
+                    if _gate.gate_name == "conflict_density":
+                        _orig_dir = context.metadata.get("chosen_direction", "LONG")
+                        _flip_dir = "SHORT" if _orig_dir == "LONG" else "LONG"
+                        _flip_gate = run_pre_scoring_gates(
+                            smc_snapshot=context.smc_snapshot,
+                            config=_session_gate_config,
+                            direction=_flip_dir,
+                            regime=_symbol_regime,
+                            btc_impulse=_btc_impulse,
+                            is_btc=_is_btc,
+                            cycle_context=cycle_context,
+                        )
+                        if _flip_gate.passed:
+                            logger.info(
+                                "%s: 🔄 CONFLICT→FLIP %s→%s — %d opposing OBs are "
+                                "aligned %s signals, continuing",
+                                symbol, _orig_dir, _flip_dir,
+                                _gate.metadata.get("conflict_count", 0), _flip_dir,
+                            )
+                            context.metadata["chosen_direction"] = _flip_dir
+                            _flip_succeeded = True
+                        else:
+                            logger.info(
+                                "%s: ❌ GATE REJECTED [conflict_density] both dirs — %s",
+                                symbol, _gate.reason,
+                            )
+                    else:
+                        logger.info(
+                            "%s: ❌ GATE REJECTED [%s] — %s",
+                            symbol, _gate.gate_name, _gate.reason,
+                        )
+
+                    if not _flip_succeeded:
+                        self.diagnostics["confluence_rejections"].append({
+                            "symbol": symbol,
+                            "trace_id": trace_id,
+                            "score": 0.0,
+                            "threshold": self.config.min_confluence_score,
+                            "gate": _gate.gate_name,
+                        })
+                        # Build rejection info, forwarding useful gate metadata so
+                        # the UI can render detailed breakdowns instead of just the
+                        # reason string.  Only safe scalar/list values are forwarded
+                        # (no complex objects) to keep the dict JSON-serialisable.
+                        _rejection_info: dict = {
+                            "symbol": symbol,
+                            "direction": context.metadata.get("chosen_direction", "LONG"),
+                            "reason_type": _gate.gate_name,
+                            "reason": _gate.reason,
+                            "score": 0.0,
+                            "threshold": self.config.min_confluence_score,
+                        }
+                        _FORWARD_KEYS = {
+                            "conflict_count", "conflict_conditions",
+                            "btc_impulse", "regime_trend",
+                        }
+                        for _k, _v in _gate.metadata.items():
+                            if _k in _FORWARD_KEYS:
+                                _rejection_info[_k] = _v
+                        return None, _rejection_info
             # ─────────────────────────────────────────────────────────────────────
 
             context.confluence_breakdown = self.confluence_service.score(
