@@ -32,6 +32,8 @@ class ScanConfig:
     max_symbols: int = 20
     max_risk_pct: float = 2.0
     leverage: int = 1  # Added: user-selected leverage to allow planner adaptive buffers/targets
+    confluence_soft_floor: Optional[float] = None  # Near-miss floor: signals above this but below min_confluence_score are tracked but not traded
+    sensitivity_preset: str = "balanced"  # Named preset: conservative/balanced/aggressive/custom
     enable_fusion: bool = False  # Bot-only: adopt Surgical/Strike weights per market regime (scanner always uses pure Stealth)
     max_drawdown_pct: float = 10.0  # Session kill-switch threshold
 

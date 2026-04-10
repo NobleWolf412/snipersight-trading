@@ -1030,6 +1030,8 @@ class PaperTradingConfigRequest(BaseModel):
     trailing_activation: float = Field(default=1.5, ge=1.0, le=5.0)
     breakeven_after_target: int = Field(default=1, ge=1, le=3)
     min_confluence: Optional[float] = Field(default=None, ge=0, le=100)
+    sensitivity_preset: Optional[str] = Field(default="balanced")
+    confluence_soft_floor: Optional[float] = Field(default=None, ge=0, le=100)
     symbols: List[str] = []
     exclude_symbols: List[str] = []
     majors: bool = True
@@ -1067,6 +1069,8 @@ async def start_paper_trading(config: PaperTradingConfigRequest):
             trailing_activation=config.trailing_activation,
             breakeven_after_target=config.breakeven_after_target,
             min_confluence=config.min_confluence,
+            sensitivity_preset=config.sensitivity_preset or "balanced",
+            confluence_soft_floor=config.confluence_soft_floor,
             symbols=config.symbols,
             exclude_symbols=config.exclude_symbols,
             majors=config.majors,
