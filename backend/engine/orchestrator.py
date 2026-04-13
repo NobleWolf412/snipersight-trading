@@ -2707,26 +2707,38 @@ class Orchestrator:
         smc_snapshot: "SMCSnapshot",
         structure_tfs: set,
         fallback: str,
+        current_price: float = 0.0,
     ) -> str:
         """
         Lightweight direction scoring for a cascade scale.
 
-        Counts grade A/B OBs and BOS breaks on the scale's structure
-        timeframes to determine which direction the scale's structure
-        actually favours — independent of the HTF-dominant session direction.
+        Counts grade A/B OBs, BOS breaks, and unswept liquidity pools on
+        the scale's structure timeframes to determine which direction the
+        scale's structure actually favours — independent of the HTF-dominant
+        session direction.
 
         Weighting:
-          - Grade A OB  → 2 points (strong, institutional)
-          - Grade B OB  → 1 point  (moderate)
-          - BOS break   → 1 point  (trend continuation confirmation)
-          - CHoCH       → excluded (reversal marker, not continuation)
+          - Grade A OB               → 2 pts  (strong, institutional)
+          - Grade B OB               → 1 pt   (moderate)
+          - BOS break                → 1 pt   (trend continuation)
+          - CHoCH                    → excluded (reversal marker)
+          - Unswept equal_highs above price → bull pts  (price drawn UP)
+          - Unswept equal_lows below price  → bear pts  (price drawn DOWN)
+            Grade A pool → 3 pts, Grade B → 2 pts, Grade C → 1 pt
+            Nearest pool gets 1.5× bonus (most immediate magnet)
 
-        Falls back to the session-level direction on a tie (zero score counts
-        as tie so an empty TF slice doesn't flip direction arbitrarily).
+        Liquidity pool rationale:
+          Equal highs above current price = clustered stop-losses / sell-side
+          liquidity. Institutions push price UP to sweep that liquidity before
+          reversing. The nearest unswept cluster is the strongest near-term
+          magnet and represents a high-probability directional draw.
+
+        Falls back to the session-level direction on a tie.
         """
         bull = 0
         bear = 0
 
+        # ── Order Blocks ─────────────────────────────────────────────────────
         for ob in smc_snapshot.order_blocks:
             if ob.timeframe not in structure_tfs:
                 continue
@@ -2738,6 +2750,7 @@ class Orchestrator:
             else:
                 bear += weight
 
+        # ── Structural Breaks (BOS only) ─────────────────────────────────────
         for sb in smc_snapshot.structural_breaks:
             if sb.timeframe not in structure_tfs:
                 continue
@@ -2748,6 +2761,56 @@ class Orchestrator:
                 bull += 1
             else:
                 bear += 1
+
+        # ── Liquidity Pool Magnet Votes ───────────────────────────────────────
+        # Unswept pools act as price magnets: equal_highs above = bull draw,
+        # equal_lows below = bear draw.  Only count pools on this scale's TFs.
+        # The nearest pool carries a 1.5× bonus — it's the most immediate target.
+        if current_price > 0:
+            pools = getattr(smc_snapshot, "liquidity_pools", [])
+            _grade_weight = {"A": 3, "B": 2, "C": 1}
+
+            bull_pools = []  # unswept equal_highs above price
+            bear_pools = []  # unswept equal_lows below price
+
+            for pool in pools:
+                if getattr(pool, "swept", False):
+                    continue  # already swept — no longer a magnet
+                tf = getattr(pool, "timeframe", None)
+                if tf and structure_tfs and tf not in structure_tfs:
+                    continue  # wrong scale
+                pool_level = getattr(pool, "level", 0.0)
+                pool_type = getattr(pool, "pool_type", "")
+                grade = getattr(pool, "grade", "C")
+                w = _grade_weight.get(str(grade).upper(), 1)
+
+                if pool_type == "equal_highs" and pool_level > current_price:
+                    bull_pools.append((abs(pool_level - current_price), w))
+                elif pool_type == "equal_lows" and pool_level < current_price:
+                    bear_pools.append((abs(pool_level - current_price), w))
+
+            # Nearest pool gets 1.5× bonus; all others count at face value
+            def _tally(pool_list: list) -> float:
+                if not pool_list:
+                    return 0.0
+                pool_list.sort(key=lambda x: x[0])  # sort by distance asc
+                total = 0.0
+                for i, (_, w) in enumerate(pool_list):
+                    total += w * (1.5 if i == 0 else 1.0)
+                return total
+
+            _bull_pool_pts = _tally(bull_pools)
+            _bear_pool_pts = _tally(bear_pools)
+            bull += _bull_pool_pts
+            bear += _bear_pool_pts
+
+            if bull_pools or bear_pools:
+                logger.debug(
+                    "_derive_cascade_direction: pool magnets — "
+                    "bull_pools=%d (%.1f pts) bear_pools=%d (%.1f pts)",
+                    len(bull_pools), _bull_pool_pts,
+                    len(bear_pools), _bear_pool_pts,
+                )
 
         if bear > bull:
             return "SHORT"
@@ -2814,6 +2877,7 @@ class Orchestrator:
                         smc_snapshot=context.smc_snapshot,
                         structure_tfs=_scale_structure_tfs,
                         fallback=_session_direction,
+                        current_price=current_price,
                     )
                     if context.smc_snapshot and _scale_structure_tfs
                     else _session_direction
