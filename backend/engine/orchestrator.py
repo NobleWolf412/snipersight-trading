@@ -1344,8 +1344,11 @@ class Orchestrator:
                             _flip_succeeded = True
                         else:
                             logger.info(
-                                "%s: ❌ GATE REJECTED [conflict_density] both dirs — %s",
-                                symbol, _gate.reason,
+                                "%s: ❌ GATE REJECTED [conflict_density] both dirs — "
+                                "orig %s: %s | flip %s blocked by [%s]: %s",
+                                symbol,
+                                _orig_dir, _gate.reason,
+                                _flip_dir, _flip_gate.gate_name, _flip_gate.reason,
                             )
                     else:
                         logger.info(
@@ -1365,11 +1368,18 @@ class Orchestrator:
                         # the UI can render detailed breakdowns instead of just the
                         # reason string.  Only safe scalar/list values are forwarded
                         # (no complex objects) to keep the dict JSON-serialisable.
+                        # Include flip attempt result so UI/logs show WHY both dirs failed
+                        _flip_detail = ""
+                        if _gate.gate_name == "conflict_density":
+                            _flip_detail = (
+                                f" | flip {_flip_dir} blocked by [{_flip_gate.gate_name}]: "
+                                f"{_flip_gate.reason}"
+                            )
                         _rejection_info: dict = {
                             "symbol": symbol,
                             "direction": context.metadata.get("chosen_direction", "LONG"),
                             "reason_type": _gate.gate_name,
-                            "reason": _gate.reason,
+                            "reason": _gate.reason + _flip_detail,
                             "score": 0.0,
                             "threshold": self.config.min_confluence_score,
                         }
