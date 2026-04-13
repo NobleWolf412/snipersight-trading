@@ -1719,31 +1719,24 @@ class Orchestrator:
                 "setup_state": (context.confluence_breakdown.metadata or {}).get("setup_state", "NOISE"),
             }
 
-        # Hard veto check — if scorer set veto_blocked=True, reject before trade planning.
-        # Previously veto_blocked was captured in metadata for UI display but was never
-        # checked here, so a MACD-vetoed signal could still execute if other factors
-        # compensated past the score gate. Now it is an unconditional hard stop.
+        # MACD veto soft-pass — the scorer already applies a −15 penalty when
+        # veto_blocked is set.  If the signal STILL passes the confluence gate
+        # after that penalty, the setup is genuinely strong enough to trade.
+        # A hard block on top of the score penalty was redundant and killed 26%
+        # of all signals in 10 hr sessions (751/2925 in session 65b49818).
+        # Now we log a warning and let the cascade evaluate per-scale.
         _meta = (context.confluence_breakdown.metadata or {}) if context.confluence_breakdown else {}
         _veto_blocked = _meta.get("veto_blocked", False)
         if _veto_blocked:
             _active_vetoes = _meta.get("active_vetoes", [])
             _veto_label = ", ".join(_active_vetoes) if _active_vetoes else "MACD Veto"
-            logger.info(
-                "%s: ❌ REJECTED (veto_blocked) | Vetoes: %s | Score was: %.1f%%",
-                symbol,
-                _veto_label,
-                context.confluence_breakdown.total_score if context.confluence_breakdown else 0,
+            _veto_score = context.confluence_breakdown.total_score if context.confluence_breakdown else 0
+            logger.warning(
+                "%s: ⚠️ VETO SOFT-PASS | Vetoes: %s | Score (with penalty): %.1f%% "
+                "— letting cascade evaluate per-scale",
+                symbol, _veto_label, _veto_score,
             )
-            self._progress("GATE_FAIL", {"symbol": symbol, "gate": "veto_blocked", "vetoes": _active_vetoes})
-            return None, {
-                "symbol": symbol,
-                "direction": context.metadata.get("chosen_direction", "LONG"),
-                "reason_type": "veto_blocked",
-                "reason": f"Signal hard-vetoed by: {_veto_label}",
-                "veto_blocked": True,
-                "active_vetoes": _active_vetoes,
-                "score": context.confluence_breakdown.total_score if context.confluence_breakdown else 0,
-            }
+            context.metadata["veto_soft_blocked"] = True
 
         # Log confluence pass
         logger.info(

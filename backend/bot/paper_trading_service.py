@@ -48,6 +48,16 @@ _PENDING_TTL_MINUTES: Dict[str, float] = {
     "scalp": 10.0,     # 2 scan cycles
 }
 
+# Maximum distance (%) a limit order can be placed from current price.
+# If the OB entry zone is further away, the limit is "snapped" closer to price
+# so the order actually has a chance of filling within the TTL window.
+# For high-confluence signals (>= 70%), the max distance is halved.
+_MAX_LIMIT_DISTANCE_PCT: Dict[str, float] = {
+    "scalp": 0.15,     # ~$0.20 on a $130 coin
+    "intraday": 0.40,  # ~$0.52 on a $130 coin
+    "swing": 1.00,     # wider — retests can take hours
+}
+
 # Signal Sensitivity preset definitions.
 # gate  = minimum score for full-size entry
 # floor = minimum score for near-miss half-size entry; below floor = skipped
@@ -1565,6 +1575,8 @@ class PaperTradingService:
                 return
 
         # Check for existing pending orders for this symbol
+        _old_placed_at = None     # Used by Fix 2 (TTL preservation)
+        _old_limit_price = None
         existing_order_id = next(
             (oid for oid, p in self._pending_plans.items() if p.symbol == plan.symbol), None
         )
@@ -1603,6 +1615,9 @@ class PaperTradingService:
                 return
             else:
                 # Same direction, better confluence — replace
+                # Save old TTL/price for Fix 2 (TTL preservation on same-price replacement)
+                _old_placed_at = self._pending_placed_at.get(existing_order_id)
+                _old_limit_price = existing_plan.entry_zone.near_entry
                 logger.info(
                     f"REPLACING PENDING ORDER: {plan.symbol} | "
                     f"old confluence={existing_plan.confidence_score:.1f}% → "
@@ -1771,13 +1786,40 @@ class PaperTradingService:
         try:
             side = "BUY" if plan.direction == "LONG" else "SELL"
 
+            # ── Limit proximity snap ──────────────────────────────────────
+            # If the OB entry zone is too far from current price, the limit
+            # order will sit pending and expire without filling.  Snap the
+            # limit closer so it has a realistic chance of executing within
+            # the TTL window.  The plan object is NOT mutated — we use a
+            # local `limit_price` for placement & logging.
+            _trade_type = getattr(plan, "trade_type", "intraday") or "intraday"
+            _raw_limit = float(plan.entry_zone.near_entry)
+            _max_dist = _MAX_LIMIT_DISTANCE_PCT.get(_trade_type, 0.40)
+            if plan.confidence_score >= 70.0:
+                _max_dist /= 2.0  # High-confluence → tighter snap → faster fill
+            _gap_pct = abs(_raw_limit - current_price) / current_price * 100 if current_price else 0
+
+            if _gap_pct > _max_dist and current_price > 0:
+                if side == "BUY":
+                    limit_price = current_price * (1 - _max_dist / 100)
+                else:
+                    limit_price = current_price * (1 + _max_dist / 100)
+                logger.info(
+                    "LIMIT SNAP: %s %s | entry snapped %.4f → %.4f "
+                    "(gap %.2f%% > max %.2f%% for %s, conf=%.1f%%)",
+                    plan.symbol, plan.direction, _raw_limit, limit_price,
+                    _gap_pct, _max_dist, _trade_type, plan.confidence_score,
+                )
+            else:
+                limit_price = _raw_limit
+
             # Use LIMIT to allow the executor to simulate realistic partial fills
             order = executor.place_order(
                 symbol=plan.symbol,
                 side=side,
                 order_type="LIMIT",
                 quantity=position_size,
-                price=plan.entry_zone.near_entry,
+                price=limit_price,
             )
 
 
@@ -1830,7 +1872,7 @@ class PaperTradingService:
                 order_status = order.status.value if order.status else "unknown"
                 reason = (
                     f"Waiting for limit fill (price={current_price:.2f}, "
-                    f"limit={plan.entry_zone.near_entry:.2f})"
+                    f"limit={limit_price:.2f})"
                 )
                 logger.info(
                     f"PENDING ORDER: {plan.symbol} {plan.direction} | {reason}"
@@ -1841,13 +1883,32 @@ class PaperTradingService:
                     "symbol": plan.symbol,
                     "direction": plan.direction,
                     "confluence": plan.confidence_score,
-                    "limit_price": plan.entry_zone.near_entry,
+                    "limit_price": limit_price,
+                    "original_entry": _raw_limit,
+                    "snapped": limit_price != _raw_limit,
                     "current_price": current_price,
                 })
 
                 # Keep the plan so _monitor_loop can pick it up if it fills later
                 self._pending_plans[order.order_id] = plan
                 self._pending_placed_at[order.order_id] = datetime.now(timezone.utc)
+
+                # ── Fix 2: TTL preservation on same-price replacement ─────
+                # If this order replaces one at the same entry price, the
+                # original placed_at should be kept so the TTL isn't reset
+                # on every scan cycle (which effectively made orders immortal).
+                if _old_placed_at is not None and _old_limit_price is not None:
+                    _price_delta_pct = (
+                        abs(limit_price - _old_limit_price) / _old_limit_price * 100
+                        if _old_limit_price > 0 else 999
+                    )
+                    if _price_delta_pct <= 0.1:
+                        self._pending_placed_at[order.order_id] = _old_placed_at
+                        logger.info(
+                            "TTL PRESERVED: %s | same limit price (%.4f), "
+                            "keeping original placed_at (%s)",
+                            plan.symbol, limit_price, _old_placed_at.isoformat(),
+                        )
 
         except Exception as e:
             import traceback
