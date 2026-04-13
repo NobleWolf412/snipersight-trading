@@ -1804,12 +1804,33 @@ class PaperTradingService:
                     limit_price = current_price * (1 - _max_dist / 100)
                 else:
                     limit_price = current_price * (1 + _max_dist / 100)
-                logger.info(
-                    "LIMIT SNAP: %s %s | entry snapped %.4f → %.4f "
-                    "(gap %.2f%% > max %.2f%% for %s, conf=%.1f%%)",
-                    plan.symbol, plan.direction, _raw_limit, limit_price,
-                    _gap_pct, _max_dist, _trade_type, plan.confidence_score,
-                )
+
+                # ── Recalculate position size for the wider stop distance ──
+                # The snap moved entry away from the OB, increasing the distance
+                # to the stop loss.  If we keep the original position size, we'd
+                # risk more $ than configured.  Recalculate so risk stays constant.
+                _stop = plan.stop_loss.level
+                _new_risk_per_unit = abs(limit_price - _stop) if _stop else 0
+                _old_risk_per_unit = abs(_raw_limit - _stop) if _stop else 0
+                if _new_risk_per_unit > 0 and _old_risk_per_unit > 0:
+                    _size_ratio = _old_risk_per_unit / _new_risk_per_unit
+                    _orig_size = position_size
+                    position_size = position_size * _size_ratio
+                    logger.info(
+                        "LIMIT SNAP: %s %s | entry snapped %.4f → %.4f "
+                        "(gap %.2f%% > max %.2f%% for %s, conf=%.1f%%) "
+                        "| size adjusted %.4f → %.4f (risk/unit %.4f → %.4f)",
+                        plan.symbol, plan.direction, _raw_limit, limit_price,
+                        _gap_pct, _max_dist, _trade_type, plan.confidence_score,
+                        _orig_size, position_size, _old_risk_per_unit, _new_risk_per_unit,
+                    )
+                else:
+                    logger.info(
+                        "LIMIT SNAP: %s %s | entry snapped %.4f → %.4f "
+                        "(gap %.2f%% > max %.2f%% for %s, conf=%.1f%%)",
+                        plan.symbol, plan.direction, _raw_limit, limit_price,
+                        _gap_pct, _max_dist, _trade_type, plan.confidence_score,
+                    )
             else:
                 limit_price = _raw_limit
 
