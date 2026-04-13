@@ -334,6 +334,9 @@ class PaperTradingService:
         # Track limit orders that are waiting to fill
         self._pending_plans: Dict[str, TradePlan] = {}
         self._pending_placed_at: Dict[str, datetime] = {}
+        self._pending_placed_price: Dict[str, float] = {}  # price at time of placement
+        self._pending_extended: set = set()                # order_ids already given a TTL extension
+        self._expired_symbols: set = set()                 # symbols whose order just expired → priority re-scan
 
         # Diagnostics
         self.diagnostic_logger: Optional[DiagnosticLogger] = None
@@ -475,6 +478,9 @@ class PaperTradingService:
         self.stats = PaperTradingStats()
         self._pending_plans = {}
         self._pending_placed_at = {}
+        self._pending_placed_price = {}
+        self._pending_extended = set()
+        self._expired_symbols = set()
         self._price_cache = {}
         self._peak_equity = config.initial_balance
 
@@ -649,6 +655,9 @@ class PaperTradingService:
         self._price_cache = {}
         self._pending_plans = {}
         self._pending_placed_at = {}
+        self._pending_placed_price = {}
+        self._pending_extended = set()
+        self._expired_symbols = set()
 
         self.started_at = None
         self.stopped_at = None
@@ -976,9 +985,58 @@ class PaperTradingService:
                                 )
                                 max_age = timedelta(minutes=ttl_minutes)
                                 if (now - placed_at) > max_age:
+                                    # ── Adaptive TTL: extend if price is pulling back ─
+                                    # Before cancelling, check whether price has already
+                                    # started moving toward the limit.  Cancelling right
+                                    # as a pullback begins wastes the setup.
+                                    _placed_price = self._pending_placed_price.get(order_id)
+                                    _cur_price = self._price_cache.get(plan.symbol, 0.0)
+                                    _lim_price = self._get_limit_price_for_order(order_id, plan)
+                                    _already_extended = order_id in self._pending_extended
+
+                                    _pullback_in_progress = False
+                                    if _placed_price and _cur_price and _lim_price and not _already_extended:
+                                        if plan.direction == "LONG":
+                                            # Price has dropped closer to the buy limit
+                                            _gap_now = _cur_price - _lim_price
+                                            _gap_orig = _placed_price - _lim_price
+                                            _pullback_in_progress = _gap_now < _gap_orig * 0.6  # 40%+ closer
+                                        else:
+                                            # Price has risen closer to the sell limit
+                                            _gap_now = _lim_price - _cur_price
+                                            _gap_orig = _lim_price - _placed_price
+                                            _pullback_in_progress = _gap_now < _gap_orig * 0.6
+
+                                    if _pullback_in_progress:
+                                        # Extend by 50% of original TTL (one-time)
+                                        _extension = timedelta(minutes=ttl_minutes * 0.5)
+                                        self._pending_placed_at[order_id] = now - max_age + _extension
+                                        self._pending_extended.add(order_id)
+                                        logger.info(
+                                            "⏳ TTL EXTENDED: %s [%s] | price %.4f moving toward limit %.4f "
+                                            "(was %.4f at placement) | +%.0fmin extension",
+                                            plan.symbol, trade_type,
+                                            _cur_price, _lim_price, _placed_price,
+                                            ttl_minutes * 0.5,
+                                        )
+                                        self._log_activity("pending_order_ttl_extended", {
+                                            "order_id": order_id,
+                                            "symbol": plan.symbol,
+                                            "direction": plan.direction,
+                                            "current_price": _cur_price,
+                                            "limit_price": _lim_price,
+                                            "placed_price": _placed_price,
+                                            "extension_minutes": ttl_minutes * 0.5,
+                                        })
+                                        continue  # Skip cancellation this cycle
+
                                     executor.cancel_order(order_id)
                                     self._pending_plans.pop(order_id, None)
                                     self._pending_placed_at.pop(order_id, None)
+                                    self._pending_placed_price.pop(order_id, None)
+                                    self._pending_extended.discard(order_id)
+                                    # Flag for priority re-scan so fresh price is used immediately
+                                    self._expired_symbols.add(plan.symbol)
 
                                     # Ghost-position cleanup: if this order was PARTIALLY_FILLED
                                     # before expiry, the executor still holds the partial in its
@@ -1185,6 +1243,20 @@ class PaperTradingService:
             # Filter out excluded symbols
             if self.config.exclude_symbols:
                 scan_symbols = [s for s in scan_symbols if s not in self.config.exclude_symbols]
+
+            # Prioritise symbols whose pending order just expired — they need fresh
+            # analysis with current price immediately rather than being shuffled to
+            # wherever they land in the normal scan order.
+            if self._expired_symbols:
+                _priority = [s for s in self._expired_symbols if s in scan_symbols]
+                _rest = [s for s in scan_symbols if s not in self._expired_symbols]
+                scan_symbols = _priority + _rest
+                if _priority:
+                    logger.info(
+                        "🔄 PRIORITY RE-SCAN: %s (pending expired, refreshing entry zones)",
+                        ", ".join(_priority),
+                    )
+                self._expired_symbols.clear()
 
             logger.info(f"Starting scan: {len(scan_symbols)} symbols, mode={self.config.sniper_mode}")
 
@@ -1913,6 +1985,7 @@ class PaperTradingService:
                 # Keep the plan so _monitor_loop can pick it up if it fills later
                 self._pending_plans[order.order_id] = plan
                 self._pending_placed_at[order.order_id] = datetime.now(timezone.utc)
+                self._pending_placed_price[order.order_id] = current_price  # for adaptive TTL
 
                 # ── Fix 2: TTL preservation on same-price replacement ─────
                 # If this order replaces one at the same entry price, the
@@ -2205,6 +2278,15 @@ class PaperTradingService:
 
         # Clamp to safe range
         return max(0.3, min(1.3, multiplier))
+
+    def _get_limit_price_for_order(self, order_id: str, plan: "TradePlan") -> float:
+        """Return the actual limit price placed for an order (executor's record)."""
+        if self.executor:
+            order = self.executor.get_order(order_id)
+            if order and order.price:
+                return float(order.price)
+        # Fallback to plan's near_entry
+        return float(plan.entry_zone.near_entry) if plan.entry_zone else 0.0
 
     def _has_position(self, symbol: str) -> bool:
         """Check if already in position for symbol."""
