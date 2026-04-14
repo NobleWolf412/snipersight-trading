@@ -23,6 +23,7 @@ import {
   Warning,
   CheckCircle,
   XCircle,
+  X,
   Crosshair,
   ArrowUp,
   ArrowDown,
@@ -1847,8 +1848,31 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
 }
 
 // Pending Order Card Component
-function PendingOrderCard({ order }: { order: any }) {
+function PendingOrderCard({ order, onCancel }: { order: any; onCancel?: (orderId: string) => void }) {
   const isLong = order.direction === 'LONG';
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
+
+  const handleCancel = async () => {
+    if (cancelling || cancelled) return;
+    setCancelling(true);
+    try {
+      const res = await fetch(`/api/paper-trading/orders/${order.order_id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setCancelled(true);
+        onCancel?.(order.order_id);
+      } else {
+        const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+        console.error('Cancel failed:', err.detail);
+      }
+    } catch (e) {
+      console.error('Cancel request failed:', e);
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  if (cancelled) return null;
 
   return (
     <div className="p-3 bg-background/40 rounded-lg border border-amber-500/20 border-dashed hover:border-amber-500/40 transition-all duration-300 group">
@@ -1871,8 +1895,24 @@ function PendingOrderCard({ order }: { order: any }) {
           )}
           <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest bg-amber-500/10 px-1 py-0 rounded">Waiting Fill</span>
         </div>
-        <div className="text-xs font-bold font-mono text-amber-400/80">
-          ${order.limit_price.toFixed(2)}
+        <div className="flex items-center gap-2">
+          <div className="text-xs font-bold font-mono text-amber-400/80">
+            ${order.limit_price.toFixed(order.limit_price < 1 ? 5 : 2)}
+          </div>
+          <button
+            onClick={handleCancel}
+            disabled={cancelling}
+            title="Cancel order"
+            className={cn(
+              "flex items-center justify-center w-5 h-5 rounded border transition-all duration-200",
+              "opacity-0 group-hover:opacity-100",
+              cancelling
+                ? "border-muted/30 text-muted/30 cursor-not-allowed"
+                : "border-red-500/30 text-red-400/60 hover:border-red-500/70 hover:text-red-400 hover:bg-red-500/10 cursor-pointer"
+            )}
+          >
+            <X size={10} />
+          </button>
         </div>
       </div>
 

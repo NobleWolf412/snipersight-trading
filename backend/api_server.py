@@ -1201,6 +1201,38 @@ async def reset_paper_trading():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.delete("/api/paper-trading/orders/{order_id}")
+async def cancel_paper_trading_order(order_id: str):
+    """
+    Cancel a pending limit order by ID.
+
+    Removes the order from the executor so it will not fill on the next
+    scan cycle.  Returns 404 if the order does not exist or is already
+    filled/cancelled.
+    """
+    try:
+        service = get_paper_trading_service()
+        if not service.executor:
+            raise HTTPException(status_code=400, detail="Bot is not running")
+
+        existing = service.executor.get_order(order_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+
+        cancelled = service.executor.cancel_order(order_id)
+        if not cancelled:
+            raise HTTPException(status_code=409, detail=f"Order {order_id} could not be cancelled (already filled or closed)")
+
+        logger.info("Manual cancel: order %s cancelled by user", order_id)
+        return {"success": True, "order_id": order_id, "message": "Order cancelled"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to cancel order %s: %s", order_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/risk/summary")
 async def get_risk_summary():
     """Get risk management summary."""

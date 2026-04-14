@@ -2198,12 +2198,30 @@ class Orchestrator:
                             context.symbol, counter_type
                         )
                     
-                    # Update label and frontend tags
-                    plan.metadata["counter_htf_scalp"] = True # Keep for backwards compat
+                    # Update label and frontend tags.
+                    # Human-readable label: "HTF Bounce ↑ [Strong]" replaces the
+                    # opaque "Counter-HTF Intraday" which merged trade type with
+                    # confirmation timeframe in a confusing way.
+                    _direction = context.metadata.get("chosen_direction", "LONG")
+                    _arrow = "↑" if _direction == "LONG" else "↓"
+                    _quality = context.metadata.get("counter_htf_quality", "")
+                    _quality_tag = {
+                        "confirmed": "Strong",
+                        "partial":   "Moderate",
+                        "soft":      "Soft",
+                        "minimal":   "Weak",
+                    }.get(_quality, "")
+                    _bounce_label = (
+                        f"HTF Bounce {_arrow} [{_quality_tag}]"
+                        if _quality_tag
+                        else f"HTF Bounce {_arrow}"
+                    )
+                    plan.metadata["counter_htf_scalp"] = True  # keep for backwards compat
                     plan.metadata["counter_htf_type"] = counter_type
-                    label_suffix = f" [Counter-HTF {counter_type.capitalize()}]"
-                    plan.metadata["setup_label"] = f"Counter-HTF {counter_type.capitalize()}"
-                    plan.setup_type = ((plan.setup_type or "") + label_suffix).strip()
+                    plan.metadata["setup_label"] = _bounce_label
+                    # Rebuild setup_type: strip any previous bracket suffix, append new
+                    _base_type = (plan.setup_type or "").split("[")[0].strip()
+                    plan.setup_type = f"{_base_type} [{_bounce_label}]".strip()
 
                 # APEX Signal: tag for frontend visual treatment
                 bd_metadata = getattr(context.confluence_breakdown, "metadata", {}) or {}
