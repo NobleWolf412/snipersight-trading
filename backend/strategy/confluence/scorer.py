@@ -3045,10 +3045,30 @@ def calculate_confluence_score(
         )
 
 
-    # Macro Adjustment
+    # Macro Adjustment — trade-type and reversal aware
     macro_adj = 0.0
     if config and getattr(config, "macro_overlay_enabled", False) and macro_context:
-        macro_adj = compute_macro_score(macro_context, direction, is_btc, is_alt) * 5.0
+        _expected_tt = getattr(config, "expected_trade_type", None) or "swing"
+        _tt_clean = (
+            "scalp" if "scalp" in str(_expected_tt).lower()
+            else "intraday" if "intraday" in str(_expected_tt).lower()
+            else "swing"
+        )
+        _is_reversal = (
+            reversal_context is not None
+            and getattr(reversal_context, "is_reversal_setup", False)
+        )
+        macro_adj = compute_macro_score(
+            macro_context, direction, is_btc, is_alt,
+            trade_type=_tt_clean,
+            is_reversal=_is_reversal,
+        ) * 5.0
+        logger.info(
+            "🌐 MACRO [%s %s]: state=%s score=%+.0f (trade_type=%s, reversal=%s)",
+            smc_snapshot.symbol if smc_snapshot else "?",
+            direction, macro_context.macro_state.value if macro_context.macro_state else "?",
+            macro_adj, _tt_clean, _is_reversal,
+        )
 
     raw_score = weighted_score + synergy_bonus - conflict_penalty - coverage_penalty + macro_adj
     raw_score = max(0.0, min(100.0, raw_score))
@@ -3235,7 +3255,8 @@ def calculate_confluence_score(
 
 
     # Final Logging
-    logger.info(f"📊 CONFLUENCE [{symbol} {direction}]: {final_score:.1f} ({tier}) | Factors: {active_factors} | Synergy: +{synergy_bonus:.1f} | Conflict: -{conflict_penalty:.1f}")
+    _macro_tag = f" | Macro: {macro_adj:+.0f}" if macro_adj != 0.0 else ""
+    logger.info(f"📊 CONFLUENCE [{symbol} {direction}]: {final_score:.1f} ({tier}) | Factors: {active_factors} | Synergy: +{synergy_bonus:.1f} | Conflict: -{conflict_penalty:.1f}{_macro_tag}")
 
     return breakdown
 

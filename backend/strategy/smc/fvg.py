@@ -25,15 +25,15 @@ logger = logging.getLogger(__name__)
 # orchestrator passes the short profile name (e.g. "stealth", "strike").
 MODE_FVG_MIN_SIZE = {
     # Canonical internal keys
-    "macro_surveillance": 0.568,   # OVERWATCH: Top 25% cleanest gaps
-    "stealth_balanced":   0.290,   # STEALTH: Top 50% core intraday gaps
-    "intraday_aggressive": 0.132,  # STRIKE: Top 75% rapid scalp gaps
-    "precision":          0.081,   # SURGICAL: Catch everything above pure noise
+    "macro_surveillance": 0.45,    # OVERWATCH: HTF gaps only — still selective
+    "stealth_balanced":   0.20,    # STEALTH: Relaxed from 0.29 — catches real gaps in tight ranges
+    "intraday_aggressive": 0.10,   # STRIKE: Quick scalp gaps
+    "precision":          0.06,    # SURGICAL: Catch everything above pure noise
     # Scanner-mode aliases (what the orchestrator actually passes)
-    "overwatch":  0.568,
-    "stealth":    0.290,
-    "strike":     0.132,
-    "surgical":   0.081,
+    "overwatch":  0.45,
+    "stealth":    0.20,
+    "strike":     0.10,
+    "surgical":   0.06,
 }
 
 

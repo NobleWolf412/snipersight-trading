@@ -2821,6 +2821,26 @@ class PaperTradingService:
                 lines.append(f"**Total signals processed:** {total_signals}  ")
                 lines.append(f"**Executed:** {len(executed)} | **Filtered:** {len(filtered)} | **Pending:** {len(pending)}\n")
 
+                # ── Macro Context Snapshot ─────────────────────────────────────────────
+                if hasattr(self, "_orchestrator") and self._orchestrator:
+                    _mc = getattr(self._orchestrator, "macro_context", None)
+                    if _mc:
+                        lines.append("### Macro Context (Last Scan)\n")
+                        lines.append(f"| Field | Value |")
+                        lines.append(f"|-------|-------|")
+                        lines.append(f"| State | **{getattr(_mc, 'macro_state', 'N/A')}** |")
+                        lines.append(f"| BTC Dom | {getattr(_mc, 'btc_dom', 0):.1f}% |")
+                        lines.append(f"| ALT Dom | {getattr(_mc, 'alt_dom', 0):.1f}% |")
+                        lines.append(f"| Stable Dom | {getattr(_mc, 'stable_dom', 0):.1f}% |")
+                        lines.append(f"| BTC Dir | {getattr(_mc, 'btc_dir', '?')} |")
+                        lines.append(f"| ALT Dir | {getattr(_mc, 'alt_dir', '?')} |")
+                        lines.append(f"| Cluster Score | {getattr(_mc, 'cluster_score', 0)} |")
+                        lines.append(f"| Macro Score | {getattr(_mc, 'macro_score', 0)} |")
+                        _notes = getattr(_mc, "notes", [])
+                        if _notes:
+                            lines.append(f"| Notes | {'; '.join(str(n) for n in _notes[-5:])} |")
+                        lines.append("")
+
                 # ── Gate Kill Breakdown ──────────────────────────────────────────────────
                 gate_counts: Dict[str, int] = {}
                 for sig in filtered:

@@ -147,9 +147,20 @@ def compute_macro_score(
     direction: str,  # "LONG" | "SHORT"
     is_btc: bool,
     is_alt: bool,
+    trade_type: str = "swing",       # "scalp" | "intraday" | "swing"
+    is_reversal: bool = False,       # True when counter-HTF / discount bounce
 ) -> int:
     """Return macro score adjustment for a given setup.
-    Encodes dominance-driven adjustments and BTC-led expansion overrides.
+
+    Trade-type and reversal awareness:
+      - Scalp reversals in RISK_OFF get a reduced penalty (-1 vs -3)
+        because short-duration trades carry less directional exposure.
+      - Intraday reversals get a moderate penalty (-2 vs -3).
+      - Swing counter-trend longs keep the full -3 penalty.
+
+    This prevents the macro overlay from killing valid liquidity-sweep
+    bounces (e.g., BTC sweeps $65k discount zone and recovers) while
+    still correctly penalising trend-following longs into a falling market.
     """
     score = 0
     notes = ctx.notes
@@ -205,8 +216,23 @@ def compute_macro_score(
 
     elif state in (MacroState.RISK_OFF, MacroState.STABLE_SCARE):
         if direction == "LONG":
-            score += amplify(-3)
-            notes.append("Risk-off/Stable scare: penalize longs")
+            # Trade-type-aware penalty: scalp reversals carry less directional
+            # risk than swing holds.  Counter-trend bounces off liquidity sweeps
+            # (is_reversal=True) get softened further — slamming a discount-zone
+            # bounce with -3 misses valid setups in macro transitions.
+            if is_reversal and trade_type == "scalp":
+                _base = -1   # minimal penalty — quick in/out
+                notes.append("Risk-off: soft penalty (scalp reversal)")
+            elif is_reversal and trade_type == "intraday":
+                _base = -1   # reduced — counter-trend with evidence
+                notes.append("Risk-off: reduced penalty (intraday reversal)")
+            elif is_reversal:
+                _base = -2   # moderate — swing reversal still risky
+                notes.append("Risk-off: moderate penalty (swing reversal)")
+            else:
+                _base = -3   # full penalty — trend-following long in risk-off
+                notes.append("Risk-off/Stable scare: penalize longs")
+            score += amplify(_base)
         else:
             score += amplify(2)
             if is_alt:

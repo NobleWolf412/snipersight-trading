@@ -411,8 +411,8 @@ class SMCConfig:
     ob_min_freshness: float = 0.05  # Keep older OBs longer
 
     # Fair Value Gap parameters
-    fvg_min_gap_atr: float = 0.2  # Min gap size in ATR
-    fvg_max_overlap: float = 0.15  # Max overlap allowed
+    fvg_min_gap_atr: float = 0.2   # Min gap size in ATR
+    fvg_max_overlap: float = 0.22  # Max overlap allowed (relaxed from 0.15 — fast markets have slight wick overlap)
 
     # Structural Break parameters
     structure_swing_lookback: int = 7  # Swing detection lookback

@@ -33,8 +33,10 @@ class ScanConfig:
     weekly_stoch_rsi_gate_enabled: bool = True
     weekly_stoch_rsi_oversold: float = 20.0  # Below this = bullish bias
     weekly_stoch_rsi_overbought: float = 80.0  # Above this = bearish bias
-    # Macro overlay (dominance/flows) toggle - disabled by default until fully wired
-    macro_overlay_enabled: bool = False
+    # Macro overlay (dominance/flows) — applies BTC/ALT/stablecoin dominance
+    # shifts to confluence scoring.  Boosts longs in RISK_ON / ALT_SEASON,
+    # penalises longs in RISK_OFF / STABLE_SCARE.  ±5-15 pts impact.
+    macro_overlay_enabled: bool = True
     max_symbols: int = 20
     max_risk_pct: float = 2.0
     leverage: int = 1  # Added: user-selected leverage to allow planner adaptive buffers/targets
