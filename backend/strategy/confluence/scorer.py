@@ -3065,7 +3065,7 @@ def calculate_confluence_score(
         ) * 5.0
         logger.info(
             "🌐 MACRO [%s %s]: state=%s score=%+.0f (trade_type=%s, reversal=%s)",
-            smc_snapshot.symbol if smc_snapshot else "?",
+            symbol,
             direction, macro_context.macro_state.value if macro_context.macro_state else "?",
             macro_adj, _tt_clean, _is_reversal,
         )
