@@ -12,6 +12,8 @@ class MacroState(Enum):
     ALT_SEASON = auto()
     BTC_ONLY_RALLY = auto()
     STABLE_SCARE = auto()
+    CORRELATED_SELLOFF = auto()   # everything dumping (BTC ↓, ALTs ↓)
+    CHOPPY = auto()               # mixed signals, high uncertainty
     NEUTRAL = auto()
 
 
@@ -106,6 +108,20 @@ def classify_macro_state(ctx: MacroContext) -> MacroState:
     # Alt-season: BTC down, ALTs up, stables flat/down
     if b == "down" and a == "up" and s in ("flat", "down"):
         return MacroState.ALT_SEASON
+
+    # Correlated sell-off: BTC down, ALTs down — everything dumping together.
+    # Distinct from RISK_OFF (where BTC holds up while alts bleed).
+    # This is the "blood in the streets" scenario — dangerous for trend-following
+    # longs, but can produce the best reversal setups (capitulation sweep).
+    if b == "down" and a == "down":
+        return MacroState.CORRELATED_SELLOFF
+
+    # Choppy: at least one direction is "flat" while others disagree,
+    # or stables rising while BTC is flat (quiet risk-off that doesn't match
+    # the strict RISK_OFF criteria).  High uncertainty, reduce conviction.
+    _flat_count = sum(1 for d in (b, a, s) if d == "flat")
+    if _flat_count >= 2 or (s == "up" and b == "flat"):
+        return MacroState.CHOPPY
 
     return MacroState.NEUTRAL
 
@@ -258,6 +274,33 @@ def compute_macro_score(
                 score += amplify(0)
         else:
             score += _reversal_penalty(-2, "Alt-season")
+
+    elif state == MacroState.CORRELATED_SELLOFF:
+        # Everything dumping — dangerous for longs, but capitulation sweeps
+        # produce the best reversal entries.  Reversals get softened;
+        # trend-following longs get full penalty.
+        if direction == "LONG":
+            score += _reversal_penalty(-3, "Correlated sell-off")
+        else:
+            # Shorts are naturally aligned — small boost
+            score += amplify(1)
+            notes.append("Correlated sell-off: slight favor for shorts")
+
+    elif state == MacroState.CHOPPY:
+        # Mixed signals, high uncertainty.  Reduce conviction on both sides
+        # but don't outright penalise — the market can break either way.
+        # Swing trades carry more risk in chop; scalps are fine.
+        if trade_type == "swing":
+            score += amplify(-1)
+            notes.append("Choppy: reduce swing conviction")
+        elif trade_type == "intraday":
+            # Slight dampening — still tradeable but lower confidence
+            score += 0
+            notes.append("Choppy: intraday neutral")
+        else:
+            # Scalps thrive in chop — mean reversion territory
+            score += amplify(1)
+            notes.append("Choppy: scalp-friendly (mean reversion)")
 
     # Bound final macro score gently
     score = max(-4, min(4, score))
