@@ -23,7 +23,14 @@ def _pct_change(current: Optional[float], prev: Optional[float]) -> float:
     return (current - prev) / prev * 100.0
 
 
-def _dir_from_pct(p: float, eps: float = 0.1) -> str:
+def _dir_from_pct(p: float, eps: float = 0.2) -> str:
+    """Classify velocity into a direction.
+
+    eps=0.2% (raised from 0.1%) — a 0.1% move on a 1H candle is pure noise
+    and caused the macro state to flip between scans on slight price drift.
+    0.2% is still sensitive enough to catch real directional moves while
+    filtering out market microstructure noise.
+    """
     if p > eps:
         return "up"
     if p < -eps:
@@ -82,19 +89,53 @@ def compute_velocities_1h(
 
 
 def classify_macro_state(ctx: MacroContext) -> MacroState:
-    # Convenience
-    b, a, s = ctx.btc_dir, ctx.alt_dir, ctx.stable_dir
+    """Classify the current macro environment into a discrete state.
 
-    # Strong stablecoin concern first (overrides)
-    if ctx.stable_velocity_1h > 0.5:  # configurable threshold
+    Uses THREE layers of evidence (prioritised top-to-bottom):
+
+    1. **Velocity-based** (btc_dir / alt_dir / stable_dir)
+       Derived from 1H price changes.  Fast-reacting but noisy.
+
+    2. **Dominance-based overrides**
+       BTC dom > 58% → flight-to-BTC (BTC_ONLY_RALLY or RISK_OFF).
+       BTC dom < 50% → capital rotating to alts (boosts ALT_SEASON / RISK_ON).
+       Stable dom > 6% → extreme risk-off regardless of velocity.
+
+    3. **Breadth confirmation** (percent_alts_up)
+       Validates velocity reads:
+         - If 70%+ alts up, "up" velocity is confirmed (broad participation)
+         - If <30% alts up, "up" velocity on ALTs is suspect (thin rally)
+       Prevents RISK_ON classification on narrow alt rallies.
+    """
+    b, a, s = ctx.btc_dir, ctx.alt_dir, ctx.stable_dir
+    breadth = ctx.percent_alts_up  # 0–100, 50 = neutral
+
+    # ── Layer 0: Dominance-level overrides ────────────────────────────────
+    # These fire regardless of velocity because extreme dominance shifts
+    # indicate structural capital rotation, not just price noise.
+    if ctx.stable_dom > 6.0:
+        ctx.notes.append(f"Stable dom {ctx.stable_dom:.1f}% > 6% → STABLE_SCARE override")
         return MacroState.STABLE_SCARE
 
+    # Strong stablecoin velocity concern (original check)
+    if ctx.stable_velocity_1h > 0.5:
+        return MacroState.STABLE_SCARE
+
+    # ── Layer 1: Velocity-based classification ────────────────────────────
     # BTC-led expansion: BTC up, ALTs up, Stables down
     if b == "up" and a == "up" and s == "down":
+        # Breadth confirmation: if <40% of alts are actually up,
+        # the "alt_dir=up" is a narrow rally — don't trust it
+        if breadth < 40:
+            ctx.notes.append(f"BTC_LED_EXPANSION downgraded: breadth {breadth:.0f}% < 40%")
+            return MacroState.BTC_ONLY_RALLY  # narrow alt participation
         return MacroState.BTC_LED_EXPANSION
 
     # Risk-on: ALTs up, Stables down, BTC not necessarily up
-    if a in ("up",) and s == "down" and b in ("down", "flat"):
+    if a == "up" and s == "down" and b in ("down", "flat"):
+        if breadth < 40:
+            ctx.notes.append(f"RISK_ON downgraded to CHOPPY: breadth {breadth:.0f}% < 40%")
+            return MacroState.CHOPPY  # thin alt rally, not real risk-on
         return MacroState.RISK_ON
 
     # Risk-off: BTC up (relative dominance), ALTs down, Stables up
@@ -107,18 +148,27 @@ def classify_macro_state(ctx: MacroContext) -> MacroState:
 
     # Alt-season: BTC down, ALTs up, stables flat/down
     if b == "down" and a == "up" and s in ("flat", "down"):
+        if breadth < 50:
+            ctx.notes.append(f"ALT_SEASON downgraded to CHOPPY: breadth {breadth:.0f}% < 50%")
+            return MacroState.CHOPPY  # not enough alts participating for alt season
         return MacroState.ALT_SEASON
 
+    # ── Layer 2: Dominance-level reclassification ─────────────────────────
+    # When velocity says "flat" but dominance structure tells a clear story.
+    if ctx.btc_dom > 58.0 and b in ("up", "flat") and a in ("down", "flat"):
+        ctx.notes.append(f"BTC dom {ctx.btc_dom:.1f}% > 58% → BTC_ONLY_RALLY (dominance override)")
+        return MacroState.BTC_ONLY_RALLY
+
+    if ctx.btc_dom < 50.0 and a in ("up", "flat") and breadth >= 55:
+        ctx.notes.append(f"BTC dom {ctx.btc_dom:.1f}% < 50% + breadth {breadth:.0f}% → RISK_ON (dominance override)")
+        return MacroState.RISK_ON
+
+    # ── Layer 3: Catch-all states ─────────────────────────────────────────
     # Correlated sell-off: BTC down, ALTs down — everything dumping together.
-    # Distinct from RISK_OFF (where BTC holds up while alts bleed).
-    # This is the "blood in the streets" scenario — dangerous for trend-following
-    # longs, but can produce the best reversal setups (capitulation sweep).
     if b == "down" and a == "down":
         return MacroState.CORRELATED_SELLOFF
 
-    # Choppy: at least one direction is "flat" while others disagree,
-    # or stables rising while BTC is flat (quiet risk-off that doesn't match
-    # the strict RISK_OFF criteria).  High uncertainty, reduce conviction.
+    # Choppy: mixed signals / high uncertainty
     _flat_count = sum(1 for d in (b, a, s) if d == "flat")
     if _flat_count >= 2 or (s == "up" and b == "flat"):
         return MacroState.CHOPPY
