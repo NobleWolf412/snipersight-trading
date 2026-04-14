@@ -176,23 +176,38 @@ def compute_macro_score(
             return int(round(x * 0.7))
         return x
 
-    # BTC-LED EXPANSION (minor adjustment rules you provided)
+    # ── Helper: reversal-aware penalty ────────────────────────────────────
+    # Applies a reduced penalty when the setup is a confirmed reversal
+    # (liquidity sweep / discount-premium bounce).  Scalps get the lightest
+    # penalty because they exit quickly; swings keep most of the penalty
+    # because they hold through extended exposure.
+    def _reversal_penalty(full_base: int, label: str) -> int:
+        if is_reversal and trade_type == "scalp":
+            notes.append(f"{label}: soft penalty (scalp reversal)")
+            return amplify(max(full_base, -1) if full_base < 0 else min(full_base, 1))
+        if is_reversal and trade_type == "intraday":
+            notes.append(f"{label}: reduced penalty (intraday reversal)")
+            return amplify(max(full_base, -1) if full_base < 0 else min(full_base, 1))
+        if is_reversal:
+            notes.append(f"{label}: moderate penalty (swing reversal)")
+            return amplify(max(full_base, -2) if full_base < 0 else min(full_base, 2))
+        notes.append(f"{label}: penalize {'longs' if full_base < 0 else 'shorts'}")
+        return amplify(full_base)
+
+    # BTC-LED EXPANSION
     if state == MacroState.BTC_LED_EXPANSION:
-        # Short season? No. Penalize shorts across board.
         if direction == "SHORT":
-            score += amplify(-3)
-            notes.append("BTC-led expansion: penalize shorts")
+            score += _reversal_penalty(-3, "BTC-led expansion")
         else:
             if is_btc:
-                score += amplify(3)  # BTC gets max bonus
+                score += amplify(3)
                 notes.append("BTC-led expansion: boost BTC longs")
             if is_alt:
-                # Neutralize normal alt-long penalty and add slight bonus based on ALT velocity
                 bonus = 2 if ctx.alt_velocity_1h > 0.3 else 1
                 score += damp_for_alt_on_high_btc_vol(amplify(bonus))
                 notes.append("BTC-led expansion: slight bonus for alt longs")
 
-        # Caution flag: BTC fast up, ALTs slow/flat, stables flat → alts can lag then bleed
+        # Caution flag: BTC fast up, ALTs slow/flat, stables flat
         if (
             ctx.btc_velocity_1h > 0.6
             and ctx.alt_velocity_1h < 0.15
@@ -204,8 +219,7 @@ def compute_macro_score(
 
     elif state == MacroState.RISK_ON:
         if direction == "SHORT":
-            score += amplify(-2)
-            notes.append("Risk-on: penalize shorts")
+            score += _reversal_penalty(-2, "Risk-on")
         else:
             if is_alt:
                 score += damp_for_alt_on_high_btc_vol(amplify(2))
@@ -216,23 +230,7 @@ def compute_macro_score(
 
     elif state in (MacroState.RISK_OFF, MacroState.STABLE_SCARE):
         if direction == "LONG":
-            # Trade-type-aware penalty: scalp reversals carry less directional
-            # risk than swing holds.  Counter-trend bounces off liquidity sweeps
-            # (is_reversal=True) get softened further — slamming a discount-zone
-            # bounce with -3 misses valid setups in macro transitions.
-            if is_reversal and trade_type == "scalp":
-                _base = -1   # minimal penalty — quick in/out
-                notes.append("Risk-off: soft penalty (scalp reversal)")
-            elif is_reversal and trade_type == "intraday":
-                _base = -1   # reduced — counter-trend with evidence
-                notes.append("Risk-off: reduced penalty (intraday reversal)")
-            elif is_reversal:
-                _base = -2   # moderate — swing reversal still risky
-                notes.append("Risk-off: moderate penalty (swing reversal)")
-            else:
-                _base = -3   # full penalty — trend-following long in risk-off
-                notes.append("Risk-off/Stable scare: penalize longs")
-            score += amplify(_base)
+            score += _reversal_penalty(-3, "Risk-off/Stable scare")
         else:
             score += amplify(2)
             if is_alt:
@@ -245,8 +243,7 @@ def compute_macro_score(
                 score += amplify(2)
                 notes.append("BTC-only rally: favor BTC longs")
             if is_alt:
-                score += amplify(-3)
-                notes.append("BTC-only rally: penalize alt longs")
+                score += _reversal_penalty(-3, "BTC-only rally (alt long)")
         else:
             if is_alt:
                 score += amplify(2)
@@ -258,10 +255,9 @@ def compute_macro_score(
                 score += damp_for_alt_on_high_btc_vol(amplify(3))
                 notes.append("Alt-season: boost alt longs")
             if is_btc:
-                score += amplify(0)  # neutral to slight + if desired
+                score += amplify(0)
         else:
-            score += amplify(-2)
-            notes.append("Alt-season: penalize shorts")
+            score += _reversal_penalty(-2, "Alt-season")
 
     # Bound final macro score gently
     score = max(-4, min(4, score))
