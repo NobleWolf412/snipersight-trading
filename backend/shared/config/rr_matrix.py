@@ -195,10 +195,12 @@ def validate_rr(
         threshold_source = "mode_override"
     else:
         # Trade-type-specific minimum R:R
-        # - swing: 2.0 (wider stops require higher reward)
-        # - scalp: 1.2 (tight stops allow lower R:R)
+        # - swing:    2.0 (wider stops require higher reward)
+        # - scalp:    2.0 (raised from 1.2 — fee+slippage ~0.5% round-trip means
+        #                  a 1.2R scalp nets near-zero or negative after costs.
+        #                  Minimum target must be 4× round-trip cost to be viable.)
         # - intraday: 1.5 (balanced)
-        trade_type_min_rr = {"swing": 2.0, "scalp": 1.2, "intraday": 1.5}
+        trade_type_min_rr = {"swing": 2.0, "scalp": 2.0, "intraday": 1.5}
         trade_type_lower = (trade_type or "").lower()
 
         if trade_type_lower in trade_type_min_rr:
@@ -215,13 +217,18 @@ def validate_rr(
         return True, ""
 
     # EV-based override for borderline cases
-    # Allow slightly lower floor for scalps/aggressive modes since they have tighter stops
+    # Scalps are explicitly excluded from EV override — their fee cost (~0.5% round-trip)
+    # makes any sub-2.0R scalp unprofitable regardless of confluence. Swing/intraday
+    # can use EV override at 0.75R floor for very high confluence setups.
     trade_type_lower = (trade_type or "").lower()
-    ev_floor = (
-        0.65
-        if trade_type_lower == "scalp" or (min_rr_override and min_rr_override <= 1.2)
-        else 0.75
-    )
+    if trade_type_lower == "scalp":
+        # No EV override for scalps — fee floor is non-negotiable
+        reason = (
+            f"R:R {risk_reward:.2f} below scalp minimum {effective_min_rr:.2f}. "
+            f"Fee+slippage ~0.5% round-trip requires R:R ≥ 2.0 to be viable."
+        )
+        return False, reason
+    ev_floor = 0.75
     if (
         expected_value is not None
         and confluence_score is not None

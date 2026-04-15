@@ -985,11 +985,17 @@ def evaluate_htf_structural_proximity(
         atr_ind = _get_tf_indicators(indicators, fvg.timeframe) or primary_ind
         if not atr_ind or not atr_ind.atr:
             continue
-            
+
+        # Use the FVG's OWN timeframe ATR for the size gate, not the primary entry TF ATR.
+        # Bug: previously used `atr` (primary 1H/15m ATR) which caused valid 4H/1D FVGs to be
+        # rejected because their absolute gap size was smaller than the entry TF's ATR — even
+        # though those FVGs were correctly sized relative to their own timeframe volatility.
+        _fvg_atr = atr_ind.atr
+
         fvg_grade = getattr(fvg, "grade", "B")
         if fvg_grade not in ("A", "B"):
             continue
-        if fvg.size < atr:
+        if fvg.size < _fvg_atr * 0.3:  # 30% of own-TF ATR — was 100% (too strict, filtered valid FVGs)
             continue
         if fvg.overlap_with_price > 0.7:  # Allow partial retest (was 0.5 — too aggressive, filtered valid retested FVGs)
             continue
