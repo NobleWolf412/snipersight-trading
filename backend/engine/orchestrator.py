@@ -161,9 +161,11 @@ class Orchestrator:
 
         # Entry cooldown tracking - persistent manager
         self.cooldown_manager = CooldownManager()
-        self._cooldown_hours = (
-            24  # Hours to wait after a stop-out before re-entering same direction
-        )
+        self._cooldown_hours_by_type: Dict[str, int] = {
+            "scalp": 2,
+            "intraday": 8,
+            "swing": 24,
+        }
 
         # Initialize components
         if exchange_adapter is None:
@@ -3590,7 +3592,12 @@ class Orchestrator:
     # ======================== COOLDOWN MANAGEMENT ========================
 
     def register_stop_out(
-        self, symbol: str, price: float, direction: str, timestamp: Optional[datetime] = None
+        self,
+        symbol: str,
+        price: float,
+        direction: str,
+        trade_type: str = "intraday",
+        timestamp: Optional[datetime] = None,
     ) -> None:
         """
         Register a stop-out event to prevent immediate re-entry.
@@ -3602,24 +3609,27 @@ class Orchestrator:
             symbol: Trading pair (e.g., 'BTC/USDT')
             price: Stop-out price level
             direction: Trade direction ('LONG' or 'SHORT')
+            trade_type: Trade type ('scalp', 'intraday', 'swing') — controls cooldown duration
             timestamp: When the stop-out occurred (defaults to now)
         """
         ts = timestamp or datetime.now(timezone.utc)
+        cooldown_hours = self._cooldown_hours_by_type.get(trade_type, 24)
 
         self.cooldown_manager.add_cooldown(
             symbol=symbol,
             direction=direction,
             price=price,
             reason="stop_out",
-            duration_hours=self._cooldown_hours,
+            duration_hours=cooldown_hours,
         )
 
         logger.info(
-            "🚫 %s: Registered stop-out (dir=%s, price=%.4f) - cooldown for %d hours",
+            "🚫 %s: Registered stop-out (dir=%s, type=%s, price=%.4f) - cooldown for %d hours",
             symbol,
             direction,
+            trade_type,
             price,
-            self._cooldown_hours,
+            cooldown_hours,
         )
 
         # Log telemetry event
@@ -3630,9 +3640,10 @@ class Orchestrator:
                 payload={
                     "symbol": symbol,
                     "direction": direction,
+                    "trade_type": trade_type,
                     "stop_price": price,
-                    "cooldown_hours": self._cooldown_hours,
-                    "cooldown_expires": (ts.timestamp() + self._cooldown_hours * 3600),
+                    "cooldown_hours": cooldown_hours,
+                    "cooldown_expires": (ts.timestamp() + cooldown_hours * 3600),
                 },
             )
         )
@@ -3657,9 +3668,10 @@ class Orchestrator:
         expires_at = cooldown_info["expires_at"]
         now = datetime.now(timezone.utc)
 
-        # Calculate time remaining
+        # Calculate time remaining (use stored duration so per-type cooldowns report correctly)
+        duration_hours = cooldown_info.get("duration_hours", 24)
         hours_remaining = (expires_at - now).total_seconds() / 3600
-        hours_elapsed = self._cooldown_hours - hours_remaining
+        hours_elapsed = duration_hours - hours_remaining
 
         # Still in cooldown - check if price has moved significantly
         stop_price = cooldown_info["price"]

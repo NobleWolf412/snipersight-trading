@@ -65,6 +65,7 @@ class CooldownManager:
                                     "expires_at": expires_at,
                                     "price": info.get("price", 0.0),
                                     "reason": info.get("reason", "stop_loss"),
+                                    "duration_hours": info.get("duration_hours", 24),
                                 }
                         except (ValueError, KeyError):
                             continue
@@ -95,6 +96,7 @@ class CooldownManager:
                             "expires_at": info["expires_at"].isoformat(),
                             "price": info.get("price", 0.0),
                             "reason": info.get("reason", "stop_loss"),
+                            "duration_hours": info.get("duration_hours", 24),
                         }
                 if symbol_data:
                     data[symbol] = symbol_data
@@ -158,6 +160,7 @@ class CooldownManager:
                 "expires_at": expires_at,
                 "price": price,
                 "reason": reason,
+                "duration_hours": duration_hours,
             }
 
             logger.info(

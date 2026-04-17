@@ -2445,6 +2445,7 @@ class PaperTradingService:
                             symbol=pos.symbol,
                             direction=pos.direction,
                             price=trade.exit_price or pos.entry_price,
+                            trade_type=getattr(pos, "trade_type", "intraday"),
                         )
                     except Exception as _e:
                         logger.warning(
