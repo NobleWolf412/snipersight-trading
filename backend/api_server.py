@@ -172,6 +172,7 @@ app = FastAPI(
 # Enable live symbol classification on startup
 from backend.analysis.symbol_classifier import get_classifier
 from backend.bot.trade_journal import get_trade_journal
+from backend.ml.model_store import get_model_store
 
 
 @app.on_event("startup")
@@ -1264,6 +1265,50 @@ async def export_trade_journal(
         )
     except Exception as e:
         logger.error("Failed to export trade journal: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ml/train")
+async def train_ml_model():
+    """
+    Trigger a (re-)train of the edge model from all enriched journal trades.
+
+    Returns model metadata including accuracy and number of samples used.
+    Requires at least 30 enriched trades to succeed.
+    """
+    try:
+        journal = get_trade_journal()
+        records = journal.query(limit=10000)
+        result = get_model_store().train(records)
+        return result
+    except Exception as e:
+        logger.error("ML train failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ml/status")
+async def get_ml_status():
+    """
+    Return current model metadata (trained, model_type, n_samples, accuracy, trained_at).
+    """
+    try:
+        return get_model_store().status()
+    except Exception as e:
+        logger.error("ML status failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ml/feature-importance")
+async def get_ml_feature_importance():
+    """
+    Return feature importance list sorted descending.
+
+    Each entry: {name, importance}
+    """
+    try:
+        return {"features": get_model_store().feature_importance()}
+    except Exception as e:
+        logger.error("ML feature importance failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

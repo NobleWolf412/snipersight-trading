@@ -25,6 +25,7 @@ import logging
 from threading import Lock
 
 from backend.shared.models.planner import TradePlan, Target
+from backend.strategy.smc.sessions import get_current_kill_zone
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,17 @@ class PositionState:
     trade_type: str = "intraday"  # "scalp", "intraday", "swing" — from TradePlan
     regime_volatility: str = "normal"  # "compressed", "normal", "elevated", "chaotic"
     regime_trend: str = "sideways"  # "strong_up", "up", "sideways", "down", "strong_down"
+
+    # ML feature snapshot — captured at open time from TradePlan, used for model training
+    confidence_score: float = 0.0
+    conviction_class: str = "B"       # "A", "B", "C"
+    plan_type: str = "SMC"            # "SMC", "ATR_FALLBACK", "HYBRID"
+    risk_reward_ratio: float = 0.0
+    stop_distance_atr: float = 0.0
+    timeframe: str = "1h"
+    regime: str = "unknown"           # symbol_regime from plan metadata
+    pullback_probability: float = 0.0
+    kill_zone: str = "no_session"     # active kill zone at entry time
 
     # Price history for progress detection (sampled every 30 minutes)
     _price_samples: List[float] = field(default_factory=list)
@@ -296,12 +308,20 @@ class PositionManager:
         position_id = f"{trade_plan.symbol}_{datetime.now(timezone.utc).timestamp()}"
 
         # Extract regime context from the trade plan metadata
-        global_regime = getattr(trade_plan, "metadata", {}).get("global_regime", {}) if hasattr(trade_plan, "metadata") else {}
+        _meta = getattr(trade_plan, "metadata", {}) or {}
+        global_regime = _meta.get("global_regime", {})
         regime_volatility = global_regime.get("volatility", "normal")
         regime_trend = global_regime.get("trend", "sideways")
 
         # Extract trade type from the planner's derivation
         trade_type = getattr(trade_plan, "trade_type", "intraday") or "intraday"
+
+        # ML feature snapshot — pinned at open time so the model always trains on
+        # the conditions that were present when the decision was made.
+        _kz = get_current_kill_zone()
+        _ml_kill_zone = _kz.name if _kz else "no_session"
+        _ml_regime = str(_meta.get("symbol_regime", "unknown"))
+        _ml_pb_prob = float(_meta.get("pullback_probability", 0.0) or 0.0)
 
         position = PositionState(
             position_id=position_id,
@@ -320,6 +340,15 @@ class PositionManager:
             trade_type=trade_type,
             regime_volatility=regime_volatility,
             regime_trend=regime_trend,
+            confidence_score=float(getattr(trade_plan, "confidence_score", 0.0) or 0.0),
+            conviction_class=str(getattr(trade_plan, "conviction_class", "B") or "B"),
+            plan_type=str(getattr(trade_plan, "plan_type", "SMC") or "SMC"),
+            risk_reward_ratio=float(getattr(trade_plan, "risk_reward_ratio", 0.0) or 0.0),
+            stop_distance_atr=float(getattr(trade_plan.stop_loss, "distance_atr", 0.0) or 0.0),
+            timeframe=str(getattr(trade_plan, "timeframe", "1h") or "1h"),
+            regime=_ml_regime,
+            pullback_probability=_ml_pb_prob,
+            kill_zone=_ml_kill_zone,
         )
 
         # Calculate the adaptive stagnation deadline for logging
