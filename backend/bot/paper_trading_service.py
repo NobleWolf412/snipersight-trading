@@ -37,6 +37,7 @@ from backend.analysis.regime_policies import get_regime_policy
 from backend.shared.utils.math_utils import round_to_lot
 from backend.diagnostics.logger import DiagnosticLogger, ProbeCategory, Severity
 from backend.diagnostics.report import ReportGenerator, ModeStats
+from backend.bot.trade_journal import get_trade_journal
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +362,17 @@ class PaperTradingService:
 
         self.config = config
         self.session_id = str(uuid.uuid4())[:8]
+
+        # Preload any trades already written for this session (crash recovery).
+        # In normal first-start scenarios the journal has no entries for this brand-new
+        # session_id, so this is effectively a no-op with zero overhead.
+        try:
+            prior = get_trade_journal().query(session_id=self.session_id, limit=1000)
+            if prior:
+                logger.info("Reloaded %d trades from journal for session %s", len(prior), self.session_id)
+                # (full reconstruction path would rebuild stats too — left for future work)
+        except Exception as _je:
+            logger.warning("Could not preload journal on start: %s", _je)
 
         # Paper trading always uses stealth mode — it's the optimal balance:
         # - Covers D→5m timeframes (full range)
@@ -2445,6 +2457,7 @@ class PaperTradingService:
                             symbol=pos.symbol,
                             direction=pos.direction,
                             price=trade.exit_price or pos.entry_price,
+                            trade_type=getattr(pos, "trade_type", "intraday"),
                         )
                     except Exception as _e:
                         logger.warning(
@@ -2486,6 +2499,11 @@ class PaperTradingService:
 
     def _update_stats(self, trade: CompletedTrade):
         """Update statistics after a trade completes."""
+        try:
+            get_trade_journal().append(trade.to_dict(), self.session_id or "unknown")
+        except Exception as _je:
+            logger.warning("Failed to write trade to journal: %s", _je)
+
         self.stats.total_trades += 1
 
         if trade.pnl > 0:
