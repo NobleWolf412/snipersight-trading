@@ -3,13 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Cell,
 } from 'recharts';
-import { ArrowUp, ArrowDown, Download, Funnel, ArrowClockwise } from '@phosphor-icons/react';
+import { ArrowUp, ArrowDown, Download, Funnel, ArrowClockwise, Brain, SpinnerGap } from '@phosphor-icons/react';
 import { PageShell } from '@/components/layout/PageShell';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +24,7 @@ import {
   type JournalAggregate,
   type JournalFilters,
 } from '@/services/tradeJournalService';
+import { mlService, type MLStatus, type FeatureImportanceItem } from '@/services/mlService';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -112,6 +116,198 @@ function BreakdownTable({
             )}
           </tbody>
         </table>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── MLPanel ──────────────────────────────────────────────────────────────────
+
+function MLPanel() {
+  const [status, setStatus] = useState<MLStatus | null>(null);
+  const [importance, setImportance] = useState<FeatureImportanceItem[]>([]);
+  const [training, setTraining] = useState(false);
+  const [trainMsg, setTrainMsg] = useState<string | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(true);
+
+  const fetchStatus = async () => {
+    try {
+      const s = await mlService.getStatus();
+      setStatus(s);
+      if (s.trained) {
+        const feats = await mlService.getFeatureImportance();
+        setImportance(feats.slice(0, 12));
+      }
+    } catch {
+      // backend may not be running yet
+    } finally {
+      setLoadingStatus(false);
+    }
+  };
+
+  useEffect(() => { fetchStatus(); }, []);
+
+  const handleTrain = async () => {
+    setTraining(true);
+    setTrainMsg(null);
+    try {
+      const result = await mlService.train();
+      setTrainMsg(result.message);
+      await fetchStatus();
+    } catch (e: any) {
+      setTrainMsg(e?.message ?? 'Training failed');
+    } finally {
+      setTraining(false);
+    }
+  };
+
+  const accuracy = status?.accuracy ?? 0;
+  const accuracyColor =
+    accuracy >= 0.65 ? 'text-green-400' : accuracy >= 0.55 ? 'text-yellow-400' : 'text-red-400';
+
+  return (
+    <Card className="border-border/40 bg-card/60 backdrop-blur-sm">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <Brain size={16} className="text-primary" />
+            <CardTitle className="text-sm heading-hud text-muted-foreground">EDGE MODEL</CardTitle>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="font-mono text-xs gap-2"
+            disabled={training}
+            onClick={handleTrain}
+          >
+            {training ? <SpinnerGap size={12} className="animate-spin" /> : <Brain size={12} />}
+            {training ? 'TRAINING...' : 'TRAIN MODEL'}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loadingStatus ? (
+          <p className="text-xs text-muted-foreground font-mono animate-pulse">Loading model status...</p>
+        ) : !status ? (
+          <p className="text-xs text-muted-foreground font-mono">Backend not reachable.</p>
+        ) : (
+          <>
+            {/* Status strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground font-mono uppercase tracking-widest mb-1">Status</p>
+                <p className={`text-sm font-bold font-mono ${status.trained ? 'text-green-400' : 'text-muted-foreground'}`}>
+                  {status.trained ? 'TRAINED' : 'UNTRAINED'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground font-mono uppercase tracking-widest mb-1">Model</p>
+                <p className="text-sm font-bold font-mono">{status.model_type === 'none' ? '—' : status.model_type}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground font-mono uppercase tracking-widest mb-1">Samples</p>
+                <p className="text-sm font-bold font-mono">
+                  {status.n_samples}
+                  <span className="text-xs text-muted-foreground ml-1">/ {status.min_samples_required} min</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground font-mono uppercase tracking-widest mb-1">CV Accuracy</p>
+                <p className={`text-sm font-bold font-mono ${accuracyColor}`}>
+                  {status.trained ? `${(accuracy * 100).toFixed(1)}%` : '—'}
+                </p>
+                {status.trained && (
+                  <p className="text-[10px] text-muted-foreground font-mono mt-0.5">purged walk-fwd</p>
+                )}
+              </div>
+            </div>
+
+            {/* Insight callouts */}
+            {!status.trained && (
+              <div className="rounded-md border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-xs font-mono text-yellow-400">
+                Need {Math.max(0, status.min_samples_required - status.n_samples)} more enriched trade
+                {Math.max(0, status.min_samples_required - status.n_samples) !== 1 ? 's' : ''} before training is possible.
+              </div>
+            )}
+            {status.trained && accuracy < 0.55 && (
+              <div className="rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs font-mono text-red-400">
+                Accuracy below 55% — gather more diverse trades before relying on predictions.
+              </div>
+            )}
+            {status.trained && accuracy >= 0.65 && (
+              <div className="rounded-md border border-green-500/20 bg-green-500/5 px-3 py-2 text-xs font-mono text-green-400">
+                Model looks solid. Green bars = conditions that help your win rate. Red = conditions that hurt it.
+              </div>
+            )}
+            {status.trained && accuracy >= 0.55 && accuracy < 0.65 && (
+              <div className="rounded-md border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-xs font-mono text-yellow-400">
+                Moderate accuracy — more trades will sharpen the model. Use feature directions as guidance only.
+              </div>
+            )}
+
+            {trainMsg && (
+              <p className="text-xs font-mono text-muted-foreground">{trainMsg}</p>
+            )}
+
+            {/* Feature importance chart — directional SHAP */}
+            {importance.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-muted-foreground font-mono uppercase tracking-widest">
+                    SHAP FEATURE IMPORTANCE
+                  </p>
+                  <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <span className="inline-block w-2 h-2 rounded-sm bg-green-500" />
+                      helps win rate
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="inline-block w-2 h-2 rounded-sm bg-red-500" />
+                      hurts win rate
+                    </span>
+                  </div>
+                </div>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart
+                    layout="vertical"
+                    data={importance}
+                    margin={{ top: 0, right: 12, left: 8, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
+                    <XAxis
+                      type="number"
+                      tick={{ fontSize: 10, fill: '#888' }}
+                      tickFormatter={(v) => v.toFixed(3)}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      tick={{ fontSize: 10, fill: '#aaa', fontFamily: 'monospace' }}
+                      width={148}
+                    />
+                    <Tooltip
+                      contentStyle={{ background: '#0a0a0a', border: '1px solid #333', fontSize: 11 }}
+                      formatter={(v: number, _name: string, props: any) => {
+                        const dir = props?.payload?.direction ?? 0;
+                        const dirLabel = dir > 0 ? '▲ helps win rate' : '▼ hurts win rate';
+                        return [`${v.toFixed(5)}  ${dirLabel}`, 'SHAP |importance|'];
+                      }}
+                    />
+                    <Bar dataKey="importance" radius={[0, 3, 3, 0]}>
+                      {importance.map((item, i) => (
+                        <Cell
+                          key={i}
+                          fill={item.direction >= 0 ? '#22c55e' : '#ef4444'}
+                          opacity={0.7 + 0.3 * (1 - i / importance.length)}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </>
+        )}
       </CardContent>
     </Card>
   );
@@ -249,6 +445,22 @@ export function TradeJournal() {
           </Button>
         </div>
 
+        {/* Page tab nav */}
+        <div className="flex gap-0 border-b border-border/40 -mt-2">
+          <button
+            onClick={() => navigate('/training')}
+            className="px-5 py-2.5 text-xs font-mono tracking-widest border-b-2 border-transparent text-muted-foreground hover:text-cyan-300 hover:border-cyan-500/40 transition-colors"
+          >
+            TRAINING GROUND
+          </button>
+          <button
+            className="px-5 py-2.5 text-xs font-mono tracking-widest border-b-2 border-primary text-primary transition-colors"
+            disabled
+          >
+            JOURNAL &amp; ML
+          </button>
+        </div>
+
         {/* Error */}
         {error && (
           <div className="rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400 font-mono">
@@ -327,6 +539,9 @@ export function TradeJournal() {
           <BreakdownTable title="BY SYMBOL" rows={symbolRows} />
           <BreakdownTable title="BY TRADE TYPE" rows={typeRows} />
         </div>
+
+        {/* ML Panel */}
+        <MLPanel />
 
         {/* Filters */}
         <Card className="border-border/40 bg-card/60 backdrop-blur-sm">

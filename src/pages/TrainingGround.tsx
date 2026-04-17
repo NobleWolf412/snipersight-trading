@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -174,6 +175,7 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
 };
 
 export function TrainingGround() {
+  const navigate = useNavigate();
   const [config, setConfig] = useState<PaperTradingConfigRequest>(DEFAULT_CONFIG);
   const [status, setStatus] = useState<PaperTradingStatusResponse | null>(null);
   const [trades, setTrades] = useState<CompletedPaperTrade[]>([]);
@@ -355,6 +357,22 @@ export function TrainingGround() {
               {status.status.toUpperCase()}
             </Badge>
           )}
+        </div>
+
+        {/* Page tab nav */}
+        <div className="flex gap-0 border-b border-border/40 -mt-2">
+          <button
+            className="px-5 py-2.5 text-xs font-mono tracking-widest border-b-2 border-accent text-accent transition-colors"
+            disabled
+          >
+            TRAINING GROUND
+          </button>
+          <button
+            onClick={() => navigate('/journal')}
+            className="px-5 py-2.5 text-xs font-mono tracking-widest border-b-2 border-transparent text-muted-foreground hover:text-cyan-300 hover:border-cyan-500/40 transition-colors"
+          >
+            JOURNAL &amp; ML
+          </button>
         </div>
 
         {/* Info Alert */}

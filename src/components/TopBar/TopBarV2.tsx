@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom';
-import { Crosshair, GearSix, CaretDown } from '@phosphor-icons/react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Crosshair, GearSix, CaretDown, BookOpen } from '@phosphor-icons/react';
 import { SessionIndicator } from '@/components/SessionIndicator/SessionIndicator';
 import { WalletConnect } from '@/components/WalletConnect';
 
@@ -59,7 +59,19 @@ export function TopBar() {
                     {/* Right Utilities Section - Margin-based Spacing (Proven to work) */}
                     <div className="flex items-center text-base">
 
+                        {/* Journal link */}
                         <div style={{ marginLeft: '40px' }}>
+                            <Link
+                                to="/journal"
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-mono text-zinc-300 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
+                                title="Trade Journal"
+                            >
+                                <BookOpen size={18} weight="bold" />
+                                <span className="hidden sm:inline text-xs tracking-widest">JOURNAL</span>
+                            </Link>
+                        </div>
+
+                        <div style={{ marginLeft: '16px' }}>
                             <WalletConnect />
                         </div>
 

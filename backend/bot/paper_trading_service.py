@@ -191,6 +191,17 @@ class CompletedTrade:
     max_adverse: float = 0.0
     trade_type: str = "intraday"  # "scalp", "intraday", "swing"
 
+    # ML feature snapshot — populated from PositionState (which captures from TradePlan at open)
+    confidence_score: float = 0.0
+    conviction_class: str = "B"
+    plan_type: str = "SMC"
+    risk_reward_ratio: float = 0.0
+    stop_distance_atr: float = 0.0
+    timeframe: str = "1h"
+    regime: str = "unknown"
+    pullback_probability: float = 0.0
+    kill_zone: str = "no_session"
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API response."""
         return {
@@ -209,6 +220,15 @@ class CompletedTrade:
             "max_favorable": self.max_favorable,
             "max_adverse": self.max_adverse,
             "trade_type": self.trade_type,
+            "confidence_score": self.confidence_score,
+            "conviction_class": self.conviction_class,
+            "plan_type": self.plan_type,
+            "risk_reward_ratio": self.risk_reward_ratio,
+            "stop_distance_atr": self.stop_distance_atr,
+            "timeframe": self.timeframe,
+            "regime": self.regime,
+            "pullback_probability": self.pullback_probability,
+            "kill_zone": self.kill_zone,
         }
 
 
@@ -2401,6 +2421,15 @@ class PaperTradingService:
                     max_favorable=_mfe,
                     max_adverse=_mae,
                     trade_type=getattr(pos, "trade_type", "intraday"),
+                    confidence_score=getattr(pos, "confidence_score", 0.0),
+                    conviction_class=getattr(pos, "conviction_class", "B"),
+                    plan_type=getattr(pos, "plan_type", "SMC"),
+                    risk_reward_ratio=getattr(pos, "risk_reward_ratio", 0.0),
+                    stop_distance_atr=getattr(pos, "stop_distance_atr", 0.0),
+                    timeframe=getattr(pos, "timeframe", "1h"),
+                    regime=getattr(pos, "regime", "unknown"),
+                    pullback_probability=getattr(pos, "pullback_probability", 0.0),
+                    kill_zone=getattr(pos, "kill_zone", "no_session"),
                 )
 
                 self.completed_trades.append(trade)
