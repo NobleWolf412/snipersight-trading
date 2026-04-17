@@ -63,7 +63,7 @@ export function TopBar() {
                         <div style={{ marginLeft: '40px' }}>
                             <Link
                                 to="/journal"
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-mono text-zinc-500 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-mono text-zinc-300 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
                                 title="Trade Journal"
                             >
                                 <BookOpen size={18} weight="bold" />
