@@ -1,4 +1,6 @@
-import { api } from './api';
+const BASE = typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE
+  ? (import.meta as any).env.VITE_API_BASE
+  : '/api';
 
 export interface MLStatus {
   trained: boolean;
@@ -21,7 +23,7 @@ export interface FeatureImportanceItem {
 }
 
 class MLService {
-  private base = api.baseURL;
+  private base = BASE;
 
   async getStatus(): Promise<MLStatus> {
     const res = await fetch(`${this.base}/api/ml/status`);

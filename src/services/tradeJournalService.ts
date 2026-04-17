@@ -1,5 +1,9 @@
 import { api } from './api';
 
+const BASE = typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE
+  ? (import.meta as any).env.VITE_API_BASE
+  : '/api';
+
 export interface JournalTrade {
   trade_id: string;
   session_id: string;
@@ -78,7 +82,7 @@ class TradeJournalService {
     Object.entries(filters).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') params.append(k, String(v));
     });
-    const res = await fetch(`${api.baseURL}/trades/journal?${params}`);
+    const res = await fetch(`${BASE}/trades/journal?${params}`);
     if (!res.ok) throw new Error(`Journal fetch failed: ${res.statusText}`);
     return res.json();
   }
@@ -88,7 +92,7 @@ class TradeJournalService {
     Object.entries(filters).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') params.append(k, String(v));
     });
-    return `${api.baseURL}/trades/export?${params}`;
+    return `${BASE}/trades/export?${params}`;
   }
 }
 
