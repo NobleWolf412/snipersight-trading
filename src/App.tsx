@@ -15,6 +15,7 @@ const TrainingGround = lazy(() => import('@/pages/TrainingGround').then(m => ({ 
 const MarketOverview = lazy(() => import('@/pages/MarketOverview').then(m => ({ default: m.MarketOverview })));
 const Intel = lazy(() => import('@/pages/Intel').then(m => ({ default: m.Intel })));
 const HTFOpportunities = lazy(() => import('@/pages/HTFOpportunities').then(m => ({ default: m.HTFOpportunities })));
+const TradeJournal = lazy(() => import('@/pages/TradeJournal').then(m => ({ default: m.TradeJournal })));
 
 function LoadingFallback() {
   return (
@@ -49,6 +50,7 @@ function App() {
             <Route path="/market" element={<MarketOverview />} />
             <Route path="/intel" element={<Intel />} />
             <Route path="/htf" element={<HTFOpportunities />} />
+            <Route path="/journal" element={<TradeJournal />} />
           </Routes>
         </Suspense>
       </main>

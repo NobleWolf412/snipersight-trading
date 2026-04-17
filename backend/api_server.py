@@ -171,6 +171,7 @@ app = FastAPI(
 
 # Enable live symbol classification on startup
 from backend.analysis.symbol_classifier import get_classifier
+from backend.bot.trade_journal import get_trade_journal
 
 
 @app.on_event("startup")
@@ -1198,6 +1199,71 @@ async def reset_paper_trading():
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to reset paper trading: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/trades/journal")
+async def get_trade_journal_endpoint(
+    symbol: Optional[str] = Query(default=None),
+    trade_type: Optional[str] = Query(default=None),
+    exit_reason: Optional[str] = Query(default=None),
+    session_id: Optional[str] = Query(default=None),
+    start_date: Optional[str] = Query(default=None),
+    end_date: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+):
+    """
+    Cross-session trade journal with optional filters.
+
+    Returns all completed trades across every paper trading session,
+    newest first. Survives bot restarts — the journal is append-only on disk.
+    """
+    try:
+        journal = get_trade_journal()
+        trades = journal.query(
+            symbol=symbol,
+            trade_type=trade_type,
+            exit_reason=exit_reason,
+            session_id=session_id,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset,
+        )
+        aggregate = journal.aggregate()
+        return {"trades": trades, "total": journal.count(), "aggregate": aggregate}
+    except Exception as e:
+        logger.error("Failed to fetch trade journal: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/trades/export")
+async def export_trade_journal(
+    symbol: Optional[str] = Query(default=None),
+    trade_type: Optional[str] = Query(default=None),
+    exit_reason: Optional[str] = Query(default=None),
+    start_date: Optional[str] = Query(default=None),
+    end_date: Optional[str] = Query(default=None),
+):
+    """Download the full trade journal as CSV."""
+    from fastapi.responses import Response
+
+    try:
+        csv_data = get_trade_journal().export_csv(
+            symbol=symbol,
+            trade_type=trade_type,
+            exit_reason=exit_reason,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return Response(
+            content=csv_data,
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=trade_journal.csv"},
+        )
+    except Exception as e:
+        logger.error("Failed to export trade journal: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
