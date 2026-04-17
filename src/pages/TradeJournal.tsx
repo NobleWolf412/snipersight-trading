@@ -446,19 +446,16 @@ export function TradeJournal() {
         </div>
 
         {/* Page tab nav */}
-        <div className="flex gap-0 border-b border-border/40 -mt-2">
+        <div className="flex gap-2 p-1 rounded-lg bg-black/40 border border-white/10 w-fit">
           <button
             onClick={() => navigate('/training')}
-            className="px-5 py-2.5 text-xs font-mono tracking-widest border-b-2 border-transparent text-muted-foreground hover:text-cyan-300 hover:border-cyan-500/40 transition-colors"
+            className="px-4 py-2 rounded-md text-xs font-mono tracking-widest text-white/70 hover:bg-white/10 hover:text-white transition-colors font-bold"
           >
             TRAINING GROUND
           </button>
-          <button
-            className="px-5 py-2.5 text-xs font-mono tracking-widest border-b-2 border-primary text-primary transition-colors"
-            disabled
-          >
+          <span className="px-4 py-2 rounded-md text-xs font-mono tracking-widest bg-primary/20 text-primary border border-primary/30 font-bold">
             JOURNAL &amp; ML
-          </button>
+          </span>
         </div>
 
         {/* Error */}
