@@ -26,19 +26,19 @@ class MLService {
   private base = BASE;
 
   async getStatus(): Promise<MLStatus> {
-    const res = await fetch(`${this.base}/api/ml/status`);
+    const res = await fetch(`${this.base}/ml/status`);
     if (!res.ok) throw new Error(`ML status error: ${res.status}`);
     return res.json();
   }
 
   async train(): Promise<MLTrainResult> {
-    const res = await fetch(`${this.base}/api/ml/train`, { method: 'POST' });
+    const res = await fetch(`${this.base}/ml/train`, { method: 'POST' });
     if (!res.ok) throw new Error(`ML train error: ${res.status}`);
     return res.json();
   }
 
   async getFeatureImportance(): Promise<FeatureImportanceItem[]> {
-    const res = await fetch(`${this.base}/api/ml/feature-importance`);
+    const res = await fetch(`${this.base}/ml/feature-importance`);
     if (!res.ok) throw new Error(`ML feature importance error: ${res.status}`);
     const data = await res.json();
     return data.features ?? [];
