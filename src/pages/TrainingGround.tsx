@@ -51,7 +51,7 @@ import {
   SignalLogEntry,
 } from '@/utils/api';
 import { GauntletBreakdown } from '@/components/bot/GauntletBreakdown';
-import { WatchlistRadar } from '@/components/bot/WatchlistRadar';
+
 
 // Format time duration
 function formatDuration(seconds: number): string {
@@ -1293,26 +1293,22 @@ export function TrainingGround() {
                 </div>
               </div>
 
-              {/* Profit Factor */}
+              {/* Avg Trade P&L */}
               <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
                 <div className="relative z-10 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">PROFIT FACTOR</div>
+                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">AVG TRADE</div>
                       {(() => {
-                        const avgWin = status?.statistics?.avg_win || 0;
-                        const avgLoss = Math.abs(status?.statistics?.avg_loss || 1);
-                        const wins = status?.statistics?.winning_trades || 0;
-                        const losses = status?.statistics?.losing_trades || 0;
-                        const totalWins = avgWin * wins;
-                        const totalLosses = avgLoss * losses;
-                        const pf = totalLosses > 0 ? totalWins / totalLosses : wins > 0 ? Infinity : 0;
+                        const totalTrades = status?.statistics?.total_trades || 0;
+                        const totalPnl = status?.statistics?.total_pnl || 0;
+                        const avg = totalTrades > 0 ? totalPnl / totalTrades : 0;
                         return (
                           <div className={cn(
                             "text-xl font-bold font-mono tracking-tight mt-0.5",
-                            pf >= 2 ? 'text-green-400' : pf >= 1 ? 'text-yellow-400' : 'text-red-400'
+                            avg > 0 ? 'text-green-400' : avg < 0 ? 'text-red-400' : 'text-muted-foreground'
                           )}>
-                            {pf === Infinity ? '∞' : pf.toFixed(2)}
+                            {avg >= 0 ? '+' : ''}{formatCurrency(avg)}
                           </div>
                         );
                       })()}
@@ -1320,7 +1316,7 @@ export function TrainingGround() {
                     <Fire size={24} className="text-amber-400/20 transition-colors group-hover:text-amber-400/50 shrink-0" />
                   </div>
                   <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">
-                    Gross profit / gross loss
+                    Expectancy per trade
                   </div>
                 </div>
               </div>
@@ -1516,8 +1512,118 @@ export function TrainingGround() {
                 </div>
               </section>
 
-              {/* Watchlist Radar */}
-              {status && <WatchlistRadar status={status} />}
+              {/* Risk & Exposure */}
+              <section className="glass-card glow-border-amber p-5 rounded-2xl h-full flex flex-col relative overflow-hidden group">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+                <div className="flex items-center justify-between mb-5 relative z-10">
+                  <h2 className="text-xl lg:text-2xl font-semibold hud-headline hud-text-amber tracking-wide flex items-center gap-3">
+                    <ShieldCheck size={24} className="text-amber-400" />
+                    RISK &amp; EXPOSURE
+                  </h2>
+                </div>
+
+                <div className="relative z-10 space-y-4 flex-1">
+                  {/* Capital deployed */}
+                  {(() => {
+                    const positions = status?.positions || [];
+                    const equity = status?.balance?.equity || config.initial_balance || 10000;
+                    const totalExposure = positions.reduce((sum, p) => sum + (p.entry_price * p.quantity), 0);
+                    const exposurePct = equity > 0 ? (totalExposure / equity) * 100 : 0;
+                    const maxPositions = config.max_positions ?? 3;
+                    const usedPositions = positions.length;
+                    const unrealizedPnl = positions.reduce((sum, p) => sum + (p.unrealized_pnl || 0), 0);
+                    const riskPerTrade = config.risk_per_trade ?? 2;
+
+                    return (
+                      <>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="p-3 rounded-xl bg-background/40 border border-border/30">
+                            <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-1">POSITIONS</div>
+                            <div className="text-2xl font-mono font-bold text-foreground">
+                              {usedPositions}<span className="text-sm text-muted-foreground font-normal">/{maxPositions}</span>
+                            </div>
+                          </div>
+                          <div className="p-3 rounded-xl bg-background/40 border border-border/30">
+                            <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-1">RISK / TRADE</div>
+                            <div className="text-2xl font-mono font-bold text-foreground">
+                              {riskPerTrade}%
+                            </div>
+                            <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                              {formatCurrency(equity * riskPerTrade / 100)} max
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Exposure bar */}
+                        <div className="p-3 rounded-xl bg-background/40 border border-border/30">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">CAPITAL DEPLOYED</span>
+                            <span className={cn("text-xs font-mono font-bold", exposurePct > 50 ? 'text-amber-400' : 'text-green-400')}>
+                              {exposurePct.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="h-2 rounded-full bg-black/40 overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all duration-500",
+                                exposurePct > 75 ? 'bg-red-500' : exposurePct > 50 ? 'bg-amber-500' : 'bg-green-500'
+                              )}
+                              style={{ width: `${Math.min(exposurePct, 100)}%` }}
+                            />
+                          </div>
+                          <div className="text-[10px] text-muted-foreground font-mono mt-1.5">
+                            {formatCurrency(totalExposure)} of {formatCurrency(equity)}
+                          </div>
+                        </div>
+
+                        {/* Unrealized P&L */}
+                        <div className="p-3 rounded-xl bg-background/40 border border-border/30">
+                          <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-1">UNREALIZED P&amp;L</div>
+                          <div className={cn(
+                            "text-xl font-mono font-bold",
+                            unrealizedPnl > 0 ? 'text-green-400' : unrealizedPnl < 0 ? 'text-red-400' : 'text-muted-foreground'
+                          )}>
+                            {unrealizedPnl >= 0 ? '+' : ''}{formatCurrency(unrealizedPnl)}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                            Across {usedPositions} open position{usedPositions !== 1 ? 's' : ''}
+                          </div>
+                        </div>
+
+                        {/* Per-position heat */}
+                        {positions.length > 0 && (
+                          <div className="space-y-2 pt-1">
+                            <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">POSITION HEAT</div>
+                            {positions.map((pos) => (
+                              <div key={pos.position_id} className="flex items-center gap-2 text-xs font-mono">
+                                <span className={pos.direction === 'LONG' ? 'text-green-400' : 'text-red-400'}>
+                                  {pos.direction === 'LONG' ? '↑' : '↓'}
+                                </span>
+                                <span className="text-foreground/80 w-24 truncate">{pos.symbol}</span>
+                                <div className="flex-1 h-1.5 rounded-full bg-black/40 overflow-hidden">
+                                  <div
+                                    className={cn(
+                                      "h-full rounded-full",
+                                      (pos.unrealized_pnl || 0) >= 0 ? 'bg-green-500' : 'bg-red-500'
+                                    )}
+                                    style={{ width: `${Math.min(Math.abs((pos.unrealized_pnl_pct || 0)), 100)}%` }}
+                                  />
+                                </div>
+                                <span className={cn(
+                                  "w-16 text-right",
+                                  (pos.unrealized_pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'
+                                )}>
+                                  {(pos.unrealized_pnl || 0) >= 0 ? '+' : ''}{formatCurrency(pos.unrealized_pnl || 0)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              </section>
             </div>
 
             {/* Trade History */}
