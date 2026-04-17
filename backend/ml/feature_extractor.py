@@ -4,6 +4,23 @@ ML Feature Extractor
 Converts raw journal records into a numeric feature matrix for model training
 and inference. Only uses records that were captured with the Phase-2A enrichment
 (identified by the presence of a non-zero confidence_score).
+
+Triple-barrier labeling
+-----------------------
+Instead of a flat win/loss label, each trade is assigned a label and a sample
+weight based on which barrier was hit first:
+
+  Barrier          Label   Weight  Rationale
+  ---------------  ------  ------  -----------------------------------------------
+  target           1       1.0     High-confidence win — price reached TP cleanly
+  stop_loss        0       1.0     High-confidence loss — price hit SL cleanly
+  stagnation /     sign    0.3     Ambiguous — time ran out; outcome uncertain
+  max_hours        (pnl)
+  manual           sign    0.5     Partially ambiguous — human intervened
+                   (pnl)
+
+Trades that hit the time barrier still contribute to training but with reduced
+weight so the model is not misled by uncertain outcomes.
 """
 
 import math
@@ -40,6 +57,15 @@ _REGIMES = [
     "compressed",
     "volatile",
 ]
+
+# Sample weights per exit reason (triple-barrier confidence)
+_BARRIER_WEIGHTS = {
+    "target":     1.0,
+    "stop_loss":  1.0,
+    "manual":     0.5,
+    "stagnation": 0.3,
+    "max_hours":  0.3,
+}
 
 
 def is_enriched(record: Dict[str, Any]) -> bool:
@@ -94,32 +120,49 @@ def extract_features(record: Dict[str, Any]) -> Optional[np.ndarray]:
 
 def build_dataset(
     records: List[Dict[str, Any]],
-) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[str]]:
     """
-    Build X (features) and y (labels) from a list of journal records.
+    Build X (features), y (labels), and sample_weights from journal records.
 
-    Label: 1 = win (pnl > 0), 0 = loss.
+    Triple-barrier labeling:
+      - target          → label 1, weight 1.0
+      - stop_loss       → label 0, weight 1.0
+      - stagnation /
+        max_hours       → label from sign(pnl), weight 0.3
+      - manual          → label from sign(pnl), weight 0.5
 
     Returns:
-        X: shape (n_samples, n_features)
-        y: shape (n_samples,)  binary
-        trade_ids: list of trade_id strings in the same order
+        X:              shape (n_samples, n_features)
+        y:              shape (n_samples,)  binary int32
+        sample_weights: shape (n_samples,)  float32
+        trade_ids:      list of trade_id strings in the same order
     """
-    X_rows, y_rows, ids = [], [], []
+    X_rows, y_rows, w_rows, ids = [], [], [], []
 
     for rec in records:
         vec = extract_features(rec)
         if vec is None:
             continue
-        label = 1 if float(rec.get("pnl") or 0) > 0 else 0
+
+        exit_reason = str(rec.get("exit_reason") or "").lower()
+        pnl = float(rec.get("pnl") or 0)
+
+        label, weight = _barrier_label(exit_reason, pnl)
+
         X_rows.append(vec)
         y_rows.append(label)
+        w_rows.append(weight)
         ids.append(rec.get("trade_id", ""))
 
     if not X_rows:
-        return np.empty((0, 0)), np.empty((0,)), []
+        return np.empty((0, 0)), np.empty((0,)), np.empty((0,)), []
 
-    return np.stack(X_rows), np.array(y_rows, dtype=np.int32), ids
+    return (
+        np.stack(X_rows),
+        np.array(y_rows, dtype=np.int32),
+        np.array(w_rows, dtype=np.float32),
+        ids,
+    )
 
 
 def feature_names() -> List[str]:
@@ -144,6 +187,22 @@ def feature_names() -> List[str]:
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
+def _barrier_label(exit_reason: str, pnl: float) -> Tuple[int, float]:
+    """
+    Return (label, sample_weight) for a trade.
+
+    Clear barriers (target / stop_loss) get full weight.
+    Time/ambiguous barriers get reduced weight and are labeled by pnl sign.
+    """
+    if exit_reason == "target":
+        return 1, 1.0
+    if exit_reason == "stop_loss":
+        return 0, 1.0
+    label = 1 if pnl > 0 else 0
+    weight = _BARRIER_WEIGHTS.get(exit_reason, 0.3)
+    return label, weight
+
 
 def _parse_time(iso: str) -> Tuple[int, int]:
     """Extract (hour_of_day, day_of_week) from an ISO timestamp string."""

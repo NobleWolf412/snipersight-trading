@@ -216,24 +216,32 @@ function MLPanel() {
                 <p className={`text-sm font-bold font-mono ${accuracyColor}`}>
                   {status.trained ? `${(accuracy * 100).toFixed(1)}%` : '—'}
                 </p>
+                {status.trained && (
+                  <p className="text-[10px] text-muted-foreground font-mono mt-0.5">purged walk-fwd</p>
+                )}
               </div>
             </div>
 
-            {/* Insight callout */}
+            {/* Insight callouts */}
             {!status.trained && (
               <div className="rounded-md border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-xs font-mono text-yellow-400">
-                Need {status.min_samples_required - status.n_samples} more enriched trade
-                {status.min_samples_required - status.n_samples !== 1 ? 's' : ''} before training is possible.
+                Need {Math.max(0, status.min_samples_required - status.n_samples)} more enriched trade
+                {Math.max(0, status.min_samples_required - status.n_samples) !== 1 ? 's' : ''} before training is possible.
               </div>
             )}
             {status.trained && accuracy < 0.55 && (
               <div className="rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs font-mono text-red-400">
-                Model accuracy is below 55% — gather more diverse trades before relying on predictions.
+                Accuracy below 55% — gather more diverse trades before relying on predictions.
               </div>
             )}
             {status.trained && accuracy >= 0.65 && (
               <div className="rounded-md border border-green-500/20 bg-green-500/5 px-3 py-2 text-xs font-mono text-green-400">
-                Model looks solid. Top features below indicate which conditions drive your edge.
+                Model looks solid. Green bars = conditions that help your win rate. Red = conditions that hurt it.
+              </div>
+            )}
+            {status.trained && accuracy >= 0.55 && accuracy < 0.65 && (
+              <div className="rounded-md border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-xs font-mono text-yellow-400">
+                Moderate accuracy — more trades will sharpen the model. Use feature directions as guidance only.
               </div>
             )}
 
@@ -241,35 +249,56 @@ function MLPanel() {
               <p className="text-xs font-mono text-muted-foreground">{trainMsg}</p>
             )}
 
-            {/* Feature importance chart */}
+            {/* Feature importance chart — directional SHAP */}
             {importance.length > 0 && (
               <div>
-                <p className="text-xs text-muted-foreground font-mono uppercase tracking-widest mb-2">
-                  TOP FEATURE IMPORTANCE
-                </p>
-                <ResponsiveContainer width="100%" height={220}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-muted-foreground font-mono uppercase tracking-widest">
+                    SHAP FEATURE IMPORTANCE
+                  </p>
+                  <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <span className="inline-block w-2 h-2 rounded-sm bg-green-500" />
+                      helps win rate
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="inline-block w-2 h-2 rounded-sm bg-red-500" />
+                      hurts win rate
+                    </span>
+                  </div>
+                </div>
+                <ResponsiveContainer width="100%" height={240}>
                   <BarChart
                     layout="vertical"
                     data={importance}
-                    margin={{ top: 0, right: 8, left: 8, bottom: 0 }}
+                    margin={{ top: 0, right: 12, left: 8, bottom: 0 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 10, fill: '#888' }} tickFormatter={(v) => v.toFixed(3)} />
+                    <XAxis
+                      type="number"
+                      tick={{ fontSize: 10, fill: '#888' }}
+                      tickFormatter={(v) => v.toFixed(3)}
+                    />
                     <YAxis
                       type="category"
                       dataKey="name"
                       tick={{ fontSize: 10, fill: '#aaa', fontFamily: 'monospace' }}
-                      width={140}
+                      width={148}
                     />
                     <Tooltip
                       contentStyle={{ background: '#0a0a0a', border: '1px solid #333', fontSize: 11 }}
-                      formatter={(v: number) => [v.toFixed(5), 'Importance']}
+                      formatter={(v: number, _name: string, props: any) => {
+                        const dir = props?.payload?.direction ?? 0;
+                        const dirLabel = dir > 0 ? '▲ helps win rate' : '▼ hurts win rate';
+                        return [`${v.toFixed(5)}  ${dirLabel}`, 'SHAP |importance|'];
+                      }}
                     />
                     <Bar dataKey="importance" radius={[0, 3, 3, 0]}>
-                      {importance.map((_, i) => (
+                      {importance.map((item, i) => (
                         <Cell
                           key={i}
-                          fill={i < 3 ? '#22c55e' : i < 6 ? '#3b82f6' : '#6b7280'}
+                          fill={item.direction >= 0 ? '#22c55e' : '#ef4444'}
+                          opacity={0.7 + 0.3 * (1 - i / importance.length)}
                         />
                       ))}
                     </Bar>

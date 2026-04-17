@@ -17,6 +17,7 @@ export interface MLTrainResult extends MLStatus {
 export interface FeatureImportanceItem {
   name: string;
   importance: number;
+  direction: number; // mean SHAP: positive = pushes toward win, negative = toward loss
 }
 
 class MLService {
