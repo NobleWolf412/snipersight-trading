@@ -49,7 +49,7 @@ export function BotStatus() {
       clearInterval(analyticsInterval);
       clearInterval(statusInterval);
     };
-  }, [];
+  }, []);
 
   const handleAbortMission = () => {
     setIsActive(false);
