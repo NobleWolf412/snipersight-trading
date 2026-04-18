@@ -34,6 +34,8 @@ import {
   ShieldCheck,
   Fire,
   CaretDown,
+  TestTube,
+  Cpu,
 } from '@phosphor-icons/react';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { HomeButton } from '@/components/layout/HomeButton';
@@ -172,6 +174,7 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
   slippage_bps: 15,
   fee_rate: 0.001,
   max_hours_open: 72,
+  use_testnet: false,
 };
 
 export function TrainingGround() {
@@ -543,6 +546,51 @@ export function TrainingGround() {
                         </div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* ── Execution Mode Toggle ── */}
+                  <div className="space-y-3">
+                    <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Execution Mode</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => setConfig({ ...config, use_testnet: false })}
+                        className={cn(
+                          'p-3 rounded-xl border-2 text-left transition-all',
+                          !config.use_testnet
+                            ? 'border-accent/60 bg-accent/5'
+                            : 'border-zinc-700 hover:border-zinc-600',
+                        )}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <Cpu size={15} weight="bold" className={!config.use_testnet ? 'text-accent' : 'text-zinc-500'} />
+                          <span className={cn('text-xs font-bold uppercase tracking-wider', !config.use_testnet ? 'text-accent' : 'text-zinc-500')}>Simulation</span>
+                          {!config.use_testnet && <span className="ml-auto text-[9px] bg-accent/20 text-accent border border-accent/30 rounded px-1.5 py-0.5 font-mono">ACTIVE</span>}
+                        </div>
+                        <p className="text-[10px] text-zinc-500">Internal fill math, no API keys needed</p>
+                      </button>
+                      <button
+                        onClick={() => setConfig({ ...config, use_testnet: true })}
+                        className={cn(
+                          'p-3 rounded-xl border-2 text-left transition-all',
+                          config.use_testnet
+                            ? 'border-yellow-500/60 bg-yellow-500/5'
+                            : 'border-zinc-700 hover:border-zinc-600',
+                        )}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <TestTube size={15} weight="bold" className={config.use_testnet ? 'text-yellow-400' : 'text-zinc-500'} />
+                          <span className={cn('text-xs font-bold uppercase tracking-wider', config.use_testnet ? 'text-yellow-400' : 'text-zinc-500')}>Testnet</span>
+                          {config.use_testnet && <span className="ml-auto text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded px-1.5 py-0.5 font-mono">ACTIVE</span>}
+                        </div>
+                        <p className="text-[10px] text-zinc-500">Real fills via Phemex testnet — more accurate</p>
+                      </button>
+                    </div>
+                    {config.use_testnet && (
+                      <p className="text-[10px] text-yellow-500/70 pl-1 flex items-center gap-1.5">
+                        <TestTube size={11} />
+                        Requires PHEMEX_API_KEY + PHEMEX_API_SECRET in your .env
+                      </p>
+                    )}
                   </div>
 
                   {/* ── Parameters Grid ── */}

@@ -1048,6 +1048,7 @@ class PaperTradingConfigRequest(BaseModel):
     fee_rate: float = Field(default=0.001, ge=0, le=0.01)
     max_drawdown_pct: Optional[float] = Field(default=None, ge=0, le=100)
     max_hours_open: Optional[int] = Field(default=72, ge=1, le=720)  # Auto-close stale trades
+    use_testnet: bool = False  # Route fills through Phemex testnet instead of simulation
 
 
 @app.post("/api/paper-trading/start")
@@ -1088,6 +1089,7 @@ async def start_paper_trading(config: PaperTradingConfigRequest):
             fee_rate=config.fee_rate,
             max_drawdown_pct=config.max_drawdown_pct,
             max_hours_open=config.max_hours_open,
+            use_testnet=config.use_testnet,
         )
 
         result = await service.start(paper_config)

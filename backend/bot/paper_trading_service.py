@@ -142,6 +142,7 @@ class PaperTradingConfig:
     max_hours_open: float = 72.0
     max_pending_scans: int = 2  # Cancel pending limit orders after this many scan cycles
     max_drawdown_pct: Optional[float] = 10.0  # Kill switch: stop session if peak-to-trough drawdown exceeds X%
+    use_testnet: bool = False  # Route orders through Phemex testnet instead of simulating
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -410,16 +411,37 @@ class PaperTradingService:
         if not self.mode:
             raise ValueError("Failed to load stealth mode")
 
-        # Initialize paper executor
-        self.executor = PaperExecutor(
-            initial_balance=config.initial_balance,
-            fee_rate=config.fee_rate,
-            slippage_bps=config.slippage_bps,
-            enable_partial_fills=True,  # Step 5: Enable realistic partial fills
-            partial_fill_prob=0.3,      # 30% chance of a partial fill
-            min_fill_pct=0.3,           # Min 30% fill
-            max_fill_pct=0.7,           # Max 70% fill
-        )
+        # Initialize executor — testnet routes real orders through Phemex testnet,
+        # simulation uses internal fill math (no API keys required)
+        if config.use_testnet:
+            from backend.bot.executor.live_executor import LiveExecutor
+            from backend.shared.config.live_trading_config import load_phemex_credentials
+            from backend.data.adapters.phemex import PhemexAdapter as _PhemexAdapter
+            _api_key, _api_secret = load_phemex_credentials()
+            if not _api_key:
+                raise ValueError(
+                    "Testnet mode requires PHEMEX_API_KEY and PHEMEX_API_SECRET in your .env file."
+                )
+            _testnet_adapter = _PhemexAdapter(testnet=True, api_key=_api_key, api_secret=_api_secret)
+            self.executor = LiveExecutor(
+                adapter=_testnet_adapter,
+                fee_rate=config.fee_rate,
+                max_position_size_usd=10000.0,  # generous cap for paper sessions
+                max_total_exposure_usd=100000.0,
+                min_balance_usd=0.0,
+                dry_run=False,
+            )
+            logger.info("Paper trading using PHEMEX TESTNET executor")
+        else:
+            self.executor = PaperExecutor(
+                initial_balance=config.initial_balance,
+                fee_rate=config.fee_rate,
+                slippage_bps=config.slippage_bps,
+                enable_partial_fills=True,
+                partial_fill_prob=0.3,
+                min_fill_pct=0.3,
+                max_fill_pct=0.7,
+            )
 
         # Initialize position manager
         self.position_manager = PositionManager(
