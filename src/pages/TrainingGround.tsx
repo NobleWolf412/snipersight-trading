@@ -548,6 +548,69 @@ export function TrainingGround() {
                     </div>
                   </div>
 
+                  {/* ── Execution Mode Toggle ── */}
+                  <div className="space-y-3">
+                    <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Execution Mode</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Simulation */}
+                      <button
+                        onClick={() => setConfig({ ...config, use_testnet: false })}
+                        className={cn(
+                          'relative p-5 rounded-2xl border-2 text-left transition-all duration-300 overflow-hidden group',
+                          !config.use_testnet
+                            ? 'border-accent/60 bg-gradient-to-br from-accent/10 via-accent/5 to-transparent shadow-[0_0_20px_rgba(0,255,136,0.08)]'
+                            : 'border-zinc-700/60 hover:border-zinc-600 bg-black/20',
+                        )}
+                      >
+                        {!config.use_testnet && <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-accent/50 to-transparent" />}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Cpu size={18} weight="bold" className={!config.use_testnet ? 'text-accent' : 'text-zinc-500'} />
+                            <span className={cn('text-xs font-mono uppercase tracking-[0.2em]', !config.use_testnet ? 'text-accent' : 'text-zinc-500')}>Simulation</span>
+                          </div>
+                          {!config.use_testnet && (
+                            <span className="text-[9px] bg-accent/20 text-accent border border-accent/40 rounded-full px-2 py-0.5 font-mono tracking-wider">ACTIVE</span>
+                          )}
+                        </div>
+                        <p className={cn('text-2xl font-black italic tracking-tight mb-1', !config.use_testnet ? 'text-transparent bg-clip-text bg-gradient-to-b from-white via-green-50 to-accent/80' : 'text-zinc-500')}>
+                          SIMULATED
+                        </p>
+                        <p className="text-[11px] text-zinc-500 leading-relaxed">Internal fill math. No API keys needed — run it anywhere.</p>
+                      </button>
+
+                      {/* Testnet */}
+                      <button
+                        onClick={() => setConfig({ ...config, use_testnet: true })}
+                        className={cn(
+                          'relative p-5 rounded-2xl border-2 text-left transition-all duration-300 overflow-hidden group',
+                          config.use_testnet
+                            ? 'border-yellow-500/60 bg-gradient-to-br from-yellow-500/10 via-yellow-500/5 to-transparent shadow-[0_0_20px_rgba(234,179,8,0.08)]'
+                            : 'border-zinc-700/60 hover:border-zinc-600 bg-black/20',
+                        )}
+                      >
+                        {config.use_testnet && <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-500/50 to-transparent" />}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <TestTube size={18} weight="bold" className={config.use_testnet ? 'text-yellow-400' : 'text-zinc-500'} />
+                            <span className={cn('text-xs font-mono uppercase tracking-[0.2em]', config.use_testnet ? 'text-yellow-400' : 'text-zinc-500')}>Testnet</span>
+                          </div>
+                          {config.use_testnet && (
+                            <span className="text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 rounded-full px-2 py-0.5 font-mono tracking-wider">ACTIVE</span>
+                          )}
+                        </div>
+                        <p className={cn('text-2xl font-black italic tracking-tight mb-1', config.use_testnet ? 'text-transparent bg-clip-text bg-gradient-to-b from-white via-yellow-50 to-yellow-400/80' : 'text-zinc-500')}>
+                          TESTNET
+                        </p>
+                        <p className="text-[11px] text-zinc-500 leading-relaxed">Real Phemex fills, fake money. Most accurate results.</p>
+                        {config.use_testnet && (
+                          <p className="text-[10px] text-yellow-500/60 mt-2 flex items-center gap-1">
+                            <TestTube size={10} /> Requires PHEMEX_API_KEY in .env
+                          </p>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
                   {/* ── Parameters Grid ── */}
                   <div className="space-y-1.5 text-left">
                     <div className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1 mb-2">Session Parameters</div>
