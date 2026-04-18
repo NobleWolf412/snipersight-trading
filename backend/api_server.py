@@ -32,6 +32,8 @@ from backend.bot.paper_trading_service import (
     get_paper_trading_service,
     PaperTradingConfig,
 )
+from backend.bot.live_trading_service import get_live_trading_service
+from backend.shared.config.live_trading_config import LiveTradingConfig
 from backend.data.adapters.phemex import PhemexAdapter
 from backend.data.adapters.bybit import BybitAdapter
 from backend.data.adapters.okx import OKXAdapter
@@ -2578,6 +2580,193 @@ async def invalidate_symbol_cache(symbol: str, timeframe: Optional[str] = Query(
         msg = f"Invalidated {invalidated} cache entries for {symbol}"
 
     return {"status": "ok", "message": msg, "invalidated_count": invalidated}
+
+
+# ---------------------------------------------------------------------------
+# Live Trading Endpoints
+# ---------------------------------------------------------------------------
+
+class LiveTradingConfigRequest(BaseModel):
+    """Request model for live trading configuration."""
+    exchange: str = "phemex"
+    sniper_mode: str = "stealth"
+    risk_per_trade: float = Field(default=1.0, ge=0.1, le=5.0)
+    max_positions: int = Field(default=3, ge=1, le=10)
+    leverage: int = Field(default=1, ge=1, le=20)
+    duration_hours: int = Field(default=24, ge=0, le=168)
+    scan_interval_minutes: int = Field(default=2, ge=1, le=60)
+    trailing_stop: bool = True
+    trailing_activation: float = Field(default=1.5, ge=1.0, le=5.0)
+    breakeven_after_target: int = Field(default=1, ge=1, le=3)
+    min_confluence: Optional[float] = Field(default=None, ge=0, le=100)
+    sensitivity_preset: str = Field(default="balanced", pattern="^(conservative|balanced|aggressive|custom)$")
+    confluence_soft_floor: Optional[float] = Field(default=None, ge=0, le=100)
+    symbols: List[str] = []
+    exclude_symbols: List[str] = []
+    majors: bool = True
+    altcoins: bool = False
+    meme_mode: bool = False
+    fee_rate: float = Field(default=0.001, ge=0, le=0.01)
+    max_drawdown_pct: Optional[float] = Field(default=10.0, ge=0, le=100)
+    max_hours_open: float = Field(default=72.0, ge=1, le=720)
+    # Live-specific
+    testnet: bool = True
+    max_position_size_usd: float = Field(default=100.0, ge=1, le=50000)
+    max_total_exposure_usd: float = Field(default=500.0, ge=10, le=200000)
+    min_balance_usd: float = Field(default=50.0, ge=0)
+    kill_switch_enabled: bool = True
+    dry_run: bool = False
+    safety_acknowledgment: str = ""  # Must be "I_ACCEPT_LIVE_TRADING_RISK" for non-testnet
+
+
+@app.get("/api/live-trading/preflight")
+async def live_trading_preflight():
+    """Check exchange connectivity, balance, and open positions before starting."""
+    try:
+        from backend.shared.config.live_trading_config import load_phemex_credentials
+        api_key, api_secret = load_phemex_credentials()
+        if not api_key:
+            return {"ok": False, "issues": ["PHEMEX_API_KEY not set"], "balance": 0, "open_positions": []}
+        from backend.data.adapters.phemex import PhemexAdapter
+        from backend.bot.executor.live_executor import LiveExecutor
+        import os
+        testnet = os.getenv("PHEMEX_TESTNET", "true").lower() != "false"
+        adapter = PhemexAdapter(testnet=testnet, api_key=api_key, api_secret=api_secret)
+        executor = LiveExecutor(adapter=adapter, dry_run=False)
+        return executor.preflight_check()
+    except Exception as e:
+        logger.error(f"Preflight check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/live-trading/start")
+async def start_live_trading(config: LiveTradingConfigRequest):
+    """
+    Start a live trading session on Phemex.
+
+    For non-testnet mode, safety_acknowledgment must equal
+    'I_ACCEPT_LIVE_TRADING_RISK'.
+    """
+    try:
+        if not config.testnet and not config.dry_run:
+            if config.safety_acknowledgment != "I_ACCEPT_LIVE_TRADING_RISK":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Non-testnet live trading requires safety_acknowledgment='I_ACCEPT_LIVE_TRADING_RISK'",
+                )
+
+        service = get_live_trading_service()
+        live_config = LiveTradingConfig(
+            exchange=config.exchange,
+            sniper_mode=config.sniper_mode,
+            risk_per_trade=config.risk_per_trade,
+            max_positions=config.max_positions,
+            leverage=config.leverage,
+            duration_hours=config.duration_hours,
+            scan_interval_minutes=config.scan_interval_minutes,
+            trailing_stop=config.trailing_stop,
+            trailing_activation=config.trailing_activation,
+            breakeven_after_target=config.breakeven_after_target,
+            min_confluence=config.min_confluence,
+            sensitivity_preset=config.sensitivity_preset,
+            confluence_soft_floor=config.confluence_soft_floor,
+            symbols=config.symbols,
+            exclude_symbols=config.exclude_symbols,
+            majors=config.majors,
+            altcoins=config.altcoins,
+            meme_mode=config.meme_mode,
+            fee_rate=config.fee_rate,
+            max_drawdown_pct=config.max_drawdown_pct,
+            max_hours_open=config.max_hours_open,
+            testnet=config.testnet,
+            max_position_size_usd=config.max_position_size_usd,
+            max_total_exposure_usd=config.max_total_exposure_usd,
+            min_balance_usd=config.min_balance_usd,
+            kill_switch_enabled=config.kill_switch_enabled,
+            dry_run=config.dry_run,
+        )
+
+        result = await service.start(live_config)
+        return result
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to start live trading: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/live-trading/stop")
+async def stop_live_trading():
+    """Stop the live trading session gracefully."""
+    try:
+        service = get_live_trading_service()
+        return await service.stop()
+    except Exception as e:
+        logger.error(f"Failed to stop live trading: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/live-trading/kill-switch")
+async def live_trading_kill_switch():
+    """Emergency stop — cancels all orders and closes all positions immediately."""
+    try:
+        service = get_live_trading_service()
+        return await service.kill_switch()
+    except Exception as e:
+        logger.error(f"Kill switch failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/live-trading/status")
+async def get_live_trading_status():
+    """Get current live trading status, balance, positions, and statistics."""
+    try:
+        return get_live_trading_service().get_status()
+    except Exception as e:
+        logger.error(f"Failed to get live trading status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/live-trading/positions")
+async def get_live_trading_positions():
+    """Get active live trading positions."""
+    try:
+        positions = get_live_trading_service().get_positions()
+        return {"positions": positions, "total": len(positions)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/live-trading/history")
+async def get_live_trading_history(limit: int = Query(default=50, ge=1, le=200)):
+    """Get completed live trade history."""
+    try:
+        trades = get_live_trading_service().get_trade_history(limit=limit)
+        return {"trades": trades, "total": len(trades)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/live-trading/activity")
+async def get_live_trading_activity(limit: int = Query(default=100, ge=1, le=500)):
+    """Get live trading activity log."""
+    try:
+        activity = get_live_trading_service().get_activity_log(limit=limit)
+        return {"activity": activity, "total": len(activity)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/live-trading/reset")
+async def reset_live_trading():
+    """Reset live trading to idle state. Must be stopped first."""
+    try:
+        return get_live_trading_service().reset()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Serve built frontend at root (only if dist exists - for production)

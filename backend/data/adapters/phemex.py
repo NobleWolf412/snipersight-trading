@@ -4,6 +4,7 @@ Implements retry logic and rate limit handling.
 Works with US IPs - no geo-blocking for public endpoints.
 """
 
+import os
 import time
 from typing import Optional, Dict, Any, List, cast
 import pandas as pd
@@ -20,23 +21,38 @@ class PhemexAdapter:
     Supports BOTH spot and perpetual swap (futures) markets.
     """
 
-    def __init__(self, testnet: bool = False, default_type: str = "swap"):
+    def __init__(
+        self,
+        testnet: bool = False,
+        default_type: str = "swap",
+        api_key: Optional[str] = None,
+        api_secret: Optional[str] = None,
+    ):
         """
         Initialize Phemex exchange connection.
 
         Args:
             testnet: If True, use Phemex testnet instead of production
             default_type: Default market type ('spot' or 'swap')
+            api_key: Phemex API key (falls back to PHEMEX_API_KEY env var)
+            api_secret: Phemex API secret (falls back to PHEMEX_API_SECRET env var)
         """
-        self.exchange = ccxt.phemex(
-            {
-                "enableRateLimit": True,
-                "options": {
-                    "defaultType": default_type,  # Allow configuration
-                },
-                "timeout": 30000,  # 30s timeout explicitly set
-            }
-        )
+        _key = api_key or os.getenv("PHEMEX_API_KEY")
+        _secret = api_secret or os.getenv("PHEMEX_API_SECRET")
+
+        exchange_config: Dict[str, Any] = {
+            "enableRateLimit": True,
+            "options": {
+                "defaultType": default_type,
+            },
+            "timeout": 30000,
+        }
+        if _key:
+            exchange_config["apiKey"] = _key
+        if _secret:
+            exchange_config["secret"] = _secret
+
+        self.exchange = ccxt.phemex(exchange_config)
 
         self.default_type = default_type
 
@@ -406,9 +422,115 @@ class PhemexAdapter:
         return False
 
     def supports_trading(self) -> bool:
+        """Check if adapter supports live trading (requires API keys)."""
+        return bool(self.exchange.apiKey and self.exchange.secret)
+
+    # ------------------------------------------------------------------
+    # Authenticated trading methods (require API keys)
+    # ------------------------------------------------------------------
+
+    @retry_on_rate_limit(max_retries=3)
+    def create_order(
+        self,
+        symbol: str,
+        order_type: str,
+        side: str,
+        amount: float,
+        price: Optional[float] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
-        Check if adapter supports live trading (requires API keys).
+        Place an order on Phemex via CCXT.
+
+        Args:
+            symbol: Trading pair (e.g. 'BTC/USDT')
+            order_type: 'market' or 'limit'
+            side: 'buy' or 'sell'
+            amount: Quantity in base asset
+            price: Limit price (required for limit orders)
+            params: Extra CCXT params (timeInForce, reduceOnly, etc.)
 
         Returns:
+            CCXT order dict with id, status, filled, remaining, etc.
         """
-        return self.exchange.apiKey is not None and self.exchange.secret is not None
+        if not self.supports_trading():
+            raise ccxt.AuthenticationError("API keys required for order placement")
+        try:
+            order = self.exchange.create_order(
+                symbol, order_type, side, amount, price, params or {}
+            )
+            logger.info(
+                f"Order created on Phemex: {side} {amount} {symbol} @ {price} "
+                f"(id={order.get('id')})"
+            )
+            return order
+        except ccxt.InsufficientFunds as e:
+            logger.error(f"Insufficient funds for {side} {amount} {symbol}: {e}")
+            raise
+        except ccxt.InvalidOrder as e:
+            logger.error(f"Invalid order {side} {amount} {symbol}: {e}")
+            raise
+        except ccxt.ExchangeError as e:
+            logger.error(f"Exchange error placing order {side} {amount} {symbol}: {e}")
+            raise
+
+    @retry_on_rate_limit(max_retries=3)
+    def cancel_order(self, order_id: str, symbol: str) -> Dict[str, Any]:
+        """Cancel an open order on Phemex."""
+        if not self.supports_trading():
+            raise ccxt.AuthenticationError("API keys required to cancel orders")
+        try:
+            result = self.exchange.cancel_order(order_id, symbol)
+            logger.info(f"Order cancelled: {order_id} {symbol}")
+            return result
+        except ccxt.OrderNotFound:
+            logger.warning(f"Order not found for cancel: {order_id} {symbol}")
+            return {"id": order_id, "status": "not_found"}
+        except ccxt.ExchangeError as e:
+            logger.error(f"Exchange error cancelling {order_id}: {e}")
+            raise
+
+    @retry_on_rate_limit(max_retries=3)
+    def fetch_order(self, order_id: str, symbol: str) -> Dict[str, Any]:
+        """Fetch a single order's current status from Phemex."""
+        if not self.supports_trading():
+            raise ccxt.AuthenticationError("API keys required to fetch orders")
+        return self.exchange.fetch_order(order_id, symbol)
+
+    @retry_on_rate_limit(max_retries=3)
+    def fetch_balance(self) -> Dict[str, Any]:
+        """
+        Fetch account balance from Phemex.
+
+        Returns:
+            Dict with 'free', 'used', 'total' keys, each mapping currency → amount.
+        """
+        if not self.supports_trading():
+            raise ccxt.AuthenticationError("API keys required to fetch balance")
+        return self.exchange.fetch_balance()
+
+    @retry_on_rate_limit(max_retries=3)
+    def fetch_positions(self, symbols: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """
+        Fetch open positions from Phemex.
+
+        Args:
+            symbols: Filter by symbol list (None = all positions)
+
+        Returns:
+            List of CCXT position dicts.
+        """
+        if not self.supports_trading():
+            raise ccxt.AuthenticationError("API keys required to fetch positions")
+        return self.exchange.fetch_positions(symbols)
+
+    @retry_on_rate_limit(max_retries=3)
+    def set_leverage(self, leverage: int, symbol: str) -> None:
+        """Set leverage for a symbol on Phemex."""
+        if not self.supports_trading():
+            raise ccxt.AuthenticationError("API keys required to set leverage")
+        try:
+            self.exchange.set_leverage(leverage, symbol)
+            logger.info(f"Leverage set to {leverage}x for {symbol}")
+        except ccxt.ExchangeError as e:
+            logger.warning(f"Could not set leverage for {symbol}: {e}")
