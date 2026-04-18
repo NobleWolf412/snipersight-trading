@@ -34,8 +34,8 @@ import {
   ShieldCheck,
   Fire,
   CaretDown,
-  TestTube,
   Cpu,
+  TestTube,
 } from '@phosphor-icons/react';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { HomeButton } from '@/components/layout/HomeButton';
@@ -549,48 +549,88 @@ export function TrainingGround() {
                   </div>
 
                   {/* ── Execution Mode Toggle ── */}
-                  <div className="space-y-3">
-                    <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Execution Mode</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => setConfig({ ...config, use_testnet: false })}
-                        className={cn(
-                          'p-3 rounded-xl border-2 text-left transition-all',
-                          !config.use_testnet
-                            ? 'border-accent/60 bg-accent/5'
-                            : 'border-zinc-700 hover:border-zinc-600',
-                        )}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <Cpu size={15} weight="bold" className={!config.use_testnet ? 'text-accent' : 'text-zinc-500'} />
-                          <span className={cn('text-xs font-bold uppercase tracking-wider', !config.use_testnet ? 'text-accent' : 'text-zinc-500')}>Simulation</span>
-                          {!config.use_testnet && <span className="ml-auto text-[9px] bg-accent/20 text-accent border border-accent/30 rounded px-1.5 py-0.5 font-mono">ACTIVE</span>}
-                        </div>
-                        <p className="text-[10px] text-zinc-500">Internal fill math, no API keys needed</p>
-                      </button>
-                      <button
-                        onClick={() => setConfig({ ...config, use_testnet: true })}
-                        className={cn(
-                          'p-3 rounded-xl border-2 text-left transition-all',
+                  <div className="glass-card glow-border-green p-6 lg:p-10 rounded-3xl relative overflow-hidden group transition-all duration-500 hover:shadow-[0_0_50px_rgba(0,255,170,0.15)]">
+                    {/* Cinematic background glow */}
+                    <div className={cn(
+                      'absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] opacity-40 pointer-events-none transition-opacity duration-1000 group-hover:opacity-60',
+                      config.use_testnet ? 'from-yellow-500/10 via-transparent to-transparent' : 'from-green-500/10 via-transparent to-transparent',
+                    )} />
+                    <div className={cn(
+                      'absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent to-transparent opacity-60 transition-all duration-500',
+                      config.use_testnet ? 'via-yellow-400/60' : 'via-[#00ff88]/60',
+                    )} />
+
+                    <div className="relative z-10 flex flex-col items-center gap-6 text-center">
+                      {/* Mode picker pills */}
+                      <div className="flex items-center gap-1 bg-black/40 p-1.5 rounded-xl border border-white/5 backdrop-blur-md">
+                        <button
+                          onClick={() => setConfig({ ...config, use_testnet: false })}
+                          className={cn(
+                            'flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold tracking-wider transition-all duration-300',
+                            !config.use_testnet
+                              ? 'bg-accent/20 text-accent shadow-[0_0_15px_rgba(0,255,136,0.3)] border border-accent/40'
+                              : 'text-muted-foreground hover:text-white hover:bg-white/5',
+                          )}
+                        >
+                          <Cpu size={18} weight={!config.use_testnet ? 'fill' : 'bold'} />
+                          SIMULATION
+                        </button>
+                        <button
+                          onClick={() => setConfig({ ...config, use_testnet: true })}
+                          className={cn(
+                            'flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold tracking-wider transition-all duration-300',
+                            config.use_testnet
+                              ? 'bg-yellow-500/20 text-yellow-300 shadow-[0_0_15px_rgba(234,179,8,0.3)] border border-yellow-500/40'
+                              : 'text-muted-foreground hover:text-white hover:bg-white/5',
+                          )}
+                        >
+                          <TestTube size={18} weight={config.use_testnet ? 'fill' : 'bold'} />
+                          TESTNET
+                        </button>
+                      </div>
+
+                      {/* Big mode name */}
+                      <div className="space-y-2">
+                        <h2 className={cn(
+                          'text-5xl lg:text-7xl font-black italic tracking-tighter text-transparent bg-clip-text drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]',
                           config.use_testnet
-                            ? 'border-yellow-500/60 bg-yellow-500/5'
-                            : 'border-zinc-700 hover:border-zinc-600',
-                        )}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <TestTube size={15} weight="bold" className={config.use_testnet ? 'text-yellow-400' : 'text-zinc-500'} />
-                          <span className={cn('text-xs font-bold uppercase tracking-wider', config.use_testnet ? 'text-yellow-400' : 'text-zinc-500')}>Testnet</span>
-                          {config.use_testnet && <span className="ml-auto text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded px-1.5 py-0.5 font-mono">ACTIVE</span>}
-                        </div>
-                        <p className="text-[10px] text-zinc-500">Real fills via Phemex testnet — more accurate</p>
-                      </button>
-                    </div>
-                    {config.use_testnet && (
-                      <p className="text-[10px] text-yellow-500/70 pl-1 flex items-center gap-1.5">
-                        <TestTube size={11} />
-                        Requires PHEMEX_API_KEY + PHEMEX_API_SECRET in your .env
+                            ? 'bg-gradient-to-b from-white via-yellow-50 to-yellow-400/80'
+                            : 'bg-gradient-to-b from-white via-green-50 to-green-400/80',
+                        )}>
+                          {config.use_testnet ? 'TESTNET' : 'SIMULATED'}
+                        </h2>
+                        <div className={cn(
+                          'h-1 w-24 mx-auto bg-gradient-to-r from-transparent to-transparent rounded-full',
+                          config.use_testnet ? 'via-yellow-500/50' : 'via-green-500/50',
+                        )} />
+                      </div>
+
+                      {/* Description */}
+                      <p className="text-lg text-green-100/70 max-w-md mx-auto leading-relaxed font-light">
+                        {config.use_testnet
+                          ? '"Real Phemex order book fills, paper account. The most accurate way to validate a strategy."'
+                          : '"Internal fill math with realistic fee & slippage simulation. No API keys needed — run anywhere."'}
                       </p>
-                    )}
+
+                      {/* Warning / API hint for testnet */}
+                      {config.use_testnet && (
+                        <div className="flex items-center gap-2 text-yellow-400 bg-yellow-400/10 px-4 py-2 rounded-lg text-sm border border-yellow-400/20">
+                          <TestTube size={16} />
+                          Requires PHEMEX_API_KEY + PHEMEX_API_SECRET in .env
+                        </div>
+                      )}
+
+                      {/* Active badge */}
+                      <div className={cn(
+                        'flex items-center gap-3 px-8 py-3 rounded-full border font-bold tracking-widest',
+                        config.use_testnet
+                          ? 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30 shadow-[0_0_20px_rgba(234,179,8,0.1)]'
+                          : 'text-[#00ff88] bg-[#00ff88]/10 border-[#00ff88]/30 shadow-[0_0_20px_rgba(0,255,136,0.1)]',
+                      )}>
+                        {config.use_testnet ? <TestTube size={20} weight="fill" /> : <Cpu size={20} weight="fill" />}
+                        <span>MODE ACTIVE</span>
+                      </div>
+                    </div>
                   </div>
 
                   {/* ── Parameters Grid ── */}
