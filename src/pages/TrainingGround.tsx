@@ -34,6 +34,8 @@ import {
   ShieldCheck,
   Fire,
   CaretDown,
+  Cpu,
+  TestTube,
 } from '@phosphor-icons/react';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { HomeButton } from '@/components/layout/HomeButton';
