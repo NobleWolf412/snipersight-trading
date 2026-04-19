@@ -1548,8 +1548,14 @@ class PaperTradingService:
         _pb = _meta.get("pullback_probability") if isinstance(_meta, dict) else None
         if _pb is None:
             _pb = getattr(plan.entry_zone, "pullback_probability", 0) if plan.entry_zone else 0
+        _now = datetime.now(timezone.utc)
+        try:
+            _kz_raw = get_current_kill_zone(_now)
+            _kz = (_kz_raw.value if hasattr(_kz_raw, "value") else str(_kz_raw)) if _kz_raw else "no_session"
+        except Exception:
+            _kz = "no_session"
         entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": _now.isoformat(),
             "scan_number": self.stats.scans_completed,
             "symbol": plan.symbol,
             "direction": plan.direction,
@@ -1566,7 +1572,7 @@ class PaperTradingService:
             "plan_type": getattr(plan, "plan_type", "SMC"),
             "regime": self._current_regime_composite if hasattr(self, "_current_regime_composite") else "unknown",
             "pullback_probability": float(_pb or 0),
-            "kill_zone": get_current_kill_zone().value if hasattr(get_current_kill_zone(), "value") else str(get_current_kill_zone()),
+            "kill_zone": _kz,
         }
         entry.update(extra)
         self.signal_log.append(entry)
@@ -1788,7 +1794,7 @@ class PaperTradingService:
                     "plan_type": getattr(plan, "plan_type", "SMC"),
                     "trade_type": getattr(plan, "trade_type", "intraday"),
                     "direction": plan.direction,
-                    "kill_zone": get_current_kill_zone().value if hasattr(get_current_kill_zone(), "value") else str(get_current_kill_zone()),
+                    "kill_zone": (lambda kz: kz.value if hasattr(kz, "value") else (str(kz) if kz else "no_session"))(get_current_kill_zone(datetime.now(timezone.utc))),
                     "regime": self._current_regime_composite if hasattr(self, "_current_regime_composite") else "unknown",
                 }
                 _win_prob = _ml_store.predict_proba(_ml_record)
