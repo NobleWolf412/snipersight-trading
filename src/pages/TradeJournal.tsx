@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { ArrowUp, ArrowDown, Download, Funnel, ArrowClockwise, Brain, SpinnerGap } from '@phosphor-icons/react';
+import { ArrowUp, ArrowDown, Download, Funnel, ArrowClockwise, Brain, SpinnerGap, Trash } from '@phosphor-icons/react';
 import { PageShell } from '@/components/layout/PageShell';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -129,6 +129,8 @@ function MLPanel() {
   const [training, setTraining] = useState(false);
   const [trainMsg, setTrainMsg] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
+  const [clearing, setClearing] = useState(false);
+  const [clearConfirm, setClearConfirm] = useState(false);
 
   const fetchStatus = async () => {
     try {
@@ -146,6 +148,26 @@ function MLPanel() {
   };
 
   useEffect(() => { fetchStatus(); }, []);
+
+  const handleClearLogs = async () => {
+    if (!clearConfirm) {
+      setClearConfirm(true);
+      setTimeout(() => setClearConfirm(false), 4000);
+      return;
+    }
+    setClearConfirm(false);
+    setClearing(true);
+    setTrainMsg(null);
+    try {
+      const result = await mlService.clearSessionLogs();
+      setTrainMsg(result.message);
+      await fetchStatus();
+    } catch (e: any) {
+      setTrainMsg(e?.message ?? 'Clear failed');
+    } finally {
+      setClearing(false);
+    }
+  };
 
   const handleTrain = async () => {
     setTraining(true);
@@ -173,16 +195,29 @@ function MLPanel() {
             <Brain size={16} className="text-primary" />
             <CardTitle className="text-sm heading-hud text-muted-foreground">EDGE MODEL</CardTitle>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="font-mono text-xs gap-2 min-w-[120px]"
-            disabled={training}
-            onClick={handleTrain}
-          >
-            {training ? <SpinnerGap size={12} className="animate-spin" /> : <Brain size={12} />}
-            {training ? 'TRAINING...' : 'TRAIN MODEL'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className={`font-mono text-xs gap-2 min-w-[120px] ${clearConfirm ? 'border-red-500/60 text-red-400 bg-red-500/10' : ''}`}
+              disabled={clearing || training}
+              onClick={handleClearLogs}
+              title="Clear all session signal logs (trained model is preserved)"
+            >
+              {clearing ? <SpinnerGap size={12} className="animate-spin" /> : <Trash size={12} />}
+              {clearing ? 'CLEARING...' : clearConfirm ? 'CONFIRM CLEAR?' : 'CLEAR LOGS'}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="font-mono text-xs gap-2 min-w-[120px]"
+              disabled={training || clearing}
+              onClick={handleTrain}
+            >
+              {training ? <SpinnerGap size={12} className="animate-spin" /> : <Brain size={12} />}
+              {training ? 'TRAINING...' : 'TRAIN MODEL'}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

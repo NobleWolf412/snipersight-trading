@@ -1376,6 +1376,42 @@ async def predict_signal_edge(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.delete("/api/ml/session-logs")
+async def clear_session_logs():
+    """
+    Delete all paper-trading session log directories (signals.jsonl files).
+    The trained model (edge_model.joblib) is NOT affected.
+    """
+    import shutil
+    from backend.ml.signal_dataset_builder import _SESSION_LOGS_DIR
+
+    try:
+        deleted_sessions = 0
+        deleted_signals = 0
+        if _SESSION_LOGS_DIR.exists():
+            for session_dir in sorted(_SESSION_LOGS_DIR.iterdir()):
+                if session_dir.is_dir():
+                    signals_file = session_dir / "signals.jsonl"
+                    if signals_file.exists():
+                        # Count signals before deleting
+                        try:
+                            with open(signals_file, "r") as f:
+                                deleted_signals += sum(1 for line in f if line.strip())
+                        except Exception:
+                            pass
+                    shutil.rmtree(session_dir)
+                    deleted_sessions += 1
+        return {
+            "success": True,
+            "deleted_sessions": deleted_sessions,
+            "deleted_signals": deleted_signals,
+            "message": f"Cleared {deleted_sessions} sessions ({deleted_signals:,} signals). Trained model untouched.",
+        }
+    except Exception as e:
+        logger.error("Clear session logs failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.delete("/api/paper-trading/orders/{order_id}")
 async def cancel_paper_trading_order(order_id: str):
     """

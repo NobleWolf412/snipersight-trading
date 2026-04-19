@@ -57,6 +57,12 @@ class MLService {
     return data.recommendations ?? [];
   }
 
+  async clearSessionLogs(): Promise<{ success: boolean; message: string; deleted_sessions: number; deleted_signals: number }> {
+    const res = await fetch(`${this.base}/ml/session-logs`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`Clear session logs error: ${res.status}`);
+    return res.json();
+  }
+
   async predict(params: {
     confidence_score?: number;
     risk_reward_ratio?: number;
