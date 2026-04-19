@@ -176,7 +176,7 @@ function MLPanel() {
           <Button
             size="sm"
             variant="outline"
-            className="font-mono text-xs gap-2"
+            className="font-mono text-xs gap-2 min-w-[120px]"
             disabled={training}
             onClick={handleTrain}
           >
@@ -222,11 +222,19 @@ function MLPanel() {
               </div>
             </div>
 
+            {/* Data availability */}
+            {(status as any).available_signals != null && (
+              <div className="rounded-md border border-zinc-700/40 bg-zinc-800/30 px-3 py-2 text-xs font-mono text-zinc-400 flex items-center justify-between">
+                <span>Training data available</span>
+                <span className={(status as any).available_signals >= 10 ? 'text-green-400 font-bold' : 'text-yellow-400 font-bold'}>
+                  {(status as any).available_signals} signals · {(status as any).available_trades ?? 0} trades
+                </span>
+              </div>
+            )}
             {/* Insight callouts */}
-            {!status.trained && (
+            {!status.trained && (status as any).available_signals < 10 && (
               <div className="rounded-md border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-xs font-mono text-yellow-400">
-                Need {Math.max(0, status.min_samples_required - status.n_samples)} more enriched trade
-                {Math.max(0, status.min_samples_required - status.n_samples) !== 1 ? 's' : ''} before training is possible.
+                Let the bot run a bit longer — need at least 10 signals to train. Currently have {(status as any).available_signals ?? 0}.
               </div>
             )}
             {status.trained && accuracy < 0.55 && (
@@ -246,7 +254,15 @@ function MLPanel() {
             )}
 
             {trainMsg && (
-              <p className="text-xs font-mono text-muted-foreground">{trainMsg}</p>
+              <div className={`rounded-md border px-3 py-2 text-xs font-mono font-bold ${
+                trainMsg.toLowerCase().includes('success') || trainMsg.toLowerCase().includes('trained')
+                  ? 'border-green-500/30 bg-green-500/10 text-green-400'
+                  : trainMsg.toLowerCase().includes('no training') || trainMsg.toLowerCase().includes('need')
+                  ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400'
+                  : 'border-red-500/30 bg-red-500/10 text-red-400'
+              }`}>
+                {trainMsg}
+              </div>
             )}
 
             {/* Feature importance chart — directional SHAP */}

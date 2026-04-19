@@ -1294,10 +1294,24 @@ async def train_ml_model():
 @app.get("/api/ml/status")
 async def get_ml_status():
     """
-    Return current model metadata (trained, model_type, n_samples, accuracy, trained_at).
+    Return current model metadata plus available training data counts.
     """
     try:
-        return get_model_store().status()
+        status = get_model_store().status()
+        # Count available signal samples so the UI can show readiness
+        try:
+            from backend.ml.signal_dataset_builder import collect_signals, load_trade_journal
+            signals = collect_signals()
+            trades = load_trade_journal()
+            n_signals = len([s for s in signals if s.get("result") == "filtered"])
+            n_executed = len([s for s in signals if s.get("result") == "executed"])
+            n_trades = len(trades)
+            status["available_signals"] = n_signals + n_executed
+            status["available_trades"] = n_trades
+            status["min_samples_required"] = 10
+        except Exception:
+            pass
+        return status
     except Exception as e:
         logger.error("ML status failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
