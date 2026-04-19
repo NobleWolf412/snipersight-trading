@@ -640,19 +640,6 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
 
   const allFilterStages = [...preScoringStages, ...postScoringStages];
 
-  const stageCounts = useMemo(() => {
-    const counts: Partial<Record<GauntletStage, number>> = {};
-    for (const s of symbolMap.values()) {
-      counts[s.stage] = (counts[s.stage] ?? 0) + 1;
-    }
-    return counts;
-  }, [symbolMap]);
-
-  const totalFiltered = allFilterStages.reduce((acc, s) => acc + (stageCounts[s] ?? 0), 0);
-  const totalExecuted = stageCounts['EXECUTED'] ?? 0;
-  const totalPending = stageCounts['PENDING_FILL'] ?? 0;
-  const totalSignals = symbolMap.size;
-
   // Deduplicated per-symbol last-seen entries (latest per symbol+direction)
   const symbolMap = useMemo(() => {
     const map = new Map<string, SymbolLastSeen>();
@@ -688,6 +675,19 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
     }
     return map;
   }, [staged]);
+
+  const stageCounts = useMemo(() => {
+    const counts: Partial<Record<GauntletStage, number>> = {};
+    for (const s of symbolMap.values()) {
+      counts[s.stage] = (counts[s.stage] ?? 0) + 1;
+    }
+    return counts;
+  }, [symbolMap]);
+
+  const totalFiltered = allFilterStages.reduce((acc, s) => acc + (stageCounts[s] ?? 0), 0);
+  const totalExecuted = stageCounts['EXECUTED'] ?? 0;
+  const totalPending = stageCounts['PENDING_FILL'] ?? 0;
+  const totalSignals = symbolMap.size;
 
   // Filtered view for right panel
   const visibleEntries = useMemo(() => {
