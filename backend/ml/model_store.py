@@ -46,11 +46,21 @@ class ManagedEdgeModel:
             self._save(model)
         return result
 
+    def train_combined(self, records) -> Dict[str, Any]:
+        model = self._get_model()
+        result = model.train_combined(records)
+        if result.get("success"):
+            self._save(model)
+        return result
+
     def predict_proba(self, record: Dict[str, Any]) -> Optional[float]:
         return self._get_model().predict_proba(record)
 
     def feature_importance(self):
         return self._get_model().feature_importance()
+
+    def gate_recommendations(self):
+        return self._get_model().gate_recommendations()
 
     def status(self) -> Dict[str, Any]:
         return self._get_model().status()

@@ -1275,15 +1275,16 @@ async def export_trade_journal(
 @app.post("/api/ml/train")
 async def train_ml_model():
     """
-    Trigger a (re-)train of the edge model from all enriched journal trades.
+    Train the edge model using combined data: journal trades + scan signals.
 
-    Returns model metadata including accuracy and number of samples used.
-    Requires at least 30 enriched trades to succeed.
+    Signals provide 10-100x more training data. Executed signals are matched
+    to trade outcomes; filtered signals are weak negatives.
+    Minimum 10 total samples (down from 30 trades-only).
     """
     try:
         journal = get_trade_journal()
         records = journal.query(limit=10000)
-        result = get_model_store().train(records)
+        result = get_model_store().train_combined(records)
         return result
     except Exception as e:
         logger.error("ML train failed: %s", e)
@@ -1313,6 +1314,51 @@ async def get_ml_feature_importance():
         return {"features": get_model_store().feature_importance()}
     except Exception as e:
         logger.error("ML feature importance failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ml/gate-recommendations")
+async def get_ml_gate_recommendations():
+    """
+    Return SHAP-driven gate threshold recommendations.
+
+    Uses feature importance to suggest which gauntlet gates to tighten or
+    loosen based on what the model learned predicts wins vs losses.
+    """
+    try:
+        return {"recommendations": get_model_store().gate_recommendations()}
+    except Exception as e:
+        logger.error("ML gate recommendations failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ml/predict")
+async def predict_signal_edge(
+    confidence_score: float = 65.0,
+    risk_reward_ratio: float = 2.0,
+    direction: str = "LONG",
+    trade_type: str = "intraday",
+    regime: str = "unknown",
+):
+    """Score a hypothetical signal with the trained ML model."""
+    try:
+        record = {
+            "confidence_score": confidence_score,
+            "risk_reward_ratio": risk_reward_ratio,
+            "stop_distance_atr": 0,
+            "pullback_probability": 0,
+            "entry_time": datetime.now(timezone.utc).isoformat(),
+            "conviction_class": "B",
+            "plan_type": "SMC",
+            "trade_type": trade_type,
+            "direction": direction,
+            "kill_zone": "no_session",
+            "regime": regime,
+        }
+        prob = get_model_store().predict_proba(record)
+        return {"win_probability": prob, "record": record}
+    except Exception as e:
+        logger.error("ML predict failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

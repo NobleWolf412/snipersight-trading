@@ -143,6 +143,7 @@ class PaperTradingConfig:
     max_pending_scans: int = 2  # Cancel pending limit orders after this many scan cycles
     max_drawdown_pct: Optional[float] = 10.0  # Kill switch: stop session if peak-to-trough drawdown exceeds X%
     use_testnet: bool = False  # Route orders through Phemex testnet instead of simulating
+    ml_gate_threshold: float = 0.40  # Reject signals with ML win probability below this (0 = disabled)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -1543,6 +1544,10 @@ class PaperTradingService:
 
     def _log_signal(self, plan: TradePlan, result: str, reason: str, **extra):
         """Record every signal's processing result for the Signal Intelligence panel."""
+        _meta = getattr(plan, "metadata", None) or {}
+        _pb = _meta.get("pullback_probability") if isinstance(_meta, dict) else None
+        if _pb is None:
+            _pb = getattr(plan.entry_zone, "pullback_probability", 0) if plan.entry_zone else 0
         entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "scan_number": self.stats.scans_completed,
@@ -1557,6 +1562,11 @@ class PaperTradingService:
             "rr": round(plan.risk_reward, 2) if hasattr(plan, "risk_reward") else None,
             "result": result,  # "executed", "filtered", "error"
             "reason": reason,
+            "conviction_class": getattr(plan, "conviction_class", "B"),
+            "plan_type": getattr(plan, "plan_type", "SMC"),
+            "regime": self._current_regime_composite if hasattr(self, "_current_regime_composite") else "unknown",
+            "pullback_probability": float(_pb or 0),
+            "kill_zone": get_current_kill_zone().value if hasattr(get_current_kill_zone(), "value") else str(get_current_kill_zone()),
         }
         entry.update(extra)
         self.signal_log.append(entry)
@@ -1759,6 +1769,44 @@ class PaperTradingService:
                     "new_confluence": plan.confidence_score,
                     "limit_price": plan.entry_zone.near_entry,
                 })
+
+        # ── ML Edge Gate ──────────────────────────────────────────────────────
+        # If the ML model is trained, score this signal. Reject if win
+        # probability falls below threshold. This uses all available training
+        # data (signals + trades) to predict which setups have real edge.
+        try:
+            from backend.ml.model_store import get_model_store
+            _ml_store = get_model_store()
+            if _ml_store.status().get("trained"):
+                _ml_record = {
+                    "confidence_score": plan.confidence_score,
+                    "risk_reward_ratio": plan.risk_reward if hasattr(plan, "risk_reward") else 0,
+                    "stop_distance_atr": 0,
+                    "pullback_probability": float((getattr(plan, "metadata", {}) or {}).get("pullback_probability", 0) or getattr(getattr(plan, "entry_zone", None), "pullback_probability", 0) or 0),
+                    "entry_time": datetime.now(timezone.utc).isoformat(),
+                    "conviction_class": getattr(plan, "conviction_class", "B"),
+                    "plan_type": getattr(plan, "plan_type", "SMC"),
+                    "trade_type": getattr(plan, "trade_type", "intraday"),
+                    "direction": plan.direction,
+                    "kill_zone": get_current_kill_zone().value if hasattr(get_current_kill_zone(), "value") else str(get_current_kill_zone()),
+                    "regime": self._current_regime_composite if hasattr(self, "_current_regime_composite") else "unknown",
+                }
+                _win_prob = _ml_store.predict_proba(_ml_record)
+                ml_threshold = getattr(config, "ml_gate_threshold", 0.40)
+                if _win_prob is not None and _win_prob < ml_threshold:
+                    reason = f"ML edge model: {_win_prob:.1%} win probability < {ml_threshold:.0%} threshold"
+                    logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
+                    self._log_signal(plan, "filtered", reason, reason_type="ml_gate", ml_win_prob=round(_win_prob, 3))
+                    self._log_activity("signal_filtered", {
+                        "symbol": plan.symbol, "direction": plan.direction,
+                        "confluence": plan.confidence_score, "reason": reason,
+                        "ml_win_prob": round(_win_prob, 3),
+                    })
+                    return
+                if _win_prob is not None:
+                    logger.info(f"ML PASS: {plan.symbol} {plan.direction} | win_prob={_win_prob:.1%}")
+        except Exception as _ml_err:
+            logger.debug("ML gate skipped: %s", _ml_err)
 
         # ── Signal Sensitivity gate (three-tier) ─────────────────────────────
         # Replaces the old binary threshold with a gate + soft-floor band:

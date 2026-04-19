@@ -30,6 +30,7 @@ from backend.ml.feature_extractor import (
     extract_features,
     feature_names,
 )
+from backend.ml.signal_dataset_builder import build_signal_dataset
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +221,120 @@ class EdgeModel:
         except Exception as exc:
             logger.warning("feature_importance fallback failed: %s", exc)
             return []
+
+    def train_combined(self, records: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Train on trade journal records + all available scan signals.
+
+        Signals provide 10-100x more data than completed trades alone.
+        Executed signals matched to trade outcomes get full weight.
+        Filtered signals are weak negatives (weight 0.15).
+        """
+        X_trades, y_trades, w_trades, ids_trades = build_dataset(records)
+        X_signals, y_signals, w_signals, ids_signals = build_signal_dataset()
+
+        if len(y_trades) == 0 and len(y_signals) == 0:
+            return {"success": False, "n_samples": 0, "message": "No training data available."}
+
+        parts_X, parts_y, parts_w, parts_ids = [], [], [], []
+
+        if len(y_trades) > 0:
+            parts_X.append(X_trades)
+            parts_y.append(y_trades)
+            parts_w.append(w_trades)
+            parts_ids.extend(ids_trades)
+
+        if len(y_signals) > 0:
+            parts_X.append(X_signals)
+            parts_y.append(y_signals)
+            parts_w.append(w_signals)
+            parts_ids.extend(ids_signals)
+
+        X = np.vstack(parts_X)
+        y = np.concatenate(parts_y)
+        weights = np.concatenate(parts_w)
+        n = len(y)
+
+        min_required = 10
+        if n < min_required:
+            msg = f"Only {n} total samples (trades + signals); need {min_required}."
+            logger.info(msg)
+            return {"success": False, "n_samples": n, "message": msg}
+
+        try:
+            model, accuracy = self._fit(X, y, weights)
+        except Exception as exc:
+            logger.exception("Combined training failed: %s", exc)
+            return {"success": False, "n_samples": n, "message": str(exc)}
+
+        from datetime import datetime, timezone
+        self._model = model
+        self._n_samples = n
+        self._accuracy = accuracy
+        self._trained_at = datetime.now(timezone.utc).isoformat()
+
+        n_trades = len(y_trades)
+        n_sigs = len(y_signals)
+        logger.info(
+            "EdgeModel trained (combined): %s, n=%d (trades=%d, signals=%d), accuracy=%.3f",
+            self._model_type, n, n_trades, n_sigs, accuracy,
+        )
+
+        return {
+            "success": True,
+            "model_type": self._model_type,
+            "n_samples": n,
+            "n_trades": n_trades,
+            "n_signals": n_sigs,
+            "accuracy": round(accuracy, 4),
+            "trained_at": self._trained_at,
+            "message": f"Trained on {n_trades} trades + {n_sigs} signals.",
+        }
+
+    def gate_recommendations(self) -> List[Dict[str, Any]]:
+        """
+        Use SHAP values to recommend gauntlet gate threshold adjustments.
+
+        Returns a list of {gate, current_direction, recommendation, shap_impact}
+        for the most impactful features that map to tunable gates.
+        """
+        importance = self.feature_importance()
+        if not importance:
+            return []
+
+        gate_map = {
+            "confidence_score": {"gate": "min_confluence", "description": "Confluence score threshold"},
+            "pullback_probability": {"gate": "pullback_prob_threshold", "description": "Pullback probability gate (< 0.45)"},
+            "risk_reward_ratio": {"gate": "min_risk_reward", "description": "Minimum R:R ratio"},
+            "direction_long": {"gate": "direction_bias", "description": "Long vs short preference"},
+            "conviction_ordinal": {"gate": "conviction_filter", "description": "Conviction class gate (A/B/C)"},
+        }
+
+        recommendations = []
+        for feat in importance:
+            name = feat["name"]
+            if name not in gate_map:
+                continue
+
+            direction = feat.get("direction", 0)
+            impact = feat.get("importance", 0)
+
+            if direction > 0.01:
+                action = "Higher values predict wins — consider loosening this gate"
+            elif direction < -0.01:
+                action = "Higher values predict losses — consider tightening this gate"
+            else:
+                action = "Minimal directional impact — gate is well-calibrated"
+
+            recommendations.append({
+                **gate_map[name],
+                "feature": name,
+                "shap_importance": round(impact, 4),
+                "shap_direction": round(direction, 4),
+                "recommendation": action,
+            })
+
+        return sorted(recommendations, key=lambda x: x["shap_importance"], reverse=True)
 
     def status(self) -> Dict[str, Any]:
         """Return current model metadata."""

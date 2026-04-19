@@ -11,9 +11,15 @@ export interface MLStatus {
   min_samples_required: number;
 }
 
-export interface MLTrainResult extends MLStatus {
+export interface MLTrainResult {
   success: boolean;
   message: string;
+  model_type?: string;
+  n_samples?: number;
+  n_trades?: number;
+  n_signals?: number;
+  accuracy?: number;
+  trained_at?: string | null;
 }
 
 export interface FeatureImportanceItem {
@@ -43,6 +49,40 @@ class MLService {
     const data = await res.json();
     return data.features ?? [];
   }
+
+  async getGateRecommendations(): Promise<GateRecommendation[]> {
+    const res = await fetch(`${this.base}/ml/gate-recommendations`);
+    if (!res.ok) throw new Error(`ML gate recommendations error: ${res.status}`);
+    const data = await res.json();
+    return data.recommendations ?? [];
+  }
+
+  async predict(params: {
+    confidence_score?: number;
+    risk_reward_ratio?: number;
+    direction?: string;
+    trade_type?: string;
+    regime?: string;
+  }): Promise<{ win_probability: number | null }> {
+    const qs = new URLSearchParams();
+    if (params.confidence_score != null) qs.set('confidence_score', String(params.confidence_score));
+    if (params.risk_reward_ratio != null) qs.set('risk_reward_ratio', String(params.risk_reward_ratio));
+    if (params.direction) qs.set('direction', params.direction);
+    if (params.trade_type) qs.set('trade_type', params.trade_type);
+    if (params.regime) qs.set('regime', params.regime);
+    const res = await fetch(`${this.base}/ml/predict?${qs.toString()}`);
+    if (!res.ok) throw new Error(`ML predict error: ${res.status}`);
+    return res.json();
+  }
+}
+
+export interface GateRecommendation {
+  gate: string;
+  description: string;
+  feature: string;
+  shap_importance: number;
+  shap_direction: number;
+  recommendation: string;
 }
 
 export const mlService = new MLService();
