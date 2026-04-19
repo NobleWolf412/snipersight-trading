@@ -27,8 +27,8 @@ from backend.ml.feature_extractor import (
 
 logger = logging.getLogger(__name__)
 
-_SESSION_LOGS_DIR = Path("logs/paper_trading")
-_TRADE_JOURNAL_PATH = Path("backend/cache/trade_journal.jsonl")
+_SESSION_LOGS_DIR = Path(__file__).parent.parent.parent / "logs" / "paper_trading"
+_TRADE_JOURNAL_PATH = Path(__file__).parent.parent / "cache" / "trade_journal.jsonl"
 
 FILTERED_SIGNAL_WEIGHT = 0.15
 
