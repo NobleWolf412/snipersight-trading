@@ -1326,20 +1326,24 @@ class Orchestrator:
                     if _gate.gate_name == "conflict_density":
                         _orig_dir = context.metadata.get("chosen_direction", "LONG")
                         _flip_dir = "SHORT" if _orig_dir == "LONG" else "LONG"
+                        _conflict_count = _gate.metadata.get("conflict_count", 0)
 
-                        # BTC macro alignment override: if BTC impulse strongly
-                        # confirms the original direction, the opposing structures
-                        # are counter-trend and therefore weaker. Proceed with the
-                        # original direction rather than flipping against BTC.
+                        # When BTC macro confirms the original direction, opposing
+                        # structures are counter-trend — BTC momentum routinely
+                        # sweeps through LTF resistance. Raise the conflict
+                        # threshold from 3 to 5 (not a bypass — heavy opposition
+                        # still blocks even with BTC alignment).
                         _btc_confirms_orig = (
                             (_btc_impulse == "strong_up" and _orig_dir == "LONG") or
                             (_btc_impulse == "strong_down" and _orig_dir == "SHORT")
                         )
-                        if _btc_confirms_orig:
+                        _btc_raised_threshold = 5
+                        if _btc_confirms_orig and _conflict_count < _btc_raised_threshold:
                             logger.info(
-                                "%s: 🔄 CONFLICT_DENSITY bypassed — BTC %s confirms %s, "
-                                "opposing structures are counter-trend",
-                                symbol, _btc_impulse, _orig_dir,
+                                "%s: 🟡 CONFLICT_DENSITY (%d conflicts) under BTC-aligned "
+                                "threshold (%d) — BTC %s confirms %s, proceeding to scoring",
+                                symbol, _conflict_count, _btc_raised_threshold,
+                                _btc_impulse, _orig_dir,
                             )
                             _flip_succeeded = True  # continue with original direction
 
@@ -1358,7 +1362,7 @@ class Orchestrator:
                                     "%s: 🔄 CONFLICT→FLIP %s→%s — %d opposing OBs are "
                                     "aligned %s signals, continuing",
                                     symbol, _orig_dir, _flip_dir,
-                                    _gate.metadata.get("conflict_count", 0), _flip_dir,
+                                    _conflict_count, _flip_dir,
                                 )
                                 context.metadata["chosen_direction"] = _flip_dir
                                 _flip_succeeded = True
