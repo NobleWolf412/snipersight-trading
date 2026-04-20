@@ -1412,6 +1412,36 @@ async def clear_session_logs():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.delete("/api/ml/model")
+async def reset_ml_model():
+    """
+    Delete the trained edge model from disk and reset in-memory state.
+    The ML gate will be skipped (untrained) until the model is retrained.
+    Session logs are NOT affected.
+    """
+    try:
+        from backend.ml.model_store import get_model_store
+        from backend.ml.signal_dataset_builder import _TRADE_JOURNAL_PATH
+        store = get_model_store()
+        model_path = store.model_path
+        deleted = False
+        import os
+        if os.path.exists(model_path):
+            os.remove(model_path)
+            deleted = True
+        # Reset in-memory state so next access creates a fresh EdgeModel
+        store._edge_model = None
+        store._loaded = False
+        return {
+            "success": True,
+            "deleted_file": deleted,
+            "message": "ML model reset. The ML gate is now inactive until you retrain.",
+        }
+    except Exception as e:
+        logger.error("ML model reset failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.delete("/api/paper-trading/orders/{order_id}")
 async def cancel_paper_trading_order(order_id: str):
     """

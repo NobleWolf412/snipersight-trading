@@ -63,6 +63,12 @@ class MLService {
     return res.json();
   }
 
+  async resetModel(): Promise<{ success: boolean; message: string; deleted_file: boolean }> {
+    const res = await fetch(`${this.base}/ml/model`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`Reset model error: ${res.status}`);
+    return res.json();
+  }
+
   async predict(params: {
     confidence_score?: number;
     risk_reward_ratio?: number;

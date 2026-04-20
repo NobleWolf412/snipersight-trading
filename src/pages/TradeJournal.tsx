@@ -131,6 +131,8 @@ function MLPanel() {
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [clearing, setClearing] = useState(false);
   const [clearConfirm, setClearConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState(false);
 
   const fetchStatus = async () => {
     try {
@@ -148,6 +150,27 @@ function MLPanel() {
   };
 
   useEffect(() => { fetchStatus(); }, []);
+
+  const handleResetModel = async () => {
+    if (!resetConfirm) {
+      setResetConfirm(true);
+      setTimeout(() => setResetConfirm(false), 4000);
+      return;
+    }
+    setResetConfirm(false);
+    setResetting(true);
+    setTrainMsg(null);
+    try {
+      const result = await mlService.resetModel();
+      setTrainMsg(result.message);
+      setImportance([]);
+      await fetchStatus();
+    } catch (e: any) {
+      setTrainMsg(e?.message ?? 'Reset failed');
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const handleClearLogs = async () => {
     if (!clearConfirm) {
@@ -195,12 +218,23 @@ function MLPanel() {
             <Brain size={16} className="text-primary" />
             <CardTitle className="text-sm heading-hud text-muted-foreground">EDGE MODEL</CardTitle>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              className={`font-mono text-xs gap-2 min-w-[120px] ${resetConfirm ? 'border-red-500/60 text-red-400 bg-red-500/10' : ''}`}
+              disabled={resetting || training || clearing}
+              onClick={handleResetModel}
+              title="Delete trained model — ML gate becomes inactive until retrained"
+            >
+              {resetting ? <SpinnerGap size={12} className="animate-spin" /> : <Trash size={12} />}
+              {resetting ? 'RESETTING...' : resetConfirm ? 'CONFIRM RESET?' : 'RESET MODEL'}
+            </Button>
             <Button
               size="sm"
               variant="outline"
               className={`font-mono text-xs gap-2 min-w-[120px] ${clearConfirm ? 'border-red-500/60 text-red-400 bg-red-500/10' : ''}`}
-              disabled={clearing || training}
+              disabled={clearing || training || resetting}
               onClick={handleClearLogs}
               title="Clear all session signal logs (trained model is preserved)"
             >
@@ -211,7 +245,7 @@ function MLPanel() {
               size="sm"
               variant="outline"
               className="font-mono text-xs gap-2 min-w-[120px]"
-              disabled={training || clearing}
+              disabled={training || clearing || resetting}
               onClick={handleTrain}
             >
               {training ? <SpinnerGap size={12} className="animate-spin" /> : <Brain size={12} />}
