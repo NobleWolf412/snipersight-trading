@@ -1326,32 +1326,50 @@ class Orchestrator:
                     if _gate.gate_name == "conflict_density":
                         _orig_dir = context.metadata.get("chosen_direction", "LONG")
                         _flip_dir = "SHORT" if _orig_dir == "LONG" else "LONG"
-                        _flip_gate = run_pre_scoring_gates(
-                            smc_snapshot=context.smc_snapshot,
-                            config=_session_gate_config,
-                            direction=_flip_dir,
-                            regime=_symbol_regime,
-                            btc_impulse=_btc_impulse,
-                            is_btc=_is_btc,
-                            cycle_context=cycle_context,
+
+                        # BTC macro alignment override: if BTC impulse strongly
+                        # confirms the original direction, the opposing structures
+                        # are counter-trend and therefore weaker. Proceed with the
+                        # original direction rather than flipping against BTC.
+                        _btc_confirms_orig = (
+                            (_btc_impulse == "strong_up" and _orig_dir == "LONG") or
+                            (_btc_impulse == "strong_down" and _orig_dir == "SHORT")
                         )
-                        if _flip_gate.passed:
+                        if _btc_confirms_orig:
                             logger.info(
-                                "%s: 🔄 CONFLICT→FLIP %s→%s — %d opposing OBs are "
-                                "aligned %s signals, continuing",
-                                symbol, _orig_dir, _flip_dir,
-                                _gate.metadata.get("conflict_count", 0), _flip_dir,
+                                "%s: 🔄 CONFLICT_DENSITY bypassed — BTC %s confirms %s, "
+                                "opposing structures are counter-trend",
+                                symbol, _btc_impulse, _orig_dir,
                             )
-                            context.metadata["chosen_direction"] = _flip_dir
-                            _flip_succeeded = True
+                            _flip_succeeded = True  # continue with original direction
+
                         else:
-                            logger.info(
-                                "%s: ❌ GATE REJECTED [conflict_density] both dirs — "
-                                "orig %s: %s | flip %s blocked by [%s]: %s",
-                                symbol,
-                                _orig_dir, _gate.reason,
-                                _flip_dir, _flip_gate.gate_name, _flip_gate.reason,
+                            _flip_gate = run_pre_scoring_gates(
+                                smc_snapshot=context.smc_snapshot,
+                                config=_session_gate_config,
+                                direction=_flip_dir,
+                                regime=_symbol_regime,
+                                btc_impulse=_btc_impulse,
+                                is_btc=_is_btc,
+                                cycle_context=cycle_context,
                             )
+                            if _flip_gate.passed:
+                                logger.info(
+                                    "%s: 🔄 CONFLICT→FLIP %s→%s — %d opposing OBs are "
+                                    "aligned %s signals, continuing",
+                                    symbol, _orig_dir, _flip_dir,
+                                    _gate.metadata.get("conflict_count", 0), _flip_dir,
+                                )
+                                context.metadata["chosen_direction"] = _flip_dir
+                                _flip_succeeded = True
+                            else:
+                                logger.info(
+                                    "%s: ❌ GATE REJECTED [conflict_density] both dirs — "
+                                    "orig %s: %s | flip %s blocked by [%s]: %s",
+                                    symbol,
+                                    _orig_dir, _gate.reason,
+                                    _flip_dir, _flip_gate.gate_name, _flip_gate.reason,
+                                )
                     else:
                         logger.info(
                             "%s: ❌ GATE REJECTED [%s] — %s",
