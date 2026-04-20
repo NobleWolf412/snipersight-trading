@@ -21,6 +21,16 @@ weight based on which barrier was hit first:
 
 Trades that hit the time barrier still contribute to training but with reduced
 weight so the model is not misled by uncertain outcomes.
+
+Feature vector (37 total):
+  [0-3]   confidence_score, risk_reward_ratio, stop_distance_atr, pullback_probability
+  [4-7]   hour_sin, hour_cos, dow_sin, dow_cos
+  [8-11]  conviction_ordinal, plan_type_ordinal, trade_type_ordinal, direction_long
+  [12-18] kz_* one-hot (7)
+  [19-24] regime_* one-hot (6)
+  [25-29] synergy_bonus, conflict_penalty, htf_aligned, htf_proximity_atr, macro_score
+  [30-36] rsi, adx, bb_percent_b, volume_ratio, macd_histogram_sign, atr_percent,
+          volume_acceleration
 """
 
 import math
@@ -75,7 +85,7 @@ def is_enriched(record: Dict[str, Any]) -> bool:
 
 def extract_features(record: Dict[str, Any]) -> Optional[np.ndarray]:
     """
-    Convert one journal record into a 1-D feature vector.
+    Convert one journal record into a 1-D feature vector (37 features).
 
     Returns None if the record is not enriched (pre-Phase-2A trade).
     Feature ordering must stay stable — any change requires a model retrain.
@@ -85,35 +95,64 @@ def extract_features(record: Dict[str, Any]) -> Optional[np.ndarray]:
 
     feats: List[float] = []
 
-    # ── Numeric ───────────────────────────────────────────────────────────────
+    # ── [0-3] Core numeric ────────────────────────────────────────────────────
     feats.append(float(record.get("confidence_score") or 0))
     feats.append(float(record.get("risk_reward_ratio") or 0))
     feats.append(float(record.get("stop_distance_atr") or 0))
     feats.append(float(record.get("pullback_probability") or 0))
 
-    # ── Cyclical time encoding ────────────────────────────────────────────────
-    entry_time = record.get("entry_time") or ""
+    # ── [4-7] Cyclical time encoding ──────────────────────────────────────────
+    entry_time = record.get("entry_time") or record.get("timestamp") or ""
     hour, dow = _parse_time(entry_time)
     feats.append(math.sin(2 * math.pi * hour / 24))
     feats.append(math.cos(2 * math.pi * hour / 24))
     feats.append(math.sin(2 * math.pi * dow / 7))
     feats.append(math.cos(2 * math.pi * dow / 7))
 
-    # ── Ordinal ───────────────────────────────────────────────────────────────
+    # ── [8-11] Ordinal categoricals ───────────────────────────────────────────
     feats.append(float(_CONVICTION_MAP.get(str(record.get("conviction_class") or "B"), 1)))
     feats.append(float(_PLAN_TYPE_MAP.get(str(record.get("plan_type") or "SMC"), 0)))
     feats.append(float(_TRADE_TYPE_MAP.get(str(record.get("trade_type") or "intraday"), 1)))
     feats.append(1.0 if record.get("direction") == "LONG" else 0.0)
 
-    # ── One-hot: kill zone ────────────────────────────────────────────────────
+    # ── [12-18] One-hot: kill zone ────────────────────────────────────────────
     kz = str(record.get("kill_zone") or "no_session").lower()
     for zone in _KILL_ZONES:
         feats.append(1.0 if kz == zone else 0.0)
 
-    # ── One-hot: regime ───────────────────────────────────────────────────────
+    # ── [19-24] One-hot: regime ───────────────────────────────────────────────
     reg = str(record.get("regime") or "unknown").lower()
     for r in _REGIMES:
         feats.append(1.0 if reg == r else 0.0)
+
+    # ── [25-29] Confluence breakdown features ─────────────────────────────────
+    # synergy_bonus: 0-10, normalize to 0-1
+    feats.append(min(1.0, float(record.get("synergy_bonus") or 0) / 10.0))
+    # conflict_penalty: 0-20, normalize to 0-1
+    feats.append(min(1.0, float(record.get("conflict_penalty") or 0) / 20.0))
+    # htf_aligned: already 0/1
+    feats.append(float(record.get("htf_aligned") or 0))
+    # htf_proximity_atr: distance to HTF level in ATR units; clip at 5, normalize
+    feats.append(min(1.0, float(record.get("htf_proximity_atr") or 0) / 5.0))
+    # macro_score: -20 to +20, shift to 0-1
+    feats.append((float(record.get("macro_score") or 0) + 20.0) / 40.0)
+
+    # ── [30-36] Indicator snapshot features ───────────────────────────────────
+    # rsi: 0-100, normalize to 0-1
+    feats.append(float(record.get("rsi") or 50) / 100.0)
+    # adx: 0-100, normalize to 0-1
+    feats.append(float(record.get("adx") or 0) / 100.0)
+    # bb_percent_b: already 0-1 (0=at lower band, 1=at upper band)
+    feats.append(float(record.get("bb_percent_b") or 0.5))
+    # volume_ratio (RVOL): current/average, clip at 5, normalize
+    feats.append(min(1.0, float(record.get("volume_ratio") or 1.0) / 5.0))
+    # macd_histogram sign: -1 / 0 / +1 (direction of momentum)
+    _mh = float(record.get("macd_histogram") or 0)
+    feats.append(1.0 if _mh > 0 else (-1.0 if _mh < 0 else 0.0))
+    # atr_percent: ATR as % of price, clip at 5%, normalize
+    feats.append(min(1.0, float(record.get("atr_percent") or 0) / 5.0))
+    # volume_acceleration: normalized slope -1 to +1
+    feats.append(max(-1.0, min(1.0, float(record.get("volume_acceleration") or 0))))
 
     return np.array(feats, dtype=np.float32)
 
@@ -168,21 +207,44 @@ def build_dataset(
 def feature_names() -> List[str]:
     """Return the ordered list of feature names (for importance display)."""
     names = [
+        # [0-3] core
         "confidence_score",
         "risk_reward_ratio",
         "stop_distance_atr",
         "pullback_probability",
+        # [4-7] time
         "hour_sin",
         "hour_cos",
         "dow_sin",
         "dow_cos",
+        # [8-11] ordinal
         "conviction_ordinal",
         "plan_type_ordinal",
         "trade_type_ordinal",
         "direction_long",
     ]
+    # [12-18] kill zone one-hot
     names += [f"kz_{z}" for z in _KILL_ZONES]
+    # [19-24] regime one-hot
     names += [f"regime_{r}" for r in _REGIMES]
+    # [25-29] confluence breakdown
+    names += [
+        "synergy_bonus",
+        "conflict_penalty",
+        "htf_aligned",
+        "htf_proximity_atr",
+        "macro_score",
+    ]
+    # [30-36] indicator snapshot
+    names += [
+        "rsi",
+        "adx",
+        "bb_percent_b",
+        "volume_ratio",
+        "macd_histogram_sign",
+        "atr_percent",
+        "volume_acceleration",
+    ]
     return names
 
 

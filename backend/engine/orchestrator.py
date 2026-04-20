@@ -2500,6 +2500,30 @@ class Orchestrator:
                 except Exception:
                     pass
 
+            # Attach key indicator snapshot for ML feature enrichment
+            if plan and context.multi_tf_indicators:
+                try:
+                    primary_tf = getattr(plan, "primary_timeframe", None) or "1h"
+                    snap = context.multi_tf_indicators.get_indicator(primary_tf)
+                    if snap is None:
+                        for _tf in ["1h", "4h", "15m", "1d"]:
+                            snap = context.multi_tf_indicators.get_indicator(_tf)
+                            if snap is not None:
+                                break
+                    if snap is not None:
+                        plan.metadata["ml_indicators"] = {
+                            "rsi": getattr(snap, "rsi", None),
+                            "adx": getattr(snap, "adx", None),
+                            "bb_percent_b": getattr(snap, "bb_percent_b", None),
+                            "volume_ratio": getattr(snap, "volume_ratio", None),
+                            "macd_histogram": getattr(snap, "macd_histogram", None),
+                            "obv_trend": getattr(snap, "obv_trend", None),
+                            "atr_percent": getattr(snap, "atr_percent", None),
+                            "volume_acceleration": getattr(snap, "volume_acceleration", None),
+                        }
+                except Exception:
+                    pass
+
             # Attach liquidity pools (equal highs/lows) for UI display
             if plan and context.smc_snapshot:
                 try:

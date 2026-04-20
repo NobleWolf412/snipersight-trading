@@ -171,7 +171,15 @@ class EdgeModel:
             return None
 
         try:
-            proba = self._model.predict_proba(vec.reshape(1, -1))[0][1]
+            X = vec.reshape(1, -1)
+            expected = getattr(self._model, "n_features_in_", None)
+            if expected is not None and X.shape[1] != expected:
+                logger.warning(
+                    "predict_proba: feature count mismatch (model=%d, input=%d) — retrain needed",
+                    expected, X.shape[1],
+                )
+                return None
+            proba = self._model.predict_proba(X)[0][1]
             return float(proba)
         except Exception as exc:
             logger.warning("predict_proba failed: %s", exc)

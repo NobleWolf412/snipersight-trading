@@ -1574,6 +1574,22 @@ class PaperTradingService:
             "pullback_probability": float(_pb or 0),
             "kill_zone": _kz,
         }
+        # Confluence breakdown features (Tier 1 ML enrichment)
+        _cb = getattr(plan, "confluence_breakdown", None)
+        if _cb is not None:
+            entry["synergy_bonus"] = round(float(getattr(_cb, "synergy_bonus", 0) or 0), 2)
+            entry["conflict_penalty"] = round(float(getattr(_cb, "conflict_penalty", 0) or 0), 2)
+            entry["htf_aligned"] = int(bool(getattr(_cb, "htf_aligned", False)))
+            entry["htf_proximity_atr"] = round(float(getattr(_cb, "htf_proximity_atr", 0) or 0), 3)
+            entry["macro_score"] = round(float(getattr(_cb, "macro_score", 0) or 0), 1)
+        # Indicator snapshot features attached by orchestrator
+        _ml_inds = (_meta.get("ml_indicators") or {}) if isinstance(_meta, dict) else {}
+        if _ml_inds:
+            for _k in ("rsi", "adx", "bb_percent_b", "volume_ratio",
+                       "macd_histogram", "obv_trend", "atr_percent", "volume_acceleration"):
+                _v = _ml_inds.get(_k)
+                if _v is not None:
+                    entry[_k] = _v
         entry.update(extra)
         self.signal_log.append(entry)
         # Keep last 200 entries in memory for UI
