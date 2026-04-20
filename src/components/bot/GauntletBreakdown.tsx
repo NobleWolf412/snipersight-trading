@@ -26,7 +26,14 @@ export type GauntletStage =
   | 'REGIME_ALIGNMENT'
   | 'BTC_IMPULSE'
   | 'CONFLICT_DENSITY'
-  // ── Post-scoring service gates ────────────────────────────────────────
+  | 'COOLDOWN'
+  | 'MISSING_TF'
+  | 'NO_DATA'
+  // ── Post-scoring / planner gates ──────────────────────────────────────
+  | 'NO_TRADE_PLAN'
+  | 'RISK_VALIDATION'
+  | 'ML_GATE'
+  // ── Execution gates ───────────────────────────────────────────────────
   | 'REGIME_VETO'
   | 'MAX_POSITIONS'
   | 'HAS_POSITION'
@@ -86,6 +93,61 @@ const STAGE_CONFIG: Record<GauntletStage, StageConfig> = {
     bgColor: 'bg-fuchsia-500/10',
     borderColor: 'border-fuchsia-500/30',
     description: 'too many opposing BOS + OBs active — excludes CHoCH (reversal markers, not continuation)',
+    gate: 0,
+  },
+  COOLDOWN: {
+    label: 'Stop-out cooldown',
+    shortLabel: 'COOLDOWN',
+    color: 'text-orange-300',
+    bgColor: 'bg-orange-400/10',
+    borderColor: 'border-orange-400/30',
+    description: 'recent stop-out on this symbol — waiting before re-entry',
+    gate: 0,
+  },
+  MISSING_TF: {
+    label: 'Missing timeframes',
+    shortLabel: 'NO TF',
+    color: 'text-slate-400',
+    bgColor: 'bg-slate-500/10',
+    borderColor: 'border-slate-500/30',
+    description: 'critical timeframe data unavailable for this symbol',
+    gate: 0,
+  },
+  NO_DATA: {
+    label: 'No market data',
+    shortLabel: 'NO DATA',
+    color: 'text-slate-500',
+    bgColor: 'bg-slate-600/10',
+    borderColor: 'border-slate-600/30',
+    description: 'no OHLCV data returned from exchange',
+    gate: 0,
+  },
+  // ── Post-scoring / planner gates ─────────────────────────────────────────
+  NO_TRADE_PLAN: {
+    label: 'No trade plan',
+    shortLabel: 'NO PLAN',
+    color: 'text-rose-300',
+    bgColor: 'bg-rose-400/10',
+    borderColor: 'border-rose-400/30',
+    description: 'insufficient SMC patterns (OB/FVG/sweep) to anchor an entry and stop',
+    gate: 0,
+  },
+  RISK_VALIDATION: {
+    label: 'Risk validation',
+    shortLabel: 'RISK',
+    color: 'text-amber-300',
+    bgColor: 'bg-amber-400/10',
+    borderColor: 'border-amber-400/30',
+    description: 'post-plan check failed — entry drifted, R:R invalid, or stop too wide',
+    gate: 0,
+  },
+  ML_GATE: {
+    label: 'ML win prob gate',
+    shortLabel: 'ML GATE',
+    color: 'text-violet-400',
+    bgColor: 'bg-violet-500/10',
+    borderColor: 'border-violet-500/30',
+    description: 'ML model predicted win probability below threshold',
     gate: 0,
   },
   // ── Post-scoring service gates ────────────────────────────────────────────
@@ -206,12 +268,34 @@ export function classifyStage(signal: SignalLogEntry): GauntletStage {
   if (signal.result === 'error') return 'EXEC_ERROR';
 
   const r = signal.reason.toLowerCase();
+  const rt = (signal.reason_type ?? '').toLowerCase();
 
   // Pending fill — reason-based since result type only allows executed/filtered/error
   if (r.includes('waiting for limit fill') || (r.includes('pending') && r.includes('fill')))
     return 'PENDING_FILL';
 
-  // ── Pre-scoring hard gates ──────────────────────────────────────────────────
+  // ── reason_type fast-path (machine-readable, always prefer over string matching) ──
+  if (rt === 'structural_anchor')       return 'STRUCTURAL_ANCHOR';
+  if (rt === 'regime_alignment')        return 'REGIME_ALIGNMENT';
+  if (rt === 'btc_impulse')             return 'BTC_IMPULSE';
+  if (rt === 'conflict_density')        return 'CONFLICT_DENSITY';
+  if (rt === 'cooldown_active')         return 'COOLDOWN';
+  if (rt === 'missing_critical_tf')     return 'MISSING_TF';
+  if (rt === 'no_data')                 return 'NO_DATA';
+  if (rt === 'no_trade_plan')           return 'NO_TRADE_PLAN';
+  if (rt === 'risk_validation')         return 'RISK_VALIDATION';
+  if (rt === 'ml_gate')                 return 'ML_GATE';
+  if (rt === 'low_confluence')          return 'CONFLUENCE';
+  if (rt === 'regime_veto')             return 'REGIME_VETO';
+  if (rt === 'max_positions')           return 'MAX_POSITIONS';
+  if (rt === 'has_position')            return 'HAS_POSITION';
+  if (rt === 'pending_order')           return 'PENDING_ORDER';
+  if (rt === 'position_size')           return 'POSITION_SIZE';
+  if (rt === 'pullback_prob')           return 'PULLBACK_PROB';
+  if (rt === 'price_fetch')             return 'PRICE_FETCH';
+  if (rt === 'errors')                  return 'EXEC_ERROR';
+
+  // ── Fallback: reason string matching (for signals without reason_type) ──────
   if (r.includes('structural anchor') || r.includes('quality structural'))
     return 'STRUCTURAL_ANCHOR';
   if (r.includes('regime is') || (r.includes('rejected') && r.includes('choch')))
@@ -220,8 +304,18 @@ export function classifyStage(signal: SignalLogEntry): GauntletStage {
     return 'BTC_IMPULSE';
   if (r.includes('simultaneous conflict') || r.includes('conflict conditions detected'))
     return 'CONFLICT_DENSITY';
-
-  // ── Post-scoring service gates ──────────────────────────────────────────────
+  if (r.includes('stop-out') || r.includes('cooldown') || r.includes('wait') && r.includes('h ago'))
+    return 'COOLDOWN';
+  if (r.includes('missing critical timeframe') || r.includes('critical tf'))
+    return 'MISSING_TF';
+  if (r.includes('no market data') || r.includes('no data available'))
+    return 'NO_DATA';
+  if (r.includes('insufficient smc') || r.includes('no trade plan') || r.includes('no plan generated'))
+    return 'NO_TRADE_PLAN';
+  if (r.includes('revalidation failed') || r.includes('risk validation') || r.includes('post-plan'))
+    return 'RISK_VALIDATION';
+  if (r.includes('ml') && (r.includes('win prob') || r.includes('gate') || r.includes('model')))
+    return 'ML_GATE';
   if (r.includes('regime veto') || r.includes('extreme regime') || r.includes('chaotic'))
     return 'REGIME_VETO';
   if (r.includes('max position'))
@@ -657,15 +751,25 @@ export function GauntletBreakdown({ signals, minConfluence, currentScan }: Props
     'REGIME_ALIGNMENT',
     'BTC_IMPULSE',
     'CONFLICT_DENSITY',
+    'COOLDOWN',
+    'MISSING_TF',
+    'NO_DATA',
   ];
 
-  // ── Post-scoring service gates ───────────────────────────────────────────
+  // ── Planner / post-scoring gates ─────────────────────────────────────────
+  const plannerStages: GauntletStage[] = [
+    'NO_TRADE_PLAN',
+    'RISK_VALIDATION',
+    'ML_GATE',
+  ];
+
+  // ── Execution service gates ───────────────────────────────────────────────
   const postScoringStages: GauntletStage[] = [
     'REGIME_VETO', 'MAX_POSITIONS', 'HAS_POSITION', 'PENDING_ORDER',
     'CONFLUENCE', 'POSITION_SIZE', 'PULLBACK_PROB', 'PRICE_FETCH', 'EXEC_ERROR',
   ];
 
-  const allFilterStages = [...preScoringStages, ...postScoringStages];
+  const allFilterStages = [...preScoringStages, ...plannerStages, ...postScoringStages];
 
   // Deduplicated per-symbol last-seen entries (latest per symbol+direction)
   const symbolMap = useMemo(() => {
@@ -921,14 +1025,43 @@ export function GauntletBreakdown({ signals, minConfluence, currentScan }: Props
                   />
                 );
               })}
+            </>
+          )}
+
+          {/* ── Planner / SMC gates ── */}
+          {plannerStages.some(s => (stageCounts[s] ?? 0) > 0) && (
+            <>
+              <div className="my-1.5 border-t border-border/20" />
+              <div className="text-[8px] uppercase tracking-widest text-muted-foreground/35 font-bold pl-1 pb-0.5">
+                Planner gates
+              </div>
+              {plannerStages.map(stage => {
+                const count = stageCounts[stage] ?? 0;
+                if (count === 0) return null;
+                return (
+                  <FunnelBar
+                    key={stage}
+                    stage={stage}
+                    count={count}
+                    total={totalFiltered}
+                    threshold={minConfluence}
+                    isSelected={selectedStage === stage}
+                    onClick={() => setSelectedStage(selectedStage === stage ? null : stage)}
+                  />
+                );
+              })}
+            </>
+          )}
+
+          {/* ── Post-scoring / execution gates ── */}
+          {postScoringStages.some(s => (stageCounts[s] ?? 0) > 0) && (
+            <>
               <div className="my-1.5 border-t border-border/20" />
               <div className="text-[8px] uppercase tracking-widest text-muted-foreground/35 font-bold pl-1 pb-0.5">
                 Execution gates
               </div>
             </>
           )}
-
-          {/* ── Post-scoring / execution gates ── */}
           {postScoringStages.map(stage => {
             const count = stageCounts[stage] ?? 0;
             if (count === 0) return null;
