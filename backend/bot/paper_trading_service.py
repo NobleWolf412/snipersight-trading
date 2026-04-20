@@ -1468,6 +1468,14 @@ class PaperTradingService:
             
             if self.current_scan:
                 self.current_scan["status"] = "completed"
+                # Store rejection funnel for UI monitoring
+                if isinstance(rejection_summary, dict):
+                    _by_reason = rejection_summary.get("by_reason", {})
+                    self.current_scan["rejection_funnel"] = {
+                        k: v for k, v in _by_reason.items() if isinstance(v, (int, float))
+                    }
+                    self.current_scan["total_scanned"] = len(scan_symbols)
+                    self.current_scan["total_passed"] = len(trade_plans)
 
             # Log rejections
             rejections_details = rejection_summary.get("details", {}) if isinstance(rejection_summary, dict) else {}

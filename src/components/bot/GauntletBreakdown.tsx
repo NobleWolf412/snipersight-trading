@@ -608,12 +608,39 @@ function SignalRow({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
+interface RejectionFunnel {
+  [gate: string]: number;
+}
+
+interface CurrentScan {
+  status?: string;
+  total_scanned?: number;
+  total_passed?: number;
+  rejection_funnel?: RejectionFunnel;
+}
+
 interface Props {
   signals: SignalLogEntry[];
   minConfluence?: number;
+  currentScan?: CurrentScan | null;
 }
 
-export function GauntletBreakdown({ signals, minConfluence }: Props) {
+// Human-readable labels for rejection funnel gate keys
+const FUNNEL_GATE_LABELS: Record<string, string> = {
+  structural_anchor:  'No structural anchor',
+  conflict_density:   'Conflict density',
+  regime_alignment:   'Regime alignment',
+  btc_impulse:        'BTC impulse veto',
+  low_confluence:     'Below confluence floor',
+  risk_validation:    'R:R too low',
+  missing_critical_tf:'Missing critical TF',
+  no_trade_plan:      'No trade plan',
+  no_data:            'No data',
+  errors:             'Errors',
+  cooldown_active:    'Cooldown active',
+};
+
+export function GauntletBreakdown({ signals, minConfluence, currentScan }: Props) {
   const [selectedStage, setSelectedStage] = useState<GauntletStage | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [detailMode, setDetailMode] = useState(false);
@@ -767,6 +794,64 @@ export function GauntletBreakdown({ signals, minConfluence }: Props) {
           </button>
         </div>
       </div>
+
+      {/* ── Scan Rejection Funnel ── */}
+      {currentScan?.rejection_funnel && Object.keys(currentScan.rejection_funnel).length > 0 && (() => {
+        const funnel = currentScan.rejection_funnel!;
+        const totalScanned = currentScan.total_scanned ?? 0;
+        const totalPassed = currentScan.total_passed ?? 0;
+        const entries = Object.entries(funnel)
+          .filter(([, v]) => v > 0)
+          .sort(([, a], [, b]) => b - a);
+        const maxCount = entries[0]?.[1] ?? 1;
+        return (
+          <div className="relative z-10 mb-4 rounded-xl border border-purple-500/20 bg-zinc-900/40 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[9px] uppercase tracking-widest text-purple-400/70 font-bold">
+                Last Scan Funnel — {totalScanned} symbols
+              </span>
+              <span className="text-[9px] font-mono text-green-400">
+                {totalPassed} passed
+              </span>
+            </div>
+            <div className="space-y-1">
+              {entries.map(([gate, count]) => {
+                const pct = Math.round((count / Math.max(totalScanned, 1)) * 100);
+                const barPct = Math.round((count / maxCount) * 100);
+                const label = FUNNEL_GATE_LABELS[gate] ?? gate.replace(/_/g, ' ');
+                return (
+                  <div key={gate} className="flex items-center gap-2">
+                    <span className="text-[9px] font-mono text-muted-foreground/60 w-4 text-right shrink-0">{count}</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-red-500/60 transition-all duration-500"
+                        style={{ width: `${barPct}%` }}
+                      />
+                    </div>
+                    <span className="text-[9px] font-mono text-muted-foreground/50 w-24 truncate">{label}</span>
+                    <span className="text-[9px] font-mono text-muted-foreground/40 w-6 text-right">{pct}%</span>
+                  </div>
+                );
+              })}
+              {totalPassed > 0 && (
+                <div className="flex items-center gap-2 mt-1 pt-1 border-t border-zinc-700/40">
+                  <span className="text-[9px] font-mono text-green-400 w-4 text-right shrink-0">{totalPassed}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-green-500/60 transition-all duration-500"
+                      style={{ width: `${Math.round((totalPassed / maxCount) * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-[9px] font-mono text-green-400/60 w-24 truncate">passed to scoring</span>
+                  <span className="text-[9px] font-mono text-green-400/40 w-6 text-right">
+                    {Math.round((totalPassed / Math.max(totalScanned, 1)) * 100)}%
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="relative z-10 flex flex-col lg:flex-row gap-4">
 

@@ -109,6 +109,7 @@ def run_pre_scoring_gates(
     btc_impulse: Optional[str] = None,
     is_btc: bool = False,
     cycle_context: Optional[Any] = None,
+    relevant_timeframes: Optional[set] = None,
 ) -> GateResult:
     """
     Run all pre-scoring hard gates. Returns on the first failure.
@@ -118,6 +119,12 @@ def run_pre_scoring_gates(
       2. Regime Alignment   — mode-aware hard block on counter-trend in strong trend
       3. BTC Impulse        — reject alts when BTC in opposing strong impulse
       4. Conflict Density   — reject if 3+ conflict conditions simultaneously active
+
+    Args:
+        relevant_timeframes: When provided, conflict_density only counts structures
+            from these timeframes. Allows per-scale filtering so scalp trades are not
+            blocked by HTF structure irrelevant to their trade duration. When None,
+            all timeframes are counted (current default behavior).
     """
     profile = getattr(config, "profile", "stealth_balanced").lower()
     norm_dir = direction.lower()
@@ -374,10 +381,14 @@ def run_pre_scoring_gates(
         if break_type == "CHOCH":
             continue
 
+        # Skip structures outside the trade's relevant timeframes when scoped
+        tf = getattr(sb, "timeframe", None)
+        if relevant_timeframes and tf and tf.lower() not in relevant_timeframes:
+            continue
+
         is_opposing = (is_long and sb_dir == "bearish") or (not is_long and sb_dir == "bullish")
         if is_opposing:
             conflict_count += 1
-            tf = getattr(sb, "timeframe", None)
             level = getattr(sb, "level", None) or getattr(sb, "price_level", None)
             label = f"{sb_dir} {break_type}"
             if level is not None:
@@ -388,6 +399,10 @@ def run_pre_scoring_gates(
 
     for ob in smc_snapshot.order_blocks:
         if ob.direction != ob_direction and not ob.invalidated and ob.grade in ("A", "B"):
+            # Skip structures outside the trade's relevant timeframes when scoped
+            tf = getattr(ob, "timeframe", None)
+            if relevant_timeframes and tf and tf.lower() not in relevant_timeframes:
+                continue
             conflict_count += 1
             tf = getattr(ob, "timeframe", None)
             top = getattr(ob, "top", None)

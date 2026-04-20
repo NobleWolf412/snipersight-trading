@@ -2969,6 +2969,7 @@ class Orchestrator:
                         regime=_c_regime,
                         btc_impulse=_c_btc_impulse,
                         is_btc=_c_is_btc,
+                        relevant_timeframes=_scale_structure_tfs or None,
                     )
                     if not _scale_gate.passed:
                         cascade_attempts.append({

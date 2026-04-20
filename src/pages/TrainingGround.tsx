@@ -1753,6 +1753,7 @@ export function TrainingGround() {
               <GauntletBreakdown
                 signals={status.signal_log}
                 minConfluence={status?.config?.min_confluence ?? undefined}
+                currentScan={status?.current_scan ?? null}
               />
             )}
           </div>
