@@ -1326,18 +1326,18 @@ class Orchestrator:
                     if _gate.gate_name == "conflict_density":
                         _orig_dir = context.metadata.get("chosen_direction", "LONG")
                         _flip_dir = "SHORT" if _orig_dir == "LONG" else "LONG"
-                        _conflict_count = _gate.metadata.get("conflict_count", 0)
+                        _conflict_count = (_gate.metadata or {}).get("conflict_count", 0)
 
                         # When BTC macro confirms the original direction, opposing
                         # structures are counter-trend — BTC momentum routinely
                         # sweeps through LTF resistance. Raise the conflict
-                        # threshold from 3 to 5 (not a bypass — heavy opposition
+                        # threshold from 3 to 6 (not a bypass — heavy opposition
                         # still blocks even with BTC alignment).
                         _btc_confirms_orig = (
                             (_btc_impulse == "strong_up" and _orig_dir == "LONG") or
                             (_btc_impulse == "strong_down" and _orig_dir == "SHORT")
                         )
-                        _btc_raised_threshold = 5
+                        _btc_raised_threshold = 6
                         if _btc_confirms_orig and _conflict_count < _btc_raised_threshold:
                             logger.info(
                                 "%s: 🟡 CONFLICT_DENSITY (%d conflicts) under BTC-aligned "
@@ -1411,7 +1411,7 @@ class Orchestrator:
                             "conflict_count", "conflict_conditions",
                             "btc_impulse", "regime_trend",
                         }
-                        for _k, _v in _gate.metadata.items():
+                        for _k, _v in (_gate.metadata or {}).items():
                             if _k in _FORWARD_KEYS:
                                 _rejection_info[_k] = _v
                         return None, _rejection_info
