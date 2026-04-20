@@ -2163,6 +2163,8 @@ function ActivityItem({ event }: { event: PaperTradingActivity }) {
         return <Clock size={16} className="text-blue-400" />;
       case 'pending_order_expired':
         return <XCircle size={16} className="text-muted-foreground" />;
+      case 'pending_order_ttl_extended':
+        return <Clock size={16} className="text-yellow-400" />;
       case 'scan_error':
       case 'trade_error':
         return <XCircle size={16} className="text-red-400" />;
@@ -2208,8 +2210,14 @@ function ActivityItem({ event }: { event: PaperTradingActivity }) {
         return `${d.symbol || ''} ${d.direction || ''} — limit placed @ ${d.limit_price != null ? d.limit_price.toFixed(4) : '?'} (${d.confluence != null ? d.confluence.toFixed(0) + '% conf' : ''})`.trim();
       case 'pending_order_replaced':
         return `${d.symbol || ''} ${d.direction || ''} — limit updated @ ${d.limit_price != null ? d.limit_price.toFixed(4) : '?'}`.trim();
-      case 'pending_order_expired':
-        return `${d.symbol || ''} ${d.direction || ''} — pending order expired unfilled`.trim();
+      case 'pending_order_expired': {
+        const limStr = d.limit_price != null ? ` @ ${d.limit_price.toFixed(4)}` : '';
+        const ageStr = d.age_minutes != null ? ` after ${d.age_minutes.toFixed(0)}min` : '';
+        const ttlStr = d.ttl_minutes != null ? `/${d.ttl_minutes.toFixed(0)}min TTL` : '';
+        return `${d.symbol || ''} ${d.direction || ''} — limit${limStr} expired unfilled${ageStr}${ttlStr}`.trim();
+      }
+      case 'pending_order_ttl_extended':
+        return `${d.symbol || ''} ${d.direction || ''} — TTL extended [${d.extension_count}/${d.max_extensions}] +${d.extension_minutes?.toFixed(0)}min (price approaching limit ${d.limit_price != null ? d.limit_price.toFixed(4) : ''})`.trim();
       case 'scan_error':
         return `⚠️ Scan error: ${d.error || 'Unknown error'}`;
       case 'trade_error':

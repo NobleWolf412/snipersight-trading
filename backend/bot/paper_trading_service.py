@@ -45,9 +45,11 @@ logger = logging.getLogger(__name__)
 # may not get retested for hours; the old flat 10-min TTL was silently killing them.
 _PENDING_TTL_MINUTES: Dict[str, float] = {
     "swing": 240.0,    # 4 hours
-    "intraday": 60.0,  # 1 hour
+    "intraday": 120.0, # 2 hours — crypto intraday pullbacks often take 90–120 min
     "scalp": 10.0,     # 2 scan cycles
 }
+# Max number of adaptive TTL extensions per order (each extension = 50% of original TTL)
+_MAX_TTL_EXTENSIONS = 2
 
 # Maximum distance (%) a limit order can be placed from current price.
 # If the OB entry zone is further away, the limit is "snapped" closer to price
@@ -358,7 +360,7 @@ class PaperTradingService:
         self._pending_plans: Dict[str, TradePlan] = {}
         self._pending_placed_at: Dict[str, datetime] = {}
         self._pending_placed_price: Dict[str, float] = {}  # price at time of placement
-        self._pending_extended: set = set()                # order_ids already given a TTL extension
+        self._pending_extended: Dict[str, int] = {}        # order_id → extension count
         self._expired_symbols: set = set()                 # symbols whose order just expired → priority re-scan
 
         # Diagnostics
@@ -534,7 +536,7 @@ class PaperTradingService:
         self._pending_plans = {}
         self._pending_placed_at = {}
         self._pending_placed_price = {}
-        self._pending_extended = set()
+        self._pending_extended = {}
         self._expired_symbols = set()
         self._price_cache = {}
         self._peak_equity = config.initial_balance
@@ -711,7 +713,7 @@ class PaperTradingService:
         self._pending_plans = {}
         self._pending_placed_at = {}
         self._pending_placed_price = {}
-        self._pending_extended = set()
+        self._pending_extended = {}
         self._expired_symbols = set()
 
         self.started_at = None
@@ -1047,10 +1049,11 @@ class PaperTradingService:
                                     _placed_price = self._pending_placed_price.get(order_id)
                                     _cur_price = self._price_cache.get(plan.symbol, 0.0)
                                     _lim_price = self._get_limit_price_for_order(order_id, plan)
-                                    _already_extended = order_id in self._pending_extended
+                                    _ext_count = self._pending_extended.get(order_id, 0)
+                                    _can_extend = _ext_count < _MAX_TTL_EXTENSIONS
 
                                     _pullback_in_progress = False
-                                    if _placed_price and _cur_price and _lim_price and not _already_extended:
+                                    if _placed_price and _cur_price and _lim_price and _can_extend:
                                         if plan.direction == "LONG":
                                             # Price has dropped closer to the buy limit
                                             _gap_now = _cur_price - _lim_price
@@ -1063,13 +1066,14 @@ class PaperTradingService:
                                             _pullback_in_progress = _gap_now < _gap_orig * 0.6
 
                                     if _pullback_in_progress:
-                                        # Extend by 50% of original TTL (one-time)
+                                        # Extend by 50% of original TTL (up to _MAX_TTL_EXTENSIONS times)
                                         _extension = timedelta(minutes=ttl_minutes * 0.5)
                                         self._pending_placed_at[order_id] = now - max_age + _extension
-                                        self._pending_extended.add(order_id)
+                                        self._pending_extended[order_id] = _ext_count + 1
                                         logger.info(
-                                            "⏳ TTL EXTENDED: %s [%s] | price %.4f moving toward limit %.4f "
+                                            "⏳ TTL EXTENDED [%d/%d]: %s [%s] | price %.4f moving toward limit %.4f "
                                             "(was %.4f at placement) | +%.0fmin extension",
+                                            _ext_count + 1, _MAX_TTL_EXTENSIONS,
                                             plan.symbol, trade_type,
                                             _cur_price, _lim_price, _placed_price,
                                             ttl_minutes * 0.5,
@@ -1082,6 +1086,8 @@ class PaperTradingService:
                                             "limit_price": _lim_price,
                                             "placed_price": _placed_price,
                                             "extension_minutes": ttl_minutes * 0.5,
+                                            "extension_count": _ext_count + 1,
+                                            "max_extensions": _MAX_TTL_EXTENSIONS,
                                         })
                                         continue  # Skip cancellation this cycle
 
@@ -1089,7 +1095,7 @@ class PaperTradingService:
                                     self._pending_plans.pop(order_id, None)
                                     self._pending_placed_at.pop(order_id, None)
                                     self._pending_placed_price.pop(order_id, None)
-                                    self._pending_extended.discard(order_id)
+                                    self._pending_extended.pop(order_id, None)
                                     # Flag for priority re-scan so fresh price is used immediately
                                     self._expired_symbols.add(plan.symbol)
 
@@ -1139,8 +1145,10 @@ class PaperTradingService:
                                                 executor.positions[plan.symbol] = 0.0
                                                 executor.position_avg_price[plan.symbol] = 0.0
 
+                                    _expired_limit_price = self._get_limit_price_for_order(order_id, plan)
                                     logger.info(
                                         f"PENDING ORDER EXPIRED: {plan.symbol} [{trade_type}] | "
+                                        f"limit={_expired_limit_price:.4f} | "
                                         f"age={(now - placed_at).total_seconds() / 60:.1f}min "
                                         f"(ttl={ttl_minutes:.0f}min)"
                                     )
@@ -1150,6 +1158,7 @@ class PaperTradingService:
                                         "direction": plan.direction,
                                         "trade_type": trade_type,
                                         "confluence": plan.confidence_score,
+                                        "limit_price": _expired_limit_price,
                                         "age_minutes": (now - placed_at).total_seconds() / 60,
                                         "ttl_minutes": ttl_minutes,
                                     })
