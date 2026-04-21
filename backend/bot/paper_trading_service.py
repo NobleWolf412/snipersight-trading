@@ -837,6 +837,10 @@ class PaperTradingService:
                         "status": order.status.value,
                         "confluence": plan.confidence_score,
                         "trade_type": getattr(plan, "trade_type", "intraday"),
+                        "current_price": self._price_cache.get(order.symbol, 0.0),
+                        "stop_loss": float(plan.stop_loss.level) if plan.stop_loss else 0.0,
+                        "tp1": float(plan.targets[0].level) if plan.targets else 0.0,
+                        "tp_final": float(plan.targets[-1].level) if plan.targets else 0.0,
                     })
 
         # Signal processing log (every signal with full details)

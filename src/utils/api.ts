@@ -1013,6 +1013,10 @@ export interface PaperTradingStatusResponse {
     status: string;
     confluence: number;
     trade_type?: "scalp" | "intraday" | "swing" | string;
+    current_price?: number;
+    stop_loss?: number;
+    tp1?: number;
+    tp_final?: number;
   }>;
   last_scan_at: string | null;
   next_scan_in_seconds: number | null;

@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import {
   Target,
   PlayCircle,
@@ -1880,9 +1881,151 @@ export function TrainingGround() {
 }
 
 // Position Card Component
+// ─── Chart Modal (positions + pending orders) ────────────────────────────────
+
+interface ChartLevel {
+  label: string;
+  price: number;
+  color: string;       // tailwind text color class
+  bgColor: string;     // tailwind bg color class
+  marker?: string;     // emoji / symbol
+}
+
+function toTVSymbol(symbol: string): string {
+  let s = symbol.replace('/', '').replace(':USDT', '').replace(/\.P$/i, '').replace(/PERP$/i, '').toUpperCase();
+  if (s.startsWith('1000')) s = s.replace('1000', '');
+  return `BINANCE:${s}`;
+}
+
+interface PositionChartModalProps {
+  open: boolean;
+  onClose: () => void;
+  symbol: string;
+  direction: 'LONG' | 'SHORT';
+  levels: ChartLevel[];
+  title?: string;
+}
+
+function PositionChartModal({ open, onClose, symbol, direction, levels, title }: PositionChartModalProps) {
+  const tvSymbol = toTVSymbol(symbol);
+  const cleanSymbol = symbol.replace('/USDT', '').replace(':USDT', '');
+  const isLong = direction === 'LONG';
+
+  const sortedLevels = [...levels].filter(l => l.price > 0).sort((a, b) => b.price - a.price);
+
+  const prices = sortedLevels.map(l => l.price);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const priceRange = maxPrice - minPrice || 1;
+
+  const tvUrl = `https://s.tradingview.com/widgetembed/?${new URLSearchParams({
+    symbol: tvSymbol,
+    interval: '60',
+    theme: 'dark',
+    style: '1',
+    locale: 'en',
+    toolbar_bg: '#141416',
+    enable_publishing: 'false',
+    hide_top_toolbar: 'false',
+    save_image: 'false',
+  }).toString()}`;
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-[95vw] w-full lg:max-w-[1100px] h-[85vh] p-0 gap-0 overflow-hidden flex flex-col lg:flex-row bg-background border-zinc-700/60">
+        {/* Chart */}
+        <div className="flex-1 flex flex-col min-h-[50vh] lg:min-h-0">
+          <div className="h-12 border-b border-border/40 flex items-center gap-3 px-4 bg-muted/5 shrink-0">
+            <span className={cn('text-[10px] font-mono font-bold px-2 py-0.5 rounded border',
+              isLong ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30'
+            )}>{direction}</span>
+            <span className="font-mono font-bold text-lg">{cleanSymbol}/USDT</span>
+            {title && <span className="text-xs text-zinc-500 font-mono">{title}</span>}
+          </div>
+          <div className="flex-1 bg-[#141416] relative overflow-hidden">
+            <iframe
+              key={tvSymbol}
+              src={tvUrl}
+              className="absolute inset-0 w-full h-full border-0"
+              title={`${symbol} Chart`}
+              allow="clipboard-write"
+              allowFullScreen
+            />
+          </div>
+        </div>
+
+        {/* Levels sidebar */}
+        <div className="w-full lg:w-52 shrink-0 border-t lg:border-t-0 lg:border-l border-border/40 bg-background/80 flex flex-col">
+          <div className="px-4 py-3 border-b border-border/30">
+            <p className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Key Levels</p>
+          </div>
+
+          {/* Visual price ladder */}
+          <div className="flex-1 relative px-3 py-4 overflow-hidden">
+            <div className="relative h-full">
+              {sortedLevels.map((level, i) => {
+                const pct = priceRange > 0
+                  ? ((level.price - minPrice) / priceRange) * 100
+                  : 50;
+                const topPct = 100 - pct; // invert so high price = top
+                return (
+                  <div
+                    key={i}
+                    className="absolute left-0 right-0 flex items-center gap-1.5"
+                    style={{ top: `${Math.min(Math.max(topPct, 2), 94)}%`, transform: 'translateY(-50%)' }}
+                  >
+                    <div className={cn('w-full h-px opacity-40', level.bgColor.replace('/10', '/60').replace('bg-', 'bg-'))} />
+                    <div className={cn('shrink-0 text-right w-full absolute right-0')}>
+                      <div className="flex items-center justify-end gap-1">
+                        <span className={cn('text-[8px] font-mono font-bold uppercase tracking-widest', level.color)}>
+                          {level.label}
+                        </span>
+                      </div>
+                      <div className={cn('text-[10px] font-mono font-bold', level.color)}>
+                        ${level.price < 1 ? level.price.toFixed(5) : level.price < 100 ? level.price.toFixed(4) : level.price.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Level list */}
+          <div className="border-t border-border/30 p-3 space-y-1.5">
+            {sortedLevels.map((level, i) => (
+              <div key={i} className="flex items-center justify-between text-xs font-mono">
+                <span className={cn('text-[10px] font-bold uppercase tracking-widest', level.color)}>{level.label}</span>
+                <span className={cn('font-bold', level.color)}>
+                  ${level.price < 1 ? level.price.toFixed(5) : level.price < 100 ? level.price.toFixed(4) : level.price.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PositionCard({ position }: { position: PaperTradingPosition }) {
   const isLong = position.direction === 'LONG';
   const isProfitable = position.unrealized_pnl >= 0;
+  const [chartOpen, setChartOpen] = useState(false);
+
+  const chartLevels: ChartLevel[] = [
+    ...(position.tp_final && position.tp_final !== position.tp1 ? [{
+      label: 'TP Final', price: position.tp_final,
+      color: 'text-emerald-300', bgColor: 'bg-emerald-400/10',
+    }] : []),
+    ...(position.tp1 ? [{
+      label: 'TP1', price: position.tp1,
+      color: 'text-green-400', bgColor: 'bg-green-500/10',
+    }] : []),
+    { label: 'Current', price: position.current_price, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' },
+    { label: 'Entry', price: position.entry_price, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+    { label: 'SL', price: position.stop_loss, color: 'text-red-400', bgColor: 'bg-red-500/10' },
+  ].filter(l => l.price > 0);
 
   // Flash effect logic
   const prevPriceRef = useRef(position.current_price);
@@ -1941,7 +2084,22 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
   progressPct = Math.max(0, Math.min(100, progressPct));
 
   return (
-    <div className={cn("p-3 bg-background rounded-lg border border-border hover:border-accent/30 transition-all duration-300 relative overflow-hidden", flashClass)}>
+    <>
+    <PositionChartModal
+      open={chartOpen}
+      onClose={() => setChartOpen(false)}
+      symbol={position.symbol}
+      direction={position.direction}
+      levels={chartLevels}
+      title={`${position.trade_type ?? 'intraday'} · ${isProfitable ? '+' : ''}${position.unrealized_pnl_pct.toFixed(2)}%`}
+    />
+    <div
+      onClick={() => setChartOpen(true)}
+      className={cn("p-3 bg-background rounded-lg border border-border hover:border-accent/30 transition-all duration-300 relative overflow-hidden cursor-pointer group", flashClass)}
+    >
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-60 transition-opacity">
+        <ChartLine size={14} className="text-accent" />
+      </div>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Badge
@@ -2054,6 +2212,7 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
         </span>
       </div>
     </div>
+    </>
   );
 }
 
@@ -2062,6 +2221,27 @@ function PendingOrderCard({ order, onCancel }: { order: any; onCancel?: (orderId
   const isLong = order.direction === 'LONG';
   const [cancelling, setCancelling] = useState(false);
   const [cancelled, setCancelled] = useState(false);
+  const [chartOpen, setChartOpen] = useState(false);
+
+  const currentPrice: number = order.current_price ?? 0;
+  const limitPrice: number = order.limit_price ?? 0;
+  const distancePct = (currentPrice > 0 && limitPrice > 0)
+    ? ((isLong ? currentPrice - limitPrice : limitPrice - currentPrice) / limitPrice) * 100
+    : null;
+
+  const chartLevels: ChartLevel[] = [
+    ...(order.tp_final && order.tp_final !== order.tp1 ? [{
+      label: 'TP Final', price: order.tp_final,
+      color: 'text-emerald-300', bgColor: 'bg-emerald-400/10',
+    }] : []),
+    ...(order.tp1 ? [{
+      label: 'TP1', price: order.tp1,
+      color: 'text-green-400', bgColor: 'bg-green-500/10',
+    }] : []),
+    ...(currentPrice > 0 ? [{ label: 'Current', price: currentPrice, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' }] : []),
+    { label: 'Limit', price: limitPrice, color: 'text-amber-400', bgColor: 'bg-amber-500/10' },
+    ...(order.stop_loss ? [{ label: 'SL', price: order.stop_loss, color: 'text-red-400', bgColor: 'bg-red-500/10' }] : []),
+  ].filter(l => l.price > 0);
 
   const handleCancel = async () => {
     if (cancelling || cancelled) return;
@@ -2085,7 +2265,19 @@ function PendingOrderCard({ order, onCancel }: { order: any; onCancel?: (orderId
   if (cancelled) return null;
 
   return (
-    <div className="p-3 bg-background/40 rounded-lg border border-amber-500/20 border-dashed hover:border-amber-500/40 transition-all duration-300 group">
+    <>
+    <PositionChartModal
+      open={chartOpen}
+      onClose={() => setChartOpen(false)}
+      symbol={order.symbol}
+      direction={order.direction}
+      levels={chartLevels}
+      title={`Pending · ${order.confluence?.toFixed(0)}% conf`}
+    />
+    <div
+      onClick={() => setChartOpen(true)}
+      className="p-3 bg-background/40 rounded-lg border border-amber-500/20 border-dashed hover:border-amber-500/40 transition-all duration-300 group cursor-pointer"
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Badge
@@ -2106,11 +2298,23 @@ function PendingOrderCard({ order, onCancel }: { order: any; onCancel?: (orderId
           <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest bg-amber-500/10 px-1 py-0 rounded">Waiting Fill</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="text-xs font-bold font-mono text-amber-400/80">
-            ${order.limit_price.toFixed(order.limit_price < 1 ? 5 : 2)}
+          <div className="text-right">
+            <div className="text-xs font-bold font-mono text-amber-400/80">
+              Limit ${order.limit_price.toFixed(order.limit_price < 1 ? 5 : 4)}
+            </div>
+            {currentPrice > 0 && (
+              <div className="text-[9px] font-mono text-muted-foreground/60">
+                Now ${currentPrice.toFixed(currentPrice < 1 ? 5 : 4)}
+                {distancePct !== null && (
+                  <span className={cn('ml-1 font-bold', distancePct > 0 ? 'text-yellow-400/70' : 'text-green-400/70')}>
+                    {distancePct > 0 ? `${distancePct.toFixed(2)}% away` : 'at limit'}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <button
-            onClick={handleCancel}
+            onClick={e => { e.stopPropagation(); handleCancel(); }}
             disabled={cancelling}
             title="Cancel order"
             className={cn(
@@ -2130,6 +2334,7 @@ function PendingOrderCard({ order, onCancel }: { order: any; onCancel?: (orderId
         <div className="flex items-center gap-3">
           <span className="text-muted-foreground opacity-60">Qty: {order.quantity.toFixed(4)}</span>
           <span className="text-muted-foreground opacity-60">Conf: {order.confluence.toFixed(0)}%</span>
+          <ChartLine size={11} className="text-accent/40 group-hover:text-accent/70 transition-colors" />
         </div>
         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/40 border border-border/30">
           <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
@@ -2137,6 +2342,7 @@ function PendingOrderCard({ order, onCancel }: { order: any; onCancel?: (orderId
         </div>
       </div>
     </div>
+    </>
   );
 }
 
