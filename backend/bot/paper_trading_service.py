@@ -1455,7 +1455,7 @@ class PaperTradingService:
                 )
                 veto_reason = f"Extreme Regime Veto: {regime_composite} ({regime_score}/100)"
                 for plan in trade_plans:
-                    self._log_signal(plan, "filtered", veto_reason)
+                    self._log_signal(plan, "filtered", veto_reason, reason_type="regime_veto")
                 trade_plans = []
             elif score_val < regime_policy.min_regime_score and len(trade_plans) > 0:
                 # Below mode's minimum: log warning but DON'T veto — let position
@@ -1678,7 +1678,7 @@ class PaperTradingService:
         if active_count >= config.max_positions:
             reason = f"Max positions reached ({active_count}/{config.max_positions})"
             logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
-            self._log_signal(plan, "filtered", reason)
+            self._log_signal(plan, "filtered", reason, reason_type="max_positions")
             self._log_activity("signal_filtered", {
                 "symbol": plan.symbol, "direction": plan.direction,
                 "confluence": plan.confidence_score, "reason": reason,
@@ -1746,7 +1746,7 @@ class PaperTradingService:
             else:
                 reason = "Already in position for symbol"
                 logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
-                self._log_signal(plan, "filtered", reason)
+                self._log_signal(plan, "filtered", reason, reason_type="has_position")
                 self._log_activity("signal_filtered", {
                     "symbol": plan.symbol, "direction": plan.direction,
                     "confluence": plan.confidence_score, "reason": reason,
@@ -1790,7 +1790,7 @@ class PaperTradingService:
                     f"({existing_plan.confidence_score:.1f}% >= {plan.confidence_score:.1f}%)"
                 )
                 logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
-                self._log_signal(plan, "filtered", reason)
+                self._log_signal(plan, "filtered", reason, reason_type="pending_order")
                 return
             else:
                 # Same direction, better confluence — replace
@@ -1930,7 +1930,7 @@ class PaperTradingService:
             # Common cause: lot_size rounding floors a small quantity to 0.
             # Operator needs to know this is happening to diagnose sizing constraints.
             logger.warning(f"⚠️ SIGNAL SKIPPED (zero size): {plan.symbol} {plan.direction} | {reason}")
-            self._log_signal(plan, "filtered", reason, balance=balance)
+            self._log_signal(plan, "filtered", reason, reason_type="position_size", balance=balance)
             self._log_activity("signal_filtered", {
                 "symbol": plan.symbol, "direction": plan.direction,
                 "confluence": plan.confidence_score, "reason": reason,
@@ -1947,7 +1947,7 @@ class PaperTradingService:
         except Exception as e:
             reason = f"Price fetch failed: {e}"
             logger.error(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
-            self._log_signal(plan, "filtered", reason)
+            self._log_signal(plan, "filtered", reason, reason_type="price_fetch")
             self._log_activity("signal_filtered", {
                 "symbol": plan.symbol, "direction": plan.direction,
                 "confluence": plan.confidence_score, "reason": reason,
@@ -1987,7 +1987,7 @@ class PaperTradingService:
                 if pb is not None and pb < 0.45:
                     reason = f"Low pullback probability ({pb:.2f}) for limit entry @ {limit_price:.4f} (price={current_price:.4f})"
                     logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {reason}")
-                    self._log_signal(plan, "filtered", reason)
+                    self._log_signal(plan, "filtered", reason, reason_type="pullback_prob")
                     self._log_activity("signal_filtered", {
                         "symbol": plan.symbol,
                         "direction": plan.direction,

@@ -318,7 +318,7 @@ class PositionManager:
 
         # ML feature snapshot — pinned at open time so the model always trains on
         # the conditions that were present when the decision was made.
-        _kz = get_current_kill_zone()
+        _kz = get_current_kill_zone(datetime.now(timezone.utc))
         _ml_kill_zone = _kz.name if _kz else "no_session"
         _ml_regime = str(_meta.get("symbol_regime", "unknown"))
         _ml_pb_prob = float(_meta.get("pullback_probability", 0.0) or 0.0)
