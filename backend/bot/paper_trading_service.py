@@ -267,7 +267,9 @@ class PaperTradingStats:
     total_trades: int = 0
     winning_trades: int = 0
     losing_trades: int = 0
+    scratch_trades: int = 0
     win_rate: float = 0.0
+    expectancy: float = 0.0
     total_pnl: float = 0.0
     total_pnl_pct: float = 0.0
     avg_win: float = 0.0
@@ -2766,6 +2768,11 @@ class PaperTradingService:
             if trade.pnl < self.stats.worst_trade:
                 self.stats.worst_trade = trade.pnl
 
+        # Scratch: |P&L| < $1 (negligible result, usually slippage/commission noise)
+        _SCRATCH_THRESHOLD = 1.0
+        if abs(trade.pnl) < _SCRATCH_THRESHOLD:
+            self.stats.scratch_trades += 1
+
         self.stats.total_pnl += trade.pnl
 
         if self.config:
@@ -2773,6 +2780,7 @@ class PaperTradingService:
 
         if self.stats.total_trades > 0:
             self.stats.win_rate = (self.stats.winning_trades / self.stats.total_trades) * 100
+            self.stats.expectancy = self.stats.total_pnl / self.stats.total_trades
 
         if self.stats.avg_loss != 0:
             self.stats.avg_rr = abs(self.stats.avg_win / self.stats.avg_loss)
@@ -3019,7 +3027,8 @@ class PaperTradingService:
             lines.append(f"| Final Equity | ${final_equity:,.2f} |")
             lines.append(f"| Net P&L | ${pnl:,.2f} ({pnl_pct:+.2f}%) |")
             lines.append(f"| Total Trades | {s.total_trades} |")
-            lines.append(f"| Win Rate | {s.win_rate:.1f}% ({s.winning_trades}W / {s.losing_trades}L) |")
+            lines.append(f"| Expectancy | ${s.expectancy:+.2f}/trade |")
+            lines.append(f"| Outcome Split | {s.winning_trades}W / {s.scratch_trades}S / {s.losing_trades}L (win rate {s.win_rate:.1f}%) |")
             lines.append(f"| Avg R:R | {s.avg_rr:.2f} |")
             lines.append(f"| Best Trade | ${s.best_trade:,.2f} |")
             lines.append(f"| Worst Trade | ${s.worst_trade:,.2f} |")
@@ -3267,9 +3276,9 @@ class PaperTradingService:
                     "risk sizing, and position limit gates. Review `signals.jsonl` for "
                     "the `reason` field on filtered signals."
                 )
-            if s.win_rate < 40 and s.total_trades >= 5:
+            if s.expectancy < 0 and s.total_trades >= 5:
                 recs.append(
-                    f"**Low win rate ({s.win_rate:.1f}%)** — Review entry zone quality, "
+                    f"**Negative expectancy (${s.expectancy:.2f}/trade)** — Review entry zone quality, "
                     "stop placement, and whether trades are being opened against the trend."
                 )
             if s.max_drawdown > 10:

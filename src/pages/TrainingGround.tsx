@@ -1337,20 +1337,22 @@ export function TrainingGround() {
 
               {/* Right column — stacked stats */}
               <div className="flex flex-col gap-4 min-w-0">
-                {/* Win Rate Card */}
+                {/* Expectancy Card */}
                 <div className="glass-card p-4 rounded-2xl border-border/50 relative group flex-1 min-w-0">
                   <div className="relative z-10 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">WIN RATE</div>
-                        <div className="text-2xl font-bold font-mono tracking-tight mt-0.5">
-                          {(status?.statistics?.win_rate || 0).toFixed(1)}%
+                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">EXPECTANCY</div>
+                        <div className={`text-2xl font-bold font-mono tracking-tight mt-0.5 ${(status?.statistics?.expectancy ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {(status?.statistics?.expectancy ?? 0) >= 0 ? '+' : ''}{(status?.statistics?.expectancy ?? 0).toFixed(2)}<span className="text-sm font-normal text-muted-foreground ml-0.5">$/trade</span>
                         </div>
                       </div>
-                      <Trophy size={24} className="text-accent/20 transition-colors group-hover:text-accent/50 shrink-0" />
+                      <TrendUp size={24} className="text-accent/20 transition-colors group-hover:text-accent/50 shrink-0" />
                     </div>
                     <div className="mt-1.5 text-xs text-muted-foreground opacity-80 flex items-center gap-1.5 flex-wrap">
                       <span className="text-green-400">{status?.statistics?.winning_trades || 0}W</span>
+                      <span className="text-white/20">/</span>
+                      <span className="text-yellow-400/80">{status?.statistics?.scratch_trades || 0}S</span>
                       <span className="text-white/20">/</span>
                       <span className="text-red-400">{status?.statistics?.losing_trades || 0}L</span>
                       <span className="opacity-20">•</span>
@@ -2885,7 +2887,7 @@ function SessionDebriefModal({
   // Readiness criteria
   const criteria = [
     { label: 'Trade count ≥ 5', met: stats.total_trades >= 5 },
-    { label: 'Win rate ≥ 50%', met: stats.win_rate >= 50 },
+    { label: 'Expectancy > 0', met: (stats.expectancy ?? 0) > 0 },
     { label: 'Profit factor ≥ 1.2', met: profitFactor >= 1.2 },
     { label: 'Max drawdown ≤ 15%', met: stats.max_drawdown <= 15 },
   ];
@@ -2929,11 +2931,11 @@ function SessionDebriefModal({
               <div className="text-[9px] text-muted-foreground">{balance.pnl_pct >= 0 ? '+' : ''}{balance.pnl_pct.toFixed(2)}%</div>
             </div>
             <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
-              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Win Rate</div>
-              <div className={cn("text-lg font-mono font-bold", stats.win_rate >= 50 ? 'text-foreground' : 'text-red-400')}>
-                {stats.win_rate.toFixed(1)}%
+              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Expectancy</div>
+              <div className={cn("text-lg font-mono font-bold", (stats.expectancy ?? 0) > 0 ? 'text-green-400' : 'text-red-400')}>
+                {(stats.expectancy ?? 0) >= 0 ? '+' : ''}{(stats.expectancy ?? 0).toFixed(2)}
               </div>
-              <div className="text-[9px] text-muted-foreground">{stats.winning_trades}W / {stats.losing_trades}L</div>
+              <div className="text-[9px] text-muted-foreground">{stats.winning_trades}W / {stats.scratch_trades ?? 0}S / {stats.losing_trades}L</div>
             </div>
             <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
               <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Prof. Factor</div>

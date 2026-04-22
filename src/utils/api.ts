@@ -959,7 +959,9 @@ export interface PaperTradingStats {
   total_trades: number;
   winning_trades: number;
   losing_trades: number;
+  scratch_trades: number;
   win_rate: number;
+  expectancy: number;
   total_pnl: number;
   total_pnl_pct: number;
   avg_win: number;
