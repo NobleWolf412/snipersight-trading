@@ -146,6 +146,7 @@ class PaperTradingConfig:
     max_drawdown_pct: Optional[float] = 10.0  # Kill switch: stop session if peak-to-trough drawdown exceeds X%
     use_testnet: bool = False  # Route orders through Phemex testnet instead of simulating
     ml_gate_threshold: float = 0.40  # Reject signals with ML win probability below this (0 = disabled)
+    universe_size: int = 20  # How many pairs to scan per cycle (dynamic selection pulls top N by volume/momentum)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -1298,7 +1299,7 @@ class PaperTradingService:
                 # Auto-select from exchange using category toggles
                 try:
                     from backend.analysis.pair_selection import select_symbols
-                    limit = self.config.max_positions * 4  # Scan 4x max positions
+                    limit = self.config.universe_size  # Configurable scan universe (default 20)
                     scan_symbols = select_symbols(
                         adapter=self.orchestrator.exchange_adapter,
                         limit=limit,
@@ -2657,6 +2658,30 @@ class PaperTradingService:
                     except Exception as _e:
                         logger.warning(
                             f"Failed to register stop-out cooldown for {pos.symbol}: {_e}"
+                        )
+                elif exit_reason in ("target", "stagnation") and self.orchestrator:
+                    # Short cooldown after target/stagnation exit — prevents the bot from
+                    # immediately re-entering the same level and churning. Shorter than
+                    # stop-out cooldown; the level isn't invalidated, just recently resolved.
+                    _target_cooldown_hours = {"scalp": 0.25, "intraday": 0.5, "swing": 1.0}
+                    _hours = _target_cooldown_hours.get(
+                        getattr(pos, "trade_type", "scalp"), 0.25
+                    )
+                    try:
+                        self.orchestrator.cooldown_manager.add_cooldown(
+                            symbol=pos.symbol,
+                            direction=pos.direction,
+                            price=trade.exit_price or pos.entry_price,
+                            reason="target_exit",
+                            duration_hours=_hours,
+                        )
+                        logger.debug(
+                            f"TARGET COOLDOWN: {pos.symbol} {pos.direction} locked "
+                            f"{_hours * 60:.0f}min after {exit_reason} exit"
+                        )
+                    except Exception as _e:
+                        logger.warning(
+                            f"Failed to register target-exit cooldown for {pos.symbol}: {_e}"
                         )
 
                 self._log_activity(

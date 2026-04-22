@@ -172,6 +172,7 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
   majors: true,
   altcoins: false,
   meme_mode: false,
+  universe_size: 20,
   slippage_bps: 15,
   fee_rate: 0.001,
   max_hours_open: 72,
@@ -1029,6 +1030,26 @@ export function TrainingGround() {
                       >
                         <Crosshair size={16} weight={config.meme_mode ? "fill" : "regular"} />
                         <span className="text-xs font-mono font-bold tracking-tight">MEME HUNTER</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-border/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Universe Size</label>
+                        <span className="text-[10px] font-mono font-bold text-accent">{config.universe_size ?? 20} pairs</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={10}
+                        max={50}
+                        step={5}
+                        value={config.universe_size ?? 20}
+                        onChange={(e) => setConfig({ ...config, universe_size: Number(e.target.value) })}
+                        className="w-full h-1.5 accent-accent cursor-pointer"
+                      />
+                      <div className="flex justify-between mt-1">
+                        <span className="text-[9px] text-muted-foreground/40 font-mono">10</span>
+                        <span className="text-[9px] text-muted-foreground/40 font-mono">50</span>
                       </div>
                     </div>
 

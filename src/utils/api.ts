@@ -900,6 +900,7 @@ export interface PaperTradingConfigRequest {
   max_pending_scans?: number;
   max_drawdown_pct?: number | null;
   use_testnet?: boolean;
+  universe_size?: number;
 }
 
 export interface PaperTradingPosition {

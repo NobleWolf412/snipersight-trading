@@ -25,21 +25,31 @@ class SupportsTopSymbols(Protocol):
         ...
 
 
-# Default fallback list (mirrors existing api_server behavior)
+# Default fallback — used only when exchange API is unreachable.
+# Ordered by approximate 2025 liquidity/volume rank across majors, trending alts, and memes.
 DEFAULT_FALLBACK = [
     "BTC/USDT",
     "ETH/USDT",
-    "BNB/USDT",
     "SOL/USDT",
     "XRP/USDT",
+    "BNB/USDT",
     "ADA/USDT",
     "AVAX/USDT",
-    "MATIC/USDT",
-    "DOT/USDT",
+    "SUI/USDT",
+    "TON/USDT",
+    "NEAR/USDT",
+    "APT/USDT",
+    "ARB/USDT",
+    "OP/USDT",
+    "INJ/USDT",
     "LINK/USDT",
+    "DOT/USDT",
     "DOGE/USDT",
     "SHIB/USDT",
     "PEPE/USDT",
+    "WIF/USDT",
+    "BONK/USDT",
+    "FLOKI/USDT",
 ]
 
 # Curated crypto majors used when present in adapter list; preserves list ranking

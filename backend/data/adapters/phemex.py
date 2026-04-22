@@ -281,24 +281,25 @@ class PhemexAdapter:
         self, n: int = 20, quote_currency: str = "USDT", market_type: Optional[str] = None
     ) -> List[str]:
         """
-        Get top N trading pairs by 24h volume from Phemex.
+        Get top N trading pairs ranked by volume × volatility × momentum from Phemex.
 
-        Args:
-            n: Number of top symbols to return
-            quote_currency: Quote currency to filter by (e.g., 'USDT')
-            market_type: Market type ('spot' or 'swap'). If None, uses default_type
-
-        Returns:
-            List of symbol strings sorted by 24h volume
+        Scoring: volume * (1 + volatility) * (1 + momentum_factor)
+        - volatility = (24h high - low) / close   — range expansion signal
+        - momentum_factor = min(abs(24h pct_change) / 20, 1.0) × 0.5  — trending pairs score up to 50% higher
+        Minimum volume floor: 500,000 USDT daily — filters out illiquid micro-caps.
         """
         mt = market_type or self.default_type
         markets = None
 
         try:
             markets = self.exchange.load_markets()
+
+            # fetch_tickers() returns ALL pairs in one call; can time out on Phemex.
+            # Try it first; on failure, fall through to the curated fallback.
             tickers = self.exchange.fetch_tickers()
 
-            # Filter for active markets of the specified type
+            # Filter: active, correct quote currency, correct market type, has ticker data
+            MIN_VOLUME_USDT = 500_000
             valid_symbols = []
             for symbol, market in markets.items():
                 if (
@@ -307,70 +308,67 @@ class PhemexAdapter:
                     and market.get("type") == mt
                     and symbol in tickers
                 ):
-                    valid_symbols.append(symbol)
+                    vol = tickers[symbol].get("quoteVolume", 0) or 0
+                    if vol >= MIN_VOLUME_USDT:
+                        valid_symbols.append(symbol)
 
-            # Sort by volume * volatility (descending)
-            # Volatility = (24h high - low) / close, acts as range expansion multiplier
             def calculate_score(symbol: str) -> float:
                 ticker = tickers[symbol]
                 volume = ticker.get("quoteVolume", 0) or 0
                 high = ticker.get("high", 0) or 0
                 low = ticker.get("low", 0) or 0
-                close = ticker.get("close", 0) or ticker.get("last", 0) or 1  # Avoid div by zero
+                close = ticker.get("close", 0) or ticker.get("last", 0) or 1
 
-                # Volatility as normalized 24h range
                 volatility = (high - low) / close if close > 0 else 0
 
-                # Composite score: volume weighted by volatility
-                # Higher volatility = more likely to have active setups forming
-                return volume * (1 + volatility)
+                # Momentum: pairs with a large 24h move (either direction) score higher.
+                # A 20% move adds 50% to the base score (momentum_factor caps at 1.0).
+                pct_change = abs(ticker.get("percentage", 0) or 0)
+                momentum_factor = min(pct_change / 20.0, 1.0)
+
+                return volume * (1 + volatility) * (1 + momentum_factor * 0.5)
 
             sorted_symbols = sorted(valid_symbols, key=calculate_score, reverse=True)
-
             result = sorted_symbols[:n]
-            logger.info(f"Retrieved top {len(result)} Phemex {mt} symbols by volume * volatility")
+            logger.info(
+                f"Dynamic universe: top {len(result)} Phemex {mt} symbols "
+                f"(volume×volatility×momentum) from {len(valid_symbols)} eligible pairs"
+            )
             return result
 
         except Exception as e:
-            logger.warning(f"Error fetching top symbols dynamically: {e}. Using curated fallback.")
-            # Expanded fallback list including meme coins for category support
+            logger.warning(f"Dynamic symbol fetch failed ({e}). Using curated 2025 fallback.")
+            # Updated fallback — 2025-relevant pairs covering majors, trending alts, and memes
             fallback_pairs = [
-                # Majors
+                # Core majors (always liquid)
                 "BTC/USDT",
                 "ETH/USDT",
                 "SOL/USDT",
                 "XRP/USDT",
                 "BNB/USDT",
+                # Large-cap alts
                 "ADA/USDT",
                 "AVAX/USDT",
-                "DOT/USDT",
-                "LINK/USDT",
-                "MATIC/USDT",
-                # Popular alts (2024-2025)
+                "SUI/USDT",
+                "TON/USDT",
                 "NEAR/USDT",
-                "ATOM/USDT",
                 "APT/USDT",
                 "ARB/USDT",
                 "OP/USDT",
-                "SUI/USDT",
                 "INJ/USDT",
                 "SEI/USDT",
-                "TIA/USDT",
-                "FIL/USDT",
                 "JUP/USDT",
-                "WLD/USDT",
-                "STX/USDT",
-                "IMX/USDT",
-                "RENDER/USDT",
+                "LINK/USDT",
+                "DOT/USDT",
+                "ATOM/USDT",
+                "TIA/USDT",
                 # Meme coins
                 "DOGE/USDT",
                 "SHIB/USDT",
                 "PEPE/USDT",
-                "BONK/USDT",
                 "WIF/USDT",
+                "BONK/USDT",
                 "FLOKI/USDT",
-                "MEME/USDT",
-                "TURBO/USDT",
             ]
 
             # Validate against available markets if possible
