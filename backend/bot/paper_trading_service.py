@@ -1023,6 +1023,19 @@ class PaperTradingService:
                                                     self._pending_plans.pop(order.order_id, None)
                                                     self._pending_placed_at.pop(order.order_id, None)
 
+                                                    # Mark the signal as executed now that the fill happened.
+                                                    # The original _log_signal call used result="pending"; this
+                                                    # second entry with result="executed" lets the diagnostic
+                                                    # report and per-symbol stats correctly count the trade.
+                                                    self._log_signal(
+                                                        plan,
+                                                        "executed",
+                                                        f"Pending order filled @ {fill.price:.6g}",
+                                                        fill_price=fill.price,
+                                                        fill_qty=fill.quantity,
+                                                        position_id=position_id,
+                                                    )
+
                                                     self._log_activity("trade_opened", {
                                                         "position_id": position_id,
                                                         "symbol": plan.symbol,
