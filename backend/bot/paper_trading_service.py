@@ -352,6 +352,8 @@ class PaperTradingService:
         self._current_regime_policy = None
         self._current_regime_trend: str = "sideways"
         self._current_regime_volatility: str = "normal"
+        # Previous regime trend — used to detect BTC pump transitions mid-session
+        self._prev_regime_trend: str = "sideways"
 
         # Session log directory for persistent diagnostic output
         self._session_log_dir: Optional[Path] = None
@@ -1472,6 +1474,31 @@ class PaperTradingService:
             self._current_regime_policy = regime_policy
             self._current_regime_trend = regime.get("trend", "sideways") if regime else "sideways"
             self._current_regime_volatility = regime.get("volatility", "normal") if regime else "normal"
+
+            # Detect BTC regime flip to strong upside — protect existing alt shorts
+            _btc_strong_up = self._current_regime_trend in ("strong_up", "up")
+            _was_strong_up = self._prev_regime_trend in ("strong_up", "up")
+            if _btc_strong_up and not _was_strong_up and self.position_manager:
+                _protect_actions = self.position_manager.protect_alt_shorts_on_btc_pump(
+                    self._price_cache
+                )
+                if _protect_actions:
+                    self._log_activity("btc_pump_protective_tighten", {
+                        "new_trend": self._current_regime_trend,
+                        "prev_trend": self._prev_regime_trend,
+                        "positions_protected": len(_protect_actions),
+                        "actions": [
+                            {"symbol": sym, "position_id": pid, "action": act}
+                            for sym, pid, act in _protect_actions
+                        ],
+                    })
+                    logger.warning(
+                        "BTC_PUMP_PROTECT: Regime flipped %s→%s. Tightened stops on %d alt SHORT(s): %s",
+                        self._prev_regime_trend, self._current_regime_trend,
+                        len(_protect_actions),
+                        [a[0] for a in _protect_actions],
+                    )
+            self._prev_regime_trend = self._current_regime_trend
 
             # Update open positions with latest regime data so adaptive
             # stagnation adjusts to current market conditions, not just entry-time

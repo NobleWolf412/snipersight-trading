@@ -416,18 +416,30 @@ def generate_trade_plan(
         raise ValueError(f"Target leverage adjustment failed: {e}") from e
 
     # === 5b. Distribute Target Percentages ===
-    # Targets must sum to 100% for TradePlan validation
+    # Targets must sum to 100% for TradePlan validation.
+    # In calm/compressed regimes, front-load TP1 because further targets are
+    # unlikely to be reached before stagnation fires in low-volatility conditions.
     if targets:
+        _is_low_vol = regime_label in ("calm", "compressed")
         n = len(targets)
         if n == 1:
             targets[0].percentage = 100.0
         elif n == 2:
-            targets[0].percentage = 60.0
-            targets[1].percentage = 40.0
+            if _is_low_vol:
+                targets[0].percentage = 75.0
+                targets[1].percentage = 25.0
+            else:
+                targets[0].percentage = 60.0
+                targets[1].percentage = 40.0
         elif n == 3:
-            targets[0].percentage = 50.0
-            targets[1].percentage = 30.0
-            targets[2].percentage = 20.0
+            if _is_low_vol:
+                targets[0].percentage = 70.0
+                targets[1].percentage = 20.0
+                targets[2].percentage = 10.0
+            else:
+                targets[0].percentage = 50.0
+                targets[1].percentage = 30.0
+                targets[2].percentage = 20.0
         else:
             # For 4+ targets, use a decaying distribution
             # TP1: 40%, TP2: 30%, TP3: 20%, others: split remaining 10%

@@ -1914,9 +1914,12 @@ def _calculate_targets(
     )
 
     # Force use of structural targeting (vs R:R multiples) for Range Reversion setups
-    # Range setups rely on bands/levels, not generic R:R
+    # Range setups rely on bands/levels, not generic R:R.
+    # "calm" is the post-mapping label for "compressed" (regime_engine maps compressed→calm
+    # for PlannerConfig key compatibility). Check both to catch the label either way.
     use_structural_targets = (
-        is_swing_mode or setup_archetype == "RANGE_REVERSION" or regime_label == "compressed"
+        is_swing_mode or setup_archetype == "RANGE_REVERSION"
+        or regime_label in ("compressed", "calm")
     )
 
     if use_structural_targets:
@@ -2092,14 +2095,12 @@ def _calculate_targets(
     base_rrs = planner_cfg.target_rr_ladder
 
     # 2. Adjust for Regime
-    # In 'normal' or 'calm' regime, use standard ladder
-    # In 'elevated' or 'explosive', tighten the ladder
+    # calm/compressed (0.7×) → compress ladder so TP1 is reachable before stagnation fires
+    # normal (1.0×) → unchanged
+    # elevated (1.2×) / explosive (1.5×) → stretch ladder; price has room to travel
     regime_mult = planner_cfg.atr_regime_multipliers.get(regime_label, 1.0)
 
-    # ... (Rest of logic truncated for brevity, but I read enough to know I should just use the fallback logic here)
-    # Actually, R:R calculation logic is standard.
-
-    adjusted_rrs = [rr * rr_scale for rr in base_rrs]
+    adjusted_rrs = [rr * rr_scale * regime_mult for rr in base_rrs]
 
     for i, rr in enumerate(adjusted_rrs):
         dist = risk_distance * rr

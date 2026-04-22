@@ -229,6 +229,16 @@ class PositionManager:
         "swing": 1.5,       # Swings: need room to breathe
     }
 
+    # Stagnation should NOT close trades that are already deeply underwater.
+    # Below this P&L floor, the position is losing too much for a flat-exit
+    # to make sense — let the stop loss handle it instead. Stagnation is
+    # for trades going nowhere near flat, not for trades already in stop territory.
+    STAGNATION_LOSS_FLOOR = {
+        "scalp": -0.15,     # Scalp: defer to SL if down more than 0.15%
+        "intraday": -0.30,  # Intraday: defer if down more than 0.30%
+        "swing": -0.50,     # Swing: defer if down more than 0.50%
+    }
+
     # Regime-based multipliers on the base hold time.
     # Trending markets deserve more patience; choppy markets less.
     REGIME_TREND_MULTIPLIER = {
@@ -617,6 +627,18 @@ class PositionManager:
             making_progress = self._is_making_progress(position, current_price)
 
             if position.pnl_percentage <= adaptive_pnl and not making_progress:
+                # If the position is already deeply underwater, stagnation closing it
+                # at a loss makes the R:R distribution worse than a clean stop-out.
+                # Defer to the stop loss — stagnation exits should be near-flat, not large losses.
+                loss_floor = self.STAGNATION_LOSS_FLOOR.get(position.trade_type, -0.30)
+                if position.pnl_percentage < loss_floor:
+                    logger.info(
+                        f"STAGNATION DEFERRED (loss floor): {position.position_id} | "
+                        f"{position.symbol} | P&L {position.pnl_percentage:.2f}% < floor "
+                        f"{loss_floor:.2f}% — deferring to stop loss"
+                    )
+                    return
+
                 # Increment strike counter — require 2 consecutive failures before
                 # closing. A single flat/poor candle at the stagnation boundary is
                 # not sufficient evidence; crypto often consolidates briefly before
@@ -920,6 +942,66 @@ class PositionManager:
             f"BREAKEVEN: {position.position_id} | {position.symbol} | "
             f"Stop moved: {old_stop:.6f} -> {position.stop_loss:.6f} (entry + 0.1R buffer: {buffer:.6f})"
         )
+
+    def protect_alt_shorts_on_btc_pump(self, price_cache: dict) -> list:
+        """
+        Called when global BTC regime transitions to strong_up/up.
+        For every open SHORT position on a non-BTC symbol, move the stop
+        to breakeven if it's currently below entry. If already profitable,
+        tighten the trailing stop to within 0.25R of current price.
+
+        Returns list of (symbol, position_id, action) tuples for activity logging.
+        """
+        actions = []
+        with self._lock:
+            for pos_id, pos in self.positions.items():
+                if pos.status not in (PositionStatus.OPEN, PositionStatus.PARTIAL):
+                    continue
+                if pos.direction != "SHORT":
+                    continue
+                if "BTC" in pos.symbol.upper():
+                    continue
+
+                current_price = price_cache.get(pos.symbol)
+                if not current_price:
+                    continue
+
+                risk = abs(pos.initial_entry_price - pos.initial_stop_loss)
+                if risk == 0:
+                    continue
+
+                if not pos.breakeven_active:
+                    # Mirror _move_to_breakeven convention: SHORT breakeven stop is
+                    # entry - buffer (slightly below entry). Stop triggers when
+                    # current_price >= stop_loss, so this fires if price rises back
+                    # near entry, locking in a small profit on the runner.
+                    old_stop = pos.stop_loss
+                    buffer = risk * 0.1
+                    new_stop = pos.entry_price - buffer
+                    if new_stop < pos.stop_loss:
+                        # New stop is tighter (lower) than current — only tighten, never loosen
+                        pos.stop_loss = new_stop
+                        pos.breakeven_active = True
+                        actions.append((pos.symbol, pos_id, f"breakeven {old_stop:.4f}→{new_stop:.4f}"))
+                        logger.info(
+                            f"BTC_PUMP_PROTECT: {pos.symbol} SHORT {pos_id} | "
+                            f"stop tightened to breakeven {old_stop:.4f} → {new_stop:.4f}"
+                        )
+                else:
+                    # Already at breakeven — tighten trailing to 0.25R from current price
+                    profit_r = (pos.entry_price - current_price) / risk
+                    if profit_r > 0:
+                        trail_stop = current_price + risk * 0.25
+                        if trail_stop < pos.stop_loss:
+                            old_stop = pos.stop_loss
+                            pos.stop_loss = trail_stop
+                            pos.trailing_active = True
+                            actions.append((pos.symbol, pos_id, f"trail {old_stop:.4f}→{trail_stop:.4f}"))
+                            logger.info(
+                                f"BTC_PUMP_PROTECT: {pos.symbol} SHORT {pos_id} | "
+                                f"trailing tightened {old_stop:.4f} → {trail_stop:.4f} (0.25R)"
+                            )
+        return actions
 
     def _check_trailing_activation(self, position: PositionState, current_price: float):
         """Check if trailing stop should be activated."""

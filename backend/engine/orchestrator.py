@@ -1827,15 +1827,19 @@ class Orchestrator:
                 )
                 _is_compressed = _vol in ("compressed", "low")
 
-                if _is_counter_trend and _is_compressed and "swing" in cascade_types:
-                    # Remove swing from cascade — counter-trend swing in compressed regime
-                    # is the DCL/WCL trap. Allow intraday/scalp only.
+                if _is_compressed and "swing" in cascade_types:
+                    # Remove swing from cascade in any compressed market.
+                    # Counter-trend swings are DCL/WCL traps, but even same-trend
+                    # swings fail in compressed conditions: ATR is too small for the
+                    # wide swing stop (structure-based, 1.5× ATR buffer) to sit
+                    # outside noise, and TP targets are out of reach before stagnation
+                    # fires. Intraday/scalp entries resolve faster with tighter stops.
                     cascade_types = [t for t in cascade_types if t != "swing"]
                     context.metadata["regime_swing_cap"] = True
                     logger.info(
-                        "%s [%s]: ⚡ Regime cap — counter-trend swing blocked "
-                        "(trend=%s vol=%s dir=%s). Cascade capped to: %s",
-                        symbol, trace_id, _trend, _vol, chosen_direction, cascade_types,
+                        "%s [%s]: ⚡ Regime cap — all swings blocked in compressed vol "
+                        "(trend=%s vol=%s dir=%s counter_trend=%s). Cascade capped to: %s",
+                        symbol, trace_id, _trend, _vol, chosen_direction, _is_counter_trend, cascade_types,
                     )
         # ── End regime-aware capping ─────────────────────────────────────────────
         logger.info(
