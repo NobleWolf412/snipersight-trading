@@ -230,14 +230,11 @@ class PositionManager:
     }
 
     # Stagnation should NOT close trades that are already deeply underwater.
-    # Below this P&L floor, the position is losing too much for a flat-exit
-    # to make sense — let the stop loss handle it instead. Stagnation is
-    # for trades going nowhere near flat, not for trades already in stop territory.
-    STAGNATION_LOSS_FLOOR = {
-        "scalp": -0.15,     # Scalp: defer to SL if down more than 0.15%
-        "intraday": -0.30,  # Intraday: defer if down more than 0.30%
-        "swing": -0.50,     # Swing: defer if down more than 0.50%
-    }
+    # Fraction of the trade's stop distance used as the stagnation loss floor.
+    # If the current loss is > STAGNATION_FLOOR_RATIO × stop_distance, defer to stop loss.
+    # Using stop distance (not fixed %) makes this adaptive: a trade with a 0.3% stop has
+    # a tighter floor than one with a 2% stop, which is structurally correct.
+    STAGNATION_FLOOR_RATIO = 0.5
 
     # Regime-based multipliers on the base hold time.
     # Trending markets deserve more patience; choppy markets less.
@@ -630,12 +627,22 @@ class PositionManager:
                 # If the position is already deeply underwater, stagnation closing it
                 # at a loss makes the R:R distribution worse than a clean stop-out.
                 # Defer to the stop loss — stagnation exits should be near-flat, not large losses.
-                loss_floor = self.STAGNATION_LOSS_FLOOR.get(position.trade_type, -0.30)
+                # ATR-adaptive stagnation floor: if the loss has already exceeded
+                # STAGNATION_FLOOR_RATIO of the original stop distance, the trade is too
+                # far in the red for a stagnation exit to make sense — the stop is closer
+                # to the right exit level. This scales with each trade's actual risk size.
+                _stop_pct = (
+                    abs(position.initial_entry_price - position.initial_stop_loss)
+                    / position.initial_entry_price * 100
+                    if position.initial_entry_price > 0 else 0.30
+                )
+                loss_floor = -(_stop_pct * self.STAGNATION_FLOOR_RATIO)
                 if position.pnl_percentage < loss_floor:
                     logger.info(
                         f"STAGNATION DEFERRED (loss floor): {position.position_id} | "
                         f"{position.symbol} | P&L {position.pnl_percentage:.2f}% < floor "
-                        f"{loss_floor:.2f}% — deferring to stop loss"
+                        f"{loss_floor:.2f}% (={self.STAGNATION_FLOOR_RATIO:.0%} of "
+                        f"{_stop_pct:.2f}% stop) — deferring to stop loss"
                     )
                     return
 

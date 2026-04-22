@@ -352,8 +352,10 @@ class PaperTradingService:
         self._current_regime_policy = None
         self._current_regime_trend: str = "sideways"
         self._current_regime_volatility: str = "normal"
-        # Previous regime trend — used to detect BTC pump transitions mid-session
-        self._prev_regime_trend: str = "sideways"
+        # Previous regime trend — used to detect BTC pump transitions mid-session.
+        # None on startup: prevents a false transition trigger when BTC is already
+        # in an up regime on the very first scan (no prior state to compare against).
+        self._prev_regime_trend: Optional[str] = None
 
         # Session log directory for persistent diagnostic output
         self._session_log_dir: Optional[Path] = None
@@ -1478,7 +1480,7 @@ class PaperTradingService:
             # Detect BTC regime flip to strong upside — protect existing alt shorts
             _btc_strong_up = self._current_regime_trend in ("strong_up", "up")
             _was_strong_up = self._prev_regime_trend in ("strong_up", "up")
-            if _btc_strong_up and not _was_strong_up and self.position_manager:
+            if _btc_strong_up and not _was_strong_up and self._prev_regime_trend is not None and self.position_manager:
                 _protect_actions = self.position_manager.protect_alt_shorts_on_btc_pump(
                     self._price_cache
                 )
@@ -1561,25 +1563,49 @@ class PaperTradingService:
                         setup_state=item.get('setup_state', 'NOISE'),
                         convergence_score=item.get('convergence_score', 0),
                         convergence_critical_count=item.get('convergence_critical_count', 0),
-                        convergence_critical_total=item.get('convergence_critical_total', 9),
-                        convergence_missing=item.get('convergence_missing', []),
+                        convergence_critical_total=item.get('convergence_critical_total'),
+                        convergence_missing=item.get('convergence_missing'),
                         veto_blocked=item.get('veto_blocked', False),
                         active_vetoes=item.get('active_vetoes', []),
                         # Crash traceback hint — non-empty only for 'errors' reason_type
                         traceback_hint=item.get('traceback_hint', ''),
                     )
 
+            _rej_by_reason = {r: len(items) for r, items in rejections_details.items() if items}
+            _rej_total = sum(_rej_by_reason.values())
             self._log_activity(
                 "scan_completed",
                 {
                     "signals_found": len(trade_plans),
                     "symbols_scanned": len(scan_symbols),
-                    "rejections": len(rejections_details),
+                    "rejections": _rej_total,
+                    "rejections_by_reason": _rej_by_reason,
                 },
             )
 
-            # Process valid signal plans
-            for plan in trade_plans:
+            # Process valid signal plans.
+            # Per-scan directional cap: sort by confluence (best first), then allow at most
+            # MAX_SAME_DIR_PER_SCAN new entries per direction. Excess signals are deferred to
+            # the next scan rather than entered immediately as a correlated batch — prevents
+            # 5 correlated shorts from opening in 90 seconds on a single BTC move.
+            _MAX_SAME_DIR_PER_SCAN = 3
+            _sorted_plans = sorted(trade_plans, key=lambda p: p.confidence_score, reverse=True)
+            _dir_counts: dict = {}
+            _capped_plans = []
+            for _p in _sorted_plans:
+                _d = _p.direction
+                if _dir_counts.get(_d, 0) < _MAX_SAME_DIR_PER_SCAN:
+                    _capped_plans.append(_p)
+                    _dir_counts[_d] = _dir_counts.get(_d, 0) + 1
+                else:
+                    _defer_reason = (
+                        f"Directional cap: max {_MAX_SAME_DIR_PER_SCAN} {_d} entries per scan — "
+                        f"deferred to next scan (confluence {_p.confidence_score:.1f}%)"
+                    )
+                    logger.info(f"SIGNAL DEFERRED: {_p.symbol} {_p.direction} | {_defer_reason}")
+                    self._log_signal(_p, "filtered", _defer_reason, reason_type="directional_cap")
+
+            for plan in _capped_plans:
                 await self._process_signal(plan)
 
         except Exception as e:
