@@ -2962,6 +2962,37 @@ class Orchestrator:
                 # Write into context so _generate_trade_plan reads the right direction
                 context.metadata["chosen_direction"] = _scale_direction
 
+                # ── Scalp: block counter-HTF entries in strong impulse regimes ─────
+                # Gate 2 (regime_alignment) is bypassed for the "precision" (scalp)
+                # profile because LTF bounces CAN fade weak/normal trends. However,
+                # when the HTF regime shows strong_up or strong_down, institutional
+                # momentum overwrites LTF structure before scalp targets are reached —
+                # the same reason intraday counter entries are blocked in strong regimes.
+                # Normal "up"/"down" trends still allow counter-trend bounce scalps.
+                if trade_type == "scalp" and _scale_direction != _session_direction:
+                    _sc_trend = getattr(_c_regime, "trend", None)
+                    if _sc_trend is None:
+                        _sc_dims = getattr(_c_regime, "dimensions", None)
+                        _sc_trend = getattr(_sc_dims, "trend", "neutral") if _sc_dims else "neutral"
+                    if _sc_trend in ("strong_up", "strong_down"):
+                        _sc_block_reason = (
+                            f"scalp {_scale_direction} blocked: counter-HTF in strong impulse "
+                            f"(session={_session_direction}, trend={_sc_trend})"
+                        )
+                        cascade_attempts.append({
+                            "type": trade_type,
+                            "result": "gate_rejected",
+                            "gate": "htf_strong_counter",
+                            "reason": _sc_block_reason,
+                        })
+                        logger.info(
+                            "🔀 %s CASCADE scalp → HTF STRONG COUNTER BLOCK: %s",
+                            context.symbol, _sc_block_reason,
+                        )
+                        context.metadata["chosen_direction"] = _session_direction  # restore
+                        continue
+                # ── End scalp HTF counter block ───────────────────────────────────
+
                 # Re-run ALL pre-scoring gates with the scale's profile AND direction.
                 # Conflict-density must be evaluated with the scale direction because
                 # opposing OBs differ per TF slice.
