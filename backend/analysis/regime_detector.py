@@ -227,11 +227,12 @@ class RegimeDetector:
                     trend = "sideways"
                     score += 10  # Bonus for counter-trend at extreme
 
-            # Override bullish regime at distribution with LTR
+            # Override bullish regime at distribution / cycle topping
             if trend in ("up", "strong_up"):
                 if (
                     cycle_context.translation == CycleTranslation.LTR
                     or cycle_context.phase == CyclePhase.DISTRIBUTION
+                    or cycle_context.trade_bias == "SHORT"
                 ):
                     logger.info(
                         f"🔄 Regime override: {trend} → sideways at cycle high/LTR (allows shorts)"

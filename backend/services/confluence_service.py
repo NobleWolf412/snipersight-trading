@@ -182,7 +182,25 @@ class ConfluenceService:
             # Ties are broken by regime trend
             tie_break_used = None
 
-            if score_diff >= DIRECTION_MARGIN:
+            # When pre-scoring gates found heavy structural opposition (3+ OBs) and
+            # flipped direction, honour that structural evidence for close calls.
+            _cd_flip = context.metadata.get("conflict_density_flip")
+            if _cd_flip and abs(score_diff) < DIRECTION_MARGIN:
+                _flip_to = _cd_flip["to"]
+                if _flip_to == "SHORT":
+                    chosen = bearish_breakdown
+                    chosen_direction = "SHORT"
+                else:
+                    chosen = bullish_breakdown
+                    chosen_direction = "LONG"
+                tie_break_used = "conflict_density_structural"
+                logger.info(
+                    "✅ %s Direction: %s (conflict-density flip — %d opposing OBs forced structural tiebreak, %.1f vs %.1f)",
+                    context.symbol, chosen_direction, _cd_flip["conflict_count"],
+                    bullish_breakdown.total_score, bearish_breakdown.total_score,
+                )
+
+            elif score_diff >= DIRECTION_MARGIN:
                 # Clear bullish edge
                 chosen = bullish_breakdown
                 chosen_direction = "LONG"

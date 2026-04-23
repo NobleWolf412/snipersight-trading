@@ -1307,10 +1307,31 @@ class Orchestrator:
                 else:
                     _session_gate_config = self.config
 
+                # Derive a preliminary direction from SMC structure (OB + BOS
+                # counts) so the gates don't always default to LONG.  This is a
+                # lightweight tally — full scoring happens in confluence service.
+                _pre_dir = context.metadata.get("chosen_direction")
+                if not _pre_dir:
+                    _b, _s = 0, 0
+                    for _ob in context.smc_snapshot.order_blocks:
+                        if _ob.invalidated or _ob.grade not in ("A", "B"):
+                            continue
+                        if _ob.direction == "bullish":
+                            _b += 1
+                        else:
+                            _s += 1
+                    for _sb in context.smc_snapshot.structural_breaks:
+                        _sb_dir = getattr(_sb, "direction", None)
+                        if _sb_dir == "bullish":
+                            _b += 1
+                        elif _sb_dir == "bearish":
+                            _s += 1
+                    _pre_dir = "SHORT" if _s > _b else "LONG"
+
                 _gate = run_pre_scoring_gates(
                     smc_snapshot=context.smc_snapshot,
                     config=_session_gate_config,
-                    direction=context.metadata.get("chosen_direction", "LONG"),
+                    direction=_pre_dir,
                     regime=_symbol_regime,
                     btc_impulse=_btc_impulse,
                     is_btc=_is_btc,
@@ -1324,7 +1345,7 @@ class Orchestrator:
                     # strong SHORT signal.  Retry with the flip before giving up.
                     _flip_succeeded = False
                     if _gate.gate_name == "conflict_density":
-                        _orig_dir = context.metadata.get("chosen_direction", "LONG")
+                        _orig_dir = _pre_dir
                         _flip_dir = "SHORT" if _orig_dir == "LONG" else "LONG"
                         _conflict_count = (_gate.metadata or {}).get("conflict_count", 0)
 
@@ -1365,6 +1386,10 @@ class Orchestrator:
                                     _conflict_count, _flip_dir,
                                 )
                                 context.metadata["chosen_direction"] = _flip_dir
+                                context.metadata["conflict_density_flip"] = {
+                                    "from": _orig_dir, "to": _flip_dir,
+                                    "conflict_count": _conflict_count,
+                                }
                                 _flip_succeeded = True
                             else:
                                 logger.info(
@@ -3017,6 +3042,7 @@ class Orchestrator:
                             "🔀 %s CASCADE %s → GATE [%s] rejected: %s",
                             context.symbol, trade_type, _scale_gate.gate_name, _scale_gate.reason,
                         )
+                        context.metadata["chosen_direction"] = _session_direction
                         continue
 
                 plan = self._generate_trade_plan(
@@ -3052,6 +3078,10 @@ class Orchestrator:
                 logger.info(
                     "🔀 %s CASCADE %s → exception: %s", context.symbol, trade_type, exc
                 )
+
+        # Restore session direction — the loop may have left a scale-specific
+        # direction in context.metadata that doesn't match the winning plan.
+        context.metadata["chosen_direction"] = _session_direction
 
         # Store cascade results in context for downstream visibility
         context.metadata["cascade_attempts"] = cascade_attempts
