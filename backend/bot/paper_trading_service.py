@@ -1672,6 +1672,19 @@ class PaperTradingService:
             entry["htf_aligned"] = int(bool(getattr(_cb, "htf_aligned", False)))
             entry["htf_proximity_atr"] = round(float(getattr(_cb, "htf_proximity_atr", 0) or 0), 3)
             entry["macro_score"] = round(float(getattr(_cb, "macro_score", 0) or 0), 1)
+            # Per-factor breakdown — enables full decision reconstruction in analysis scripts
+            _factors = getattr(_cb, "factors", None)
+            if _factors:
+                entry["factors"] = [
+                    {
+                        "name": f.name,
+                        "score": round(float(f.score), 1),
+                        "weight": round(float(f.weight), 4),
+                        "weighted": round(float(f.weighted_score), 2),
+                        "rationale": f.rationale,
+                    }
+                    for f in _factors
+                ]
         # Indicator snapshot features attached by orchestrator
         _ml_inds = (_meta.get("ml_indicators") or {}) if isinstance(_meta, dict) else {}
         if _ml_inds:
