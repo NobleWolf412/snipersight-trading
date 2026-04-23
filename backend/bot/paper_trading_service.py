@@ -1738,6 +1738,25 @@ class PaperTradingService:
 
 
 
+        # R:R sanity cap — reject plans with unreachable targets.
+        # A scalp with R:R > 4 means targets are at HTF structural levels that a
+        # 15-minute scalp cannot reach; the trade will stagnate or stop out with no
+        # target hits. Intraday cap is 7R, swing 15R.
+        _MAX_RR_BY_TYPE = {"scalp": 4.0, "intraday": 7.0, "swing": 15.0}
+        _plan_rr = getattr(plan, "risk_reward", 0.0) or 0.0
+        _plan_trade_type = getattr(plan, "trade_type", "intraday") or "intraday"
+        _rr_cap = _MAX_RR_BY_TYPE.get(_plan_trade_type, 7.0)
+        if _plan_rr > _rr_cap:
+            _rr_reason = f"R:R {_plan_rr:.1f}R exceeds {_plan_trade_type} cap ({_rr_cap}R) — targets unreachable"
+            logger.info(f"SIGNAL FILTERED: {plan.symbol} {plan.direction} | {_rr_reason}")
+            self._log_signal(plan, "filtered", _rr_reason, reason_type="rr_too_wide")
+            self._log_activity("signal_filtered", {
+                "symbol": plan.symbol, "direction": plan.direction,
+                "confluence": plan.confidence_score, "reason": _rr_reason,
+                "risk_reward": _plan_rr, "cap": _rr_cap,
+            })
+            return
+
         # Check if we can take more positions.
         # Only count ACTIVE (filled) positions against the cap — pending limit orders
         # hold no capital and are already deduplicated per-symbol by Gate 3.
@@ -2609,7 +2628,7 @@ class PaperTradingService:
                     risk_reward_ratio=getattr(pos, "risk_reward_ratio", 0.0),
                     stop_distance_atr=getattr(pos, "stop_distance_atr", 0.0),
                     timeframe=getattr(pos, "timeframe", "1h"),
-                    regime=getattr(pos, "regime", "unknown"),
+                    regime=f"{getattr(pos, 'regime_trend', 'unknown')}_{getattr(pos, 'regime_volatility', 'unknown')}",
                     pullback_probability=getattr(pos, "pullback_probability", 0.0),
                     kill_zone=getattr(pos, "kill_zone", "no_session"),
                 )

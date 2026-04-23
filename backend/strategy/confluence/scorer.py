@@ -346,12 +346,18 @@ def run_pre_scoring_gates(
                 metadata={"btc_impulse": btc_impulse},
             )
         if not is_long and btc_strongly_up:
-            return GateResult(
-                passed=False,
-                gate_name="btc_impulse",
-                reason=f"SHORT alt rejected: BTC in opposing strong impulse ({btc_impulse})",
-                metadata={"btc_impulse": btc_impulse},
-            )
+            # Bypass for BTC dominance expansion: when BTC pumps but the specific
+            # alt has its own local bearish regime (down/strong_down), the alt is
+            # diverging — not correlated. The gate was designed for correlated moves
+            # (BTC pumps → alts pump); it should not block genuinely bearish alts.
+            _alt_local_trend = getattr(regime, "trend", "sideways") if regime else "sideways"
+            if _alt_local_trend not in ("down", "strong_down"):
+                return GateResult(
+                    passed=False,
+                    gate_name="btc_impulse",
+                    reason=f"SHORT alt rejected: BTC in opposing strong impulse ({btc_impulse})",
+                    metadata={"btc_impulse": btc_impulse},
+                )
 
     # ── Gate 4: Conflict Density (ALL modes) ──────────────────────────────────
     # Count active conflict signals (opposing structural breaks and OBs).
