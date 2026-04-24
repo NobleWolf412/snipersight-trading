@@ -44,9 +44,12 @@ class PlannerConfig:
     )
 
     # ATR regime multipliers (scale base offsets by regime)
+    # calm was 0.7 — produced TP1=1.05R on [1.5, 2.5, 4.0] ladder which is noise
+    # territory. Raised to 0.9 so TP1=1.35R stays meaningful while still compressing
+    # for low-vol. Stop enforcement (max_stop_atr) now does the real constraining.
     atr_regime_multipliers: Dict[str, float] = field(
         default_factory=lambda: {
-            "calm": 0.7,
+            "calm": 0.9,
             "normal": 1.0,
             "elevated": 1.2,
             "explosive": 1.5,

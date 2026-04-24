@@ -1243,6 +1243,29 @@ def _calculate_stop_loss(
     stop_loss = StopLoss(level=stop_level, distance_atr=distance_atr, rationale=rationale)
     # Attach structure_tf_used for metadata tracking
     stop_loss.structure_tf_used = structure_tf_used  # type: ignore
+
+    # ── Max stop enforcement (ALL stop types) ─────────────────────────────────
+    # max_stop_atr was previously only checked for swing-based stops (line ~792).
+    # OB/FVG structure stops bypassed this limit, allowing stops wider than the
+    # cascade config permits (e.g. scalp max=2.5 ATR but OB stop = 4 ATR).
+    # A stop wider than max_stop_atr means targets are proportionally unreachable
+    # within the trade type's timeframe — stagnation fires first every time.
+    _max_stop = getattr(config, "max_stop_atr", None)
+    if _max_stop and distance_atr > _max_stop and distance_atr > 0:
+        _fallback_mult = min(_max_stop, 1.5)  # Cap fallback at max or 1.5× ATR
+        logger.info(
+            "Stop %.1f ATR exceeds %s cap (%.1f ATR) — capping to %.1f ATR",
+            distance_atr, getattr(config, "profile", "?"), _max_stop, _fallback_mult,
+        )
+        if is_bullish:
+            stop_level = max(entry_zone.far_entry * 0.001, entry_zone.far_entry - (_fallback_mult * atr))
+        else:
+            stop_level = entry_zone.far_entry + (_fallback_mult * atr)
+        distance_atr = _fallback_mult
+        rationale = f"{rationale} [capped: {_max_stop:.1f} ATR max → {_fallback_mult:.1f}× ATR]"
+        stop_loss = StopLoss(level=stop_level, distance_atr=distance_atr, rationale=rationale)
+        stop_loss.structure_tf_used = structure_tf_used  # type: ignore
+
     return stop_loss, used_structure
 
 
@@ -1970,7 +1993,7 @@ def _calculate_targets(
         # Always check these if we are in Range Reversion or Compressed regime
         if (
             setup_archetype == "RANGE_REVERSION"
-            or regime_label == "compressed"
+            or regime_label in ("compressed", "calm")
             or "mean_reversion" in mode_profile
         ):
             bb_targets = _get_bollinger_targets(
