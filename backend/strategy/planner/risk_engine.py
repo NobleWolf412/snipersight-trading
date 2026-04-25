@@ -133,6 +133,95 @@ def _filter_targets_by_opposing_structure(
     return valid_targets
 
 
+def _adjust_targets_for_wick_barriers(
+    targets: List[Target],
+    multi_tf_data: Optional["MultiTimeframeData"],
+    avg_entry: float,
+    is_bullish: bool,
+    atr: float,
+) -> List[Target]:
+    """
+    Pull targets back to the near-side of significant wick demand/supply zones.
+
+    When a candle between entry and target has a prominent shadow (wick > 1.5× body
+    AND wick > 0.3 ATR), that shadow is a proven demand (lower wick) or supply
+    (upper wick) zone.  Placing TP inside or beyond it ignores a high-probability
+    bounce point.  This function clips each target to just outside the body edge
+    of the nearest such candle, keeping targets that have no barrier unchanged.
+    """
+    if not targets or not multi_tf_data or not multi_tf_data.timeframes:
+        return targets
+
+    tf_name = next(iter(multi_tf_data.timeframes))
+    df = multi_tf_data.timeframes[tf_name]
+    if df is None or df.empty:
+        return targets
+
+    df = df.tail(60).reset_index(drop=True)
+
+    adjusted = []
+    for target in targets:
+        t_level = target.level
+        barrier_level = None
+
+        for _, row in df.iterrows():
+            o = float(row["open"])
+            h = float(row["high"])
+            l = float(row["low"])
+            c = float(row["close"])
+            body = abs(o - c)
+            body_lo = min(o, c)
+            body_hi = max(o, c)
+
+            if not is_bullish:
+                # SHORT path: look for demand wicks (lower shadows) whose tip sits
+                # between entry and target — i.e., in our path downward.
+                lower_wick = body_lo - l
+                if lower_wick < 1.5 * max(body, atr * 0.05) or lower_wick < 0.3 * atr:
+                    continue
+                if not (t_level <= l <= avg_entry):
+                    continue
+                # Barrier = body bottom + 0.1 ATR buffer (top edge of demand zone)
+                candidate = body_lo + 0.1 * atr
+                # Take the HIGHEST candidate (nearest to entry = first zone hit going down)
+                if barrier_level is None or candidate > barrier_level:
+                    barrier_level = candidate
+            else:
+                # LONG path: look for supply wicks (upper shadows) whose tip sits
+                # between entry and target — i.e., in our path upward.
+                upper_wick = h - body_hi
+                if upper_wick < 1.5 * max(body, atr * 0.05) or upper_wick < 0.3 * atr:
+                    continue
+                if not (avg_entry <= h <= t_level):
+                    continue
+                candidate = body_hi - 0.1 * atr
+                if barrier_level is None or candidate < barrier_level:
+                    barrier_level = candidate
+
+        if barrier_level is not None and abs(barrier_level - t_level) > 0.05 * atr:
+            adjusted.append(
+                Target(
+                    level=barrier_level,
+                    label=target.label,
+                    rr_ratio=target.rr_ratio,
+                    weight=target.weight,
+                    rationale=f"{target.rationale} [wick barrier → {barrier_level:.4f}]",
+                    percentage=target.percentage,
+                )
+            )
+            logger.info(
+                "Wick barrier adjusted %s %.4f → %.4f (%s)",
+                target.label,
+                t_level,
+                barrier_level,
+                "SHORT" if not is_bullish else "LONG",
+            )
+        else:
+            adjusted.append(target)
+
+    return adjusted if adjusted else targets
+
+
 def _filter_targets_by_volume_profile(
     targets: List[Target],
     volume_profile: Optional[VolumeProfile],
@@ -2107,6 +2196,10 @@ def _calculate_targets(
                         f"swing targets (HVN conflicts removed)"
                     )
 
+            # Adjust targets that would land inside wick demand/supply zones
+            swing_targets = _adjust_targets_for_wick_barriers(
+                swing_targets, multi_tf_data, avg_entry, is_bullish, atr
+            )
             # Filter targets blocked by opposing OB structures
             return _filter_targets_by_opposing_structure(
                 swing_targets, smc_snapshot, is_bullish, atr
@@ -2158,6 +2251,8 @@ def _calculate_targets(
                 f"R:R targets (HVN conflicts removed)"
             )
 
+    # Adjust targets that would land inside wick demand/supply zones
+    targets = _adjust_targets_for_wick_barriers(targets, multi_tf_data, avg_entry, is_bullish, atr)
     # Filter targets blocked by opposing OB structures
     targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
 
