@@ -2037,9 +2037,13 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
   const [chartOpen, setChartOpen] = useState(false);
 
   const chartLevels: ChartLevel[] = [
-    ...(position.tp_final && position.tp_final !== position.tp1 ? [{
-      label: 'TP Final', price: position.tp_final,
+    ...(position.tp_final && position.tp_final !== position.tp1 && position.tp_final !== position.tp2 ? [{
+      label: 'TP3', price: position.tp_final,
       color: 'text-emerald-300', bgColor: 'bg-emerald-400/10',
+    }] : []),
+    ...(position.tp2 && position.tp2 !== position.tp1 && position.tp2 !== position.tp_final ? [{
+      label: 'TP2', price: position.tp2,
+      color: 'text-green-300', bgColor: 'bg-green-400/10',
     }] : []),
     ...(position.tp1 ? [{
       label: 'TP1', price: position.tp1,
@@ -2253,9 +2257,13 @@ function PendingOrderCard({ order, onCancel }: { order: any; onCancel?: (orderId
     : null;
 
   const chartLevels: ChartLevel[] = [
-    ...(order.tp_final && order.tp_final !== order.tp1 ? [{
-      label: 'TP Final', price: order.tp_final,
+    ...(order.tp_final && order.tp_final !== order.tp1 && order.tp_final !== order.tp2 ? [{
+      label: 'TP3', price: order.tp_final,
       color: 'text-emerald-300', bgColor: 'bg-emerald-400/10',
+    }] : []),
+    ...(order.tp2 && order.tp2 !== order.tp1 && order.tp2 !== order.tp_final ? [{
+      label: 'TP2', price: order.tp2,
+      color: 'text-green-300', bgColor: 'bg-green-400/10',
     }] : []),
     ...(order.tp1 ? [{
       label: 'TP1', price: order.tp1,

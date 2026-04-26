@@ -847,6 +847,7 @@ class PaperTradingService:
                         "current_price": self._price_cache.get(order.symbol, 0.0),
                         "stop_loss": float(plan.stop_loss.level) if plan.stop_loss else 0.0,
                         "tp1": float(plan.targets[0].level) if plan.targets else 0.0,
+                        "tp2": float(plan.targets[1].level) if len(plan.targets) > 1 else 0.0,
                         "tp_final": float(plan.targets[-1].level) if plan.targets else 0.0,
                     })
 
@@ -2558,6 +2559,10 @@ class PaperTradingService:
             current_price = self._price_cache.get(pos.symbol, pos.entry_price)
             pos.update_unrealized_pnl(current_price)
 
+            # Reconstruct full target ladder: hit targets first (in execution order),
+            # then remaining. Preserves TP1/TP2/TP3 labels even after partial exits.
+            _all_tgts = list(pos.targets_hit) + list(pos.targets)
+
             positions.append(
                 {
                     "position_id": pos.position_id,
@@ -2577,8 +2582,9 @@ class PaperTradingService:
                     "breakeven_active": pos.breakeven_active,
                     "trailing_active": pos.trailing_active,
                     "opened_at": pos.created_at.isoformat(),
-                    "tp1": pos.targets[0].level if pos.targets else (pos.targets_hit[-1].level if pos.targets_hit else 0.0),
-                    "tp_final": pos.targets[-1].level if pos.targets else (pos.targets_hit[-1].level if pos.targets_hit else 0.0),
+                    "tp1": _all_tgts[0].level if _all_tgts else 0.0,
+                    "tp2": _all_tgts[1].level if len(_all_tgts) > 1 else 0.0,
+                    "tp_final": _all_tgts[-1].level if _all_tgts else 0.0,
                     "trade_type": getattr(pos, "trade_type", "intraday"),
                     "initial_stop_loss": getattr(pos, "initial_stop_loss", pos.stop_loss),
                 }
