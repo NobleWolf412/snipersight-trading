@@ -646,6 +646,23 @@ class PositionManager:
                     )
                     return
 
+                # MFE guard: if the trade reached ≥0.5% profit at any point, it demonstrated
+                # real directional conviction. Price pulled back but the trade was live —
+                # stagnation is premature here. Let stop loss handle the exit.
+                if position.initial_entry_price > 0:
+                    _entry = position.initial_entry_price
+                    if position.direction == "LONG":
+                        _mfe_pct = (position.highest_price - _entry) / _entry * 100 if position.highest_price else 0.0
+                    else:
+                        _mfe_pct = (_entry - position.lowest_price) / _entry * 100 if position.lowest_price else 0.0
+                    if _mfe_pct >= 0.5:
+                        logger.info(
+                            f"STAGNATION DEFERRED (MFE guard): {position.position_id} | "
+                            f"{position.symbol} | Peak profit={_mfe_pct:.2f}% ≥ 0.5% — "
+                            f"trade showed conviction, deferring to stop loss"
+                        )
+                        return
+
                 # Increment strike counter — require 2 consecutive failures before
                 # closing. A single flat/poor candle at the stagnation boundary is
                 # not sufficient evidence; crypto often consolidates briefly before
