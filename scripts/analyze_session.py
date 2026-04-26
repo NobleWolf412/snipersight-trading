@@ -184,7 +184,13 @@ def _print_decision_card(signal: Dict, trade: Optional[Dict], card_num: int):
 
     # ── Indicators snapshot ───────────────────────────────────────────────────
     ind_keys = ["rsi", "adx", "bb_percent_b", "volume_ratio", "macd_histogram", "obv_trend"]
-    ind_parts = [f"{k}={signal[k]:.2f}" for k in ind_keys if k in signal]
+    ind_parts = []
+    for k in ind_keys:
+        if k in signal:
+            try:
+                ind_parts.append(f"{k}={float(signal[k]):.2f}")
+            except (TypeError, ValueError):
+                ind_parts.append(f"{k}={signal[k]}")
     if ind_parts:
         print(f"║  {dim('indicators: ' + '  '.join(ind_parts))}")
 
