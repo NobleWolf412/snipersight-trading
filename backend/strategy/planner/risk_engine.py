@@ -139,6 +139,7 @@ def _adjust_targets_for_wick_barriers(
     avg_entry: float,
     is_bullish: bool,
     atr: float,
+    risk_distance: float = 0.0,
 ) -> List[Target]:
     """
     Pull targets back to the near-side of significant wick demand/supply zones.
@@ -148,6 +149,10 @@ def _adjust_targets_for_wick_barriers(
     (upper wick) zone.  Placing TP inside or beyond it ignores a high-probability
     bounce point.  This function clips each target to just outside the body edge
     of the nearest such candle, keeping targets that have no barrier unchanged.
+
+    After clipping, validates that the adjusted level still gives at least 0.8R
+    (realised R:R vs risk_distance). If the clip is too aggressive, the original
+    target is kept. rr_ratio is always recalculated from the final level.
     """
     if not targets or not multi_tf_data or not multi_tf_data.timeframes:
         return targets
@@ -199,21 +204,39 @@ def _adjust_targets_for_wick_barriers(
                     barrier_level = candidate
 
         if barrier_level is not None and abs(barrier_level - t_level) > 0.05 * atr:
+            # Guard: adjusted target must still give at least 0.8R realised R:R.
+            # Without this, a supply wick with body_hi barely above entry can pull
+            # TP from 2.0R down to 0.03R while rr_ratio stays labelled "2.0".
+            if risk_distance > 0:
+                realized_rr = abs(barrier_level - avg_entry) / risk_distance
+                if realized_rr < 0.8:
+                    logger.info(
+                        "Wick barrier skipped for %s: adjusted level %.4f gives only %.2fR "
+                        "(< 0.8R floor) — keeping original %.4f",
+                        target.label, barrier_level, realized_rr, t_level,
+                    )
+                    adjusted.append(target)
+                    continue
+                new_rr = realized_rr
+            else:
+                new_rr = target.rr_ratio
+
             adjusted.append(
                 Target(
                     level=barrier_level,
                     label=target.label,
-                    rr_ratio=target.rr_ratio,
+                    rr_ratio=new_rr,  # recalculated from actual adjusted level
                     weight=target.weight,
                     rationale=f"{target.rationale} [wick barrier → {barrier_level:.4f}]",
                     percentage=target.percentage,
                 )
             )
             logger.info(
-                "Wick barrier adjusted %s %.4f → %.4f (%s)",
+                "Wick barrier adjusted %s %.4f → %.4f (%.2fR) (%s)",
                 target.label,
                 t_level,
                 barrier_level,
+                new_rr,
                 "SHORT" if not is_bullish else "LONG",
             )
         else:
@@ -2025,13 +2048,14 @@ def _calculate_targets(
         "swing",
     )
 
-    # Force use of structural targeting (vs R:R multiples) for Range Reversion setups
-    # Range setups rely on bands/levels, not generic R:R.
-    # "calm" is the post-mapping label for "compressed" (regime_engine maps compressed→calm
-    # for PlannerConfig key compatibility). Check both to catch the label either way.
+    # Force use of structural targeting (vs R:R multiples) for swing modes and range reversions.
+    # Scalp/intraday use the R:R ladder (with calm/regime multiplier applied) even in
+    # compressed markets — forcing them into structural mode pulls 4H/1H swing levels
+    # that are far from entry, then the wick barrier clips them back to near-entry,
+    # producing inverted R:R (e.g. $6.70 TP vs $223 stop). R:R ladder + 0.9× calm
+    # multiplier already handles compression correctly for scalps.
     use_structural_targets = (
         is_swing_mode or setup_archetype == "RANGE_REVERSION"
-        or regime_label in ("compressed", "calm")
     )
 
     if use_structural_targets:
@@ -2104,9 +2128,9 @@ def _calculate_targets(
         structural_targets = []
         seen_levels = set()
 
-        # Get mode-specific minimum R:R (e.g., Overwatch requires 2.0R)
-        # Use planner_cfg if available, fallback to 1.0R for other modes
-        min_structural_rr = getattr(planner_cfg, "min_rr_ratio", 1.0)
+        # Get mode-specific minimum R:R (e.g., Overwatch requires 2.5R, Scalp 1.5R)
+        # PlannerConfig stores this as `min_rr` (not `min_rr_ratio`)
+        min_structural_rr = getattr(planner_cfg, "min_rr", 1.0)
 
         for level, info, score in candidates:
             # Skip if too close (must meet mode's minimum R:R requirement)
@@ -2198,7 +2222,7 @@ def _calculate_targets(
 
             # Adjust targets that would land inside wick demand/supply zones
             swing_targets = _adjust_targets_for_wick_barriers(
-                swing_targets, multi_tf_data, avg_entry, is_bullish, atr
+                swing_targets, multi_tf_data, avg_entry, is_bullish, atr, risk_distance
             )
             # Filter targets blocked by opposing OB structures
             return _filter_targets_by_opposing_structure(
@@ -2252,7 +2276,7 @@ def _calculate_targets(
             )
 
     # Adjust targets that would land inside wick demand/supply zones
-    targets = _adjust_targets_for_wick_barriers(targets, multi_tf_data, avg_entry, is_bullish, atr)
+    targets = _adjust_targets_for_wick_barriers(targets, multi_tf_data, avg_entry, is_bullish, atr, risk_distance)
     # Filter targets blocked by opposing OB structures
     targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
 
