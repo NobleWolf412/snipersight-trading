@@ -1045,30 +1045,47 @@ class PositionManager:
 
         profit_r = profit / risk
 
-        # Normal activation: 1.5R threshold.
-        # Parabolic fast-activation: if peak profit (highest/lowest_price) is already
-        # ≥2.0R above entry — meaning the move blew past 1.5R faster than the tick
-        # monitor could catch — activate immediately even if current_price has pulled
-        # back below the threshold (the peak happened, trailing should have been live).
-        if position.direction == "LONG" and position.highest_price:
-            peak_r = (position.highest_price - position.entry_price) / risk
-        elif position.direction == "SHORT" and position.lowest_price:
-            peak_r = (position.entry_price - position.lowest_price) / risk
+        # Derive ATR at entry time from stop_distance_atr (stop expressed in ATR units).
+        # This gives a timeframe-aware "normal candle size" reference that doesn't break
+        # when the prior candle was a doji or the entry was after compressed volatility.
+        # ATR = risk_distance / stop_distance_atr  (e.g. stop was 1.5 ATR away)
+        _atr = risk / position.stop_distance_atr if position.stop_distance_atr > 0 else 0.0
+
+        # Peak move in ATR units (timeframe-normalised parabolic metric).
+        # ATR-multiples are the right unit because:
+        #   - 2.5 ATR on 15m resolves in ~30 min → clearly fast
+        #   - 2.5 ATR on 4h takes ~10h → still outsized relative to that TF
+        # R-multiples break when stop is tight vs ATR (1R = 0.3 ATR → 2R threshold
+        # fires on a completely normal move) or wide (1R = 3 ATR → threshold never fires).
+        if _atr > 0:
+            if position.direction == "LONG" and position.highest_price:
+                peak_atr = (position.highest_price - position.entry_price) / _atr
+            elif position.direction == "SHORT" and position.lowest_price:
+                peak_atr = (position.entry_price - position.lowest_price) / _atr
+            else:
+                peak_atr = profit / _atr
         else:
-            peak_r = profit_r
+            peak_atr = profit_r  # fallback if stop_distance_atr not set
+
+        # Parabolic thresholds by trade type — swing trades naturally travel more ATRs.
+        _PARABOLIC_ATR_BY_TYPE = {"scalp": 2.0, "intraday": 2.5, "swing": 3.5}
+        _parabolic_atr_threshold = _PARABOLIC_ATR_BY_TYPE.get(position.trade_type, 2.5)
 
         activation_threshold = self.trailing_stop_activation
-        if peak_r >= 2.0 and profit_r >= 0.5:
-            # Parabolic: peak exceeded 2R and trade is still profitable —
-            # activate trailing immediately regardless of current position.
+        is_parabolic = peak_atr >= _parabolic_atr_threshold and profit_r >= 0.5
+        if is_parabolic:
+            # Peak exceeded the ATR-based parabolic threshold and trade is still
+            # profitable — activate trailing immediately even if the tick monitor
+            # caught a pullback before reaching the normal 1.5R gate.
             activation_threshold = 0.5
 
         if profit_r >= activation_threshold:
             position.trailing_active = True
-            label = "PARABOLIC TRAILING ACTIVATED" if activation_threshold < self.trailing_stop_activation else "TRAILING ACTIVATED"
+            label = "PARABOLIC TRAILING ACTIVATED" if is_parabolic else "TRAILING ACTIVATED"
             logger.info(
                 f"{label}: {position.position_id} | {position.symbol} | "
-                f"Profit: {profit_r:.2f}R | Peak: {peak_r:.2f}R"
+                f"Profit: {profit_r:.2f}R | Peak: {peak_atr:.2f} ATR "
+                f"(threshold: {_parabolic_atr_threshold:.1f} ATR)"
             )
             self._update_trailing_stop(position)
 
@@ -1085,23 +1102,29 @@ class PositionManager:
             return
         type_distance = _TRAIL_DISTANCE_BY_TYPE.get(position.trade_type, self.trailing_stop_distance)
 
-        # Parabolic tightening: if the move has extended ≥2R above entry in the
-        # favourable direction, it's accelerating far beyond a normal trend.
-        # A sharp reversal from these levels can blow through a 0.5R trail before
-        # the next 1-second tick resolves it. Halve the trail distance to lock in
-        # more of the extraordinary gain.
-        if position.direction == "LONG" and position.highest_price:
-            peak_r = (position.highest_price - position.entry_price) / risk
-        elif position.direction == "SHORT" and position.lowest_price:
-            peak_r = (position.entry_price - position.lowest_price) / risk
+        # Parabolic tightening: use ATR-normalised peak to determine if the move
+        # is extraordinary relative to this symbol's normal candle size on this TF.
+        _atr = risk / position.stop_distance_atr if position.stop_distance_atr > 0 else 0.0
+        if _atr > 0:
+            if position.direction == "LONG" and position.highest_price:
+                peak_atr = (position.highest_price - position.entry_price) / _atr
+            elif position.direction == "SHORT" and position.lowest_price:
+                peak_atr = (position.entry_price - position.lowest_price) / _atr
+            else:
+                peak_atr = 0.0
         else:
-            peak_r = 0.0
+            # No ATR reference — fall back to R-multiples as a rough proxy
+            peak_atr = 0.0
 
-        if peak_r >= 2.0:
+        _PARABOLIC_ATR_BY_TYPE = {"scalp": 2.0, "intraday": 2.5, "swing": 3.5}
+        _parabolic_threshold = _PARABOLIC_ATR_BY_TYPE.get(position.trade_type, 2.5)
+
+        if peak_atr >= _parabolic_threshold:
             type_distance = type_distance * 0.5  # Tighten: 0.5R → 0.25R for intraday
             logger.debug(
                 f"PARABOLIC TRAIL: {position.position_id} | {position.symbol} | "
-                f"Peak={peak_r:.2f}R — trail distance tightened to {type_distance:.2f}R"
+                f"Peak={peak_atr:.2f} ATR ≥ {_parabolic_threshold:.1f} threshold — "
+                f"trail distance tightened to {type_distance:.2f}R"
             )
 
         trail_distance = risk * type_distance
