@@ -234,7 +234,7 @@ class PositionManager:
     # If the current loss is > STAGNATION_FLOOR_RATIO × stop_distance, defer to stop loss.
     # Using stop distance (not fixed %) makes this adaptive: a trade with a 0.3% stop has
     # a tighter floor than one with a 2% stop, which is structurally correct.
-    STAGNATION_FLOOR_RATIO = 0.5
+    STAGNATION_FLOOR_RATIO = 0.7
 
     # Regime-based multipliers on the base hold time.
     # Trending markets deserve more patience; choppy markets less.
