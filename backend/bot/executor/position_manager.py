@@ -1045,11 +1045,30 @@ class PositionManager:
 
         profit_r = profit / risk
 
-        if profit_r >= self.trailing_stop_activation:
+        # Normal activation: 1.5R threshold.
+        # Parabolic fast-activation: if peak profit (highest/lowest_price) is already
+        # ≥2.0R above entry — meaning the move blew past 1.5R faster than the tick
+        # monitor could catch — activate immediately even if current_price has pulled
+        # back below the threshold (the peak happened, trailing should have been live).
+        if position.direction == "LONG" and position.highest_price:
+            peak_r = (position.highest_price - position.entry_price) / risk
+        elif position.direction == "SHORT" and position.lowest_price:
+            peak_r = (position.entry_price - position.lowest_price) / risk
+        else:
+            peak_r = profit_r
+
+        activation_threshold = self.trailing_stop_activation
+        if peak_r >= 2.0 and profit_r >= 0.5:
+            # Parabolic: peak exceeded 2R and trade is still profitable —
+            # activate trailing immediately regardless of current position.
+            activation_threshold = 0.5
+
+        if profit_r >= activation_threshold:
             position.trailing_active = True
+            label = "PARABOLIC TRAILING ACTIVATED" if activation_threshold < self.trailing_stop_activation else "TRAILING ACTIVATED"
             logger.info(
-                f"TRAILING ACTIVATED: {position.position_id} | {position.symbol} | "
-                f"Profit: {profit_r:.2f}R"
+                f"{label}: {position.position_id} | {position.symbol} | "
+                f"Profit: {profit_r:.2f}R | Peak: {peak_r:.2f}R"
             )
             self._update_trailing_stop(position)
 
@@ -1062,9 +1081,31 @@ class PositionManager:
         # swings need room to breathe during normal retracements.
         _TRAIL_DISTANCE_BY_TYPE = {"scalp": 0.3, "intraday": 0.5, "swing": 1.0}
         risk = abs(position.entry_price - position.initial_stop_loss)
+        if risk == 0:
+            return
         type_distance = _TRAIL_DISTANCE_BY_TYPE.get(position.trade_type, self.trailing_stop_distance)
+
+        # Parabolic tightening: if the move has extended ≥2R above entry in the
+        # favourable direction, it's accelerating far beyond a normal trend.
+        # A sharp reversal from these levels can blow through a 0.5R trail before
+        # the next 1-second tick resolves it. Halve the trail distance to lock in
+        # more of the extraordinary gain.
+        if position.direction == "LONG" and position.highest_price:
+            peak_r = (position.highest_price - position.entry_price) / risk
+        elif position.direction == "SHORT" and position.lowest_price:
+            peak_r = (position.entry_price - position.lowest_price) / risk
+        else:
+            peak_r = 0.0
+
+        if peak_r >= 2.0:
+            type_distance = type_distance * 0.5  # Tighten: 0.5R → 0.25R for intraday
+            logger.debug(
+                f"PARABOLIC TRAIL: {position.position_id} | {position.symbol} | "
+                f"Peak={peak_r:.2f}R — trail distance tightened to {type_distance:.2f}R"
+            )
+
         trail_distance = risk * type_distance
-        
+
         if position.direction == "LONG":
             highest = position.highest_price
             if highest is None:
