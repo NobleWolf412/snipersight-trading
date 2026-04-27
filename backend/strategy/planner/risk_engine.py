@@ -186,8 +186,14 @@ def _adjust_targets_for_wick_barriers(
                     continue
                 if not (t_level <= l <= avg_entry):
                     continue
+                # Skip candles whose body is above entry — barrier would land above entry
+                # (inverted target for SHORT, causes position to exit at a loss when hit).
+                if body_lo >= avg_entry:
+                    continue
                 # Barrier = body bottom + 0.1 ATR buffer (top edge of demand zone)
                 candidate = body_lo + 0.1 * atr
+                # Safety: never let barrier exceed entry (inverted target guard)
+                candidate = min(candidate, avg_entry - 0.01 * atr)
                 # Take the HIGHEST candidate (nearest to entry = first zone hit going down)
                 if barrier_level is None or candidate > barrier_level:
                     barrier_level = candidate
@@ -199,7 +205,13 @@ def _adjust_targets_for_wick_barriers(
                     continue
                 if not (avg_entry <= h <= t_level):
                     continue
+                # Skip candles whose body is below entry — barrier would land below entry
+                # (inverted target for LONG, causes position to exit at a loss when hit).
+                if body_hi <= avg_entry:
+                    continue
                 candidate = body_hi - 0.1 * atr
+                # Safety: never let barrier fall below entry (inverted target guard)
+                candidate = max(candidate, avg_entry + 0.01 * atr)
                 if barrier_level is None or candidate < barrier_level:
                     barrier_level = candidate
 
