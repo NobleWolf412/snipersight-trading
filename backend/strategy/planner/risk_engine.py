@@ -2238,7 +2238,9 @@ def _calculate_targets(
     # calm/compressed (0.7×) → compress ladder so TP1 is reachable before stagnation fires
     # normal (1.0×) → unchanged
     # elevated (1.2×) / explosive (1.5×) → stretch ladder; price has room to travel
-    regime_mult = planner_cfg.atr_regime_multipliers.get(regime_label, 1.0)
+    # "compressed" is semantically equivalent to "calm" for multiplier purposes
+    _effective_regime = "calm" if regime_label == "compressed" else regime_label
+    regime_mult = planner_cfg.atr_regime_multipliers.get(_effective_regime, 1.0)
 
     adjusted_rrs = [rr * rr_scale * regime_mult for rr in base_rrs]
 
