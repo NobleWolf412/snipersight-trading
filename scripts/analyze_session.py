@@ -118,6 +118,25 @@ def _link_signal_to_trade(signal: Dict, trades: List[Dict]) -> Optional[Dict]:
     return best
 
 
+# ── Price formatting (scale decimals by magnitude) ───────────────────────────
+def _fmt_price(p) -> str:
+    try:
+        v = float(p)
+    except (TypeError, ValueError):
+        return str(p)
+    if v == 0:
+        return "0"
+    if v >= 1000:
+        return f"{v:.2f}"
+    if v >= 10:
+        return f"{v:.3f}"
+    if v >= 1:
+        return f"{v:.4f}"
+    if v >= 0.01:
+        return f"{v:.5f}"
+    return f"{v:.8f}"
+
+
 # ── Factor bar renderer ───────────────────────────────────────────────────────
 _BAR_WIDTH = 20
 
@@ -188,7 +207,7 @@ def _print_decision_card(signal: Dict, trade: Optional[Dict], card_num: int):
     for k in ind_keys:
         if k in signal:
             try:
-                ind_parts.append(f"{k}={float(signal[k]):.2f}")
+                ind_parts.append(f"{k}={float(signal[k]):.4f}")
             except (TypeError, ValueError):
                 ind_parts.append(f"{k}={signal[k]}")
     if ind_parts:
@@ -197,7 +216,7 @@ def _print_decision_card(signal: Dict, trade: Optional[Dict], card_num: int):
     # ── Entry plan ────────────────────────────────────────────────────────────
     entry_zone = signal.get("entry_zone", "?")
     stop_loss = signal.get("stop_loss", "?")
-    print(f"║  entry={entry_zone}  stop={stop_loss}  R:R={rr:.1f}")
+    print(f"║  entry={_fmt_price(entry_zone)}  stop={_fmt_price(stop_loss)}  R:R={rr:.1f}")
 
     # ── Outcome ───────────────────────────────────────────────────────────────
     print(f"║")
@@ -225,7 +244,7 @@ def _print_decision_card(signal: Dict, trade: Optional[Dict], card_num: int):
         outcome_icon = "✅" if pnl >= 0 else "❌"
 
         print(f"║  {bold('OUTCOME')}  {outcome_icon}  {pnl_colour(f'${pnl:+.2f}')}  ({pnl_pct:+.2f}%)  exit={exit_reason.upper()}  duration={dur_str}")
-        print(f"║    entry={entry_time}  exit={exit_time}  exit_price={exit_price}")
+        print(f"║    entry={entry_time}  exit={exit_time}  exit_price={_fmt_price(exit_price)}")
         print(f"║    targets_hit={targets_hit or 'none'}  MFE={mfe:+.2f}%  MAE={mae:.2f}%")
 
         # Assessment
