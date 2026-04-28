@@ -649,6 +649,12 @@ class PositionManager:
                 # MFE guard: if the trade reached ≥0.5% profit at any point, it demonstrated
                 # real directional conviction. Price pulled back but the trade was live —
                 # stagnation is premature here. Let stop loss handle the exit.
+                #
+                # Time cap: the guard cannot defer indefinitely. AVAX held 7h14m because
+                # an early 0.5% MFE parked the guard, then the trade slowly bled for 6h.
+                # After the type-specific max deferral window, stagnation re-engages.
+                _MFE_MAX_DEFER_HOURS = {"scalp": 4.0, "intraday": 14.0, "swing": 48.0}
+                _mfe_max_defer = _MFE_MAX_DEFER_HOURS.get(position.trade_type, 14.0)
                 if position.initial_entry_price > 0:
                     _entry = position.initial_entry_price
                     if position.direction == "LONG":
@@ -656,12 +662,21 @@ class PositionManager:
                     else:
                         _mfe_pct = (_entry - position.lowest_price) / _entry * 100 if position.lowest_price else 0.0
                     if _mfe_pct >= 0.5:
-                        logger.info(
-                            f"STAGNATION DEFERRED (MFE guard): {position.position_id} | "
-                            f"{position.symbol} | Peak profit={_mfe_pct:.2f}% ≥ 0.5% — "
-                            f"trade showed conviction, deferring to stop loss"
-                        )
-                        return
+                        if hours_open < _mfe_max_defer:
+                            logger.info(
+                                f"STAGNATION DEFERRED (MFE guard): {position.position_id} | "
+                                f"{position.symbol} | Peak profit={_mfe_pct:.2f}% ≥ 0.5% | "
+                                f"{hours_open:.1f}h open < {_mfe_max_defer:.0f}h limit — "
+                                f"deferring to stop loss"
+                            )
+                            return
+                        else:
+                            logger.info(
+                                f"STAGNATION RESUMED (MFE guard expired): {position.position_id} | "
+                                f"{position.symbol} | Peak profit={_mfe_pct:.2f}% but "
+                                f"{hours_open:.1f}h open ≥ {_mfe_max_defer:.0f}h limit — "
+                                f"stagnation re-engaged"
+                            )
 
                 # Increment strike counter — require 2 consecutive failures before
                 # closing. A single flat/poor candle at the stagnation boundary is
@@ -956,9 +971,16 @@ class PositionManager:
         risk = abs(position.initial_entry_price - position.initial_stop_loss)
         buffer = risk * 0.1
         if position.direction == "LONG":
+            # LONG stop fires when price <= stop. Place stop above entry so
+            # it fires only if price drops BACK below the entry level.
             position.stop_loss = position.entry_price + buffer
         else:
-            position.stop_loss = position.entry_price - buffer
+            # SHORT stop fires when price >= stop. Place stop ABOVE entry so
+            # it fires if price rises back through entry — protecting the runner.
+            # Previously this used (entry - buffer) which placed the stop BELOW
+            # entry, meaning fast reversals could gap through entry and trigger
+            # the stop at a loss before the monitor caught it.
+            position.stop_loss = position.entry_price + buffer
 
         position.breakeven_active = True
 

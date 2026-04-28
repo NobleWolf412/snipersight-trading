@@ -2019,6 +2019,76 @@ class PaperTradingService:
             })
             return
 
+        # ── Regime counter-trend gate ──────────────────────────────────────────
+        # Block or half-size counter-trend entries based on regime strength.
+        # The confluence gate alone is insufficient — a 67% B-class counter-trend
+        # intraday in an up_compressed regime loses because regime-aligned
+        # institutional flow absorbs the stop before the setup can work.
+        #
+        # Rules:
+        #   strong_up / strong_down → block ALL counter-trend (no edge at any R:R)
+        #   up / down / up_compressed / down_compressed → block counter-trend intraday
+        #     and swing; allow scalp only at ≥70% confluence, half-sized
+        #   scalp counter-trend that passes → half-size via size_modifier *= 0.5
+        _ct_trend = getattr(self, "_current_regime_trend", "sideways") or "sideways"
+        _ct_dir = plan.direction
+        _ct_type = getattr(plan, "trade_type", "scalp") or "scalp"
+        _is_ct = (
+            (_ct_trend in ("up", "strong_up", "up_compressed") and _ct_dir == "SHORT") or
+            (_ct_trend in ("down", "strong_down", "down_compressed") and _ct_dir == "LONG")
+        )
+        if _is_ct:
+            if _ct_trend in ("strong_up", "strong_down"):
+                # Decisive momentum — counter-trend has near-zero EV at any timeframe
+                _ct_reason = (
+                    f"Counter-trend {_ct_dir} blocked: regime={_ct_trend} is decisively "
+                    f"one-directional (type={_ct_type})"
+                )
+                logger.info(f"SIGNAL FILTERED (regime_counter_trend): {plan.symbol} | {_ct_reason}")
+                self._log_signal(plan, "filtered", _ct_reason, reason_type="regime_counter_trend")
+                self._log_activity("signal_filtered", {
+                    "symbol": plan.symbol, "direction": plan.direction,
+                    "confluence": plan.confidence_score, "reason": _ct_reason,
+                    "reason_type": "regime_counter_trend",
+                })
+                return
+            elif _ct_type in ("intraday", "swing"):
+                # Directional regime: intraday/swing counter-trend has no structural support
+                _ct_reason = (
+                    f"Counter-trend {_ct_dir} {_ct_type} blocked: regime={_ct_trend} — "
+                    f"only scalp counter-trends allowed in directional regimes"
+                )
+                logger.info(f"SIGNAL FILTERED (regime_counter_trend): {plan.symbol} | {_ct_reason}")
+                self._log_signal(plan, "filtered", _ct_reason, reason_type="regime_counter_trend")
+                self._log_activity("signal_filtered", {
+                    "symbol": plan.symbol, "direction": plan.direction,
+                    "confluence": plan.confidence_score, "reason": _ct_reason,
+                    "reason_type": "regime_counter_trend",
+                })
+                return
+            else:
+                # Counter-trend scalp in directional regime — allowed at ≥70% only, half-sized
+                if plan.confidence_score < 70.0:
+                    _ct_reason = (
+                        f"Counter-trend {_ct_dir} scalp requires ≥70% confluence in "
+                        f"{_ct_trend} regime (got {plan.confidence_score:.1f}%)"
+                    )
+                    logger.info(f"SIGNAL FILTERED (regime_counter_trend): {plan.symbol} | {_ct_reason}")
+                    self._log_signal(plan, "filtered", _ct_reason, reason_type="regime_counter_trend")
+                    self._log_activity("signal_filtered", {
+                        "symbol": plan.symbol, "direction": plan.direction,
+                        "confluence": plan.confidence_score, "reason": _ct_reason,
+                        "reason_type": "regime_counter_trend",
+                    })
+                    return
+                # Passed: run at half size regardless of confluence tier
+                size_modifier *= 0.5
+                logger.info(
+                    f"COUNTER-TREND SCALP (half-sized): {plan.symbol} {_ct_dir} "
+                    f"| regime={_ct_trend} | conf={plan.confidence_score:.1f}% ≥70% "
+                    f"| size_modifier → {size_modifier:.2f}"
+                )
+
         # Calculate position size (size_modifier applies near-miss halving)
         balance = executor.get_balance()
         position_size = self._calculate_position_size(plan, size_modifier=size_modifier)

@@ -2294,6 +2294,33 @@ def _calculate_targets(
     # Filter targets blocked by opposing OB structures
     targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
 
+    # Regime-aware R:R cap: structural targets can land at any distance from entry,
+    # but in compressed/calm regimes price cannot travel a 5R+ target before reversing
+    # or stagnating. Hard-cap prevents unreachable targets sitting open until stop-out.
+    _MAX_RR_BY_REGIME: dict = {
+        "compressed": 2.5,
+        "calm":       3.0,
+        "normal":     6.0,
+        "elevated":   8.0,
+        "explosive":  12.0,
+    }
+    _rr_cap = _MAX_RR_BY_REGIME.get(regime_label, 6.0)
+    _targets_before_cap = targets[:]  # keep copy for fallback
+    targets = [t for t in targets if t.rr_ratio <= _rr_cap]
+    if len(targets) < len(_targets_before_cap):
+        logger.info(
+            "Regime R:R cap: dropped %d target(s) exceeding %.1fR cap for '%s' regime",
+            len(_targets_before_cap) - len(targets), _rr_cap, regime_label,
+        )
+    # If the cap removes everything, keep the single closest target (lowest rr_ratio).
+    # One reachable target is better than none — the plan can still execute and exit.
+    if not targets and _targets_before_cap:
+        targets = [min(_targets_before_cap, key=lambda t: t.rr_ratio)]
+        logger.info(
+            "Regime R:R cap fallback: all targets exceeded %.1fR, keeping closest (%.1fR)",
+            _rr_cap, targets[0].rr_ratio,
+        )
+
     return targets
 
 
