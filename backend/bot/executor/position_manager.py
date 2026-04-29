@@ -221,6 +221,12 @@ class PositionManager:
         "swing": 48.0,      # unchanged
     }
 
+    # Minimum seconds a position must be open before target exits are checked.
+    # Prevents same-candle simulation artifacts: when a paper position opens, the
+    # current market price may already be past TP1 (the entry candle's range covers
+    # both entry zone and target). Without this guard, trades enter and exit on the
+    # same price tick. 90s ensures at least one full monitor cycle passes first.
+    MIN_TARGET_HOLD_SECONDS: int = 90
     # Minimum P&L threshold (%) before stagnation exit is considered.
     # Below this AND past the time limit = stagnation exit.
     TRADE_TYPE_STAGNATION_PNL = {
@@ -947,6 +953,10 @@ class PositionManager:
         Returns first target hit (closest to entry).
         """
         if not position.targets:
+            return None
+
+        seconds_open = (datetime.now(timezone.utc) - position.created_at).total_seconds()
+        if seconds_open < self.MIN_TARGET_HOLD_SECONDS:
             return None
 
         for target in position.targets:

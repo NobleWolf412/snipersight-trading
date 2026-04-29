@@ -2289,8 +2289,14 @@ def _calculate_targets(
 
     adjusted_rrs = [rr * rr_scale * regime_mult for rr in base_rrs]
 
+    # Minimum TP distance as a fraction of entry price.
+    # Round-trip paper trading fee is ~0.2% (0.1% open + 0.1% close). A target closer
+    # than this produces a net loss even on a winning trade. Floor at 0.25% to ensure
+    # TP1 always covers fees with a small margin.
+    _MIN_TP_DISTANCE = avg_entry * 0.0025
+
     for i, rr in enumerate(adjusted_rrs):
-        dist = risk_distance * rr
+        dist = max(risk_distance * rr, _MIN_TP_DISTANCE)
         if is_bullish:
             level = avg_entry + dist
         else:
