@@ -3058,11 +3058,11 @@ def calculate_confluence_score(
 
     _cp_profile = current_profile
     if _cp_profile in ("macro_surveillance", "overwatch", "stealth_balanced", "stealth"):
-        _cp_threshold, _cp_pts, _cp_cap = 5, 2.5, 15.0   # Swing: need 5 quality signals
+        _cp_threshold, _cp_pts, _cp_cap = 4, 2.5, 10.0   # Swing: need 4 quality signals (was 5 — nested OB/divergence are rare)
     elif _cp_profile in ("intraday_aggressive", "strike"):
-        _cp_threshold, _cp_pts, _cp_cap = 4, 2.0, 12.0   # Intraday: need 4
+        _cp_threshold, _cp_pts, _cp_cap = 3, 2.0, 8.0    # Intraday: need 3 (was 4)
     else:  # surgical, precision, balanced
-        _cp_threshold, _cp_pts, _cp_cap = 3, 1.5, 10.0   # Scalp: need 3
+        _cp_threshold, _cp_pts, _cp_cap = 3, 1.5, 6.0    # Scalp: need 3 (unchanged, cap tightened)
 
     if quality_factors < _cp_threshold:
         coverage_penalty = min(_cp_cap, (_cp_threshold - quality_factors) * _cp_pts)
