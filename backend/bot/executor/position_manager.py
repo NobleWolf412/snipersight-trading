@@ -221,12 +221,13 @@ class PositionManager:
         "swing": 48.0,      # unchanged
     }
 
-    # Minimum seconds a position must be open before target exits are checked.
-    # Prevents same-candle simulation artifacts: when a paper position opens, the
-    # current market price may already be past TP1 (the entry candle's range covers
-    # both entry zone and target). Without this guard, trades enter and exit on the
-    # same price tick. 90s ensures at least one full monitor cycle passes first.
-    MIN_TARGET_HOLD_SECONDS: int = 90
+    # Minimum seconds before target exits are checked in simulation mode only.
+    # In paper trading, the current market price may already be past TP1 at the moment
+    # the position opens (the entry candle's range covers both entry zone and target).
+    # Without this guard, trades enter and exit on the same price tick.
+    # In live trading this is 0 — exchange limit orders execute the moment price touches
+    # the level; the monitor is reconciliation only and must never delay real exits.
+    SIMULATION_MIN_TARGET_HOLD_SECONDS: int = 90
     # Minimum P&L threshold (%) before stagnation exit is considered.
     # Below this AND past the time limit = stagnation exit.
     TRADE_TYPE_STAGNATION_PNL = {
@@ -955,9 +956,12 @@ class PositionManager:
         if not position.targets:
             return None
 
-        seconds_open = (datetime.now(timezone.utc) - position.created_at).total_seconds()
-        if seconds_open < self.MIN_TARGET_HOLD_SECONDS:
-            return None
+        # In simulation (no live executor), enforce minimum hold to prevent same-candle exits.
+        # In live mode, the exchange's limit order handles the fill instantly — no hold needed.
+        if self.order_executor is None:
+            seconds_open = (datetime.now(timezone.utc) - position.created_at).total_seconds()
+            if seconds_open < self.SIMULATION_MIN_TARGET_HOLD_SECONDS:
+                return None
 
         for target in position.targets:
             if position.direction == "LONG":
