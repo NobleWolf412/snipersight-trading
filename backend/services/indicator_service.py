@@ -97,8 +97,16 @@ class IndicatorService:
         self._diagnostics = {"indicator_failures": []}
         by_timeframe: Dict[str, IndicatorSnapshot] = {}
 
+        # HTF timeframes need fewer candles — weekly only goes back ~1 year on newer coins,
+        # and StochRSI only requires 34 bars minimum (14+14+3+3).
+        _HTF_MIN_CANDLES = {"1w": 20, "1d": 30}
+
         for timeframe, df in multi_tf_data.timeframes.items():
-            if df.empty or len(df) < self._min_candles:
+            tf_min = _HTF_MIN_CANDLES.get(timeframe.lower(), self._min_candles)
+            if df.empty or len(df) < tf_min:
+                logger.debug(
+                    "Skipping %s indicators: only %d candles (need %d)", timeframe, len(df), tf_min
+                )
                 continue
 
             try:
@@ -120,7 +128,14 @@ class IndicatorService:
         """Compute all indicators for a single timeframe."""
         # Momentum indicators
         rsi = compute_rsi(df)
-        stoch_rsi = compute_stoch_rsi(df)
+        # StochRSI can raise ValueError when df is too short for the full window.
+        # Wrap individually so a short-history timeframe (e.g. 1W for new coins)
+        # doesn't abort the whole snapshot — stoch values just come back None.
+        try:
+            stoch_rsi = compute_stoch_rsi(df)
+        except Exception as e:
+            logger.debug("StochRSI skipped for %s (%d bars): %s", timeframe, len(df), e)
+            stoch_rsi = None
         mfi = compute_mfi(df)
 
         macd_line, macd_signal, macd_hist = self._safe_compute_macd(df, timeframe)
@@ -136,12 +151,17 @@ class IndicatorService:
         # Volume indicators
         volume_spike = detect_volume_spike(df)
         obv = compute_obv(df)
-        
+
         # VWAP: Use daily reset for intraday timeframes (Issue #5)
         # Timeframes like 1m, 5m, 15m, 1h, 4h should reset 'D'
         # 1d and above stay None (cumulative)
+        # Wrap in try/except — pandas-ta vwap can fail on unusual index formats.
         vwap_reset = 'D' if timeframe not in ['1d', '1w', '1M'] else None
-        vwap_series = compute_vwap(df, reset_period=vwap_reset)
+        try:
+            vwap_series = compute_vwap(df, reset_period=vwap_reset)
+        except Exception as e:
+            logger.debug("VWAP skipped for %s: %s", timeframe, e)
+            vwap_series = None
         
         volume_ratio = self._safe_compute_volume_ratio(df, timeframe)
         vol_accel_data = self._safe_compute_volume_acceleration(df, timeframe)
@@ -349,7 +369,9 @@ class IndicatorService:
         stoch_k_prev = None
         stoch_d_prev = None
 
-        if isinstance(stoch_rsi, tuple):
+        if stoch_rsi is None:
+            pass  # All values remain None — stoch computation was skipped
+        elif isinstance(stoch_rsi, tuple):
             stoch_k, stoch_d = stoch_rsi
             stoch_k_value = stoch_k.iloc[-1]
             stoch_d_value = stoch_d.iloc[-1]

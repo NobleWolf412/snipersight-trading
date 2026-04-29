@@ -278,7 +278,9 @@ class IngestionPipeline:
         if timeframe.endswith("d"):
             return f"{timeframe[:-1]}D"
         if timeframe.endswith("w"):
-            return f"{timeframe[:-1]}W-MON"
+            # "W" is the pandas 2.x-compatible weekly frequency (ends on Sunday by default).
+            # "W-MON" works but triggers FutureWarning in pandas ≥2.2; bare "W" is stable.
+            return "W"
         if timeframe.endswith("M"):
             return "ME"
         return None

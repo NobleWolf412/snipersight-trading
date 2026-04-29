@@ -133,6 +133,42 @@ def _filter_targets_by_opposing_structure(
     return valid_targets
 
 
+def _apply_regime_rr_cap(targets: List[Target], regime_label: str) -> List[Target]:
+    """
+    Cap targets to the regime-appropriate maximum R:R ratio.
+
+    In compressed/calm regimes price cannot travel 5R+ before reversing.
+    Applied to BOTH structural and R:R-ladder target sets so neither path
+    produces unreachable targets that sit open until a stop-out.
+    """
+    _MAX_RR_BY_REGIME: dict = {
+        "compressed": 2.5,
+        "calm":       3.0,
+        "normal":     6.0,
+        "elevated":   8.0,
+        "explosive":  12.0,
+    }
+    # Extract volatility component from composite labels like "up_compressed" or "down_normal"
+    # so the cap works regardless of the trend direction prefix.
+    _vol_part = regime_label.split("_")[-1] if "_" in regime_label else regime_label
+    _rr_cap = _MAX_RR_BY_REGIME.get(_vol_part, _MAX_RR_BY_REGIME.get(regime_label, 6.0))
+
+    _before = targets[:]
+    targets = [t for t in targets if t.rr_ratio <= _rr_cap]
+    if len(targets) < len(_before):
+        logger.info(
+            "Regime R:R cap: dropped %d target(s) exceeding %.1fR cap for '%s' regime",
+            len(_before) - len(targets), _rr_cap, regime_label,
+        )
+    if not targets and _before:
+        targets = [min(_before, key=lambda t: t.rr_ratio)]
+        logger.info(
+            "Regime R:R cap fallback: all targets exceeded %.1fR, keeping closest (%.1fR)",
+            _rr_cap, targets[0].rr_ratio,
+        )
+    return targets
+
+
 def _adjust_targets_for_wick_barriers(
     targets: List[Target],
     multi_tf_data: Optional["MultiTimeframeData"],
@@ -2197,7 +2233,7 @@ def _calculate_targets(
             logger.info(f"Using {len(targets)} structural targets for {mode_profile} mode")
             # Filter targets blocked by opposing OB structures
             targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
-            return targets
+            return _apply_regime_rr_cap(targets, regime_label)
 
         else:
             # Fallback for Swing: Use dedicated structure swing calculator
@@ -2237,9 +2273,10 @@ def _calculate_targets(
                 swing_targets, multi_tf_data, avg_entry, is_bullish, atr, risk_distance
             )
             # Filter targets blocked by opposing OB structures
-            return _filter_targets_by_opposing_structure(
+            swing_targets = _filter_targets_by_opposing_structure(
                 swing_targets, smc_snapshot, is_bullish, atr
             )
+            return _apply_regime_rr_cap(swing_targets, regime_label)
 
     # --- DEFAULT / SCALP / INTRADAY HANDLING (R:R Multiples) ---
 
@@ -2294,34 +2331,8 @@ def _calculate_targets(
     # Filter targets blocked by opposing OB structures
     targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
 
-    # Regime-aware R:R cap: structural targets can land at any distance from entry,
-    # but in compressed/calm regimes price cannot travel a 5R+ target before reversing
-    # or stagnating. Hard-cap prevents unreachable targets sitting open until stop-out.
-    _MAX_RR_BY_REGIME: dict = {
-        "compressed": 2.5,
-        "calm":       3.0,
-        "normal":     6.0,
-        "elevated":   8.0,
-        "explosive":  12.0,
-    }
-    _rr_cap = _MAX_RR_BY_REGIME.get(regime_label, 6.0)
-    _targets_before_cap = targets[:]  # keep copy for fallback
-    targets = [t for t in targets if t.rr_ratio <= _rr_cap]
-    if len(targets) < len(_targets_before_cap):
-        logger.info(
-            "Regime R:R cap: dropped %d target(s) exceeding %.1fR cap for '%s' regime",
-            len(_targets_before_cap) - len(targets), _rr_cap, regime_label,
-        )
-    # If the cap removes everything, keep the single closest target (lowest rr_ratio).
-    # One reachable target is better than none — the plan can still execute and exit.
-    if not targets and _targets_before_cap:
-        targets = [min(_targets_before_cap, key=lambda t: t.rr_ratio)]
-        logger.info(
-            "Regime R:R cap fallback: all targets exceeded %.1fR, keeping closest (%.1fR)",
-            _rr_cap, targets[0].rr_ratio,
-        )
-
-    return targets
+    # Regime-aware R:R cap — shared with structural path via helper
+    return _apply_regime_rr_cap(targets, regime_label)
 
 
 def _adjust_targets_for_leverage(
