@@ -3066,7 +3066,7 @@ def calculate_confluence_score(
     elif _cp_profile in ("intraday_aggressive", "strike"):
         _cp_threshold, _cp_pts, _cp_cap = 3, 2.0, 8.0    # Intraday: need 3
     else:  # surgical, precision, balanced
-        _cp_threshold, _cp_pts, _cp_cap = 3, 1.5, 6.0    # Scalp: need 3
+        _cp_threshold, _cp_pts, _cp_cap = 4, 1.5, 6.0    # Scalp: need 4 quality signals
 
     if quality_factors < _cp_threshold:
         coverage_penalty = min(_cp_cap, (_cp_threshold - quality_factors) * _cp_pts)
@@ -5095,6 +5095,17 @@ def _calculate_conflict_penalty(
             _btc_conflict = 20.0  # SHORT alt while BTC bullish — squeezed by macro tide
         elif _btc_dn and _is_long:
             _btc_conflict = 8.0   # LONG alt while BTC bearish — possible decouple, lower risk
+        elif btc_impulse is None and regime is not None:
+            # BTC direction unknown, but regime trend gives a proxy.
+            # An up-trending alt in a correlated market almost certainly means BTC is also
+            # bullish — shorting into that is riskier than the neutral +10 implies.
+            _regime_trend = getattr(regime, "trend", None)
+            if _regime_trend is None and hasattr(regime, "dimensions"):
+                _regime_trend = getattr(getattr(regime, "dimensions", None), "trend", None)
+            if _regime_trend in ("up", "strong_up") and not _is_long:
+                _btc_conflict = 15.0  # Up regime + SHORT + no BTC data → assume correlation
+            else:
+                _btc_conflict = 10.0
         else:
             _btc_conflict = 10.0  # No directional info available, use prior default
         penalty += _btc_conflict
