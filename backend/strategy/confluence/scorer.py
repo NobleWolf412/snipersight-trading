@@ -3042,7 +3042,7 @@ def calculate_confluence_score(
     # --- Final Score Calculation ---
     weighted_score = sum(f.score * f.weight for f in factors)
     synergy_bonus = _calculate_synergy_bonus(factors, smc_snapshot, cycle_context=cycle_context, reversal_context=reversal_context, direction=direction, mode_config=config)
-    conflict_penalty = _calculate_conflict_penalty(factors, direction, smc=smc_snapshot, mode_config=config, regime=regime)
+    conflict_penalty = _calculate_conflict_penalty(factors, direction, smc=smc_snapshot, mode_config=config, regime=regime, btc_impulse=btc_impulse)
 
     # --- FIX #2: Mode-aware coverage penalty (no double-counting) ---
     # The old fixed threshold of 6 quality factors with 3pts/missing was double-penalising:
@@ -5069,6 +5069,7 @@ def _calculate_conflict_penalty(
     smc: Optional[SMCSnapshot] = None,
     mode_config: Optional["ScanConfig"] = None,
     regime: Optional[Any] = None,
+    btc_impulse: Optional[str] = None,
 ) -> float:
     """
     Calculate penalty for conflicting signals with mode-awareness and confluence override.
@@ -5081,16 +5082,24 @@ def _calculate_conflict_penalty(
     """
     penalty = 0.0
 
-    # BTC impulse gate failure is major conflict
+    # BTC conflict — asymmetric by direction of opposition.
+    # Alts correlate strongly with BTC in current conditions:
+    #   SHORT alt while BTC is bullish: BTC drags alts up against the short — worst case, full penalty.
+    #   LONG alt while BTC is bearish: alt may show relative strength or decouple — lower penalty.
     btc_factor = next((f for f in factors if f.name == "BTC Impulse Gate"), None)
-    if btc_factor and btc_factor.score < 50.0:  # FIXED: was < 20.0 (too strict, missed conflict threshold)
-        # Progressive penalty based on how weak BTC alignment is
-        if btc_factor.score == 0.0:
-            penalty += 20.0  # Complete opposition
+    if btc_factor and btc_factor.score < 50.0:
+        _is_long = direction.lower() in ("long", "bullish")
+        _btc_up = btc_impulse in ("bullish", "strong_up", "extreme_up", "up")
+        _btc_dn = btc_impulse in ("bearish", "strong_down", "extreme_down", "down")
+        if _btc_up and not _is_long:
+            _btc_conflict = 20.0  # SHORT alt while BTC bullish — squeezed by macro tide
+        elif _btc_dn and _is_long:
+            _btc_conflict = 8.0   # LONG alt while BTC bearish — possible decouple, lower risk
         else:
-            penalty += 10.0  # Weak alignment (0-50)
+            _btc_conflict = 10.0  # No directional info available, use prior default
+        penalty += _btc_conflict
         logger.debug(
-            "BTC impulse gate conflict: score %.1f → +%.1f penalty", btc_factor.score, penalty
+            "BTC conflict: btc=%s dir=%s → +%.1f penalty", btc_impulse, direction, _btc_conflict
         )
 
     # Weak momentum in strong setup
