@@ -32,6 +32,16 @@ SetupArchetype = Literal[
     "BREAKOUT_RETEST",
 ]
 
+# Maximum R:R allowed per volatility regime. Price cannot travel 5R+ in compressed/calm
+# conditions before reversing or stagnating; wider caps apply as vol expands.
+_MAX_RR_BY_REGIME: dict = {
+    "compressed": 2.5,
+    "calm":       3.0,
+    "normal":     6.0,
+    "elevated":   8.0,
+    "explosive":  12.0,
+}
+
 
 def _get_allowed_structure_tfs(config: ScanConfig) -> tuple:
     """Extract structure_timeframes from config, or return empty tuple if unrestricted."""
@@ -134,39 +144,25 @@ def _filter_targets_by_opposing_structure(
 
 
 def _apply_regime_rr_cap(targets: List[Target], regime_label: str) -> List[Target]:
-    """
-    Cap targets to the regime-appropriate maximum R:R ratio.
+    """Cap targets to the regime-appropriate maximum R:R ratio."""
+    if not targets:
+        return targets
+    rr_cap = _MAX_RR_BY_REGIME.get(regime_label, 6.0)
+    if all(t.rr_ratio <= rr_cap for t in targets):
+        return targets  # Nothing to drop — avoid unnecessary copy
 
-    In compressed/calm regimes price cannot travel 5R+ before reversing.
-    Applied to BOTH structural and R:R-ladder target sets so neither path
-    produces unreachable targets that sit open until a stop-out.
-    """
-    _MAX_RR_BY_REGIME: dict = {
-        "compressed": 2.5,
-        "calm":       3.0,
-        "normal":     6.0,
-        "elevated":   8.0,
-        "explosive":  12.0,
-    }
-    # Extract volatility component from composite labels like "up_compressed" or "down_normal"
-    # so the cap works regardless of the trend direction prefix.
-    _vol_part = regime_label.split("_")[-1] if "_" in regime_label else regime_label
-    _rr_cap = _MAX_RR_BY_REGIME.get(_vol_part, _MAX_RR_BY_REGIME.get(regime_label, 6.0))
-
-    _before = targets[:]
-    targets = [t for t in targets if t.rr_ratio <= _rr_cap]
-    if len(targets) < len(_before):
-        logger.info(
-            "Regime R:R cap: dropped %d target(s) exceeding %.1fR cap for '%s' regime",
-            len(_before) - len(targets), _rr_cap, regime_label,
-        )
-    if not targets and _before:
-        targets = [min(_before, key=lambda t: t.rr_ratio)]
+    kept = [t for t in targets if t.rr_ratio <= rr_cap]
+    logger.info(
+        "Regime R:R cap: dropped %d target(s) exceeding %.1fR cap for '%s' regime",
+        len(targets) - len(kept), rr_cap, regime_label,
+    )
+    if not kept:
+        kept = [min(targets, key=lambda t: t.rr_ratio)]
         logger.info(
             "Regime R:R cap fallback: all targets exceeded %.1fR, keeping closest (%.1fR)",
-            _rr_cap, targets[0].rr_ratio,
+            rr_cap, kept[0].rr_ratio,
         )
-    return targets
+    return kept
 
 
 def _adjust_targets_for_wick_barriers(

@@ -75,6 +75,10 @@ class IndicatorService:
         self._min_candles = min_candles
         self._diagnostics: Dict[str, list] = {"indicator_failures": []}
 
+    # HTF timeframes need fewer candles — newer coins have limited weekly history,
+    # and StochRSI only needs 34 bars (14 RSI + 14 stoch + 3 smoothK + 3 smoothD).
+    _HTF_MIN_CANDLES: Dict[str, int] = {"1w": 20, "1d": 30}
+
     @property
     def diagnostics(self) -> Dict[str, list]:
         """Get diagnostic information from last computation."""
@@ -97,12 +101,8 @@ class IndicatorService:
         self._diagnostics = {"indicator_failures": []}
         by_timeframe: Dict[str, IndicatorSnapshot] = {}
 
-        # HTF timeframes need fewer candles — weekly only goes back ~1 year on newer coins,
-        # and StochRSI only requires 34 bars minimum (14+14+3+3).
-        _HTF_MIN_CANDLES = {"1w": 20, "1d": 30}
-
         for timeframe, df in multi_tf_data.timeframes.items():
-            tf_min = _HTF_MIN_CANDLES.get(timeframe.lower(), self._min_candles)
+            tf_min = self._HTF_MIN_CANDLES.get(timeframe.lower(), self._min_candles)
             if df.empty or len(df) < tf_min:
                 logger.debug(
                     "Skipping %s indicators: only %d candles (need %d)", timeframe, len(df), tf_min
@@ -128,14 +128,7 @@ class IndicatorService:
         """Compute all indicators for a single timeframe."""
         # Momentum indicators
         rsi = compute_rsi(df)
-        # StochRSI can raise ValueError when df is too short for the full window.
-        # Wrap individually so a short-history timeframe (e.g. 1W for new coins)
-        # doesn't abort the whole snapshot — stoch values just come back None.
-        try:
-            stoch_rsi = compute_stoch_rsi(df)
-        except Exception as e:
-            logger.debug("StochRSI skipped for %s (%d bars): %s", timeframe, len(df), e)
-            stoch_rsi = None
+        stoch_rsi = self._safe_compute_stoch_rsi(df, timeframe)
         mfi = compute_mfi(df)
 
         macd_line, macd_signal, macd_hist = self._safe_compute_macd(df, timeframe)
@@ -152,16 +145,9 @@ class IndicatorService:
         volume_spike = detect_volume_spike(df)
         obv = compute_obv(df)
 
-        # VWAP: Use daily reset for intraday timeframes (Issue #5)
-        # Timeframes like 1m, 5m, 15m, 1h, 4h should reset 'D'
-        # 1d and above stay None (cumulative)
-        # Wrap in try/except — pandas-ta vwap can fail on unusual index formats.
-        vwap_reset = 'D' if timeframe not in ['1d', '1w', '1M'] else None
-        try:
-            vwap_series = compute_vwap(df, reset_period=vwap_reset)
-        except Exception as e:
-            logger.debug("VWAP skipped for %s: %s", timeframe, e)
-            vwap_series = None
+        # VWAP resets daily for intraday timeframes; cumulative for HTF.
+        vwap_reset = None if timeframe.lower() in ('1d', '1w', '1m') else 'D'
+        vwap_series = self._safe_compute_vwap(df, timeframe, reset_period=vwap_reset)
         
         volume_ratio = self._safe_compute_volume_ratio(df, timeframe)
         vol_accel_data = self._safe_compute_volume_acceleration(df, timeframe)
@@ -358,6 +344,22 @@ class IndicatorService:
             logger.debug("Volume acceleration computation failed for %s: %s", timeframe, e)
             return None
 
+    def _safe_compute_stoch_rsi(self, df: pd.DataFrame, timeframe: str):
+        """Safely compute StochRSI; returns None when df is too short for the window."""
+        try:
+            return compute_stoch_rsi(df)
+        except Exception as e:
+            logger.debug("StochRSI skipped for %s (%d bars): %s", timeframe, len(df), e)
+            return None
+
+    def _safe_compute_vwap(self, df: pd.DataFrame, timeframe: str, reset_period=None):
+        """Safely compute VWAP; returns None on pandas-ta index format failures."""
+        try:
+            return compute_vwap(df, reset_period=reset_period)
+        except Exception as e:
+            logger.debug("VWAP skipped for %s: %s", timeframe, e)
+            return None
+
     def _extract_stoch_values(self, stoch_rsi):
         """Extract K and D values from stoch_rsi (handles tuple or series).
 
@@ -369,21 +371,19 @@ class IndicatorService:
         stoch_k_prev = None
         stoch_d_prev = None
 
-        if stoch_rsi is None:
-            pass  # All values remain None — stoch computation was skipped
-        elif isinstance(stoch_rsi, tuple):
-            stoch_k, stoch_d = stoch_rsi
-            stoch_k_value = stoch_k.iloc[-1]
-            stoch_d_value = stoch_d.iloc[-1]
-            # Get previous values for crossover detection
-            if len(stoch_k) > 1:
-                stoch_k_prev = stoch_k.iloc[-2]
-            if len(stoch_d) > 1:
-                stoch_d_prev = stoch_d.iloc[-2]
-        else:
-            stoch_k_value = stoch_rsi.iloc[-1]
-            if len(stoch_rsi) > 1:
-                stoch_k_prev = stoch_rsi.iloc[-2]
+        if stoch_rsi is not None:
+            if isinstance(stoch_rsi, tuple):
+                stoch_k, stoch_d = stoch_rsi
+                stoch_k_value = stoch_k.iloc[-1]
+                stoch_d_value = stoch_d.iloc[-1]
+                if len(stoch_k) > 1:
+                    stoch_k_prev = stoch_k.iloc[-2]
+                if len(stoch_d) > 1:
+                    stoch_d_prev = stoch_d.iloc[-2]
+            else:
+                stoch_k_value = stoch_rsi.iloc[-1]
+                if len(stoch_rsi) > 1:
+                    stoch_k_prev = stoch_rsi.iloc[-2]
 
         return stoch_k_value, stoch_d_value, stoch_k_prev, stoch_d_prev
 
