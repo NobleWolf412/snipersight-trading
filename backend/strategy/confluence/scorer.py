@@ -481,10 +481,10 @@ MODE_PENALTY_MULTIPLIERS = {
 # Maximum synergy bonus per mode. Aggressive modes allow more synergy to offset penalties.
 
 MODE_SYNERGY_CAPS = {
-    "overwatch": 10.0,
-    "macro_surveillance": 10.0,
-    "stealth_balanced": 12.0,
-    "stealth": 12.0,
+    "overwatch": 18.0,          # Raised from 10 — conflict cap is 35, synergy must be able to partially offset
+    "macro_surveillance": 18.0, # Same reason — 10 was too asymmetric vs 35-pt conflict ceiling
+    "stealth_balanced": 15.0,   # Raised from 12 — consistent with overwatch direction
+    "stealth": 15.0,            # Raised from 12 — consistent with overwatch direction
     "strike": 10.0,             # Tightened from 15 — prevents noise-score inflation past gate
     "intraday_aggressive": 10.0,
     "surgical": 12.0,           # Tightened from 18 — still highest but bounded
