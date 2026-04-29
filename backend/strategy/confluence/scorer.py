@@ -3624,9 +3624,9 @@ def _score_fvgs_incremental(
     if best_fvg.overlap_with_price == 0:
         score += 20.0
         components.append(("Virgin FVG", 20.0, "Completely unfilled"))
-    elif best_fvg.overlap_with_price > 0.5:
+    elif best_fvg.overlap_with_price > 0.7:
         score -= 15.0
-        components.append(("Filled", -15.0, f">50% filled ({best_fvg.overlap_with_price:.0%})"))
+        components.append(("Filled", -15.0, f">70% filled ({best_fvg.overlap_with_price:.0%})"))
         
     # 3. Size Bonus
     if getattr(best_fvg, "size_atr", 0.0) > 1.0:
@@ -5305,7 +5305,7 @@ def _get_fvg_rationale(fvgs: List[FVG], direction: str) -> str:
     if not aligned:
         return "No aligned FVGs"
 
-    unfilled = [fvg for fvg in aligned if fvg.overlap_with_price < 0.5]
+    unfilled = [fvg for fvg in aligned if fvg.overlap_with_price < 0.7]
     if unfilled:
         grades = [getattr(fvg, "grade", "B") for fvg in unfilled]
         grade_summary = (
