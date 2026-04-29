@@ -160,7 +160,7 @@ def run_pre_scoring_gates(
     has_quality_fvg = any(
         fvg.grade in ("A", "B")
         and fvg.size_atr >= 1.0
-        and fvg.overlap_with_price < 0.7
+        and fvg.overlap_with_price < _FVG_FILL_THRESHOLD
         and fvg.direction == fvg_direction
         for fvg in smc_snapshot.fvgs
     )
@@ -475,16 +475,20 @@ MODE_PENALTY_MULTIPLIERS = {
     "precision": 0.6,
 }
 
+# FVG fill threshold — above this the gap is considered materially consumed and penalized.
+# Must stay in sync with the structural proximity filter in evaluate_htf_structural_proximity().
+_FVG_FILL_THRESHOLD = 0.7
+
 # ==============================================================================
 # MODE-AWARE SYNERGY CAPS
 # ==============================================================================
 # Maximum synergy bonus per mode. Aggressive modes allow more synergy to offset penalties.
 
 MODE_SYNERGY_CAPS = {
-    "overwatch": 18.0,          # Raised from 10 — conflict cap is 35, synergy must be able to partially offset
-    "macro_surveillance": 18.0, # Same reason — 10 was too asymmetric vs 35-pt conflict ceiling
-    "stealth_balanced": 15.0,   # Raised from 12 — consistent with overwatch direction
-    "stealth": 15.0,            # Raised from 12 — consistent with overwatch direction
+    "overwatch": 18.0,
+    "macro_surveillance": 18.0,
+    "stealth_balanced": 15.0,
+    "stealth": 15.0,
     "strike": 10.0,             # Tightened from 15 — prevents noise-score inflation past gate
     "intraday_aggressive": 10.0,
     "surgical": 12.0,           # Tightened from 18 — still highest but bounded
@@ -1018,7 +1022,7 @@ def evaluate_htf_structural_proximity(
             continue
         if fvg.size < _fvg_atr * 0.3:  # 30% of own-TF ATR — was 100% (too strict, filtered valid FVGs)
             continue
-        if fvg.overlap_with_price > 0.7:  # Allow partial retest (was 0.5 — too aggressive, filtered valid retested FVGs)
+        if fvg.overlap_with_price > _FVG_FILL_THRESHOLD:
             continue
 
         fvg_dir_lower = fvg.direction.lower()
@@ -3058,11 +3062,11 @@ def calculate_confluence_score(
 
     _cp_profile = current_profile
     if _cp_profile in ("macro_surveillance", "overwatch", "stealth_balanced", "stealth"):
-        _cp_threshold, _cp_pts, _cp_cap = 4, 2.5, 10.0   # Swing: need 4 quality signals (was 5 — nested OB/divergence are rare)
+        _cp_threshold, _cp_pts, _cp_cap = 4, 2.5, 10.0   # Swing: need 4 quality signals
     elif _cp_profile in ("intraday_aggressive", "strike"):
-        _cp_threshold, _cp_pts, _cp_cap = 3, 2.0, 8.0    # Intraday: need 3 (was 4)
+        _cp_threshold, _cp_pts, _cp_cap = 3, 2.0, 8.0    # Intraday: need 3
     else:  # surgical, precision, balanced
-        _cp_threshold, _cp_pts, _cp_cap = 3, 1.5, 6.0    # Scalp: need 3 (unchanged, cap tightened)
+        _cp_threshold, _cp_pts, _cp_cap = 3, 1.5, 6.0    # Scalp: need 3
 
     if quality_factors < _cp_threshold:
         coverage_penalty = min(_cp_cap, (_cp_threshold - quality_factors) * _cp_pts)
@@ -3624,9 +3628,9 @@ def _score_fvgs_incremental(
     if best_fvg.overlap_with_price == 0:
         score += 20.0
         components.append(("Virgin FVG", 20.0, "Completely unfilled"))
-    elif best_fvg.overlap_with_price > 0.7:
+    elif best_fvg.overlap_with_price > _FVG_FILL_THRESHOLD:
         score -= 15.0
-        components.append(("Filled", -15.0, f">70% filled ({best_fvg.overlap_with_price:.0%})"))
+        components.append(("Filled", -15.0, f">{_FVG_FILL_THRESHOLD:.0%} filled ({best_fvg.overlap_with_price:.0%})"))
         
     # 3. Size Bonus
     if getattr(best_fvg, "size_atr", 0.0) > 1.0:
@@ -5305,7 +5309,7 @@ def _get_fvg_rationale(fvgs: List[FVG], direction: str) -> str:
     if not aligned:
         return "No aligned FVGs"
 
-    unfilled = [fvg for fvg in aligned if fvg.overlap_with_price < 0.7]
+    unfilled = [fvg for fvg in aligned if fvg.overlap_with_price < _FVG_FILL_THRESHOLD]
     if unfilled:
         grades = [getattr(fvg, "grade", "B") for fvg in unfilled]
         grade_summary = (

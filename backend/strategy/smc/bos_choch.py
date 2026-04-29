@@ -311,6 +311,9 @@ def detect_structural_breaks(
     last_swing_high = None
     last_swing_low = None
 
+    # Hoist mode volume requirement — constant for the entire scan, no need to re-lookup per candle.
+    vol_req = MODE_VOLUME_REQUIREMENTS.get(mode_profile) if mode_profile else None
+
     for i in range(swing_lookback * 2, len(df)):
         current_idx = df.index[i]
         current_high = df["high"].iloc[i]
@@ -401,16 +404,14 @@ def detect_structural_breaks(
                 if volume_confirmed and volume_ratio >= 2.0:
                     grade = "A" if grade == "B" else ("B" if grade == "C" else grade)
                 htf_aligned = _check_bos_htf_alignment("uptrend", computed_htf_trend)
-                if mode_profile and mode_profile in MODE_VOLUME_REQUIREMENTS:
-                    vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
-                    if vol_req.get("require_volume") and "BOS" in vol_req.get("apply_to", []):
-                        if volume_ratio < vol_req["min_volume_ratio"]:
-                            logger.debug(
-                                "BOS (bullish) rejected — volume %.2fx < %.2fx required (%s). "
-                                "No OB will be tagged to this break.",
-                                volume_ratio, vol_req["min_volume_ratio"], mode_profile,
-                            )
-                            continue
+                if vol_req and vol_req.get("require_volume") and "BOS" in vol_req.get("apply_to", []):
+                    if volume_ratio < vol_req["min_volume_ratio"]:
+                        logger.debug(
+                            "BOS (%s) rejected — volume %.2fx < %.2fx required (%s). "
+                            "No OB will be tagged to this break.",
+                            "bullish", volume_ratio, vol_req["min_volume_ratio"], mode_profile,
+                        )
+                        continue
                 structural_breaks.append(StructuralBreak(
                     timeframe=_infer_timeframe(df), break_type="BOS", direction="bullish",
                     level=_level, timestamp=current_idx.to_pydatetime(),
@@ -428,11 +429,13 @@ def detect_structural_breaks(
                 htf_aligned = _check_choch_htf_alignment("uptrend", computed_htf_trend, cycle_context)
                 # Signal gate: volume and 4-swing both gate the signal; trend flip is unconditional.
                 skip_signal = False
-                if mode_profile and mode_profile in MODE_VOLUME_REQUIREMENTS:
-                    vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
-                    if vol_req.get("require_volume") and "CHoCH" in vol_req.get("apply_to", []):
-                        if volume_ratio < vol_req["min_volume_ratio"]:
-                            skip_signal = True
+                if vol_req and vol_req.get("require_volume") and "CHoCH" in vol_req.get("apply_to", []):
+                    if volume_ratio < vol_req["min_volume_ratio"]:
+                        logger.debug(
+                            "CHoCH (%s) rejected — volume %.2fx < %.2fx required (%s).",
+                            "bearish", volume_ratio, vol_req["min_volume_ratio"], mode_profile,
+                        )
+                        skip_signal = True
                 if not skip_signal:
                     structural_breaks.append(StructuralBreak(
                         timeframe=_infer_timeframe(df), break_type="CHoCH", direction="bearish",
@@ -453,16 +456,14 @@ def detect_structural_breaks(
                 if volume_confirmed and volume_ratio >= 2.0:
                     grade = "A" if grade == "B" else ("B" if grade == "C" else grade)
                 htf_aligned = _check_bos_htf_alignment("downtrend", computed_htf_trend)
-                if mode_profile and mode_profile in MODE_VOLUME_REQUIREMENTS:
-                    vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
-                    if vol_req.get("require_volume") and "BOS" in vol_req.get("apply_to", []):
-                        if volume_ratio < vol_req["min_volume_ratio"]:
-                            logger.debug(
-                                "BOS (bearish) rejected — volume %.2fx < %.2fx required (%s). "
-                                "No OB will be tagged to this break.",
-                                volume_ratio, vol_req["min_volume_ratio"], mode_profile,
-                            )
-                            continue
+                if vol_req and vol_req.get("require_volume") and "BOS" in vol_req.get("apply_to", []):
+                    if volume_ratio < vol_req["min_volume_ratio"]:
+                        logger.debug(
+                            "BOS (%s) rejected — volume %.2fx < %.2fx required (%s). "
+                            "No OB will be tagged to this break.",
+                            "bearish", volume_ratio, vol_req["min_volume_ratio"], mode_profile,
+                        )
+                        continue
                 structural_breaks.append(StructuralBreak(
                     timeframe=_infer_timeframe(df), break_type="BOS", direction="bearish",
                     level=_level, timestamp=current_idx.to_pydatetime(),
@@ -487,11 +488,13 @@ def detect_structural_breaks(
                 # Signal gate: volume only — 4-swing is already handled by _choch_triggered.
                 # Trend flip is unconditional regardless of skip_signal.
                 skip_signal = False
-                if mode_profile and mode_profile in MODE_VOLUME_REQUIREMENTS:
-                    vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
-                    if vol_req.get("require_volume") and "CHoCH" in vol_req.get("apply_to", []):
-                        if volume_ratio < vol_req["min_volume_ratio"]:
-                            skip_signal = True
+                if vol_req and vol_req.get("require_volume") and "CHoCH" in vol_req.get("apply_to", []):
+                    if volume_ratio < vol_req["min_volume_ratio"]:
+                        logger.debug(
+                            "CHoCH (%s) rejected — volume %.2fx < %.2fx required (%s).",
+                            "bullish", volume_ratio, vol_req["min_volume_ratio"], mode_profile,
+                        )
+                        skip_signal = True
 
                 if not skip_signal:
                     structural_breaks.append(StructuralBreak(
