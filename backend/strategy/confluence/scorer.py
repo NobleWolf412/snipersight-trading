@@ -160,7 +160,7 @@ def run_pre_scoring_gates(
     has_quality_fvg = any(
         fvg.grade in ("A", "B")
         and fvg.size_atr >= 1.0
-        and fvg.overlap_with_price < 0.7
+        and fvg.overlap_with_price < _FVG_FILL_THRESHOLD
         and fvg.direction == fvg_direction
         for fvg in smc_snapshot.fvgs
     )
@@ -475,16 +475,20 @@ MODE_PENALTY_MULTIPLIERS = {
     "precision": 0.6,
 }
 
+# FVG fill threshold — above this the gap is considered materially consumed and penalized.
+# Must stay in sync with the structural proximity filter in evaluate_htf_structural_proximity().
+_FVG_FILL_THRESHOLD = 0.7
+
 # ==============================================================================
 # MODE-AWARE SYNERGY CAPS
 # ==============================================================================
 # Maximum synergy bonus per mode. Aggressive modes allow more synergy to offset penalties.
 
 MODE_SYNERGY_CAPS = {
-    "overwatch": 10.0,
-    "macro_surveillance": 10.0,
-    "stealth_balanced": 12.0,
-    "stealth": 12.0,
+    "overwatch": 18.0,
+    "macro_surveillance": 18.0,
+    "stealth_balanced": 15.0,
+    "stealth": 15.0,
     "strike": 10.0,             # Tightened from 15 — prevents noise-score inflation past gate
     "intraday_aggressive": 10.0,
     "surgical": 12.0,           # Tightened from 18 — still highest but bounded
@@ -1018,7 +1022,7 @@ def evaluate_htf_structural_proximity(
             continue
         if fvg.size < _fvg_atr * 0.3:  # 30% of own-TF ATR — was 100% (too strict, filtered valid FVGs)
             continue
-        if fvg.overlap_with_price > 0.7:  # Allow partial retest (was 0.5 — too aggressive, filtered valid retested FVGs)
+        if fvg.overlap_with_price > _FVG_FILL_THRESHOLD:
             continue
 
         fvg_dir_lower = fvg.direction.lower()
@@ -3038,7 +3042,7 @@ def calculate_confluence_score(
     # --- Final Score Calculation ---
     weighted_score = sum(f.score * f.weight for f in factors)
     synergy_bonus = _calculate_synergy_bonus(factors, smc_snapshot, cycle_context=cycle_context, reversal_context=reversal_context, direction=direction, mode_config=config)
-    conflict_penalty = _calculate_conflict_penalty(factors, direction, smc=smc_snapshot, mode_config=config, regime=regime)
+    conflict_penalty = _calculate_conflict_penalty(factors, direction, smc=smc_snapshot, mode_config=config, regime=regime, btc_impulse=btc_impulse)
 
     # --- FIX #2: Mode-aware coverage penalty (no double-counting) ---
     # The old fixed threshold of 6 quality factors with 3pts/missing was double-penalising:
@@ -3058,11 +3062,11 @@ def calculate_confluence_score(
 
     _cp_profile = current_profile
     if _cp_profile in ("macro_surveillance", "overwatch", "stealth_balanced", "stealth"):
-        _cp_threshold, _cp_pts, _cp_cap = 5, 2.5, 15.0   # Swing: need 5 quality signals
+        _cp_threshold, _cp_pts, _cp_cap = 4, 2.5, 10.0   # Swing: need 4 quality signals
     elif _cp_profile in ("intraday_aggressive", "strike"):
-        _cp_threshold, _cp_pts, _cp_cap = 4, 2.0, 12.0   # Intraday: need 4
+        _cp_threshold, _cp_pts, _cp_cap = 3, 2.0, 8.0    # Intraday: need 3
     else:  # surgical, precision, balanced
-        _cp_threshold, _cp_pts, _cp_cap = 3, 1.5, 10.0   # Scalp: need 3
+        _cp_threshold, _cp_pts, _cp_cap = 3, 1.5, 6.0    # Scalp: need 3
 
     if quality_factors < _cp_threshold:
         coverage_penalty = min(_cp_cap, (_cp_threshold - quality_factors) * _cp_pts)
@@ -3624,9 +3628,9 @@ def _score_fvgs_incremental(
     if best_fvg.overlap_with_price == 0:
         score += 20.0
         components.append(("Virgin FVG", 20.0, "Completely unfilled"))
-    elif best_fvg.overlap_with_price > 0.5:
+    elif best_fvg.overlap_with_price > _FVG_FILL_THRESHOLD:
         score -= 15.0
-        components.append(("Filled", -15.0, f">50% filled ({best_fvg.overlap_with_price:.0%})"))
+        components.append(("Filled", -15.0, f">{_FVG_FILL_THRESHOLD:.0%} filled ({best_fvg.overlap_with_price:.0%})"))
         
     # 3. Size Bonus
     if getattr(best_fvg, "size_atr", 0.0) > 1.0:
@@ -5065,6 +5069,7 @@ def _calculate_conflict_penalty(
     smc: Optional[SMCSnapshot] = None,
     mode_config: Optional["ScanConfig"] = None,
     regime: Optional[Any] = None,
+    btc_impulse: Optional[str] = None,
 ) -> float:
     """
     Calculate penalty for conflicting signals with mode-awareness and confluence override.
@@ -5077,16 +5082,24 @@ def _calculate_conflict_penalty(
     """
     penalty = 0.0
 
-    # BTC impulse gate failure is major conflict
+    # BTC conflict — asymmetric by direction of opposition.
+    # Alts correlate strongly with BTC in current conditions:
+    #   SHORT alt while BTC is bullish: BTC drags alts up against the short — worst case, full penalty.
+    #   LONG alt while BTC is bearish: alt may show relative strength or decouple — lower penalty.
     btc_factor = next((f for f in factors if f.name == "BTC Impulse Gate"), None)
-    if btc_factor and btc_factor.score < 50.0:  # FIXED: was < 20.0 (too strict, missed conflict threshold)
-        # Progressive penalty based on how weak BTC alignment is
-        if btc_factor.score == 0.0:
-            penalty += 20.0  # Complete opposition
+    if btc_factor and btc_factor.score < 50.0:
+        _is_long = direction.lower() in ("long", "bullish")
+        _btc_up = btc_impulse in ("bullish", "strong_up", "extreme_up", "up")
+        _btc_dn = btc_impulse in ("bearish", "strong_down", "extreme_down", "down")
+        if _btc_up and not _is_long:
+            _btc_conflict = 20.0  # SHORT alt while BTC bullish — squeezed by macro tide
+        elif _btc_dn and _is_long:
+            _btc_conflict = 8.0   # LONG alt while BTC bearish — possible decouple, lower risk
         else:
-            penalty += 10.0  # Weak alignment (0-50)
+            _btc_conflict = 10.0  # No directional info available, use prior default
+        penalty += _btc_conflict
         logger.debug(
-            "BTC impulse gate conflict: score %.1f → +%.1f penalty", btc_factor.score, penalty
+            "BTC conflict: btc=%s dir=%s → +%.1f penalty", btc_impulse, direction, _btc_conflict
         )
 
     # Weak momentum in strong setup
@@ -5305,7 +5318,7 @@ def _get_fvg_rationale(fvgs: List[FVG], direction: str) -> str:
     if not aligned:
         return "No aligned FVGs"
 
-    unfilled = [fvg for fvg in aligned if fvg.overlap_with_price < 0.5]
+    unfilled = [fvg for fvg in aligned if fvg.overlap_with_price < _FVG_FILL_THRESHOLD]
     if unfilled:
         grades = [getattr(fvg, "grade", "B") for fvg in unfilled]
         grade_summary = (

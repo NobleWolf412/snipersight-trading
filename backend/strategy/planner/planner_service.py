@@ -146,6 +146,7 @@ def generate_trade_plan(
     volume_profile: Optional["VolumeProfile"] = None,  # NEW: For HVN/LVN target filtering
     tick_size: float = 0.0,  # NEW: For exchange tick alignment
     lot_size: float = 0.0,
+    fee_rate: float = 0.001,
 ) -> TradePlan:
     """
     Generate a complete, actionable trade plan.
@@ -398,6 +399,7 @@ def generate_trade_plan(
             multi_tf_data=multi_tf_data,
             indicators=indicators,
             volume_profile=volume_profile,  # NEW: For HVN/LVN target filtering
+            fee_rate=fee_rate,
         )
     except Exception as e:
         logger.error(f"Target calculation failed for {symbol}: {e}")

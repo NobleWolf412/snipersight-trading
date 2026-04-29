@@ -2058,6 +2058,7 @@ def _calculate_targets(
     multi_tf_data: Optional["MultiTimeframeData"] = None,  # For HTF swing detection
     indicators: Optional["IndicatorSet"] = None,  # NEW: For Bollinger Band targeting
     volume_profile: Optional[VolumeProfile] = None,  # NEW: For HVN/LVN target filtering
+    fee_rate: float = 0.001,
 ) -> List[Target]:
     """
     Calculate tiered targets based on structure and R:R multiples.
@@ -2289,8 +2290,13 @@ def _calculate_targets(
 
     adjusted_rrs = [rr * rr_scale * regime_mult for rr in base_rrs]
 
+    # Minimum TP distance derived from the configured fee rate.
+    # Round-trip cost = fee_rate × 2 (open + close). Floor at 2.5× round-trip so TP1
+    # always covers fees with margin. At 0.1% fees: min = 0.5% round-trip × 2.5 = 0.25%.
+    _MIN_TP_DISTANCE = avg_entry * fee_rate * 2 * 2.5
+
     for i, rr in enumerate(adjusted_rrs):
-        dist = risk_distance * rr
+        dist = max(risk_distance * rr, _MIN_TP_DISTANCE)
         if is_bullish:
             level = avg_entry + dist
         else:
