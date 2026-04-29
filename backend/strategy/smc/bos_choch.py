@@ -11,7 +11,10 @@ These patterns identify shifts in market structure and potential trend changes.
 from typing import List, Optional, Tuple, TYPE_CHECKING
 from datetime import datetime
 import bisect
+import logging
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from backend.shared.models.smc import StructuralBreak, grade_pattern
 from backend.shared.config.smc_config import SMCConfig, scale_lookback
@@ -402,6 +405,11 @@ def detect_structural_breaks(
                     vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
                     if vol_req.get("require_volume") and "BOS" in vol_req.get("apply_to", []):
                         if volume_ratio < vol_req["min_volume_ratio"]:
+                            logger.debug(
+                                "BOS (bullish) rejected — volume %.2fx < %.2fx required (%s). "
+                                "No OB will be tagged to this break.",
+                                volume_ratio, vol_req["min_volume_ratio"], mode_profile,
+                            )
                             continue
                 structural_breaks.append(StructuralBreak(
                     timeframe=_infer_timeframe(df), break_type="BOS", direction="bullish",
@@ -449,6 +457,11 @@ def detect_structural_breaks(
                     vol_req = MODE_VOLUME_REQUIREMENTS[mode_profile]
                     if vol_req.get("require_volume") and "BOS" in vol_req.get("apply_to", []):
                         if volume_ratio < vol_req["min_volume_ratio"]:
+                            logger.debug(
+                                "BOS (bearish) rejected — volume %.2fx < %.2fx required (%s). "
+                                "No OB will be tagged to this break.",
+                                volume_ratio, vol_req["min_volume_ratio"], mode_profile,
+                            )
                             continue
                 structural_breaks.append(StructuralBreak(
                     timeframe=_infer_timeframe(df), break_type="BOS", direction="bearish",
