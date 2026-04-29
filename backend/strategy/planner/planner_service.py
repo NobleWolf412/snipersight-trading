@@ -423,8 +423,17 @@ def generate_trade_plan(
     # unlikely to be reached before stagnation fires in low-volatility conditions.
     if targets:
         _is_low_vol = regime_label in ("calm", "compressed")
+        # In compressed scalp specifically, runners never reach TP2 (0/56 hit rate observed).
+        # Compressed markets are range-bound — TP1 is the mean-reversion target within the
+        # range; TP2 requires a breakout. Keep 100% of position in TP1 and avoid the dead-weight
+        # runner exposure. Intraday and swing in compressed keep their distributions since they
+        # have more time to hold.
+        _is_scalp = (expected_trade_type or "").lower() == "scalp"
+        _is_compressed_scalp = _is_low_vol and _is_scalp
         n = len(targets)
-        if n == 1:
+        if n == 1 or _is_compressed_scalp:
+            targets = targets[:1]
+            n = len(targets)  # keep n in sync after possible truncation
             targets[0].percentage = 100.0
         elif n == 2:
             if _is_low_vol:
