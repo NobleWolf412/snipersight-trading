@@ -32,6 +32,16 @@ SetupArchetype = Literal[
     "BREAKOUT_RETEST",
 ]
 
+# Maximum R:R allowed per volatility regime. Price cannot travel 5R+ in compressed/calm
+# conditions before reversing or stagnating; wider caps apply as vol expands.
+_MAX_RR_BY_REGIME: dict = {
+    "compressed": 2.5,
+    "calm":       3.0,
+    "normal":     6.0,
+    "elevated":   8.0,
+    "explosive":  12.0,
+}
+
 
 def _get_allowed_structure_tfs(config: ScanConfig) -> tuple:
     """Extract structure_timeframes from config, or return empty tuple if unrestricted."""
@@ -131,6 +141,152 @@ def _filter_targets_by_opposing_structure(
         )
 
     return valid_targets
+
+
+def _apply_regime_rr_cap(targets: List[Target], regime_label: str) -> List[Target]:
+    """Cap targets to the regime-appropriate maximum R:R ratio."""
+    if not targets:
+        return targets
+    rr_cap = _MAX_RR_BY_REGIME.get(regime_label, 6.0)
+    if all(t.rr_ratio <= rr_cap for t in targets):
+        return targets  # Nothing to drop — avoid unnecessary copy
+
+    kept = [t for t in targets if t.rr_ratio <= rr_cap]
+    logger.info(
+        "Regime R:R cap: dropped %d target(s) exceeding %.1fR cap for '%s' regime",
+        len(targets) - len(kept), rr_cap, regime_label,
+    )
+    if not kept:
+        kept = [min(targets, key=lambda t: t.rr_ratio)]
+        logger.info(
+            "Regime R:R cap fallback: all targets exceeded %.1fR, keeping closest (%.1fR)",
+            rr_cap, kept[0].rr_ratio,
+        )
+    return kept
+
+
+def _adjust_targets_for_wick_barriers(
+    targets: List[Target],
+    multi_tf_data: Optional["MultiTimeframeData"],
+    avg_entry: float,
+    is_bullish: bool,
+    atr: float,
+    risk_distance: float = 0.0,
+) -> List[Target]:
+    """
+    Pull targets back to the near-side of significant wick demand/supply zones.
+
+    When a candle between entry and target has a prominent shadow (wick > 1.5× body
+    AND wick > 0.3 ATR), that shadow is a proven demand (lower wick) or supply
+    (upper wick) zone.  Placing TP inside or beyond it ignores a high-probability
+    bounce point.  This function clips each target to just outside the body edge
+    of the nearest such candle, keeping targets that have no barrier unchanged.
+
+    After clipping, validates that the adjusted level still gives at least 0.8R
+    (realised R:R vs risk_distance). If the clip is too aggressive, the original
+    target is kept. rr_ratio is always recalculated from the final level.
+    """
+    if not targets or not multi_tf_data or not multi_tf_data.timeframes:
+        return targets
+
+    tf_name = next(iter(multi_tf_data.timeframes))
+    df = multi_tf_data.timeframes[tf_name]
+    if df is None or df.empty:
+        return targets
+
+    df = df.tail(60).reset_index(drop=True)
+
+    adjusted = []
+    for target in targets:
+        t_level = target.level
+        barrier_level = None
+
+        for _, row in df.iterrows():
+            o = float(row["open"])
+            h = float(row["high"])
+            l = float(row["low"])
+            c = float(row["close"])
+            body = abs(o - c)
+            body_lo = min(o, c)
+            body_hi = max(o, c)
+
+            if not is_bullish:
+                # SHORT path: look for demand wicks (lower shadows) whose tip sits
+                # between entry and target — i.e., in our path downward.
+                lower_wick = body_lo - l
+                if lower_wick < 1.5 * max(body, atr * 0.05) or lower_wick < 0.3 * atr:
+                    continue
+                if not (t_level <= l <= avg_entry):
+                    continue
+                # Skip candles whose body is above entry — barrier would land above entry
+                # (inverted target for SHORT, causes position to exit at a loss when hit).
+                if body_lo >= avg_entry:
+                    continue
+                # Barrier = body bottom + 0.1 ATR buffer (top edge of demand zone)
+                candidate = body_lo + 0.1 * atr
+                # Safety: never let barrier exceed entry (inverted target guard)
+                candidate = min(candidate, avg_entry - 0.01 * atr)
+                # Take the HIGHEST candidate (nearest to entry = first zone hit going down)
+                if barrier_level is None or candidate > barrier_level:
+                    barrier_level = candidate
+            else:
+                # LONG path: look for supply wicks (upper shadows) whose tip sits
+                # between entry and target — i.e., in our path upward.
+                upper_wick = h - body_hi
+                if upper_wick < 1.5 * max(body, atr * 0.05) or upper_wick < 0.3 * atr:
+                    continue
+                if not (avg_entry <= h <= t_level):
+                    continue
+                # Skip candles whose body is below entry — barrier would land below entry
+                # (inverted target for LONG, causes position to exit at a loss when hit).
+                if body_hi <= avg_entry:
+                    continue
+                candidate = body_hi - 0.1 * atr
+                # Safety: never let barrier fall below entry (inverted target guard)
+                candidate = max(candidate, avg_entry + 0.01 * atr)
+                if barrier_level is None or candidate < barrier_level:
+                    barrier_level = candidate
+
+        if barrier_level is not None and abs(barrier_level - t_level) > 0.05 * atr:
+            # Guard: adjusted target must still give at least 0.8R realised R:R.
+            # Without this, a supply wick with body_hi barely above entry can pull
+            # TP from 2.0R down to 0.03R while rr_ratio stays labelled "2.0".
+            if risk_distance > 0:
+                realized_rr = abs(barrier_level - avg_entry) / risk_distance
+                if realized_rr < 0.8:
+                    logger.info(
+                        "Wick barrier skipped for %s: adjusted level %.4f gives only %.2fR "
+                        "(< 0.8R floor) — keeping original %.4f",
+                        target.label, barrier_level, realized_rr, t_level,
+                    )
+                    adjusted.append(target)
+                    continue
+                new_rr = realized_rr
+            else:
+                new_rr = target.rr_ratio
+
+            adjusted.append(
+                Target(
+                    level=barrier_level,
+                    label=target.label,
+                    rr_ratio=new_rr,  # recalculated from actual adjusted level
+                    weight=target.weight,
+                    rationale=f"{target.rationale} [wick barrier → {barrier_level:.4f}]",
+                    percentage=target.percentage,
+                )
+            )
+            logger.info(
+                "Wick barrier adjusted %s %.4f → %.4f (%.2fR) (%s)",
+                target.label,
+                t_level,
+                barrier_level,
+                new_rr,
+                "SHORT" if not is_bullish else "LONG",
+            )
+        else:
+            adjusted.append(target)
+
+    return adjusted if adjusted else targets
 
 
 def _filter_targets_by_volume_profile(
@@ -1243,6 +1399,29 @@ def _calculate_stop_loss(
     stop_loss = StopLoss(level=stop_level, distance_atr=distance_atr, rationale=rationale)
     # Attach structure_tf_used for metadata tracking
     stop_loss.structure_tf_used = structure_tf_used  # type: ignore
+
+    # ── Max stop enforcement (ALL stop types) ─────────────────────────────────
+    # max_stop_atr was previously only checked for swing-based stops (line ~792).
+    # OB/FVG structure stops bypassed this limit, allowing stops wider than the
+    # cascade config permits (e.g. scalp max=2.5 ATR but OB stop = 4 ATR).
+    # A stop wider than max_stop_atr means targets are proportionally unreachable
+    # within the trade type's timeframe — stagnation fires first every time.
+    _max_stop = getattr(config, "max_stop_atr", None)
+    if _max_stop and distance_atr > _max_stop and distance_atr > 0:
+        _fallback_mult = min(_max_stop, 1.5)  # Cap fallback at max or 1.5× ATR
+        logger.info(
+            "Stop %.1f ATR exceeds %s cap (%.1f ATR) — capping to %.1f ATR",
+            distance_atr, getattr(config, "profile", "?"), _max_stop, _fallback_mult,
+        )
+        if is_bullish:
+            stop_level = max(entry_zone.far_entry * 0.001, entry_zone.far_entry - (_fallback_mult * atr))
+        else:
+            stop_level = entry_zone.far_entry + (_fallback_mult * atr)
+        distance_atr = _fallback_mult
+        rationale = f"{rationale} [capped: {_max_stop:.1f} ATR max → {_fallback_mult:.1f}× ATR]"
+        stop_loss = StopLoss(level=stop_level, distance_atr=distance_atr, rationale=rationale)
+        stop_loss.structure_tf_used = structure_tf_used  # type: ignore
+
     return stop_loss, used_structure
 
 
@@ -1913,13 +2092,14 @@ def _calculate_targets(
         "swing",
     )
 
-    # Force use of structural targeting (vs R:R multiples) for Range Reversion setups
-    # Range setups rely on bands/levels, not generic R:R.
-    # "calm" is the post-mapping label for "compressed" (regime_engine maps compressed→calm
-    # for PlannerConfig key compatibility). Check both to catch the label either way.
+    # Force use of structural targeting (vs R:R multiples) for swing modes and range reversions.
+    # Scalp/intraday use the R:R ladder (with calm/regime multiplier applied) even in
+    # compressed markets — forcing them into structural mode pulls 4H/1H swing levels
+    # that are far from entry, then the wick barrier clips them back to near-entry,
+    # producing inverted R:R (e.g. $6.70 TP vs $223 stop). R:R ladder + 0.9× calm
+    # multiplier already handles compression correctly for scalps.
     use_structural_targets = (
         is_swing_mode or setup_archetype == "RANGE_REVERSION"
-        or regime_label in ("compressed", "calm")
     )
 
     if use_structural_targets:
@@ -1970,7 +2150,7 @@ def _calculate_targets(
         # Always check these if we are in Range Reversion or Compressed regime
         if (
             setup_archetype == "RANGE_REVERSION"
-            or regime_label == "compressed"
+            or regime_label in ("compressed", "calm")
             or "mean_reversion" in mode_profile
         ):
             bb_targets = _get_bollinger_targets(
@@ -1992,9 +2172,9 @@ def _calculate_targets(
         structural_targets = []
         seen_levels = set()
 
-        # Get mode-specific minimum R:R (e.g., Overwatch requires 2.0R)
-        # Use planner_cfg if available, fallback to 1.0R for other modes
-        min_structural_rr = getattr(planner_cfg, "min_rr_ratio", 1.0)
+        # Get mode-specific minimum R:R (e.g., Overwatch requires 2.5R, Scalp 1.5R)
+        # PlannerConfig stores this as `min_rr` (not `min_rr_ratio`)
+        min_structural_rr = getattr(planner_cfg, "min_rr", 1.0)
 
         for level, info, score in candidates:
             # Skip if too close (must meet mode's minimum R:R requirement)
@@ -2049,7 +2229,7 @@ def _calculate_targets(
             logger.info(f"Using {len(targets)} structural targets for {mode_profile} mode")
             # Filter targets blocked by opposing OB structures
             targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
-            return targets
+            return _apply_regime_rr_cap(targets, regime_label)
 
         else:
             # Fallback for Swing: Use dedicated structure swing calculator
@@ -2084,10 +2264,15 @@ def _calculate_targets(
                         f"swing targets (HVN conflicts removed)"
                     )
 
+            # Adjust targets that would land inside wick demand/supply zones
+            swing_targets = _adjust_targets_for_wick_barriers(
+                swing_targets, multi_tf_data, avg_entry, is_bullish, atr, risk_distance
+            )
             # Filter targets blocked by opposing OB structures
-            return _filter_targets_by_opposing_structure(
+            swing_targets = _filter_targets_by_opposing_structure(
                 swing_targets, smc_snapshot, is_bullish, atr
             )
+            return _apply_regime_rr_cap(swing_targets, regime_label)
 
     # --- DEFAULT / SCALP / INTRADAY HANDLING (R:R Multiples) ---
 
@@ -2098,7 +2283,9 @@ def _calculate_targets(
     # calm/compressed (0.7×) → compress ladder so TP1 is reachable before stagnation fires
     # normal (1.0×) → unchanged
     # elevated (1.2×) / explosive (1.5×) → stretch ladder; price has room to travel
-    regime_mult = planner_cfg.atr_regime_multipliers.get(regime_label, 1.0)
+    # "compressed" is semantically equivalent to "calm" for multiplier purposes
+    _effective_regime = "calm" if regime_label == "compressed" else regime_label
+    regime_mult = planner_cfg.atr_regime_multipliers.get(_effective_regime, 1.0)
 
     adjusted_rrs = [rr * rr_scale * regime_mult for rr in base_rrs]
 
@@ -2135,10 +2322,13 @@ def _calculate_targets(
                 f"R:R targets (HVN conflicts removed)"
             )
 
+    # Adjust targets that would land inside wick demand/supply zones
+    targets = _adjust_targets_for_wick_barriers(targets, multi_tf_data, avg_entry, is_bullish, atr, risk_distance)
     # Filter targets blocked by opposing OB structures
     targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
 
-    return targets
+    # Regime-aware R:R cap — shared with structural path via helper
+    return _apply_regime_rr_cap(targets, regime_label)
 
 
 def _adjust_targets_for_leverage(

@@ -847,6 +847,7 @@ class PaperTradingService:
                         "current_price": self._price_cache.get(order.symbol, 0.0),
                         "stop_loss": float(plan.stop_loss.level) if plan.stop_loss else 0.0,
                         "tp1": float(plan.targets[0].level) if plan.targets else 0.0,
+                        "tp2": float(plan.targets[1].level) if len(plan.targets) > 1 else 0.0,
                         "tp_final": float(plan.targets[-1].level) if plan.targets else 0.0,
                     })
 
@@ -1653,8 +1654,8 @@ class PaperTradingService:
             "setup_type": getattr(plan, "setup_type", "unknown"),
             "trade_type": getattr(plan, "trade_type", "unknown"),
             "timeframe": getattr(plan, "primary_timeframe", None) or getattr(plan, "signal_timeframe", None),
-            "entry_zone": round(plan.entry_zone.near_entry, 2),
-            "stop_loss": round(plan.stop_loss.level, 2),
+            "entry_zone": round(plan.entry_zone.near_entry, 6),
+            "stop_loss": round(plan.stop_loss.level, 6),
             "rr": round(plan.risk_reward, 2) if hasattr(plan, "risk_reward") else None,
             "result": result,  # "executed", "filtered", "error"
             "reason": reason,
@@ -2017,6 +2018,76 @@ class PaperTradingService:
                 "confluence": plan.confidence_score, "reason": reason,
             })
             return
+
+        # ── Regime counter-trend gate ──────────────────────────────────────────
+        # Block or half-size counter-trend entries based on regime strength.
+        # The confluence gate alone is insufficient — a 67% B-class counter-trend
+        # intraday in an up_compressed regime loses because regime-aligned
+        # institutional flow absorbs the stop before the setup can work.
+        #
+        # Rules:
+        #   strong_up / strong_down → block ALL counter-trend (no edge at any R:R)
+        #   up / down / up_compressed / down_compressed → block counter-trend intraday
+        #     and swing; allow scalp only at ≥70% confluence, half-sized
+        #   scalp counter-trend that passes → half-size via size_modifier *= 0.5
+        _ct_trend = getattr(self, "_current_regime_trend", "sideways") or "sideways"
+        _ct_dir = plan.direction
+        _ct_type = getattr(plan, "trade_type", "scalp") or "scalp"
+        _is_ct = (
+            (_ct_trend in ("up", "strong_up", "up_compressed") and _ct_dir == "SHORT") or
+            (_ct_trend in ("down", "strong_down", "down_compressed") and _ct_dir == "LONG")
+        )
+        if _is_ct:
+            if _ct_trend in ("strong_up", "strong_down"):
+                # Decisive momentum — counter-trend has near-zero EV at any timeframe
+                _ct_reason = (
+                    f"Counter-trend {_ct_dir} blocked: regime={_ct_trend} is decisively "
+                    f"one-directional (type={_ct_type})"
+                )
+                logger.info(f"SIGNAL FILTERED (regime_counter_trend): {plan.symbol} | {_ct_reason}")
+                self._log_signal(plan, "filtered", _ct_reason, reason_type="regime_counter_trend")
+                self._log_activity("signal_filtered", {
+                    "symbol": plan.symbol, "direction": plan.direction,
+                    "confluence": plan.confidence_score, "reason": _ct_reason,
+                    "reason_type": "regime_counter_trend",
+                })
+                return
+            elif _ct_type in ("intraday", "swing"):
+                # Directional regime: intraday/swing counter-trend has no structural support
+                _ct_reason = (
+                    f"Counter-trend {_ct_dir} {_ct_type} blocked: regime={_ct_trend} — "
+                    f"only scalp counter-trends allowed in directional regimes"
+                )
+                logger.info(f"SIGNAL FILTERED (regime_counter_trend): {plan.symbol} | {_ct_reason}")
+                self._log_signal(plan, "filtered", _ct_reason, reason_type="regime_counter_trend")
+                self._log_activity("signal_filtered", {
+                    "symbol": plan.symbol, "direction": plan.direction,
+                    "confluence": plan.confidence_score, "reason": _ct_reason,
+                    "reason_type": "regime_counter_trend",
+                })
+                return
+            else:
+                # Counter-trend scalp in directional regime — allowed at ≥70% only, half-sized
+                if plan.confidence_score < 70.0:
+                    _ct_reason = (
+                        f"Counter-trend {_ct_dir} scalp requires ≥70% confluence in "
+                        f"{_ct_trend} regime (got {plan.confidence_score:.1f}%)"
+                    )
+                    logger.info(f"SIGNAL FILTERED (regime_counter_trend): {plan.symbol} | {_ct_reason}")
+                    self._log_signal(plan, "filtered", _ct_reason, reason_type="regime_counter_trend")
+                    self._log_activity("signal_filtered", {
+                        "symbol": plan.symbol, "direction": plan.direction,
+                        "confluence": plan.confidence_score, "reason": _ct_reason,
+                        "reason_type": "regime_counter_trend",
+                    })
+                    return
+                # Passed: run at half size regardless of confluence tier
+                size_modifier *= 0.5
+                logger.info(
+                    f"COUNTER-TREND SCALP (half-sized): {plan.symbol} {_ct_dir} "
+                    f"| regime={_ct_trend} | conf={plan.confidence_score:.1f}% ≥70% "
+                    f"| size_modifier → {size_modifier:.2f}"
+                )
 
         # Calculate position size (size_modifier applies near-miss halving)
         balance = executor.get_balance()
@@ -2558,6 +2629,10 @@ class PaperTradingService:
             current_price = self._price_cache.get(pos.symbol, pos.entry_price)
             pos.update_unrealized_pnl(current_price)
 
+            # Reconstruct full target ladder: hit targets first (in execution order),
+            # then remaining. Preserves TP1/TP2/TP3 labels even after partial exits.
+            _all_tgts = list(pos.targets_hit) + list(pos.targets)
+
             positions.append(
                 {
                     "position_id": pos.position_id,
@@ -2577,8 +2652,9 @@ class PaperTradingService:
                     "breakeven_active": pos.breakeven_active,
                     "trailing_active": pos.trailing_active,
                     "opened_at": pos.created_at.isoformat(),
-                    "tp1": pos.targets[0].level if pos.targets else (pos.targets_hit[-1].level if pos.targets_hit else 0.0),
-                    "tp_final": pos.targets[-1].level if pos.targets else (pos.targets_hit[-1].level if pos.targets_hit else 0.0),
+                    "tp1": _all_tgts[0].level if _all_tgts else 0.0,
+                    "tp2": _all_tgts[1].level if len(_all_tgts) > 1 else 0.0,
+                    "tp_final": _all_tgts[-1].level if _all_tgts else 0.0,
                     "trade_type": getattr(pos, "trade_type", "intraday"),
                     "initial_stop_loss": getattr(pos, "initial_stop_loss", pos.stop_loss),
                 }

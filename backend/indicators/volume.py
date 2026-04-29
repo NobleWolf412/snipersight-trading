@@ -324,7 +324,7 @@ def compute_vwap(df: pd.DataFrame, reset_period: str = None) -> pd.Series:
 
     # Use pandas-ta for cumulative VWAP (no reset_period)
     if reset_period is None and PANDAS_TA_AVAILABLE:
-        result = pta.vwap(df["high"], df["low"], df["close"], df["volume"])
+        result = ta.vwap(df["high"], df["low"], df["close"], df["volume"])
         if result is not None:
             return result
         logger.warning("pandas-ta VWAP returned None, falling back to manual implementation")

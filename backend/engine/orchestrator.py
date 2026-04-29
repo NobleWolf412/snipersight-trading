@@ -1851,6 +1851,15 @@ class Orchestrator:
                     (_trend in ("down", "strong_down") and chosen_direction == "LONG")
                 )
                 _is_compressed = _vol in ("compressed", "low")
+                # If symbol regime is "normal" (e.g. local ATR expanded due to a spike),
+                # also check global regime — a spike doesn't change the broader market structure.
+                if not _is_compressed and self.current_regime:
+                    _global_vol = getattr(self.current_regime, "volatility", None)
+                    if _global_vol is None:
+                        _global_dims = getattr(self.current_regime, "dimensions", None)
+                        _global_vol = getattr(_global_dims, "volatility", "normal") if _global_dims else "normal"
+                    if _global_vol in ("compressed", "low"):
+                        _is_compressed = True
 
                 if _is_compressed and "swing" in cascade_types:
                     # Remove swing from cascade in any compressed market.

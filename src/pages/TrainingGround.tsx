@@ -1337,45 +1337,41 @@ export function TrainingGround() {
 
               {/* Right column — stacked stats */}
               <div className="flex flex-col gap-4 min-w-0">
-                {/* Expectancy Card */}
+                {/* Performance Card */}
                 <div className="glass-card p-4 rounded-2xl border-border/50 relative group flex-1 min-w-0">
                   <div className="relative z-10 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">EXPECTANCY</div>
-                        <div className={`text-2xl font-bold font-mono tracking-tight mt-0.5 ${(status?.statistics?.expectancy ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {(status?.statistics?.expectancy ?? 0) >= 0 ? '+' : ''}{(status?.statistics?.expectancy ?? 0).toFixed(2)}<span className="text-sm font-normal text-muted-foreground ml-0.5">$/trade</span>
+                    <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase mb-3">PERFORMANCE</div>
+                    {/* Record row */}
+                    <div className="flex items-baseline gap-1.5 mb-2">
+                      <span className="text-green-400 font-mono font-bold text-lg">{status?.statistics?.winning_trades || 0}W</span>
+                      <span className="text-white/20 text-sm">/</span>
+                      <span className="text-yellow-400/80 font-mono font-bold text-lg">{status?.statistics?.scratch_trades || 0}S</span>
+                      <span className="text-white/20 text-sm">/</span>
+                      <span className="text-red-400 font-mono font-bold text-lg">{status?.statistics?.losing_trades || 0}L</span>
+                      <span className="text-muted-foreground text-xs ml-1">({status?.statistics?.total_trades || 0} trades)</span>
+                    </div>
+                    {/* Win rate */}
+                    <div className="text-xs text-muted-foreground font-mono mb-3">
+                      Win Rate: <span className={cn("font-bold", (status?.statistics?.win_rate ?? 0) >= 50 ? 'text-green-400' : 'text-amber-400')}>{(status?.statistics?.win_rate ?? 0).toFixed(0)}%</span>
+                    </div>
+                    {/* EV and RR row */}
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div className="p-2 rounded-lg bg-black/20">
+                        <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-0.5">EV / TRADE</div>
+                        <div className={cn("text-base font-bold font-mono", (status?.statistics?.expectancy ?? 0) >= 0 ? 'text-green-400' : 'text-red-400')}>
+                          {(status?.statistics?.expectancy ?? 0) >= 0 ? '+' : ''}{formatCurrency(status?.statistics?.expectancy ?? 0)}
                         </div>
                       </div>
-                      <TrendUp size={24} className="text-accent/20 transition-colors group-hover:text-accent/50 shrink-0" />
-                    </div>
-                    <div className="mt-1.5 text-xs text-muted-foreground opacity-80 flex items-center gap-1.5 flex-wrap">
-                      <span className="text-green-400">{status?.statistics?.winning_trades || 0}W</span>
-                      <span className="text-white/20">/</span>
-                      <span className="text-yellow-400/80">{status?.statistics?.scratch_trades || 0}S</span>
-                      <span className="text-white/20">/</span>
-                      <span className="text-red-400">{status?.statistics?.losing_trades || 0}L</span>
-                      <span className="opacity-20">•</span>
-                      <span>{status?.statistics?.total_trades || 0} total</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Avg R:R Card */}
-                <div className="glass-card p-4 rounded-2xl border-border/50 relative group flex-1 min-w-0">
-                  <div className="relative z-10 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">AVG R:R</div>
-                        <div className="text-2xl font-bold font-mono tracking-tight mt-0.5">
-                          {(status?.statistics?.avg_rr || 0).toFixed(2)}
-                        </div>
+                      <div className="p-2 rounded-lg bg-black/20">
+                        <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-0.5">AVG R:R</div>
+                        <div className="text-base font-bold font-mono">{(status?.statistics?.avg_rr || 0).toFixed(2)}</div>
                       </div>
-                      <Crosshair size={24} className="text-accent/20 transition-colors group-hover:text-amber-400/50 shrink-0" />
                     </div>
-                    <div className="mt-1.5 text-xs text-muted-foreground opacity-80 flex flex-col gap-0.5">
-                      <span className="text-green-400/80">W: {formatCurrency(status?.statistics?.avg_win || 0)}</span>
-                      <span className="text-red-400/80">L: {formatCurrency(status?.statistics?.avg_loss || 0)}</span>
+                    {/* Avg win / loss */}
+                    <div className="flex gap-3 text-xs font-mono">
+                      <span>Avg W: <span className="text-green-400 font-bold">{formatCurrency(status?.statistics?.avg_win || 0)}</span></span>
+                      <span className="opacity-20">|</span>
+                      <span>Avg L: <span className="text-red-400 font-bold">{formatCurrency(status?.statistics?.avg_loss || 0)}</span></span>
                     </div>
                   </div>
                 </div>
@@ -1392,9 +1388,9 @@ export function TrainingGround() {
                       <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">MAX DRAWDOWN</div>
                       <div className={cn(
                         "text-xl font-bold font-mono tracking-tight mt-0.5",
-                        (status?.statistics as any)?.max_drawdown_pct ? 'text-red-400' : 'text-muted-foreground'
+                        status?.statistics?.max_drawdown ? 'text-red-400' : 'text-muted-foreground'
                       )}>
-                        {((status?.statistics as any)?.max_drawdown_pct || 0).toFixed(2)}%
+                        {(status?.statistics?.max_drawdown || 0).toFixed(2)}%
                       </div>
                     </div>
                     <TrendDown size={24} className="text-red-400/20 transition-colors group-hover:text-red-400/50 shrink-0" />
@@ -1405,89 +1401,58 @@ export function TrainingGround() {
                 </div>
               </div>
 
-              {/* Avg Trade P&L */}
+              {/* Profit Factor */}
               <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
                 <div className="relative z-10 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">AVG TRADE</div>
+                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">PROFIT FACTOR</div>
                       {(() => {
-                        const totalTrades = status?.statistics?.total_trades || 0;
-                        const totalPnl = status?.statistics?.total_pnl || 0;
-                        const avg = totalTrades > 0 ? totalPnl / totalTrades : 0;
+                        const grossWin = (status?.statistics?.avg_win || 0) * (status?.statistics?.winning_trades || 0);
+                        const grossLoss = Math.abs(status?.statistics?.avg_loss || 0) * (status?.statistics?.losing_trades || 0);
+                        const pf = grossLoss > 0 ? grossWin / grossLoss : 0;
                         return (
-                          <div className={cn(
-                            "text-xl font-bold font-mono tracking-tight mt-0.5",
-                            avg > 0 ? 'text-green-400' : avg < 0 ? 'text-red-400' : 'text-muted-foreground'
-                          )}>
-                            {avg >= 0 ? '+' : ''}{formatCurrency(avg)}
+                          <div className={cn("text-xl font-bold font-mono tracking-tight mt-0.5", pf >= 1.5 ? 'text-green-400' : pf >= 1 ? 'text-amber-400' : 'text-red-400')}>
+                            {pf.toFixed(2)}x
                           </div>
                         );
                       })()}
                     </div>
-                    <Fire size={24} className="text-amber-400/20 transition-colors group-hover:text-amber-400/50 shrink-0" />
+                    <TrendUp size={24} className="text-accent/20 transition-colors group-hover:text-accent/50 shrink-0" />
                   </div>
-                  <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">
-                    Expectancy per trade
-                  </div>
+                  <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">Gross wins / gross losses</div>
                 </div>
               </div>
 
-              {/* Scans Card */}
+              {/* Best Trade */}
               <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
                 <div className="relative z-10 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">SCANS</div>
-                      <div className="text-xl font-bold font-mono tracking-tight mt-0.5">
-                        {status?.statistics?.scans_completed || 0}
+                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">BEST TRADE</div>
+                      <div className="text-xl font-bold font-mono tracking-tight mt-0.5 text-green-400">
+                        {(status?.statistics?.best_trade ?? 0) > 0 ? '+' : ''}{formatCurrency(status?.statistics?.best_trade ?? 0)}
                       </div>
                     </div>
-                    <Target size={24} className="text-accent/20 transition-colors group-hover:text-blue-400/50 shrink-0" />
+                    <TrendUp size={24} className="text-green-400/20 transition-colors group-hover:text-green-400/50 shrink-0" />
                   </div>
-                  <div className="mt-1.5 text-[10px] text-muted-foreground font-mono opacity-80">
-                    <span className="text-blue-400/80">{status?.statistics?.signals_generated || 0} sigs</span>
-                    <span className="mx-1.5 opacity-20">→</span>
-                    <span className="text-green-400/80">{status?.statistics?.signals_taken || 0} tk</span>
-                  </div>
+                  <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">Single trade max profit</div>
                 </div>
               </div>
 
-              {/* Current Streak */}
+              {/* Worst Trade */}
               <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
                 <div className="relative z-10 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">STREAK</div>
-                      {(() => {
-                        // Calculate current streak from trade history
-                        let streak = 0;
-                        let streakType: 'win' | 'loss' | 'none' = 'none';
-                        if (trades.length > 0) {
-                          streakType = trades[0].pnl >= 0 ? 'win' : 'loss';
-                          for (const t of trades) {
-                            if ((t.pnl >= 0 && streakType === 'win') || (t.pnl < 0 && streakType === 'loss')) {
-                              streak++;
-                            } else break;
-                          }
-                        }
-                        return (
-                          <div className={cn(
-                            "text-xl font-bold font-mono tracking-tight mt-0.5 flex items-center gap-1.5",
-                            streakType === 'win' ? 'text-green-400' : streakType === 'loss' ? 'text-red-400' : 'text-muted-foreground'
-                          )}>
-                            {streak > 0 && streakType === 'win' && <TrendUp size={18} />}
-                            {streak > 0 && streakType === 'loss' && <TrendDown size={18} />}
-                            {streak === 0 ? '—' : `${streak}${streakType === 'win' ? 'W' : 'L'}`}
-                          </div>
-                        );
-                      })()}
+                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">WORST TRADE</div>
+                      <div className="text-xl font-bold font-mono tracking-tight mt-0.5 text-red-400">
+                        {formatCurrency(status?.statistics?.worst_trade ?? 0)}
+                      </div>
                     </div>
-                    <Lightning size={24} className="text-purple-400/20 transition-colors group-hover:text-purple-400/50 shrink-0" />
+                    <TrendDown size={24} className="text-red-400/20 transition-colors group-hover:text-red-400/50 shrink-0" />
                   </div>
-                  <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">
-                    Current streak
-                  </div>
+                  <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">Single trade max loss</div>
                 </div>
               </div>
             </div>
@@ -1502,26 +1467,29 @@ export function TrainingGround() {
                 {Object.keys(status.statistics.by_trade_type || {}).length > 0 && (
                   <div className="glass-card p-4 rounded-2xl border-border/50">
                     <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase mb-3">BY TRADE TYPE</div>
-                    <div className="flex flex-col gap-2">
-                      {((['scalp', 'intraday', 'swing'] as const).filter(tt => status.statistics.by_trade_type?.[tt]).concat(
-                        Object.keys(status.statistics.by_trade_type || {}).filter(tt => !['scalp','intraday','swing'].includes(tt)) as any
-                      ) as string[]).map(tt => {
+                    <div>
+                      {/* Header row */}
+                      <div className="grid grid-cols-[80px_1fr_48px_48px_64px] gap-2 text-[9px] text-muted-foreground/50 font-mono uppercase tracking-widest mb-2 pb-1 border-b border-border/20">
+                        <span>Type</span>
+                        <span>Win Rate</span>
+                        <span className="text-right">Win%</span>
+                        <span className="text-right">Trades</span>
+                        <span className="text-right">Net P&L</span>
+                      </div>
+                      {(['scalp', 'intraday', 'swing'] as const).filter(tt => status.statistics.by_trade_type?.[tt]).map(tt => {
                         const b = status.statistics.by_trade_type![tt];
                         if (!b) return null;
                         const color = tt === 'scalp' ? 'text-purple-400' : tt === 'intraday' ? 'text-blue-400' : 'text-amber-400';
                         const pnlColor = b.total_pnl >= 0 ? 'text-green-400' : 'text-red-400';
                         return (
-                          <div key={tt} className="flex items-center gap-3 text-xs font-mono">
-                            <span className={cn("w-16 font-bold uppercase tracking-tight shrink-0", color)}>{tt}</span>
-                            <div className="flex-1 bg-white/5 rounded-full h-1.5 overflow-hidden">
-                              <div
-                                className={cn("h-full rounded-full", b.win_rate >= 50 ? 'bg-green-400/60' : 'bg-red-400/60')}
-                                style={{ width: `${b.win_rate}%` }}
-                              />
+                          <div key={tt} className="grid grid-cols-[80px_1fr_48px_48px_64px] gap-2 items-center text-xs font-mono py-1">
+                            <span className={cn("font-bold uppercase tracking-tight", color)}>{tt}</span>
+                            <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                              <div className={cn("h-full rounded-full", b.win_rate >= 50 ? 'bg-green-400/60' : 'bg-red-400/60')} style={{ width: `${b.win_rate}%` }} />
                             </div>
-                            <span className="w-10 text-right text-muted-foreground">{b.win_rate.toFixed(0)}%</span>
-                            <span className="w-12 text-right text-muted-foreground/60">{b.trades}T</span>
-                            <span className={cn("w-16 text-right", pnlColor)}>{b.total_pnl >= 0 ? '+' : ''}{b.total_pnl.toFixed(1)}</span>
+                            <span className="text-right text-muted-foreground">{b.win_rate.toFixed(0)}%</span>
+                            <span className="text-right text-muted-foreground/60">{b.trades}</span>
+                            <span className={cn("text-right font-bold", pnlColor)}>{b.total_pnl >= 0 ? '+' : ''}{b.total_pnl.toFixed(1)}</span>
                           </div>
                         );
                       })}
@@ -1669,7 +1637,7 @@ export function TrainingGround() {
                         {/* Exposure bar */}
                         <div className="p-3 rounded-xl bg-background/40 border border-border/30">
                           <div className="flex justify-between items-center mb-2">
-                            <span className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">CAPITAL DEPLOYED</span>
+                            <span className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">NOTIONAL EXPOSURE</span>
                             <span className={cn("text-xs font-mono font-bold", exposurePct > 50 ? 'text-amber-400' : 'text-green-400')}>
                               {exposurePct.toFixed(1)}%
                             </span>
@@ -1684,13 +1652,13 @@ export function TrainingGround() {
                             />
                           </div>
                           <div className="text-[10px] text-muted-foreground font-mono mt-1.5">
-                            {formatCurrency(totalExposure)} of {formatCurrency(equity)}
+                            {formatCurrency(totalExposure)} position size vs equity — &gt;100% is normal with leverage
                           </div>
                         </div>
 
                         {/* Unrealized P&L */}
                         <div className="p-3 rounded-xl bg-background/40 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-1">UNREALIZED P&amp;L</div>
+                          <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-1">TOTAL UNREALIZED P&amp;L</div>
                           <div className={cn(
                             "text-xl font-mono font-bold",
                             unrealizedPnl > 0 ? 'text-green-400' : unrealizedPnl < 0 ? 'text-red-400' : 'text-muted-foreground'
@@ -1705,7 +1673,7 @@ export function TrainingGround() {
                         {/* Per-position heat */}
                         {positions.length > 0 && (
                           <div className="space-y-2 pt-1">
-                            <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">POSITION HEAT</div>
+                            <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">OPEN P&L BREAKDOWN</div>
                             {positions.map((pos) => (
                               <div key={pos.position_id} className="flex items-center gap-2 text-xs font-mono">
                                 <span className={pos.direction === 'LONG' ? 'text-green-400' : 'text-red-400'}>
@@ -1754,15 +1722,10 @@ export function TrainingGround() {
 
               <div className="relative z-10">
                 {trades.length > 0 ? (
-                  <div className="space-y-2">
-                    {trades.slice(0, 10).map((trade) => (
+                  <div className="max-h-[480px] overflow-y-auto pr-1 space-y-2 scrollbar-thin scrollbar-thumb-border/50 scrollbar-track-transparent">
+                    {trades.map((trade) => (
                       <TradeHistoryItem key={trade.trade_id} trade={trade} />
                     ))}
-                    {trades.length > 10 && (
-                      <div className="text-center text-sm text-muted-foreground py-2">
-                        + {trades.length - 10} more trades
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <div className="text-center py-12 border border-border border-dashed rounded-lg bg-background/50">
@@ -2037,9 +2000,13 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
   const [chartOpen, setChartOpen] = useState(false);
 
   const chartLevels: ChartLevel[] = [
-    ...(position.tp_final && position.tp_final !== position.tp1 ? [{
-      label: 'TP Final', price: position.tp_final,
+    ...(position.tp_final && position.tp_final !== position.tp1 && position.tp_final !== position.tp2 ? [{
+      label: 'TP3', price: position.tp_final,
       color: 'text-emerald-300', bgColor: 'bg-emerald-400/10',
+    }] : []),
+    ...(position.tp2 && position.tp2 !== position.tp1 && position.tp2 !== position.tp_final ? [{
+      label: 'TP2', price: position.tp2,
+      color: 'text-green-300', bgColor: 'bg-green-400/10',
     }] : []),
     ...(position.tp1 ? [{
       label: 'TP1', price: position.tp1,
@@ -2253,9 +2220,13 @@ function PendingOrderCard({ order, onCancel }: { order: any; onCancel?: (orderId
     : null;
 
   const chartLevels: ChartLevel[] = [
-    ...(order.tp_final && order.tp_final !== order.tp1 ? [{
-      label: 'TP Final', price: order.tp_final,
+    ...(order.tp_final && order.tp_final !== order.tp1 && order.tp_final !== order.tp2 ? [{
+      label: 'TP3', price: order.tp_final,
       color: 'text-emerald-300', bgColor: 'bg-emerald-400/10',
+    }] : []),
+    ...(order.tp2 && order.tp2 !== order.tp1 && order.tp2 !== order.tp_final ? [{
+      label: 'TP2', price: order.tp2,
+      color: 'text-green-300', bgColor: 'bg-green-400/10',
     }] : []),
     ...(order.tp1 ? [{
       label: 'TP1', price: order.tp1,

@@ -278,7 +278,8 @@ class IngestionPipeline:
         if timeframe.endswith("d"):
             return f"{timeframe[:-1]}D"
         if timeframe.endswith("w"):
-            return f"{timeframe[:-1]}W-MON"
+            # "W-MON" triggers FutureWarning in pandas ≥2.2; bare "W" is stable.
+            return "W"
         if timeframe.endswith("M"):
             return "ME"
         return None

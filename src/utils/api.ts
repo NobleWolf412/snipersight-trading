@@ -913,6 +913,7 @@ export interface PaperTradingPosition {
   remaining_quantity: number;
   stop_loss: number;
   tp1?: number;
+  tp2?: number;
   tp_final?: number;
   targets_remaining: number;
   targets_hit: number;
@@ -1019,6 +1020,7 @@ export interface PaperTradingStatusResponse {
     current_price?: number;
     stop_loss?: number;
     tp1?: number;
+    tp2?: number;
     tp_final?: number;
   }>;
   last_scan_at: string | null;

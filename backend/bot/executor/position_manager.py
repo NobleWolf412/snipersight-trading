@@ -234,7 +234,7 @@ class PositionManager:
     # If the current loss is > STAGNATION_FLOOR_RATIO × stop_distance, defer to stop loss.
     # Using stop distance (not fixed %) makes this adaptive: a trade with a 0.3% stop has
     # a tighter floor than one with a 2% stop, which is structurally correct.
-    STAGNATION_FLOOR_RATIO = 0.5
+    STAGNATION_FLOOR_RATIO = 0.7
 
     # Regime-based multipliers on the base hold time.
     # Trending markets deserve more patience; choppy markets less.
@@ -646,6 +646,38 @@ class PositionManager:
                     )
                     return
 
+                # MFE guard: if the trade reached ≥0.5% profit at any point, it demonstrated
+                # real directional conviction. Price pulled back but the trade was live —
+                # stagnation is premature here. Let stop loss handle the exit.
+                #
+                # Time cap: the guard cannot defer indefinitely. AVAX held 7h14m because
+                # an early 0.5% MFE parked the guard, then the trade slowly bled for 6h.
+                # After the type-specific max deferral window, stagnation re-engages.
+                _MFE_MAX_DEFER_HOURS = {"scalp": 4.0, "intraday": 14.0, "swing": 48.0}
+                _mfe_max_defer = _MFE_MAX_DEFER_HOURS.get(position.trade_type, 14.0)
+                if position.initial_entry_price > 0:
+                    _entry = position.initial_entry_price
+                    if position.direction == "LONG":
+                        _mfe_pct = (position.highest_price - _entry) / _entry * 100 if position.highest_price else 0.0
+                    else:
+                        _mfe_pct = (_entry - position.lowest_price) / _entry * 100 if position.lowest_price else 0.0
+                    if _mfe_pct >= 0.5:
+                        if hours_open < _mfe_max_defer:
+                            logger.info(
+                                f"STAGNATION DEFERRED (MFE guard): {position.position_id} | "
+                                f"{position.symbol} | Peak profit={_mfe_pct:.2f}% ≥ 0.5% | "
+                                f"{hours_open:.1f}h open < {_mfe_max_defer:.0f}h limit — "
+                                f"deferring to stop loss"
+                            )
+                            return
+                        else:
+                            logger.info(
+                                f"STAGNATION RESUMED (MFE guard expired): {position.position_id} | "
+                                f"{position.symbol} | Peak profit={_mfe_pct:.2f}% but "
+                                f"{hours_open:.1f}h open ≥ {_mfe_max_defer:.0f}h limit — "
+                                f"stagnation re-engaged"
+                            )
+
                 # Increment strike counter — require 2 consecutive failures before
                 # closing. A single flat/poor candle at the stagnation boundary is
                 # not sufficient evidence; crypto often consolidates briefly before
@@ -939,9 +971,16 @@ class PositionManager:
         risk = abs(position.initial_entry_price - position.initial_stop_loss)
         buffer = risk * 0.1
         if position.direction == "LONG":
+            # LONG stop fires when price <= stop. Place stop above entry so
+            # it fires only if price drops BACK below the entry level.
             position.stop_loss = position.entry_price + buffer
         else:
-            position.stop_loss = position.entry_price - buffer
+            # SHORT stop fires when price >= stop. Place stop ABOVE entry so
+            # it fires if price rises back through entry — protecting the runner.
+            # Previously this used (entry - buffer) which placed the stop BELOW
+            # entry, meaning fast reversals could gap through entry and trigger
+            # the stop at a loss before the monitor caught it.
+            position.stop_loss = position.entry_price + buffer
 
         position.breakeven_active = True
 
@@ -1028,11 +1067,47 @@ class PositionManager:
 
         profit_r = profit / risk
 
-        if profit_r >= self.trailing_stop_activation:
+        # Derive ATR at entry time from stop_distance_atr (stop expressed in ATR units).
+        # This gives a timeframe-aware "normal candle size" reference that doesn't break
+        # when the prior candle was a doji or the entry was after compressed volatility.
+        # ATR = risk_distance / stop_distance_atr  (e.g. stop was 1.5 ATR away)
+        _atr = risk / position.stop_distance_atr if position.stop_distance_atr > 0 else 0.0
+
+        # Peak move in ATR units (timeframe-normalised parabolic metric).
+        # ATR-multiples are the right unit because:
+        #   - 2.5 ATR on 15m resolves in ~30 min → clearly fast
+        #   - 2.5 ATR on 4h takes ~10h → still outsized relative to that TF
+        # R-multiples break when stop is tight vs ATR (1R = 0.3 ATR → 2R threshold
+        # fires on a completely normal move) or wide (1R = 3 ATR → threshold never fires).
+        if _atr > 0:
+            if position.direction == "LONG" and position.highest_price:
+                peak_atr = (position.highest_price - position.entry_price) / _atr
+            elif position.direction == "SHORT" and position.lowest_price:
+                peak_atr = (position.entry_price - position.lowest_price) / _atr
+            else:
+                peak_atr = profit / _atr
+        else:
+            peak_atr = profit_r  # fallback if stop_distance_atr not set
+
+        # Parabolic thresholds by trade type — swing trades naturally travel more ATRs.
+        _PARABOLIC_ATR_BY_TYPE = {"scalp": 2.0, "intraday": 2.5, "swing": 3.5}
+        _parabolic_atr_threshold = _PARABOLIC_ATR_BY_TYPE.get(position.trade_type, 2.5)
+
+        activation_threshold = self.trailing_stop_activation
+        is_parabolic = peak_atr >= _parabolic_atr_threshold and profit_r >= 0.5
+        if is_parabolic:
+            # Peak exceeded the ATR-based parabolic threshold and trade is still
+            # profitable — activate trailing immediately even if the tick monitor
+            # caught a pullback before reaching the normal 1.5R gate.
+            activation_threshold = 0.5
+
+        if profit_r >= activation_threshold:
             position.trailing_active = True
+            label = "PARABOLIC TRAILING ACTIVATED" if is_parabolic else "TRAILING ACTIVATED"
             logger.info(
-                f"TRAILING ACTIVATED: {position.position_id} | {position.symbol} | "
-                f"Profit: {profit_r:.2f}R"
+                f"{label}: {position.position_id} | {position.symbol} | "
+                f"Profit: {profit_r:.2f}R | Peak: {peak_atr:.2f} ATR "
+                f"(threshold: {_parabolic_atr_threshold:.1f} ATR)"
             )
             self._update_trailing_stop(position)
 
@@ -1045,9 +1120,37 @@ class PositionManager:
         # swings need room to breathe during normal retracements.
         _TRAIL_DISTANCE_BY_TYPE = {"scalp": 0.3, "intraday": 0.5, "swing": 1.0}
         risk = abs(position.entry_price - position.initial_stop_loss)
+        if risk == 0:
+            return
         type_distance = _TRAIL_DISTANCE_BY_TYPE.get(position.trade_type, self.trailing_stop_distance)
+
+        # Parabolic tightening: use ATR-normalised peak to determine if the move
+        # is extraordinary relative to this symbol's normal candle size on this TF.
+        _atr = risk / position.stop_distance_atr if position.stop_distance_atr > 0 else 0.0
+        if _atr > 0:
+            if position.direction == "LONG" and position.highest_price:
+                peak_atr = (position.highest_price - position.entry_price) / _atr
+            elif position.direction == "SHORT" and position.lowest_price:
+                peak_atr = (position.entry_price - position.lowest_price) / _atr
+            else:
+                peak_atr = 0.0
+        else:
+            # No ATR reference — fall back to R-multiples as a rough proxy
+            peak_atr = 0.0
+
+        _PARABOLIC_ATR_BY_TYPE = {"scalp": 2.0, "intraday": 2.5, "swing": 3.5}
+        _parabolic_threshold = _PARABOLIC_ATR_BY_TYPE.get(position.trade_type, 2.5)
+
+        if peak_atr >= _parabolic_threshold:
+            type_distance = type_distance * 0.5  # Tighten: 0.5R → 0.25R for intraday
+            logger.debug(
+                f"PARABOLIC TRAIL: {position.position_id} | {position.symbol} | "
+                f"Peak={peak_atr:.2f} ATR ≥ {_parabolic_threshold:.1f} threshold — "
+                f"trail distance tightened to {type_distance:.2f}R"
+            )
+
         trail_distance = risk * type_distance
-        
+
         if position.direction == "LONG":
             highest = position.highest_price
             if highest is None:
