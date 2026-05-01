@@ -1226,6 +1226,74 @@ export function TrainingGround() {
               </div>
             </section>
 
+            {/* Session Config Summary Strip */}
+            {status?.config && (() => {
+              const cfg = status.config;
+              const mode = cfg.sniper_mode || 'stealth';
+              const preset = cfg.sensitivity_preset;
+              const duration = cfg.duration_hours;
+              const maxPos = cfg.max_positions;
+              const rpt = cfg.risk_per_trade;
+              const lev = cfg.leverage;
+              const universe = cfg.universe_size;
+              const trailing = cfg.trailing_stop;
+              const modeColor: Record<string, string> = {
+                stealth: 'text-blue-400 border-blue-500/40 bg-blue-500/10',
+                surgical: 'text-purple-400 border-purple-500/40 bg-purple-500/10',
+                aggressive: 'text-red-400 border-red-500/40 bg-red-500/10',
+                overwatch: 'text-amber-400 border-amber-500/40 bg-amber-500/10',
+              };
+              const presetColor: Record<string, string> = {
+                conservative: 'text-green-400 border-green-500/40 bg-green-500/10',
+                balanced: 'text-blue-400 border-blue-500/40 bg-blue-500/10',
+                aggressive: 'text-red-400 border-red-500/40 bg-red-500/10',
+                custom: 'text-yellow-400 border-yellow-500/40 bg-yellow-500/10',
+              };
+              return (
+                <div className="flex flex-wrap gap-2 px-1 py-0.5 items-center">
+                  <span className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-[0.2em] mr-1">SESSION CONFIG</span>
+                  <Badge variant="outline" className={cn("font-mono text-[10px] tracking-widest", modeColor[mode] || 'text-foreground border-border/40')}>
+                    {mode.toUpperCase()}
+                  </Badge>
+                  {preset && (
+                    <Badge variant="outline" className={cn("font-mono text-[10px] tracking-widest", presetColor[preset] || 'text-foreground border-border/40')}>
+                      {preset.toUpperCase()}
+                    </Badge>
+                  )}
+                  {duration != null && (
+                    <Badge variant="outline" className="font-mono text-[10px] tracking-widest text-muted-foreground border-border/40 bg-background/40">
+                      {duration}H RUN
+                    </Badge>
+                  )}
+                  {maxPos != null && (
+                    <Badge variant="outline" className="font-mono text-[10px] tracking-widest text-muted-foreground border-border/40 bg-background/40">
+                      {maxPos} SLOTS
+                    </Badge>
+                  )}
+                  {rpt != null && (
+                    <Badge variant="outline" className="font-mono text-[10px] tracking-widest text-muted-foreground border-border/40 bg-background/40">
+                      {rpt}% RISK
+                    </Badge>
+                  )}
+                  {lev != null && lev !== 1 && (
+                    <Badge variant="outline" className="font-mono text-[10px] tracking-widest text-amber-400 border-amber-500/30 bg-amber-500/10">
+                      {lev}× LEV
+                    </Badge>
+                  )}
+                  {universe != null && (
+                    <Badge variant="outline" className="font-mono text-[10px] tracking-widest text-muted-foreground border-border/40 bg-background/40">
+                      {universe} UNIVERSE
+                    </Badge>
+                  )}
+                  {trailing && (
+                    <Badge variant="outline" className="font-mono text-[10px] tracking-widest text-cyan-400 border-cyan-500/30 bg-cyan-500/10">
+                      TRAILING STOP
+                    </Badge>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Active/Last Scan Progress */}
             {status?.current_scan && (
               <section className={cn("glass-card rounded-2xl relative overflow-hidden group p-4 border", status.current_scan.status === 'running' ? "glow-border-amber border-amber-500/30" : "glow-border-green border-green-500/30")}>
@@ -1659,10 +1727,10 @@ export function TrainingGround() {
                     const equity = status?.balance?.equity || config.initial_balance || 10000;
                     const totalExposure = positions.reduce((sum, p) => sum + (p.entry_price * p.quantity), 0);
                     const exposurePct = equity > 0 ? (totalExposure / equity) * 100 : 0;
-                    const maxPositions = config.max_positions ?? 3;
+                    const maxPositions = status?.config?.max_positions ?? config.max_positions ?? 3;
                     const usedPositions = positions.length;
                     const unrealizedPnl = positions.reduce((sum, p) => sum + (p.unrealized_pnl || 0), 0);
-                    const riskPerTrade = config.risk_per_trade ?? 2;
+                    const riskPerTrade = status?.config?.risk_per_trade ?? config.risk_per_trade ?? 2;
 
                     return (
                       <>
