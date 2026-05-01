@@ -1194,7 +1194,17 @@ export function TrainingGround() {
                 </div>
 
                 {/* ── Row 2: Live Metrics Grid ────────────────────────────── */}
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {/* Session Uptime */}
+                  <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2.5">Running</div>
+                    <div className="text-xl sm:text-2xl font-black font-mono text-white/80 leading-none mb-1.5"
+                      style={{ letterSpacing: '-0.02em' }}>
+                      {formatDuration(status?.uptime_seconds || 0)}
+                    </div>
+                    <div className="text-[10px] font-mono text-white/30">session uptime</div>
+                  </div>
+
                   {/* Market Regime */}
                   <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
                     <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2.5">Regime</div>
@@ -2598,8 +2608,12 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
                 </span>
               )}
             </div>
-            <div className="text-xs text-muted-foreground flex items-center gap-2">
-              <span>${trade.entry_price.toFixed(4)} <span className="text-muted-foreground/30 mx-1">→</span> ${trade.exit_price.toFixed(4)}</span>
+            <div className="text-xs text-muted-foreground flex items-center gap-1.5 font-mono">
+              <span>${trade.entry_price.toFixed(4)}</span>
+              <span className={cn("text-[10px] font-bold", isLong ? 'text-green-400/60' : 'text-red-400/60')}>
+                {isLong ? '↑' : '↓'}
+              </span>
+              <span>${trade.exit_price.toFixed(4)}</span>
             </div>
           </div>
         </div>
@@ -2618,16 +2632,21 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
           {/* ── Entry / Exit prices — hero row ── */}
           {(() => {
             const isLongDir = trade.direction === 'LONG';
+            // For a SHORT, price going DOWN is profitable. rawMove is always
+            // positive when the trade moved in the intended direction.
             const rawMove = isLongDir
               ? (trade.exit_price - trade.entry_price) / trade.entry_price * 100
               : (trade.entry_price - trade.exit_price) / trade.entry_price * 100;
-            const moveIsPos = rawMove >= 0;
+            const movedRight = rawMove >= 0;
+            // Arrow label makes SHORT direction obvious: sell high → buy lower
+            const entryLabel = isLongDir ? 'Bought at' : 'Sold at';
+            const exitLabel  = isLongDir ? 'Sold at'   : 'Bought back at';
             return (
               <div className="mt-2 mb-3 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.4)' }}>
                 <div className="grid grid-cols-3 divide-x divide-white/[0.06]">
                   {/* Entry */}
                   <div className="p-3">
-                    <div className="text-[9px] text-white/30 font-mono uppercase tracking-widest mb-1.5">Entered at</div>
+                    <div className="text-[9px] text-white/30 font-mono uppercase tracking-widest mb-1.5">{entryLabel}</div>
                     <div className="text-base font-black font-mono text-white/90" style={{ letterSpacing: '-0.02em' }}>
                       ${trade.entry_price.toFixed(4)}
                     </div>
@@ -2639,21 +2658,24 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
                   </div>
 
                   {/* Move */}
-                  <div className="p-3 flex flex-col items-center justify-center text-center">
+                  <div className="p-3 flex flex-col items-center justify-center text-center gap-1">
                     <div className={cn(
                       "text-sm font-black font-mono",
-                      moveIsPos ? 'text-green-400' : 'text-red-400'
+                      movedRight ? 'text-green-400' : 'text-red-400'
                     )}
-                      style={{ textShadow: moveIsPos ? '0 0 16px rgba(74,222,128,0.5)' : '0 0 16px rgba(248,113,113,0.5)' }}
+                      style={{ textShadow: movedRight ? '0 0 16px rgba(74,222,128,0.5)' : '0 0 16px rgba(248,113,113,0.5)' }}
                     >
-                      {moveIsPos ? '+' : ''}{rawMove.toFixed(3)}%
+                      {movedRight ? '+' : ''}{rawMove.toFixed(3)}%
                     </div>
-                    <div className="text-[9px] text-white/30 font-mono mt-1 uppercase tracking-wide">{displayReason}</div>
+                    <div className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full"
+                      style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.4)' }}>
+                      {displayReason}
+                    </div>
                   </div>
 
                   {/* Exit */}
                   <div className="p-3 text-right">
-                    <div className="text-[9px] text-white/30 font-mono uppercase tracking-widest mb-1.5">Exited at</div>
+                    <div className="text-[9px] text-white/30 font-mono uppercase tracking-widest mb-1.5">{exitLabel}</div>
                     <div className={cn(
                       "text-base font-black font-mono",
                       isProfitable ? 'text-green-400' : 'text-red-400'

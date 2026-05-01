@@ -781,6 +781,7 @@ class PositionManager:
                 if position.remaining_quantity < 1e-9 or not position.targets:  # All targets hit or no targets left
                     position.status = PositionStatus.CLOSED
                     position.exit_reason = "target"
+                    position.exit_price = current_price  # Record at trigger time, not sync time
                     position.remaining_quantity = 0.0  # Zero out any residue
                 else:
                     position.status = PositionStatus.PARTIAL
