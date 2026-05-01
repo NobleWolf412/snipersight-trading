@@ -1261,7 +1261,7 @@ export function TrainingGround() {
                       {pills.map((pill, i) => (
                         <span
                           key={i}
-                          className="flex-shrink-0 text-[10px] font-mono font-semibold px-2.5 py-1 rounded-md border text-white/45 border-white/[0.08] bg-white/[0.03]"
+                          className="flex-shrink-0 text-[10px] font-mono font-semibold px-2.5 py-1 rounded-md border text-white/70 border-white/20 bg-white/[0.07]"
                         >
                           {pill.label}
                         </span>
@@ -2614,8 +2614,8 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
       </div>
 
       {expanded && (
-        <div className="px-4 pb-4 pt-1 border-t border-border/30 bg-black/20">
-          {/* Price execution row — the most important data, shown first */}
+        <div className="px-3 pb-4 pt-2 border-t border-border/30 bg-black/20">
+          {/* ── Entry / Exit prices — hero row ── */}
           {(() => {
             const isLongDir = trade.direction === 'LONG';
             const rawMove = isLongDir
@@ -2623,31 +2623,54 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
               : (trade.entry_price - trade.exit_price) / trade.entry_price * 100;
             const moveIsPos = rawMove >= 0;
             return (
-              <div className="mt-3 mb-3 p-3 rounded-lg bg-black/30 border border-border/30 grid grid-cols-3 gap-4">
-                <div>
-                  <div className="text-[9px] text-muted-foreground/60 font-mono uppercase tracking-widest mb-1">Entry Price</div>
-                  <div className="text-sm font-bold font-mono text-blue-300">${trade.entry_price.toFixed(4)}</div>
-                  <div className="text-[9px] text-muted-foreground/40 font-mono mt-0.5">
-                    {new Date(trade.entry_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
-                <div className="flex flex-col items-center justify-center">
-                  <div className={cn("text-xs font-mono font-bold", moveIsPos ? 'text-green-400' : 'text-red-400')}>
-                    {moveIsPos ? '▲' : '▼'} {Math.abs(rawMove).toFixed(3)}%
-                  </div>
-                  <div className="text-[9px] text-muted-foreground/30 font-mono my-1">────────</div>
-                  <div className="text-[9px] text-muted-foreground/50 font-mono uppercase tracking-widest">{displayReason}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[9px] text-muted-foreground/60 font-mono uppercase tracking-widest mb-1">Exit Price</div>
-                  <div className={cn("text-sm font-bold font-mono", isProfitable ? 'text-green-400' : 'text-red-400')}>
-                    ${trade.exit_price.toFixed(4)}
-                  </div>
-                  {trade.exit_time && (
-                    <div className="text-[9px] text-muted-foreground/40 font-mono mt-0.5">
-                      {new Date(trade.exit_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <div className="mt-2 mb-3 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.4)' }}>
+                <div className="grid grid-cols-3 divide-x divide-white/[0.06]">
+                  {/* Entry */}
+                  <div className="p-3">
+                    <div className="text-[9px] text-white/30 font-mono uppercase tracking-widest mb-1.5">Entered at</div>
+                    <div className="text-base font-black font-mono text-white/90" style={{ letterSpacing: '-0.02em' }}>
+                      ${trade.entry_price.toFixed(4)}
                     </div>
-                  )}
+                    {trade.entry_time && (
+                      <div className="text-[9px] text-white/25 font-mono mt-1">
+                        {new Date(trade.entry_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Move */}
+                  <div className="p-3 flex flex-col items-center justify-center text-center">
+                    <div className={cn(
+                      "text-sm font-black font-mono",
+                      moveIsPos ? 'text-green-400' : 'text-red-400'
+                    )}
+                      style={{ textShadow: moveIsPos ? '0 0 16px rgba(74,222,128,0.5)' : '0 0 16px rgba(248,113,113,0.5)' }}
+                    >
+                      {moveIsPos ? '+' : ''}{rawMove.toFixed(3)}%
+                    </div>
+                    <div className="text-[9px] text-white/30 font-mono mt-1 uppercase tracking-wide">{displayReason}</div>
+                  </div>
+
+                  {/* Exit */}
+                  <div className="p-3 text-right">
+                    <div className="text-[9px] text-white/30 font-mono uppercase tracking-widest mb-1.5">Exited at</div>
+                    <div className={cn(
+                      "text-base font-black font-mono",
+                      isProfitable ? 'text-green-400' : 'text-red-400'
+                    )}
+                      style={{
+                        letterSpacing: '-0.02em',
+                        textShadow: isProfitable ? '0 0 16px rgba(74,222,128,0.4)' : '0 0 16px rgba(248,113,113,0.4)'
+                      }}
+                    >
+                      ${trade.exit_price.toFixed(4)}
+                    </div>
+                    {trade.exit_time && (
+                      <div className="text-[9px] text-white/25 font-mono mt-1">
+                        {new Date(trade.exit_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
