@@ -1197,87 +1197,71 @@ export function TrainingGround() {
                 <div className="grid grid-cols-3 gap-2.5">
                   {/* Market Regime */}
                   <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2">Regime</div>
+                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2.5">Regime</div>
                     {status?.regime && status.regime.composite !== 'unknown' ? (
                       <>
                         <div className={cn(
-                          "text-sm sm:text-base font-black font-mono leading-none mb-1",
+                          "text-xl sm:text-2xl font-black font-mono leading-none mb-1.5",
                           status.regime.trend.includes('up') ? 'text-green-400' : status.regime.trend.includes('down') ? 'text-red-400' : 'text-blue-400'
-                        )}>
+                        )}
+                          style={{ letterSpacing: '-0.02em' }}
+                        >
                           {status.regime.trend.replace(/_/g, ' ').toUpperCase()}
                         </div>
-                        <div className="text-[10px] font-mono text-white/30 uppercase">{status.regime.volatility}</div>
+                        <div className="text-[10px] font-mono text-white/30 uppercase tracking-wide">{status.regime.volatility}</div>
                       </>
                     ) : (
-                      <div className="text-sm font-mono text-white/20">—</div>
+                      <div className="text-2xl font-black font-mono text-white/15">—</div>
                     )}
                   </div>
 
                   {/* Next Scan */}
                   <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2">Next Scan</div>
+                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2.5">Next Scan</div>
                     {isRunning && status?.next_scan_in_seconds != null ? (
                       <>
-                        <div className="text-sm sm:text-base font-black font-mono text-amber-400 leading-none mb-1"
-                          style={{ textShadow: '0 0 20px rgba(251,191,36,0.4)' }}>
+                        <div className="text-xl sm:text-2xl font-black font-mono text-amber-400 leading-none mb-1.5"
+                          style={{ textShadow: '0 0 24px rgba(251,191,36,0.5)', letterSpacing: '-0.02em' }}>
                           {formatDuration(Math.round(status.next_scan_in_seconds))}
                         </div>
-                        <div className="text-[10px] font-mono text-white/30">countdown</div>
+                        <div className="text-[10px] font-mono text-white/30">until next scan</div>
                       </>
                     ) : (
-                      <div className="text-sm font-mono text-white/20">—</div>
+                      <div className="text-2xl font-black font-mono text-white/15">—</div>
                     )}
                   </div>
 
                   {/* Confluence Gate */}
                   <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2">Gate</div>
-                    <div className="text-sm sm:text-base font-black font-mono text-yellow-400 leading-none mb-1"
-                      style={{ textShadow: '0 0 20px rgba(234,179,8,0.4)' }}>
+                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2.5">Min Score</div>
+                    <div className="text-xl sm:text-2xl font-black font-mono text-white/70 leading-none mb-1.5"
+                      style={{ letterSpacing: '-0.02em' }}>
                       {status?.config?.min_confluence != null ? `≥${status.config.min_confluence}` : 'AUTO'}
                     </div>
                     <div className="text-[10px] font-mono text-white/30">confluence</div>
                   </div>
                 </div>
 
-                {/* ── Row 3: Session config pills ─────────────────────────── */}
+                {/* ── Row 3: Session parameters ────────────────────────────── */}
                 {status?.config && (() => {
                   const cfg = status.config;
                   const mode = cfg.sniper_mode || 'stealth';
                   const preset = cfg.sensitivity_preset;
-                  const modeStyles: Record<string, string> = {
-                    stealth: 'text-cyan-300/80 border-cyan-500/20',
-                    surgical: 'text-purple-300/80 border-purple-500/20',
-                    aggressive: 'text-red-300/80 border-red-500/20',
-                    overwatch: 'text-amber-300/80 border-amber-500/20',
-                  };
-                  const presetStyles: Record<string, string> = {
-                    conservative: 'text-green-300/70 border-green-500/20',
-                    balanced: 'text-blue-300/70 border-blue-500/20',
-                    aggressive: 'text-orange-300/70 border-orange-500/20',
-                    custom: 'text-yellow-300/70 border-yellow-500/20',
-                  };
                   const pills = [
-                    { label: mode.toUpperCase(), cls: modeStyles[mode] || 'text-white/40 border-white/10' },
-                    preset ? { label: preset.toUpperCase(), cls: presetStyles[preset] || 'text-white/40 border-white/10' } : null,
-                    cfg.duration_hours != null ? { label: `${cfg.duration_hours}H`, cls: 'text-white/35 border-white/8' } : null,
-                    cfg.max_positions != null ? { label: `${cfg.max_positions} SLOTS`, cls: 'text-white/35 border-white/8' } : null,
-                    cfg.risk_per_trade != null ? { label: `${cfg.risk_per_trade}% RISK`, cls: 'text-white/35 border-white/8' } : null,
-                    cfg.leverage != null && cfg.leverage !== 1 ? { label: `${cfg.leverage}× LEV`, cls: 'text-amber-300/70 border-amber-500/20' } : null,
-                  ].filter(Boolean) as { label: string; cls: string }[];
+                    mode ? { label: mode.toUpperCase() } : null,
+                    preset ? { label: preset.toUpperCase() } : null,
+                    cfg.duration_hours != null ? { label: `${cfg.duration_hours}H` } : null,
+                    cfg.max_positions != null ? { label: `${cfg.max_positions} SLOTS` } : null,
+                    cfg.risk_per_trade != null ? { label: `${cfg.risk_per_trade}% RISK` } : null,
+                    cfg.leverage != null && cfg.leverage !== 1 ? { label: `${cfg.leverage}× LEVERAGE` } : null,
+                  ].filter(Boolean) as { label: string }[];
 
                   return (
-                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                      <span className="text-[9px] font-mono text-white/20 uppercase tracking-[0.2em] flex-shrink-0">config</span>
-                      <div className="w-px h-3 bg-white/10 flex-shrink-0" />
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
                       {pills.map((pill, i) => (
                         <span
                           key={i}
-                          className={cn(
-                            "flex-shrink-0 text-[10px] font-mono font-bold px-2 py-0.5 rounded border",
-                            "bg-black/20",
-                            pill.cls
-                          )}
+                          className="flex-shrink-0 text-[10px] font-mono font-semibold px-2.5 py-1 rounded-md border text-white/45 border-white/[0.08] bg-white/[0.03]"
                         >
                           {pill.label}
                         </span>
@@ -1535,37 +1519,41 @@ export function TrainingGround() {
                 </div>
               </div>
 
-              {/* Best Trade */}
-              <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
-                <div className="relative z-10 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">BEST TRADE</div>
-                      <div className="text-xl font-bold font-mono tracking-tight mt-0.5 text-green-400">
-                        {(status?.statistics?.best_trade ?? 0) > 0 ? '+' : ''}{formatCurrency(status?.statistics?.best_trade ?? 0)}
+              {/* Best Trade — only when there are wins */}
+              {(status?.statistics?.winning_trades ?? 0) > 0 && (
+                <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
+                  <div className="relative z-10 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">BEST TRADE</div>
+                        <div className="text-xl font-bold font-mono tracking-tight mt-0.5 text-green-400">
+                          +{formatCurrency(status?.statistics?.best_trade ?? 0)}
+                        </div>
                       </div>
+                      <TrendUp size={24} className="text-green-400/20 transition-colors group-hover:text-green-400/50 shrink-0" />
                     </div>
-                    <TrendUp size={24} className="text-green-400/20 transition-colors group-hover:text-green-400/50 shrink-0" />
+                    <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">Single trade max profit</div>
                   </div>
-                  <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">Single trade max profit</div>
                 </div>
-              </div>
+              )}
 
-              {/* Worst Trade */}
-              <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
-                <div className="relative z-10 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">WORST TRADE</div>
-                      <div className="text-xl font-bold font-mono tracking-tight mt-0.5 text-red-400">
-                        {formatCurrency(status?.statistics?.worst_trade ?? 0)}
+              {/* Worst Trade — only when there are losses */}
+              {(status?.statistics?.losing_trades ?? 0) > 0 && (
+                <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
+                  <div className="relative z-10 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">WORST TRADE</div>
+                        <div className="text-xl font-bold font-mono tracking-tight mt-0.5 text-red-400">
+                          {formatCurrency(status?.statistics?.worst_trade ?? 0)}
+                        </div>
                       </div>
+                      <TrendDown size={24} className="text-red-400/20 transition-colors group-hover:text-red-400/50 shrink-0" />
                     </div>
-                    <TrendDown size={24} className="text-red-400/20 transition-colors group-hover:text-red-400/50 shrink-0" />
+                    <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">Single trade max loss</div>
                   </div>
-                  <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">Single trade max loss</div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Breakdown Row — By Trade Type + Exit Reasons */}
