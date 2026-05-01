@@ -1305,10 +1305,11 @@ export function TrainingGround() {
 
                   {/* Hero P&L number */}
                   {(() => {
-                    const pnl = status?.balance?.pnl ?? 0;
-                    const pnlPct = status?.balance?.pnl_pct ?? 0;
                     const initial = status?.balance?.initial || config.initial_balance || 10000;
                     const equity = status?.balance?.equity || initial;
+                    // Realized-only: sum completed trades, not balance.pnl which includes unrealized
+                    const pnl = trades.reduce((s, t) => s + t.pnl, 0);
+                    const pnlPct = initial > 0 ? (pnl / initial) * 100 : 0;
                     const wins = status?.statistics?.winning_trades ?? 0;
                     const losses = status?.statistics?.losing_trades ?? 0;
                     const avgWin = status?.statistics?.avg_win ?? 0;
@@ -1340,7 +1341,7 @@ export function TrainingGround() {
                               {isPos ? '+' : ''}{pnlPct.toFixed(2)}%
                             </Badge>
                             <div className="text-[10px] text-muted-foreground/50 font-mono">
-                              from {formatCurrency(initial)} · equity {formatCurrency(equity)}
+                              realized · started {formatCurrency(initial)}
                             </div>
                           </div>
                         </div>
