@@ -1,0 +1,46 @@
+{
+  "total_trades": 36,
+  "winning_trades": 21,
+  "losing_trades": 15,
+  "scratch_trades": 8,
+  "win_rate": 58.333333333333336,
+  "expectancy": 10.04119228610644,
+  "total_pnl": 361.48292229983184,
+  "total_pnl_pct": 3.6148292229983183,
+  "avg_win": 25.167168070712496,
+  "avg_loss": -11.13517381234205,
+  "avg_rr": 2.260150447118985,
+  "best_trade": 127.96459523905467,
+  "worst_trade": -45.6267436809494,
+  "max_drawdown": 2.954846305567748,
+  "current_streak": 2,
+  "scans_completed": 442,
+  "signals_generated": 566,
+  "signals_taken": 36,
+  "exit_reasons": {
+    "target": 18,
+    "stop_loss": 6,
+    "stagnation": 8,
+    "session_stopped": 4
+  },
+  "by_trade_type": {
+    "scalp": {
+      "trades": 32,
+      "wins": 17,
+      "losses": 15,
+      "win_rate": 53.125,
+      "total_pnl": 325.02219681657857,
+      "avg_win": 28.944106117747605,
+      "avg_loss": -11.13517381234205
+    },
+    "intraday": {
+      "trades": 4,
+      "wins": 4,
+      "losses": 0,
+      "win_rate": 100.0,
+      "total_pnl": 36.46072548325331,
+      "avg_win": 9.115181370813328,
+      "avg_loss": 0.0
+    }
+  }
+}
