@@ -1085,272 +1085,272 @@ export function TrainingGround() {
           </div>
         ) : (
           <div className="space-y-6 mt-6">
-            {/* Control Bar */}
-            <section className="glass-card glow-border-green rounded-2xl relative overflow-hidden group">
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-green-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-              <div className="p-4 flex items-center justify-between relative z-10">
-                <div className="flex-1 flex items-center justify-between max-w-[80%] mr-12">
-                  {/* Session Info */}
-                  <div>
-                    <div className="text-xs text-[#00ff88] uppercase tracking-widest font-mono font-bold">SESSION</div>
-                    <div className="mt-1 font-mono text-sm tracking-widest glow-border-green px-2 py-0.5 rounded bg-black/40 flex items-center gap-2">
-                      {status?.session_id || '—'}
-                      <Badge variant="outline" className="text-[9px] h-4 border-purple-500/30 text-purple-400 font-black bg-purple-500/10">
-                        STEALTH
-                      </Badge>
+            {/* Command Center */}
+            <section
+              className="rounded-2xl relative overflow-hidden"
+              style={{
+                background: 'linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(10,20,15,0.8) 100%)',
+                border: isRunning ? '1px solid rgba(74,222,128,0.2)' : '1px solid rgba(234,179,8,0.2)',
+                boxShadow: isRunning
+                  ? '0 0 0 1px rgba(74,222,128,0.05), 0 8px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(74,222,128,0.1)'
+                  : '0 0 0 1px rgba(234,179,8,0.05), 0 8px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(234,179,8,0.1)',
+              }}
+            >
+              {/* Ambient glow layer */}
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  background: isRunning
+                    ? 'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(74,222,128,0.06) 0%, transparent 70%)'
+                    : 'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(234,179,8,0.06) 0%, transparent 70%)',
+                }}
+              />
+
+              <div className="relative z-10 p-5 space-y-5">
+
+                {/* ── Row 1: Identity + Controls ─────────────────────────── */}
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4 min-w-0">
+                    {/* Pulsing status orb */}
+                    <div className="relative flex-shrink-0 w-10 h-10 flex items-center justify-center">
+                      <div
+                        className={cn("absolute inset-0 rounded-full animate-ping opacity-20", isRunning ? "bg-green-400" : "bg-yellow-400")}
+                        style={{ animationDuration: '2.5s' }}
+                      />
+                      <div
+                        className={cn("absolute inset-1 rounded-full opacity-30", isRunning ? "bg-green-400/30" : "bg-yellow-400/30")}
+                        style={{ filter: 'blur(4px)' }}
+                      />
+                      <div className={cn(
+                        "relative w-4 h-4 rounded-full",
+                        isRunning
+                          ? "bg-green-400 shadow-[0_0_16px_rgba(74,222,128,0.9)]"
+                          : "bg-yellow-400 shadow-[0_0_16px_rgba(234,179,8,0.9)]"
+                      )} />
+                    </div>
+
+                    {/* Title block */}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="text-base sm:text-lg font-black font-mono tracking-tight text-white/90 uppercase">
+                          Phantom Engine
+                        </span>
+                        <span className={cn(
+                          "text-[10px] font-black font-mono tracking-[0.2em] px-2 py-0.5 rounded-full border",
+                          isRunning
+                            ? "text-green-400 border-green-500/40 bg-green-500/10"
+                            : "text-yellow-400 border-yellow-500/40 bg-yellow-500/10"
+                        )}>
+                          {isRunning ? "LIVE" : "PAUSED"}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-white/30 font-mono mt-1 flex items-center gap-2 flex-wrap">
+                        <Clock size={10} className="opacity-50" />
+                        <span>{formatDuration(status?.uptime_seconds || 0)}</span>
+                        {status?.session_id && (
+                          <>
+                            <span className="opacity-20">·</span>
+                            <span className="opacity-40 truncate max-w-[120px] sm:max-w-none">
+                              {status.session_id.slice(0, 8)}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Uptime */}
-                  <div>
-                    <div className="text-xs text-muted-foreground uppercase tracking-widest font-mono">UPTIME</div>
-                    <div className="mt-1 font-mono text-sm flex items-center gap-1 tracking-widest">
-                      <Clock size={14} />
-                      {formatDuration(status?.uptime_seconds || 0)}
-                    </div>
+                  {/* Controls */}
+                  <div className="flex-shrink-0">
+                    {isRunning ? (
+                      <button
+                        onClick={handleStop}
+                        disabled={isLoading}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono font-black text-xs tracking-widest text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 hover:border-red-500/50 transition-all duration-200 disabled:opacity-40"
+                        style={{ boxShadow: '0 0 20px rgba(239,68,68,0.1)' }}
+                      >
+                        <StopCircle size={15} />
+                        STOP
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleStart}
+                          disabled={isLoading || isRunning}
+                          className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono font-black text-xs tracking-widest text-green-400 border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 transition-all duration-200 disabled:opacity-40"
+                        >
+                          <PlayCircle size={15} />
+                          START
+                        </button>
+                        <button
+                          onClick={handleReset}
+                          disabled={isLoading || isRunning}
+                          className="flex items-center justify-center w-9 h-9 rounded-lg text-white/40 border border-border/30 bg-black/20 hover:bg-black/40 transition-all duration-200 disabled:opacity-40"
+                        >
+                          <ArrowsClockwise size={15} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Row 2: Live Metrics Grid ────────────────────────────── */}
+                <div className="grid grid-cols-3 gap-2.5">
+                  {/* Market Regime */}
+                  <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2">Regime</div>
+                    {status?.regime && status.regime.composite !== 'unknown' ? (
+                      <>
+                        <div className={cn(
+                          "text-sm sm:text-base font-black font-mono leading-none mb-1",
+                          status.regime.trend.includes('up') ? 'text-green-400' : status.regime.trend.includes('down') ? 'text-red-400' : 'text-blue-400'
+                        )}>
+                          {status.regime.trend.replace(/_/g, ' ').toUpperCase()}
+                        </div>
+                        <div className="text-[10px] font-mono text-white/30 uppercase">{status.regime.volatility}</div>
+                      </>
+                    ) : (
+                      <div className="text-sm font-mono text-white/20">—</div>
+                    )}
                   </div>
 
                   {/* Next Scan */}
-                  {isRunning && status?.next_scan_in_seconds !== null && (
-                    <div>
-                      <div className="text-xs text-yellow-400/80 uppercase tracking-widest font-mono font-bold">NEXT SCAN</div>
-                      <div className="mt-1 font-mono text-sm flex items-center gap-1 text-yellow-500 tracking-widest">
-                        <Target size={14} className="animate-pulse shadow-[0_0_8px_rgba(234,179,8,0.8)]" />
-                        {formatDuration(Math.round(status.next_scan_in_seconds))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Cache Hit Rate */}
-                  {status?.cache_stats && (
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-widest font-mono">CACHE</div>
-                      <div className={cn(
-                        "mt-1 font-mono text-sm tracking-widest",
-                        status.cache_stats.hit_rate_pct > 50 ? 'text-green-400' : 'text-yellow-400'
-                      )}>
-                        {status.cache_stats.hit_rate_pct.toFixed(0)}% <span className="text-xs opacity-50">hit</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Mode / Regime */}
-                  <div>
-                    <div className="text-xs text-muted-foreground uppercase tracking-widest font-mono">
-                      {status?.config?.sniper_mode === 'stealth' ? 'ADAPTIVE MODE' : 'MODE'}
-                    </div>
-                    <div className="flex gap-1.5 mt-1">
-                      <Badge variant="outline" className={cn(
-                        "font-mono text-xs tracking-widest",
-                        (status?.active_mode || status?.current_scan?.actual_mode) && (status?.active_mode || status?.current_scan?.actual_mode) !== (status?.config?.sniper_mode || 'stealth')
-                          ? "border-purple-500 text-purple-400 bg-purple-500/10"
-                          : "border-accent text-accent bg-accent/10"
-                      )}>
-                        {(status?.active_mode || status?.current_scan?.actual_mode || status?.config?.sniper_mode || 'ADAPTIVE').toUpperCase()}
-                      </Badge>
-                      {status?.active_profile && status.active_profile !== 'stealth' && (
-                        <Badge variant="outline" className="font-mono text-xs tracking-widest border-yellow-500/50 text-yellow-400 bg-yellow-500/10">
-                          {(status.active_profile || '').toUpperCase()}
-                        </Badge>
-                      )}
-                    </div>
+                  <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2">Next Scan</div>
+                    {isRunning && status?.next_scan_in_seconds != null ? (
+                      <>
+                        <div className="text-sm sm:text-base font-black font-mono text-amber-400 leading-none mb-1"
+                          style={{ textShadow: '0 0 20px rgba(251,191,36,0.4)' }}>
+                          {formatDuration(Math.round(status.next_scan_in_seconds))}
+                        </div>
+                        <div className="text-[10px] font-mono text-white/30">countdown</div>
+                      </>
+                    ) : (
+                      <div className="text-sm font-mono text-white/20">—</div>
+                    )}
                   </div>
-
-                  {/* Market Regime */}
-                  {status?.regime && status.regime.composite !== 'unknown' && (
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-widest font-mono">
-                        MARKET REGIME
-                      </div>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className={cn(
-                          "font-mono text-sm font-bold tracking-tight",
-                          status.regime.trend.includes('up') ? 'text-green-400' : status.regime.trend.includes('down') ? 'text-red-400' : 'text-blue-400'
-                        )}>
-                          {status.regime.trend.toUpperCase()}
-                        </span>
-                        <span className="text-muted-foreground/30 font-mono text-xs">—</span>
-                        <span className="text-xs font-mono text-muted-foreground/80 uppercase">
-                          {status.regime.volatility}
-                        </span>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Confluence Gate */}
-                  <div>
-                    <div className="text-xs text-muted-foreground uppercase tracking-widest font-mono">
-                      GATE
+                  <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2">Gate</div>
+                    <div className="text-sm sm:text-base font-black font-mono text-yellow-400 leading-none mb-1"
+                      style={{ textShadow: '0 0 20px rgba(234,179,8,0.4)' }}>
+                      {status?.config?.min_confluence != null ? `≥${status.config.min_confluence}` : 'AUTO'}
                     </div>
-                    <div className="mt-1 font-mono text-sm tracking-widest text-yellow-400 font-bold">
-                      {status?.config?.min_confluence != null ? `≥ ${status.config.min_confluence}%` : 'AUTO'}
-                    </div>
+                    <div className="text-[10px] font-mono text-white/30">confluence</div>
                   </div>
                 </div>
 
-                {/* Control Buttons */}
-                <div className="flex gap-3">
-                  {isRunning ? (
-                    <Button
-                      onClick={handleStop}
-                      disabled={isLoading}
-                      variant="destructive"
-                      size="sm"
-                    >
-                      <StopCircle size={18} className="mr-1" />
-                      STOP
-                    </Button>
-                  ) : (
-                    <>
-                      <Button
-                        onClick={handleStart}
-                        disabled={isLoading || isRunning}
-                        size="sm"
-                        className="bg-accent hover:bg-accent/90"
-                      >
-                        <PlayCircle size={18} className="mr-1" />
-                        START
-                      </Button>
-                      <Button
-                        onClick={handleReset}
-                        disabled={isLoading || isRunning}
-                        variant="outline"
-                        size="sm"
-                      >
-                        <ArrowsClockwise size={18} className="mr-1" />
-                        RESET
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </section>
+                {/* ── Row 3: Session config pills ─────────────────────────── */}
+                {status?.config && (() => {
+                  const cfg = status.config;
+                  const mode = cfg.sniper_mode || 'stealth';
+                  const preset = cfg.sensitivity_preset;
+                  const modeStyles: Record<string, string> = {
+                    stealth: 'text-cyan-300/80 border-cyan-500/20',
+                    surgical: 'text-purple-300/80 border-purple-500/20',
+                    aggressive: 'text-red-300/80 border-red-500/20',
+                    overwatch: 'text-amber-300/80 border-amber-500/20',
+                  };
+                  const presetStyles: Record<string, string> = {
+                    conservative: 'text-green-300/70 border-green-500/20',
+                    balanced: 'text-blue-300/70 border-blue-500/20',
+                    aggressive: 'text-orange-300/70 border-orange-500/20',
+                    custom: 'text-yellow-300/70 border-yellow-500/20',
+                  };
+                  const pills = [
+                    { label: mode.toUpperCase(), cls: modeStyles[mode] || 'text-white/40 border-white/10' },
+                    preset ? { label: preset.toUpperCase(), cls: presetStyles[preset] || 'text-white/40 border-white/10' } : null,
+                    cfg.duration_hours != null ? { label: `${cfg.duration_hours}H`, cls: 'text-white/35 border-white/8' } : null,
+                    cfg.max_positions != null ? { label: `${cfg.max_positions} SLOTS`, cls: 'text-white/35 border-white/8' } : null,
+                    cfg.risk_per_trade != null ? { label: `${cfg.risk_per_trade}% RISK`, cls: 'text-white/35 border-white/8' } : null,
+                    cfg.leverage != null && cfg.leverage !== 1 ? { label: `${cfg.leverage}× LEV`, cls: 'text-amber-300/70 border-amber-500/20' } : null,
+                  ].filter(Boolean) as { label: string; cls: string }[];
 
-            {/* Session Config Summary Strip */}
-            {status?.config && (() => {
-              const cfg = status.config;
-              const mode = cfg.sniper_mode || 'stealth';
-              const preset = cfg.sensitivity_preset;
-              const duration = cfg.duration_hours;
-              const maxPos = cfg.max_positions;
-              const rpt = cfg.risk_per_trade;
-              const lev = cfg.leverage;
-              const universe = cfg.universe_size;
-              const trailing = cfg.trailing_stop;
-              const modeColor: Record<string, string> = {
-                stealth: 'text-blue-400 border-blue-500/40 bg-blue-500/10',
-                surgical: 'text-purple-400 border-purple-500/40 bg-purple-500/10',
-                aggressive: 'text-red-400 border-red-500/40 bg-red-500/10',
-                overwatch: 'text-amber-400 border-amber-500/40 bg-amber-500/10',
-              };
-              const presetColor: Record<string, string> = {
-                conservative: 'text-green-400 border-green-500/40 bg-green-500/10',
-                balanced: 'text-blue-400 border-blue-500/40 bg-blue-500/10',
-                aggressive: 'text-red-400 border-red-500/40 bg-red-500/10',
-                custom: 'text-yellow-400 border-yellow-500/40 bg-yellow-500/10',
-              };
-              return (
-                <div className="flex flex-wrap gap-2 px-1 py-0.5 items-center">
-                  <span className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-[0.2em] mr-1">SESSION CONFIG</span>
-                  <Badge variant="outline" className={cn("font-mono text-[10px] tracking-widest", modeColor[mode] || 'text-foreground border-border/40')}>
-                    {mode.toUpperCase()}
-                  </Badge>
-                  {preset && (
-                    <Badge variant="outline" className={cn("font-mono text-[10px] tracking-widest", presetColor[preset] || 'text-foreground border-border/40')}>
-                      {preset.toUpperCase()}
-                    </Badge>
-                  )}
-                  {duration != null && (
-                    <Badge variant="outline" className="font-mono text-[10px] tracking-widest text-muted-foreground border-border/40 bg-background/40">
-                      {duration}H RUN
-                    </Badge>
-                  )}
-                  {maxPos != null && (
-                    <Badge variant="outline" className="font-mono text-[10px] tracking-widest text-muted-foreground border-border/40 bg-background/40">
-                      {maxPos} SLOTS
-                    </Badge>
-                  )}
-                  {rpt != null && (
-                    <Badge variant="outline" className="font-mono text-[10px] tracking-widest text-muted-foreground border-border/40 bg-background/40">
-                      {rpt}% RISK
-                    </Badge>
-                  )}
-                  {lev != null && lev !== 1 && (
-                    <Badge variant="outline" className="font-mono text-[10px] tracking-widest text-amber-400 border-amber-500/30 bg-amber-500/10">
-                      {lev}× LEV
-                    </Badge>
-                  )}
-                  {universe != null && (
-                    <Badge variant="outline" className="font-mono text-[10px] tracking-widest text-muted-foreground border-border/40 bg-background/40">
-                      {universe} UNIVERSE
-                    </Badge>
-                  )}
-                  {trailing && (
-                    <Badge variant="outline" className="font-mono text-[10px] tracking-widest text-cyan-400 border-cyan-500/30 bg-cyan-500/10">
-                      TRAILING STOP
-                    </Badge>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Active/Last Scan Progress */}
-            {status?.current_scan && (
-              <section className={cn("glass-card rounded-2xl relative overflow-hidden group p-4 border", status.current_scan.status === 'running' ? "glow-border-amber border-amber-500/30" : "glow-border-green border-green-500/30")}>
-                <div className={cn("absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] via-transparent to-transparent opacity-40 pointer-events-none", status.current_scan.status === 'running' ? 'from-amber-500/10' : 'from-green-500/10')} />
-                <div className={cn("absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent to-transparent opacity-50", status.current_scan.status === 'running' ? "via-amber-400/50" : "via-green-400/50")} />
-                <div className="space-y-3 relative z-10">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Target size={18} className={cn("text-accent", status.current_scan.status === 'running' ? "animate-pulse" : "text-green-400")} />
-                      <h3 className="heading-hud text-sm text-foreground uppercase tracking-widest">
-                        {status.current_scan.status === 'running' ? 'Scan in Progress' : 'Last Scan'}
-                      </h3>
-                      <Badge variant="outline" className="ml-2 font-mono text-[10px] bg-background">
-                        {status.current_scan.completed} / {status.current_scan.total}
-                      </Badge>
-                    </div>
-                    <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
-                      {status.current_scan.progress_pct}%
-                    </div>
-                  </div>
-
-                  <Progress value={status.current_scan.progress_pct} className="h-1.5" />
-
-                  <div className="flex justify-between items-center text-xs font-mono">
-                    <div className="text-muted-foreground">
-                      <span className="text-foreground mr-1">Scanning:</span>
-                      {status.current_scan.status === 'running'
-                        ? (status.current_scan.current_symbol || 'Initializing...')
-                        : 'Completed'}
-                    </div>
-                    <div className="flex gap-3">
-                      <span className="text-green-400">{status.current_scan.passed} Passed</span>
-                      <span className="text-red-400">{status.current_scan.rejected} Rejected</span>
-                    </div>
-                  </div>
-
-                  {/* Recent symbols ticker */}
-                  {status.current_scan.recent_symbols && status.current_scan.recent_symbols.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-border/50 flex gap-6 overflow-hidden overflow-x-auto no-scrollbar">
-                      {status.current_scan.recent_symbols.map((item, idx) => (
-                        <div
-                          key={`${item.symbol}-${idx}`}
+                  return (
+                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                      <span className="text-[9px] font-mono text-white/20 uppercase tracking-[0.2em] flex-shrink-0">config</span>
+                      <div className="w-px h-3 bg-white/10 flex-shrink-0" />
+                      {pills.map((pill, i) => (
+                        <span
+                          key={i}
                           className={cn(
-                            "text-[10px] font-mono px-2 py-1 rounded whitespace-nowrap",
-                            item.passed ? "bg-green-500/10 text-green-400" : "bg-muted/40 text-muted-foreground"
+                            "flex-shrink-0 text-[10px] font-mono font-bold px-2 py-0.5 rounded border",
+                            "bg-black/20",
+                            pill.cls
                           )}
-                          title={item.reason || 'Passed'}
                         >
-                          {item.passed ? <CheckCircle size={10} className="inline mr-1" /> : <XCircle size={10} className="inline mr-1 opacity-50" />}
-                          {item.symbol}
-                        </div>
+                          {pill.label}
+                        </span>
                       ))}
                     </div>
-                  )}
-                </div>
-              </section>
-            )}
+                  );
+                })()}
+
+                {/* ── Row 4: Scan progress (inline) ────────────────────────── */}
+                {status?.current_scan && (() => {
+                  const scan = status.current_scan;
+                  const isScanning = scan.status === 'running';
+                  return (
+                    <div className="space-y-2.5 pt-1 border-t border-white/[0.05]">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Target
+                            size={12}
+                            className={cn("flex-shrink-0", isScanning ? "text-amber-400 animate-pulse" : "text-green-400")}
+                          />
+                          <span className="text-[10px] font-mono text-white/40 uppercase tracking-widest truncate">
+                            {isScanning
+                              ? `Scanning ${scan.current_symbol || '…'}`
+                              : 'Scan complete'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0 text-[10px] font-mono">
+                          <span className="text-green-400 font-bold">{scan.passed} passed</span>
+                          <span className="text-white/25">{scan.rejected} filtered</span>
+                          <span className="text-white/20">{scan.completed}/{scan.total}</span>
+                        </div>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="relative h-1 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.5)' }}>
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{
+                            width: `${scan.progress_pct}%`,
+                            background: isScanning
+                              ? 'linear-gradient(90deg, rgba(251,191,36,0.8), rgba(251,191,36,1))'
+                              : 'linear-gradient(90deg, rgba(74,222,128,0.7), rgba(74,222,128,1))',
+                            boxShadow: isScanning
+                              ? '0 0 12px rgba(251,191,36,0.5)'
+                              : '0 0 10px rgba(74,222,128,0.4)',
+                          }}
+                        />
+                      </div>
+
+                      {/* Symbol ticker */}
+                      {scan.recent_symbols && scan.recent_symbols.length > 0 && (
+                        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                          {scan.recent_symbols.map((item, idx) => (
+                            <span
+                              key={`${item.symbol}-${idx}`}
+                              className={cn(
+                                "flex-shrink-0 text-[9px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap",
+                                item.passed
+                                  ? "text-green-400/80 bg-green-500/10"
+                                  : "text-white/20 bg-white/[0.03]"
+                              )}
+                            >
+                              {item.symbol}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+              </div>
+            </section>
 
             {/* Equity Curve + Stats Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
