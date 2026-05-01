@@ -417,7 +417,25 @@ def generate_trade_plan(
         logger.error(f"Target leverage adjustment failed for {symbol}: {e}")
         raise ValueError(f"Target leverage adjustment failed: {e}") from e
 
-    # === 5b. Distribute Target Percentages ===
+    # === 5b. Percentage Stop Sanity Gate ===
+    # ATR-based stops reach 5-8% of price on low-price tokens (e.g. OP at $0.10) where
+    # ATR is a large fraction of price. Confirmed in session logs: every OP trade with
+    # a stop >3% lost or broke even; the single OP trade with a 2.74% stop was profitable.
+    # AVAX at $20 (2.26% avg stop) and WIF/ARB pass comfortably.
+    _PCT_STOP_CAPS = {"scalp": 0.03, "intraday": 0.05, "swing": 0.10}
+    _trade_type_for_cap = (expected_trade_type or "scalp").lower()
+    _stop_pct_cap = _PCT_STOP_CAPS.get(_trade_type_for_cap, 0.05)
+    _avg_entry_for_cap = (entry_zone.near_entry + entry_zone.far_entry) / 2
+    if _avg_entry_for_cap > 0:
+        _actual_stop_pct = abs(_avg_entry_for_cap - stop_loss.level) / _avg_entry_for_cap
+        if _actual_stop_pct > _stop_pct_cap:
+            raise ValueError(
+                f"Stop {_actual_stop_pct:.1%} exceeds {_stop_pct_cap:.0%} cap "
+                f"for {_trade_type_for_cap} on {symbol} @ {_avg_entry_for_cap:.5f} — "
+                f"stop geometry invalid, plan rejected"
+            )
+
+    # === 5c. Distribute Target Percentages ===
     # Targets must sum to 100% for TradePlan validation.
     # In calm/compressed regimes, front-load TP1 because further targets are
     # unlikely to be reached before stagnation fires in low-volatility conditions.
