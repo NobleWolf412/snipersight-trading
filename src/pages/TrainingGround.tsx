@@ -1286,51 +1286,93 @@ export function TrainingGround() {
 
             {/* Equity Curve + Stats Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* Equity Curve Card (spans 2 cols) */}
-              <div className="lg:col-span-2 glass-card p-5 rounded-2xl border-accent/30 relative group">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-accent/5 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none -mr-16 -mt-16" />
+              {/* SESSION P&L Hero Card (spans 2 cols) */}
+              <div className="lg:col-span-2 glass-card p-5 rounded-2xl border-accent/30 relative group overflow-hidden">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-accent/5 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none -mr-20 -mt-20" />
+                {/* Top accent bar */}
+                <div className={cn(
+                  "absolute top-0 left-0 right-0 h-0.5",
+                  (status?.balance?.pnl ?? 0) >= 0
+                    ? 'bg-gradient-to-r from-transparent via-green-400/60 to-transparent'
+                    : 'bg-gradient-to-r from-transparent via-red-400/60 to-transparent'
+                )} />
                 <div className="relative z-10">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex flex-col gap-1 items-start">
-                      <div>
-                        <div className="text-[9px] text-muted-foreground font-mono font-bold tracking-wider uppercase opacity-70">EQUITY</div>
-                        <div className="text-xl font-bold font-mono tracking-tight glow-text-accent">
-                          {formatCurrency(status?.balance?.equity || config.initial_balance || 10000)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[9px] text-muted-foreground font-mono font-bold tracking-wider uppercase opacity-60">AVAILABLE CASH (W/ P&L)</div>
-                        <div className="text-sm font-bold font-mono tracking-tight opacity-80">
-                          {formatCurrency(status?.balance?.current || config.initial_balance || 10000)}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "font-mono text-xs border tracking-widest",
-                          status?.balance?.pnl && status.balance.pnl >= 0
-                            ? 'bg-green-500/10 text-green-400 border-green-500/30 glow-border-green'
-                            : 'bg-red-500/10 text-red-400 border-red-500/30'
-                        )}
-                      >
-                        {formatPct(status?.balance?.pnl_pct || 0)}
-                      </Badge>
-                      <Wallet size={28} className="text-accent/40" />
-                    </div>
+                  {/* Section label */}
+                  <div className="text-[9px] text-muted-foreground font-mono font-bold tracking-[0.2em] uppercase mb-2 opacity-60 flex items-center gap-2">
+                    <Wallet size={10} />
+                    SESSION P&L
                   </div>
+
+                  {/* Hero P&L number */}
+                  {(() => {
+                    const pnl = status?.balance?.pnl ?? 0;
+                    const pnlPct = status?.balance?.pnl_pct ?? 0;
+                    const initial = status?.balance?.initial || config.initial_balance || 10000;
+                    const equity = status?.balance?.equity || initial;
+                    const wins = status?.statistics?.winning_trades ?? 0;
+                    const losses = status?.statistics?.losing_trades ?? 0;
+                    const avgWin = status?.statistics?.avg_win ?? 0;
+                    const avgLoss = status?.statistics?.avg_loss ?? 0;
+                    const grossWins = avgWin * wins;
+                    const grossLosses = Math.abs(avgLoss) * losses;
+                    const isPos = pnl >= 0;
+                    return (
+                      <>
+                        <div className="flex items-end gap-4 mb-3">
+                          <div className={cn(
+                            "text-5xl font-bold font-mono tracking-tight leading-none",
+                            isPos ? 'text-green-400' : 'text-red-400'
+                          )}
+                            style={isPos ? { textShadow: '0 0 30px rgba(74,222,128,0.35)' } : { textShadow: '0 0 30px rgba(248,113,113,0.35)' }}
+                          >
+                            {isPos ? '+' : ''}{formatCurrency(pnl)}
+                          </div>
+                          <div className="flex flex-col gap-1 pb-1">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "font-mono text-xs border tracking-widest self-start",
+                                isPos
+                                  ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                                  : 'bg-red-500/10 text-red-400 border-red-500/30'
+                              )}
+                            >
+                              {isPos ? '+' : ''}{pnlPct.toFixed(2)}%
+                            </Badge>
+                            <div className="text-[10px] text-muted-foreground/50 font-mono">
+                              from {formatCurrency(initial)} · equity {formatCurrency(equity)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Gross wins / gross losses breakdown */}
+                        {(wins > 0 || losses > 0) && (
+                          <div className="grid grid-cols-2 gap-2 mb-3 p-2.5 rounded-lg bg-black/30 border border-border/20">
+                            <div>
+                              <div className="text-[9px] text-green-400/60 font-mono uppercase tracking-widest mb-0.5">GROSS WINS</div>
+                              <div className="text-base font-bold font-mono text-green-400">+{formatCurrency(grossWins)}</div>
+                              <div className="text-[9px] text-muted-foreground/40 font-mono">{wins} win{wins !== 1 ? 's' : ''} · avg {formatCurrency(avgWin)}</div>
+                            </div>
+                            <div>
+                              <div className="text-[9px] text-red-400/60 font-mono uppercase tracking-widest mb-0.5">GROSS LOSSES</div>
+                              <div className="text-base font-bold font-mono text-red-400">-{formatCurrency(grossLosses)}</div>
+                              <div className="text-[9px] text-muted-foreground/40 font-mono">{losses} loss{losses !== 1 ? 'es' : ''} · avg {formatCurrency(Math.abs(avgLoss))}</div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+
                   {/* Equity Sparkline */}
-                  <div className="mt-2 p-2 rounded-lg bg-black/30 border border-border/30">
+                  <div className="p-2 rounded-lg bg-black/30 border border-border/30">
                     <EquitySparkline
                       trades={trades}
                       initialBalance={status?.balance?.initial || config.initial_balance || 10000}
                     />
                   </div>
                   <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground/50 font-mono">
-                    <span>from {formatCurrency(status?.balance?.initial || config.initial_balance || 10000)}</span>
-                    <span className="opacity-30">•</span>
-                    <span>{trades.length} trades</span>
+                    <span>{trades.length} completed trade{trades.length !== 1 ? 's' : ''}</span>
                   </div>
                 </div>
               </div>
@@ -1505,12 +1547,19 @@ export function TrainingGround() {
                       {Object.entries(status.statistics.exit_reasons || {})
                         .sort(([, a], [, b]) => b - a)
                         .map(([reason, count]) => {
-                          const label = reason === 'stop_loss' ? 'Stop' : reason === 'target' ? 'Target' : reason === 'stagnation' ? 'Stagnation' : reason === 'direction_flip' ? 'Flip' : reason === 'emergency' ? 'Emergency' : reason;
+                          const label = reason === 'stop_loss' ? 'Stop' : reason === 'target' ? 'Target' : reason === 'stagnation' ? 'Stagnation' : reason === 'direction_flip' ? 'Flip' : reason === 'emergency' ? 'Emergency' : reason === 'session_stopped' ? 'Session End' : reason.replace(/_/g, ' ');
                           const chipColor = reason === 'target' ? 'bg-green-400/15 border-green-400/30 text-green-400' : reason === 'stop_loss' ? 'bg-red-400/15 border-red-400/30 text-red-400' : reason === 'stagnation' ? 'bg-amber-400/15 border-amber-400/30 text-amber-400' : 'bg-white/5 border-border/40 text-muted-foreground';
+                          const reasonPnl = trades.filter(t => t.exit_reason === reason).reduce((s, t) => s + t.pnl, 0);
+                          const pnlStr = reasonPnl >= 0 ? `+${formatCurrency(reasonPnl)}` : formatCurrency(reasonPnl);
                           return (
-                            <div key={reason} className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-mono font-bold", chipColor)}>
-                              <span>{label}</span>
-                              <span className="opacity-60">×{count}</span>
+                            <div key={reason} className={cn("flex flex-col gap-0.5 px-3 py-2 rounded-xl border text-[11px] font-mono font-bold", chipColor)}>
+                              <div className="flex items-center gap-1.5">
+                                <span>{label}</span>
+                                <span className="opacity-50 font-normal">×{count}</span>
+                              </div>
+                              <div className={cn("text-[10px] font-normal", reasonPnl >= 0 ? 'text-green-400/70' : 'text-red-400/70')}>
+                                {pnlStr}
+                              </div>
                             </div>
                           );
                         })}
@@ -2509,7 +2558,45 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
 
       {expanded && (
         <div className="px-4 pb-4 pt-1 border-t border-border/30 bg-black/20">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
+          {/* Price execution row — the most important data, shown first */}
+          {(() => {
+            const isLongDir = trade.direction === 'LONG';
+            const rawMove = isLongDir
+              ? (trade.exit_price - trade.entry_price) / trade.entry_price * 100
+              : (trade.entry_price - trade.exit_price) / trade.entry_price * 100;
+            const moveIsPos = rawMove >= 0;
+            return (
+              <div className="mt-3 mb-3 p-3 rounded-lg bg-black/30 border border-border/30 grid grid-cols-3 gap-4">
+                <div>
+                  <div className="text-[9px] text-muted-foreground/60 font-mono uppercase tracking-widest mb-1">Entry Price</div>
+                  <div className="text-sm font-bold font-mono text-blue-300">${trade.entry_price.toFixed(4)}</div>
+                  <div className="text-[9px] text-muted-foreground/40 font-mono mt-0.5">
+                    {new Date(trade.entry_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+                <div className="flex flex-col items-center justify-center">
+                  <div className={cn("text-xs font-mono font-bold", moveIsPos ? 'text-green-400' : 'text-red-400')}>
+                    {moveIsPos ? '▲' : '▼'} {Math.abs(rawMove).toFixed(3)}%
+                  </div>
+                  <div className="text-[9px] text-muted-foreground/30 font-mono my-1">────────</div>
+                  <div className="text-[9px] text-muted-foreground/50 font-mono uppercase tracking-widest">{displayReason}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[9px] text-muted-foreground/60 font-mono uppercase tracking-widest mb-1">Exit Price</div>
+                  <div className={cn("text-sm font-bold font-mono", isProfitable ? 'text-green-400' : 'text-red-400')}>
+                    ${trade.exit_price.toFixed(4)}
+                  </div>
+                  {trade.exit_time && (
+                    <div className="text-[9px] text-muted-foreground/40 font-mono mt-0.5">
+                      {new Date(trade.exit_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Times */}
             <div className="space-y-1">
               <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">Timing</div>
@@ -2538,11 +2625,11 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
               <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">Excursion</div>
               <div className="text-xs font-mono flex flex-col gap-0.5">
                 <span className="flex justify-between">
-                  <span className="text-muted-foreground/50">MFE:</span>
+                  <span className="text-muted-foreground/50">Peak:</span>
                   <span className="text-green-400/80">+{formatPct(trade.max_favorable)}</span>
                 </span>
                 <span className="flex justify-between">
-                  <span className="text-muted-foreground/50">MAE:</span>
+                  <span className="text-muted-foreground/50">Dip:</span>
                   <span className="text-red-400/80">{formatPct(trade.max_adverse)}</span>
                 </span>
                 <span className="flex justify-between mt-0.5 pt-0.5 border-t border-border/30">
@@ -2574,9 +2661,9 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
 
             {/* Results breakdown */}
             <div className="space-y-1 flex flex-col items-end justify-center bg-background/40 p-2 rounded border border-border/50">
-              <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest mb-1">Final Result</div>
+              <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest mb-1">Result</div>
               <div className={cn("text-lg font-mono font-bold tracking-tight", isProfitable ? 'text-green-400' : 'text-red-400')}>
-                {formatCurrency(trade.pnl)}
+                {isProfitable ? '+' : ''}{formatCurrency(trade.pnl)}
               </div>
               <div className={cn("text-xs font-mono", isProfitable ? 'text-green-400/70' : 'text-red-400/70')}>
                 {formatPct(trade.pnl_pct)}
