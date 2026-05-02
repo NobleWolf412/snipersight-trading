@@ -221,15 +221,6 @@ class Exchange(str, Enum):
     BYBIT = "bybit"
 
 
-# Models moved to routers/scanner.py and shared/models, but Bot models remain here
-class Exchange(str, Enum):
-    """Supported exchanges."""
-
-    PHEMEX = "phemex"
-    BINANCE = "binance"
-    BYBIT = "bybit"
-
-
 class Timeframe(str, Enum):
     """Supported timeframes."""
 
@@ -1609,7 +1600,7 @@ async def get_prices(
             try:
                 # Use adapter's fetch_ticker - adapters handle symbol format internally
                 # Run blocking fetch_ticker in thread pool to avoid blocking event loop
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 ticker = await loop.run_in_executor(None, adapter.fetch_ticker, symbol)
 
                 last_price = ticker.get("last") or ticker.get("close") or 0.0

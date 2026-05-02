@@ -547,6 +547,8 @@ class PaperTradingService:
         self._expired_symbols = set()
         self._price_cache = {}
         self._peak_equity = config.initial_balance
+        self._prev_regime_trend = None
+        self._current_regime_trend = None
 
         # Create session log directory for persistent output
         project_root = Path(__file__).parent.parent.parent
@@ -993,7 +995,10 @@ class PaperTradingService:
                                                 active_count_now = len(self._get_active_positions())
                                                 cap = self.config.max_positions if self.config else 3
                                                 if active_count_now >= cap:
-                                                    executor.cancel_order(order.order_id)
+                                                    try:
+                                                        executor.cancel_order(order.order_id)
+                                                    except Exception as _ce:
+                                                        logger.warning("cancel_order %s failed: %s", order.order_id, _ce)
                                                     self._pending_plans.pop(order.order_id, None)
                                                     self._pending_placed_at.pop(order.order_id, None)
                                                     logger.info(
@@ -1116,7 +1121,10 @@ class PaperTradingService:
                                         })
                                         continue  # Skip cancellation this cycle
 
-                                    executor.cancel_order(order_id)
+                                    try:
+                                        executor.cancel_order(order_id)
+                                    except Exception as _ce:
+                                        logger.warning("cancel_order %s failed (already gone?): %s", order_id, _ce)
                                     self._pending_plans.pop(order_id, None)
                                     self._pending_placed_at.pop(order_id, None)
                                     self._pending_placed_price.pop(order_id, None)
@@ -1873,7 +1881,10 @@ class PaperTradingService:
                     f"pending ({existing_plan.confidence_score:.1f}%), taking {plan.direction} "
                     f"({plan.confidence_score:.1f}%)"
                 )
-                executor.cancel_order(existing_order_id)
+                try:
+                    executor.cancel_order(existing_order_id)
+                except Exception as _ce:
+                    logger.warning("cancel_order %s failed (already gone?): %s", existing_order_id, _ce)
                 self._pending_plans.pop(existing_order_id, None)
                 self._pending_placed_at.pop(existing_order_id, None)
                 self._log_activity("pending_order_replaced", {
@@ -1904,7 +1915,10 @@ class PaperTradingService:
                     f"old confluence={existing_plan.confidence_score:.1f}% → "
                     f"new confluence={plan.confidence_score:.1f}%"
                 )
-                executor.cancel_order(existing_order_id)
+                try:
+                    executor.cancel_order(existing_order_id)
+                except Exception as _ce:
+                    logger.warning("cancel_order %s failed (already gone?): %s", existing_order_id, _ce)
                 self._pending_plans.pop(existing_order_id, None)
                 self._pending_placed_at.pop(existing_order_id, None)
                 self._log_activity("pending_order_replaced", {
@@ -2849,7 +2863,15 @@ class PaperTradingService:
 
         self.stats.total_trades += 1
 
-        if trade.pnl > 0:
+        # Scratch: |P&L| < $1 (negligible result, usually slippage/commission noise).
+        # Classified separately — not counted in winning_trades or losing_trades.
+        _SCRATCH_THRESHOLD = 1.0
+        _is_scratch = abs(trade.pnl) < _SCRATCH_THRESHOLD
+
+        if _is_scratch:
+            self.stats.scratch_trades += 1
+            # Streak is unaffected by scratches
+        elif trade.pnl > 0:
             self.stats.winning_trades += 1
             self.stats.current_streak = (
                 max(1, self.stats.current_streak + 1) if self.stats.current_streak >= 0 else 1
@@ -2876,21 +2898,21 @@ class PaperTradingService:
             if trade.pnl < self.stats.worst_trade:
                 self.stats.worst_trade = trade.pnl
 
-        # Scratch: |P&L| < $1 (negligible result, usually slippage/commission noise)
-        _SCRATCH_THRESHOLD = 1.0
-        if abs(trade.pnl) < _SCRATCH_THRESHOLD:
-            self.stats.scratch_trades += 1
-
         self.stats.total_pnl += trade.pnl
 
         if self.config:
             self.stats.total_pnl_pct = (self.stats.total_pnl / self.config.initial_balance) * 100
 
         if self.stats.total_trades > 0:
+            # win_rate denominator includes scratch trades by design: a scratch is
+            # a real trading decision with no meaningful profit. Excluding scratches
+            # would inflate the win rate in choppy sessions (e.g. 5W/5S/0L → 100%
+            # instead of the correct 50%). Use winning_trades + losing_trades for
+            # a "decisive-trade" ratio if needed separately.
             self.stats.win_rate = (self.stats.winning_trades / self.stats.total_trades) * 100
             self.stats.expectancy = self.stats.total_pnl / self.stats.total_trades
 
-        if self.stats.avg_loss != 0:
+        if abs(self.stats.avg_loss) > 0.01:
             self.stats.avg_rr = abs(self.stats.avg_win / self.stats.avg_loss)
 
         # --- Exit reason breakdown ---
@@ -3445,9 +3467,13 @@ class PaperTradingService:
         if not self.orchestrator or not hasattr(self.orchestrator, 'exchange_adapter'):
             raise ValueError("No exchange adapter available")
 
-        # Primary: live ticker from exchange
+        # Primary: live ticker from exchange — run in executor so the sync ccxt
+        # call doesn't block the entire async event loop.
         try:
-            ticker = self.orchestrator.exchange_adapter.fetch_ticker(symbol)
+            loop = asyncio.get_event_loop()
+            ticker = await loop.run_in_executor(
+                None, self.orchestrator.exchange_adapter.fetch_ticker, symbol
+            )
             price = ticker.get("last", ticker.get("close", 0.0))
             if price and price > 0:
                 return float(price)

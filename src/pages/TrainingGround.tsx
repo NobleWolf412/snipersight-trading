@@ -191,6 +191,12 @@ export function TrainingGround() {
   const [debrief, setDebrief] = useState<{ stats: PaperTradingStats; balance: PaperTradingBalance; config: PaperTradingConfigRequest; uptime: number; signalLog: SignalLogEntry[] } | null>(null);
 
   const pollRef = useRef<number | null>(null);
+  const fetchFailCount = useRef(0);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  // Ref mirrors state so fetchStatus can read without being in its deps array,
+  // preventing an infinite re-render loop on backend recovery.
+  const connectionErrorRef = useRef<string | null>(null);
+  connectionErrorRef.current = connectionError;
 
   // Fetch status
   const fetchStatus = useCallback(async () => {
@@ -198,9 +204,15 @@ export function TrainingGround() {
       const response = await api.getPaperTradingStatus();
       if (response.data) {
         setStatus(response.data);
+        fetchFailCount.current = 0;
+        if (connectionErrorRef.current) setConnectionError(null);
       }
     } catch (err) {
+      fetchFailCount.current += 1;
       console.error('Failed to fetch status:', err);
+      if (fetchFailCount.current >= 3) {
+        setConnectionError('Backend unreachable — data may be stale');
+      }
     } finally {
       setIsInitialLoad(false);
     }
@@ -399,6 +411,14 @@ export function TrainingGround() {
             <Warning size={20} />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {connectionError && !error && (
+          <Alert variant="destructive" className="border-yellow-500/50 bg-yellow-500/10">
+            <Warning size={20} className="text-yellow-400" />
+            <AlertTitle className="text-yellow-400">Connection Issue</AlertTitle>
+            <AlertDescription className="text-yellow-300/80">{connectionError}</AlertDescription>
           </Alert>
         )}
 
@@ -1194,7 +1214,17 @@ export function TrainingGround() {
                 </div>
 
                 {/* ── Row 2: Live Metrics Grid ────────────────────────────── */}
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {/* Session Uptime */}
+                  <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2.5">Running</div>
+                    <div className="text-xl sm:text-2xl font-black font-mono text-white/80 leading-none mb-1.5"
+                      style={{ letterSpacing: '-0.02em' }}>
+                      {formatDuration(status?.uptime_seconds || 0)}
+                    </div>
+                    <div className="text-[10px] font-mono text-white/30">session uptime</div>
+                  </div>
+
                   {/* Market Regime */}
                   <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
                     <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2.5">Regime</div>
@@ -1505,10 +1535,10 @@ export function TrainingGround() {
                       {(() => {
                         const grossWin = (status?.statistics?.avg_win || 0) * (status?.statistics?.winning_trades || 0);
                         const grossLoss = Math.abs(status?.statistics?.avg_loss || 0) * (status?.statistics?.losing_trades || 0);
-                        const pf = grossLoss > 0 ? grossWin / grossLoss : 0;
+                        const pf = grossLoss > 0 ? grossWin / grossLoss : (grossWin > 0 ? 99 : 0);
                         return (
-                          <div className={cn("text-xl font-bold font-mono tracking-tight mt-0.5", pf >= 1.5 ? 'text-green-400' : pf >= 1 ? 'text-amber-400' : 'text-red-400')}>
-                            {pf.toFixed(2)}x
+                          <div className={cn("text-xl font-bold font-mono tracking-tight mt-0.5", pf === 0 ? 'text-muted-foreground' : pf >= 1.5 ? 'text-green-400' : pf >= 1 ? 'text-amber-400' : 'text-red-400')}>
+                            {pf === 0 ? 'N/A' : pf >= 99 ? '∞' : `${pf.toFixed(2)}x`}
                           </div>
                         );
                       })()}
@@ -1975,6 +2005,22 @@ export function TrainingGround() {
 // Position Card Component
 // ─── Chart Modal (positions + pending orders) ────────────────────────────────
 
+interface PendingOrder {
+  order_id: string;
+  symbol: string;
+  direction: 'LONG' | 'SHORT';
+  limit_price: number;
+  current_price?: number;
+  stop_loss?: number;
+  tp1?: number;
+  tp2?: number;
+  tp_final?: number;
+  trade_type?: string;
+  placed_at?: string;
+  ttl_minutes?: number;
+  confluence_score?: number;
+}
+
 interface ChartLevel {
   label: string;
   price: number;
@@ -2313,7 +2359,7 @@ function PositionCard({ position }: { position: PaperTradingPosition }) {
 }
 
 // Pending Order Card Component
-function PendingOrderCard({ order, onCancel }: { order: any; onCancel?: (orderId: string) => void }) {
+function PendingOrderCard({ order, onCancel }: { order: PendingOrder; onCancel?: (orderId: string) => void }) {
   const isLong = order.direction === 'LONG';
   const [cancelling, setCancelling] = useState(false);
   const [cancelled, setCancelled] = useState(false);
@@ -2598,8 +2644,12 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
                 </span>
               )}
             </div>
-            <div className="text-xs text-muted-foreground flex items-center gap-2">
-              <span>${trade.entry_price.toFixed(4)} <span className="text-muted-foreground/30 mx-1">→</span> ${trade.exit_price.toFixed(4)}</span>
+            <div className="text-xs text-muted-foreground flex items-center gap-1.5 font-mono">
+              <span>${trade.entry_price.toFixed(4)}</span>
+              <span className={cn("text-[10px] font-bold", isLong ? 'text-green-400/60' : 'text-red-400/60')}>
+                {isLong ? '↑' : '↓'}
+              </span>
+              <span>${trade.exit_price.toFixed(4)}</span>
             </div>
           </div>
         </div>
@@ -2618,16 +2668,21 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
           {/* ── Entry / Exit prices — hero row ── */}
           {(() => {
             const isLongDir = trade.direction === 'LONG';
+            // For a SHORT, price going DOWN is profitable. rawMove is always
+            // positive when the trade moved in the intended direction.
             const rawMove = isLongDir
               ? (trade.exit_price - trade.entry_price) / trade.entry_price * 100
               : (trade.entry_price - trade.exit_price) / trade.entry_price * 100;
-            const moveIsPos = rawMove >= 0;
+            const movedRight = rawMove >= 0;
+            // Arrow label makes SHORT direction obvious: sell high → buy lower
+            const entryLabel = isLongDir ? 'Bought at' : 'Sold at';
+            const exitLabel  = isLongDir ? 'Sold at'   : 'Bought back at';
             return (
               <div className="mt-2 mb-3 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.4)' }}>
                 <div className="grid grid-cols-3 divide-x divide-white/[0.06]">
                   {/* Entry */}
                   <div className="p-3">
-                    <div className="text-[9px] text-white/30 font-mono uppercase tracking-widest mb-1.5">Entered at</div>
+                    <div className="text-[9px] text-white/30 font-mono uppercase tracking-widest mb-1.5">{entryLabel}</div>
                     <div className="text-base font-black font-mono text-white/90" style={{ letterSpacing: '-0.02em' }}>
                       ${trade.entry_price.toFixed(4)}
                     </div>
@@ -2639,21 +2694,24 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
                   </div>
 
                   {/* Move */}
-                  <div className="p-3 flex flex-col items-center justify-center text-center">
+                  <div className="p-3 flex flex-col items-center justify-center text-center gap-1">
                     <div className={cn(
                       "text-sm font-black font-mono",
-                      moveIsPos ? 'text-green-400' : 'text-red-400'
+                      movedRight ? 'text-green-400' : 'text-red-400'
                     )}
-                      style={{ textShadow: moveIsPos ? '0 0 16px rgba(74,222,128,0.5)' : '0 0 16px rgba(248,113,113,0.5)' }}
+                      style={{ textShadow: movedRight ? '0 0 16px rgba(74,222,128,0.5)' : '0 0 16px rgba(248,113,113,0.5)' }}
                     >
-                      {moveIsPos ? '+' : ''}{rawMove.toFixed(3)}%
+                      {movedRight ? '+' : ''}{rawMove.toFixed(3)}%
                     </div>
-                    <div className="text-[9px] text-white/30 font-mono mt-1 uppercase tracking-wide">{displayReason}</div>
+                    <div className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full"
+                      style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.4)' }}>
+                      {displayReason}
+                    </div>
                   </div>
 
                   {/* Exit */}
                   <div className="p-3 text-right">
-                    <div className="text-[9px] text-white/30 font-mono uppercase tracking-widest mb-1.5">Exited at</div>
+                    <div className="text-[9px] text-white/30 font-mono uppercase tracking-widest mb-1.5">{exitLabel}</div>
                     <div className={cn(
                       "text-base font-black font-mono",
                       isProfitable ? 'text-green-400' : 'text-red-400'
@@ -2757,233 +2815,7 @@ function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
 }
 
 // Signal Intelligence Panel - shows every signal's processing result
-function SignalIntelligencePanel({ signals }: { signals: SignalLogEntry[] }) {
-  const [expanded, setExpanded] = useState(true);
-
-  const executed = signals.filter(s => s.result === 'executed');
-  const filtered = signals.filter(s => s.result === 'filtered');
-  const errors = signals.filter(s => s.result === 'error');
-
-  // Group filter reasons
-  const reasonCounts: Record<string, number> = {};
-  for (const s of filtered) {
-    const key = s.reason.split(':')[0].split('(')[0].trim();
-    reasonCounts[key] = (reasonCounts[key] || 0) + 1;
-  }
-
-  return (
-    <section className="glass-card p-5 rounded-2xl relative overflow-hidden group border border-purple-500/20">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-purple-500/5 via-transparent to-transparent opacity-40 pointer-events-none" />
-      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-purple-400/50 to-transparent opacity-50" />
-
-      <div
-        className="flex items-center justify-between mb-4 relative z-10 cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <h2 className="text-xl lg:text-2xl font-semibold hud-headline tracking-wide flex items-center gap-3 text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.5)]">
-          <Crosshair size={24} className="text-purple-400" />
-          SIGNAL INTELLIGENCE
-        </h2>
-        <div className="flex items-center gap-3">
-          <Badge variant="outline" className="font-mono text-[10px] bg-green-500/10 text-green-400 border-green-500/30">
-            {executed.length} EXEC
-          </Badge>
-          <Badge variant="outline" className="font-mono text-[10px] bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
-            {filtered.length} FILT
-          </Badge>
-          {errors.length > 0 && (
-            <Badge variant="outline" className="font-mono text-[10px] bg-red-500/10 text-red-400 border-red-500/30">
-              {errors.length} ERR
-            </Badge>
-          )}
-          <Badge variant="outline" className="font-mono text-xs bg-black/60 px-3 border-purple-500/40 text-purple-400">
-            {signals.length} TOTAL
-          </Badge>
-        </div>
-      </div>
-
-      {expanded && (
-        <div className="relative z-10 space-y-4">
-          {/* Filter reason summary */}
-          {Object.keys(reasonCounts).length > 0 && (
-            <div className="p-3 rounded-lg bg-background/80 border border-yellow-500/20">
-              <div className="text-[10px] uppercase tracking-widest text-yellow-400/80 font-bold mb-2">Filter Reason Breakdown</div>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]).map(([reason, count]) => (
-                  <span key={reason} className="text-xs font-mono px-2 py-1 rounded bg-yellow-500/10 text-yellow-300/80 border border-yellow-500/20">
-                    {reason}: {count}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Signal table */}
-          <div className="max-h-96 overflow-y-auto space-y-2 pr-2">
-            {[...signals].reverse().map((sig, idx) => (
-              <SignalLogRow key={idx} signal={sig} />
-            ))}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
 // Individual signal log row
-function SignalLogRow({ signal }: { signal: SignalLogEntry }) {
-  const [expanded, setExpanded] = useState(false);
-  const isLong = signal.direction === 'LONG';
-
-  const resultColor = signal.result === 'executed'
-    ? 'text-green-400 bg-green-500/10 border-green-500/30'
-    : signal.result === 'error'
-      ? 'text-red-400 bg-red-500/10 border-red-500/30'
-      : 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30';
-
-  const resultLabel = signal.result === 'executed' ? 'EXEC' : signal.result === 'error' ? 'ERR' : 'FILT';
-
-  // Parse reason into layman summary + technical detail bullets
-  const { layman, details } = (() => {
-    const r = signal.reason || '';
-
-    // Known layman mappings
-    if (r.toLowerCase().includes('max positions')) return { layman: 'Slot full — max positions reached', details: [] };
-    if (r.toLowerCase().includes('waiting for limit fill') || r.toLowerCase().includes('limit placed')) return { layman: 'Limit order placed, waiting for fill', details: [] };
-    if (r.toLowerCase().includes('no directional edge')) return { layman: 'No clear bias — too close to call', details: [] };
-    if (r.toLowerCase().includes('already in position')) return { layman: 'Already holding this symbol', details: [] };
-    if (r.toLowerCase().includes('pending order already exists')) return { layman: 'Better pending order already queued', details: [] };
-    if (r.toLowerCase().includes('invalid position size')) return { layman: 'Position size too small to open', details: [] };
-    if (r.toLowerCase().includes('session stopped')) return { layman: 'Trade closed — session ended', details: [] };
-
-    // Confluence gate pattern: "Score X% is Y points below Z gate. Weakest signals: a: b, c: d"
-    const scoreMatch = r.match(/score\s+([\d.]+)%\s+is\s+([\d.]+)\s+points\s+below/i);
-    const weakestIdx = r.indexOf('Weakest signals:');
-
-    if (scoreMatch) {
-      const gap = parseFloat(scoreMatch[2]).toFixed(0);
-      const weakestRaw = weakestIdx >= 0 ? r.slice(weakestIdx + 'Weakest signals:'.length).trim() : '';
-      // Split on ", " where followed by a capital letter (each factor starts with a name)
-      const bulletItems = weakestRaw
-        ? weakestRaw.split(/,\s*(?=[A-Z])/).map(s => s.trim()).filter(Boolean)
-        : [];
-      return {
-        layman: `Scored ${parseFloat(scoreMatch[1]).toFixed(0)}% — ${gap}pts below the gate`,
-        details: bulletItems,
-      };
-    }
-
-    // Executed signal
-    if (signal.result === 'executed') {
-      return { layman: r.split('.')[0] || 'Order executed', details: [] };
-    }
-
-    // Fallback: first sentence is layman, rest is detail
-    const dotIdx = r.indexOf('.');
-    if (dotIdx > 0 && dotIdx < r.length - 1) {
-      return { layman: r.slice(0, dotIdx).trim(), details: [r.slice(dotIdx + 1).trim()] };
-    }
-    return { layman: r, details: [] };
-  })();
-
-  return (
-    <div className="rounded-lg bg-background/60 border border-border/50 hover:border-purple-500/30 transition-all duration-200 overflow-hidden">
-      {/* Collapsed view body — wraps for mobile/narrow views */}
-      <div 
-        className="cursor-pointer select-none group/row"
-        onClick={() => setExpanded(!expanded)}
-      >
-        {/* Row 1: Badges, Symbol, Conf, Time */}
-        <div className="flex items-center gap-2 px-3 pt-2 pb-1 text-[10px] font-mono">
-          <Badge variant="outline" className={cn("text-[8px] tracking-widest uppercase border px-1.5 py-0 shrink-0 font-bold", resultColor)}>
-            {resultLabel}
-          </Badge>
-
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className={cn("font-bold shrink-0", isLong ? 'text-green-400' : 'text-red-400')}>
-              {isLong ? <ArrowUp size={8} className="inline" /> : <ArrowDown size={8} className="inline" />}
-            </span>
-            <span className="font-bold text-foreground text-xs truncate w-14">{signal.symbol.replace('/USDT', '')}</span>
-          </div>
-
-          <span className={cn(
-            "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0",
-            signal.confluence >= 80 ? 'text-green-400 bg-green-500/10' :
-            signal.confluence >= 65 ? 'text-yellow-400 bg-yellow-500/10' :
-            'text-red-400/80 bg-red-500/10'
-          )}>
-            {signal.confluence.toFixed(0)}%
-          </span>
-
-          {/* Time & Chevron pushed right */}
-          <div className="ml-auto flex items-center gap-2">
-            <span className="text-[9px] font-mono text-muted-foreground/35">
-              {new Date(signal.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
-            {(details.length > 0 || signal.fill_price) && (
-              <span className={cn("text-purple-400/40 transition-transform duration-200", expanded ? 'rotate-180' : 'group-hover/row:text-purple-400')}>
-                <CaretDown size={11} />
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Row 2: Layman Summary — full width with wrap, no truncate */}
-        <div className="px-3 pb-2 pt-0.5 border-t border-transparent">
-          <p className="text-[10px] text-muted-foreground/60 leading-relaxed italic break-words">
-            {layman}
-          </p>
-        </div>
-      </div>
-
-      {/* Expanded — technical detail in purple, wrapped */}
-      {expanded && (details.length > 0 || signal.fill_price || signal.fill_qty || signal.balance !== undefined) && (
-        <div className="px-3 pb-3 pt-1 border-t border-purple-500/10 bg-purple-500/5 space-y-2">
-          {/* Weakest signal breakdown — each as its own wrapped line */}
-          {details.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="text-[9px] font-mono uppercase tracking-widest text-purple-400/50 font-bold mb-1">Why it was filtered:</div>
-              {details.map((item, i) => {
-                // Split on first ": " to get factor name vs explanation
-                const colonIdx = item.indexOf(': ');
-                const factor = colonIdx > 0 ? item.slice(0, colonIdx) : null;
-                const explanation = colonIdx > 0 ? item.slice(colonIdx + 2) : item;
-                return (
-                  <div key={i} className="flex gap-2 text-[10px] font-mono leading-relaxed">
-                    <span className="text-purple-400/40 shrink-0 mt-0.5">›</span>
-                    <span>
-                      {factor && <span className="text-purple-300/70 font-bold mr-1">{factor}:</span>}
-                      <span className="text-muted-foreground/60">{explanation}</span>
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Execution metadata — always shown when expanded */}
-          <div className="flex flex-wrap gap-3 text-[10px] font-mono pt-1 border-t border-border/20">
-            {signal.timeframe && (
-              <span><span className="text-muted-foreground/40">TF:</span> <span className="text-accent/70 font-bold">{signal.timeframe}</span></span>
-            )}
-            <span><span className="text-muted-foreground/40">Setup:</span> <span className="text-foreground/70">{signal.setup_type}</span></span>
-            <span><span className="text-muted-foreground/40">Scan #:</span> <span className="text-foreground/70">{signal.scan_number}</span></span>
-            {signal.fill_price && (
-              <span><span className="text-muted-foreground/40">Fill:</span> <span className="text-green-400">${signal.fill_price.toFixed(4)}</span></span>
-            )}
-            {signal.fill_qty && (
-              <span><span className="text-muted-foreground/40">Qty:</span> <span className="text-foreground/70">{signal.fill_qty.toFixed(6)}</span></span>
-            )}
-            {signal.balance !== undefined && (
-              <span><span className="text-muted-foreground/40">Balance:</span> <span className="text-foreground/70">${signal.balance.toFixed(2)}</span></span>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // Session Debrief Modal
 function SessionDebriefModal({
   stats,
@@ -3063,10 +2895,10 @@ function SessionDebriefModal({
           <div className="grid grid-cols-3 gap-3">
             <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
               <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">P&L</div>
-              <div className={cn("text-lg font-mono font-bold", balance.pnl >= 0 ? 'text-accent' : 'text-red-400')}>
-                {balance.pnl >= 0 ? '+' : ''}{balance.pnl.toFixed(0)}
+              <div className={cn("text-lg font-mono font-bold", (stats.total_pnl ?? 0) >= 0 ? 'text-accent' : 'text-red-400')}>
+                {(stats.total_pnl ?? 0) >= 0 ? '+' : ''}{(stats.total_pnl ?? 0).toFixed(0)}
               </div>
-              <div className="text-[9px] text-muted-foreground">{balance.pnl_pct >= 0 ? '+' : ''}{balance.pnl_pct.toFixed(2)}%</div>
+              <div className="text-[9px] text-muted-foreground">{(stats.total_pnl_pct ?? 0) >= 0 ? '+' : ''}{(stats.total_pnl_pct ?? 0).toFixed(2)}%</div>
             </div>
             <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
               <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Expectancy</div>
@@ -3077,8 +2909,8 @@ function SessionDebriefModal({
             </div>
             <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
               <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Prof. Factor</div>
-              <div className={cn("text-lg font-mono font-bold", profitFactor >= 1.2 ? 'text-foreground' : 'text-red-400')}>
-                {profitFactor >= 99 ? '∞' : profitFactor.toFixed(2)}
+              <div className={cn("text-lg font-mono font-bold", profitFactor === 0 ? 'text-muted-foreground' : profitFactor >= 1.2 ? 'text-foreground' : 'text-red-400')}>
+                {profitFactor === 0 ? 'N/A' : profitFactor >= 99 ? '∞' : profitFactor.toFixed(2)}
               </div>
               <div className="text-[9px] text-muted-foreground">{stats.total_trades} trades</div>
             </div>
