@@ -1032,15 +1032,14 @@ class PositionManager:
                     continue
 
                 if not pos.breakeven_active:
-                    # Mirror _move_to_breakeven convention: SHORT breakeven stop is
-                    # entry - buffer (slightly below entry). Stop triggers when
-                    # current_price >= stop_loss, so this fires if price rises back
-                    # near entry, locking in a small profit on the runner.
+                    # SHORT stop-hit fires when current_price >= stop_loss, so the
+                    # breakeven stop must be ABOVE entry (not below). A price rise back
+                    # to entry + buffer will trigger the stop and lock in a small profit.
                     old_stop = pos.stop_loss
                     buffer = risk * 0.1
-                    new_stop = pos.entry_price - buffer
-                    if new_stop < pos.stop_loss:
-                        # New stop is tighter (lower) than current — only tighten, never loosen
+                    new_stop = pos.entry_price + buffer
+                    if new_stop > pos.stop_loss:
+                        # New stop is tighter (higher for SHORT) than current — only tighten
                         pos.stop_loss = new_stop
                         pos.breakeven_active = True
                         actions.append((pos.symbol, pos_id, f"breakeven {old_stop:.4f}→{new_stop:.4f}"))
@@ -1053,7 +1052,7 @@ class PositionManager:
                     profit_r = (pos.entry_price - current_price) / risk
                     if profit_r > 0:
                         trail_stop = current_price + risk * 0.25
-                        if trail_stop < pos.stop_loss:
+                        if trail_stop > pos.stop_loss:
                             old_stop = pos.stop_loss
                             pos.stop_loss = trail_stop
                             pos.trailing_active = True
@@ -1340,20 +1339,18 @@ class PositionManager:
                             f"Emergency executor close failed for {position.position_id}: {exec_err}"
                         )
 
-                # Set EMERGENCY_EXIT status BEFORE settling so _sync_closed_positions
-                # can distinguish this from a normal CLOSED status.
+                # Settle all position fields under the lock so no concurrent
+                # monitor tick reads a partially-updated state.
                 with self._lock:
                     position.status = PositionStatus.EMERGENCY_EXIT
                     position.exit_reason = f"EMERGENCY: {reason}"
-
-                # Calculate final P&L and zero out remaining quantity
-                if current_price is not None:
-                    position.update_unrealized_pnl(current_price)
-                    position.realized_pnl += position.unrealized_pnl
-                    position.unrealized_pnl = 0.0
-                position.remaining_quantity = 0.0
-                position.exit_price = current_price
-                position.updated_at = datetime.now(timezone.utc)
+                    if current_price is not None:
+                        position.update_unrealized_pnl(current_price)
+                        position.realized_pnl += position.unrealized_pnl
+                        position.unrealized_pnl = 0.0
+                    position.remaining_quantity = 0.0
+                    position.exit_price = current_price
+                    position.updated_at = datetime.now(timezone.utc)
 
                 logger.info(
                     f"Emergency closed: {position.position_id} | "

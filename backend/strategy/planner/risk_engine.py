@@ -165,6 +165,31 @@ def _apply_regime_rr_cap(targets: List[Target], regime_label: str) -> List[Targe
     return kept
 
 
+def _guard_target_direction(
+    targets: List[Target], avg_entry: float, is_bullish: bool
+) -> List[Target]:
+    """
+    Remove targets that ended up on the wrong side of entry (e.g. after wick-barrier
+    clipping or structural filtering pushed a level past the entry price).
+    Always keeps at least 1 target as a fallback.
+    """
+    if not targets:
+        return targets
+    correct_side = [t for t in targets if (is_bullish and t.level > avg_entry) or (not is_bullish and t.level < avg_entry)]
+    if not correct_side:
+        logger.warning(
+            "All %d targets ended up on wrong side of entry %.4f (%s) — keeping closest",
+            len(targets), avg_entry, "LONG" if is_bullish else "SHORT",
+        )
+        return [targets[0]]
+    if len(correct_side) < len(targets):
+        logger.info(
+            "Target direction guard: removed %d wrong-side target(s) from %d total",
+            len(targets) - len(correct_side), len(targets),
+        )
+    return correct_side
+
+
 def _adjust_targets_for_wick_barriers(
     targets: List[Target],
     multi_tf_data: Optional["MultiTimeframeData"],
@@ -1725,6 +1750,11 @@ def _find_eqh_eql_zones(
         if not df.columns.is_unique:
             df = df.loc[:, ~df.columns.duplicated()]
 
+        # Scan only the most recent 100 candles — older EQH/EQL levels are rarely
+        # respected and the full-df scan is O(N) with a 20-bar inner window which
+        # becomes expensive on 500+ bar dataframes.
+        df = df.tail(100)
+
         if is_bullish:
             # Find equal highs above entry (liquidity above = target for longs)
             highs = df["high"].values
@@ -2035,7 +2065,7 @@ def _calculate_swing_structural_targets(
 
     # === DEBUG LOGGING ===
     logger.info(
-        f"📊 TARGET CALC: Generated {len(targets)} targets | Entry={avg_entry:.4f} | Stop={stop_loss.level:.4f} | Risk={risk_distance:.4f}"
+        f"📊 TARGET CALC: Generated {len(targets)} targets | Entry={avg_entry:.4f} | Risk={risk_distance:.4f}"
     )
     for i, t in enumerate(targets, 1):
         logger.info(f"  TP{i}: Level={t.level:.4f} | R:R={t.rr_ratio:.2f}R | Label={t.label}")
@@ -2230,6 +2260,7 @@ def _calculate_targets(
             logger.info(f"Using {len(targets)} structural targets for {mode_profile} mode")
             # Filter targets blocked by opposing OB structures
             targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
+            targets = _guard_target_direction(targets, avg_entry, is_bullish)
             return _apply_regime_rr_cap(targets, regime_label)
 
         else:
@@ -2273,6 +2304,7 @@ def _calculate_targets(
             swing_targets = _filter_targets_by_opposing_structure(
                 swing_targets, smc_snapshot, is_bullish, atr
             )
+            swing_targets = _guard_target_direction(swing_targets, avg_entry, is_bullish)
             return _apply_regime_rr_cap(swing_targets, regime_label)
 
     # --- DEFAULT / SCALP / INTRADAY HANDLING (R:R Multiples) ---
@@ -2332,6 +2364,8 @@ def _calculate_targets(
     targets = _adjust_targets_for_wick_barriers(targets, multi_tf_data, avg_entry, is_bullish, atr, risk_distance)
     # Filter targets blocked by opposing OB structures
     targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
+    # Final safety check: ensure all targets are on the correct side of entry
+    targets = _guard_target_direction(targets, avg_entry, is_bullish)
 
     # Regime-aware R:R cap — shared with structural path via helper
     return _apply_regime_rr_cap(targets, regime_label)
