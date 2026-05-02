@@ -1232,7 +1232,7 @@ export function TrainingGround() {
                       <>
                         <div className={cn(
                           "text-xl sm:text-2xl font-black font-mono leading-none mb-1.5",
-                          status.regime.trend.includes('up') ? 'text-green-400' : status.regime.trend.includes('down') ? 'text-red-400' : 'text-blue-400'
+                          (status.regime.trend ?? '').includes('up') ? 'text-green-400' : (status.regime.trend ?? '').includes('down') ? 'text-red-400' : 'text-blue-400'
                         )}
                           style={{ letterSpacing: '-0.02em' }}
                         >
