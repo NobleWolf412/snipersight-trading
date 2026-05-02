@@ -2904,6 +2904,11 @@ class PaperTradingService:
             self.stats.total_pnl_pct = (self.stats.total_pnl / self.config.initial_balance) * 100
 
         if self.stats.total_trades > 0:
+            # win_rate denominator includes scratch trades by design: a scratch is
+            # a real trading decision with no meaningful profit. Excluding scratches
+            # would inflate the win rate in choppy sessions (e.g. 5W/5S/0L → 100%
+            # instead of the correct 50%). Use winning_trades + losing_trades for
+            # a "decisive-trade" ratio if needed separately.
             self.stats.win_rate = (self.stats.winning_trades / self.stats.total_trades) * 100
             self.stats.expectancy = self.stats.total_pnl / self.stats.total_trades
 

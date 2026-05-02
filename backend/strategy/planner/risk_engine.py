@@ -177,11 +177,14 @@ def _guard_target_direction(
         return targets
     correct_side = [t for t in targets if (is_bullish and t.level > avg_entry) or (not is_bullish and t.level < avg_entry)]
     if not correct_side:
+        # Sort wrong-side targets by proximity to entry so the least-wrong one
+        # is kept as the fallback rather than whatever happened to be first.
+        nearest = min(targets, key=lambda t: abs(t.level - avg_entry))
         logger.warning(
-            "All %d targets ended up on wrong side of entry %.4f (%s) — keeping closest",
-            len(targets), avg_entry, "LONG" if is_bullish else "SHORT",
+            "All %d targets ended up on wrong side of entry %.4f (%s) — keeping nearest (%.4f)",
+            len(targets), avg_entry, "LONG" if is_bullish else "SHORT", nearest.level,
         )
-        return [targets[0]]
+        return [nearest]
     if len(correct_side) < len(targets):
         logger.info(
             "Target direction guard: removed %d wrong-side target(s) from %d total",

@@ -193,6 +193,10 @@ export function TrainingGround() {
   const pollRef = useRef<number | null>(null);
   const fetchFailCount = useRef(0);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  // Ref mirrors state so fetchStatus can read without being in its deps array,
+  // preventing an infinite re-render loop on backend recovery.
+  const connectionErrorRef = useRef<string | null>(null);
+  connectionErrorRef.current = connectionError;
 
   // Fetch status
   const fetchStatus = useCallback(async () => {
@@ -201,7 +205,7 @@ export function TrainingGround() {
       if (response.data) {
         setStatus(response.data);
         fetchFailCount.current = 0;
-        if (connectionError) setConnectionError(null);
+        if (connectionErrorRef.current) setConnectionError(null);
       }
     } catch (err) {
       fetchFailCount.current += 1;
@@ -212,7 +216,7 @@ export function TrainingGround() {
     } finally {
       setIsInitialLoad(false);
     }
-  }, [connectionError]);
+  }, []);
 
   // Fetch trade history
   const fetchTrades = useCallback(async () => {
