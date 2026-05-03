@@ -505,21 +505,83 @@ class LiveTradingService:
         self.stats.scans_completed += 1
         self._log_activity("scan_started", {"scan_number": self.stats.scans_completed})
 
+        # Build symbol list (same logic as paper trading service)
+        config = self.config
+        if config.symbols:
+            scan_symbols = list(config.symbols)
+        else:
+            try:
+                from backend.analysis.pair_selection import select_symbols
+                limit = getattr(config, "universe_size", 20)
+                scan_symbols = select_symbols(
+                    adapter=self.orchestrator.exchange_adapter,
+                    limit=limit,
+                    majors=getattr(config, "majors", True),
+                    altcoins=getattr(config, "altcoins", False),
+                    meme_mode=getattr(config, "meme_mode", False),
+                    leverage=config.leverage,
+                )
+            except Exception as e:
+                logger.warning(f"Pair selection failed ({e}), using default majors")
+                scan_symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]
+
+        if getattr(config, "exclude_symbols", None):
+            scan_symbols = [s for s in scan_symbols if s not in config.exclude_symbols]
+
+        self.current_scan = {
+            "status": "running",
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "completed": 0,
+            "total": len(scan_symbols),
+            "passed": 0,
+            "rejected": 0,
+            "progress_pct": 0,
+            "current_symbol": None,
+            "recent_symbols": [],
+        }
+
+        def _progress_callback(completed: int, total: int, symbol: str, passed: bool, _extra=None):
+            if self.current_scan:
+                self.current_scan["completed"] = completed
+                self.current_scan["current_symbol"] = symbol
+                self.current_scan["progress_pct"] = (completed / total * 100) if total > 0 else 0
+                if passed:
+                    self.current_scan["passed"] = self.current_scan.get("passed", 0) + 1
+                else:
+                    self.current_scan["rejected"] = self.current_scan.get("rejected", 0) + 1
+                recent = self.current_scan.get("recent_symbols", [])
+                recent.append({"symbol": symbol, "passed": passed})
+                self.current_scan["recent_symbols"] = recent[-12:]
+
         try:
-            results = await asyncio.get_event_loop().run_in_executor(
-                None, self.orchestrator.run_scan
+            loop = asyncio.get_running_loop()
+            trade_plans, rejection_summary = await loop.run_in_executor(
+                None,
+                lambda: self.orchestrator.scan(
+                    symbols=scan_symbols,
+                    progress_callback=_progress_callback,
+                ),
             )
         except Exception as e:
             logger.error(f"Orchestrator scan failed: {e}")
+            if self.current_scan:
+                self.current_scan["status"] = "error"
             return
 
-        if not results:
-            return
+        # Update regime from scan result
+        if isinstance(rejection_summary, dict):
+            regime = (rejection_summary.get("regime") or {})
+            self._current_regime_composite = regime.get("composite", "unknown")
+            self._current_regime_score = regime.get("score", 50.0)
 
-        signals = results if isinstance(results, list) else results.get("signals", [])
-        self.stats.signals_generated += len(signals)
+        if self.current_scan:
+            self.current_scan["status"] = "complete"
+            self.current_scan["progress_pct"] = 100
 
-        for plan in signals:
+        self.stats.signals_generated += len(trade_plans)
+        logger.info(f"Live scan complete: {len(trade_plans)} signals from {len(scan_symbols)} symbols")
+
+        for plan in trade_plans:
             try:
                 await self._process_signal(plan)
             except Exception as e:
