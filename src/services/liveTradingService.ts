@@ -20,9 +20,11 @@ export interface LiveTradingConfigRequest {
   majors?: boolean;
   altcoins?: boolean;
   meme_mode?: boolean;
+  universe_size?: number;
   fee_rate?: number;
   max_drawdown_pct?: number | null;
   max_hours_open?: number;
+  confluence_soft_floor?: number | null;
   // live-specific
   testnet?: boolean;
   max_position_size_usd?: number;
