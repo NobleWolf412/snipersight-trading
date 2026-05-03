@@ -36,6 +36,7 @@ class LiveExecutor:
         max_total_exposure_usd: float = 500.0,
         min_balance_usd: float = 50.0,
         dry_run: bool = False,
+        target_leverage: int = 1,
     ):
         if not adapter.supports_trading() and not dry_run:
             raise ValueError(
@@ -49,6 +50,7 @@ class LiveExecutor:
         self.max_total_exposure_usd = max_total_exposure_usd
         self.min_balance_usd = min_balance_usd
         self.dry_run = dry_run
+        self.target_leverage = max(1, int(target_leverage))
 
         # Internal state
         self._orders: Dict[str, Order] = {}
@@ -60,6 +62,7 @@ class LiveExecutor:
         self._cached_balance: float = 0.0
         self._initial_balance: float = 0.0
         self._order_counter: int = 0
+        self._leverage_confirmed: set = set()  # symbols with leverage already set this session
 
         # Fetch initial balance
         self._cached_balance = self._fetch_balance_from_exchange()
@@ -166,9 +169,22 @@ class LiveExecutor:
         if self.dry_run:
             logger.info(
                 f"[DRY RUN] Order would send: {order_id} {side} {quantity} "
-                f"{symbol} @ {price}"
+                f"{symbol} @ {price} leverage={self.target_leverage}x"
             )
             return order
+
+        # Ensure leverage is set correctly on Phemex before placing the order.
+        # Phemex uses the account's saved leverage per symbol (default 10x).
+        # We enforce our configured target before the first order per symbol.
+        if symbol not in self._leverage_confirmed:
+            try:
+                self._adapter.set_leverage(self.target_leverage, symbol)
+                self._leverage_confirmed.add(symbol)
+            except Exception as e:
+                logger.warning(
+                    f"Could not set leverage to {self.target_leverage}x for {symbol}: {e}. "
+                    f"Proceeding — exchange leverage may differ from configured value."
+                )
 
         # Send to exchange
         ccxt_type = order_type_enum.value.lower()
