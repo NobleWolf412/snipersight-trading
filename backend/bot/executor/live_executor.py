@@ -468,17 +468,15 @@ class LiveExecutor:
             return order
 
         try:
+            # "stop_market" is the CCXT unified type for a stop-triggered market order.
+            # price= is the trigger level; reduceOnly ensures it only closes the position.
             exchange_order = self._adapter.create_order(
                 symbol=symbol,
-                order_type="market",
+                order_type="stop_market",
                 side=side.lower(),
                 amount=quantity,
-                price=None,
-                params={
-                    "stopPrice": stop_price,
-                    "reduceOnly": True,
-                    "timeInForce": "GTE_GTC",
-                },
+                price=stop_price,
+                params={"reduceOnly": True},
             )
             exchange_id = str(exchange_order.get("id", ""))
             self._exchange_order_map[order_id] = exchange_id
