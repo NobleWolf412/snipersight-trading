@@ -92,6 +92,9 @@ class LiveTradingService:
 
         self.signal_log: List[Dict[str, Any]] = []
 
+        # Session log directory (set on start, used for persistent output)
+        self._session_log_dir: Optional[Path] = None
+
         # Symbols with exchange-side positions/orders that pre-date this session.
         # Populated by _startup_reconcile() so _has_position() blocks double-entry.
         self._orphaned_symbols: set = set()
@@ -188,6 +191,7 @@ class LiveTradingService:
         self.activity_log = []
         self.stats = PaperTradingStats()
         self.signal_log = []
+        self._session_log_dir = None
         self._orphaned_symbols = set()
         self._price_cache = {}
         self._pending_plans = {}
@@ -203,9 +207,27 @@ class LiveTradingService:
         self._running = True
         self.status = LiveBotStatus.RUNNING
 
+        # Create session log directory
+        project_root = Path(__file__).parent.parent.parent
+        self._session_log_dir = project_root / "logs" / "live_trading" / f"session_{self.session_id}"
+        self._session_log_dir.mkdir(parents=True, exist_ok=True)
+
         mode_label = "DRY RUN" if config.dry_run else ("TESTNET" if config.testnet else "LIVE — REAL MONEY")
         logger.warning(f"Live trading started: session={self.session_id} mode={mode_label}")
         self._log_activity("session_started", {"session_id": self.session_id, "mode": mode_label})
+
+        # Write session_info.json
+        try:
+            session_info = {
+                "session_id": self.session_id,
+                "started_at": self.started_at.isoformat(),
+                "mode": mode_label,
+                "config": config.to_dict(),
+            }
+            with open(self._session_log_dir / "session_info.json", "w", encoding="utf-8") as f:
+                json.dump(session_info, f, indent=2, default=str)
+        except Exception as e:
+            logger.warning(f"Failed to write session_info.json: {e}")
 
         # Reconcile exchange state before first scan to prevent double-entry
         await self._startup_reconcile()
@@ -243,6 +265,26 @@ class LiveTradingService:
         await self._close_all_positions("session_stopped")
         self._log_activity("session_stopped", {"session_id": self.session_id})
         logger.info(f"Live trading stopped: session={self.session_id}")
+
+        # Write final session report
+        if self._session_log_dir:
+            try:
+                with open(self._session_log_dir / "stats.json", "w", encoding="utf-8") as f:
+                    json.dump(self.stats.to_dict(), f, indent=2, default=str)
+                if self.config:
+                    with open(self._session_log_dir / "config.json", "w", encoding="utf-8") as f:
+                        json.dump(self.config.to_dict(), f, indent=2, default=str)
+                stopped_at = self.stopped_at or datetime.now(timezone.utc)
+                with open(self._session_log_dir / "session_info.json", "r+", encoding="utf-8") as f:
+                    info = json.load(f)
+                    info["stopped_at"] = stopped_at.isoformat()
+                    info["duration_seconds"] = self._get_uptime_seconds()
+                    f.seek(0)
+                    json.dump(info, f, indent=2, default=str)
+                    f.truncate()
+            except Exception as e:
+                logger.warning(f"Failed to write session report: {e}")
+
         return self.get_status()
 
     async def kill_switch(self) -> Dict[str, Any]:
@@ -889,6 +931,12 @@ class LiveTradingService:
         self.signal_log.append(entry)
         if len(self.signal_log) > 200:
             self.signal_log = self.signal_log[-200:]
+        if self._session_log_dir:
+            try:
+                with open(self._session_log_dir / "signals.jsonl", "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, default=str) + "\n")
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Helpers
@@ -1131,6 +1179,12 @@ class LiveTradingService:
             self.completed_trades.append(trade)
             self._completed_trade_ids.add(trade.trade_id)
             self._update_stats(trade)
+            if self._session_log_dir:
+                try:
+                    with open(self._session_log_dir / "trades.jsonl", "a", encoding="utf-8") as f:
+                        f.write(json.dumps(trade.to_dict(), default=str) + "\n")
+                except Exception:
+                    pass
             self._log_activity("trade_closed", {
                 "position_id": pos.position_id,
                 "symbol": pos.symbol,
@@ -1194,6 +1248,12 @@ class LiveTradingService:
         self.activity_log.append(entry)
         if len(self.activity_log) > 1000:
             self.activity_log = self.activity_log[-500:]
+        if self._session_log_dir:
+            try:
+                with open(self._session_log_dir / "activity.jsonl", "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, default=str) + "\n")
+            except Exception:
+                pass
 
     def _get_uptime_seconds(self) -> int:
         if not self.started_at:

@@ -1023,15 +1023,6 @@ export function BotStatus() {
                   </div>
                 )}
 
-                {/* ── Gauntlet Signal Intelligence ─────────────────────────── */}
-                {status?.signal_log && status.signal_log.length > 0 && (
-                  <GauntletBreakdown
-                    signals={status.signal_log}
-                    minConfluence={status.config?.min_confluence ?? undefined}
-                    currentScan={status.current_scan ?? undefined}
-                  />
-                )}
-
                 {/* ── Positions & Risk Row ─────────────────────────────────── */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Active Positions */}
@@ -1197,6 +1188,15 @@ export function BotStatus() {
                     )}
                   </div>
                 </section>
+
+                {/* ── Gauntlet Signal Intelligence ─────────────────────────── */}
+                {status?.signal_log && status.signal_log.length > 0 && (
+                  <GauntletBreakdown
+                    signals={status.signal_log}
+                    minConfluence={status.config?.min_confluence ?? undefined}
+                    currentScan={status.current_scan ?? undefined}
+                  />
+                )}
 
                 {/* ── Recent Activity ──────────────────────────────────────── */}
                 {status.recent_activity.length > 0 && (
