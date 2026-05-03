@@ -566,11 +566,12 @@ class LiveTradingService:
             except Exception:
                 return
 
-        stop_loss = getattr(plan, "stop_loss", None)
-        if not stop_loss or stop_loss <= 0:
+        sl_obj = getattr(plan, "stop_loss", None)
+        stop_level = getattr(sl_obj, "level", None) if sl_obj is not None else None
+        if not stop_level or stop_level <= 0:
             return
 
-        stop_distance = abs(current_price - stop_loss)
+        stop_distance = abs(current_price - stop_level)
         if stop_distance <= 0:
             return
 
@@ -590,10 +591,14 @@ class LiveTradingService:
         if quantity <= 0:
             return
 
-        # Entry price — use OB zone midpoint or current price
-        entry_targets = getattr(plan, "entry_zone", None)
-        if entry_targets and len(entry_targets) >= 2:
-            entry_price = (entry_targets[0] + entry_targets[1]) / 2
+        # Entry price — use OB near_entry or current price
+        ez_obj = getattr(plan, "entry_zone", None)
+        near = getattr(ez_obj, "near_entry", None)
+        far = getattr(ez_obj, "far_entry", None)
+        if near and far:
+            entry_price = (near + far) / 2
+        elif near:
+            entry_price = near
         else:
             entry_price = current_price
 
@@ -618,7 +623,7 @@ class LiveTradingService:
             "direction": plan.direction,
             "score": score,
             "entry": entry_price,
-            "stop": stop_loss,
+            "stop": stop_level,
             "quantity": quantity,
             "order_id": order.order_id,
         })
@@ -668,7 +673,8 @@ class LiveTradingService:
         """Place a native stop-market on Phemex immediately after an entry fills."""
         if not self.executor:
             return
-        stop_level = getattr(plan, "stop_loss", None)
+        sl_obj = getattr(plan, "stop_loss", None)
+        stop_level = getattr(sl_obj, "level", None) if sl_obj is not None else None
         if not stop_level or stop_level <= 0:
             return
         stop_side = "SELL" if plan.direction == "LONG" else "BUY"
