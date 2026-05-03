@@ -94,6 +94,10 @@ export function BotSetup() {
   }, []);
 
   useEffect(() => {
+    // Redirect immediately if bot is already running
+    liveTradingService.getStatus().then(s => {
+      if (s.status === 'running') navigate('/bot/status');
+    }).catch(() => {});
     runPreflight();
     api.getScannerRecommendation().then(r => { if (r.data) setRecommendation(r.data); }).catch(() => {});
   }, [runPreflight]);
