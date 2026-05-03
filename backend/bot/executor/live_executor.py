@@ -527,10 +527,18 @@ class LiveExecutor:
         self._cached_balance = new_balance
         return new_balance
 
-    def reconcile_positions(self) -> Dict[str, float]:
-        """Fetch positions from exchange and log discrepancies."""
+    def reconcile_positions(self) -> set:
+        """
+        Fetch positions from exchange, sync local state, and return the set of symbols
+        with open positions on the exchange.
+
+        Callers use the returned set to detect positions that were closed natively on the
+        exchange (e.g., exchange-native stop fired, liquidation) but are still OPEN in
+        the position manager — so they can be marked closed in software.
+        """
         if self.dry_run:
-            return self._positions.copy()
+            return {sym for sym, qty in self._positions.items() if abs(qty) > 1e-9}
+        ex_open_symbols: set = set()
         try:
             ex_positions = self._adapter.fetch_positions()
             for pos in ex_positions:
@@ -540,11 +548,20 @@ class LiveExecutor:
                 if abs(ex_qty - abs(local_qty)) > 1e-6:
                     logger.warning(
                         f"Position discrepancy for {symbol}: "
-                        f"local={local_qty:.6f} exchange={ex_qty:.6f}"
+                        f"local={local_qty:.6f} exchange={ex_qty:.6f} — syncing"
                     )
+                    # Sync: adjust local quantity to match exchange reality
+                    if ex_qty > 1e-9:
+                        # Preserve direction sign from local state
+                        self._positions[symbol] = ex_qty if local_qty >= 0 else -ex_qty
+                    else:
+                        self._positions[symbol] = 0.0
+                        self._position_avg_price[symbol] = 0.0
+                if ex_qty > 1e-9:
+                    ex_open_symbols.add(symbol)
         except Exception as e:
             logger.error(f"Failed to reconcile positions: {e}")
-        return self._positions.copy()
+        return ex_open_symbols
 
     def preflight_check(self) -> Dict:
         """Run connectivity + balance + position check before session start."""

@@ -25,6 +25,7 @@ from backend.bot.paper_trading_service import (
     PaperTradingStats,
     _PENDING_TTL_MINUTES,
     _SENSITIVITY_PRESETS,
+    _MAX_LIMIT_DISTANCE_PCT,
 )
 from backend.bot.trade_journal import get_trade_journal
 from backend.engine.orchestrator import Orchestrator
@@ -552,24 +553,30 @@ class LiveTradingService:
                                         if active_count >= cap:
                                             executor.cancel_order(order.order_id)
                                             self._pending_plans.pop(order.order_id, None)
-                                        else:
+                                        elif order.status == OrderStatus.FILLED:
+                                            # Wait for full fill before opening position — avoids
+                                            # opening a position with only a partial fill qty.
+                                            # On full fill, use average_fill_price + total filled qty.
+                                            entry_px = order.average_fill_price or fill.price
+                                            entry_qty = order.filled_quantity or fill.quantity
                                             pos_id = self.position_manager.open_position(
                                                 trade_plan=plan,
-                                                entry_price=fill.price,
-                                                quantity=fill.quantity,
+                                                entry_price=entry_px,
+                                                quantity=entry_qty,
                                                 entry_order_id=order.order_id,
                                             )
                                             self.stats.signals_taken += 1
                                             self._pending_plans.pop(order.order_id, None)
                                             self._pending_placed_at.pop(order.order_id, None)
                                             # Place exchange-native stop immediately after entry fills
-                                            await self._place_exchange_stop(pos_id, plan, fill.price, fill.quantity)
+                                            await self._place_exchange_stop(pos_id, plan, entry_px, entry_qty)
                                             self._log_activity("trade_opened", {
                                                 "position_id": pos_id,
                                                 "symbol": plan.symbol,
                                                 "direction": plan.direction,
-                                                "entry_price": fill.price,
+                                                "entry_price": entry_px,
                                             })
+                                        # Partially filled — keep in _pending_plans, wait for full fill
 
                         # Expire stale pending orders
                         if self._pending_plans and self.config:
@@ -583,24 +590,31 @@ class LiveTradingService:
                                 ttl = timedelta(minutes=_PENDING_TTL_MINUTES.get(trade_type, 10.0))
                                 if (now - placed_at) > ttl:
                                     try:
-                                        executor.cancel_order(order_id)
+                                        cancelled = executor.cancel_order(order_id)
                                     except Exception:
-                                        pass
-                                    self._pending_plans.pop(order_id, None)
-                                    self._pending_placed_at.pop(order_id, None)
-                                    logger.info(f"Pending order expired: {order_id} {plan.symbol}")
+                                        cancelled = False
+                                    if cancelled:
+                                        self._pending_plans.pop(order_id, None)
+                                        self._pending_placed_at.pop(order_id, None)
+                                        logger.info(f"Pending order expired and cancelled: {order_id} {plan.symbol}")
+                                    else:
+                                        # Cancel failed — keep in _pending_plans so if the order
+                                        # fills on exchange we still have the plan to open a position.
+                                        # Next cycle we will retry the cancel.
+                                        logger.warning(f"Cancel failed for expired order {order_id} {plan.symbol} — will retry")
 
                     # Run position monitoring
                     await self.position_manager.monitor_all_positions()
                     await self._sync_exchange_stops()
                     await self._sync_closed_positions()
 
-                    # Periodic balance reconciliation
+                    # Periodic balance + position reconciliation
                     if self.executor and self.config:
                         now_ts = time.monotonic()
                         if now_ts - self._last_reconcile_at >= self.config.balance_reconcile_interval:
                             self.executor.reconcile_balance()
-                            self.executor.reconcile_positions()
+                            ex_open_symbols = self.executor.reconcile_positions()
+                            await self._detect_exchange_closed_positions(ex_open_symbols)
                             self._last_reconcile_at = now_ts
 
                             # Auto kill switch on low balance
@@ -847,19 +861,56 @@ class LiveTradingService:
         else:
             entry_price = current_price
 
-        # Stale-entry guard: if the OB entry zone has already been passed by price,
-        # a limit order at entry_price would be below market (SHORT) or above market
-        # (LONG) and get rejected by Phemex. Skip these — the setup has already fired.
+        # Limit proximity snap: if the OB entry zone is far from current price the limit
+        # order will sit pending and expire without filling within the TTL window.
+        # Snap the limit closer to market so it has a realistic chance of executing.
+        # Mirrors paper_trading_service._MAX_LIMIT_DISTANCE_PCT snap logic exactly.
         is_long = plan.direction == "LONG"
-        if is_long and entry_price < current_price * 0.985:
+        _trade_type_snap = getattr(plan, "trade_type", "intraday") or "intraday"
+        _raw_limit = entry_price
+        _max_dist = _MAX_LIMIT_DISTANCE_PCT.get(_trade_type_snap, 0.40)
+        if score >= 70.0:
+            _max_dist /= 2.0
+        _gap_pct = abs(_raw_limit - current_price) / current_price * 100 if current_price else 0
+        if _gap_pct > _max_dist and current_price > 0:
+            if is_long:
+                entry_price = current_price * (1 - _max_dist / 100)
+            else:
+                entry_price = current_price * (1 + _max_dist / 100)
+            _stop = stop_level
+            _new_risk = abs(entry_price - _stop) if _stop else 0
+            _old_risk = abs(_raw_limit - _stop) if _stop else 0
+            if _new_risk > 0 and _old_risk > 0:
+                quantity = quantity * (_old_risk / _new_risk)
+                try:
+                    market_info = self.adapter.get_market_info(symbol) if self.adapter else {}
+                    lot_size = market_info.get("lot_size", 0.0)
+                    if lot_size > 0:
+                        quantity = round_to_lot(quantity, lot_size)
+                except Exception:
+                    pass
+            logger.info(
+                "LIMIT SNAP: %s %s | %.4f → %.4f (gap %.2f%% > max %.2f%%)",
+                symbol, plan.direction, _raw_limit, entry_price, _gap_pct, _max_dist,
+            )
+
+        # Stale-entry guard: reject only when the OB zone has already been blown through
+        # by price in the wrong direction. A valid OB entry is always "on the other side"
+        # of current price — LONG OB is below market (buy the dip), SHORT OB is above
+        # market (sell the rally). Rejection applies when:
+        #   LONG: entry is >1.5% ABOVE market — price blew through the OB upward
+        #   SHORT: entry is >1.5% BELOW market — price blew through the OB downward
+        # (The original ETH issue was SHORT entry at $2328 when market was $2380 —
+        # OB blown through downward — correct to reject that.)
+        if is_long and entry_price > current_price * 1.015:
             self._log_signal(plan, "filtered",
-                f"Entry {entry_price:.4f} is >1.5% below market {current_price:.4f} — OB already passed",
-                reason_type="risk_validation")
+                f"Entry {entry_price:.4f} is >1.5% above market {current_price:.4f} — OB blown through upward",
+                reason_type="stale_entry")
             return
-        if not is_long and entry_price > current_price * 1.015:
+        if not is_long and entry_price < current_price * 0.985:
             self._log_signal(plan, "filtered",
-                f"Entry {entry_price:.4f} is >1.5% above market {current_price:.4f} — OB already passed",
-                reason_type="risk_validation")
+                f"Entry {entry_price:.4f} is >1.5% below market {current_price:.4f} — OB blown through downward",
+                reason_type="stale_entry")
             return
 
         order = self.executor.place_order(
@@ -973,6 +1024,29 @@ class LiveTradingService:
             order = self.executor.place_order(symbol=symbol, side=side, order_type="MARKET", quantity=quantity, price=price)
             if order is None:
                 return False
+            if order.status == OrderStatus.REJECTED:
+                # Exchange rejected the exit — check if the position still exists on exchange.
+                # If not, the exchange-native stop already fired and there is nothing to close.
+                # Return True so position_manager marks this position closed and stops retrying.
+                if self.adapter and not self.executor.dry_run:
+                    try:
+                        loop = asyncio.get_running_loop()
+                        ex_positions = await loop.run_in_executor(
+                            None, lambda: self.adapter.fetch_positions([symbol])
+                        )
+                        still_open = any(
+                            float(p.get("contracts", 0) or 0) > 1e-9
+                            for p in ex_positions if p.get("symbol") == symbol
+                        )
+                        if not still_open:
+                            logger.info(
+                                f"Exit rejected for {symbol} — position already closed on exchange "
+                                f"(native stop fired or liquidation). Marking closed."
+                            )
+                            return True
+                    except Exception as chk_e:
+                        logger.debug(f"Could not verify {symbol} position status: {chk_e}")
+                return False
             fill = self.executor.execute_market_order(order.order_id, price)
             return fill is not None
         except Exception as e:
@@ -1045,6 +1119,38 @@ class LiveTradingService:
                     "symbol": pos.symbol,
                     "old_stop": last_stop,
                     "new_stop": current_stop,
+                })
+
+    async def _detect_exchange_closed_positions(self, ex_open_symbols: set):
+        """
+        Detect positions that are OPEN in the position manager but no longer exist on
+        the exchange (exchange-native stop fired, liquidation, or manual close).
+
+        Marks them as STOPPED_OUT so _sync_closed_positions() creates a CompletedTrade
+        and stops the monitor from repeatedly sending invalid exit orders.
+        """
+        if not self.position_manager:
+            return
+        for pos in self.position_manager.get_open_positions():
+            if pos.symbol not in ex_open_symbols:
+                stop_level = self._exchange_stop_levels.get(pos.position_id)
+                exit_price = stop_level or self._price_cache.get(pos.symbol, pos.entry_price)
+                logger.warning(
+                    f"Position {pos.position_id} ({pos.symbol} {pos.direction}) not found on exchange — "
+                    f"native stop fired or liquidation. Marking stopped at {exit_price:.5f}."
+                )
+                self.position_manager.close_position(
+                    pos.position_id,
+                    reason="stop_loss",
+                    current_price=exit_price,
+                )
+                self._exchange_stop_orders.pop(pos.position_id, None)
+                self._exchange_stop_levels.pop(pos.position_id, None)
+                self._log_activity("exchange_stop_detected", {
+                    "position_id": pos.position_id,
+                    "symbol": pos.symbol,
+                    "direction": pos.direction,
+                    "exit_price": exit_price,
                 })
 
     async def _cancel_exchange_stop(self, position_id: str):
