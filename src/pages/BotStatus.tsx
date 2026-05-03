@@ -13,6 +13,7 @@ import {
 import { PageContainer } from '@/components/layout/PageContainer';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { TacticalPanel } from '@/components/TacticalPanel';
+import { GauntletBreakdown } from '@/components/bot/GauntletBreakdown';
 import {
   liveTradingService,
   type LiveTradingStatus,
@@ -1020,6 +1021,15 @@ export function BotStatus() {
                       </div>
                     )}
                   </div>
+                )}
+
+                {/* ── Gauntlet Signal Intelligence ─────────────────────────── */}
+                {status?.signal_log && status.signal_log.length > 0 && (
+                  <GauntletBreakdown
+                    signals={status.signal_log}
+                    minConfluence={status.config?.min_confluence ?? undefined}
+                    currentScan={status.current_scan ?? undefined}
+                  />
                 )}
 
                 {/* ── Positions & Risk Row ─────────────────────────────────── */}
