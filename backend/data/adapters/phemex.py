@@ -532,3 +532,23 @@ class PhemexAdapter:
             logger.info(f"Leverage set to {leverage}x for {symbol}")
         except ccxt.ExchangeError as e:
             logger.warning(f"Could not set leverage for {symbol}: {e}")
+
+    def set_margin_mode(self, symbol: str, mode: str = "isolated") -> None:
+        """
+        Set margin mode for a symbol on Phemex.
+
+        mode: "isolated" (default — losses capped to allocated margin)
+              "cross"    (entire account used as collateral — higher liquidation risk)
+
+        Phemex rejects this call if a position is already open on the symbol,
+        so failures are logged as warnings and execution continues.
+        """
+        if not self.supports_trading():
+            return
+        try:
+            self.exchange.set_margin_mode(mode, symbol)
+            logger.info(f"Margin mode set to {mode} for {symbol}")
+        except ccxt.ExchangeError as e:
+            logger.warning(f"Could not set margin mode to {mode} for {symbol}: {e}")
+        except Exception as e:
+            logger.warning(f"set_margin_mode failed for {symbol}: {e}")

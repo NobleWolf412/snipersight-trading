@@ -173,10 +173,12 @@ class LiveExecutor:
             )
             return order
 
-        # Ensure leverage is set correctly on Phemex before placing the order.
-        # Phemex uses the account's saved leverage per symbol (default 10x).
-        # We enforce our configured target before the first order per symbol.
+        # Ensure margin mode and leverage are set correctly before the first order
+        # per symbol. Phemex persists these settings per symbol on the account,
+        # so we only need to set them once per session.
+        # Both calls are no-ops if a position is already open on the symbol.
         if symbol not in self._leverage_confirmed:
+            self._adapter.set_margin_mode(symbol, mode="isolated")
             try:
                 self._adapter.set_leverage(self.target_leverage, symbol)
                 self._leverage_confirmed.add(symbol)
