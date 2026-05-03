@@ -308,8 +308,20 @@ _STOP_PCT_CAPS = {"scalp": 0.03, "intraday": 0.05, "swing": 0.10}
 
 def _stop_pct_for_signal(sig: Dict) -> Optional[float]:
     try:
-        entry = float(sig.get("entry_zone") or 0)
-        stop = float(sig.get("stop_loss") or 0)
+        ez = sig.get("entry_zone")
+        if isinstance(ez, dict):
+            near = float(ez.get("near_entry") or ez.get("near") or 0)
+            far = float(ez.get("far_entry") or ez.get("far") or 0)
+            entry = (near + far) / 2 if (near and far) else (near or far)
+        else:
+            entry = float(ez or 0)
+
+        sl = sig.get("stop_loss")
+        if isinstance(sl, dict):
+            stop = float(sl.get("level") or sl.get("stop") or 0)
+        else:
+            stop = float(sl or 0)
+
         if entry > 0 and stop > 0:
             return abs(entry - stop) / entry
     except (TypeError, ValueError):
@@ -322,14 +334,14 @@ def _stop_pct_for_signal(sig: Dict) -> Optional[float]:
 def _print_config_block(config: Dict):
     if not config:
         return
-    mode = config.get("mode") or config.get("scanner_mode") or "?"
-    score = config.get("min_confluence_score") or config.get("confluence_soft_floor") or "mode default"
-    risk = config.get("risk_per_trade_pct") or config.get("risk_percent") or "?"
+    mode = config.get("sniper_mode") or config.get("mode") or config.get("scanner_mode") or "?"
+    score = config.get("min_confluence") or config.get("min_confluence_score") or config.get("confluence_soft_floor") or "mode default"
+    risk = config.get("risk_per_trade") or config.get("risk_per_trade_pct") or config.get("risk_percent") or "?"
     lev = config.get("leverage") or 1
     fee = config.get("fee_rate") or "?"
     balance = config.get("initial_balance") or config.get("balance") or "?"
     trailing = config.get("trailing_stop_enabled") or config.get("trailing_stop") or False
-    trail_act = config.get("trailing_stop_activation_pct") or "?"
+    trail_act = config.get("trailing_activation") or config.get("trailing_stop_activation_pct") or "?"
     print()
     print(bold("SESSION CONFIG"))
     print(f"  Mode: {cyan(mode)}  |  Min score: {score}  |  Risk: {risk}%  |  "
@@ -738,17 +750,10 @@ def _print_table(title: str, rows: List[Tuple], headers: List[str]):
         print(fmt.format(*cells))
 
 
-def _aggregate_report(
-    all_trades: List[Dict],
-    all_signals: List[Dict],
-    session_label: str,
-    config: Optional[Dict] = None,
-    session_dirs: Optional[List[Path]] = None,
-):
+def _aggregate_report(all_trades: List[Dict], all_signals: List[Dict], session_label: str):
     print()
     print(bold("=" * 80))
     print(bold(f"  SNIPERSIGHT SESSION ANALYSIS  —  {session_label}"))
-    _print_config_block(config or {})
     print(bold("=" * 80))
 
     if not all_trades:
@@ -1083,14 +1088,6 @@ def _aggregate_report(
         print(f"  Counter-trend:    {len(ct_trades):>3} trades  {_win_pct(ct_trades):.0f}% win  EV {ct_colour(f'${ct_ev:+.2f}')}"
               + (f"  ← regime gate not blocking these" if ct_ev < 0 else ""))
 
-    # ── New sections ─────────────────────────────────────────────────────────
-    _print_equity_curve(all_trades)
-    _print_stop_geometry(all_signals, all_trades)
-    _print_score_histogram(all_signals)
-    _print_btc_state_analysis(all_signals, all_trades)
-    _print_factor_correlation(all_signals, all_trades)
-    _print_system_diagnostics(all_trades, all_signals, config or {}, session_dirs)
-
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
@@ -1125,14 +1122,11 @@ def main():
     # ── Load data ─────────────────────────────────────────────────────────────
     all_trades: List[Dict] = []
     all_signals: List[Dict] = []
-    config: Dict = {}
 
     for sd in session_dirs:
         sd = Path(sd)
         all_trades.extend(_load_jsonl(sd / "trades.jsonl"))
         all_signals.extend(_load_jsonl(sd / "signals.jsonl"))
-        if not config:
-            config = _load_json(sd / "config.json")
 
     # ── Decision cards ────────────────────────────────────────────────────────
     show_cards = args.cards or args.card or (not args.no_cards and len(all_trades) <= 30)
@@ -1153,7 +1147,7 @@ def main():
                 _print_decision_card(sig, trade, i)
 
     # ── Aggregate report ──────────────────────────────────────────────────────
-    _aggregate_report(all_trades, all_signals, label, config=config, session_dirs=session_dirs)
+    _aggregate_report(all_trades, all_signals, label)
 
     print()
 
