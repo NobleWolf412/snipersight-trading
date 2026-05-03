@@ -43,12 +43,39 @@ export interface LivePosition {
   current_price: number;
   quantity: number;
   stop_loss: number;
+  initial_stop_loss?: number;
   unrealized_pnl: number;
   unrealized_pnl_pct: number;
   breakeven_active: boolean;
   trailing_active: boolean;
   opened_at: string;
   trade_type: string;
+  tp1?: number | null;
+  tp2?: number | null;
+  tp_final?: number | null;
+  target_pnl?: number;
+  risk_pnl?: number;
+  targets_hit?: number;
+  targets_remaining?: number;
+}
+
+export interface CompletedLiveTrade {
+  trade_id: string;
+  symbol: string;
+  direction: string;
+  entry_price: number;
+  exit_price: number;
+  quantity: number;
+  entry_time: string;
+  exit_time: string | null;
+  pnl: number;
+  pnl_pct: number;
+  exit_reason: string;
+  targets_hit: number[];
+  max_favorable: number;
+  max_adverse: number;
+  trade_type: string;
+  confidence_score: number;
 }
 
 export interface LiveTradingStatus {
@@ -61,6 +88,22 @@ export interface LiveTradingStatus {
   config: LiveTradingConfigRequest | null;
   last_scan_at: string | null;
   next_scan_in_seconds: number | null;
+  current_scan: {
+    status: string;
+    current_symbol?: string;
+    passed: number;
+    rejected: number;
+    completed: number;
+    total: number;
+    progress_pct: number;
+    recent_symbols?: { symbol: string; passed: boolean }[];
+  } | null;
+  regime: {
+    composite: string;
+    score: number;
+    trend?: string;
+    volatility?: string;
+  } | null;
   positions: LivePosition[];
   balance: {
     initial: number;
@@ -73,19 +116,32 @@ export interface LiveTradingStatus {
     total_trades: number;
     winning_trades: number;
     losing_trades: number;
+    scratch_trades: number;
     win_rate: number;
+    expectancy: number;
     total_pnl: number;
+    total_pnl_pct: number;
     avg_win: number;
     avg_loss: number;
+    avg_rr: number;
     best_trade: number;
     worst_trade: number;
     max_drawdown: number;
     scans_completed: number;
     signals_generated: number;
     signals_taken: number;
+    exit_reasons: Record<string, number>;
+    by_trade_type: Record<string, {
+      trades: number;
+      win_rate: number;
+      total_pnl: number;
+      avg_win: number;
+      avg_loss: number;
+    }>;
   };
   recent_activity: { timestamp: string; event_type: string; data: any }[];
   pending_orders: { order_id: string; symbol: string; direction: string; limit_price: number; quantity: number; status: string }[];
+  signal_log?: any[];
 }
 
 export interface PreflightResult {
@@ -139,7 +195,7 @@ class LiveTradingService {
     return res.json();
   }
 
-  async getHistory(limit = 50): Promise<{ trades: any[]; total: number }> {
+  async getHistory(limit = 50): Promise<{ trades: CompletedLiveTrade[]; total: number }> {
     const res = await fetch(`${BASE}/live-trading/history?limit=${limit}`);
     if (!res.ok) throw new Error(`History failed: ${res.status}`);
     return res.json();
