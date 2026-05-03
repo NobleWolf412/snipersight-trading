@@ -4,6 +4,10 @@ FastAPI server for SniperSight trading bot.
 Provides REST API endpoints for the frontend UI.
 """
 
+from dotenv import load_dotenv
+from pathlib import Path
+load_dotenv(Path(__file__).parent / ".env")
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
