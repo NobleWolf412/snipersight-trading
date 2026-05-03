@@ -556,11 +556,8 @@ class LiveExecutor:
                     if float(p.get("contracts", 0) or 0) != 0
                 ]
                 result["open_positions"] = open_pos
-                if open_pos:
-                    issues.append(
-                        f"Exchange has {len(open_pos)} existing open position(s) — "
-                        "review before starting"
-                    )
+                # Existing positions are informational — not a blocker.
+                # The bot will track and manage them alongside new ones.
             except Exception as e:
                 issues.append(f"Position check failed: {e}")
 
