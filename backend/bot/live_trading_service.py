@@ -762,7 +762,7 @@ class LiveTradingService:
     # ------------------------------------------------------------------
 
     def _log_signal(self, plan: Any, result: str, reason: str, **extra):
-        from backend.shared.utils.kill_zones import get_current_kill_zone
+        from backend.strategy.smc.sessions import get_current_kill_zone
         _now = datetime.now(timezone.utc)
         try:
             _kz_raw = get_current_kill_zone(_now)
