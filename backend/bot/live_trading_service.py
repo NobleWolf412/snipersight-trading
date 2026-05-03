@@ -25,6 +25,7 @@ from backend.bot.paper_trading_service import (
     PaperTradingStats,
     _PENDING_TTL_MINUTES,
     _SENSITIVITY_PRESETS,
+    _MAX_LIMIT_DISTANCE_PCT,
 )
 from backend.bot.trade_journal import get_trade_journal
 from backend.engine.orchestrator import Orchestrator
@@ -847,19 +848,56 @@ class LiveTradingService:
         else:
             entry_price = current_price
 
-        # Stale-entry guard: if the OB entry zone has already been passed by price,
-        # a limit order at entry_price would be below market (SHORT) or above market
-        # (LONG) and get rejected by Phemex. Skip these — the setup has already fired.
+        # Limit proximity snap: if the OB entry zone is far from current price the limit
+        # order will sit pending and expire without filling within the TTL window.
+        # Snap the limit closer to market so it has a realistic chance of executing.
+        # Mirrors paper_trading_service._MAX_LIMIT_DISTANCE_PCT snap logic exactly.
         is_long = plan.direction == "LONG"
-        if is_long and entry_price < current_price * 0.985:
+        _trade_type_snap = getattr(plan, "trade_type", "intraday") or "intraday"
+        _raw_limit = entry_price
+        _max_dist = _MAX_LIMIT_DISTANCE_PCT.get(_trade_type_snap, 0.40)
+        if score >= 70.0:
+            _max_dist /= 2.0
+        _gap_pct = abs(_raw_limit - current_price) / current_price * 100 if current_price else 0
+        if _gap_pct > _max_dist and current_price > 0:
+            if is_long:
+                entry_price = current_price * (1 - _max_dist / 100)
+            else:
+                entry_price = current_price * (1 + _max_dist / 100)
+            _stop = stop_level
+            _new_risk = abs(entry_price - _stop) if _stop else 0
+            _old_risk = abs(_raw_limit - _stop) if _stop else 0
+            if _new_risk > 0 and _old_risk > 0:
+                quantity = quantity * (_old_risk / _new_risk)
+                try:
+                    market_info = self.adapter.get_market_info(symbol) if self.adapter else {}
+                    lot_size = market_info.get("lot_size", 0.0)
+                    if lot_size > 0:
+                        quantity = round_to_lot(quantity, lot_size)
+                except Exception:
+                    pass
+            logger.info(
+                "LIMIT SNAP: %s %s | %.4f → %.4f (gap %.2f%% > max %.2f%%)",
+                symbol, plan.direction, _raw_limit, entry_price, _gap_pct, _max_dist,
+            )
+
+        # Stale-entry guard: reject only when the OB zone has already been blown through
+        # by price in the wrong direction. A valid OB entry is always "on the other side"
+        # of current price — LONG OB is below market (buy the dip), SHORT OB is above
+        # market (sell the rally). Rejection applies when:
+        #   LONG: entry is >1.5% ABOVE market — price blew through the OB upward
+        #   SHORT: entry is >1.5% BELOW market — price blew through the OB downward
+        # (The original ETH issue was SHORT entry at $2328 when market was $2380 —
+        # OB blown through downward — correct to reject that.)
+        if is_long and entry_price > current_price * 1.015:
             self._log_signal(plan, "filtered",
-                f"Entry {entry_price:.4f} is >1.5% below market {current_price:.4f} — OB already passed",
-                reason_type="risk_validation")
+                f"Entry {entry_price:.4f} is >1.5% above market {current_price:.4f} — OB blown through upward",
+                reason_type="stale_entry")
             return
-        if not is_long and entry_price > current_price * 1.015:
+        if not is_long and entry_price < current_price * 0.985:
             self._log_signal(plan, "filtered",
-                f"Entry {entry_price:.4f} is >1.5% above market {current_price:.4f} — OB already passed",
-                reason_type="risk_validation")
+                f"Entry {entry_price:.4f} is >1.5% below market {current_price:.4f} — OB blown through downward",
+                reason_type="stale_entry")
             return
 
         order = self.executor.place_order(
