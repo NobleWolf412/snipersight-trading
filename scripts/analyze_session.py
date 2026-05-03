@@ -308,8 +308,20 @@ _STOP_PCT_CAPS = {"scalp": 0.03, "intraday": 0.05, "swing": 0.10}
 
 def _stop_pct_for_signal(sig: Dict) -> Optional[float]:
     try:
-        entry = float(sig.get("entry_zone") or 0)
-        stop = float(sig.get("stop_loss") or 0)
+        ez = sig.get("entry_zone")
+        if isinstance(ez, dict):
+            near = float(ez.get("near_entry") or ez.get("near") or 0)
+            far = float(ez.get("far_entry") or ez.get("far") or 0)
+            entry = (near + far) / 2 if (near and far) else (near or far)
+        else:
+            entry = float(ez or 0)
+
+        sl = sig.get("stop_loss")
+        if isinstance(sl, dict):
+            stop = float(sl.get("level") or sl.get("stop") or 0)
+        else:
+            stop = float(sl or 0)
+
         if entry > 0 and stop > 0:
             return abs(entry - stop) / entry
     except (TypeError, ValueError):
@@ -322,14 +334,14 @@ def _stop_pct_for_signal(sig: Dict) -> Optional[float]:
 def _print_config_block(config: Dict):
     if not config:
         return
-    mode = config.get("mode") or config.get("scanner_mode") or "?"
-    score = config.get("min_confluence_score") or config.get("confluence_soft_floor") or "mode default"
-    risk = config.get("risk_per_trade_pct") or config.get("risk_percent") or "?"
+    mode = config.get("sniper_mode") or config.get("mode") or config.get("scanner_mode") or "?"
+    score = config.get("min_confluence") or config.get("min_confluence_score") or config.get("confluence_soft_floor") or "mode default"
+    risk = config.get("risk_per_trade") or config.get("risk_per_trade_pct") or config.get("risk_percent") or "?"
     lev = config.get("leverage") or 1
     fee = config.get("fee_rate") or "?"
     balance = config.get("initial_balance") or config.get("balance") or "?"
     trailing = config.get("trailing_stop_enabled") or config.get("trailing_stop") or False
-    trail_act = config.get("trailing_stop_activation_pct") or "?"
+    trail_act = config.get("trailing_activation") or config.get("trailing_stop_activation_pct") or "?"
     print()
     print(bold("SESSION CONFIG"))
     print(f"  Mode: {cyan(mode)}  |  Min score: {score}  |  Risk: {risk}%  |  "
