@@ -80,6 +80,7 @@ class Order:
     average_fill_price: float = 0.0
     status: OrderStatus = OrderStatus.PENDING
     stop_price: Optional[float] = None
+    rejection_reason: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 

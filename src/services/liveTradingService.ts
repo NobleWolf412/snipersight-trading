@@ -200,6 +200,16 @@ class LiveTradingService {
     if (!res.ok) throw new Error(`History failed: ${res.status}`);
     return res.json();
   }
+
+  async analyzeSession(sessionId?: string): Promise<{ session_dir: string; session_id: string; output: string; error: string; returncode: number }> {
+    const url = sessionId ? `${BASE}/live-trading/analyze-session?session_id=${sessionId}` : `${BASE}/live-trading/analyze-session`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || `Analyze failed: ${res.status}`);
+    }
+    return res.json();
+  }
 }
 
 export const liveTradingService = new LiveTradingService();

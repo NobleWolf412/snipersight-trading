@@ -870,8 +870,9 @@ class LiveTradingService:
         )
 
         if order.status.value in ("REJECTED",):
-            logger.warning(f"Order rejected for {symbol}: {order.status}")
-            self._log_signal(plan, "filtered", f"Order rejected by exchange: {order.status.value}", reason_type="errors")
+            reject_msg = getattr(order, "rejection_reason", None) or order.status.value
+            logger.warning(f"Order rejected for {symbol}: {reject_msg}")
+            self._log_signal(plan, "filtered", reject_msg, reason_type="errors")
             return
 
         self._pending_plans[order.order_id] = plan
