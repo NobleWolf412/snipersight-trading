@@ -254,7 +254,7 @@ export function BotSetup() {
                     <input
                       type="number" step="0.1" min="0.1" max="5"
                       value={riskPct}
-                      onChange={e => setRiskPct(parseFloat(e.target.value))}
+                      onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) setRiskPct(v); }}
                       className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-foreground focus:border-accent outline-none"
                     />
                   </FieldRow>
@@ -268,7 +268,7 @@ export function BotSetup() {
                     <input
                       type="number" min="1" max="10"
                       value={maxPositions}
-                      onChange={e => setMaxPositions(parseInt(e.target.value))}
+                      onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setMaxPositions(v); }}
                       className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-foreground focus:border-accent outline-none"
                     />
                   </FieldRow>
@@ -282,7 +282,7 @@ export function BotSetup() {
                     <input
                       type="number" min="1" max="168"
                       value={durationHours}
-                      onChange={e => setDurationHours(parseInt(e.target.value))}
+                      onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setDurationHours(v); }}
                       className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-foreground focus:border-accent outline-none"
                     />
                   </FieldRow>
@@ -296,7 +296,7 @@ export function BotSetup() {
                     <input
                       type="number" min="1" max="60"
                       value={scanInterval}
-                      onChange={e => setScanInterval(parseInt(e.target.value))}
+                      onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setScanInterval(v); }}
                       className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-foreground focus:border-accent outline-none"
                     />
                   </FieldRow>
@@ -329,7 +329,7 @@ export function BotSetup() {
                     <input
                       type="number" min="1" max="720"
                       value={maxHoursOpen}
-                      onChange={e => setMaxHoursOpen(parseInt(e.target.value))}
+                      onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setMaxHoursOpen(v); }}
                       className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-foreground focus:border-accent outline-none"
                     />
                   </FieldRow>
@@ -397,7 +397,7 @@ export function BotSetup() {
                     <input
                       type="number" min="1"
                       value={maxPosSizeUsd}
-                      onChange={e => setMaxPosSizeUsd(parseFloat(e.target.value))}
+                      onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) setMaxPosSizeUsd(v); }}
                       className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-foreground focus:border-accent outline-none"
                     />
                   </FieldRow>
@@ -405,7 +405,7 @@ export function BotSetup() {
                     <input
                       type="number" min="1"
                       value={maxExposureUsd}
-                      onChange={e => setMaxExposureUsd(parseFloat(e.target.value))}
+                      onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) setMaxExposureUsd(v); }}
                       className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-foreground focus:border-accent outline-none"
                     />
                   </FieldRow>
@@ -413,7 +413,7 @@ export function BotSetup() {
                     <input
                       type="number" min="0"
                       value={minBalanceUsd}
-                      onChange={e => setMinBalanceUsd(parseFloat(e.target.value))}
+                      onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) setMinBalanceUsd(v); }}
                       className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono text-foreground focus:border-accent outline-none"
                     />
                   </FieldRow>
