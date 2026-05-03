@@ -729,9 +729,24 @@ class LiveTradingService:
         else:
             entry_price = current_price
 
+        # Stale-entry guard: if the OB entry zone has already been passed by price,
+        # a limit order at entry_price would be below market (SHORT) or above market
+        # (LONG) and get rejected by Phemex. Skip these — the setup has already fired.
+        is_long = plan.direction == "LONG"
+        if is_long and entry_price < current_price * 0.985:
+            self._log_signal(plan, "filtered",
+                f"Entry {entry_price:.4f} is >1.5% below market {current_price:.4f} — OB already passed",
+                reason_type="risk_validation")
+            return
+        if not is_long and entry_price > current_price * 1.015:
+            self._log_signal(plan, "filtered",
+                f"Entry {entry_price:.4f} is >1.5% above market {current_price:.4f} — OB already passed",
+                reason_type="risk_validation")
+            return
+
         order = self.executor.place_order(
             symbol=symbol,
-            side="BUY" if plan.direction == "LONG" else "SELL",
+            side="BUY" if is_long else "SELL",
             order_type="LIMIT",
             quantity=quantity,
             price=entry_price,
@@ -739,14 +754,14 @@ class LiveTradingService:
 
         if order.status.value in ("REJECTED",):
             logger.warning(f"Order rejected for {symbol}: {order.status}")
-            self._log_signal(plan, "filtered", f"Order rejected by exchange: {order.status.value}", reason_type="exec_error")
+            self._log_signal(plan, "filtered", f"Order rejected by exchange: {order.status.value}", reason_type="errors")
             return
 
         self._pending_plans[order.order_id] = plan
         self._pending_placed_at[order.order_id] = datetime.now(timezone.utc)
         self._pending_placed_price[order.order_id] = current_price
 
-        self._log_signal(plan, "pending", f"Limit order placed @ {entry_price:.4f}", reason_type="executed")
+        self._log_signal(plan, "pending", f"Waiting for limit fill @ {entry_price:.4f}", reason_type="pending_fill")
         self._log_activity("signal_taken", {
             "symbol": symbol,
             "direction": plan.direction,
