@@ -428,6 +428,74 @@ class LiveExecutor:
             "active_positions": len([p for p in self._positions.values() if p != 0]),
         }
 
+    def place_stop_order(
+        self,
+        symbol: str,
+        side: str,
+        quantity: float,
+        stop_price: float,
+    ) -> Order:
+        """
+        Place a reduce-only stop-market order on Phemex.
+
+        This is the exchange-side guardian — it fires even if our server goes
+        down. Complement to PositionManager's software polling, not a replacement.
+        Side should be the CLOSING side: SELL for a LONG, BUY for a SHORT.
+        """
+        order_id = self._generate_order_id()
+        try:
+            order_side = OrderSide(side.upper())
+        except ValueError:
+            raise ValueError(f"Invalid stop order side '{side}'")
+
+        order = Order(
+            order_id=order_id,
+            symbol=symbol,
+            side=order_side,
+            order_type=OrderType.STOP_LOSS,
+            quantity=quantity,
+            price=stop_price,
+            stop_price=stop_price,
+            status=OrderStatus.OPEN,
+        )
+        self._orders[order_id] = order
+
+        if self.dry_run:
+            logger.info(
+                f"[DRY RUN] Exchange stop would place: {order_id} {side} {quantity} "
+                f"{symbol} trigger @ {stop_price}"
+            )
+            return order
+
+        try:
+            exchange_order = self._adapter.create_order(
+                symbol=symbol,
+                order_type="market",
+                side=side.lower(),
+                amount=quantity,
+                price=None,
+                params={
+                    "stopPrice": stop_price,
+                    "reduceOnly": True,
+                    "timeInForce": "GTE_GTC",
+                },
+            )
+            exchange_id = str(exchange_order.get("id", ""))
+            self._exchange_order_map[order_id] = exchange_id
+            self._reverse_order_map[exchange_id] = order_id
+            logger.info(
+                f"Exchange stop placed: {order_id} → exchange_id={exchange_id} "
+                f"{side} {quantity} {symbol} trigger @ {stop_price}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Exchange stop placement failed for {symbol} @ {stop_price} — "
+                f"software monitoring remains active. Error: {e}"
+            )
+            order.status = OrderStatus.REJECTED
+
+        return order
+
     # ------------------------------------------------------------------
     # Live-only methods (not in PaperExecutor)
     # ------------------------------------------------------------------
