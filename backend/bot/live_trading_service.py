@@ -92,6 +92,13 @@ class LiveTradingService:
 
         self.signal_log: List[Dict[str, Any]] = []
 
+        # Session log directory (set on start, used for persistent output)
+        self._session_log_dir: Optional[Path] = None
+
+        # Symbols with exchange-side positions/orders that pre-date this session.
+        # Populated by _startup_reconcile() so _has_position() blocks double-entry.
+        self._orphaned_symbols: set = set()
+
         # Exchange-native stop order tracking (position_id → internal order_id / level)
         self._exchange_stop_orders: Dict[str, str] = {}
         self._exchange_stop_levels: Dict[str, float] = {}
@@ -184,6 +191,8 @@ class LiveTradingService:
         self.activity_log = []
         self.stats = PaperTradingStats()
         self.signal_log = []
+        self._session_log_dir = None
+        self._orphaned_symbols = set()
         self._price_cache = {}
         self._pending_plans = {}
         self._pending_placed_at = {}
@@ -198,9 +207,30 @@ class LiveTradingService:
         self._running = True
         self.status = LiveBotStatus.RUNNING
 
+        # Create session log directory
+        project_root = Path(__file__).parent.parent.parent
+        self._session_log_dir = project_root / "logs" / "live_trading" / f"session_{self.session_id}"
+        self._session_log_dir.mkdir(parents=True, exist_ok=True)
+
         mode_label = "DRY RUN" if config.dry_run else ("TESTNET" if config.testnet else "LIVE — REAL MONEY")
         logger.warning(f"Live trading started: session={self.session_id} mode={mode_label}")
         self._log_activity("session_started", {"session_id": self.session_id, "mode": mode_label})
+
+        # Write session_info.json
+        try:
+            session_info = {
+                "session_id": self.session_id,
+                "started_at": self.started_at.isoformat(),
+                "mode": mode_label,
+                "config": config.to_dict(),
+            }
+            with open(self._session_log_dir / "session_info.json", "w", encoding="utf-8") as f:
+                json.dump(session_info, f, indent=2, default=str)
+        except Exception as e:
+            logger.warning(f"Failed to write session_info.json: {e}")
+
+        # Reconcile exchange state before first scan to prevent double-entry
+        await self._startup_reconcile()
 
         self._scan_task = asyncio.create_task(self._scan_loop(), name=f"live_scan_{self.session_id}")
         self._scan_task.add_done_callback(self._task_done_callback)
@@ -235,6 +265,26 @@ class LiveTradingService:
         await self._close_all_positions("session_stopped")
         self._log_activity("session_stopped", {"session_id": self.session_id})
         logger.info(f"Live trading stopped: session={self.session_id}")
+
+        # Write final session report
+        if self._session_log_dir:
+            try:
+                with open(self._session_log_dir / "stats.json", "w", encoding="utf-8") as f:
+                    json.dump(self.stats.to_dict(), f, indent=2, default=str)
+                if self.config:
+                    with open(self._session_log_dir / "config.json", "w", encoding="utf-8") as f:
+                        json.dump(self.config.to_dict(), f, indent=2, default=str)
+                stopped_at = self.stopped_at or datetime.now(timezone.utc)
+                with open(self._session_log_dir / "session_info.json", "r+", encoding="utf-8") as f:
+                    info = json.load(f)
+                    info["stopped_at"] = stopped_at.isoformat()
+                    info["duration_seconds"] = self._get_uptime_seconds()
+                    f.seek(0)
+                    json.dump(info, f, indent=2, default=str)
+                    f.truncate()
+            except Exception as e:
+                logger.warning(f"Failed to write session report: {e}")
+
         return self.get_status()
 
     async def kill_switch(self) -> Dict[str, Any]:
@@ -377,6 +427,73 @@ class LiveTradingService:
 
     def get_activity_log(self, limit: int = 100) -> List[Dict[str, Any]]:
         return self.activity_log[-limit:]
+
+    # ------------------------------------------------------------------
+    # Startup reconciliation
+    # ------------------------------------------------------------------
+
+    async def _startup_reconcile(self):
+        """
+        Sync exchange state on session start to prevent double-entry after restart.
+
+        Two cases handled:
+        1. Orphaned limit orders — we lost the TradePlan on restart so we cannot
+           manage a fill correctly. Cancel them and let the next scan re-evaluate.
+        2. Orphaned open positions — register their symbols in _orphaned_symbols so
+           _has_position() blocks new entries. The exchange-native stop still protects
+           the position; the bot won't trail/target it but won't add to it either.
+        """
+        if not self.adapter or not self.executor or (self.config and self.config.dry_run):
+            return
+
+        loop = asyncio.get_running_loop()
+
+        # ── 1. Cancel orphaned limit orders ──────────────────────────────────
+        try:
+            raw_orders = await loop.run_in_executor(
+                None, lambda: self.adapter.exchange.fetch_open_orders()
+            )
+            for o in raw_orders:
+                if o.get("type", "").lower() not in ("limit", "stop_market", "stop"):
+                    continue
+                symbol = o.get("symbol", "")
+                oid = str(o.get("id", ""))
+                try:
+                    await loop.run_in_executor(
+                        None, lambda s=symbol, i=oid: self.adapter.cancel_order(i, s)
+                    )
+                    logger.warning(f"Startup reconcile: cancelled orphaned order {oid} {symbol}")
+                    self._log_activity("orphaned_order_cancelled", {"order_id": oid, "symbol": symbol})
+                except Exception as e:
+                    logger.error(f"Startup reconcile: could not cancel {oid} {symbol}: {e}")
+        except Exception as e:
+            logger.warning(f"Startup reconcile: could not fetch open orders: {e}")
+
+        # ── 2. Block new entries on symbols with existing positions ───────────
+        try:
+            positions = await loop.run_in_executor(None, self.adapter.fetch_positions)
+            for pos in positions:
+                qty = float(pos.get("contracts", 0) or 0)
+                if abs(qty) < 1e-6:
+                    continue
+                symbol = pos.get("symbol", "")
+                side = pos.get("side", "long")
+                entry_price = float(pos.get("entryPrice", 0) or 0)
+                self._orphaned_symbols.add(symbol)
+                logger.warning(
+                    f"Startup reconcile: orphaned position detected — {symbol} "
+                    f"{side.upper()} qty={qty:.4f} @ {entry_price:.4f}. "
+                    f"Exchange-native stop still active. Bot will not add to this position."
+                )
+                self._log_activity("orphaned_position_detected", {
+                    "symbol": symbol,
+                    "side": side,
+                    "quantity": qty,
+                    "entry_price": entry_price,
+                    "note": "Exchange stop active. No new entries will be placed.",
+                })
+        except Exception as e:
+            logger.warning(f"Startup reconcile: could not fetch positions: {e}")
 
     # ------------------------------------------------------------------
     # Background loops
@@ -753,8 +870,9 @@ class LiveTradingService:
         )
 
         if order.status.value in ("REJECTED",):
-            logger.warning(f"Order rejected for {symbol}: {order.status}")
-            self._log_signal(plan, "filtered", f"Order rejected by exchange: {order.status.value}", reason_type="errors")
+            reject_msg = getattr(order, "rejection_reason", None) or order.status.value
+            logger.warning(f"Order rejected for {symbol}: {reject_msg}")
+            self._log_signal(plan, "filtered", reject_msg, reason_type="errors")
             return
 
         self._pending_plans[order.order_id] = plan
@@ -814,6 +932,12 @@ class LiveTradingService:
         self.signal_log.append(entry)
         if len(self.signal_log) > 200:
             self.signal_log = self.signal_log[-200:]
+        if self._session_log_dir:
+            try:
+                with open(self._session_log_dir / "signals.jsonl", "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, default=str) + "\n")
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Helpers
@@ -951,6 +1075,9 @@ class LiveTradingService:
             self._price_cache_refreshed_at = datetime.now(timezone.utc)
 
     def _has_position(self, symbol: str) -> bool:
+        # Also block entry on symbols with pre-session exchange positions/orders
+        if symbol in self._orphaned_symbols:
+            return True
         if not self.position_manager:
             return False
         for pos in self.position_manager.positions.values():
@@ -1053,6 +1180,12 @@ class LiveTradingService:
             self.completed_trades.append(trade)
             self._completed_trade_ids.add(trade.trade_id)
             self._update_stats(trade)
+            if self._session_log_dir:
+                try:
+                    with open(self._session_log_dir / "trades.jsonl", "a", encoding="utf-8") as f:
+                        f.write(json.dumps(trade.to_dict(), default=str) + "\n")
+                except Exception:
+                    pass
             self._log_activity("trade_closed", {
                 "position_id": pos.position_id,
                 "symbol": pos.symbol,
@@ -1116,6 +1249,12 @@ class LiveTradingService:
         self.activity_log.append(entry)
         if len(self.activity_log) > 1000:
             self.activity_log = self.activity_log[-500:]
+        if self._session_log_dir:
+            try:
+                with open(self._session_log_dir / "activity.jsonl", "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, default=str) + "\n")
+            except Exception:
+                pass
 
     def _get_uptime_seconds(self) -> int:
         if not self.started_at:

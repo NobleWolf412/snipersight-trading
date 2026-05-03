@@ -143,27 +143,24 @@ class LiveExecutor:
         if ref_price > 0:
             position_usd = quantity * ref_price
             if position_usd > self.max_position_size_usd:
-                logger.warning(
-                    f"Order REJECTED: position size ${position_usd:.2f} exceeds cap "
-                    f"${self.max_position_size_usd:.2f}"
-                )
+                msg = f"Position size ${position_usd:.2f} exceeds cap ${self.max_position_size_usd:.2f}"
+                logger.warning(f"Order REJECTED: {msg}")
                 order.status = OrderStatus.REJECTED
+                order.rejection_reason = msg
                 return order
 
             if self._total_exposure_usd() + position_usd > self.max_total_exposure_usd:
-                logger.warning(
-                    f"Order REJECTED: total exposure would exceed "
-                    f"${self.max_total_exposure_usd:.2f}"
-                )
+                msg = f"Total exposure would exceed ${self.max_total_exposure_usd:.2f}"
+                logger.warning(f"Order REJECTED: {msg}")
                 order.status = OrderStatus.REJECTED
+                order.rejection_reason = msg
                 return order
 
         if self._cached_balance < self.min_balance_usd:
-            logger.warning(
-                f"Order REJECTED: balance ${self._cached_balance:.2f} below "
-                f"minimum ${self.min_balance_usd:.2f}"
-            )
+            msg = f"Balance ${self._cached_balance:.2f} below minimum ${self.min_balance_usd:.2f}"
+            logger.warning(f"Order REJECTED: {msg}")
             order.status = OrderStatus.REJECTED
+            order.rejection_reason = msg
             return order
 
         if self.dry_run:
@@ -195,15 +192,18 @@ class LiveExecutor:
                 f"Order sent: {order_id} → exchange_id={exchange_id} "
                 f"{side} {quantity} {symbol} @ {price}"
             )
-        except ccxt.InsufficientFunds:
+        except ccxt.InsufficientFunds as e:
             logger.error(f"Insufficient funds for {order_id}")
             order.status = OrderStatus.REJECTED
+            order.rejection_reason = f"Insufficient funds: {e}"
         except ccxt.InvalidOrder as e:
             logger.error(f"Invalid order {order_id}: {e}")
             order.status = OrderStatus.REJECTED
+            order.rejection_reason = f"Invalid order: {e}"
         except Exception as e:
             logger.error(f"Failed to send order {order_id} to exchange: {e}")
             order.status = OrderStatus.REJECTED
+            order.rejection_reason = str(e)
 
         return order
 

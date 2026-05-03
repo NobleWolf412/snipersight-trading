@@ -497,6 +497,9 @@ export function BotStatus() {
   const [killing, setKilling] = useState(false);
   const [showKillConfirm, setShowKillConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeOutput, setAnalyzeOutput] = useState<string | null>(null);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const fetchFailCount = useRef(0);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const connectionErrorRef = useRef<string | null>(null);
@@ -548,6 +551,21 @@ export function BotStatus() {
   const handleReset = async () => {
     try { await liveTradingService.reset(); navigate('/bot/setup'); }
     catch (e: any) { setError(e.message); }
+  };
+
+  const handleAnalyze = async () => {
+    setAnalyzing(true);
+    setAnalyzeOutput(null);
+    setAnalyzeError(null);
+    try {
+      const result = await liveTradingService.analyzeSession();
+      setAnalyzeOutput(result.output || '(no output)');
+      if (result.error) setAnalyzeError(result.error);
+    } catch (e: any) {
+      setAnalyzeError(e.message);
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const isRunning = status?.status === 'running';
@@ -676,6 +694,20 @@ export function BotStatus() {
                             </button>
                           </div>
                         )}
+                        {/* Analyze Session — 3D button, always visible when logs exist */}
+                        <button
+                          onClick={handleAnalyze}
+                          disabled={analyzing}
+                          className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono font-black text-xs tracking-widest text-cyan-300 disabled:opacity-40 transition-all duration-100 active:translate-y-px"
+                          style={{
+                            background: 'linear-gradient(180deg, #164e63 0%, #0e3a4a 60%, #0a2d3a 100%)',
+                            border: '1px solid rgba(34,211,238,0.4)',
+                            boxShadow: '0 4px 0 0 #061e27, 0 0 12px rgba(34,211,238,0.15), inset 0 1px 0 rgba(255,255,255,0.07)',
+                          }}
+                        >
+                          {analyzing ? <ArrowsClockwise size={15} className="animate-spin" /> : <ChartLine size={15} />}
+                          ANALYZE
+                        </button>
                       </div>
                     </div>
 
@@ -1023,15 +1055,6 @@ export function BotStatus() {
                   </div>
                 )}
 
-                {/* ── Gauntlet Signal Intelligence ─────────────────────────── */}
-                {status?.signal_log && status.signal_log.length > 0 && (
-                  <GauntletBreakdown
-                    signals={status.signal_log}
-                    minConfluence={status.config?.min_confluence ?? undefined}
-                    currentScan={status.current_scan ?? undefined}
-                  />
-                )}
-
                 {/* ── Positions & Risk Row ─────────────────────────────────── */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Active Positions */}
@@ -1198,6 +1221,15 @@ export function BotStatus() {
                   </div>
                 </section>
 
+                {/* ── Gauntlet Signal Intelligence ─────────────────────────── */}
+                {status?.signal_log && status.signal_log.length > 0 && (
+                  <GauntletBreakdown
+                    signals={status.signal_log}
+                    minConfluence={status.config?.min_confluence ?? undefined}
+                    currentScan={status.current_scan ?? undefined}
+                  />
+                )}
+
                 {/* ── Recent Activity ──────────────────────────────────────── */}
                 {status.recent_activity.length > 0 && (
                   <TacticalPanel>
@@ -1242,6 +1274,32 @@ export function BotStatus() {
           </div>
         </PageContainer>
       </main>
+
+      {/* ── Analyze Session Modal ─────────────────────────────────────────── */}
+      <Dialog open={analyzeOutput !== null || analyzeError !== null} onOpenChange={(open) => { if (!open) { setAnalyzeOutput(null); setAnalyzeError(null); } }}>
+        <DialogContent className="max-w-4xl w-full max-h-[85vh] flex flex-col bg-zinc-950 border-cyan-500/30 p-0">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+            <div className="flex items-center gap-3">
+              <ChartLine size={18} className="text-cyan-400" />
+              <span className="font-mono font-black text-sm tracking-widest text-cyan-300 uppercase">Session Analysis</span>
+            </div>
+            <button
+              onClick={() => { navigator.clipboard.writeText(analyzeOutput || analyzeError || ''); }}
+              className="flex items-center gap-2 px-3 py-1.5 rounded font-mono text-xs text-zinc-400 border border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+            >
+              <ListBullets size={13} /> COPY
+            </button>
+          </div>
+          {analyzeError && (
+            <div className="px-5 py-3 bg-red-950/40 border-b border-red-500/20">
+              <p className="font-mono text-xs text-red-400">{analyzeError}</p>
+            </div>
+          )}
+          <div className="flex-1 overflow-y-auto p-5">
+            <pre className="font-mono text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{analyzeOutput}</pre>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

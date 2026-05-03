@@ -2894,6 +2894,51 @@ async def reset_live_trading():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/live-trading/analyze-session")
+async def analyze_live_session(session_id: Optional[str] = None):
+    """Run analyze_session.py on the most recent (or specified) live session log directory."""
+    import subprocess
+    from pathlib import Path as _Path
+
+    project_root = _Path(__file__).parent.parent
+    logs_dir = project_root / "logs" / "live_trading"
+
+    if not logs_dir.exists():
+        raise HTTPException(status_code=404, detail="No live session logs found")
+
+    if session_id:
+        session_dir = logs_dir / f"session_{session_id}"
+        if not session_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    else:
+        dirs = sorted(logs_dir.glob("session_*"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not dirs:
+            raise HTTPException(status_code=404, detail="No live session logs found")
+        session_dir = dirs[0]
+
+    script = project_root / "scripts" / "analyze_session.py"
+    if not script.exists():
+        raise HTTPException(status_code=404, detail="analyze_session.py script not found")
+
+    try:
+        result = subprocess.run(
+            ["python", str(script), str(session_dir)],
+            capture_output=True, text=True, timeout=60,
+            cwd=str(project_root),
+        )
+        return {
+            "session_dir": str(session_dir),
+            "session_id": session_dir.name.replace("session_", ""),
+            "output": result.stdout,
+            "error": result.stderr,
+            "returncode": result.returncode,
+        }
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Analysis timed out after 60s")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Serve built frontend at root (only if dist exists - for production)
 # IMPORTANT: This MUST be at the end, after all API routes, otherwise it catches /api/* requests
 import os
