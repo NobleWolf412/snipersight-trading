@@ -302,6 +302,390 @@ def _print_decision_card(signal: Dict, trade: Optional[Dict], card_num: int):
     print(bold("╚" + "═" * 78))
 
 
+# ── Stop geometry helpers ─────────────────────────────────────────────────────
+_STOP_PCT_CAPS = {"scalp": 0.03, "intraday": 0.05, "swing": 0.10}
+
+
+def _stop_pct_for_signal(sig: Dict) -> Optional[float]:
+    try:
+        ez = sig.get("entry_zone")
+        if isinstance(ez, dict):
+            near = float(ez.get("near_entry") or ez.get("near") or 0)
+            far = float(ez.get("far_entry") or ez.get("far") or 0)
+            entry = (near + far) / 2 if (near and far) else (near or far)
+        else:
+            entry = float(ez or 0)
+
+        sl = sig.get("stop_loss")
+        if isinstance(sl, dict):
+            stop = float(sl.get("level") or sl.get("stop") or 0)
+        else:
+            stop = float(sl or 0)
+
+        if entry > 0 and stop > 0:
+            return abs(entry - stop) / entry
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+# ── New section renderers ─────────────────────────────────────────────────────
+
+def _print_config_block(config: Dict):
+    if not config:
+        return
+    mode = config.get("sniper_mode") or config.get("mode") or config.get("scanner_mode") or "?"
+    score = config.get("min_confluence") or config.get("min_confluence_score") or config.get("confluence_soft_floor") or "mode default"
+    risk = config.get("risk_per_trade") or config.get("risk_per_trade_pct") or config.get("risk_percent") or "?"
+    lev = config.get("leverage") or 1
+    fee = config.get("fee_rate") or "?"
+    balance = config.get("initial_balance") or config.get("balance") or "?"
+    trailing = config.get("trailing_stop_enabled") or config.get("trailing_stop") or False
+    trail_act = config.get("trailing_activation") or config.get("trailing_stop_activation_pct") or "?"
+    print()
+    print(bold("SESSION CONFIG"))
+    print(f"  Mode: {cyan(mode)}  |  Min score: {score}  |  Risk: {risk}%  |  "
+          f"Leverage: {lev}x  |  Fee: {fee}  |  Balance: ${balance}")
+    if trailing:
+        print(f"  Trailing stop: enabled (activation {trail_act}%)")
+
+
+def _print_equity_curve(all_trades: List[Dict]):
+    sorted_trades = sorted(
+        [t for t in all_trades if t.get("entry_time")],
+        key=lambda t: t.get("entry_time", ""),
+    )
+    if not sorted_trades:
+        return
+    print()
+    print(bold("EQUITY CURVE  (cumulative P&L per trade)"))
+    cumulative = 0.0
+    bar_scale = 2.0  # $ per char
+    for i, t in enumerate(sorted_trades, 1):
+        pnl = t.get("pnl", 0)
+        cumulative += pnl
+        sym = t.get("symbol", "?")[:8]
+        pnl_colour = green if pnl >= 0 else red
+        cum_colour = green if cumulative >= 0 else red
+        bar_len = max(1, round(abs(pnl) / bar_scale))
+        bar = ("+" if pnl >= 0 else "-") * bar_len
+        bar_str = green(bar) if pnl >= 0 else red(bar)
+        print(f"  #{i:>2}  {sym:<10}  {pnl_colour(f'{pnl:+6.2f}'):>10}  "
+              f"cum={cum_colour(f'${cumulative:+7.2f}')}  {bar_str}")
+
+
+def _print_stop_geometry(all_signals: List[Dict], all_trades: List[Dict]):
+    executed = [s for s in all_signals if s.get("result") == "executed"]
+    if not executed:
+        return
+
+    sig_map: Dict[Tuple, Dict] = {}
+    for s in executed:
+        sig_map[(s.get("symbol"), s.get("direction"))] = s
+
+    by_sym: Dict[str, List[float]] = defaultdict(list)
+    for s in executed:
+        pct = _stop_pct_for_signal(s)
+        if pct is not None:
+            by_sym[s.get("symbol", "?")].append(pct)
+
+    if not by_sym:
+        return
+
+    print()
+    print(bold("STOP GEOMETRY BY SYMBOL  (stop distance as % of entry)"))
+    headers = ["Symbol", "Trades", "Avg Stop%", "Max Stop%", "Cap Breaches"]
+    rows = []
+    any_breach = False
+    for sym, pcts in sorted(by_sym.items()):
+        trades_for_sym = [t for t in all_trades if t.get("symbol") == sym]
+        tt = (trades_for_sym[0].get("trade_type") or "scalp").lower() if trades_for_sym else "scalp"
+        cap = _STOP_PCT_CAPS.get(tt, 0.05)
+        breaches = sum(1 for p in pcts if p > cap)
+        avg_pct = sum(pcts) / len(pcts) * 100
+        max_pct = max(pcts) * 100
+        breach_str = red(f"{breaches}  ← geometry issue") if breaches > 0 else green("0")
+        if breaches:
+            any_breach = True
+        rows.append((sym, len(pcts), f"{avg_pct:.2f}%", f"{max_pct:.2f}%", breach_str))
+
+    rows.sort(key=lambda r: float(r[3].rstrip("%")), reverse=True)
+    col_widths = [max(len(str(h)), max(len(str(r[i])) for r in rows)) for i, h in enumerate(headers)]
+    fmt = "  ".join(f"{{:<{w}}}" for w in col_widths)
+    print(fmt.format(*headers))
+    print("  ".join("─" * w for w in col_widths))
+    for row in rows:
+        print(fmt.format(*row))
+    if any_breach:
+        print(f"  {yellow('Cap thresholds: scalp 3%, intraday 5%, swing 10%')}")
+
+
+def _print_score_histogram(all_signals: List[Dict]):
+    executed = [s for s in all_signals if s.get("result") == "executed"]
+    if not executed:
+        return
+
+    # 1-point buckets from 70 (gate threshold) up — granular enough to see
+    # which bands are actually contributing trades.
+    buckets: Dict[int, int] = {}
+    for lo in range(70, 100):
+        buckets[lo] = 0
+    below = 0
+
+    for s in executed:
+        conf = s.get("confluence", 0) or 0
+        lo = int(conf)
+        if lo < 70:
+            below += 1
+        elif lo in buckets:
+            buckets[lo] += 1
+        else:
+            buckets[99] = buckets.get(99, 0) + 1
+
+    total = len(executed)
+    print()
+    print(bold(f"SCORE DISTRIBUTION  ({total} executed signals)"))
+    bar_max = max(max(buckets.values(), default=0), below, 1)
+    if below:
+        bar = "█" * round(below / bar_max * 20)
+        print(f"  {' <70':>6}  {red(bar):<22}  {below:>2} trades  ({below/total*100:.0f}%)")
+    for lo, count in sorted(buckets.items()):
+        if count == 0:
+            continue
+        bar = "█" * round(count / bar_max * 20)
+        pct = count / total * 100
+        colour = green if lo >= 75 else yellow
+        label = f"{lo}-{lo+1}"
+        print(f"  {label:>6}  {colour(bar):<22}  {count:>2} trades  ({pct:.0f}%)")
+
+
+def _print_btc_state_analysis(all_signals: List[Dict], all_trades: List[Dict]):
+    executed = [s for s in all_signals if s.get("result") == "executed"]
+    if not executed:
+        return
+
+    trade_map: Dict[Tuple, Dict] = {}
+    for t in all_trades:
+        trade_map[(t.get("symbol"), t.get("direction"))] = t
+
+    by_btc: Dict[str, List[float]] = defaultdict(list)
+    for s in executed:
+        btc_state = (
+            s.get("btc_impulse")
+            or s.get("btc_state")
+            or (s.get("btc_factor") or {}).get("status")
+            or "unknown"
+        )
+        t = trade_map.get((s.get("symbol"), s.get("direction")))
+        if t:
+            by_btc[str(btc_state)].append(t.get("pnl", 0))
+
+    if not by_btc or list(by_btc.keys()) == ["unknown"]:
+        return
+
+    print()
+    print(bold("WIN RATE BY BTC STATE AT ENTRY"))
+    headers = ["BTC State", "Trades", "Win%", "EV/trade"]
+    rows = []
+    for state, pnls in sorted(by_btc.items()):
+        wins = sum(1 for p in pnls if p > 1.0)
+        ev = sum(pnls) / len(pnls)
+        win_pct = wins / len(pnls) * 100
+        ev_str = f"${ev:+.2f}"
+        rows.append((state, len(pnls), f"{win_pct:.0f}%", ev_str))
+
+    col_widths = [max(len(str(h)), max(len(str(r[i])) for r in rows)) for i, h in enumerate(headers)]
+    fmt = "  ".join(f"{{:<{w}}}" for w in col_widths)
+    print(fmt.format(*headers))
+    print("  ".join("─" * w for w in col_widths))
+    for row in rows:
+        ev_val = float(row[3].replace("$", "").replace("+", ""))
+        ev_str = green(row[3]) if ev_val >= 0 else red(row[3])
+        print(fmt.format(row[0], row[1], row[2], ev_str))
+
+
+def _print_factor_correlation(all_signals: List[Dict], all_trades: List[Dict]):
+    executed = [s for s in all_signals if s.get("result") == "executed"]
+    if not executed:
+        return
+
+    trade_map: Dict[Tuple, Dict] = {}
+    for t in all_trades:
+        trade_map[(t.get("symbol"), t.get("direction"))] = t
+
+    factor_wins: Dict[str, int] = defaultdict(int)
+    factor_losses: Dict[str, int] = defaultdict(int)
+
+    for s in executed:
+        t = trade_map.get((s.get("symbol"), s.get("direction")))
+        if not t:
+            continue
+        won = t.get("pnl", 0) > 1.0
+        for f in s.get("factors", []):
+            name = f.get("name", "?")
+            score = f.get("score", 0) or 0
+            if score >= 75:
+                if won:
+                    factor_wins[name] += 1
+                else:
+                    factor_losses[name] += 1
+
+    all_factors = set(factor_wins) | set(factor_losses)
+    if not all_factors:
+        return
+
+    print()
+    print(bold("FACTOR WIN CORRELATION  (factors scoring ≥75, win% when present)"))
+    headers = ["Factor", "W", "L", "Win%", "Signal"]
+    rows = []
+    for name in sorted(all_factors):
+        w = factor_wins.get(name, 0)
+        l = factor_losses.get(name, 0)
+        total = w + l
+        if total < 2:
+            continue
+        win_pct = w / total * 100
+        signal = (green("strong") if win_pct >= 65
+                  else yellow("weak") if win_pct >= 45
+                  else red("noise"))
+        rows.append((name[:32], w, l, f"{win_pct:.0f}%", signal))
+
+    rows.sort(key=lambda r: -int(r[3].rstrip("%")))
+    col_widths = [max(len(str(h)), max(len(str(r[i])) for r in rows)) for i, h in enumerate(headers)]
+    fmt = "  ".join(f"{{:<{w}}}" for w in col_widths)
+    print(fmt.format(*headers))
+    print("  ".join("─" * w for w in col_widths))
+    for row in rows:
+        print(fmt.format(*row))
+
+
+def _print_system_diagnostics(
+    all_trades: List[Dict],
+    all_signals: List[Dict],
+    config: Dict,
+    session_dirs: Optional[List[Path]] = None,
+):
+    executed = [s for s in all_signals if s.get("result") == "executed"]
+    filtered = [s for s in all_signals if s.get("result") == "filtered"]
+    total_trades = len(all_trades)
+
+    print()
+    print(bold("SYSTEM DIAGNOSTICS"))
+
+    # ── Stop geometry gate ────────────────────────────────────────────────────
+    stop_gate_hits = sum(
+        1 for s in filtered
+        if (s.get("reason_type") or s.get("reason") or "") in ("stop_pct_too_wide", "no_trade_plan")
+        and "stop" in str(s.get("message") or "").lower()
+    )
+    cap_violations = 0
+    for s in executed:
+        pct = _stop_pct_for_signal(s)
+        tt = (s.get("trade_type") or "scalp").lower()
+        cap = _STOP_PCT_CAPS.get(tt, 0.05)
+        if pct is not None and pct > cap:
+            cap_violations += 1
+
+    if cap_violations == 0:
+        print(f"  {green('✅')} Stop geometry gate: no cap violations in executed trades")
+    else:
+        print(f"  {red('❌')} Stop geometry gate: {cap_violations} executed trades exceeded stop % cap — gate may not be active")
+
+    # ── BTC conflict penalty ──────────────────────────────────────────────────
+    neutral_up_shorts = []
+    for s in executed:
+        regime = s.get("regime") or ""
+        direction = s.get("direction") or ""
+        btc_state = (
+            s.get("btc_impulse")
+            or s.get("btc_state")
+            or (s.get("btc_factor") or {}).get("status")
+            or ""
+        )
+        if "up" in regime and direction == "SHORT" and "neutral" in str(btc_state).lower():
+            neutral_up_shorts.append(s)
+
+    if neutral_up_shorts:
+        syms = ", ".join(s.get("symbol", "?") for s in neutral_up_shorts)
+        print(f"  {yellow('⚠️ ')} BTC neutral + up-regime SHORTs: {len(neutral_up_shorts)} trades ({syms}) — "
+              f"BTC conflict penalty skipped (btc_score=100, block not triggered)")
+    else:
+        print(f"  {green('✅')} BTC conflict penalty: no neutral-BTC + up-regime SHORT gap detected")
+
+    # ── Stagnation quality ────────────────────────────────────────────────────
+    stag_trades = [t for t in all_trades if t.get("exit_reason") == "stagnation"]
+    premature_stagnations = [t for t in stag_trades if (t.get("max_favorable") or 0) >= 0.5]
+    if premature_stagnations:
+        syms = ", ".join(t.get("symbol", "?") for t in premature_stagnations)
+        print(f"  {yellow('⚠️ ')} Stagnation cut live trades: {len(premature_stagnations)} exits had MFE ≥0.5% ({syms}) — "
+              f"consider MFE guard")
+    else:
+        clean_stags = len([t for t in stag_trades if (t.get("max_favorable") or 0) < 0.2])
+        print(f"  {green('✅')} Stagnation quality: {clean_stags}/{len(stag_trades)} exits had MFE <0.2% (correctly flat)")
+
+    # ── Breakeven stop false positives ───────────────────────────────────────
+    be_positives = [
+        t for t in all_trades
+        if t.get("exit_reason") == "stop_loss" and (t.get("pnl") or 0) > 0
+    ]
+    if be_positives:
+        print(f"  {green('✅')} Breakeven stops: {len(be_positives)} stop_loss exits with positive P&L — "
+              f"expected (TP1 hit → breakeven stop)")
+
+    # ── Threshold scrapers ────────────────────────────────────────────────────
+    scrapers = [s for s in executed if (s.get("confluence") or 0) < 71.0]
+    if scrapers:
+        scraper_syms = defaultdict(int)
+        for s in scrapers:
+            scraper_syms[s.get("symbol", "?")] += 1
+        sym_str = ", ".join(f"{sym}×{n}" for sym, n in sorted(scraper_syms.items(), key=lambda x: -x[1]))
+        print(f"  {yellow('⚠️ ')} Threshold scrapers (score 70-71): {len(scrapers)} trades — {sym_str}")
+    else:
+        print(f"  {green('✅')} No threshold scrapers detected (all executed signals scored ≥71)")
+
+    # ── Systematic symbol losers ──────────────────────────────────────────────
+    by_sym: Dict[str, List[Dict]] = defaultdict(list)
+    for t in all_trades:
+        by_sym[t.get("symbol", "?")].append(t)
+
+    flagged_syms = []
+    for sym, trades in by_sym.items():
+        if len(trades) >= 3:
+            wins = sum(1 for t in trades if (t.get("pnl") or 0) > 1.0)
+            win_pct = wins / len(trades)
+            net = sum(t.get("pnl", 0) for t in trades)
+            if win_pct == 0 or (win_pct < 0.30 and net < -10):
+                flagged_syms.append((sym, len(trades), win_pct * 100, net))
+
+    if flagged_syms:
+        print(f"  {red('❌')} Systematic underperformers (≥3 trades, <30% win):")
+        for sym, n, wp, net in flagged_syms:
+            print(f"       {sym}: {n} trades, {wp:.0f}% win, ${net:+.2f} net — review exclusion")
+    else:
+        print(f"  {green('✅')} No systematic symbol losers detected")
+
+    # ── Score band drift vs prior session ────────────────────────────────────
+    if session_dirs and len(session_dirs) == 1:
+        prior_dirs = _find_sessions()
+        idx = next((i for i, d in enumerate(prior_dirs) if d == session_dirs[0]), None)
+        if idx is not None and idx > 0:
+            prior_signals = _load_jsonl(prior_dirs[idx - 1] / "signals.jsonl")
+            prior_exec = [s for s in prior_signals if s.get("result") == "executed"]
+            if prior_exec:
+                def _b_band_share(sigs):
+                    bb = sum(1 for s in sigs if 65 <= (s.get("confluence") or 0) < 75)
+                    return bb / len(sigs) * 100 if sigs else 0
+
+                cur_bb = _b_band_share(executed)
+                pri_bb = _b_band_share(prior_exec)
+                drift = cur_bb - pri_bb
+                drift_str = f"{drift:+.0f}pp"
+                drift_colour = yellow if abs(drift) >= 10 else green
+                print(f"  {'⚠️ ' if abs(drift) >= 10 else '✅'} B-band share: "
+                      f"{cur_bb:.0f}% this session vs {pri_bb:.0f}% prior "
+                      f"({drift_colour(drift_str)}){'  ← more borderline signals executing' if drift >= 10 else ''}")
+
+
 # ── Aggregate tables ──────────────────────────────────────────────────────────
 def _ev(trades: List[Dict]) -> float:
     if not trades:
