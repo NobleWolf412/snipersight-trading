@@ -2894,6 +2894,241 @@ async def reset_live_trading():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _build_signal_diagnostic(session_dir) -> str:
+    """Parse signals.jsonl and return a formatted mid-session diagnostic report."""
+    import json as _json
+    from collections import defaultdict, Counter
+    from pathlib import Path as _Path
+    from datetime import datetime as _dt
+
+    signals_file = _Path(session_dir) / "signals.jsonl"
+    if not signals_file.exists():
+        return ""
+
+    signals = []
+    with open(signals_file) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    signals.append(_json.loads(line))
+                except Exception:
+                    pass
+
+    if not signals:
+        return ""
+
+    total = len(signals)
+    accepted = [s for s in signals if s.get("result") == "accepted"]
+    rejected = [s for s in signals if s.get("result") != "accepted"]
+
+    # Gate breakdown
+    _GATE_LABELS = {
+        "errors": "Errors / Scan Error",
+        "no_plan": "No Trade Plan",
+        "no_trade_plan": "No Trade Plan",
+        "conf_gate": "Confluence Gate",
+        "confluence": "Confluence Gate",
+        "confluence_gate": "Confluence Gate",
+        "conflict_density": "Conflict Density",
+        "revalidation_price_drift": "Price Drift (Stale Entry)",
+        "cooldown": "Cooldown Active",
+        "cooldown_active": "Cooldown Active",
+        "pending_fill": "Pending Limit Fill",
+        "executed": "Executed",
+        "accepted": "Accepted",
+        "max_positions": "Max Positions Reached",
+        "sizing": "Position Sizing / Balance",
+        "position_size": "Position Sizing / Balance",
+        "kill_zone": "Kill Zone Timing",
+        "regime_block": "Regime Block",
+        "duplicate": "Duplicate Position",
+        "has_position": "Already Has Position",
+        "pending_order": "Pending Order Active",
+        "price_fetch": "Price Fetch Failed",
+        "risk_validation": "Risk Validation Failed",
+        "orphaned": "Orphaned Symbol (Restart)",
+        "stale_entry": "Stale Entry Guard",
+        "exec_error": "Exchange Rejection",
+        "exec_rejected": "Exchange Rejection",
+    }
+
+    gate_counts: Counter = Counter()
+    for s in rejected:
+        rt = s.get("reason_type") or "unknown"
+        gate_counts[rt] += 1
+
+    # Score distribution (rejected signals that reached confluence scoring)
+    # Field is "confluence" in live_trading_service._log_signal
+    def _get_score(s):
+        return s.get("confluence") or s.get("score")
+
+    rejected_scored = [s for s in rejected if _get_score(s) is not None]
+
+    score_buckets = Counter()
+    for s in rejected_scored:
+        sc = _get_score(s) or 0
+        if sc < 50:
+            score_buckets["< 50"] += 1
+        elif sc < 60:
+            score_buckets["50–59"] += 1
+        elif sc < 65:
+            score_buckets["60–64"] += 1
+        elif sc < 70:
+            score_buckets["65–69"] += 1
+        elif sc < 75:
+            score_buckets["70–74"] += 1
+        elif sc < 80:
+            score_buckets["75–79"] += 1
+        else:
+            score_buckets["≥ 80"] += 1
+
+    # Kill zone timing breakdown
+    kz_counts: Counter = Counter()
+    for s in signals:
+        kz = s.get("kill_zone") or "unknown"
+        kz_counts[kz] += 1
+
+    kz_accepted: Counter = Counter()
+    for s in accepted:
+        kz = s.get("kill_zone") or "unknown"
+        kz_accepted[kz] += 1
+
+    # Per-symbol breakdown
+    sym_total: Counter = Counter()
+    sym_accepted: Counter = Counter()
+    sym_gates: dict = defaultdict(Counter)
+    for s in signals:
+        sym = s.get("symbol", "?")
+        sym_total[sym] += 1
+        if s.get("result") == "accepted":
+            sym_accepted[sym] += 1
+        else:
+            rt = s.get("reason_type") or "unknown"
+            sym_gates[sym][rt] += 1
+
+    # Weakest factors from per-signal factor scores
+    factor_weak: Counter = Counter()
+    for s in rejected:
+        factors = s.get("factor_scores") or {}
+        if factors:
+            weakest = min(factors, key=lambda k: factors[k])
+            factor_weak[weakest] += 1
+
+    # Build report
+    lines = []
+    lines.append("=" * 64)
+    lines.append("  SIGNAL INTELLIGENCE REPORT (Mid-Session)")
+    lines.append("=" * 64)
+
+    # Parse session_info.json for timing
+    session_info_path = _Path(session_dir) / "session_info.json"
+    if session_info_path.exists():
+        try:
+            si = _json.loads(session_info_path.read_text())
+            started = si.get("started_at", "")
+            mode = si.get("config", {}).get("sniper_mode", "?")
+            lines.append(f"  Mode: {mode}  |  Started: {started}")
+        except Exception:
+            pass
+    lines.append(f"  Session: {_Path(session_dir).name}")
+    lines.append("")
+
+    lines.append(f"  Total signals evaluated : {total}")
+    lines.append(f"  Accepted (placed order)  : {len(accepted)}")
+    lines.append(f"  Rejected (filtered out)  : {len(rejected)}")
+    if total > 0:
+        lines.append(f"  Accept rate              : {len(accepted)/total*100:.1f}%")
+    lines.append("")
+
+    # Gate breakdown
+    lines.append("─" * 64)
+    lines.append("  FILTER GATE BREAKDOWN  (why signals were rejected)")
+    lines.append("─" * 64)
+    if gate_counts:
+        for rt, cnt in gate_counts.most_common():
+            label = _GATE_LABELS.get(rt, rt)
+            bar = "█" * min(cnt, 30)
+            lines.append(f"  {label:<35s} {cnt:>4d}  {bar}")
+    else:
+        lines.append("  (no rejections recorded)")
+    lines.append("")
+
+    # Score distribution
+    if rejected_scored:
+        lines.append("─" * 64)
+        lines.append("  CONFLUENCE SCORE DISTRIBUTION  (rejected signals that scored)")
+        lines.append("─" * 64)
+        lines.append(f"  (Gate threshold ≈ 65–70 depending on mode)")
+        for bucket, cnt in sorted(score_buckets.items(), key=lambda x: x[0]):
+            bar = "█" * min(cnt, 30)
+            marker = " ← gate" if bucket in ("60–64", "65–69") else ""
+            lines.append(f"  {bucket:<10s}  {cnt:>4d}  {bar}{marker}")
+        near_miss = [s for s in rejected_scored if 60 <= (_get_score(s) or 0) < 70]
+        if near_miss:
+            lines.append(f"\n  Near-miss signals (60–69): {len(near_miss)} rejected just below gate")
+            top_near = sorted(near_miss, key=lambda s: _get_score(s) or 0, reverse=True)[:5]
+            for s in top_near:
+                sym = s.get("symbol", "?")
+                dir_ = s.get("direction", "?")
+                sc = _get_score(s) or 0
+                reason = s.get("reason", "")[:50]
+                lines.append(f"    {sym:<14s} {dir_:<6s} score={sc:.1f}  {reason}")
+        lines.append("")
+
+    # Weakest factors
+    if factor_weak:
+        lines.append("─" * 64)
+        lines.append("  TOP WEAKEST FACTORS  (most frequent lowest score in rejected signals)")
+        lines.append("─" * 64)
+        for factor, cnt in factor_weak.most_common(8):
+            bar = "█" * min(cnt, 25)
+            lines.append(f"  {factor:<30s} {cnt:>4d}  {bar}")
+        lines.append("")
+
+    # Kill zone timing
+    if kz_counts:
+        lines.append("─" * 64)
+        lines.append("  KILL ZONE TIMING  (when signals occurred)")
+        lines.append("─" * 64)
+        for kz, cnt in kz_counts.most_common():
+            acc = kz_accepted.get(kz, 0)
+            label = kz if kz != "unknown" else "outside session"
+            lines.append(f"  {label:<25s}  total={cnt:>3d}  accepted={acc:>3d}")
+        lines.append("")
+
+    # Per-symbol summary
+    lines.append("─" * 64)
+    lines.append("  PER-SYMBOL BREAKDOWN  (top symbols by signal volume)")
+    lines.append("─" * 64)
+    lines.append(f"  {'Symbol':<14s} {'Total':>6s} {'Acc':>5s} {'Top Gate'}")
+    lines.append(f"  {'------':<14s} {'-----':>6s} {'---':>5s} {'--------'}")
+    for sym, cnt in sym_total.most_common(15):
+        acc = sym_accepted.get(sym, 0)
+        gates = sym_gates.get(sym, Counter())
+        top_gate = gates.most_common(1)[0][0] if gates else "—"
+        top_gate_label = _GATE_LABELS.get(top_gate, top_gate)[:28]
+        lines.append(f"  {sym:<14s} {cnt:>6d} {acc:>5d}  {top_gate_label}")
+    lines.append("")
+
+    # Recent accepted signals
+    if accepted:
+        lines.append("─" * 64)
+        lines.append("  RECENT ACCEPTED SIGNALS")
+        lines.append("─" * 64)
+        for s in accepted[-5:]:
+            sym = s.get("symbol", "?")
+            dir_ = s.get("direction", "?")
+            sc = _get_score(s) or "?"
+            ts = s.get("timestamp", "")[:19]
+            tt = s.get("trade_type", "")
+            lines.append(f"  {ts}  {sym:<14s} {dir_:<6s} {tt:<10s} score={sc}")
+        lines.append("")
+
+    lines.append("=" * 64)
+    return "\n".join(lines)
+
+
 @app.get("/api/live-trading/analyze-session")
 async def analyze_live_session(session_id: Optional[str] = None):
     """Run analyze_session.py on the most recent (or specified) live session log directory."""
@@ -2917,26 +3152,51 @@ async def analyze_live_session(session_id: Optional[str] = None):
         session_dir = dirs[0]
 
     script = project_root / "scripts" / "analyze_session.py"
-    if not script.exists():
-        raise HTTPException(status_code=404, detail="analyze_session.py script not found")
 
-    try:
-        result = subprocess.run(
-            ["python", str(script), str(session_dir)],
-            capture_output=True, text=True, timeout=60,
-            cwd=str(project_root),
+    # Always build signal diagnostic first
+    signal_diag = _build_signal_diagnostic(session_dir)
+
+    trade_output = ""
+    trade_error = ""
+    trade_returncode = 0
+
+    if script.exists():
+        try:
+            result = subprocess.run(
+                ["python", str(script), str(session_dir)],
+                capture_output=True, text=True, timeout=60,
+                cwd=str(project_root),
+            )
+            trade_output = result.stdout
+            trade_error = result.stderr
+            trade_returncode = result.returncode
+        except subprocess.TimeoutExpired:
+            trade_error = "Trade analysis timed out after 60s"
+            trade_returncode = 1
+        except Exception as e:
+            trade_error = str(e)
+            trade_returncode = 1
+
+    # Combine: signal diagnostic first, then trade analysis (if it produced output)
+    combined_output = signal_diag
+    if trade_output and trade_output.strip():
+        combined_output = combined_output + "\n\n" + trade_output if combined_output else trade_output
+
+    # If no trades yet and no signal diag, produce a helpful message
+    if not combined_output.strip():
+        combined_output = (
+            "No session data found yet.\n\n"
+            "The bot needs to complete at least one scan cycle before diagnostics are available.\n"
+            "Check that the bot is running and that signals.jsonl is being written to the session log directory."
         )
-        return {
-            "session_dir": str(session_dir),
-            "session_id": session_dir.name.replace("session_", ""),
-            "output": result.stdout,
-            "error": result.stderr,
-            "returncode": result.returncode,
-        }
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="Analysis timed out after 60s")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "session_dir": str(session_dir),
+        "session_id": session_dir.name.replace("session_", ""),
+        "output": combined_output,
+        "error": trade_error,
+        "returncode": trade_returncode,
+    }
 
 
 # Serve built frontend at root (only if dist exists - for production)
