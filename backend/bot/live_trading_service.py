@@ -90,6 +90,8 @@ class LiveTradingService:
         self._current_regime_score: float = 50.0
         self._last_reconcile_at: float = 0.0
 
+        self.signal_log: List[Dict[str, Any]] = []
+
         # Exchange-native stop order tracking (position_id → internal order_id / level)
         self._exchange_stop_orders: Dict[str, str] = {}
         self._exchange_stop_levels: Dict[str, float] = {}
@@ -181,6 +183,7 @@ class LiveTradingService:
         self._completed_trade_ids = set()
         self.activity_log = []
         self.stats = PaperTradingStats()
+        self.signal_log = []
         self._price_cache = {}
         self._pending_plans = {}
         self._pending_placed_at = {}
@@ -279,6 +282,7 @@ class LiveTradingService:
         self._completed_trade_ids = set()
         self.activity_log = []
         self.stats = PaperTradingStats()
+        self.signal_log = []
         self._price_cache = {}
         self._pending_plans = {}
         self.started_at = None
@@ -344,6 +348,7 @@ class LiveTradingService:
 
         result["statistics"] = self.stats.to_dict()
         result["recent_activity"] = self.activity_log[-50:]
+        result["signal_log"] = self.signal_log[-100:]
         result["pending_orders"] = []
         if self.executor:
             for order_id, plan in self._pending_plans.items():
@@ -574,6 +579,47 @@ class LiveTradingService:
             self._current_regime_composite = regime.get("composite", "unknown")
             self._current_regime_score = regime.get("score", 50.0)
 
+            # Log orchestrator-level rejections into signal_log (feeds Gauntlet panel)
+            rejections_details = rejection_summary.get("details", {})
+            for reason_type, items in rejections_details.items():
+                for item in items:
+                    from types import SimpleNamespace
+                    mock_plan = SimpleNamespace(
+                        symbol=item.get("symbol", "Unknown"),
+                        direction=item.get("direction", "LONG"),
+                        confidence_score=item.get("score", 0.0),
+                        setup_type="filtered",
+                        trade_type=item.get("trade_type", "unknown"),
+                        primary_timeframe=None,
+                        entry_zone=SimpleNamespace(near_entry=item.get("entry_price", 0.0) or item.get("current_price", 0.0)),
+                        stop_loss=SimpleNamespace(level=item.get("stop_loss", 0.0)),
+                        risk_reward=0.0,
+                        conviction_class="B",
+                        plan_type="SMC",
+                    )
+                    self._log_signal(
+                        mock_plan,
+                        result="filtered",
+                        reason=item.get("reason", f"Scanner Filter: {reason_type}"),
+                        reason_type=reason_type,
+                        threshold=item.get("threshold"),
+                        setup_state=item.get("setup_state", "NOISE"),
+                        convergence_score=item.get("convergence_score", 0),
+                        convergence_critical_count=item.get("convergence_critical_count", 0),
+                        convergence_critical_total=item.get("convergence_critical_total"),
+                        convergence_missing=item.get("convergence_missing"),
+                        conflict_conditions=item.get("conflict_conditions", []),
+                        conflict_count=item.get("conflict_count"),
+                        veto_blocked=item.get("veto_blocked", False),
+                        active_vetoes=item.get("active_vetoes", []),
+                    )
+
+            if self.current_scan:
+                _by_reason = rejection_summary.get("by_reason", {})
+                self.current_scan["rejection_funnel"] = {k: v for k, v in _by_reason.items() if isinstance(v, (int, float))}
+                self.current_scan["total_scanned"] = len(scan_symbols)
+                self.current_scan["total_passed"] = len(trade_plans)
+
         if self.current_scan:
             self.current_scan["status"] = "complete"
             self.current_scan["progress_pct"] = 100
@@ -593,23 +639,26 @@ class LiveTradingService:
             return
 
         symbol = plan.symbol
+        score = getattr(plan, "confidence_score", 0.0)
 
         # Position cap
         active_count = len(self._get_active_positions())
         if active_count >= config.max_positions:
+            self._log_signal(plan, "filtered", f"Max positions reached ({config.max_positions})", reason_type="max_positions")
             return
 
         # No duplicate positions
         if self._has_position(symbol):
+            self._log_signal(plan, "filtered", f"Already have position on {symbol}", reason_type="has_position")
             return
 
         # No duplicate pending orders for same symbol
         for pending_plan in self._pending_plans.values():
             if pending_plan.symbol == symbol:
+                self._log_signal(plan, "filtered", f"Pending order already exists for {symbol}", reason_type="pending_order")
                 return
 
         # Confluence gate
-        score = getattr(plan, "confidence_score", 0.0)
         _preset = (config.sensitivity_preset or "balanced").lower()
         if _preset in _SENSITIVITY_PRESETS:
             gate = config.min_confluence if config.min_confluence is not None else _SENSITIVITY_PRESETS[_preset]["gate"]
@@ -617,6 +666,7 @@ class LiveTradingService:
             gate = config.min_confluence if config.min_confluence is not None else 65.0
 
         if score < gate:
+            self._log_signal(plan, "filtered", f"Confluence {score:.1f} < gate {gate:.1f}", reason_type="confluence", threshold=gate)
             return
 
         # Position sizing — use current equity
@@ -626,15 +676,18 @@ class LiveTradingService:
                 current_price = await self._fetch_price(symbol)
                 self._price_cache[symbol] = current_price
             except Exception:
+                self._log_signal(plan, "filtered", f"Could not fetch price for {symbol}", reason_type="price_fetch")
                 return
 
         sl_obj = getattr(plan, "stop_loss", None)
         stop_level = getattr(sl_obj, "level", None) if sl_obj is not None else None
         if not stop_level or stop_level <= 0:
+            self._log_signal(plan, "filtered", "Invalid stop loss level", reason_type="risk_validation")
             return
 
         stop_distance = abs(current_price - stop_level)
         if stop_distance <= 0:
+            self._log_signal(plan, "filtered", "Zero stop distance", reason_type="risk_validation")
             return
 
         equity = self.executor.get_equity(self._price_cache)
@@ -651,7 +704,19 @@ class LiveTradingService:
             pass
 
         if quantity <= 0:
+            self._log_signal(plan, "filtered", "Position size rounds to zero", reason_type="position_size")
             return
+
+        # Check position size cap
+        if hasattr(config, "max_position_size_usd") and config.max_position_size_usd:
+            position_value = quantity * current_price
+            if position_value > config.max_position_size_usd:
+                self._log_signal(
+                    plan, "filtered",
+                    f"Position size ${position_value:.2f} exceeds cap ${config.max_position_size_usd:.2f}",
+                    reason_type="position_size",
+                )
+                return
 
         # Entry price — use OB near_entry or current price
         ez_obj = getattr(plan, "entry_zone", None)
@@ -674,12 +739,14 @@ class LiveTradingService:
 
         if order.status.value in ("REJECTED",):
             logger.warning(f"Order rejected for {symbol}: {order.status}")
+            self._log_signal(plan, "filtered", f"Order rejected by exchange: {order.status.value}", reason_type="exec_error")
             return
 
         self._pending_plans[order.order_id] = plan
         self._pending_placed_at[order.order_id] = datetime.now(timezone.utc)
         self._pending_placed_price[order.order_id] = current_price
 
+        self._log_signal(plan, "pending", f"Limit order placed @ {entry_price:.4f}", reason_type="executed")
         self._log_activity("signal_taken", {
             "symbol": symbol,
             "direction": plan.direction,
@@ -689,6 +756,49 @@ class LiveTradingService:
             "quantity": quantity,
             "order_id": order.order_id,
         })
+
+    # ------------------------------------------------------------------
+    # Signal logging (mirrors PaperTradingService._log_signal)
+    # ------------------------------------------------------------------
+
+    def _log_signal(self, plan: Any, result: str, reason: str, **extra):
+        from backend.shared.utils.kill_zones import get_current_kill_zone
+        _now = datetime.now(timezone.utc)
+        try:
+            _kz_raw = get_current_kill_zone(_now)
+            _kz = (_kz_raw.value if hasattr(_kz_raw, "value") else str(_kz_raw)) if _kz_raw else "no_session"
+        except Exception:
+            _kz = "no_session"
+
+        ez_obj = getattr(plan, "entry_zone", None)
+        sl_obj = getattr(plan, "stop_loss", None)
+        entry_val = getattr(ez_obj, "near_entry", 0.0) or 0.0
+        stop_val = getattr(sl_obj, "level", 0.0) or 0.0
+
+        entry = {
+            "timestamp": _now.isoformat(),
+            "scan_number": self.stats.scans_completed,
+            "symbol": getattr(plan, "symbol", "Unknown"),
+            "direction": getattr(plan, "direction", "LONG"),
+            "confluence": round(float(getattr(plan, "confidence_score", 0.0)), 1),
+            "setup_type": getattr(plan, "setup_type", "unknown"),
+            "trade_type": getattr(plan, "trade_type", "unknown"),
+            "timeframe": getattr(plan, "primary_timeframe", None) or getattr(plan, "signal_timeframe", None),
+            "entry_zone": round(float(entry_val), 6),
+            "stop_loss": round(float(stop_val), 6),
+            "rr": round(float(getattr(plan, "risk_reward", 0.0) or 0.0), 2),
+            "result": result,
+            "reason": reason,
+            "conviction_class": getattr(plan, "conviction_class", "B"),
+            "plan_type": getattr(plan, "plan_type", "SMC"),
+            "regime": self._current_regime_composite,
+            "pullback_probability": 0.0,
+            "kill_zone": _kz,
+        }
+        entry.update(extra)
+        self.signal_log.append(entry)
+        if len(self.signal_log) > 200:
+            self.signal_log = self.signal_log[-200:]
 
     # ------------------------------------------------------------------
     # Helpers

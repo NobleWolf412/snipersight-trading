@@ -141,7 +141,7 @@ export interface LiveTradingStatus {
   };
   recent_activity: { timestamp: string; event_type: string; data: any }[];
   pending_orders: { order_id: string; symbol: string; direction: string; limit_price: number; quantity: number; status: string }[];
-  signal_log?: any[];
+  signal_log?: import('@/utils/api').SignalLogEntry[];
 }
 
 export interface PreflightResult {
