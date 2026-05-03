@@ -210,7 +210,7 @@ export function BotSetup() {
                       <span className={cn('text-sm font-mono', preflight.ok ? 'text-success' : 'text-destructive')}>
                         {preflight.ok ? 'Connected' : 'Not connected'}
                       </span>
-                      {preflight.ok && (
+                      {preflight.balance > 0 && (
                         <span className="text-zinc-400 text-sm ml-auto font-mono">
                           Balance: <span className="text-foreground">${preflight.balance.toFixed(2)}</span>
                         </span>
@@ -223,10 +223,10 @@ export function BotSetup() {
                     ))}
                     {preflight.open_positions.length > 0 && (
                       <p className="text-xs text-warning flex items-center gap-1.5">
-                        <Warning size={12} /> {preflight.open_positions.length} existing open position(s) on exchange
+                        <Warning size={12} /> {preflight.open_positions.length} existing open position(s) on exchange — bot will manage alongside them
                       </p>
                     )}
-                    {!preflight.ok && (
+                    {preflight.issues.some(i => i.toLowerCase().includes('api key') || i.toLowerCase().includes('api_key')) && (
                       <p className="text-xs text-zinc-500 mt-1">
                         Add <code className="bg-zinc-800 px-1 rounded">PHEMEX_API_KEY</code> and{' '}
                         <code className="bg-zinc-800 px-1 rounded">PHEMEX_API_SECRET</code> to your <code className="bg-zinc-800 px-1 rounded">.env</code> file, then restart the backend.
