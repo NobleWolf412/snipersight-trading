@@ -2897,9 +2897,22 @@ async def reset_live_trading():
 # Serve built frontend at root (only if dist exists - for production)
 # IMPORTANT: This MUST be at the end, after all API routes, otherwise it catches /api/* requests
 import os
+from fastapi.responses import FileResponse
 
 if os.path.exists("dist"):
-    app.mount("/", StaticFiles(directory="dist", html=True), name="frontend")
+    # SPA catch-all: any path not matched by an API route serves index.html so
+    # React Router can handle client-side routing (e.g. /bot/setup, /training).
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        file_path = Path("dist") / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        index = Path("dist/index.html")
+        if index.exists():
+            return FileResponse(index)
+        raise HTTPException(status_code=404, detail="Frontend not built")
+
+    app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
 
 
 if __name__ == "__main__":
