@@ -780,6 +780,10 @@ class LiveTradingService:
                 continue
             current_price = self._price_cache.get(pos.symbol, pos.entry_price)
             pos.update_unrealized_pnl(current_price)
+            remaining_targets = sorted(pos.targets, key=lambda t: t.level) if pos.direction == "LONG" else sorted(pos.targets, key=lambda t: t.level, reverse=True)
+            tp1 = remaining_targets[0].level if len(remaining_targets) > 0 else None
+            tp2 = remaining_targets[1].level if len(remaining_targets) > 1 else None
+            tp_final = remaining_targets[-1].level if len(remaining_targets) > 1 else None
             positions.append({
                 "position_id": pos.position_id,
                 "symbol": pos.symbol,
@@ -788,12 +792,20 @@ class LiveTradingService:
                 "current_price": current_price,
                 "quantity": pos.quantity,
                 "stop_loss": pos.stop_loss,
+                "initial_stop_loss": pos.initial_stop_loss,
                 "unrealized_pnl": pos.unrealized_pnl,
                 "unrealized_pnl_pct": pos.pnl_percentage,
                 "breakeven_active": pos.breakeven_active,
                 "trailing_active": pos.trailing_active,
                 "opened_at": pos.created_at.isoformat(),
                 "trade_type": getattr(pos, "trade_type", "intraday"),
+                "tp1": tp1,
+                "tp2": tp2,
+                "tp_final": tp_final,
+                "target_pnl": pos.target_pnl,
+                "risk_pnl": pos.risk_pnl,
+                "targets_hit": len(pos.targets_hit),
+                "targets_remaining": len(pos.targets),
             })
         return positions
 
