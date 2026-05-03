@@ -136,6 +136,7 @@ class LiveTradingService:
             max_total_exposure_usd=config.max_total_exposure_usd,
             min_balance_usd=config.min_balance_usd,
             dry_run=config.dry_run,
+            target_leverage=config.leverage,
         )
 
         # Preflight
