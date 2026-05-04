@@ -552,3 +552,33 @@ class PhemexAdapter:
             logger.warning(f"Could not set margin mode to {mode} for {symbol}: {e}")
         except Exception as e:
             logger.warning(f"set_margin_mode failed for {symbol}: {e}")
+
+    def set_position_mode_one_way(self) -> bool:
+        """
+        Switch the account to one-way (non-hedge) position mode.
+
+        Phemex TE_ERR_INCONSISTENT_POS_MODE fires when hedge mode is enabled but
+        orders don't include positionSide. The bot is designed for one-way mode
+        (no simultaneous LONG+SHORT on the same symbol) so we switch at session start.
+
+        Returns True if already in or successfully switched to one-way mode.
+        """
+        if not self.supports_trading():
+            return True
+        try:
+            # CCXT unified call: hedged=False → one-way / netting mode
+            self.exchange.set_position_mode(False)
+            logger.info("Position mode set to one-way (non-hedge)")
+            return True
+        except ccxt.ExchangeError as e:
+            err = str(e)
+            # Phemex returns an error if positions are open — treat as acceptable
+            # because it means the mode is already correct or can't be changed now.
+            if "position" in err.lower() or "10007" in err or "20010" in err:
+                logger.info(f"Position mode already set or cannot change with open positions: {e}")
+                return True
+            logger.warning(f"Could not set position mode to one-way: {e}")
+            return False
+        except Exception as e:
+            logger.warning(f"set_position_mode_one_way failed: {e}")
+            return False
