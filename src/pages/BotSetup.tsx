@@ -152,592 +152,494 @@ export function BotSetup() {
 
   return (
     <PageContainer id="main-content">
-      <div className="space-y-8">
+      <div className="space-y-4 cockpit-scanlines">
 
         {/* Header */}
-        <div className="flex justify-between items-start">
-          <div className="flex items-start gap-4">
-            <HomeButton />
-            <div className="space-y-2">
-              <h1 className="text-3xl lg:text-4xl font-bold flex items-center gap-3 hud-headline hud-text-green tracking-widest">
-                <Robot size={32} weight="bold" className="text-accent" />
-                AUTONOMOUS BOT
-              </h1>
-              <p className="font-mono text-sm text-muted-foreground uppercase tracking-widest pl-11">
-                Deploy your trained strategy — live orders on Phemex
-              </p>
-            </div>
+        <div className="flex items-center gap-4">
+          <HomeButton />
+          <div>
+            <h1 className="text-2xl font-black tracking-widest font-mono text-emerald-400 flex items-center gap-2">
+              <Robot size={22} weight="bold" /> AUTONOMOUS BOT
+            </h1>
+            <p className="text-[10px] font-mono text-white/30 uppercase tracking-[0.2em] mt-0.5">
+              Deploy your trained AI strategy · Live orders on Phemex
+            </p>
           </div>
         </div>
 
         {/* Error */}
         {error && (
-          <div className="p-4 rounded-xl border border-destructive/40 bg-destructive/10 text-destructive text-sm flex items-start gap-2">
-            <Warning size={16} className="flex-shrink-0 mt-0.5" /> {error}
+          <div className="flex items-start gap-2 px-4 py-3 border border-red-500/30 bg-red-500/5 text-red-400 text-xs font-mono">
+            <Warning size={14} className="flex-shrink-0 mt-0.5" /> {error}
           </div>
         )}
 
-        {/* Hero initialization panel */}
-        <section className="glass-card glow-border-green rounded-2xl p-6 md:p-8 flex flex-col items-center text-center space-y-6 relative overflow-hidden group transition-all duration-500 hover:shadow-[0_0_50px_rgba(0,255,170,0.15)]">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-green-500/10 via-transparent to-transparent opacity-40 pointer-events-none group-hover:opacity-60 transition-opacity duration-1000" />
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#00ff88]/50 to-transparent opacity-50" />
+        {/* System Bar */}
+        <div className="flex items-center gap-4 px-4 py-2 bg-black/80 border border-white/[0.06] text-[9px] font-mono tracking-[0.18em] overflow-x-auto">
+          <span className="text-white/20 whitespace-nowrap">[SYS-01 · AUTONOMOUS BOT]</span>
+          <span className="text-white/10">│</span>
+          <span className="text-white/30">CONN</span>
+          <span className={cn("font-bold", preflight?.ok ? "text-emerald-400" : preflightLoading ? "text-amber-400" : "text-red-400")}>
+            {preflightLoading ? "CHECKING" : preflight?.ok ? "ONLINE" : "OFFLINE"}
+          </span>
+          {balance > 0 && <>
+            <span className="text-white/10">│</span>
+            <span className="text-white/30">BALANCE</span>
+            <span className="text-white/60 font-bold">${balance.toFixed(2)}</span>
+          </>}
+          {recommendation?.regime?.composite && <>
+            <span className="text-white/10">│</span>
+            <span className="text-white/30">REGIME</span>
+            <span className="text-cyan-400 capitalize">{recommendation.regime.composite.replace(/_/g, ' ')}</span>
+          </>}
+          <span className="ml-auto flex items-center gap-1.5 text-red-400 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+            ● LIVE MODE
+          </span>
+        </div>
 
-          <div className="relative z-10 w-full flex flex-col items-center text-center space-y-6">
-            <Target size={64} className="text-accent opacity-50 mb-2" />
-            <div className="max-w-xl mx-auto space-y-2">
-              <h2 className="text-3xl lg:text-4xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-green-50 to-green-400/80 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]">LIVE DEPLOYMENT</h2>
-              <div className="h-1 w-24 mx-auto bg-gradient-to-r from-transparent via-green-500/50 to-transparent rounded-full mb-4" />
-              <p className="text-base text-green-100/80 leading-relaxed font-light">
-                The AI engine you trained is now live. It reads institutional order flow across 5 timeframes, enters on precision limit orders, and adapts automatically to changing market conditions.
-              </p>
-            </div>
+        {/* Cockpit Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-[1px] bg-white/[0.06] border border-white/[0.06]">
 
-            {/* Stats grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full">
-              <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-accent/30 transition-colors">
-                <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Leverage</div>
-                <div className="text-2xl font-mono font-bold text-accent">{config.leverage}x</div>
-                <div className="text-[9px] text-muted-foreground mt-1 opacity-60">Adjustable below</div>
-              </div>
-              <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-border/60 transition-colors">
-                <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Risk / Trade</div>
-                <div className="text-2xl font-mono font-bold text-foreground">{config.risk_per_trade}%</div>
-                <div className="text-[9px] text-muted-foreground mt-1 opacity-60">
-                  {riskAmountUsd != null ? `≈ $${riskAmountUsd.toFixed(2)}` : 'of balance'}
-                </div>
-              </div>
-              <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-primary/30 transition-colors relative overflow-hidden">
-                {recommendation?.regime?.composite && (
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,_var(--tw-gradient-stops))] from-blue-500/10 to-transparent pointer-events-none" />
-                )}
-                <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Regime</div>
-                <div className="flex items-center gap-1.5">
-                  <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", recommendation?.regime?.composite ? "bg-primary animate-pulse" : "bg-muted-foreground/40")} />
-                  <div className="text-lg font-mono font-bold text-primary capitalize truncate">
-                    {recommendation?.regime?.composite ? recommendation.regime.composite.replace(/_/g, ' — ') : 'Adaptive'}
+          {/* ── LEFT: System Health ── */}
+          <div className="lg:col-span-3 bg-[#050c08] border-t-2 border-emerald-500/50 p-5 space-y-5">
+            <div className="text-[8px] font-mono tracking-[0.25em] text-emerald-500/40 uppercase">[SYS-01] SYSTEM</div>
+
+            {/* Connection */}
+            <div className="space-y-2">
+              <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Exchange Connection</div>
+              {preflight ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    {preflight.ok
+                      ? <CheckCircle size={14} weight="bold" className="text-emerald-400" />
+                      : <XCircle size={14} weight="bold" className="text-red-400" />}
+                    <span className={cn("text-sm font-bold font-mono", preflight.ok ? "text-emerald-400" : "text-red-400")}>
+                      {preflight.ok ? "ONLINE" : "OFFLINE"}
+                    </span>
                   </div>
-                </div>
-                {recommendation?.reason && (
-                  <div className="text-[9px] text-muted-foreground mt-1 leading-tight truncate opacity-70">{recommendation.reason}</div>
-                )}
-              </div>
-              <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-yellow-400/30 transition-colors">
-                <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Sensitivity</div>
-                <div className="text-xl font-mono font-bold text-yellow-400 capitalize">{config.sensitivity_preset}</div>
-                <div className="text-[9px] text-muted-foreground mt-1 opacity-60">
-                  {config.sensitivity_preset === 'conservative' ? '72/62' : config.sensitivity_preset === 'aggressive' ? '58/48' : config.sensitivity_preset === 'custom' ? `${config.min_confluence ?? 65}/${config.confluence_soft_floor ?? 55}` : '65/55'}
-                </div>
-              </div>
-            </div>
-
-            {/* Engine info */}
-            <div className="w-full max-w-2xl pt-4 space-y-6">
-              <div className="space-y-3">
-                <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Engine Mode</label>
-                <div className="bg-gradient-to-r from-purple-500/10 via-accent/5 to-blue-500/10 border border-purple-500/30 rounded-xl p-4 relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-purple-400/50 to-transparent" />
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Lightning size={18} weight="fill" className="text-purple-400" />
-                      <span className="text-sm font-black tracking-widest text-purple-400">STEALTH</span>
-                      <span className="text-[8px] border border-purple-500/30 text-purple-300/80 bg-purple-500/10 px-1.5 py-0.5 rounded font-mono">LOCKED</span>
-                    </div>
-                    <ShieldCheck size={18} className="text-accent/40" />
-                  </div>
-                  <p className="text-[11px] text-muted-foreground/80 leading-relaxed mb-3">
-                    Balanced execution across all timeframes (Daily → 5 min). Automatically switches between quick scalps, intraday moves, and multi-day swings based on live market structure — no manual mode switching needed.
-                  </p>
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                    {[
-                      { label: 'Min R:R', value: '1.8' },
-                      { label: 'Timeframes', value: 'D → 5m' },
-                      { label: 'Direction', value: 'Long + Short' },
-                      { label: 'Trade Types', value: 'Scalp / Intraday / Swing' },
-                      { label: 'Scan Every', value: `${config.scan_interval_minutes}m` },
-                    ].map(({ label, value }) => (
-                      <div key={label} className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
-                        <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">{label}</div>
-                        <div className="text-sm font-mono font-bold text-accent">{value}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Live mode banner */}
-              <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Skull size={20} weight="fill" className="text-red-400" />
-                  <div>
-                    <p className="text-sm font-black tracking-widest text-red-400">LIVE TRADING MODE</p>
-                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">Real orders · Real funds · Losses are irreversible</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                  <span className="text-[10px] font-bold tracking-widest text-red-400">ACTIVE</span>
-                </div>
-              </div>
-
-              {/* Exchange connection + balance */}
-              <div className="space-y-3 text-left">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1 flex items-center gap-1.5">
-                    <Key size={12} /> Exchange Connection
-                  </label>
-                  <button
-                    onClick={runPreflight}
-                    disabled={preflightLoading}
-                    className="text-xs text-zinc-400 hover:text-accent flex items-center gap-1 transition-colors"
-                  >
-                    <ArrowsClockwise size={12} className={preflightLoading ? 'animate-spin' : ''} />
-                    Recheck
-                  </button>
-                </div>
-
-                {preflight ? (
-                  <div className="rounded-xl border border-border/50 bg-background/40 p-4 space-y-3">
-                    <div className="flex items-center gap-2">
-                      {preflight.ok
-                        ? <CheckCircle size={16} weight="bold" className="text-success" />
-                        : <XCircle size={16} weight="bold" className="text-destructive" />}
-                      <span className={cn('text-sm font-mono font-bold', preflight.ok ? 'text-success' : 'text-destructive')}>
-                        {preflight.ok ? 'Connected' : 'Not connected'}
-                      </span>
-                    </div>
-
-                    {/* Balance display — the main event */}
-                    {balance > 0 && (
-                      <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border/30">
-                        <div className="text-center p-3 rounded-lg bg-black/30 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1 flex items-center justify-center gap-1">
-                            <Wallet size={10} /> Available
-                          </div>
-                          <div className="text-lg font-mono font-bold text-accent">${balance.toFixed(2)}</div>
-                          <div className="text-[9px] text-muted-foreground/60 mt-0.5">Futures wallet</div>
-                        </div>
-                        <div className="text-center p-3 rounded-lg bg-black/30 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1 flex items-center justify-center gap-1">
-                            <TrendDown size={10} /> Risk / Trade
-                          </div>
-                          <div className="text-lg font-mono font-bold text-foreground">
-                            {riskAmountUsd != null ? `$${riskAmountUsd.toFixed(2)}` : '—'}
-                          </div>
-                          <div className="text-[9px] text-muted-foreground/60 mt-0.5">{config.risk_per_trade}% of balance</div>
-                        </div>
-                        <div className="text-center p-3 rounded-lg bg-black/30 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1 flex items-center justify-center gap-1">
-                            <TrendUp size={10} /> Max Exposure
-                          </div>
-                          <div className="text-lg font-mono font-bold text-foreground">
-                            {maxRiskAtOnce != null ? `$${maxRiskAtOnce.toFixed(2)}` : '—'}
-                          </div>
-                          <div className="text-[9px] text-muted-foreground/60 mt-0.5">{config.max_positions} positions × risk</div>
-                        </div>
-                      </div>
-                    )}
-
-                    {preflight.issues.map((issue, i) => (
-                      <p key={i} className="text-xs text-destructive flex items-start gap-1.5">
-                        <Warning size={12} className="mt-0.5 flex-shrink-0" /> {issue}
-                      </p>
-                    ))}
-                    {preflight.open_positions.length > 0 && (
-                      <p className="text-xs text-warning flex items-center gap-1.5">
-                        <Warning size={12} /> {preflight.open_positions.length} existing position(s) on exchange — bot will manage alongside them
-                      </p>
-                    )}
-                    {preflight.issues.some(i => i.toLowerCase().includes('api key') || i.toLowerCase().includes('api_key')) && (
-                      <p className="text-xs text-zinc-500">
-                        Add <code className="bg-zinc-800 px-1 rounded">PHEMEX_API_KEY</code> and{' '}
-                        <code className="bg-zinc-800 px-1 rounded">PHEMEX_API_SECRET</code> to your <code className="bg-zinc-800 px-1 rounded">.env</code> file, then restart the backend.
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-border/50 bg-background/40 p-4 text-sm text-zinc-500 font-mono flex items-center gap-2">
-                    <ArrowsClockwise size={14} className="animate-spin" /> Checking exchange connection...
-                  </div>
-                )}
-              </div>
-
-              {/* ── Parameters Grid ── */}
-              <div className="space-y-1.5 text-left">
-                <div className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1 mb-2">Session Parameters</div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-                  {/* Leverage */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between h-4 mb-0.5">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Leverage (x)</label>
-                    </div>
-                    <input
-                      type="number" min="1" max="20"
-                      value={config.leverage}
-                      onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setConfig({ ...config, leverage: v }); }}
-                      className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                    />
-                    <div className="flex gap-1.5">
-                      {[1, 2, 5, 10].map(v => (
-                        <button key={v} onClick={() => setConfig({ ...config, leverage: v })}
-                          className={cn('flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all',
-                            config.leverage === v ? 'bg-accent/15 border-accent/50 text-accent' : 'bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground')}
-                        >{v}x</button>
-                      ))}
-                    </div>
-                    <p className={cn('text-[9px] font-mono pl-1 leading-snug', effectiveExposure >= 20 ? 'text-red-400' : effectiveExposure >= 10 ? 'text-yellow-400' : 'text-muted-foreground/50')}>
-                      Effective exposure / trade: {effectiveExposure.toFixed(1)}%
+                  {preflight.issues.map((issue, i) => (
+                    <p key={i} className="text-[9px] text-red-400/70 font-mono leading-tight">{issue}</p>
+                  ))}
+                  {preflight.issues.some(i => i.toLowerCase().includes('api')) && (
+                    <p className="text-[9px] text-white/25 font-mono leading-tight">Set PHEMEX_API_KEY + PHEMEX_API_SECRET in .env</p>
+                  )}
+                  {preflight.open_positions.length > 0 && (
+                    <p className="text-[9px] text-amber-400/70 font-mono flex items-center gap-1">
+                      <Warning size={10} /> {preflight.open_positions.length} existing position(s) on exchange
                     </p>
-                  </div>
-
-                  {/* Risk Per Trade */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between h-4 mb-0.5">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Risk Per Trade (%)</label>
-                    </div>
-                    <input
-                      type="number" min="0.1" max="5" step="0.5"
-                      value={config.risk_per_trade}
-                      onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) setConfig({ ...config, risk_per_trade: v }); }}
-                      className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                    />
-                    <div className="flex gap-1.5">
-                      {[0.5, 1, 2, 3].map(v => (
-                        <button key={v} onClick={() => setConfig({ ...config, risk_per_trade: v })}
-                          className={cn('flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all',
-                            config.risk_per_trade === v ? 'bg-accent/15 border-accent/50 text-accent' : 'bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground')}
-                        >{v}%</button>
-                      ))}
-                    </div>
-                    <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">% of balance risked per entry — scales across 3 limit levels</p>
-                  </div>
-
-                  {/* Session Duration */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between h-4 mb-0.5">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Session Duration (h)</label>
-                    </div>
-                    <input
-                      type="number" min="1" max="720"
-                      value={config.duration_hours}
-                      onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setConfig({ ...config, duration_hours: v }); }}
-                      className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                    />
-                    <div className="flex gap-1.5">
-                      {[8, 24, 72, 168].map(v => (
-                        <button key={v} onClick={() => setConfig({ ...config, duration_hours: v })}
-                          className={cn('flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all',
-                            config.duration_hours === v ? 'bg-accent/15 border-accent/50 text-accent' : 'bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground')}
-                        >{v >= 168 ? '1w' : v >= 72 ? '3d' : `${v}h`}</button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Signal Sensitivity */}
-                  <div className="space-y-2 md:col-span-2">
-                    <div className="flex justify-between items-center h-4 mb-0.5">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Signal Quality Filter</label>
-                      <span className="text-[8px] text-muted-foreground/50 font-mono italic">entry threshold / near-miss</span>
-                    </div>
-                    <div className="flex gap-1.5">
-                      {([
-                        { key: 'conservative', label: 'Precision',   gate: 72, floor: 62, color: 'blue' },
-                        { key: 'balanced',     label: 'Balanced',    gate: 65, floor: 55, color: 'emerald' },
-                        { key: 'aggressive',   label: 'Active',      gate: 58, floor: 48, color: 'orange' },
-                        { key: 'custom',       label: 'Custom',      gate: null, floor: null, color: 'purple' },
-                      ] as const).map(({ key, label, gate, floor, color }) => {
-                        const isSelected = config.sensitivity_preset === key;
-                        const selectedCls = {
-                          blue:    'bg-blue-500/15 border-blue-500/60 text-blue-400',
-                          emerald: 'bg-emerald-500/15 border-emerald-500/60 text-emerald-400',
-                          orange:  'bg-orange-500/15 border-orange-500/60 text-orange-400',
-                          purple:  'bg-purple-500/15 border-purple-500/60 text-purple-400',
-                        }[color];
-                        return (
-                          <button key={key}
-                            onClick={() => setConfig({
-                              ...config, sensitivity_preset: key,
-                              min_confluence: key === 'custom' ? (config.min_confluence ?? 65) : null,
-                              confluence_soft_floor: key === 'custom' ? (config.confluence_soft_floor ?? 55) : null,
-                            })}
-                            className={cn('flex-1 py-1.5 rounded text-[9px] font-mono font-bold tracking-tight border transition-all flex flex-col items-center gap-0.5',
-                              isSelected ? selectedCls : 'bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground')}
-                          >
-                            <span>{label}</span>
-                            {gate !== null && <span className="opacity-60 text-[8px]">{gate}/{floor}</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {config.sensitivity_preset === 'custom' && (
-                      <div className="flex gap-3 mt-1">
-                        <div className="flex-1 space-y-1">
-                          <label className="text-[9px] text-purple-400/70 uppercase tracking-widest pl-0.5">Gate % (full size)</label>
-                          <input type="number" min="40" max="100"
-                            value={config.min_confluence ?? 65}
-                            onChange={e => setConfig({ ...config, min_confluence: Number(e.target.value) || 65 })}
-                            className="w-full h-10 bg-background border border-purple-500/30 rounded-lg px-3 font-mono text-center text-base focus:outline-none focus:border-purple-400/60 text-foreground"
-                          />
-                        </div>
-                        <div className="flex-1 space-y-1">
-                          <label className="text-[9px] text-purple-400/70 uppercase tracking-widest pl-0.5">Floor % (half size)</label>
-                          <input type="number" min="30" max="100"
-                            value={config.confluence_soft_floor ?? 55}
-                            onChange={e => setConfig({ ...config, confluence_soft_floor: Number(e.target.value) || 55 })}
-                            className="w-full h-10 bg-background border border-purple-500/30 rounded-lg px-3 font-mono text-center text-base focus:outline-none focus:border-purple-400/60 text-foreground"
-                          />
-                        </div>
-                      </div>
-                    )}
-                    <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">
-                      {config.sensitivity_preset === 'conservative' ? 'Highest-conviction only — 2–5 top-quality signals/week' :
-                       config.sensitivity_preset === 'aggressive'   ? 'Wide net — 15–30+ signals/week (more noise, more trades)' :
-                       config.sensitivity_preset === 'custom'       ? 'Signals above the threshold enter at full size · Near-misses enter at half size' :
-                       'Quality signals at full size, near-misses at half size — 5–12 trades/week'}
-                    </p>
-                  </div>
-
-                  {/* Max Trade Duration */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Max Trade Duration (h)</label>
-                    <input type="number" min="1" max="720"
-                      value={config.max_hours_open}
-                      onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setConfig({ ...config, max_hours_open: v }); }}
-                      className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                    />
-                    <div className="flex gap-1.5">
-                      {[24, 48, 72, 168].map(v => (
-                        <button key={v} onClick={() => setConfig({ ...config, max_hours_open: v })}
-                          className={cn('flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all',
-                            config.max_hours_open === v ? 'bg-accent/15 border-accent/50 text-accent' : 'bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground')}
-                        >{v}h</button>
-                      ))}
-                    </div>
-                    <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">Auto-closes any trade open longer than this</p>
-                  </div>
-
-                  {/* Max Drawdown */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] text-red-400/80 uppercase tracking-widest pl-1">Max Drawdown Limit (%)</label>
-                    <input type="number" min="1" max="100"
-                      value={config.max_drawdown_pct ?? ''}
-                      placeholder="NONE"
-                      onChange={e => setConfig({ ...config, max_drawdown_pct: e.target.value === '' ? null : Number(e.target.value) })}
-                      className="w-full h-12 bg-background border border-red-500/20 rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-red-400/40 text-foreground placeholder:text-muted-foreground/30"
-                    />
-                    <div className="flex gap-1.5">
-                      {[{ l: 'OFF', v: null }, { l: '10%', v: 10 }, { l: '15%', v: 15 }, { l: '25%', v: 25 }].map(({ l, v }) => (
-                        <button key={l} onClick={() => setConfig({ ...config, max_drawdown_pct: v })}
-                          className={cn('flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all',
-                            config.max_drawdown_pct === v ? 'bg-red-500/15 border-red-500/50 text-red-400' : 'bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground')}
-                        >{l}</button>
-                      ))}
-                    </div>
-                    <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">Kill switch fires if balance drops this % from session start</p>
-                  </div>
-
-                  {/* Scan Interval */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between h-4 mb-0.5">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Scan Every (m)</label>
-                      <span className="text-[8px] text-accent/60 border border-accent/20 bg-accent/5 px-1.5 py-0 rounded">Suggested: 2m</span>
-                    </div>
-                    <input type="number" min="1" max="60"
-                      value={config.scan_interval_minutes}
-                      onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setConfig({ ...config, scan_interval_minutes: v }); }}
-                      className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                    />
-                    <div className="flex gap-1.5">
-                      {[2, 5, 15, 30].map(v => (
-                        <button key={v} onClick={() => setConfig({ ...config, scan_interval_minutes: v })}
-                          className={cn('flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all',
-                            config.scan_interval_minutes === v ? 'bg-accent/15 border-accent/50 text-accent' : 'bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground')}
-                        >{v}m</button>
-                      ))}
-                    </div>
-                    <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">Fast scans (2m) catch scalp entries; slower scans reduce CPU load</p>
-                  </div>
-
-                  {/* Max Concurrent Assets */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between h-4 mb-0.5">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Max Concurrent Assets</label>
-                      <span className="text-[8px] text-accent/60 border border-accent/20 bg-accent/5 px-1.5 py-0 rounded">Suggested: 3</span>
-                    </div>
-                    <input type="number" min="1" max="10"
-                      value={config.max_positions}
-                      onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setConfig({ ...config, max_positions: v }); }}
-                      className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                    />
-                    <div className="flex gap-1.5">
-                      {[1, 3, 5, 10].map(v => (
-                        <button key={v} onClick={() => setConfig({ ...config, max_positions: v })}
-                          className={cn('flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all',
-                            config.max_positions === v ? 'bg-accent/15 border-accent/50 text-accent' : 'bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground')}
-                        >{v}</button>
-                      ))}
-                    </div>
-                    <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">Maximum simultaneous open trades (positions + pending orders combined)</p>
-                  </div>
+                  )}
                 </div>
-              </div>
-
-              {/* Asset Buckets */}
-              <div className="bg-background/40 border border-border/50 rounded-xl p-4 space-y-4 text-left">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Target Asset Buckets</label>
-                  <span className="text-[9px] text-muted-foreground font-mono italic">Volume adaptive</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div onClick={() => setConfig({ ...config, majors: !config.majors })}
-                          className={cn('flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all',
-                            config.majors ? 'bg-accent/10 border-accent text-accent shadow-[0_0_10px_rgba(0,255,170,0.1)]' : 'bg-black/20 border-border text-muted-foreground opacity-60 grayscale')}
-                        >
-                          <Trophy size={16} weight={config.majors ? 'fill' : 'regular'} />
-                          <span className="text-xs font-mono font-bold tracking-tight">MAJORS</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="bg-black/90 border-border text-[10px] p-2 max-w-[200px]">
-                        BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, DOT, LINK
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <div onClick={() => setConfig({ ...config, altcoins: !config.altcoins })}
-                    className={cn('flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all',
-                      config.altcoins ? 'bg-primary/10 border-primary text-primary shadow-[0_0_10px_rgba(59,130,246,0.1)]' : 'bg-black/20 border-border text-muted-foreground opacity-60 grayscale')}
-                  >
-                    <ChartLine size={16} weight={config.altcoins ? 'fill' : 'regular'} />
-                    <span className="text-xs font-mono font-bold tracking-tight">ALTS</span>
-                  </div>
-                  <div onClick={() => setConfig({ ...config, meme_mode: !config.meme_mode })}
-                    className={cn('flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all',
-                      config.meme_mode ? 'bg-purple-500/10 border-purple-500 text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.1)]' : 'bg-black/20 border-border text-muted-foreground opacity-60 grayscale')}
-                  >
-                    <Crosshair size={16} weight={config.meme_mode ? 'fill' : 'regular'} />
-                    <span className="text-xs font-mono font-bold tracking-tight">MEME HUNTER</span>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-border/30">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Universe Size</label>
-                    <span className="text-[10px] font-mono font-bold text-accent">{config.universe_size} pairs</span>
-                  </div>
-                  <input type="range" min={10} max={50} step={5}
-                    value={config.universe_size}
-                    onChange={e => setConfig({ ...config, universe_size: Number(e.target.value) })}
-                    className="w-full h-1.5 accent-accent cursor-pointer"
-                  />
-                  <div className="flex justify-between mt-1">
-                    <span className="text-[9px] text-muted-foreground/40 font-mono">10</span>
-                    <span className="text-[9px] text-muted-foreground/40 font-mono">50</span>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-border/30">
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2 block font-mono">Custom symbols (comma separated)</label>
-                  <input type="text"
-                    placeholder="e.g. BTC/USDT, ETH/USDT, LINK/USDT"
-                    value={config.symbols.join(', ')}
-                    onChange={e => {
-                      const syms = e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
-                      setConfig({ ...config, symbols: syms });
-                    }}
-                    className="w-full h-10 bg-black/40 border border-border rounded-md px-3 font-mono text-xs focus:outline-none focus:border-accent/40 placeholder:text-muted-foreground/30 text-foreground"
-                  />
-                </div>
-              </div>
-
-              {/* Safety Limits */}
-              <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 space-y-4 text-left">
-                <label className="text-[10px] font-bold uppercase tracking-widest pl-1 flex items-center gap-1.5 text-red-400">
-                  <Fire size={12} /> Capital Protection Limits
-                </label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Max Position Size ($)</label>
-                    <input type="number" min="1"
-                      value={config.max_position_size_usd}
-                      onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) setConfig({ ...config, max_position_size_usd: v }); }}
-                      className="w-full h-10 bg-background border border-border rounded-lg px-3 font-mono text-center focus:outline-none focus:border-accent/40 text-foreground"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Max Total Exposure ($)</label>
-                    <input type="number" min="1"
-                      value={config.max_total_exposure_usd}
-                      onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) setConfig({ ...config, max_total_exposure_usd: v }); }}
-                      className="w-full h-10 bg-background border border-border rounded-lg px-3 font-mono text-center focus:outline-none focus:border-accent/40 text-foreground"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Min Balance Floor ($)</label>
-                    <input type="number" min="0"
-                      value={config.min_balance_usd}
-                      onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) setConfig({ ...config, min_balance_usd: v }); }}
-                      className="w-full h-10 bg-background border border-border rounded-lg px-3 font-mono text-center focus:outline-none focus:border-accent/40 text-foreground"
-                    />
-                  </div>
-                </div>
-                <p className="text-[9px] text-muted-foreground/50 font-mono pl-1">Kill switch fires automatically if balance drops below the floor</p>
-              </div>
-
-              {/* Live acknowledgment */}
-              {isLive && (
-                <div className="rounded-xl border border-red-500/40 bg-red-500/5 p-4 space-y-3 text-left">
-                  <div className="flex items-start gap-3">
-                    <Skull size={24} weight="bold" className="text-red-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold text-red-400 text-sm">Confirm Live Deployment</p>
-                      <p className="text-xs text-zinc-400 mt-1">
-                        This deploys real orders on Phemex using your API keys. Capital at risk — all losses are real. Double-check your position limits and drawdown settings above before proceeding.
-                      </p>
-                    </div>
-                  </div>
-                  <label className="flex items-center gap-3 cursor-pointer mt-2">
-                    <input type="checkbox" checked={ackChecked} onChange={e => setAckChecked(e.target.checked)} className="w-4 h-4 accent-red-500" />
-                    <span className="text-xs text-zinc-300">I understand this places real orders with real capital and I accept full responsibility for all outcomes</span>
-                  </label>
+              ) : (
+                <div className="flex items-center gap-2 text-white/25 text-[9px] font-mono">
+                  <ArrowsClockwise size={11} className="animate-spin" /> CHECKING...
                 </div>
               )}
+            </div>
 
-              {/* Deploy button */}
-              <button
-                onClick={handleStart}
-                disabled={!canStart || starting}
-                className={cn(
-                  'w-full h-14 rounded-xl font-bold text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all duration-300 relative overflow-hidden group/btn border-2',
-                  canStart && !starting
-                    ? 'bg-red-600 hover:bg-red-500 border-red-500 text-white shadow-lg shadow-red-900/30 hover:shadow-red-500/30'
-                    : 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed',
-                )}
-              >
-                {canStart && !starting && (
-                  <div className="absolute inset-0 bg-white/10 skew-x-12 -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
-                )}
-                {starting ? (
-                  <><ArrowsClockwise size={20} className="animate-spin" /> Initializing...</>
-                ) : (
-                  <><Skull size={20} weight="bold" /> Deploy Live Bot</>
-                )}
-              </button>
+            {/* Balance */}
+            {balance > 0 && (
+              <div className="space-y-2">
+                <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Wallet</div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-[9px] text-white/25 font-mono">Available</span>
+                  <span className="text-base font-bold font-mono text-emerald-400">${balance.toFixed(2)}</span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-[9px] text-white/25 font-mono">Risk / Trade</span>
+                  <span className="text-sm font-bold font-mono text-white/60">{riskAmountUsd != null ? `$${riskAmountUsd.toFixed(2)}` : '—'}</span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-[9px] text-white/25 font-mono">Max Exposure</span>
+                  <span className="text-sm font-bold font-mono text-white/40">{maxRiskAtOnce != null ? `$${maxRiskAtOnce.toFixed(2)}` : '—'}</span>
+                </div>
+                <div className="h-px bg-white/[0.06] mt-1" />
+                <div className="h-1 bg-white/5">
+                  <div className={cn("h-full transition-all duration-500", effectiveExposure >= 20 ? 'bg-red-500/60' : effectiveExposure >= 10 ? 'bg-amber-500/60' : 'bg-emerald-500/60')}
+                    style={{ width: `${Math.min(100, effectiveExposure * 5).toFixed(1)}%` }} />
+                </div>
+                <div className={cn("text-[8px] font-mono", effectiveExposure >= 20 ? 'text-red-400' : effectiveExposure >= 10 ? 'text-amber-400' : 'text-white/25')}>
+                  {effectiveExposure.toFixed(1)}% effective exposure / trade
+                </div>
+              </div>
+            )}
+
+            {/* Regime */}
+            <div className="space-y-1.5">
+              <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Market Regime</div>
+              <div className="flex items-center gap-2">
+                <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", recommendation?.regime?.composite ? "bg-cyan-400 animate-pulse" : "bg-white/20")} />
+                <span className="text-sm font-bold font-mono text-cyan-300 capitalize">
+                  {recommendation?.regime?.composite ? recommendation.regime.composite.replace(/_/g, ' ') : 'Adaptive'}
+                </span>
+              </div>
+              {recommendation?.reason && (
+                <p className="text-[9px] text-white/25 font-mono leading-tight line-clamp-2">{recommendation.reason}</p>
+              )}
+            </div>
+
+            {/* Engine Mode */}
+            <div className="space-y-2">
+              <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Engine Mode</div>
+              <div className="border border-purple-500/20 bg-purple-500/5 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Lightning size={13} weight="fill" className="text-purple-400" />
+                    <span className="text-sm font-black tracking-widest text-purple-300 font-mono">STEALTH</span>
+                  </div>
+                  <span className="text-[8px] font-mono border border-purple-500/30 text-purple-400/60 px-1.5 py-0.5">LOCKED</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 text-[9px] font-mono">
+                  {[['R:R Min', '1.8'], ['TF Range', 'D→5m'], ['Direction', 'L + S'], ['Types', 'S/I/W']].map(([k, v]) => (
+                    <div key={k}>
+                      <div className="text-white/20">{k}</div>
+                      <div className="text-white/60 font-bold">{v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Live mode tag */}
+            <div className="border border-red-500/20 bg-red-500/5 p-3 flex items-center gap-2">
+              <Skull size={12} weight="fill" className="text-red-400" />
+              <div>
+                <div className="text-[9px] font-mono font-black tracking-[0.2em] text-red-400">LIVE TRADING</div>
+                <div className="text-[8px] text-white/25 font-mono">Real orders · Real funds · Irreversible</div>
+              </div>
+            </div>
+
+            {/* Recheck */}
+            <button onClick={runPreflight} disabled={preflightLoading}
+              className="w-full flex items-center justify-center gap-2 py-2 border border-white/10 text-white/30 text-[9px] font-mono tracking-widest uppercase hover:border-emerald-500/40 hover:text-emerald-400 transition-all disabled:opacity-30"
+            >
+              <ArrowsClockwise size={10} className={preflightLoading ? 'animate-spin' : ''} />
+              Recheck Connection
+            </button>
+          </div>
+
+          {/* ── CENTER: Operational Config ── */}
+          <div className="lg:col-span-6 bg-[#070707] p-5 space-y-5">
+            <div className="text-[8px] font-mono tracking-[0.25em] text-white/20 uppercase">[OPS-01] CONFIGURATION</div>
+
+            {/* Signal Quality Filter */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Signal Quality Filter</div>
+                <span className="text-[8px] text-white/20 font-mono">entry gate / near-miss floor</span>
+              </div>
+              <div className="grid grid-cols-4 gap-[1px] bg-white/[0.06]">
+                {([
+                  { key: 'conservative', label: 'PRECISION',  gate: 72, floor: 62, hi: 'text-blue-400 bg-blue-500/10' },
+                  { key: 'balanced',     label: 'BALANCED',   gate: 65, floor: 55, hi: 'text-emerald-400 bg-emerald-500/10' },
+                  { key: 'aggressive',   label: 'ACTIVE',     gate: 58, floor: 48, hi: 'text-orange-400 bg-orange-500/10' },
+                  { key: 'custom',       label: 'CUSTOM',     gate: null, floor: null, hi: 'text-purple-400 bg-purple-500/10' },
+                ] as const).map(({ key, label, gate, floor, hi }) => (
+                  <button key={key}
+                    onClick={() => setConfig({ ...config, sensitivity_preset: key,
+                      min_confluence: key === 'custom' ? (config.min_confluence ?? 65) : null,
+                      confluence_soft_floor: key === 'custom' ? (config.confluence_soft_floor ?? 55) : null,
+                    })}
+                    className={cn("py-2.5 flex flex-col items-center gap-0.5 text-[9px] font-mono font-bold tracking-wider transition-all border-t-2",
+                      config.sensitivity_preset === key ? `border-current ${hi}` : "border-transparent bg-black/60 text-white/20 hover:text-white/50")}
+                  >
+                    <span>{label}</span>
+                    {gate !== null && <span className="opacity-50 text-[8px] font-normal">{gate}/{floor}</span>}
+                  </button>
+                ))}
+              </div>
+              {config.sensitivity_preset === 'custom' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="text-[8px] text-purple-400/60 font-mono mb-1 uppercase tracking-widest">Gate % (full size)</div>
+                    <input type="number" min="40" max="100" value={config.min_confluence ?? 65}
+                      onChange={e => setConfig({ ...config, min_confluence: Number(e.target.value) || 65 })}
+                      className="w-full h-9 bg-black border border-white/10 rounded-none px-3 font-mono text-sm text-center text-white shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] focus:outline-none focus:border-purple-500/40"
+                    />
+                  </div>
+                  <div>
+                    <div className="text-[8px] text-purple-400/60 font-mono mb-1 uppercase tracking-widest">Floor % (half size)</div>
+                    <input type="number" min="30" max="100" value={config.confluence_soft_floor ?? 55}
+                      onChange={e => setConfig({ ...config, confluence_soft_floor: Number(e.target.value) || 55 })}
+                      className="w-full h-9 bg-black border border-white/10 rounded-none px-3 font-mono text-sm text-center text-white shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] focus:outline-none focus:border-purple-500/40"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 2-up: Leverage + Risk */}
+            <div className="grid grid-cols-2 gap-[1px] bg-white/[0.06]">
+              <div className="bg-[#070707] p-3 space-y-2">
+                <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Leverage</div>
+                <input type="number" min="1" max="20" value={config.leverage}
+                  onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setConfig({ ...config, leverage: v }); }}
+                  className="w-full h-9 bg-black border border-white/10 rounded-none px-3 font-mono text-lg text-center text-white shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] focus:outline-none focus:border-emerald-500/40"
+                />
+                <div className="flex gap-[1px]">
+                  {[1, 2, 5, 10].map(v => (
+                    <button key={v} onClick={() => setConfig({ ...config, leverage: v })}
+                      className={cn("flex-1 py-1 text-[9px] font-mono font-bold transition-all",
+                        config.leverage === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                    >{v}x</button>
+                  ))}
+                </div>
+                <div className={cn("text-[8px] font-mono", effectiveExposure >= 20 ? 'text-red-400' : effectiveExposure >= 10 ? 'text-amber-400' : 'text-white/25')}>
+                  {effectiveExposure.toFixed(1)}% effective / trade
+                </div>
+              </div>
+              <div className="bg-[#070707] p-3 space-y-2">
+                <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Risk / Trade</div>
+                <input type="number" min="0.1" max="5" step="0.5" value={config.risk_per_trade}
+                  onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) setConfig({ ...config, risk_per_trade: v }); }}
+                  className="w-full h-9 bg-black border border-white/10 rounded-none px-3 font-mono text-lg text-center text-white shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] focus:outline-none focus:border-emerald-500/40"
+                />
+                <div className="flex gap-[1px]">
+                  {[0.5, 1, 2, 3].map(v => (
+                    <button key={v} onClick={() => setConfig({ ...config, risk_per_trade: v })}
+                      className={cn("flex-1 py-1 text-[9px] font-mono font-bold transition-all",
+                        config.risk_per_trade === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                    >{v}%</button>
+                  ))}
+                </div>
+                <div className="text-[8px] font-mono text-white/25">
+                  {riskAmountUsd != null ? `≈ $${riskAmountUsd.toFixed(2)} per entry` : 'of balance per entry'}
+                </div>
+              </div>
+            </div>
+
+            {/* 2-up: Session Duration + Scan Freq */}
+            <div className="grid grid-cols-2 gap-[1px] bg-white/[0.06]">
+              <div className="bg-[#070707] p-3 space-y-2">
+                <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Session Duration</div>
+                <input type="number" min="1" max="720" value={config.duration_hours}
+                  onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setConfig({ ...config, duration_hours: v }); }}
+                  className="w-full h-9 bg-black border border-white/10 rounded-none px-3 font-mono text-lg text-center text-white shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] focus:outline-none focus:border-emerald-500/40"
+                />
+                <div className="flex gap-[1px]">
+                  {[8, 24, 72, 168].map(v => (
+                    <button key={v} onClick={() => setConfig({ ...config, duration_hours: v })}
+                      className={cn("flex-1 py-1 text-[9px] font-mono font-bold transition-all",
+                        config.duration_hours === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                    >{v >= 168 ? '1w' : v >= 72 ? '3d' : `${v}h`}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-[#070707] p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Scan Interval</div>
+                  <span className="text-[8px] text-emerald-500/50 font-mono">rec: 2m</span>
+                </div>
+                <input type="number" min="1" max="60" value={config.scan_interval_minutes}
+                  onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setConfig({ ...config, scan_interval_minutes: v }); }}
+                  className="w-full h-9 bg-black border border-white/10 rounded-none px-3 font-mono text-lg text-center text-white shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] focus:outline-none focus:border-emerald-500/40"
+                />
+                <div className="flex gap-[1px]">
+                  {[2, 5, 15, 30].map(v => (
+                    <button key={v} onClick={() => setConfig({ ...config, scan_interval_minutes: v })}
+                      className={cn("flex-1 py-1 text-[9px] font-mono font-bold transition-all",
+                        config.scan_interval_minutes === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                    >{v}m</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 2-up: Max Trade Duration + Max Concurrent */}
+            <div className="grid grid-cols-2 gap-[1px] bg-white/[0.06]">
+              <div className="bg-[#070707] p-3 space-y-2">
+                <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Max Trade Duration</div>
+                <input type="number" min="1" max="720" value={config.max_hours_open}
+                  onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setConfig({ ...config, max_hours_open: v }); }}
+                  className="w-full h-9 bg-black border border-white/10 rounded-none px-3 font-mono text-lg text-center text-white shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] focus:outline-none focus:border-emerald-500/40"
+                />
+                <div className="flex gap-[1px]">
+                  {[24, 48, 72, 168].map(v => (
+                    <button key={v} onClick={() => setConfig({ ...config, max_hours_open: v })}
+                      className={cn("flex-1 py-1 text-[9px] font-mono font-bold transition-all",
+                        config.max_hours_open === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                    >{v}h</button>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-[#070707] p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Max Concurrent</div>
+                  <span className="text-[8px] text-emerald-500/50 font-mono">rec: 3</span>
+                </div>
+                <input type="number" min="1" max="10" value={config.max_positions}
+                  onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setConfig({ ...config, max_positions: v }); }}
+                  className="w-full h-9 bg-black border border-white/10 rounded-none px-3 font-mono text-lg text-center text-white shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] focus:outline-none focus:border-emerald-500/40"
+                />
+                <div className="flex gap-[1px]">
+                  {[1, 3, 5, 10].map(v => (
+                    <button key={v} onClick={() => setConfig({ ...config, max_positions: v })}
+                      className={cn("flex-1 py-1 text-[9px] font-mono font-bold transition-all",
+                        config.max_positions === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                    >{v}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Asset Buckets */}
+            <div className="space-y-2">
+              <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Target Asset Universe</div>
+              <div className="grid grid-cols-3 gap-[1px] bg-white/[0.06]">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div onClick={() => setConfig({ ...config, majors: !config.majors })}
+                        className={cn("flex items-center justify-center gap-1.5 py-2.5 cursor-pointer transition-all text-[9px] font-mono font-bold tracking-wider",
+                          config.majors ? "bg-emerald-500/15 text-emerald-400" : "bg-black/60 text-white/20 hover:text-white/40")}
+                      >
+                        <Trophy size={12} weight={config.majors ? "fill" : "regular"} /> MAJORS
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="bg-black/90 border-white/10 text-[10px] p-2 max-w-[200px] font-mono">
+                      BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, DOT, LINK
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <div onClick={() => setConfig({ ...config, altcoins: !config.altcoins })}
+                  className={cn("flex items-center justify-center gap-1.5 py-2.5 cursor-pointer transition-all text-[9px] font-mono font-bold tracking-wider",
+                    config.altcoins ? "bg-blue-500/15 text-blue-400" : "bg-black/60 text-white/20 hover:text-white/40")}
+                >
+                  <ChartLine size={12} weight={config.altcoins ? "fill" : "regular"} /> ALTS
+                </div>
+                <div onClick={() => setConfig({ ...config, meme_mode: !config.meme_mode })}
+                  className={cn("flex items-center justify-center gap-1.5 py-2.5 cursor-pointer transition-all text-[9px] font-mono font-bold tracking-wider",
+                    config.meme_mode ? "bg-purple-500/15 text-purple-400" : "bg-black/60 text-white/20 hover:text-white/40")}
+                >
+                  <Crosshair size={12} weight={config.meme_mode ? "fill" : "regular"} /> MEME
+                </div>
+              </div>
+
+              {/* Universe size */}
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[9px] font-mono text-white/25">UNIVERSE SIZE</span>
+                <span className="text-[9px] font-bold font-mono text-emerald-400">{config.universe_size} pairs</span>
+              </div>
+              <input type="range" min={10} max={50} step={5} value={config.universe_size}
+                onChange={e => setConfig({ ...config, universe_size: Number(e.target.value) })}
+                className="cockpit-range w-full cursor-pointer"
+              />
+              <div className="flex justify-between">
+                <span className="text-[8px] text-white/15 font-mono">10</span>
+                <span className="text-[8px] text-white/15 font-mono">50</span>
+              </div>
+            </div>
+
+            {/* Custom Symbols */}
+            <div className="space-y-1.5">
+              <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Custom Symbols (overrides buckets)</div>
+              <input type="text" placeholder="BTC/USDT, ETH/USDT, ..."
+                value={config.symbols.join(', ')}
+                onChange={e => {
+                  const syms = e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
+                  setConfig({ ...config, symbols: syms });
+                }}
+                className="w-full h-9 bg-black border border-white/10 rounded-none px-3 font-mono text-xs text-white shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] focus:outline-none focus:border-emerald-500/40 placeholder:text-white/15"
+              />
             </div>
           </div>
-        </section>
 
-        {/* System capabilities */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* ── RIGHT: Safety + Deploy ── */}
+          <div className="lg:col-span-3 bg-[#0c0505] border-t-2 border-red-500/50 p-5 space-y-5 flex flex-col">
+            <div className="text-[8px] font-mono tracking-[0.25em] text-red-500/40 uppercase">[SAF-01] SAFETY</div>
+
+            {/* Max Drawdown — Big Display */}
+            <div className="space-y-2">
+              <div className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-mono">Max Drawdown Kill Switch</div>
+              <div className="text-center py-4 border border-red-500/10 bg-red-500/5">
+                <div className={cn("text-5xl font-black font-mono tracking-tight",
+                  config.max_drawdown_pct == null ? "text-white/15" : config.max_drawdown_pct <= 10 ? "text-emerald-400" : config.max_drawdown_pct <= 20 ? "text-amber-400" : "text-red-400"
+                )}>
+                  {config.max_drawdown_pct != null ? `${config.max_drawdown_pct}%` : 'OFF'}
+                </div>
+                <div className="text-[8px] text-white/20 font-mono mt-1">session drawdown limit</div>
+              </div>
+              <input type="number" min="1" max="100" value={config.max_drawdown_pct ?? ''} placeholder="NONE"
+                onChange={e => setConfig({ ...config, max_drawdown_pct: e.target.value === '' ? null : Number(e.target.value) })}
+                className="w-full h-9 bg-black border border-red-500/20 rounded-none px-3 font-mono text-sm text-center text-white shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] focus:outline-none focus:border-red-500/40 placeholder:text-white/20"
+              />
+              <div className="flex gap-[1px]">
+                {[{ l: 'OFF', v: null }, { l: '10%', v: 10 }, { l: '15%', v: 15 }, { l: '25%', v: 25 }].map(({ l, v }) => (
+                  <button key={l} onClick={() => setConfig({ ...config, max_drawdown_pct: v })}
+                    className={cn("flex-1 py-1 text-[9px] font-mono font-bold transition-all",
+                      config.max_drawdown_pct === v ? "bg-red-500/20 text-red-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                  >{l}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Capital Limits */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-[0.2em] text-red-400/50 font-mono">
+                <Fire size={10} /> Position Limits
+              </div>
+              <div className="space-y-2">
+                {[
+                  { label: 'MAX POSITION SIZE ($)', val: config.max_position_size_usd, key: 'max_position_size_usd' as const },
+                  { label: 'MAX TOTAL EXPOSURE ($)', val: config.max_total_exposure_usd, key: 'max_total_exposure_usd' as const },
+                  { label: 'MIN BALANCE FLOOR ($)', val: config.min_balance_usd, key: 'min_balance_usd' as const },
+                ].map(({ label, val, key }) => (
+                  <div key={key}>
+                    <div className="text-[8px] text-white/20 font-mono mb-1 uppercase tracking-widest">{label}</div>
+                    <input type="number" min="0" value={val}
+                      onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) setConfig({ ...config, [key]: v }); }}
+                      className="w-full h-9 bg-black border border-red-500/10 rounded-none px-3 font-mono text-sm text-center text-white shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] focus:outline-none focus:border-red-500/30"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex-1" />
+
+            {/* Live Acknowledgment */}
+            <div className="space-y-3 border border-red-500/20 bg-red-500/5 p-3">
+              <div className="flex items-start gap-2">
+                <Skull size={14} weight="bold" className="text-red-400 flex-shrink-0 mt-0.5" />
+                <p className="text-[9px] text-red-300/60 font-mono leading-relaxed">
+                  Deploys real orders on Phemex. Capital at risk — all losses are permanent. Verify position limits and drawdown settings before proceeding.
+                </p>
+              </div>
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" checked={ackChecked} onChange={e => setAckChecked(e.target.checked)} className="w-3.5 h-3.5 mt-0.5 accent-red-500 flex-shrink-0" />
+                <span className="text-[9px] text-white/40 font-mono leading-relaxed">
+                  I accept full responsibility for all trading outcomes
+                </span>
+              </label>
+            </div>
+
+            {/* Deploy Button */}
+            <button onClick={handleStart} disabled={!canStart || starting}
+              className={cn(
+                "w-full py-4 font-black text-sm tracking-[0.25em] uppercase font-mono flex items-center justify-center gap-2 transition-all duration-300 relative overflow-hidden group/btn",
+                canStart && !starting
+                  ? "bg-red-600 hover:bg-red-500 text-white shadow-[0_0_30px_rgba(239,68,68,0.3)] hover:shadow-[0_0_50px_rgba(239,68,68,0.5)]"
+                  : "bg-white/5 text-white/20 cursor-not-allowed border border-white/10",
+              )}
+            >
+              {canStart && !starting && (
+                <div className="absolute inset-0 bg-white/10 skew-x-12 -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
+              )}
+              {starting ? <><ArrowsClockwise size={16} className="animate-spin" /> INITIALIZING...</> : <><Skull size={16} weight="bold" /> DEPLOY LIVE BOT</>}
+            </button>
+          </div>
+        </div>
+
+        {/* System capabilities footer */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-[1px] bg-white/[0.06] border border-white/[0.06]">
           {[
-            { icon: <Cpu size={18} className="text-accent" />, title: 'Market Adaptive', desc: 'Automatically detects whether the market is trending, ranging, or compressed — then adjusts targets, position sizing, and entry thresholds accordingly.' },
-            { icon: <Target size={18} className="text-primary" />, title: 'Smart Money Analysis', desc: 'Identifies institutional order blocks, price gaps (fair value gaps), and liquidity zones — the same levels where large players enter and exit the market.' },
-            { icon: <ShieldCheck size={18} className="text-warning" />, title: 'Capital Protection', desc: 'Exchange-native stop losses, automated breakeven lock, session kill switch, and per-trade drawdown limits keep your capital protected at all times.' },
+            { icon: <Cpu size={13} className="text-emerald-400" />, title: 'MARKET ADAPTIVE', desc: 'Auto-detects trending, ranging, or compressed conditions — adjusts targets and sizing accordingly.' },
+            { icon: <Target size={13} className="text-cyan-400" />, title: 'SMART MONEY ANALYSIS', desc: 'Identifies institutional order blocks, fair value gaps, and liquidity zones across 5 timeframes.' },
+            { icon: <ShieldCheck size={13} className="text-amber-400" />, title: 'CAPITAL PROTECTION', desc: 'Exchange-native stops, breakeven lock, session kill switch, and per-trade drawdown limits.' },
           ].map(({ icon, title, desc }) => (
-            <div key={title} className="p-4 rounded-xl bg-background/40 border border-border/30 space-y-2">
-              <div className="flex items-center gap-2">{icon}<span className="text-xs font-bold font-mono uppercase tracking-wider">{title}</span></div>
-              <p className="text-[10px] text-muted-foreground/70 leading-relaxed">{desc}</p>
+            <div key={title} className="bg-black/60 p-4 space-y-1.5">
+              <div className="flex items-center gap-2">{icon}<span className="text-[9px] font-bold font-mono uppercase tracking-[0.2em] text-white/50">{title}</span></div>
+              <p className="text-[9px] text-white/25 font-mono leading-relaxed">{desc}</p>
             </div>
           ))}
         </div>

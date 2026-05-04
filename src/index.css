@@ -689,7 +689,60 @@ body {
   animation: flash-red 1s ease-out;
 }
 
-/* ─── Active Scan Beacon ─────────────────────────────────────── */
+/* ─── Cockpit Instrument Panel ───────────────────────────────── */
+.cockpit-scanlines {
+  position: relative;
+  isolation: isolate;
+}
+.cockpit-scanlines::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.016) 2px,
+    rgba(255, 255, 255, 0.016) 4px
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Stepped range track — visual notches every 25% of width */
+.cockpit-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255,255,255,0.12) 0px,
+      rgba(255,255,255,0.12) 1px,
+      transparent 1px,
+      transparent 12.5%
+    ),
+    rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+.cockpit-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 18px;
+  background: #10b981;
+  border-radius: 0;
+  border: 1px solid rgba(255,255,255,0.3);
+  cursor: pointer;
+}
+.cockpit-range::-moz-range-thumb {
+  width: 10px;
+  height: 18px;
+  background: #10b981;
+  border-radius: 0;
+  border: 1px solid rgba(255,255,255,0.3);
+  cursor: pointer;
+}
 @keyframes beacon-sonar {
   0%   { transform: scale(1);   opacity: 0.75; }
   100% { transform: scale(3.2); opacity: 0;    }
