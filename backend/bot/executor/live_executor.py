@@ -63,13 +63,28 @@ class LiveExecutor:
         self._initial_balance: float = 0.0
         self._order_counter: int = 0
         self._leverage_confirmed: set = set()  # symbols with leverage already set this session
+        self._hedge_mode: bool = False  # True if account is in hedge mode (needs positionSide)
+
+        # Switch to one-way position mode at startup.
+        # Phemex TE_ERR_INCONSISTENT_POS_MODE fires when the account is in hedge mode
+        # but orders don't include positionSide. The bot uses one-way mode exclusively.
+        if not dry_run:
+            one_way_ok = self._adapter.set_position_mode_one_way()
+            if not one_way_ok:
+                # Could not switch — account may already have open positions.
+                # Flag hedge mode so every order includes positionSide as fallback.
+                self._hedge_mode = True
+                logger.warning(
+                    "Could not confirm one-way position mode — will include positionSide "
+                    "in all orders to handle hedge-mode accounts."
+                )
 
         # Fetch initial balance
         self._cached_balance = self._fetch_balance_from_exchange()
         self._initial_balance = self._cached_balance
         logger.info(
             f"LiveExecutor initialized — balance=${self._cached_balance:.2f} "
-            f"dry_run={dry_run}"
+            f"dry_run={dry_run} hedge_mode={self._hedge_mode}"
         )
 
     def _generate_order_id(self) -> str:
@@ -195,6 +210,13 @@ class LiveExecutor:
 
         ccxt_side = order_side.value.lower()
 
+        # In hedge mode, Phemex requires positionSide on every order.
+        # For entry orders: BUY=Long, SELL=Short.
+        # For exit/reduce orders: use reduceOnly instead (simpler and mode-agnostic).
+        extra_params: dict = {}
+        if self._hedge_mode:
+            extra_params["positionSide"] = "Long" if ccxt_side == "buy" else "Short"
+
         try:
             exchange_order = self._adapter.create_order(
                 symbol=symbol,
@@ -202,6 +224,7 @@ class LiveExecutor:
                 side=ccxt_side,
                 amount=quantity,
                 price=price,
+                params=extra_params if extra_params else None,
             )
             exchange_id = str(exchange_order.get("id", ""))
             self._exchange_order_map[order_id] = exchange_id
@@ -298,9 +321,24 @@ class LiveExecutor:
         ex_filled = float(ex_order.get("filled", 0.0) or 0.0)
         ex_avg_price = float(ex_order.get("average", 0.0) or ex_order.get("price", 0.0) or 0.0)
 
+        # Phemex sometimes reports filled=0/null on a closed order (uses cumQty internally,
+        # CCXT normalization may not catch it). When the exchange says the order is done but
+        # filled qty is still zero, treat the full order quantity as filled.
+        if ex_status in ("closed", "filled") and ex_filled < 1e-9:
+            ex_filled = order.quantity
+            if ex_avg_price <= 0:
+                ex_avg_price = order.price or 0.0
+            logger.info(
+                f"Order {order.order_id} closed on exchange with filled=0 — "
+                f"assuming full fill of {ex_filled:.6f} @ {ex_avg_price}"
+            )
+
         # How much was filled since we last checked
         new_qty = ex_filled - order.filled_quantity
         if new_qty < 1e-9:
+            # Fully accounted for — keep status in sync
+            if ex_status in ("closed", "filled"):
+                order.status = OrderStatus.FILLED
             return None
 
         fill_price = ex_avg_price if ex_avg_price > 0 else (order.price or 0.0)
@@ -488,13 +526,19 @@ class LiveExecutor:
         try:
             # "stop_market" is the CCXT unified type for a stop-triggered market order.
             # price= is the trigger level; reduceOnly ensures it only closes the position.
+            stop_params: dict = {"reduceOnly": True}
+            if self._hedge_mode:
+                # In hedge mode, the stop's positionSide is the position being closed:
+                # SELL stop closes a LONG → positionSide=Long
+                # BUY stop closes a SHORT → positionSide=Short
+                stop_params["positionSide"] = "Long" if side.upper() == "SELL" else "Short"
             exchange_order = self._adapter.create_order(
                 symbol=symbol,
                 order_type="stop_market",
                 side=side.lower(),
                 amount=quantity,
                 price=stop_price,
-                params={"reduceOnly": True},
+                params=stop_params,
             )
             exchange_id = str(exchange_order.get("id", ""))
             self._exchange_order_map[order_id] = exchange_id
