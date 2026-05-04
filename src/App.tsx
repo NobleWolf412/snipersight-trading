@@ -4,6 +4,7 @@ import { Routes, Route } from 'react-router-dom';
 import { SniperReticle } from '@/components/SniperReticle';
 import { TopBar } from '@/components/TopBar';
 import { TacticalBackground } from '@/components/ui/TacticalBackground';
+import { ActiveScanBeacon } from '@/components/ActiveScanBeacon/ActiveScanBeacon';
 
 const Landing = lazy(() => import('@/pages/Landing').then(m => ({ default: m.Landing })));
 const ScannerSetup = lazy(() => import('@/pages/ScannerSetup').then(m => ({ default: m.ScannerSetup })));
@@ -54,6 +55,7 @@ function App() {
           </Routes>
         </Suspense>
       </main>
+      <ActiveScanBeacon />
       <Toaster />
     </div>
   );

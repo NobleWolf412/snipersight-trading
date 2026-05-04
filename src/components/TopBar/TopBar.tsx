@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Crosshair, GearSix, CaretDown } from '@phosphor-icons/react';
 import { SessionIndicator } from '@/components/SessionIndicator/SessionIndicator';
 import { WalletConnect } from '@/components/WalletConnect';
@@ -8,6 +8,49 @@ import { debugLogger, LogLevel } from '@/utils/debugLogger';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useScanner } from '@/context/ScannerContext';
+
+const TOPBAR_OPS = [
+  { key: 'bot',      label: 'BOT',      route: '/bot/status',      color: '#f59e0b' },
+  { key: 'training', label: 'TRAINING', route: '/training',         color: '#00ff9d' },
+  { key: 'scanner',  label: 'RECON',    route: '/scanner/status',   color: '#22d3ee' },
+];
+
+function ActiveOpsIndicator() {
+  const { isBotActive, isTrainingActive, isScanning } = useScanner();
+  const navigate = useNavigate();
+  const active = TOPBAR_OPS.filter(op =>
+    (op.key === 'bot' && isBotActive) ||
+    (op.key === 'training' && isTrainingActive) ||
+    (op.key === 'scanner' && isScanning)
+  );
+  if (active.length === 0) return null;
+  return (
+    <div className="flex items-center gap-2">
+      {active.map(op => (
+        <button
+          key={op.key}
+          onClick={() => navigate(op.route)}
+          className="group flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-black tracking-[0.18em] transition-all duration-200 hover:scale-105"
+          style={{
+            color: op.color,
+            borderColor: `${op.color}50`,
+            backgroundColor: `${op.color}0f`,
+            boxShadow: `0 0 8px ${op.color}30`,
+            textShadow: `0 0 6px ${op.color}`,
+          }}
+          title={`Go to ${op.label}`}
+        >
+          <span
+            className="w-1.5 h-1.5 rounded-full animate-pulse"
+            style={{ backgroundColor: op.color, boxShadow: `0 0 4px ${op.color}` }}
+          />
+          {op.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function TopBar() {
   const [showSettings, setShowSettings] = useState(false);
@@ -47,13 +90,15 @@ export function TopBar() {
             </div>
           </Link>
 
-          {/* Center: Session Indicator + BTC Price */}
+          {/* Center: Session Indicator + BTC Price + Active Ops */}
           <div className="flex flex-1 items-center justify-center gap-6">
-            {/* Session indicator - centered */}
             <div className="hidden lg:block">
               <SessionIndicator />
             </div>
             <BTCPricePill />
+            <div className="hidden md:block">
+              <ActiveOpsIndicator />
+            </div>
           </div>
 
           {/* Right Utilities Section - Grid Layout */}

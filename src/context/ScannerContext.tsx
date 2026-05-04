@@ -45,6 +45,8 @@ interface ScannerContextType {
   setIsScanning: (scanning: boolean) => void;
   isBotActive: boolean;
   setIsBotActive: (active: boolean) => void;
+  isTrainingActive: boolean;
+  setIsTrainingActive: (active: boolean) => void;
   scannerModes: ScannerMode[];
   selectedMode: ScannerMode | null;
   setSelectedMode: (mode: ScannerMode) => void;
@@ -172,6 +174,7 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
   const [botConfig, setBotConfig] = useLocalStorage<BotConfig>('bot-config', defaultBotConfig);
   const [isScanning, setIsScanning] = useLocalStorage<boolean>('is-scanning', false);
   const [isBotActive, setIsBotActive] = useLocalStorage<boolean>('is-bot-active', false);
+  const [isTrainingActive, setIsTrainingActive] = useLocalStorage<boolean>('is-training-active', false);
 
   const [scannerModes, setScannerModes] = useState<ScannerMode[]>(fallbackModes);
   const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(null);
@@ -271,6 +274,8 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
         setIsScanning,
         isBotActive: isBotActive || false,
         setIsBotActive,
+        isTrainingActive: isTrainingActive || false,
+        setIsTrainingActive,
         scannerModes,
         selectedMode,
         setSelectedMode,

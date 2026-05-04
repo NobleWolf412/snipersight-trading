@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
+import { useScanner } from '@/context/ScannerContext';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -181,6 +182,7 @@ const DEFAULT_CONFIG: PaperTradingConfigRequest = {
 
 export function TrainingGround() {
   const navigate = useNavigate();
+  const { setIsTrainingActive } = useScanner();
   const [config, setConfig] = useState<PaperTradingConfigRequest>(DEFAULT_CONFIG);
   const [status, setStatus] = useState<PaperTradingStatusResponse | null>(null);
   const [trades, setTrades] = useState<CompletedPaperTrade[]>([]);
@@ -340,6 +342,11 @@ export function TrainingGround() {
   const isRunning = status?.status === 'running';
   const isStopped = status?.status === 'stopped';
   const isIdle = !status || status.status === 'idle' || status.status === 'stopped';
+
+  // Keep global context in sync — beacon + TopBar indicator read this on every page
+  useLayoutEffect(() => {
+    setIsTrainingActive(isRunning);
+  }, [isRunning, setIsTrainingActive]);
 
   return (
     <PageContainer id="main-content">
