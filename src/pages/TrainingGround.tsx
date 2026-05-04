@@ -352,34 +352,26 @@ export function TrainingGround() {
     <PageContainer id="main-content">
       <div className="space-y-8">
         {/* Header */}
-        <div className="flex justify-between items-start">
-          <div className="flex items-start gap-4">
-            <HomeButton />
-            <div className="space-y-2">
-              <h1 className="text-3xl lg:text-4xl font-bold flex items-center gap-3 hud-headline hud-text-green tracking-widest">
-                <Target size={32} weight="bold" className="text-accent" />
-                TRAINING GROUND
-              </h1>
-              <p className="font-mono text-sm text-muted-foreground uppercase tracking-widest pl-11">
-                Train your AI strategy on live markets — zero risk, full insight
-              </p>
-            </div>
+        <div className="flex items-center gap-4">
+          <HomeButton />
+          <div>
+            <h1 className="text-2xl font-black tracking-widest font-mono text-emerald-400 flex items-center gap-2">
+              <Target size={22} weight="bold" /> TRAINING GROUND
+            </h1>
+            <p className="text-[10px] font-mono text-white/30 uppercase tracking-[0.2em] mt-0.5">
+              Train your AI strategy on live markets · Zero risk, full insight
+            </p>
           </div>
-
-          {/* Status Badge */}
           {status && (
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-sm px-3 py-1 font-mono tracking-widest uppercase border",
-                isRunning ? 'bg-green-500/10 text-green-400 border-green-500/30' :
-                  isStopped ? 'bg-red-500/10 text-red-400 border-red-500/30' :
-                    'bg-muted/50 text-muted-foreground border-border'
-              )}
-            >
-              {isRunning && <Pulse size={14} className="mr-2 animate-pulse" />}
+            <div className={cn(
+              "ml-auto flex items-center gap-1.5 px-3 py-1 text-[9px] font-mono font-black tracking-[0.15em] border",
+              isRunning ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                isStopped ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                  'bg-white/5 text-white/40 border-white/10'
+            )}>
+              {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
               {status.status.toUpperCase()}
-            </Badge>
+            </div>
           )}
         </div>
 
@@ -439,677 +431,518 @@ export function TrainingGround() {
             </div>
           </div>
         ) : isIdle ? (
-          <div className="space-y-6 mt-6">
-            <section className="glass-card glow-border-green rounded-2xl p-6 md:p-8 flex flex-col items-center text-center space-y-6 relative overflow-hidden group transition-all duration-500 hover:shadow-[0_0_50px_rgba(0,255,170,0.15)]">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-green-500/10 via-transparent to-transparent opacity-40 pointer-events-none group-hover:opacity-60 transition-opacity duration-1000" />
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#00ff88]/50 to-transparent opacity-50" />
-              <div className="relative z-10 w-full flex flex-col items-center text-center space-y-6">
-                <Target size={64} className="text-accent opacity-50 mb-2" />
-                <div className="max-w-xl mx-auto space-y-2">
-                  <h2 className="text-3xl lg:text-4xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-green-50 to-green-400/80 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]">READY TO TRAIN</h2>
-                  <div className="h-1 w-24 mx-auto bg-gradient-to-r from-transparent via-green-500/50 to-transparent rounded-full mb-4" />
-                  <p className="text-base text-green-100/80 leading-relaxed font-light">
-                    The AI engine analyzes order flow and price structure across 5 timeframes, enters at institutional levels with precision limit orders, and adapts to changing market conditions. Configure your parameters, then arm it to start learning.
-                  </p>
-                </div>
+          <div className="mt-6 cockpit-scanlines">
+            {/* ── System Status Bar ── */}
+            <div className="flex items-center gap-4 px-4 py-2 bg-black/80 border border-white/[0.06] text-[9px] font-mono tracking-[0.18em] overflow-x-auto">
+              <span className="text-white/20">[SYS-01 · TRAINING GROUND]</span>
+              <span className="text-white/10">│</span>
+              <span className="text-white/30">REGIME</span>
+              <span className="font-bold text-cyan-400 capitalize">
+                {recommendation?.regime?.composite
+                  ? recommendation.regime.composite.replace(/_/g, ' ').toUpperCase()
+                  : 'ADAPTIVE'}
+              </span>
+              <span className="text-white/10">│</span>
+              <span className="text-white/30">BALANCE</span>
+              <span className="font-bold text-emerald-400">${(config.initial_balance ?? 10000).toLocaleString()}</span>
+              <span className="text-white/10">│</span>
+              <span className="text-white/30">MODE</span>
+              <span className={cn("font-bold", config.use_testnet ? "text-yellow-400" : "text-emerald-400")}>
+                {config.use_testnet ? 'TESTNET' : 'SIMULATION'}
+              </span>
+            </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full">
-                  {/* Leverage */}
-                  <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-accent/30 transition-colors">
-                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Leverage</div>
-                    <div className="text-2xl font-mono font-bold text-accent">{config.leverage}x</div>
-                    <div className="text-[9px] text-muted-foreground mt-1 opacity-60">Adjustable below</div>
-                  </div>
-                  {/* Risk */}
-                  <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-border/60 transition-colors">
-                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Risk Profile</div>
-                    <div className="text-2xl font-mono font-bold text-foreground">{config.risk_per_trade ?? 2}%</div>
-                    <div className="text-[9px] text-muted-foreground mt-1 opacity-60">3-part scale-in</div>
-                  </div>
-                  {/* Regime */}
-                  <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-primary/30 transition-colors relative overflow-hidden">
-                    {recommendation?.regime?.composite && (
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,_var(--tw-gradient-stops))] from-blue-500/10 to-transparent pointer-events-none" />
-                    )}
-                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Regime State</div>
-                    <div className="flex items-center gap-1.5">
-                      <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", recommendation?.regime?.composite ? "bg-primary animate-pulse" : "bg-muted-foreground/40")} />
-                      <div className="text-lg font-mono font-bold text-primary capitalize truncate">
-                        {recommendation?.regime?.composite
-                          ? recommendation.regime.composite.replace(/_/g, ' — ')
-                          : 'Adaptive'}
-                      </div>
-                    </div>
-                    {recommendation?.reason && (
-                      <div className="text-[9px] text-muted-foreground mt-1 leading-tight truncate opacity-70">
-                        {recommendation.reason}
-                      </div>
-                    )}
-                  </div>
-                  {/* Signal Sensitivity */}
-                  <div className="p-4 rounded-xl bg-background/60 border border-border hover:border-yellow-400/30 transition-colors">
-                    <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Sensitivity</div>
-                    <div className="text-xl font-mono font-bold text-yellow-400 capitalize">
-                      {config.sensitivity_preset ?? 'balanced'}
-                    </div>
-                    <div className="text-[9px] text-muted-foreground mt-1 opacity-60">
-                      {config.sensitivity_preset === 'conservative' ? '72/62 entry / near-miss' :
-                       config.sensitivity_preset === 'aggressive' ? '58/48 entry / near-miss' :
-                       config.sensitivity_preset === 'custom' ? `${config.min_confluence ?? 65}/${config.confluence_soft_floor ?? 55} custom` :
-                       '65/55 entry / near-miss'}
-                    </div>
-                  </div>
-                </div>
+            {/* ── 12-Col Cockpit Grid ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-[1px] bg-white/[0.06] border border-white/[0.06]">
 
-                <div className="w-full max-w-2xl pt-4 space-y-6">
-                  {/* Engine Mode — Fixed to Stealth */}
-                  <div className="space-y-3">
-                    <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Engine Mode</label>
-                    <div className="bg-gradient-to-r from-purple-500/10 via-accent/5 to-blue-500/10 border border-purple-500/30 rounded-xl p-4 relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-purple-400/50 to-transparent" />
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <Lightning size={18} weight="fill" className="text-purple-400" />
-                          <span className="text-sm font-black tracking-widest text-purple-400">STEALTH</span>
-                          {recommendation?.mode && recommendation.mode !== 'stealth' ? (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Badge variant="outline" className="text-[8px] border-accent/40 text-accent bg-accent/10 px-1.5 py-0 capitalize cursor-help transition-all hover:bg-accent/20">
-                                    ADAPTING TO {recommendation.mode} PROFILE
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-[240px] border-accent/30 bg-black/90 p-3 shadow-[0_0_20px_rgba(0,255,170,0.1)]">
-                                  <div className="space-y-1.5">
-                                    <div className="flex items-center gap-1.5 text-accent font-bold text-[10px] uppercase tracking-wider">
-                                      <Lightning size={12} weight="fill" />
-                                      {recommendation.mode} Mode Active
-                                    </div>
-                                    <p className="text-[10px] text-muted-foreground leading-relaxed italic">
-                                      "Market is currently high-risk. I'm being extra picky with trades—waiting for perfect signals and double-checking volume to ensure we don't get trapped by fake moves. Prioritizing safety over speed."
-                                    </p>
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          ) : (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Badge variant="outline" className="text-[8px] border-purple-500/30 text-purple-300/80 bg-purple-500/10 px-1.5 py-0 cursor-help">
-                                    LOCKED
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="bg-black/90 border-purple-500/30 text-[10px] p-2">
-                                  Stealth engine is in standard autonomous mode.
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                        </div>
-                        <ShieldCheck size={18} className="text-accent/40" />
-                      </div>
-                      <p className="text-[11px] text-muted-foreground/80 leading-relaxed mb-3">
-                        Stealth is the optimal paper trading engine — it covers the full timeframe range (D→5m) and adaptively selects between scalp, intraday, and swing setups based on what the market structure dictates.
-                      </p>
-                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">R:R Min</div>
-                          <div className="text-sm font-mono font-bold text-accent">1.8</div>
-                        </div>
-                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Range</div>
-                          <div className="text-sm font-mono font-bold text-foreground">D→5m</div>
-                        </div>
-                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Direction</div>
-                          <div className="text-sm font-mono font-bold text-foreground">L + S</div>
-                        </div>
-                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Types</div>
-                          <div className="text-sm font-mono font-bold text-foreground">Scalp / Intraday / Swing</div>
-                        </div>
-                        <div className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Scan Every</div>
-                          <div className="text-sm font-mono font-bold text-accent">{config.scan_interval_minutes ?? 2}m</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+              {/* ── LEFT PANEL — Execution ── */}
+              <div className="lg:col-span-3 bg-[#050c08] border-t-2 border-emerald-500/50 p-5 space-y-5">
+                <div className="text-[8px] font-mono tracking-[0.2em] text-white/20 uppercase">[SYS-01] EXECUTION</div>
 
-                  {/* ── Execution Mode Toggle ── */}
-                  <div className="glass-card glow-border-green p-6 lg:p-10 rounded-3xl relative overflow-hidden group transition-all duration-500 hover:shadow-[0_0_50px_rgba(0,255,170,0.15)]">
-                    {/* Cinematic background glow */}
-                    <div className={cn(
-                      'absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] opacity-40 pointer-events-none transition-opacity duration-1000 group-hover:opacity-60',
-                      config.use_testnet ? 'from-yellow-500/10 via-transparent to-transparent' : 'from-green-500/10 via-transparent to-transparent',
-                    )} />
-                    <div className={cn(
-                      'absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent to-transparent opacity-60 transition-all duration-500',
-                      config.use_testnet ? 'via-yellow-400/60' : 'via-[#00ff88]/60',
-                    )} />
-
-                    <div className="relative z-10 flex flex-col items-center gap-6 text-center">
-                      {/* Mode picker pills */}
-                      <div className="flex items-center gap-1 bg-black/40 p-1.5 rounded-xl border border-white/5 backdrop-blur-md">
-                        <button
-                          onClick={() => setConfig({ ...config, use_testnet: false })}
-                          className={cn(
-                            'flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold tracking-wider transition-all duration-300',
-                            !config.use_testnet
-                              ? 'bg-accent/20 text-accent shadow-[0_0_15px_rgba(0,255,136,0.3)] border border-accent/40'
-                              : 'text-muted-foreground hover:text-white hover:bg-white/5',
-                          )}
-                        >
-                          <Cpu size={18} weight={!config.use_testnet ? 'fill' : 'bold'} />
-                          SIMULATION
-                        </button>
-                        <button
-                          onClick={() => setConfig({ ...config, use_testnet: true })}
-                          className={cn(
-                            'flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold tracking-wider transition-all duration-300',
-                            config.use_testnet
-                              ? 'bg-yellow-500/20 text-yellow-300 shadow-[0_0_15px_rgba(234,179,8,0.3)] border border-yellow-500/40'
-                              : 'text-muted-foreground hover:text-white hover:bg-white/5',
-                          )}
-                        >
-                          <TestTube size={18} weight={config.use_testnet ? 'fill' : 'bold'} />
-                          TESTNET
-                        </button>
-                      </div>
-
-                      {/* Big mode name */}
-                      <div className="space-y-2">
-                        <h2 className={cn(
-                          'text-5xl lg:text-7xl font-black italic tracking-tighter text-transparent bg-clip-text drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]',
-                          config.use_testnet
-                            ? 'bg-gradient-to-b from-white via-yellow-50 to-yellow-400/80'
-                            : 'bg-gradient-to-b from-white via-green-50 to-green-400/80',
-                        )}>
-                          {config.use_testnet ? 'TESTNET' : 'SIMULATED'}
-                        </h2>
-                        <div className={cn(
-                          'h-1 w-24 mx-auto bg-gradient-to-r from-transparent to-transparent rounded-full',
-                          config.use_testnet ? 'via-yellow-500/50' : 'via-green-500/50',
-                        )} />
-                      </div>
-
-                      {/* Description */}
-                      <p className="text-lg text-green-100/70 max-w-md mx-auto leading-relaxed font-light">
-                        {config.use_testnet
-                          ? '"Real Phemex order book fills, paper account. The most accurate way to validate a strategy."'
-                          : '"Internal fill math with realistic fee & slippage simulation. No API keys needed — run anywhere."'}
-                      </p>
-
-                      {/* Warning / API hint for testnet */}
-                      {config.use_testnet && (
-                        <div className="flex items-center gap-2 text-yellow-400 bg-yellow-400/10 px-4 py-2 rounded-lg text-sm border border-yellow-400/20">
-                          <TestTube size={16} />
-                          Requires PHEMEX_API_KEY + PHEMEX_API_SECRET in .env
-                        </div>
+                {/* Execution Mode Toggle */}
+                <div className="space-y-2">
+                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Execution Mode</div>
+                  <div className="flex gap-[1px] bg-white/[0.06]">
+                    <button
+                      onClick={() => setConfig({ ...config, use_testnet: false })}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-2 py-2.5 text-[10px] font-mono font-black tracking-[0.15em] transition-all",
+                        !config.use_testnet
+                          ? "bg-emerald-500/20 text-emerald-400"
+                          : "bg-black/40 text-white/20 hover:text-white/50"
                       )}
-
-                      {/* Active badge */}
-                      <div className={cn(
-                        'flex items-center gap-3 px-8 py-3 rounded-full border font-bold tracking-widest',
+                    >
+                      <Cpu size={12} weight={!config.use_testnet ? "fill" : "bold"} />
+                      SIMULATION
+                    </button>
+                    <button
+                      onClick={() => setConfig({ ...config, use_testnet: true })}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-2 py-2.5 text-[10px] font-mono font-black tracking-[0.15em] transition-all",
                         config.use_testnet
-                          ? 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30 shadow-[0_0_20px_rgba(234,179,8,0.1)]'
-                          : 'text-[#00ff88] bg-[#00ff88]/10 border-[#00ff88]/30 shadow-[0_0_20px_rgba(0,255,136,0.1)]',
-                      )}>
-                        {config.use_testnet ? <TestTube size={20} weight="fill" /> : <Cpu size={20} weight="fill" />}
-                        <span>MODE ACTIVE</span>
-                      </div>
-                    </div>
+                          ? "bg-yellow-500/20 text-yellow-400"
+                          : "bg-black/40 text-white/20 hover:text-white/50"
+                      )}
+                    >
+                      <TestTube size={12} weight={config.use_testnet ? "fill" : "bold"} />
+                      TESTNET
+                    </button>
                   </div>
+                  {config.use_testnet && (
+                    <div className="flex items-center gap-1.5 text-yellow-400/70 text-[9px] font-mono bg-yellow-400/5 border border-yellow-400/20 px-2 py-1.5">
+                      <TestTube size={10} />
+                      Requires PHEMEX_API_KEY in .env
+                    </div>
+                  )}
+                </div>
 
-                  {/* ── Parameters Grid ── */}
-                  <div className="space-y-1.5 text-left">
-                    <div className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1 mb-2">Session Parameters</div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      
-                      {/* Starting Balance */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Starting Balance ($)</label>
-                        </div>
-                        <input
-                          type="number"
-                          value={config.initial_balance}
-                          onChange={e => setConfig({ ...config, initial_balance: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[1000, 5000, 10000, 50000].map(preset => (
-                            <button
-                              key={preset}
-                              onClick={() => setConfig({ ...config, initial_balance: preset })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.initial_balance === preset
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {preset >= 1000 ? `${preset / 1000}k` : preset}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Leverage */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Leverage (x)</label>
-                        </div>
-                        <input
-                          type="number"
-                          min="1"
-                          max="100"
-                          value={config.leverage}
-                          onChange={e => setConfig({ ...config, leverage: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[1, 5, 10, 20].map(preset => (
-                            <button
-                              key={preset}
-                              onClick={() => setConfig({ ...config, leverage: preset })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.leverage === preset
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {preset}x
-                            </button>
-                          ))}
-                        </div>
-                        {(() => {
-                          const exposure = (config.leverage ?? 1) * (config.risk_per_trade ?? 2);
-                          const color = exposure >= 20 ? 'text-red-400' : exposure >= 10 ? 'text-yellow-400' : 'text-muted-foreground/50';
-                          return (
-                            <p className={`text-[9px] font-mono pl-1 leading-snug ${color}`}>
-                              Effective exposure per trade: {exposure.toFixed(1)}%
-                            </p>
-                          );
-                        })()}
-                      </div>
-
-                      {/* Risk Per Trade */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Risk Per Trade (%)</label>
-                        </div>
-                        <input
-                          type="number"
-                          min="0.1"
-                          max="10"
-                          step="0.5"
-                          value={config.risk_per_trade ?? 2}
-                          onChange={e => setConfig({ ...config, risk_per_trade: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[0.5, 1, 2, 3].map(preset => (
-                            <button
-                              key={preset}
-                              onClick={() => setConfig({ ...config, risk_per_trade: preset })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.risk_per_trade === preset
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {preset}%
-                            </button>
-                          ))}
-                        </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">% of your simulated balance at risk per trade, split across 3 entry levels</p>
-                      </div>
-
-                      {/* Duration */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Session Duration (h)</label>
-                        </div>
-                        <input
-                          type="number"
-                          min="1"
-                          max="720"
-                          value={config.duration_hours}
-                          onChange={e => setConfig({ ...config, duration_hours: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[8, 24, 72, 168].map(preset => (
-                            <button
-                              key={preset}
-                              onClick={() => setConfig({ ...config, duration_hours: preset })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.duration_hours === preset
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {preset >= 168 ? '1w' : preset >= 72 ? '3d' : `${preset}h`}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Signal Sensitivity */}
-                      <div className="space-y-2 md:col-span-2">
-                        <div className="flex justify-between items-center h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Signal Quality Filter</label>
-                          <span className="text-[8px] text-muted-foreground/50 font-mono italic">entry threshold / near-miss</span>
-                        </div>
-                        <div className="flex gap-1.5">
-                          {([
-                            { key: 'conservative', label: 'Precision',   gate: 72, floor: 62, color: 'blue' },
-                            { key: 'balanced',     label: 'Balanced',    gate: 65, floor: 55, color: 'emerald' },
-                            { key: 'aggressive',   label: 'Active',      gate: 58, floor: 48, color: 'orange' },
-                            { key: 'custom',       label: 'Custom',      gate: null, floor: null, color: 'purple' },
-                          ] as const).map(({ key, label, gate, floor, color }) => {
-                            const isSelected = (config.sensitivity_preset ?? 'balanced') === key;
-                            const selectedCls = {
-                              blue:    'bg-blue-500/15 border-blue-500/60 text-blue-400',
-                              emerald: 'bg-emerald-500/15 border-emerald-500/60 text-emerald-400',
-                              orange:  'bg-orange-500/15 border-orange-500/60 text-orange-400',
-                              purple:  'bg-purple-500/15 border-purple-500/60 text-purple-400',
-                            }[color];
-                            return (
-                              <button
-                                key={key}
-                                onClick={() => setConfig({
-                                  ...config,
-                                  sensitivity_preset: key,
-                                  min_confluence: key === 'custom' ? (config.min_confluence ?? 65) : null,
-                                  confluence_soft_floor: key === 'custom' ? (config.confluence_soft_floor ?? 55) : null,
-                                })}
-                                className={cn(
-                                  "flex-1 py-1.5 rounded text-[9px] font-mono font-bold tracking-tight border transition-all flex flex-col items-center gap-0.5",
-                                  isSelected ? selectedCls : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                                )}
-                              >
-                                <span>{label}</span>
-                                {gate !== null && <span className="opacity-60 text-[8px]">{gate}/{floor}</span>}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {/* Custom gate/floor inputs */}
-                        {(config.sensitivity_preset ?? 'balanced') === 'custom' && (
-                          <div className="flex gap-3 mt-1">
-                            <div className="flex-1 space-y-1">
-                              <label className="text-[9px] text-purple-400/70 uppercase tracking-widest pl-0.5">Gate % (full size)</label>
-                              <input
-                                type="number" min="40" max="100"
-                                value={config.min_confluence ?? 65}
-                                onChange={e => setConfig({ ...config, min_confluence: Number(e.target.value) || 65 })}
-                                className="w-full h-10 bg-background border border-purple-500/30 rounded-lg px-3 font-mono text-center text-base focus:outline-none focus:border-purple-400/60 text-foreground"
-                              />
-                            </div>
-                            <div className="flex-1 space-y-1">
-                              <label className="text-[9px] text-purple-400/70 uppercase tracking-widest pl-0.5">Floor % (half size)</label>
-                              <input
-                                type="number" min="30" max="100"
-                                value={config.confluence_soft_floor ?? 55}
-                                onChange={e => setConfig({ ...config, confluence_soft_floor: Number(e.target.value) || 55 })}
-                                className="w-full h-10 bg-background border border-purple-500/30 rounded-lg px-3 font-mono text-center text-base focus:outline-none focus:border-purple-400/60 text-foreground"
-                              />
-                            </div>
-                          </div>
+                {/* Starting Balance */}
+                <div className="space-y-2">
+                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Starting Balance ($)</div>
+                  <input
+                    type="number"
+                    value={config.initial_balance}
+                    onChange={e => setConfig({ ...config, initial_balance: Number(e.target.value) })}
+                    className="w-full h-10 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-emerald-400 focus:outline-none focus:border-emerald-500/30"
+                  />
+                  <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
+                    {[1000, 5000, 10000, 50000].map(preset => (
+                      <button
+                        key={preset}
+                        onClick={() => setConfig({ ...config, initial_balance: preset })}
+                        className={cn(
+                          "py-1 text-[9px] font-mono font-black tracking-tight transition-all",
+                          config.initial_balance === preset
+                            ? "bg-emerald-500/20 text-emerald-400"
+                            : "bg-black/40 text-white/20 hover:text-white/50"
                         )}
-                        {/* Description line */}
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">
-                          {config.sensitivity_preset === 'conservative' ? 'Highest-conviction only — 2–5 top-quality signals/week' :
-                           config.sensitivity_preset === 'aggressive'   ? 'Wide net — 15–30+ signals/week (more trades, more noise)' :
-                           config.sensitivity_preset === 'custom'       ? 'Signals above threshold enter at full size · Near-misses enter at half size' :
-                           'Quality signals at full size, near-misses at half size — 5–12 trades/week'}
-                        </p>
-                      </div>
-
-                      {/* Max Trade Duration */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Max Trade Duration (h)</label>
-                        </div>
-                        <input
-                          type="number"
-                          min="1"
-                          max="720"
-                          value={config.max_hours_open}
-                          onChange={e => setConfig({ ...config, max_hours_open: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[24, 48, 72, 168].map(preset => (
-                            <button
-                              key={preset}
-                              onClick={() => setConfig({ ...config, max_hours_open: preset })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.max_hours_open === preset
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {preset}h
-                            </button>
-                          ))}
-                        </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Auto-closes any trade that hasn't exited after this period</p>
-                      </div>
-
-                      {/* Max Drawdown Kill Switch */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-red-400/80 uppercase tracking-widest pl-1">Max Drawdown Limit (%)</label>
-                        </div>
-                        <input
-                          type="number"
-                          min="1"
-                          max="100"
-                          value={config.max_drawdown_pct ?? ''}
-                          placeholder="NONE"
-                          onChange={e => setConfig({ ...config, max_drawdown_pct: e.target.value === '' ? null : Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-red-500/20 rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-red-400/40 text-foreground placeholder:text-muted-foreground/30"
-                        />
-                        <div className="flex gap-1.5">
-                          {[{ l: 'OFF', v: null }, { l: '10%', v: 10 }, { l: '15%', v: 15 }, { l: '25%', v: 25 }].map(({ l, v }) => (
-                            <button
-                              key={l}
-                              onClick={() => setConfig({ ...config, max_drawdown_pct: v })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.max_drawdown_pct === v
-                                  ? "bg-red-500/15 border-red-500/50 text-red-400"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {l}
-                            </button>
-                          ))}
-                        </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Stop session if balance drops by this % from start</p>
-                      </div>
-
-                      {/* Scan Interval */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Scan Every (m)</label>
-                          <div className="text-[8px] text-accent/60 border border-accent/20 bg-accent/5 px-1.5 py-0 rounded">
-                            Suggested: 2m
-                          </div>
-                        </div>
-                        <input
-                          type="number"
-                          min="1"
-                          max="60"
-                          value={config.scan_interval_minutes}
-                          onChange={e => setConfig({ ...config, scan_interval_minutes: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[2, 5, 15, 30].map(m => (
-                            <button
-                              key={m}
-                              onClick={() => setConfig({ ...config, scan_interval_minutes: m })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.scan_interval_minutes === m
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {m}m
-                            </button>
-                          ))}
-                        </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Fast scans (2-5m) catch Scalp entries on lower timeframes</p>
-                      </div>
-
-                      {/* Max Assets */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Max Concurrent Assets</label>
-                          <div className="text-[8px] text-accent/60 border border-accent/20 bg-accent/5 px-1.5 py-0 rounded">
-                            Suggested: 3
-                          </div>
-                        </div>
-                        <input
-                          type="number"
-                          min="1"
-                          max="10"
-                          value={config.max_positions}
-                          onChange={e => setConfig({ ...config, max_positions: Number(e.target.value) })}
-                          className="w-full h-12 bg-background border border-border rounded-lg px-4 font-mono text-center text-lg focus:outline-none focus:border-accent/40 text-foreground"
-                        />
-                        <div className="flex gap-1.5">
-                          {[1, 3, 5, 10].map(v => (
-                            <button
-                              key={v}
-                              onClick={() => setConfig({ ...config, max_positions: v })}
-                              className={cn(
-                                "flex-1 py-1 rounded text-[9px] font-mono font-bold tracking-tight border transition-all",
-                                config.max_positions === v
-                                  ? "bg-accent/15 border-accent/50 text-accent"
-                                  : "bg-black/30 border-border/40 text-muted-foreground/60 hover:border-border hover:text-muted-foreground"
-                              )}
-                            >
-                              {v}
-                            </button>
-                          ))}
-                        </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Maximum simultaneous open trades (positions + pending orders combined)</p>
-                      </div>
-                    </div>
+                      >
+                        {preset >= 1000 ? `${preset / 1000}k` : preset}
+                      </button>
+                    ))}
                   </div>
+                </div>
 
-                  {/* Symbol Selection UI */}
-                  <div className="bg-background/40 border border-border/50 rounded-xl p-4 space-y-4">
+                {/* Market Regime */}
+                <div className="space-y-2">
+                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Market Regime</div>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-black/40 border border-white/[0.06]">
+                    <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", recommendation?.regime?.composite ? "bg-cyan-400 animate-pulse" : "bg-white/20")} />
+                    <span className="text-sm font-mono font-bold text-cyan-400 capitalize truncate">
+                      {recommendation?.regime?.composite ? recommendation.regime.composite.replace(/_/g, ' — ') : 'ADAPTIVE'}
+                    </span>
+                  </div>
+                  {recommendation?.reason && (
+                    <p className="text-[8px] font-mono text-white/25 leading-tight truncate px-1">{recommendation.reason}</p>
+                  )}
+                </div>
+
+                {/* Engine Mode */}
+                <div className="space-y-2">
+                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Engine Mode</div>
+                  <div className="bg-purple-500/5 border border-purple-500/20 p-3 space-y-2">
                     <div className="flex items-center justify-between">
-                      <label className="text-[10px] text-accent font-bold uppercase tracking-widest pl-1">Target Asset Buckets</label>
-                      <span className="text-[9px] text-muted-foreground font-mono italic">Volume adaptive</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div
-                              onClick={() => setConfig({ ...config, majors: !config.majors })}
-                              className={cn(
-                                "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all",
-                                config.majors ? "bg-accent/10 border-accent text-accent shadow-[0_0_10px_rgba(0,255,170,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
-                              )}
-                            >
-                              <Trophy size={16} weight={config.majors ? "fill" : "regular"} />
-                              <span className="text-xs font-mono font-bold tracking-tight">MAJORS</span>
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="bg-black/90 border-border text-[10px] p-2 max-w-[200px]">
-                            BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, DOT, LINK
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-
-                      <div
-                        onClick={() => setConfig({ ...config, altcoins: !config.altcoins })}
-                        className={cn(
-                          "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all",
-                          config.altcoins ? "bg-primary/10 border-primary text-primary shadow-[0_0_10px_rgba(59,130,246,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
-                        )}
-                      >
-                        <ChartLine size={16} weight={config.altcoins ? "fill" : "regular"} />
-                        <span className="text-xs font-mono font-bold tracking-tight">ALTS</span>
+                      <div className="flex items-center gap-1.5">
+                        <Lightning size={14} weight="fill" className="text-purple-400" />
+                        <span className="text-xs font-black tracking-[0.15em] text-purple-400">STEALTH</span>
                       </div>
-
-                      <div
-                        onClick={() => setConfig({ ...config, meme_mode: !config.meme_mode })}
-                        className={cn(
-                          "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all",
-                          config.meme_mode ? "bg-purple-500/10 border-purple-500 text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.1)]" : "bg-black/20 border-border text-muted-foreground opacity-60 grayscale"
-                        )}
-                      >
-                        <Crosshair size={16} weight={config.meme_mode ? "fill" : "regular"} />
-                        <span className="text-xs font-mono font-bold tracking-tight">MEME HUNTER</span>
-                      </div>
+                      <span className="text-[8px] font-mono text-purple-400/50 border border-purple-500/20 px-1.5 py-0.5">LOCKED</span>
                     </div>
-
-                    <div className="pt-2 border-t border-border/30">
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Universe Size</label>
-                        <span className="text-[10px] font-mono font-bold text-accent">{config.universe_size ?? 20} pairs</span>
-                      </div>
-                      <input
-                        type="range"
-                        min={10}
-                        max={50}
-                        step={5}
-                        value={config.universe_size ?? 20}
-                        onChange={(e) => setConfig({ ...config, universe_size: Number(e.target.value) })}
-                        className="w-full h-1.5 accent-accent cursor-pointer"
-                      />
-                      <div className="flex justify-between mt-1">
-                        <span className="text-[9px] text-muted-foreground/40 font-mono">10</span>
-                        <span className="text-[9px] text-muted-foreground/40 font-mono">50</span>
-                      </div>
+                    <div className="grid grid-cols-2 gap-[1px] bg-white/[0.04] text-[9px]">
+                      {[
+                        { label: 'R:R MIN', value: '1.8' },
+                        { label: 'RANGE', value: 'D→5m' },
+                        { label: 'TYPES', value: 'S/I/SW' },
+                        { label: 'SCAN', value: `${config.scan_interval_minutes ?? 2}m` },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="bg-black/40 px-2 py-1.5 text-center">
+                          <div className="text-[7px] text-white/25 tracking-[0.15em] uppercase">{label}</div>
+                          <div className="text-[10px] font-mono font-bold text-white/60">{value}</div>
+                        </div>
+                      ))}
                     </div>
-
-                    <div className="pt-2 border-t border-border/30">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2 block font-mono">Custom symbols (comma separated)</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. BTC/USDT, ETH/USDT, LINK/USDT"
-                        value={config.symbols?.join(', ') || ''}
-                        onChange={(e) => {
-                          const syms = e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
-                          setConfig({ ...config, symbols: syms });
-                        }}
-                        className="w-full h-10 bg-black/40 border border-border rounded-md px-3 font-mono text-xs focus:outline-none focus:border-accent/40 placeholder:text-muted-foreground/30 text-foreground"
-                      />
-                    </div>
+                    {recommendation?.mode && recommendation.mode !== 'stealth' && (
+                      <div className="text-[8px] font-mono text-emerald-400/60 bg-emerald-500/5 border border-emerald-500/20 px-2 py-1">
+                        ADAPTING → {recommendation.mode.toUpperCase()}
+                      </div>
+                    )}
                   </div>
-                  <p className="text-center text-[10px] text-muted-foreground/40 font-mono italic">
-                    Simulated execution only — no real funds at risk
-                  </p>
-                  <Button
-                    onClick={handleStart}
-                    disabled={isLoading}
-                    className="w-full h-14 bg-[#00ff88] hover:bg-[#00cc6a] text-black font-bold tracking-widest text-lg border-2 border-white/20 shadow-[0_0_30px_rgba(0,255,136,0.4)] hover:shadow-[0_0_50px_rgba(0,255,136,0.6)] hover:scale-105 transition-all duration-300 relative overflow-hidden group/btn"
-                  >
-                    <div className="absolute inset-0 bg-white/40 skew-x-12 -translate-x-full group-hover/btn:animate-shimmer" />
-                    {isLoading ? <ArrowsClockwise size={20} className="animate-spin mr-2" /> : <PlayCircle size={24} weight="fill" className="mr-2" />}
-                    {isLoading ? 'ARMING...' : 'ARM PHANTOM'}
-                  </Button>
                 </div>
               </div>
-            </section>
+
+              {/* ── CENTER PANEL — Configuration ── */}
+              <div className="lg:col-span-6 bg-[#070707] p-5 space-y-5">
+                <div className="text-[8px] font-mono tracking-[0.2em] text-white/20 uppercase">[OPS-01] CONFIGURATION</div>
+
+                {/* Signal Quality Filter */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Signal Quality Filter</div>
+                    <span className="text-[8px] text-white/20 font-mono italic">entry / near-miss</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
+                    {([
+                      { key: 'conservative', label: 'PRECISION', gate: 72, floor: 62, color: 'blue' },
+                      { key: 'balanced',     label: 'BALANCED',  gate: 65, floor: 55, color: 'emerald' },
+                      { key: 'aggressive',   label: 'ACTIVE',    gate: 58, floor: 48, color: 'orange' },
+                      { key: 'custom',       label: 'CUSTOM',    gate: null, floor: null, color: 'purple' },
+                    ] as const).map(({ key, label, gate, floor, color }) => {
+                      const isSelected = (config.sensitivity_preset ?? 'balanced') === key;
+                      const activeCls = {
+                        blue:    'bg-blue-500/20 text-blue-400 border-t-2 border-blue-400',
+                        emerald: 'bg-emerald-500/20 text-emerald-400 border-t-2 border-emerald-400',
+                        orange:  'bg-orange-500/20 text-orange-400 border-t-2 border-orange-400',
+                        purple:  'bg-purple-500/20 text-purple-400 border-t-2 border-purple-400',
+                      }[color];
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => setConfig({
+                            ...config,
+                            sensitivity_preset: key,
+                            min_confluence: key === 'custom' ? (config.min_confluence ?? 65) : null,
+                            confluence_soft_floor: key === 'custom' ? (config.confluence_soft_floor ?? 55) : null,
+                          })}
+                          className={cn(
+                            "py-2 flex flex-col items-center gap-0.5 text-[9px] font-mono font-black tracking-[0.1em] transition-all",
+                            isSelected ? activeCls : "bg-black/40 text-white/20 hover:text-white/50"
+                          )}
+                        >
+                          <span>{label}</span>
+                          {gate !== null && <span className="opacity-60 text-[8px]">{gate}/{floor}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(config.sensitivity_preset ?? 'balanced') === 'custom' && (
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <div className="space-y-1">
+                        <div className="text-[8px] text-purple-400/60 uppercase tracking-[0.15em] font-mono">Gate % (full size)</div>
+                        <input
+                          type="number" min="40" max="100"
+                          value={config.min_confluence ?? 65}
+                          onChange={e => setConfig({ ...config, min_confluence: Number(e.target.value) || 65 })}
+                          className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-purple-500/20 bg-black/60 px-3 font-mono text-sm text-center text-purple-400 focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-[8px] text-purple-400/60 uppercase tracking-[0.15em] font-mono">Floor % (half size)</div>
+                        <input
+                          type="number" min="30" max="100"
+                          value={config.confluence_soft_floor ?? 55}
+                          onChange={e => setConfig({ ...config, confluence_soft_floor: Number(e.target.value) || 55 })}
+                          className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-purple-500/20 bg-black/60 px-3 font-mono text-sm text-center text-purple-400 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-[8px] text-white/20 font-mono pl-0.5">
+                    {config.sensitivity_preset === 'conservative' ? 'Highest-conviction only — 2–5 top-quality signals/week' :
+                     config.sensitivity_preset === 'aggressive'   ? 'Wide net — 15–30+ signals/week (more trades, more noise)' :
+                     config.sensitivity_preset === 'custom'       ? 'Signals above threshold enter at full size · Near-misses enter at half size' :
+                     'Quality signals at full size, near-misses at half size — 5–12 trades/week'}
+                  </p>
+                </div>
+
+                {/* 2-up: Leverage | Risk Per Trade */}
+                <div className="grid grid-cols-2 gap-[1px] bg-white/[0.04]">
+                  <div className="bg-[#070707] p-3 space-y-2">
+                    <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Leverage (×)</div>
+                    <input
+                      type="number" min="1" max="100"
+                      value={config.leverage}
+                      onChange={e => setConfig({ ...config, leverage: Number(e.target.value) })}
+                      className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-emerald-400 focus:outline-none focus:border-emerald-500/30"
+                    />
+                    <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
+                      {[1, 5, 10, 20].map(v => (
+                        <button key={v} onClick={() => setConfig({ ...config, leverage: v })}
+                          className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
+                            config.leverage === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                        >{v}×</button>
+                      ))}
+                    </div>
+                    {(() => {
+                      const exposure = (config.leverage ?? 1) * (config.risk_per_trade ?? 2);
+                      const color = exposure >= 20 ? 'text-red-400' : exposure >= 10 ? 'text-yellow-400' : 'text-white/25';
+                      return <p className={`text-[8px] font-mono ${color}`}>Exposure: {exposure.toFixed(1)}%</p>;
+                    })()}
+                  </div>
+                  <div className="bg-[#070707] p-3 space-y-2">
+                    <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Risk / Trade (%)</div>
+                    <input
+                      type="number" min="0.1" max="10" step="0.5"
+                      value={config.risk_per_trade ?? 2}
+                      onChange={e => setConfig({ ...config, risk_per_trade: Number(e.target.value) })}
+                      className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-emerald-400 focus:outline-none focus:border-emerald-500/30"
+                    />
+                    <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
+                      {[0.5, 1, 2, 3].map(v => (
+                        <button key={v} onClick={() => setConfig({ ...config, risk_per_trade: v })}
+                          className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
+                            config.risk_per_trade === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                        >{v}%</button>
+                      ))}
+                    </div>
+                    <p className="text-[8px] text-white/25 font-mono">Split across 3 entry levels</p>
+                  </div>
+                </div>
+
+                {/* 2-up: Session Duration | Scan Interval */}
+                <div className="grid grid-cols-2 gap-[1px] bg-white/[0.04]">
+                  <div className="bg-[#070707] p-3 space-y-2">
+                    <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Session Duration (h)</div>
+                    <input
+                      type="number" min="1" max="720"
+                      value={config.duration_hours}
+                      onChange={e => setConfig({ ...config, duration_hours: Number(e.target.value) })}
+                      className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-white/70 focus:outline-none focus:border-white/20"
+                    />
+                    <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
+                      {[8, 24, 72, 168].map(v => (
+                        <button key={v} onClick={() => setConfig({ ...config, duration_hours: v })}
+                          className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
+                            config.duration_hours === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                        >{v >= 168 ? '1w' : v >= 72 ? '3d' : `${v}h`}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="bg-[#070707] p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Scan Every (m)</div>
+                      <span className="text-[7px] font-mono text-emerald-400/50 border border-emerald-500/20 px-1 py-0.5">REC: 2m</span>
+                    </div>
+                    <input
+                      type="number" min="1" max="60"
+                      value={config.scan_interval_minutes}
+                      onChange={e => setConfig({ ...config, scan_interval_minutes: Number(e.target.value) })}
+                      className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-white/70 focus:outline-none focus:border-white/20"
+                    />
+                    <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
+                      {[2, 5, 15, 30].map(v => (
+                        <button key={v} onClick={() => setConfig({ ...config, scan_interval_minutes: v })}
+                          className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
+                            config.scan_interval_minutes === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                        >{v}m</button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2-up: Max Trade Duration | Max Concurrent */}
+                <div className="grid grid-cols-2 gap-[1px] bg-white/[0.04]">
+                  <div className="bg-[#070707] p-3 space-y-2">
+                    <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Max Trade Duration (h)</div>
+                    <input
+                      type="number" min="1" max="720"
+                      value={config.max_hours_open}
+                      onChange={e => setConfig({ ...config, max_hours_open: Number(e.target.value) })}
+                      className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-white/70 focus:outline-none focus:border-white/20"
+                    />
+                    <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
+                      {[24, 48, 72, 168].map(v => (
+                        <button key={v} onClick={() => setConfig({ ...config, max_hours_open: v })}
+                          className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
+                            config.max_hours_open === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                        >{v}h</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="bg-[#070707] p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Max Concurrent</div>
+                      <span className="text-[7px] font-mono text-emerald-400/50 border border-emerald-500/20 px-1 py-0.5">REC: 3</span>
+                    </div>
+                    <input
+                      type="number" min="1" max="10"
+                      value={config.max_positions}
+                      onChange={e => setConfig({ ...config, max_positions: Number(e.target.value) })}
+                      className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-white/70 focus:outline-none focus:border-white/20"
+                    />
+                    <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
+                      {[1, 3, 5, 10].map(v => (
+                        <button key={v} onClick={() => setConfig({ ...config, max_positions: v })}
+                          className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
+                            config.max_positions === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                        >{v}</button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Asset Buckets */}
+                <div className="space-y-2">
+                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Target Asset Buckets</div>
+                  <div className="grid grid-cols-3 gap-[1px] bg-white/[0.04]">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => setConfig({ ...config, majors: !config.majors })}
+                            className={cn(
+                              "flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-mono font-black tracking-[0.12em] transition-all",
+                              config.majors ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50"
+                            )}
+                          >
+                            <Trophy size={12} weight={config.majors ? "fill" : "regular"} />
+                            MAJORS
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="bg-black/90 border-border text-[10px] p-2 max-w-[200px]">
+                          BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, DOT, LINK
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <button
+                      onClick={() => setConfig({ ...config, altcoins: !config.altcoins })}
+                      className={cn(
+                        "flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-mono font-black tracking-[0.12em] transition-all",
+                        config.altcoins ? "bg-blue-500/20 text-blue-400" : "bg-black/40 text-white/20 hover:text-white/50"
+                      )}
+                    >
+                      <ChartLine size={12} weight={config.altcoins ? "fill" : "regular"} />
+                      ALTS
+                    </button>
+                    <button
+                      onClick={() => setConfig({ ...config, meme_mode: !config.meme_mode })}
+                      className={cn(
+                        "flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-mono font-black tracking-[0.12em] transition-all",
+                        config.meme_mode ? "bg-purple-500/20 text-purple-400" : "bg-black/40 text-white/20 hover:text-white/50"
+                      )}
+                    >
+                      <Crosshair size={12} weight={config.meme_mode ? "fill" : "regular"} />
+                      MEME HUNTER
+                    </button>
+                  </div>
+                </div>
+
+                {/* Universe Size */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Universe Size</div>
+                    <span className="text-[10px] font-mono font-bold text-emerald-400">{config.universe_size ?? 20} pairs</span>
+                  </div>
+                  <input
+                    type="range" min={10} max={50} step={5}
+                    value={config.universe_size ?? 20}
+                    onChange={(e) => setConfig({ ...config, universe_size: Number(e.target.value) })}
+                    className="cockpit-range w-full"
+                  />
+                  <div className="flex justify-between">
+                    <span className="text-[8px] text-white/20 font-mono">10</span>
+                    <span className="text-[8px] text-white/20 font-mono">50</span>
+                  </div>
+                </div>
+
+                {/* Custom Symbols */}
+                <div className="space-y-2">
+                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Custom Symbols (comma separated)</div>
+                  <input
+                    type="text"
+                    placeholder="e.g. BTC/USDT, ETH/USDT, LINK/USDT"
+                    value={config.symbols?.join(', ') || ''}
+                    onChange={(e) => {
+                      const syms = e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
+                      setConfig({ ...config, symbols: syms });
+                    }}
+                    className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-xs text-white/60 placeholder:text-white/15 focus:outline-none focus:border-white/20"
+                  />
+                </div>
+              </div>
+
+              {/* ── RIGHT PANEL — Limits ── */}
+              <div className="lg:col-span-3 bg-[#050c08] border-t-2 border-emerald-500/50 p-5 space-y-5 flex flex-col">
+                <div className="text-[8px] font-mono tracking-[0.2em] text-white/20 uppercase">[SAF-01] LIMITS</div>
+
+                {/* Max Drawdown big display */}
+                <div className="text-center py-4 border border-white/[0.06] bg-black/40 space-y-1">
+                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Max Drawdown Kill</div>
+                  <div className={cn(
+                    "text-5xl font-black font-mono",
+                    config.max_drawdown_pct == null ? "text-white/15" :
+                    config.max_drawdown_pct <= 10 ? "text-emerald-400" :
+                    config.max_drawdown_pct <= 20 ? "text-yellow-400" : "text-red-400"
+                  )}>
+                    {config.max_drawdown_pct == null ? 'OFF' : `${config.max_drawdown_pct}%`}
+                  </div>
+                  <div className="text-[8px] text-white/20 font-mono">stop if balance drops by this %</div>
+                </div>
+
+                {/* Max drawdown input + quick select */}
+                <div className="space-y-2">
+                  <input
+                    type="number" min="1" max="100"
+                    value={config.max_drawdown_pct ?? ''}
+                    placeholder="NONE"
+                    onChange={e => setConfig({ ...config, max_drawdown_pct: e.target.value === '' ? null : Number(e.target.value) })}
+                    className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-white/60 placeholder:text-white/15 focus:outline-none focus:border-white/20"
+                  />
+                  <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
+                    {[{ l: 'OFF', v: null }, { l: '10%', v: 10 }, { l: '15%', v: 15 }, { l: '25%', v: 25 }].map(({ l, v }) => (
+                      <button key={l} onClick={() => setConfig({ ...config, max_drawdown_pct: v })}
+                        className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
+                          config.max_drawdown_pct === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
+                      >{l}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Mode info card */}
+                <div className={cn("p-3 border space-y-1",
+                  config.use_testnet ? "border-yellow-500/20 bg-yellow-500/5" : "border-emerald-500/20 bg-emerald-500/5"
+                )}>
+                  <div className={cn("text-[9px] font-mono font-black tracking-[0.15em]",
+                    config.use_testnet ? "text-yellow-400" : "text-emerald-400"
+                  )}>
+                    {config.use_testnet ? '⚡ TESTNET MODE' : '◎ SIMULATION MODE'}
+                  </div>
+                  <p className="text-[8px] text-white/30 font-mono leading-tight">
+                    {config.use_testnet
+                      ? 'Real Phemex order book fills on paper account. Most accurate strategy validation.'
+                      : 'Internal fill math with realistic fee & slippage. No API keys needed.'}
+                  </p>
+                </div>
+
+                <div className="flex-1" />
+
+                {/* ARM PHANTOM button */}
+                <button
+                  onClick={handleStart}
+                  disabled={isLoading}
+                  className={cn(
+                    "w-full h-14 font-black tracking-[0.2em] text-sm font-mono relative overflow-hidden transition-all duration-300 border",
+                    "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
+                    "hover:bg-emerald-500/30 hover:shadow-[0_0_30px_rgba(0,255,136,0.25)] hover:scale-[1.02]",
+                    isLoading && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  <div className="absolute inset-0 bg-white/20 skew-x-12 -translate-x-full hover:animate-shimmer" />
+                  <div className="flex items-center justify-center gap-2">
+                    {isLoading ? (
+                      <><ArrowsClockwise size={18} className="animate-spin" /> ARMING...</>
+                    ) : (
+                      <><PlayCircle size={18} weight="fill" /> ARM PHANTOM</>
+                    )}
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* ── Footer Capabilities Strip ── */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-[1px] bg-white/[0.06] border border-white/[0.06]">
+              {[
+                { label: 'MARKET ADAPTIVE', value: 'Regime-aware position sizing and trade type selection — scalp in compression, swing in trending' },
+                { label: 'SMART MONEY ANALYSIS', value: '5-timeframe order block + FVG + BOS + CHoCH detection with confluence scoring' },
+                { label: 'ZERO-RISK TRAINING', value: 'Internal simulation engine or Phemex testnet fills — no real funds at risk, full AI engine active' },
+              ].map(({ label, value }) => (
+                <div key={label} className="bg-black/40 px-4 py-3 space-y-1">
+                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/25 font-mono">{label}</div>
+                  <div className="text-[9px] text-white/40 font-mono leading-relaxed">{value}</div>
+                </div>
+              ))}
+            </div>
           </div>
+
         ) : (
           <div className="space-y-6 mt-6">
             {/* Command Center */}
