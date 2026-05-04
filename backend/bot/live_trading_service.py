@@ -546,7 +546,10 @@ class LiveTradingService:
                                 price = self._price_cache.get(order.symbol)
                                 if price:
                                     fill = executor.execute_limit_order(order.order_id, price)
-                                    if fill and order.order_id in self._pending_plans:
+                                    # Also check order.status directly — Phemex may return filled=0
+                                    # on a closed order causing fill=None, but executor still updates status.
+                                    order_done = fill or order.status == OrderStatus.FILLED
+                                    if order_done and order.order_id in self._pending_plans:
                                         plan = self._pending_plans[order.order_id]
                                         active_count = len(self._get_active_positions())
                                         cap = self.config.max_positions if self.config else 3
@@ -557,8 +560,8 @@ class LiveTradingService:
                                             # Wait for full fill before opening position — avoids
                                             # opening a position with only a partial fill qty.
                                             # On full fill, use average_fill_price + total filled qty.
-                                            entry_px = order.average_fill_price or fill.price
-                                            entry_qty = order.filled_quantity or fill.quantity
+                                            entry_px = order.average_fill_price or (fill.price if fill else 0.0) or order.price or 0.0
+                                            entry_qty = order.filled_quantity or (fill.quantity if fill else 0.0) or order.quantity
                                             pos_id = self.position_manager.open_position(
                                                 trade_plan=plan,
                                                 entry_price=entry_px,

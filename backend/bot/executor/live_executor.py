@@ -321,9 +321,24 @@ class LiveExecutor:
         ex_filled = float(ex_order.get("filled", 0.0) or 0.0)
         ex_avg_price = float(ex_order.get("average", 0.0) or ex_order.get("price", 0.0) or 0.0)
 
+        # Phemex sometimes reports filled=0/null on a closed order (uses cumQty internally,
+        # CCXT normalization may not catch it). When the exchange says the order is done but
+        # filled qty is still zero, treat the full order quantity as filled.
+        if ex_status in ("closed", "filled") and ex_filled < 1e-9:
+            ex_filled = order.quantity
+            if ex_avg_price <= 0:
+                ex_avg_price = order.price or 0.0
+            logger.info(
+                f"Order {order.order_id} closed on exchange with filled=0 — "
+                f"assuming full fill of {ex_filled:.6f} @ {ex_avg_price}"
+            )
+
         # How much was filled since we last checked
         new_qty = ex_filled - order.filled_quantity
         if new_qty < 1e-9:
+            # Fully accounted for — keep status in sync
+            if ex_status in ("closed", "filled"):
+                order.status = OrderStatus.FILLED
             return None
 
         fill_price = ex_avg_price if ex_avg_price > 0 else (order.price or 0.0)
