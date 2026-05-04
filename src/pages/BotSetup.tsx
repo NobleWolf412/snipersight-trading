@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import {
   Target, PlayCircle, ArrowsClockwise, TrendUp, TrendDown,
   Wallet, ChartLine, Warning, CheckCircle, XCircle,
-  Crosshair, Lightning, ShieldCheck, Fire, Cpu, TestTube,
+  Crosshair, Lightning, ShieldCheck, Fire, Cpu,
   Trophy, Robot, Skull, Key,
 } from '@phosphor-icons/react';
 import { PageContainer } from '@/components/layout/PageContainer';
@@ -13,7 +13,6 @@ import { HomeButton } from '@/components/layout/HomeButton';
 import { liveTradingService, type LiveTradingConfigRequest, type PreflightResult } from '@/services/liveTradingService';
 import { api } from '@/utils/api';
 
-type TradingMode = 'testnet' | 'live';
 
 interface LiveConfig {
   leverage: number;
@@ -71,7 +70,6 @@ const DEFAULT_CONFIG: LiveConfig = {
 
 export function BotSetup() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<TradingMode>('live');
   const [config, setConfig] = useState<LiveConfig>(DEFAULT_CONFIG);
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
@@ -107,16 +105,14 @@ export function BotSetup() {
   const maxRiskAtOnce = riskAmountUsd ? riskAmountUsd * config.max_positions : null;
   const effectiveExposure = config.leverage * config.risk_per_trade;
 
-  const canStart = mode === 'testnet'
-    ? (preflight?.ok ?? false)
-    : (preflight?.ok ?? false) && ackChecked;
+  const canStart = (preflight?.ok ?? false) && ackChecked;
 
   const handleStart = async () => {
     setStarting(true);
     setError(null);
     try {
       const req: LiveTradingConfigRequest = {
-        testnet: mode === 'testnet',
+        testnet: false,
         dry_run: false,
         sniper_mode: 'stealth',
         leverage: config.leverage,
@@ -143,7 +139,7 @@ export function BotSetup() {
         max_total_exposure_usd: config.max_total_exposure_usd,
         min_balance_usd: config.min_balance_usd,
         kill_switch_enabled: config.kill_switch_enabled,
-        safety_acknowledgment: mode === 'live' ? 'I_ACCEPT_LIVE_TRADING_RISK' : '',
+        safety_acknowledgment: 'I_ACCEPT_LIVE_TRADING_RISK',
       };
       await liveTradingService.start(req);
       navigate('/bot/status');
@@ -153,8 +149,6 @@ export function BotSetup() {
       setStarting(false);
     }
   };
-
-  const isLive = mode === 'live';
 
   return (
     <PageContainer id="main-content">
@@ -170,7 +164,7 @@ export function BotSetup() {
                 AUTONOMOUS BOT
               </h1>
               <p className="font-mono text-sm text-muted-foreground uppercase tracking-widest pl-11">
-                Live trading on Phemex — real market orders
+                Deploy your trained strategy — live orders on Phemex
               </p>
             </div>
           </div>
@@ -194,7 +188,7 @@ export function BotSetup() {
               <h2 className="text-3xl lg:text-4xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-green-50 to-green-400/80 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]">LIVE DEPLOYMENT</h2>
               <div className="h-1 w-24 mx-auto bg-gradient-to-r from-transparent via-green-500/50 to-transparent rounded-full mb-4" />
               <p className="text-base text-green-100/80 leading-relaxed font-light">
-                Stealth engine — regime-adaptive, limit-only entries with a scaled ladder approach. Real orders on Phemex.
+                The AI engine you trained is now live. It reads institutional order flow across 5 timeframes, enters on precision limit orders, and adapts automatically to changing market conditions.
               </p>
             </div>
 
@@ -251,14 +245,14 @@ export function BotSetup() {
                     <ShieldCheck size={18} className="text-accent/40" />
                   </div>
                   <p className="text-[11px] text-muted-foreground/80 leading-relaxed mb-3">
-                    Stealth covers the full timeframe range (D→5m) and adaptively selects between scalp, intraday, and swing setups based on market structure. Optimal for live execution.
+                    Balanced execution across all timeframes (Daily → 5 min). Automatically switches between quick scalps, intraday moves, and multi-day swings based on live market structure — no manual mode switching needed.
                   </p>
                   <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                     {[
-                      { label: 'R:R Min', value: '1.8' },
-                      { label: 'Range', value: 'D→5m' },
-                      { label: 'Direction', value: 'L + S' },
-                      { label: 'Types', value: 'S/I/Sw' },
+                      { label: 'Min R:R', value: '1.8' },
+                      { label: 'Timeframes', value: 'D → 5m' },
+                      { label: 'Direction', value: 'Long + Short' },
+                      { label: 'Trade Types', value: 'Scalp / Intraday / Swing' },
                       { label: 'Scan Every', value: `${config.scan_interval_minutes}m` },
                     ].map(({ label, value }) => (
                       <div key={label} className="text-center p-2 rounded-lg bg-black/30 border border-border/30">
@@ -270,56 +264,18 @@ export function BotSetup() {
                 </div>
               </div>
 
-              {/* Mode toggle (testnet / live) */}
-              <div className="glass-card glow-border-green p-6 lg:p-8 rounded-3xl relative overflow-hidden group transition-all duration-500 hover:shadow-[0_0_50px_rgba(0,255,170,0.15)]">
-                <div className={cn(
-                  'absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] opacity-40 pointer-events-none transition-opacity duration-1000 group-hover:opacity-60',
-                  isLive ? 'from-red-500/10 via-transparent to-transparent' : 'from-yellow-500/10 via-transparent to-transparent',
-                )} />
-                <div className={cn(
-                  'absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent to-transparent opacity-60',
-                  isLive ? 'via-red-400/60' : 'via-yellow-400/60',
-                )} />
-                <div className="relative z-10 flex flex-col items-center gap-5 text-center">
-                  <div className="flex items-center gap-1 bg-black/40 p-1.5 rounded-xl border border-white/5 backdrop-blur-md">
-                    <button
-                      onClick={() => setMode('live')}
-                      className={cn(
-                        'flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold tracking-wider transition-all duration-300',
-                        isLive ? 'bg-red-500/20 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)] border border-red-500/40' : 'text-muted-foreground hover:text-white hover:bg-white/5',
-                      )}
-                    >
-                      <Skull size={18} weight={isLive ? 'fill' : 'bold'} />
-                      LIVE
-                    </button>
-                    <button
-                      onClick={() => { setMode('testnet'); setAckChecked(false); }}
-                      className={cn(
-                        'flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold tracking-wider transition-all duration-300',
-                        !isLive ? 'bg-yellow-500/20 text-yellow-300 shadow-[0_0_15px_rgba(234,179,8,0.3)] border border-yellow-500/40' : 'text-muted-foreground hover:text-white hover:bg-white/5',
-                      )}
-                    >
-                      <TestTube size={18} weight={!isLive ? 'fill' : 'bold'} />
-                      TESTNET
-                    </button>
+              {/* Live mode banner */}
+              <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Skull size={20} weight="fill" className="text-red-400" />
+                  <div>
+                    <p className="text-sm font-black tracking-widest text-red-400">LIVE TRADING MODE</p>
+                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">Real orders · Real funds · Losses are irreversible</p>
                   </div>
-                  <h2 className={cn(
-                    'text-5xl lg:text-7xl font-black italic tracking-tighter text-transparent bg-clip-text drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]',
-                    isLive ? 'bg-gradient-to-b from-white via-red-50 to-red-400/80' : 'bg-gradient-to-b from-white via-yellow-50 to-yellow-400/80',
-                  )}>
-                    {isLive ? 'LIVE' : 'TESTNET'}
-                  </h2>
-                  <div className={cn('h-1 w-24 mx-auto bg-gradient-to-r from-transparent to-transparent rounded-full', isLive ? 'via-red-500/50' : 'via-yellow-500/50')} />
-                  <p className="text-lg text-green-100/70 max-w-md mx-auto leading-relaxed font-light">
-                    {isLive ? '"Real orders with real funds. Losses are real and irreversible."' : '"Real Phemex order book fills on the testnet. No real capital at risk."'}
-                  </p>
-                  <div className={cn(
-                    'flex items-center gap-3 px-8 py-3 rounded-full border font-bold tracking-widest',
-                    isLive ? 'text-red-400 bg-red-400/10 border-red-400/30 shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30 shadow-[0_0_20px_rgba(234,179,8,0.1)]',
-                  )}>
-                    {isLive ? <Skull size={20} weight="fill" /> : <TestTube size={20} weight="fill" />}
-                    <span>MODE ACTIVE</span>
-                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                  <span className="text-[10px] font-bold tracking-widest text-red-400">ACTIVE</span>
                 </div>
               </div>
 
@@ -480,15 +436,15 @@ export function BotSetup() {
                   {/* Signal Sensitivity */}
                   <div className="space-y-2 md:col-span-2">
                     <div className="flex justify-between items-center h-4 mb-0.5">
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Signal Sensitivity</label>
-                      <span className="text-[8px] text-muted-foreground/50 font-mono italic">gate / floor</span>
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Signal Quality Filter</label>
+                      <span className="text-[8px] text-muted-foreground/50 font-mono italic">entry threshold / near-miss</span>
                     </div>
                     <div className="flex gap-1.5">
                       {([
-                        { key: 'conservative', label: 'Conservative', gate: 72, floor: 62, color: 'blue' },
-                        { key: 'balanced',     label: 'Balanced',     gate: 65, floor: 55, color: 'emerald' },
-                        { key: 'aggressive',   label: 'Aggressive',   gate: 58, floor: 48, color: 'orange' },
-                        { key: 'custom',       label: 'Custom',       gate: null, floor: null, color: 'purple' },
+                        { key: 'conservative', label: 'Precision',   gate: 72, floor: 62, color: 'blue' },
+                        { key: 'balanced',     label: 'Balanced',    gate: 65, floor: 55, color: 'emerald' },
+                        { key: 'aggressive',   label: 'Active',      gate: 58, floor: 48, color: 'orange' },
+                        { key: 'custom',       label: 'Custom',      gate: null, floor: null, color: 'purple' },
                       ] as const).map(({ key, label, gate, floor, color }) => {
                         const isSelected = config.sensitivity_preset === key;
                         const selectedCls = {
@@ -534,10 +490,10 @@ export function BotSetup() {
                       </div>
                     )}
                     <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">
-                      {config.sensitivity_preset === 'conservative' ? 'Highest-conviction only — 2–5 trades/week' :
-                       config.sensitivity_preset === 'aggressive'   ? 'Wider net, more near-misses — 10–20+ trades/week' :
-                       config.sensitivity_preset === 'custom'       ? 'Score ≥ gate → 100% size · floor ≤ score < gate → 50% size' :
-                       'Good setups full size, near-misses half size — 5–12 trades/week'}
+                      {config.sensitivity_preset === 'conservative' ? 'Highest-conviction only — 2–5 top-quality signals/week' :
+                       config.sensitivity_preset === 'aggressive'   ? 'Wide net — 15–30+ signals/week (more noise, more trades)' :
+                       config.sensitivity_preset === 'custom'       ? 'Signals above the threshold enter at full size · Near-misses enter at half size' :
+                       'Quality signals at full size, near-misses at half size — 5–12 trades/week'}
                     </p>
                   </div>
 
@@ -621,7 +577,7 @@ export function BotSetup() {
                         >{v}</button>
                       ))}
                     </div>
-                    <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">Limit of concurrent open + pending position slots</p>
+                    <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">Maximum simultaneous open trades (positions + pending orders combined)</p>
                   </div>
                 </div>
               </div>
@@ -696,9 +652,9 @@ export function BotSetup() {
               </div>
 
               {/* Safety Limits */}
-              <div className={cn('rounded-xl border p-4 space-y-4 text-left', isLive ? 'border-red-500/30 bg-red-500/5' : 'border-yellow-500/30 bg-yellow-500/5')}>
-                <label className={cn('text-[10px] font-bold uppercase tracking-widest pl-1 flex items-center gap-1.5', isLive ? 'text-red-400' : 'text-yellow-400')}>
-                  <Fire size={12} /> Safety Limits — {isLive ? 'REAL MONEY' : 'Testnet'}
+              <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 space-y-4 text-left">
+                <label className="text-[10px] font-bold uppercase tracking-widest pl-1 flex items-center gap-1.5 text-red-400">
+                  <Fire size={12} /> Capital Protection Limits
                 </label>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
@@ -735,15 +691,15 @@ export function BotSetup() {
                   <div className="flex items-start gap-3">
                     <Skull size={24} weight="bold" className="text-red-400 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-bold text-red-400 text-sm">Real Money Warning</p>
+                      <p className="font-bold text-red-400 text-sm">Confirm Live Deployment</p>
                       <p className="text-xs text-zinc-400 mt-1">
-                        This bot will place real orders on Phemex using your API keys. Losses are real and irreversible. Verify all limits above before deploying.
+                        This deploys real orders on Phemex using your API keys. Capital at risk — all losses are real. Double-check your position limits and drawdown settings above before proceeding.
                       </p>
                     </div>
                   </div>
                   <label className="flex items-center gap-3 cursor-pointer mt-2">
                     <input type="checkbox" checked={ackChecked} onChange={e => setAckChecked(e.target.checked)} className="w-4 h-4 accent-red-500" />
-                    <span className="text-xs text-zinc-300">I understand this trades real money and accept full responsibility</span>
+                    <span className="text-xs text-zinc-300">I understand this places real orders with real capital and I accept full responsibility for all outcomes</span>
                   </label>
                 </div>
               )}
@@ -755,9 +711,7 @@ export function BotSetup() {
                 className={cn(
                   'w-full h-14 rounded-xl font-bold text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all duration-300 relative overflow-hidden group/btn border-2',
                   canStart && !starting
-                    ? isLive
-                      ? 'bg-red-600 hover:bg-red-500 border-red-500 text-white shadow-lg shadow-red-900/30 hover:shadow-red-500/30'
-                      : 'bg-[#00ff88] hover:bg-[#00cc6a] border-white/20 text-black shadow-[0_0_30px_rgba(0,255,136,0.4)] hover:shadow-[0_0_50px_rgba(0,255,136,0.6)] hover:scale-105'
+                    ? 'bg-red-600 hover:bg-red-500 border-red-500 text-white shadow-lg shadow-red-900/30 hover:shadow-red-500/30'
                     : 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed',
                 )}
               >
@@ -766,10 +720,8 @@ export function BotSetup() {
                 )}
                 {starting ? (
                   <><ArrowsClockwise size={20} className="animate-spin" /> Initializing...</>
-                ) : isLive ? (
-                  <><Skull size={20} weight="bold" /> Deploy Live Bot</>
                 ) : (
-                  <><PlayCircle size={20} weight="fill" /> Deploy on Testnet</>
+                  <><Skull size={20} weight="bold" /> Deploy Live Bot</>
                 )}
               </button>
             </div>
@@ -779,9 +731,9 @@ export function BotSetup() {
         {/* System capabilities */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
-            { icon: <Cpu size={18} className="text-accent" />, title: 'Regime Adaptive', desc: 'Adjusts targets, position sizing, and entry thresholds based on live volatility regime detection.' },
-            { icon: <Target size={18} className="text-primary" />, title: 'SMC Detection', desc: 'Order blocks, fair value gaps, liquidity sweeps, and multi-timeframe structure alignment.' },
-            { icon: <ShieldCheck size={18} className="text-warning" />, title: 'Risk Control', desc: 'Native exchange stops, trailing breakeven, kill switch, and per-session drawdown limits.' },
+            { icon: <Cpu size={18} className="text-accent" />, title: 'Market Adaptive', desc: 'Automatically detects whether the market is trending, ranging, or compressed — then adjusts targets, position sizing, and entry thresholds accordingly.' },
+            { icon: <Target size={18} className="text-primary" />, title: 'Smart Money Analysis', desc: 'Identifies institutional order blocks, price gaps (fair value gaps), and liquidity zones — the same levels where large players enter and exit the market.' },
+            { icon: <ShieldCheck size={18} className="text-warning" />, title: 'Capital Protection', desc: 'Exchange-native stop losses, automated breakeven lock, session kill switch, and per-trade drawdown limits keep your capital protected at all times.' },
           ].map(({ icon, title, desc }) => (
             <div key={title} className="p-4 rounded-xl bg-background/40 border border-border/30 space-y-2">
               <div className="flex items-center gap-2">{icon}<span className="text-xs font-bold font-mono uppercase tracking-wider">{title}</span></div>

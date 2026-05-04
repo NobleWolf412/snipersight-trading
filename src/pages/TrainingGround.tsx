@@ -361,7 +361,7 @@ export function TrainingGround() {
                 TRAINING GROUND
               </h1>
               <p className="font-mono text-sm text-muted-foreground uppercase tracking-widest pl-11">
-                Paper trading with real market data
+                Train your AI strategy on live markets — zero risk, full insight
               </p>
             </div>
           </div>
@@ -392,7 +392,7 @@ export function TrainingGround() {
             onClick={() => navigate('/journal')}
             className="px-4 py-2 rounded-md text-xs font-mono tracking-widest text-white/70 hover:bg-white/10 hover:text-white transition-colors font-bold"
           >
-            JOURNAL &amp; ML
+            TRADE JOURNAL &amp; ML INSIGHTS
           </button>
         </div>
 
@@ -403,10 +403,10 @@ export function TrainingGround() {
             <BookOpen size={20} className="text-accent mt-0.5" />
             <div>
               <h3 className="text-accent uppercase font-bold tracking-widest text-sm mb-1 font-mono">
-                SAFE ENVIRONMENT
+                AI STRATEGY TRAINING
               </h3>
               <p className="text-muted-foreground text-sm font-mono leading-relaxed">
-                Paper trading uses real market data but simulated execution. Perfect for testing strategies without risking real capital.
+                Runs the full AI engine on live Phemex market data with simulated fills. Every signal, every trade, every exit is tracked — so you can see exactly how your strategy performs before risking real capital. Train here first. Deploy when ready.
               </p>
             </div>
           </div>
@@ -446,10 +446,10 @@ export function TrainingGround() {
               <div className="relative z-10 w-full flex flex-col items-center text-center space-y-6">
                 <Target size={64} className="text-accent opacity-50 mb-2" />
                 <div className="max-w-xl mx-auto space-y-2">
-                  <h2 className="text-3xl lg:text-4xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-green-50 to-green-400/80 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]">PHANTOM INITIALIZATION</h2>
+                  <h2 className="text-3xl lg:text-4xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-green-50 to-green-400/80 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]">READY TO TRAIN</h2>
                   <div className="h-1 w-24 mx-auto bg-gradient-to-r from-transparent via-green-500/50 to-transparent rounded-full mb-4" />
                   <p className="text-base text-green-100/80 leading-relaxed font-light">
-                    Phantom is an autonomous, regime-adaptive execution layer running strictly limit-only entries with a scaled ladder approach.
+                    The AI engine analyzes order flow and price structure across 5 timeframes, enters at institutional levels with precision limit orders, and adapts to changing market conditions. Configure your parameters, then arm it to start learning.
                   </p>
                 </div>
 
@@ -493,10 +493,10 @@ export function TrainingGround() {
                       {config.sensitivity_preset ?? 'balanced'}
                     </div>
                     <div className="text-[9px] text-muted-foreground mt-1 opacity-60">
-                      {config.sensitivity_preset === 'conservative' ? '72/62 gate/floor' :
-                       config.sensitivity_preset === 'aggressive' ? '58/48 gate/floor' :
-                       config.sensitivity_preset === 'custom' ? `${config.min_confluence ?? 65}/${config.confluence_soft_floor ?? 55}` :
-                       '65/55 gate/floor'}
+                      {config.sensitivity_preset === 'conservative' ? '72/62 entry / near-miss' :
+                       config.sensitivity_preset === 'aggressive' ? '58/48 entry / near-miss' :
+                       config.sensitivity_preset === 'custom' ? `${config.min_confluence ?? 65}/${config.confluence_soft_floor ?? 55} custom` :
+                       '65/55 entry / near-miss'}
                     </div>
                   </div>
                 </div>
@@ -766,7 +766,7 @@ export function TrainingGround() {
                             </button>
                           ))}
                         </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">% of balance risked per entry across 3 scale-in levels</p>
+                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">% of your simulated balance at risk per trade, split across 3 entry levels</p>
                       </div>
 
                       {/* Duration */}
@@ -803,15 +803,15 @@ export function TrainingGround() {
                       {/* Signal Sensitivity */}
                       <div className="space-y-2 md:col-span-2">
                         <div className="flex justify-between items-center h-4 mb-0.5">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Signal Sensitivity</label>
-                          <span className="text-[8px] text-muted-foreground/50 font-mono italic">gate / floor / near-miss</span>
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">Signal Quality Filter</label>
+                          <span className="text-[8px] text-muted-foreground/50 font-mono italic">entry threshold / near-miss</span>
                         </div>
                         <div className="flex gap-1.5">
                           {([
-                            { key: 'conservative', label: 'Conservative', gate: 72, floor: 62, color: 'blue' },
-                            { key: 'balanced',     label: 'Balanced',     gate: 65, floor: 55, color: 'emerald' },
-                            { key: 'aggressive',   label: 'Aggressive',   gate: 58, floor: 48, color: 'orange' },
-                            { key: 'custom',       label: 'Custom',       gate: null, floor: null, color: 'purple' },
+                            { key: 'conservative', label: 'Precision',   gate: 72, floor: 62, color: 'blue' },
+                            { key: 'balanced',     label: 'Balanced',    gate: 65, floor: 55, color: 'emerald' },
+                            { key: 'aggressive',   label: 'Active',      gate: 58, floor: 48, color: 'orange' },
+                            { key: 'custom',       label: 'Custom',      gate: null, floor: null, color: 'purple' },
                           ] as const).map(({ key, label, gate, floor, color }) => {
                             const isSelected = (config.sensitivity_preset ?? 'balanced') === key;
                             const selectedCls = {
@@ -865,10 +865,10 @@ export function TrainingGround() {
                         )}
                         {/* Description line */}
                         <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug">
-                          {config.sensitivity_preset === 'conservative' ? 'Highest-conviction only — 2–5 trades/week' :
-                           config.sensitivity_preset === 'aggressive'   ? 'Wider net, more near-misses — 10–20+ trades/week' :
-                           config.sensitivity_preset === 'custom'       ? 'Score ≥ gate → 100% size · floor ≤ score < gate → 50% size' :
-                           'Good setups full size, near-misses half size — 5–12 trades/week'}
+                          {config.sensitivity_preset === 'conservative' ? 'Highest-conviction only — 2–5 top-quality signals/week' :
+                           config.sensitivity_preset === 'aggressive'   ? 'Wide net — 15–30+ signals/week (more trades, more noise)' :
+                           config.sensitivity_preset === 'custom'       ? 'Signals above threshold enter at full size · Near-misses enter at half size' :
+                           'Quality signals at full size, near-misses at half size — 5–12 trades/week'}
                         </p>
                       </div>
 
@@ -1004,7 +1004,7 @@ export function TrainingGround() {
                             </button>
                           ))}
                         </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Limit of concurrent active symbol slots (Positions + Pending)</p>
+                        <p className="text-[9px] text-muted-foreground/40 font-mono pl-1 leading-snug tracking-tighter">Maximum simultaneous open trades (positions + pending orders combined)</p>
                       </div>
                     </div>
                   </div>
