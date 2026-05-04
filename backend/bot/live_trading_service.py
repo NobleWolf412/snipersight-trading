@@ -601,10 +601,39 @@ class LiveTradingService:
                                         self._pending_placed_at.pop(order_id, None)
                                         logger.info(f"Pending order expired and cancelled: {order_id} {plan.symbol}")
                                     else:
-                                        # Cancel failed — keep in _pending_plans so if the order
-                                        # fills on exchange we still have the plan to open a position.
-                                        # Next cycle we will retry the cancel.
-                                        logger.warning(f"Cancel failed for expired order {order_id} {plan.symbol} — will retry")
+                                        # Cancel failed — check if the order filled during the TTL window.
+                                        # cancel_order() calls _process_exchange_order() when it detects a
+                                        # fill, so order.status == FILLED means we have fill data recorded.
+                                        expired_order = executor.get_order(order_id)
+                                        if expired_order and expired_order.status == OrderStatus.FILLED:
+                                            entry_px = expired_order.average_fill_price or expired_order.price or 0.0
+                                            entry_qty = expired_order.filled_quantity or expired_order.quantity
+                                            active_count = len(self._get_active_positions())
+                                            cap = self.config.max_positions if self.config else 3
+                                            if active_count < cap and entry_px > 0:
+                                                pos_id = self.position_manager.open_position(
+                                                    trade_plan=plan,
+                                                    entry_price=entry_px,
+                                                    quantity=entry_qty,
+                                                    entry_order_id=order_id,
+                                                )
+                                                self.stats.signals_taken += 1
+                                                await self._place_exchange_stop(pos_id, plan, entry_px, entry_qty)
+                                                self._log_activity("trade_opened", {
+                                                    "position_id": pos_id,
+                                                    "symbol": plan.symbol,
+                                                    "direction": plan.direction,
+                                                    "entry_price": entry_px,
+                                                })
+                                                logger.info(
+                                                    f"Recovered fill for expired order {order_id} {plan.symbol} "
+                                                    f"@ {entry_px} — position opened"
+                                                )
+                                            self._pending_plans.pop(order_id, None)
+                                            self._pending_placed_at.pop(order_id, None)
+                                        else:
+                                            # Genuine cancel failure — retry next cycle.
+                                            logger.warning(f"Cancel failed for expired order {order_id} {plan.symbol} — will retry")
 
                     # Run position monitoring
                     await self.position_manager.monitor_all_positions()

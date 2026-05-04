@@ -217,15 +217,18 @@ class LiveExecutor:
         if self._hedge_mode:
             extra_params["positionSide"] = "Long" if ccxt_side == "buy" else "Short"
 
-        try:
-            exchange_order = self._adapter.create_order(
+        def _send_order(params: dict) -> dict:
+            return self._adapter.create_order(
                 symbol=symbol,
                 order_type=ccxt_type,
                 side=ccxt_side,
                 amount=quantity,
                 price=price,
-                params=extra_params if extra_params else None,
+                params=params if params else None,
             )
+
+        try:
+            exchange_order = _send_order(extra_params)
             exchange_id = str(exchange_order.get("id", ""))
             self._exchange_order_map[order_id] = exchange_id
             self._reverse_order_map[exchange_id] = order_id
@@ -242,9 +245,35 @@ class LiveExecutor:
             order.status = OrderStatus.REJECTED
             order.rejection_reason = f"Invalid order: {e}"
         except Exception as e:
-            logger.error(f"Failed to send order {order_id} to exchange: {e}")
-            order.status = OrderStatus.REJECTED
-            order.rejection_reason = str(e)
+            err_str = str(e)
+            # Phemex 20004 TE_ERR_INCONSISTENT_POS_MODE: the account is in hedge mode
+            # despite our startup switch (startup may have silently failed if positions
+            # were open at that time). Retry with positionSide and flag hedge mode.
+            if "20004" in err_str or "INCONSISTENT_POS_MODE" in err_str:
+                logger.warning(
+                    f"TE_ERR_INCONSISTENT_POS_MODE on {symbol} — account is in hedge mode. "
+                    f"Retrying with positionSide and switching to hedge-mode operation."
+                )
+                hedge_params = dict(extra_params)
+                hedge_params["positionSide"] = "Long" if ccxt_side == "buy" else "Short"
+                try:
+                    exchange_order = _send_order(hedge_params)
+                    exchange_id = str(exchange_order.get("id", ""))
+                    self._exchange_order_map[order_id] = exchange_id
+                    self._reverse_order_map[exchange_id] = order_id
+                    self._hedge_mode = True  # all future orders will include positionSide
+                    logger.info(
+                        f"Order sent (hedge-mode retry): {order_id} → {exchange_id} "
+                        f"{side} {quantity} {symbol} @ {price}"
+                    )
+                except Exception as retry_e:
+                    logger.error(f"Failed to send {order_id} after hedge-mode retry: {retry_e}")
+                    order.status = OrderStatus.REJECTED
+                    order.rejection_reason = str(retry_e)
+            else:
+                logger.error(f"Failed to send order {order_id} to exchange: {e}")
+                order.status = OrderStatus.REJECTED
+                order.rejection_reason = str(e)
 
         return order
 
@@ -416,10 +445,12 @@ class LiveExecutor:
             if exchange_id:
                 try:
                     result = self._adapter.cancel_order(exchange_id, order.symbol)
-                    # If the exchange says it was already filled, update accordingly
+                    # If the exchange says it was already filled, record the fill so the
+                    # caller can open the position. Without this, the fill is lost when
+                    # get_open_orders() excludes FILLED orders from future poll cycles.
                     if result.get("status") in ("closed", "filled"):
-                        logger.info(f"Order {order_id} was already filled on exchange")
-                        order.status = OrderStatus.FILLED
+                        logger.info(f"Order {order_id} was filled on exchange — recording fill")
+                        self._process_exchange_order(order, result)
                         return False
                 except Exception as e:
                     logger.error(f"Failed to cancel {order_id} on exchange: {e}")
