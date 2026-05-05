@@ -34,6 +34,7 @@ from backend.shared.config.scanner_modes import get_mode
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.models.planner import TradePlan
 from backend.data.adapters.phemex import PhemexAdapter
+from backend.data.adapters.phemex_ws import PhemexWebSocketClient
 from backend.shared.utils.math_utils import round_to_lot
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ class LiveTradingService:
 
         self._scan_task: Optional[asyncio.Task] = None
         self._monitor_task: Optional[asyncio.Task] = None
+        self._ws_task: Optional[asyncio.Task] = None
         self._running = False
 
         self._price_cache: Dict[str, float] = {}
@@ -209,6 +211,7 @@ class LiveTradingService:
         self._exchange_stop_levels = {}
         self._exchange_tp_orders = {}
         self._exchange_trailing_orders = {}
+        self._ws_task = None
 
         self.started_at = datetime.now(timezone.utc)
         self.stopped_at = None
@@ -245,6 +248,20 @@ class LiveTradingService:
         self._monitor_task = asyncio.create_task(self._monitor_loop(), name=f"live_monitor_{self.session_id}")
         self._monitor_task.add_done_callback(self._task_done_callback)
 
+        # Start WebSocket order feed for real-time fill detection (skipped in dry_run)
+        if not config.dry_run and api_key and api_secret:
+            ws_client = PhemexWebSocketClient(
+                api_key=api_key,
+                api_secret=api_secret,
+                testnet=config.testnet,
+                on_order_update=self.executor.apply_ws_fill,
+            )
+            self._ws_task = asyncio.create_task(
+                ws_client.run(), name=f"live_ws_{self.session_id}"
+            )
+            self._ws_task.add_done_callback(self._task_done_callback)
+            logger.info("Phemex WS order feed started")
+
         return {
             "session_id": self.session_id,
             "status": self.status.value,
@@ -262,7 +279,7 @@ class LiveTradingService:
         self.status = LiveBotStatus.STOPPED
         self.stopped_at = datetime.now(timezone.utc)
 
-        for task in (self._scan_task, self._monitor_task):
+        for task in (self._scan_task, self._monitor_task, self._ws_task):
             if task:
                 task.cancel()
                 try:
@@ -303,7 +320,7 @@ class LiveTradingService:
         self._running = False
         self.status = LiveBotStatus.KILL_SWITCHED
 
-        for task in (self._scan_task, self._monitor_task):
+        for task in (self._scan_task, self._monitor_task, self._ws_task):
             if task:
                 task.cancel()
                 try:
