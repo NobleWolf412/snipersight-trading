@@ -124,9 +124,17 @@ class LiveExecutor:
         quantity: float,
         price: Optional[float] = None,
         stop_price: Optional[float] = None,
+        sl_price: Optional[float] = None,
+        tp_price: Optional[float] = None,
     ) -> Order:
         """
         Place an order on Phemex (or log it in dry_run mode).
+
+        sl_price / tp_price: when provided, attached inline to the entry order
+        as position-level SL/TP per Phemex conditional order spec. This is atomic —
+        protection exists the moment the entry fills, not in a separate API call.
+        _place_exchange_stop() still fires after fill as a belt-and-suspenders backup;
+        Phemex auto-cancels the redundant order via closeOnTrigger.
 
         Runs pre-flight safety checks before sending to the exchange.
         Returns an Order with status=REJECTED if any check fails.
@@ -185,6 +193,8 @@ class LiveExecutor:
             logger.info(
                 f"[DRY RUN] Order would send: {order_id} {side} {quantity} "
                 f"{symbol} @ {price} leverage={self.target_leverage}x"
+                + (f" | inline SL={sl_price}" if sl_price else "")
+                + (f" TP={tp_price}" if tp_price else "")
             )
             return order
 
@@ -220,6 +230,12 @@ class LiveExecutor:
         extra_params: dict = {"clientOrderId": order_id}
         if self._hedge_mode:
             extra_params["positionSide"] = "Long" if ccxt_side == "buy" else "Short"
+        if sl_price and sl_price > 0:
+            extra_params["stopLossPrice"] = sl_price
+            extra_params["slTrigger"] = "ByMarkPrice"
+        if tp_price and tp_price > 0:
+            extra_params["takeProfitPrice"] = tp_price
+            extra_params["tpTrigger"] = "ByMarkPrice"
 
         def _send_order(params: dict) -> dict:
             return self._adapter.create_order(

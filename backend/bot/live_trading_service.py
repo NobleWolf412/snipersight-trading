@@ -961,12 +961,23 @@ class LiveTradingService:
                 reason_type="stale_entry")
             return
 
+        # Inline TP1 + SL: attached to the entry order itself per Phemex conditional
+        # order spec. Provides atomic crash protection — protection is on the exchange
+        # the moment the entry fills, not in a subsequent API call.
+        _targets = getattr(plan, "targets", None) or []
+        _tp1_price = None
+        if _targets:
+            _sorted = sorted(_targets, key=lambda t: t.level, reverse=not is_long)
+            _tp1_price = _sorted[0].level if _sorted else None
+
         order = self.executor.place_order(
             symbol=symbol,
             side="BUY" if is_long else "SELL",
             order_type="LIMIT",
             quantity=quantity,
             price=entry_price,
+            sl_price=stop_level,
+            tp_price=_tp1_price,
         )
 
         if order.status.value in ("REJECTED",):
