@@ -629,6 +629,24 @@ def generate_trade_plan(
             f"| Stop={stop_loss.level:.4f} | TickSize={tick_size}"
         )
 
+    # Percentage stop sanity gate — rejects signals where ATR-based stops are a
+    # disproportionately large fraction of price (e.g. OP at $0.10 where a 1-ATR
+    # stop is 6% of price). Confirmed by session logs: all OP trades with >3% stops
+    # lost or barely broke even; the single OP trade with a 2.74% stop was profitable.
+    # AVAX ($20, ~2.26% avg stop) and WIF/ARB pass comfortably.
+    _PCT_STOP_CAPS = {"scalp": 0.03, "intraday": 0.05, "swing": 0.10}
+    _trade_type_for_cap = (expected_trade_type or "scalp").lower()
+    _stop_pct_cap = _PCT_STOP_CAPS.get(_trade_type_for_cap, 0.05)
+    _avg_entry_for_cap = (entry_zone.near_entry + entry_zone.far_entry) / 2
+    if _avg_entry_for_cap > 0:
+        _actual_stop_pct = abs(_avg_entry_for_cap - stop_loss.level) / _avg_entry_for_cap
+        if _actual_stop_pct > _stop_pct_cap:
+            raise ValueError(
+                f"Stop distance {_actual_stop_pct:.1%} exceeds {_stop_pct_cap:.0%} cap "
+                f"for {_trade_type_for_cap} on {symbol} @ {_avg_entry_for_cap:.5f} "
+                f"(stop={stop_loss.level:.5f})"
+            )
+
     # DEBUG: Log final values before TradePlan validation
     try:
         targets_levels = [f"{t.level:.4f}" for t in targets[:3]] if targets else []
