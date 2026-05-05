@@ -608,9 +608,15 @@ class LiveExecutor:
             return order
 
         try:
-            # CCXT Phemex: for stop_market, price= is the trigger (maps to stopPx
-            # in the native API). Do NOT set price=None — that removes the trigger.
-            stop_params: dict = {"reduceOnly": True}
+            # CCXT Phemex: for stop_market, price= is the trigger (maps to stopPx).
+            # triggerType=ByMarkPrice prevents wick-hunt triggers on last-price spikes.
+            # closeOnTrigger cancels other same-direction orders when the stop fires,
+            # ensuring the position fully closes rather than just reducing.
+            stop_params: dict = {
+                "reduceOnly": True,
+                "closeOnTrigger": True,
+                "triggerType": "ByMarkPrice",
+            }
             if self._hedge_mode:
                 # In hedge mode, the stop's positionSide is the position being closed:
                 # SELL stop closes a LONG → positionSide=Long
@@ -675,7 +681,13 @@ class LiveExecutor:
             return order
 
         try:
-            tp_params: dict = {"reduceOnly": True}
+            # closeOnTrigger ensures this TP is treated as a closing order and cancels
+            # other same-direction orders when it fills. TP is a resting limit order —
+            # no triggerType needed since the limit price IS the trigger.
+            tp_params: dict = {
+                "reduceOnly": True,
+                "closeOnTrigger": True,
+            }
             if self._hedge_mode:
                 tp_params["positionSide"] = "Long" if side.upper() == "SELL" else "Short"
             exchange_order = self._adapter.create_order(
