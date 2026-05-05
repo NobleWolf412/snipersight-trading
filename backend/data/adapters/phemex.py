@@ -55,6 +55,7 @@ class PhemexAdapter:
         self.exchange = ccxt.phemex(exchange_config)
 
         self.default_type = default_type
+        self.testnet = testnet
 
         if testnet:
             self.exchange.set_sandbox_mode(True)
@@ -172,7 +173,8 @@ class PhemexAdapter:
                 }
                 resolution = tf_map.get(timeframe, 60)
 
-                url = "https://api.phemex.com/exchange/public/md/kline"
+                _base = "https://testnet-api.phemex.com" if self.testnet else "https://api.phemex.com"
+                url = f"{_base}/exchange/public/md/kline"
                 end_time = int(time.time())
 
                 params = {

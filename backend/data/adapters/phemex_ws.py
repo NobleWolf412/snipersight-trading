@@ -181,11 +181,17 @@ class PhemexWebSocketClient:
         except (json.JSONDecodeError, ValueError):
             return
 
+        msg_type = msg.get("type")
+
         # aop_p channel messages carry order arrays
-        if msg.get("type") != "aop_p":
+        if msg_type != "aop_p":
+            # Log any non-trivial message so format changes are visible in debug logs
+            if msg_type and msg_type not in ("pong",):
+                logger.debug("Unhandled WS message type=%r id=%s", msg_type, msg.get("id"))
             return
 
-        for order in msg.get("orders", []):
+        orders = msg.get("orders") or msg.get("data", {}).get("orders", [])
+        for order in orders:
             self._handle_order_event(order)
 
     def _handle_order_event(self, order: dict) -> None:
