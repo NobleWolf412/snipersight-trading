@@ -418,6 +418,19 @@ class LiveExecutor:
         ex_status = ex_order.get("status", "open")
         ex_filled = float(ex_order.get("filled", 0.0) or 0.0)
         ex_avg_price = float(ex_order.get("average", 0.0) or ex_order.get("price", 0.0) or 0.0)
+        ex_remaining = float(ex_order.get("remaining", 0.0) or 0.0)
+        ex_amount = float(ex_order.get("amount", order.quantity) or order.quantity)
+
+        # Cross-check: if remaining < amount and filled is still 0, infer filled from remaining.
+        # Phemex can report leavesQty correctly before cumQty normalizes through CCXT.
+        if ex_filled < 1e-9 and ex_amount > 0 and ex_remaining < ex_amount - 1e-9:
+            inferred = ex_amount - ex_remaining
+            if inferred > 1e-9:
+                ex_filled = inferred
+                logger.debug(
+                    f"Order {order.order_id} filled inferred from remaining: "
+                    f"amount={ex_amount:.6f} remaining={ex_remaining:.6f} → filled={ex_filled:.6f}"
+                )
 
         # Phemex sometimes reports filled=0/null on a closed order (uses cumQty internally,
         # CCXT normalization may not catch it). When the exchange says the order is done but
@@ -444,8 +457,17 @@ class LiveExecutor:
 
         if ex_status in ("closed", "filled"):
             order.status = OrderStatus.FILLED
+            logger.info(
+                f"Order {order.order_id} fully filled: {order.filled_quantity:.6f}/{order.quantity:.6f} "
+                f"@ avg {order.average_fill_price:.5f}"
+            )
         elif ex_filled > 0:
             order.status = OrderStatus.PARTIALLY_FILLED
+            logger.info(
+                f"Partial fill: {order.order_id} +{new_qty:.6f} "
+                f"({order.filled_quantity:.6f}/{order.quantity:.6f} filled, "
+                f"remaining={ex_remaining:.6f}) @ {fill_price:.5f}"
+            )
 
         return fill
 
@@ -527,6 +549,18 @@ class LiveExecutor:
 
         order.status = OrderStatus.CANCELLED
         order.updated_at = datetime.now(timezone.utc)
+
+        if order.filled_quantity > 1e-9:
+            # Part of this order filled before cancellation (TTL expiry, manual cancel, etc.).
+            # Surface it as FILLED so the caller opens a position with the partial qty rather
+            # than silently discarding fills that already landed on the exchange.
+            order.status = OrderStatus.FILLED
+            logger.info(
+                f"Order {order_id} had partial fill of {order.filled_quantity:.6f} before cancel — "
+                f"treating as final fill so position opens with reduced size"
+            )
+            return False  # Caller checks order.status == FILLED on False return
+
         logger.info(f"Order {order_id} cancelled")
         return True
 
