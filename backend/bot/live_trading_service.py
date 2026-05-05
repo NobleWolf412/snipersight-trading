@@ -103,6 +103,8 @@ class LiveTradingService:
         # Exchange-native stop order tracking (position_id → internal order_id / level)
         self._exchange_stop_orders: Dict[str, str] = {}
         self._exchange_stop_levels: Dict[str, float] = {}
+        # Exchange-native TP order tracking (position_id → internal order_id)
+        self._exchange_tp_orders: Dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Session lifecycle
@@ -203,6 +205,7 @@ class LiveTradingService:
         self._last_reconcile_at = 0.0
         self._exchange_stop_orders = {}
         self._exchange_stop_levels = {}
+        self._exchange_tp_orders = {}
 
         self.started_at = datetime.now(timezone.utc)
         self.stopped_at = None
@@ -1058,11 +1061,12 @@ class LiveTradingService:
         if quantity <= 0 or price <= 0:
             return False
 
-        # Cancel exchange-native stop before firing software market exit to avoid double-close
+        # Cancel exchange-native stop and TP before firing software market exit to avoid double-close
         if self.position_manager:
             for pos in self.position_manager.get_open_positions():
                 if pos.symbol == symbol:
                     await self._cancel_exchange_stop(pos.position_id)
+                    await self._cancel_exchange_tp(pos.position_id)
                     break
 
         try:
@@ -1101,22 +1105,24 @@ class LiveTradingService:
     async def _place_exchange_stop(
         self, position_id: str, plan: "TradePlan", entry_price: float, quantity: float
     ):
-        """Place a native stop-market on Phemex immediately after an entry fills."""
+        """Place exchange-native SL (stop-market) and TP1 (limit) on Phemex after fill."""
         if not self.executor:
             return
+
+        # --- Stop Loss ---
         sl_obj = getattr(plan, "stop_loss", None)
         stop_level = getattr(sl_obj, "level", None) if sl_obj is not None else None
         if not stop_level or stop_level <= 0:
             return
         stop_side = "SELL" if plan.direction == "LONG" else "BUY"
-        order = self.executor.place_stop_order(
+        stop_order = self.executor.place_stop_order(
             symbol=plan.symbol,
             side=stop_side,
             quantity=quantity,
             stop_price=stop_level,
         )
-        if order.status.value != "REJECTED":
-            self._exchange_stop_orders[position_id] = order.order_id
+        if stop_order.status.value != "REJECTED":
+            self._exchange_stop_orders[position_id] = stop_order.order_id
             self._exchange_stop_levels[position_id] = stop_level
             self._log_activity("exchange_stop_placed", {
                 "position_id": position_id,
@@ -1124,6 +1130,36 @@ class LiveTradingService:
                 "stop_price": stop_level,
                 "direction": plan.direction,
             })
+
+        # --- Take Profit (TP1 only) ---
+        # Place TP1 as a reduce-only limit order so it shows in the Phemex position
+        # card and executes at the exact price rather than market-slipping through it.
+        # Remaining targets (TP2, TP3) remain software-managed — placing all targets
+        # as exchange orders would conflict with our partial-exit logic.
+        targets = getattr(plan, "targets", None) or []
+        if targets:
+            tp_side = stop_side  # same closing side
+            is_long = plan.direction == "LONG"
+            # Sort ascending for LONG (nearest TP first), descending for SHORT
+            sorted_targets = sorted(targets, key=lambda t: t.level, reverse=not is_long)
+            tp1 = sorted_targets[0]
+            tp1_qty = round((tp1.percentage / 100.0) * quantity, 8)
+            if tp1_qty > 0 and tp1.level > 0:
+                tp_order = self.executor.place_take_profit_order(
+                    symbol=plan.symbol,
+                    side=tp_side,
+                    quantity=tp1_qty,
+                    tp_price=tp1.level,
+                )
+                if tp_order.status.value != "REJECTED":
+                    self._exchange_tp_orders[position_id] = tp_order.order_id
+                    self._log_activity("exchange_tp_placed", {
+                        "position_id": position_id,
+                        "symbol": plan.symbol,
+                        "tp_price": tp1.level,
+                        "quantity": tp1_qty,
+                        "direction": plan.direction,
+                    })
 
     async def _sync_exchange_stops(self):
         """Detect stop level changes from PositionManager and update Phemex stop orders."""
@@ -1191,6 +1227,7 @@ class LiveTradingService:
                 )
                 self._exchange_stop_orders.pop(pos.position_id, None)
                 self._exchange_stop_levels.pop(pos.position_id, None)
+                self._exchange_tp_orders.pop(pos.position_id, None)
                 self._log_activity("exchange_stop_detected", {
                     "position_id": pos.position_id,
                     "symbol": pos.symbol,
@@ -1209,6 +1246,17 @@ class LiveTradingService:
             logger.info(f"Exchange stop cancelled before software exit: pos={position_id}")
         except Exception as e:
             logger.warning(f"Could not cancel exchange stop {order_id} (may have already fired): {e}")
+
+    async def _cancel_exchange_tp(self, position_id: str):
+        """Cancel Phemex native TP limit order — called before software exits and on final close."""
+        order_id = self._exchange_tp_orders.pop(position_id, None)
+        if not order_id or not self.executor:
+            return
+        try:
+            self.executor.cancel_order(order_id)
+            logger.info(f"Exchange TP cancelled before software exit: pos={position_id}")
+        except Exception as e:
+            logger.warning(f"Could not cancel exchange TP {order_id} (may have already filled): {e}")
 
     async def _refresh_price_cache(self):
         if not self.position_manager:
@@ -1284,9 +1332,10 @@ class LiveTradingService:
             if pos.position_id in self._completed_trade_ids:
                 continue
 
-            # Clean up any remaining exchange stop (e.g. fired natively or was never cancelled)
+            # Clean up any remaining exchange stop/TP (e.g. fired natively or was never cancelled)
             self._exchange_stop_orders.pop(pos.position_id, None)
             self._exchange_stop_levels.pop(pos.position_id, None)
+            self._exchange_tp_orders.pop(pos.position_id, None)
 
             exit_reason = pos.exit_reason or ("target" if pos.status == PositionStatus.CLOSED else "stop_loss")
             if pos.status == PositionStatus.EMERGENCY_EXIT:

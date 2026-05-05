@@ -608,8 +608,8 @@ class LiveExecutor:
             return order
 
         try:
-            # "stop_market" is the CCXT unified type for a stop-triggered market order.
-            # price= is the trigger level; reduceOnly ensures it only closes the position.
+            # CCXT Phemex: for stop_market, price= is the trigger (maps to stopPx
+            # in the native API). Do NOT set price=None — that removes the trigger.
             stop_params: dict = {"reduceOnly": True}
             if self._hedge_mode:
                 # In hedge mode, the stop's positionSide is the position being closed:
@@ -621,7 +621,7 @@ class LiveExecutor:
                 order_type="stop_market",
                 side=side.lower(),
                 amount=quantity,
-                price=stop_price,
+                price=stop_price,    # trigger level — CCXT maps this to Phemex stopPx
                 params=stop_params,
             )
             exchange_id = str(exchange_order.get("id", ""))
@@ -634,6 +634,68 @@ class LiveExecutor:
         except Exception as e:
             logger.warning(
                 f"Exchange stop placement failed for {symbol} @ {stop_price} — "
+                f"software monitoring remains active. Error: {e}"
+            )
+            order.status = OrderStatus.REJECTED
+
+        return order
+
+    def place_take_profit_order(
+        self,
+        symbol: str,
+        side: str,      # closing side: SELL for LONG, BUY for SHORT
+        quantity: float,
+        tp_price: float,
+    ) -> Order:
+        """
+        Place a reduce-only limit order as an exchange-native take profit.
+
+        Using a limit order (not take_profit_market) so the TP shows in the
+        position card's TP/SL section on Phemex and fills at the exact price
+        rather than market-slipping through it.
+        """
+        order_id = self._generate_order_id()
+        order = Order(
+            order_id=order_id,
+            symbol=symbol,
+            side=OrderSide(side.upper()),
+            order_type=OrderType.TAKE_PROFIT,
+            quantity=quantity,
+            price=tp_price,
+            stop_price=tp_price,
+            status=OrderStatus.OPEN,
+        )
+        self._orders[order_id] = order
+
+        if self.dry_run:
+            logger.info(
+                f"[DRY RUN] TP would place: {order_id} {side} {quantity} "
+                f"{symbol} @ {tp_price}"
+            )
+            return order
+
+        try:
+            tp_params: dict = {"reduceOnly": True}
+            if self._hedge_mode:
+                tp_params["positionSide"] = "Long" if side.upper() == "SELL" else "Short"
+            exchange_order = self._adapter.create_order(
+                symbol=symbol,
+                order_type="limit",
+                side=side.lower(),
+                amount=quantity,
+                price=tp_price,
+                params=tp_params,
+            )
+            exchange_id = str(exchange_order.get("id", ""))
+            self._exchange_order_map[order_id] = exchange_id
+            self._reverse_order_map[exchange_id] = order_id
+            logger.info(
+                f"TP placed: {order_id} → {exchange_id} "
+                f"{side} {quantity} {symbol} @ {tp_price}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"TP placement failed for {symbol} @ {tp_price} — "
                 f"software monitoring remains active. Error: {e}"
             )
             order.status = OrderStatus.REJECTED
