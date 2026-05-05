@@ -766,6 +766,81 @@ class LiveExecutor:
 
         return order
 
+    def place_trailing_stop_order(
+        self,
+        symbol: str,
+        side: str,
+        quantity: float,
+        activation_price: float,
+        callback_rate: float,   # percentage, e.g. 1.5 for 1.5%
+    ) -> Order:
+        """
+        Place an exchange-native trailing stop on Phemex.
+
+        orderType = TrailingStopMarket per Phemex spec.
+        activationPrice: absolute price at which trailing begins tracking.
+        callbackRate: trailing distance as a percentage of peak price
+                      (e.g. 1.5 means stop trails 1.5% below the highest price).
+
+        Phemex manages the moving stop on their servers — survives server restarts.
+        Placed alongside the fixed SL; closeOnTrigger ensures only one fires.
+        """
+        order_id = self._generate_order_id()
+        order = Order(
+            order_id=order_id,
+            symbol=symbol,
+            side=OrderSide(side.upper()),
+            order_type=OrderType.TRAILING_STOP,
+            quantity=quantity,
+            price=activation_price,
+            stop_price=activation_price,
+            status=OrderStatus.OPEN,
+        )
+        self._orders[order_id] = order
+
+        if self.dry_run:
+            logger.info(
+                f"[DRY RUN] Trailing stop would place: {order_id} {side} {quantity} "
+                f"{symbol} activation={activation_price:.5f} callback={callback_rate:.2f}%"
+            )
+            return order
+
+        try:
+            trail_params: dict = {
+                "clientOrderId": order_id,
+                "reduceOnly": True,
+                "closeOnTrigger": True,
+                "activationPrice": activation_price,
+                "callbackRate": callback_rate,
+            }
+            if self._hedge_mode:
+                trail_params["positionSide"] = "Long" if side.upper() == "SELL" else "Short"
+            exchange_order = self._adapter.create_order(
+                symbol=symbol,
+                order_type="trailing_stop_market",
+                side=side.lower(),
+                amount=quantity,
+                price=activation_price,
+                params=trail_params,
+            )
+            exchange_id = str(exchange_order.get("id", ""))
+            self._exchange_order_map[order_id] = exchange_id
+            self._reverse_order_map[exchange_id] = order_id
+            logger.info(
+                f"Trailing stop placed: {order_id} → {exchange_id} "
+                f"{side} {quantity} {symbol} "
+                f"activation={activation_price:.5f} callback={callback_rate:.2f}%"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Trailing stop placement failed for {symbol} "
+                f"(activation={activation_price:.5f}, callback={callback_rate:.2f}%) — "
+                f"fixed stop remains active. Error: {e}"
+            )
+            order.status = OrderStatus.REJECTED
+
+        return order
+
     # ------------------------------------------------------------------
     # Live-only methods (not in PaperExecutor)
     # ------------------------------------------------------------------

@@ -30,6 +30,7 @@ class OrderType(Enum):
     LIMIT = "LIMIT"
     STOP_LOSS = "STOP_LOSS"
     TAKE_PROFIT = "TAKE_PROFIT"
+    TRAILING_STOP = "TRAILING_STOP"
 
 
 class OrderStatus(Enum):
