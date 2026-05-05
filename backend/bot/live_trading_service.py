@@ -479,7 +479,7 @@ class LiveTradingService:
                 None, lambda: self.adapter.exchange.fetch_open_orders()
             )
             for o in raw_orders:
-                if o.get("type", "").lower() not in ("limit", "stop_market", "stop"):
+                if o.get("type", "").lower() not in ("limit", "stop_market", "stop", "trailing_stop_market"):
                     continue
                 symbol = o.get("symbol", "")
                 oid = str(o.get("id", ""))

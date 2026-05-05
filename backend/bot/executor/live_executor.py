@@ -987,12 +987,35 @@ class LiveExecutor:
 
     def preflight_check(self) -> Dict:
         """Run connectivity + balance + position check before session start."""
+        import time as _time
         issues = []
         result: Dict = {"ok": False, "balance": 0.0, "open_positions": [], "issues": issues}
 
         if not self._adapter.supports_trading() and not self.dry_run:
             issues.append("No API keys configured")
             return result
+
+        # Phemex requires request timestamps within ±60 s of server time.
+        # A skewed local clock causes signed REST requests and WS auth tokens to
+        # be rejected silently. Warn early so the operator can fix NTP before trading.
+        if not self.dry_run:
+            try:
+                server_ms = self._adapter.exchange.fetch_time()   # ms since epoch
+                local_ms = _time.time() * 1000
+                skew_s = abs(server_ms - local_ms) / 1000
+                result["clock_skew_seconds"] = round(skew_s, 2)
+                if skew_s > 10:
+                    msg = (
+                        f"Local clock is {skew_s:.1f}s off from Phemex server time. "
+                        f"Sync with NTP (sudo ntpdate -u pool.ntp.org) — "
+                        f"Phemex rejects requests with >60 s skew."
+                    )
+                    if skew_s > 30:
+                        issues.append(msg)
+                    else:
+                        logger.warning(f"CLOCK SKEW WARNING: {msg}")
+            except Exception as e:
+                logger.debug(f"Clock skew check failed (non-blocking): {e}")
 
         try:
             balance = self.reconcile_balance()
