@@ -217,7 +217,7 @@ class LiveExecutor:
         # In hedge mode, Phemex requires positionSide on every order.
         # For entry orders: BUY=Long, SELL=Short.
         # For exit/reduce orders: use reduceOnly instead (simpler and mode-agnostic).
-        extra_params: dict = {}
+        extra_params: dict = {"clientOrderId": order_id}
         if self._hedge_mode:
             extra_params["positionSide"] = "Long" if ccxt_side == "buy" else "Short"
 
@@ -613,6 +613,7 @@ class LiveExecutor:
             # closeOnTrigger cancels other same-direction orders when the stop fires,
             # ensuring the position fully closes rather than just reducing.
             stop_params: dict = {
+                "clientOrderId": order_id,
                 "reduceOnly": True,
                 "closeOnTrigger": True,
                 "triggerType": "ByMarkPrice",
@@ -685,6 +686,7 @@ class LiveExecutor:
             # other same-direction orders when it fills. TP is a resting limit order —
             # no triggerType needed since the limit price IS the trigger.
             tp_params: dict = {
+                "clientOrderId": order_id,
                 "reduceOnly": True,
                 "closeOnTrigger": True,
             }
