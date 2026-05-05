@@ -740,10 +740,13 @@ class LiveExecutor:
                         f"Position discrepancy for {symbol}: "
                         f"local={local_qty:.6f} exchange={ex_qty:.6f} — syncing"
                     )
-                    # Sync: adjust local quantity to match exchange reality
+                    # Sync: adjust local quantity and entry price to match exchange reality
                     if ex_qty > 1e-9:
                         # Preserve direction sign from local state
                         self._positions[symbol] = ex_qty if local_qty >= 0 else -ex_qty
+                        entry_px = float(pos.get("entryPrice", 0.0) or 0.0)
+                        if entry_px > 0:
+                            self._position_avg_price[symbol] = entry_px
                     else:
                         self._positions[symbol] = 0.0
                         self._position_avg_price[symbol] = 0.0

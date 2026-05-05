@@ -1144,6 +1144,10 @@ class LiveTradingService:
             sorted_targets = sorted(targets, key=lambda t: t.level, reverse=not is_long)
             tp1 = sorted_targets[0]
             tp1_qty = round((tp1.percentage / 100.0) * quantity, 8)
+            market_info = self.adapter.get_market_info(plan.symbol) if self.adapter else {}
+            lot_size = market_info.get("lot_size", 0.0)
+            if lot_size > 0:
+                tp1_qty = round_to_lot(tp1_qty, lot_size)
             if tp1_qty > 0 and tp1.level > 0:
                 tp_order = self.executor.place_take_profit_order(
                     symbol=plan.symbol,
@@ -1173,13 +1177,9 @@ class LiveTradingService:
             last_stop = self._exchange_stop_levels.get(pid)
             if last_stop is None or abs(current_stop - last_stop) < 1e-8:
                 continue
-            # Stop level moved — cancel old exchange order and place new one
-            old_order_id = self._exchange_stop_orders.get(pid)
-            if old_order_id:
-                try:
-                    self.executor.cancel_order(old_order_id)
-                except Exception as e:
-                    logger.warning(f"Could not cancel old exchange stop {old_order_id}: {e}")
+            # Stop level moved — place new stop FIRST, then cancel old one.
+            # Reversing the order eliminates the gap window where no exchange stop
+            # exists if the process dies between cancel and place.
             stop_side = "SELL" if pos.direction == "LONG" else "BUY"
             qty = getattr(pos, "remaining_quantity", None) or pos.quantity
             order = self.executor.place_stop_order(
@@ -1189,6 +1189,12 @@ class LiveTradingService:
                 stop_price=current_stop,
             )
             if order.status.value != "REJECTED":
+                old_order_id = self._exchange_stop_orders.get(pid)
+                if old_order_id:
+                    try:
+                        self.executor.cancel_order(old_order_id)
+                    except Exception as e:
+                        logger.warning(f"Could not cancel old exchange stop {old_order_id}: {e}")
                 self._exchange_stop_orders[pid] = order.order_id
                 self._exchange_stop_levels[pid] = current_stop
                 logger.info(
