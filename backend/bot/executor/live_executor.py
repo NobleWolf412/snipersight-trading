@@ -124,9 +124,18 @@ class LiveExecutor:
         quantity: float,
         price: Optional[float] = None,
         stop_price: Optional[float] = None,
+        sl_price: Optional[float] = None,
+        tp_price: Optional[float] = None,
+        reduce_only: bool = False,
     ) -> Order:
         """
         Place an order on Phemex (or log it in dry_run mode).
+
+        sl_price / tp_price: when provided, attached inline to the entry order
+        as position-level SL/TP per Phemex conditional order spec. This is atomic —
+        protection exists the moment the entry fills, not in a separate API call.
+        _place_exchange_stop() still fires after fill as a belt-and-suspenders backup;
+        Phemex auto-cancels the redundant order via closeOnTrigger.
 
         Runs pre-flight safety checks before sending to the exchange.
         Returns an Order with status=REJECTED if any check fails.
@@ -185,6 +194,9 @@ class LiveExecutor:
             logger.info(
                 f"[DRY RUN] Order would send: {order_id} {side} {quantity} "
                 f"{symbol} @ {price} leverage={self.target_leverage}x"
+                + (" | reduceOnly" if reduce_only else "")
+                + (f" | inline SL={sl_price}" if sl_price else "")
+                + (f" TP={tp_price}" if tp_price else "")
             )
             return order
 
@@ -217,9 +229,17 @@ class LiveExecutor:
         # In hedge mode, Phemex requires positionSide on every order.
         # For entry orders: BUY=Long, SELL=Short.
         # For exit/reduce orders: use reduceOnly instead (simpler and mode-agnostic).
-        extra_params: dict = {}
+        extra_params: dict = {"clientOrderId": order_id}
+        if reduce_only:
+            extra_params["reduceOnly"] = True
         if self._hedge_mode:
             extra_params["positionSide"] = "Long" if ccxt_side == "buy" else "Short"
+        if sl_price and sl_price > 0:
+            extra_params["stopLossPrice"] = sl_price
+            extra_params["slTrigger"] = "ByMarkPrice"
+        if tp_price and tp_price > 0:
+            extra_params["takeProfitPrice"] = tp_price
+            extra_params["tpTrigger"] = "ByMarkPrice"
 
         def _send_order(params: dict) -> dict:
             return self._adapter.create_order(
@@ -402,6 +422,19 @@ class LiveExecutor:
         ex_status = ex_order.get("status", "open")
         ex_filled = float(ex_order.get("filled", 0.0) or 0.0)
         ex_avg_price = float(ex_order.get("average", 0.0) or ex_order.get("price", 0.0) or 0.0)
+        ex_remaining = float(ex_order.get("remaining", 0.0) or 0.0)
+        ex_amount = float(ex_order.get("amount", order.quantity) or order.quantity)
+
+        # Cross-check: if remaining < amount and filled is still 0, infer filled from remaining.
+        # Phemex can report leavesQty correctly before cumQty normalizes through CCXT.
+        if ex_filled < 1e-9 and ex_amount > 0 and ex_remaining < ex_amount - 1e-9:
+            inferred = ex_amount - ex_remaining
+            if inferred > 1e-9:
+                ex_filled = inferred
+                logger.debug(
+                    f"Order {order.order_id} filled inferred from remaining: "
+                    f"amount={ex_amount:.6f} remaining={ex_remaining:.6f} → filled={ex_filled:.6f}"
+                )
 
         # Phemex sometimes reports filled=0/null on a closed order (uses cumQty internally,
         # CCXT normalization may not catch it). When the exchange says the order is done but
@@ -428,8 +461,17 @@ class LiveExecutor:
 
         if ex_status in ("closed", "filled"):
             order.status = OrderStatus.FILLED
+            logger.info(
+                f"Order {order.order_id} fully filled: {order.filled_quantity:.6f}/{order.quantity:.6f} "
+                f"@ avg {order.average_fill_price:.5f}"
+            )
         elif ex_filled > 0:
             order.status = OrderStatus.PARTIALLY_FILLED
+            logger.info(
+                f"Partial fill: {order.order_id} +{new_qty:.6f} "
+                f"({order.filled_quantity:.6f}/{order.quantity:.6f} filled, "
+                f"remaining={ex_remaining:.6f}) @ {fill_price:.5f}"
+            )
 
         return fill
 
@@ -511,6 +553,18 @@ class LiveExecutor:
 
         order.status = OrderStatus.CANCELLED
         order.updated_at = datetime.now(timezone.utc)
+
+        if order.filled_quantity > 1e-9:
+            # Part of this order filled before cancellation (TTL expiry, manual cancel, etc.).
+            # Surface it as FILLED so the caller opens a position with the partial qty rather
+            # than silently discarding fills that already landed on the exchange.
+            order.status = OrderStatus.FILLED
+            logger.info(
+                f"Order {order_id} had partial fill of {order.filled_quantity:.6f} before cancel — "
+                f"treating as final fill so position opens with reduced size"
+            )
+            return False  # Caller checks order.status == FILLED on False return
+
         logger.info(f"Order {order_id} cancelled")
         return True
 
@@ -608,9 +662,16 @@ class LiveExecutor:
             return order
 
         try:
-            # CCXT Phemex: for stop_market, price= is the trigger (maps to stopPx
-            # in the native API). Do NOT set price=None — that removes the trigger.
-            stop_params: dict = {"reduceOnly": True}
+            # CCXT Phemex: for stop_market, price= is the trigger (maps to stopPx).
+            # triggerType=ByMarkPrice prevents wick-hunt triggers on last-price spikes.
+            # closeOnTrigger cancels other same-direction orders when the stop fires,
+            # ensuring the position fully closes rather than just reducing.
+            stop_params: dict = {
+                "clientOrderId": order_id,
+                "reduceOnly": True,
+                "closeOnTrigger": True,
+                "triggerType": "ByMarkPrice",
+            }
             if self._hedge_mode:
                 # In hedge mode, the stop's positionSide is the position being closed:
                 # SELL stop closes a LONG → positionSide=Long
@@ -675,7 +736,14 @@ class LiveExecutor:
             return order
 
         try:
-            tp_params: dict = {"reduceOnly": True}
+            # closeOnTrigger ensures this TP is treated as a closing order and cancels
+            # other same-direction orders when it fills. TP is a resting limit order —
+            # no triggerType needed since the limit price IS the trigger.
+            tp_params: dict = {
+                "clientOrderId": order_id,
+                "reduceOnly": True,
+                "closeOnTrigger": True,
+            }
             if self._hedge_mode:
                 tp_params["positionSide"] = "Long" if side.upper() == "SELL" else "Short"
             exchange_order = self._adapter.create_order(
@@ -702,9 +770,170 @@ class LiveExecutor:
 
         return order
 
+    def place_trailing_stop_order(
+        self,
+        symbol: str,
+        side: str,
+        quantity: float,
+        activation_price: float,
+        callback_rate: float,   # percentage, e.g. 1.5 for 1.5%
+    ) -> Order:
+        """
+        Place an exchange-native trailing stop on Phemex.
+
+        orderType = TrailingStopMarket per Phemex spec.
+        activationPrice: absolute price at which trailing begins tracking.
+        callbackRate: trailing distance as a percentage of peak price
+                      (e.g. 1.5 means stop trails 1.5% below the highest price).
+
+        Phemex manages the moving stop on their servers — survives server restarts.
+        Placed alongside the fixed SL; closeOnTrigger ensures only one fires.
+        """
+        order_id = self._generate_order_id()
+        order = Order(
+            order_id=order_id,
+            symbol=symbol,
+            side=OrderSide(side.upper()),
+            order_type=OrderType.TRAILING_STOP,
+            quantity=quantity,
+            price=activation_price,
+            stop_price=activation_price,
+            status=OrderStatus.OPEN,
+        )
+        self._orders[order_id] = order
+
+        if self.dry_run:
+            logger.info(
+                f"[DRY RUN] Trailing stop would place: {order_id} {side} {quantity} "
+                f"{symbol} activation={activation_price:.5f} callback={callback_rate:.2f}%"
+            )
+            return order
+
+        try:
+            trail_params: dict = {
+                "clientOrderId": order_id,
+                "reduceOnly": True,
+                "closeOnTrigger": True,
+                "callbackRate": callback_rate,
+                # activationPrice is passed as price= (standard CCXT path for Phemex)
+                # rather than via params to avoid double-mapping by CCXT's Phemex adapter.
+            }
+            if self._hedge_mode:
+                trail_params["positionSide"] = "Long" if side.upper() == "SELL" else "Short"
+            exchange_order = self._adapter.create_order(
+                symbol=symbol,
+                order_type="trailing_stop_market",
+                side=side.lower(),
+                amount=quantity,
+                price=activation_price,
+                params=trail_params,
+            )
+            exchange_id = str(exchange_order.get("id", ""))
+            self._exchange_order_map[order_id] = exchange_id
+            self._reverse_order_map[exchange_id] = order_id
+            logger.info(
+                f"Trailing stop placed: {order_id} → {exchange_id} "
+                f"{side} {quantity} {symbol} "
+                f"activation={activation_price:.5f} callback={callback_rate:.2f}%"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Trailing stop placement failed for {symbol} "
+                f"(activation={activation_price:.5f}, callback={callback_rate:.2f}%) — "
+                f"fixed stop remains active. Error: {e}"
+            )
+            order.status = OrderStatus.REJECTED
+
+        return order
+
     # ------------------------------------------------------------------
     # Live-only methods (not in PaperExecutor)
     # ------------------------------------------------------------------
+
+    def apply_ws_fill(
+        self,
+        exchange_id: str,
+        client_order_id: str,
+        status: str,
+        filled_qty: float,
+        avg_price: float,
+    ) -> None:
+        """
+        Apply a WebSocket AOP order update to internal state.
+
+        Called by PhemexWebSocketClient on every aop_p order event.  Updates
+        order status and fill data synchronously so the monitor loop (which
+        polls every 1 second) can open the position on its very next tick
+        without issuing an extra REST fetch_order call.
+
+        Only LIMIT and MARKET entry orders trigger full position accounting via
+        _record_fill.  Stop/TP/trailing orders have their status updated so the
+        reconcile loop knows they fired; position closure is handled by
+        _detect_exchange_closed_positions / reconcile_positions.
+        """
+        # Resolve internal order_id from exchange_id first, then fall back to
+        # client_order_id (which equals our internal order_id, e.g. "LIVE_00000001").
+        order_id = self._reverse_order_map.get(exchange_id)
+        if not order_id and client_order_id and client_order_id in self._orders:
+            order_id = client_order_id
+
+        if not order_id or order_id not in self._orders:
+            return  # Unknown order — manual trade or residual from prior session
+
+        order = self._orders[order_id]
+        if order.status in (OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
+            return  # Already finalised; polling loop won't re-process
+
+        ws_status = status.lower()
+
+        if ws_status in ("filled", "closed"):
+            # Full fill: record the incremental quantity above what we already tracked
+            entry_order = order.order_type in (OrderType.LIMIT, OrderType.MARKET)
+            prev_filled = order.filled_quantity
+            total_filled = filled_qty if filled_qty > 1e-9 else order.quantity
+            incremental = total_filled - prev_filled
+            fill_price = avg_price if avg_price > 0 else (order.price or 0.0)
+
+            if incremental > 1e-9 and entry_order:
+                self._record_fill(order, incremental, fill_price)
+            elif incremental > 1e-9:
+                # Stop/TP/trailing stop fired — just record qty/price without touching
+                # position accounting (reconcile_positions handles the position side)
+                order.filled_quantity = total_filled
+                order.average_fill_price = fill_price
+
+            order.status = OrderStatus.FILLED
+            logger.info(
+                "WS fill: %s %s %s qty=%.6f @ %.5f",
+                order_id, order.symbol, order.side.value,
+                order.filled_quantity, order.average_fill_price or fill_price,
+            )
+
+        elif ws_status == "partiallyfilled":
+            if filled_qty > order.filled_quantity + 1e-9:
+                entry_order = order.order_type in (OrderType.LIMIT, OrderType.MARKET)
+                incremental = filled_qty - order.filled_quantity
+                fill_price = avg_price if avg_price > 0 else (order.price or 0.0)
+                if entry_order:
+                    self._record_fill(order, incremental, fill_price)
+                else:
+                    order.filled_quantity = filled_qty
+                order.status = OrderStatus.PARTIALLY_FILLED
+                logger.info(
+                    "WS partial fill: %s %s cumfilled=%.6f @ %.5f",
+                    order_id, order.symbol, order.filled_quantity, fill_price,
+                )
+
+        elif ws_status in ("canceled", "cancelled"):
+            if order.filled_quantity > 1e-9:
+                order.status = OrderStatus.FILLED   # partial fill before cancel
+            else:
+                order.status = OrderStatus.CANCELLED
+            logger.debug("WS cancel: %s %s status=%s", order_id, order.symbol, order.status)
+
+        elif ws_status == "rejected":
+            order.status = OrderStatus.REJECTED
+            logger.warning("WS rejected: %s %s", order_id, order.symbol)
 
     def reconcile_balance(self) -> float:
         """Fetch balance from exchange and update local cache."""

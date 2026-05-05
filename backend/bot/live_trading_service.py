@@ -34,6 +34,7 @@ from backend.shared.config.scanner_modes import get_mode
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.models.planner import TradePlan
 from backend.data.adapters.phemex import PhemexAdapter
+from backend.data.adapters.phemex_ws import PhemexWebSocketClient
 from backend.shared.utils.math_utils import round_to_lot
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ class LiveTradingService:
 
         self._scan_task: Optional[asyncio.Task] = None
         self._monitor_task: Optional[asyncio.Task] = None
+        self._ws_task: Optional[asyncio.Task] = None
         self._running = False
 
         self._price_cache: Dict[str, float] = {}
@@ -105,6 +107,8 @@ class LiveTradingService:
         self._exchange_stop_levels: Dict[str, float] = {}
         # Exchange-native TP order tracking (position_id → internal order_id)
         self._exchange_tp_orders: Dict[str, str] = {}
+        # Exchange-native trailing stop tracking (position_id → internal order_id)
+        self._exchange_trailing_orders: Dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Session lifecycle
@@ -206,6 +210,8 @@ class LiveTradingService:
         self._exchange_stop_orders = {}
         self._exchange_stop_levels = {}
         self._exchange_tp_orders = {}
+        self._exchange_trailing_orders = {}
+        self._ws_task = None
 
         self.started_at = datetime.now(timezone.utc)
         self.stopped_at = None
@@ -242,6 +248,20 @@ class LiveTradingService:
         self._monitor_task = asyncio.create_task(self._monitor_loop(), name=f"live_monitor_{self.session_id}")
         self._monitor_task.add_done_callback(self._task_done_callback)
 
+        # Start WebSocket order feed for real-time fill detection (skipped in dry_run)
+        if not config.dry_run and api_key and api_secret:
+            ws_client = PhemexWebSocketClient(
+                api_key=api_key,
+                api_secret=api_secret,
+                testnet=config.testnet,
+                on_order_update=self.executor.apply_ws_fill,
+            )
+            self._ws_task = asyncio.create_task(
+                ws_client.run(), name=f"live_ws_{self.session_id}"
+            )
+            self._ws_task.add_done_callback(self._task_done_callback)
+            logger.info("Phemex WS order feed started")
+
         return {
             "session_id": self.session_id,
             "status": self.status.value,
@@ -259,7 +279,7 @@ class LiveTradingService:
         self.status = LiveBotStatus.STOPPED
         self.stopped_at = datetime.now(timezone.utc)
 
-        for task in (self._scan_task, self._monitor_task):
+        for task in (self._scan_task, self._monitor_task, self._ws_task):
             if task:
                 task.cancel()
                 try:
@@ -300,7 +320,7 @@ class LiveTradingService:
         self._running = False
         self.status = LiveBotStatus.KILL_SWITCHED
 
-        for task in (self._scan_task, self._monitor_task):
+        for task in (self._scan_task, self._monitor_task, self._ws_task):
             if task:
                 task.cancel()
                 try:
@@ -961,12 +981,19 @@ class LiveTradingService:
                 reason_type="stale_entry")
             return
 
+        # Inline SL only: attached to the entry order for atomic crash protection.
+        # The SL fires on the exchange even if our server goes down before
+        # _place_exchange_stop() runs.  TP1 is NOT attached inline because
+        # _place_exchange_stop() places an explicit reduce-only limit order for TP1;
+        # having both would create two overlapping TP orders at the same price and
+        # quantity, risking a 2× exit on TP hit.
         order = self.executor.place_order(
             symbol=symbol,
             side="BUY" if is_long else "SELL",
             order_type="LIMIT",
             quantity=quantity,
             price=entry_price,
+            sl_price=stop_level,
         )
 
         if order.status.value in ("REJECTED",):
@@ -1061,16 +1088,17 @@ class LiveTradingService:
         if quantity <= 0 or price <= 0:
             return False
 
-        # Cancel exchange-native stop and TP before firing software market exit to avoid double-close
+        # Cancel exchange-native stop, TP, and trailing stop before firing software market exit
         if self.position_manager:
             for pos in self.position_manager.get_open_positions():
                 if pos.symbol == symbol:
                     await self._cancel_exchange_stop(pos.position_id)
                     await self._cancel_exchange_tp(pos.position_id)
+                    await self._cancel_exchange_trailing(pos.position_id)
                     break
 
         try:
-            order = self.executor.place_order(symbol=symbol, side=side, order_type="MARKET", quantity=quantity, price=price)
+            order = self.executor.place_order(symbol=symbol, side=side, order_type="MARKET", quantity=quantity, price=price, reduce_only=True)
             if order is None:
                 return False
             if order.status == OrderStatus.REJECTED:
@@ -1165,6 +1193,36 @@ class LiveTradingService:
                         "direction": plan.direction,
                     })
 
+        # --- Exchange-native trailing stop ---
+        # Placed alongside the fixed SL. Phemex manages the moving stop on their
+        # servers once activationPrice is touched — survives server restarts.
+        # callbackRate = trail_R × stop_distance_pct (scaled by trade type).
+        # Both the fixed SL and this trailing stop carry closeOnTrigger=True so
+        # only one fires; whichever triggers first closes the position.
+        _risk = abs(entry_price - stop_level) if stop_level and stop_level > 0 else 0.0
+        if _risk > 0 and entry_price > 0:
+            _trail_r = {"scalp": 0.3, "intraday": 0.5, "swing": 1.0}
+            _trade_type = getattr(plan, "trade_type", "intraday") or "intraday"
+            _callback_rate = max(0.1, round(_trail_r.get(_trade_type, 0.5) * (_risk / entry_price) * 100, 3))
+            _is_long = plan.direction == "LONG"
+            _activation = entry_price + 1.5 * _risk if _is_long else entry_price - 1.5 * _risk
+            trail_order = self.executor.place_trailing_stop_order(
+                symbol=plan.symbol,
+                side=stop_side,
+                quantity=quantity,
+                activation_price=_activation,
+                callback_rate=_callback_rate,
+            )
+            if trail_order.status.value != "REJECTED":
+                self._exchange_trailing_orders[position_id] = trail_order.order_id
+                self._log_activity("exchange_trailing_placed", {
+                    "position_id": position_id,
+                    "symbol": plan.symbol,
+                    "activation_price": _activation,
+                    "callback_rate": _callback_rate,
+                    "direction": plan.direction,
+                })
+
     async def _sync_exchange_stops(self):
         """Detect stop level changes from PositionManager and update Phemex stop orders."""
         if not self.position_manager or not self.executor:
@@ -1234,6 +1292,7 @@ class LiveTradingService:
                 self._exchange_stop_orders.pop(pos.position_id, None)
                 self._exchange_stop_levels.pop(pos.position_id, None)
                 self._exchange_tp_orders.pop(pos.position_id, None)
+                self._exchange_trailing_orders.pop(pos.position_id, None)
                 self._log_activity("exchange_stop_detected", {
                     "position_id": pos.position_id,
                     "symbol": pos.symbol,
@@ -1263,6 +1322,17 @@ class LiveTradingService:
             logger.info(f"Exchange TP cancelled before software exit: pos={position_id}")
         except Exception as e:
             logger.warning(f"Could not cancel exchange TP {order_id} (may have already filled): {e}")
+
+    async def _cancel_exchange_trailing(self, position_id: str):
+        """Cancel Phemex native trailing stop — called before software exits and on final close."""
+        order_id = self._exchange_trailing_orders.pop(position_id, None)
+        if not order_id or not self.executor:
+            return
+        try:
+            self.executor.cancel_order(order_id)
+            logger.info(f"Exchange trailing stop cancelled before software exit: pos={position_id}")
+        except Exception as e:
+            logger.warning(f"Could not cancel exchange trailing {order_id} (may have already fired): {e}")
 
     async def _refresh_price_cache(self):
         if not self.position_manager:
@@ -1338,10 +1408,11 @@ class LiveTradingService:
             if pos.position_id in self._completed_trade_ids:
                 continue
 
-            # Clean up any remaining exchange stop/TP (e.g. fired natively or was never cancelled)
+            # Clean up any remaining exchange stop/TP/trailing (e.g. fired natively or was never cancelled)
             self._exchange_stop_orders.pop(pos.position_id, None)
             self._exchange_stop_levels.pop(pos.position_id, None)
             self._exchange_tp_orders.pop(pos.position_id, None)
+            self._exchange_trailing_orders.pop(pos.position_id, None)
 
             exit_reason = pos.exit_reason or ("target" if pos.status == PositionStatus.CLOSED else "stop_loss")
             if pos.status == PositionStatus.EMERGENCY_EXIT:
