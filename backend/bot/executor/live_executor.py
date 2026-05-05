@@ -845,6 +845,91 @@ class LiveExecutor:
     # Live-only methods (not in PaperExecutor)
     # ------------------------------------------------------------------
 
+    def apply_ws_fill(
+        self,
+        exchange_id: str,
+        client_order_id: str,
+        status: str,
+        filled_qty: float,
+        avg_price: float,
+    ) -> None:
+        """
+        Apply a WebSocket AOP order update to internal state.
+
+        Called by PhemexWebSocketClient on every aop_p order event.  Updates
+        order status and fill data synchronously so the monitor loop (which
+        polls every 1 second) can open the position on its very next tick
+        without issuing an extra REST fetch_order call.
+
+        Only LIMIT and MARKET entry orders trigger full position accounting via
+        _record_fill.  Stop/TP/trailing orders have their status updated so the
+        reconcile loop knows they fired; position closure is handled by
+        _detect_exchange_closed_positions / reconcile_positions.
+        """
+        # Resolve internal order_id from exchange_id first, then fall back to
+        # client_order_id (which equals our internal order_id, e.g. "LIVE_00000001").
+        order_id = self._reverse_order_map.get(exchange_id)
+        if not order_id and client_order_id and client_order_id in self._orders:
+            order_id = client_order_id
+
+        if not order_id or order_id not in self._orders:
+            return  # Unknown order — manual trade or residual from prior session
+
+        order = self._orders[order_id]
+        if order.status in (OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
+            return  # Already finalised; polling loop won't re-process
+
+        ws_status = status.lower()
+
+        if ws_status in ("filled", "closed"):
+            # Full fill: record the incremental quantity above what we already tracked
+            entry_order = order.order_type in (OrderType.LIMIT, OrderType.MARKET)
+            prev_filled = order.filled_quantity
+            total_filled = filled_qty if filled_qty > 1e-9 else order.quantity
+            incremental = total_filled - prev_filled
+            fill_price = avg_price if avg_price > 0 else (order.price or 0.0)
+
+            if incremental > 1e-9 and entry_order:
+                self._record_fill(order, incremental, fill_price)
+            elif incremental > 1e-9:
+                # Stop/TP/trailing stop fired — just record qty/price without touching
+                # position accounting (reconcile_positions handles the position side)
+                order.filled_quantity = total_filled
+                order.average_fill_price = fill_price
+
+            order.status = OrderStatus.FILLED
+            logger.info(
+                "WS fill: %s %s %s qty=%.6f @ %.5f",
+                order_id, order.symbol, order.side.value,
+                order.filled_quantity, order.average_fill_price or fill_price,
+            )
+
+        elif ws_status == "partiallyfilled":
+            if filled_qty > order.filled_quantity + 1e-9:
+                entry_order = order.order_type in (OrderType.LIMIT, OrderType.MARKET)
+                incremental = filled_qty - order.filled_quantity
+                fill_price = avg_price if avg_price > 0 else (order.price or 0.0)
+                if entry_order:
+                    self._record_fill(order, incremental, fill_price)
+                else:
+                    order.filled_quantity = filled_qty
+                order.status = OrderStatus.PARTIALLY_FILLED
+                logger.info(
+                    "WS partial fill: %s %s cumfilled=%.6f @ %.5f",
+                    order_id, order.symbol, order.filled_quantity, fill_price,
+                )
+
+        elif ws_status in ("canceled", "cancelled"):
+            if order.filled_quantity > 1e-9:
+                order.status = OrderStatus.FILLED   # partial fill before cancel
+            else:
+                order.status = OrderStatus.CANCELLED
+            logger.debug("WS cancel: %s %s status=%s", order_id, order.symbol, order.status)
+
+        elif ws_status == "rejected":
+            order.status = OrderStatus.REJECTED
+            logger.warning("WS rejected: %s %s", order_id, order.symbol)
+
     def reconcile_balance(self) -> float:
         """Fetch balance from exchange and update local cache."""
         new_balance = self._fetch_balance_from_exchange()
