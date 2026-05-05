@@ -191,17 +191,21 @@ class LiveExecutor:
         # Ensure margin mode and leverage are set correctly before the first order
         # per symbol. Phemex persists these settings per symbol on the account,
         # so we only need to set them once per session.
-        # Both calls are no-ops if a position is already open on the symbol.
         if symbol not in self._leverage_confirmed:
             self._adapter.set_margin_mode(symbol, mode="isolated")
             try:
                 self._adapter.set_leverage(self.target_leverage, symbol)
                 self._leverage_confirmed.add(symbol)
             except Exception as e:
-                logger.warning(
-                    f"Could not set leverage to {self.target_leverage}x for {symbol}: {e}. "
-                    f"Proceeding — exchange leverage may differ from configured value."
+                # Phemex refuses set_leverage when an open position already exists.
+                # Abort the order rather than silently placing it at the account's
+                # current leverage, which may be very different from target.
+                logger.error(
+                    f"LEVERAGE MISMATCH: Cannot set {self.target_leverage}x for {symbol}: {e}. "
+                    f"Order BLOCKED — close any existing {symbol} position first."
                 )
+                order.status = OrderStatus.REJECTED
+                return order
 
         # Send to exchange
         ccxt_type = order_type_enum.value.lower()
