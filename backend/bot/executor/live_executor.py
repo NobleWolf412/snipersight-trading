@@ -126,6 +126,7 @@ class LiveExecutor:
         stop_price: Optional[float] = None,
         sl_price: Optional[float] = None,
         tp_price: Optional[float] = None,
+        reduce_only: bool = False,
     ) -> Order:
         """
         Place an order on Phemex (or log it in dry_run mode).
@@ -193,6 +194,7 @@ class LiveExecutor:
             logger.info(
                 f"[DRY RUN] Order would send: {order_id} {side} {quantity} "
                 f"{symbol} @ {price} leverage={self.target_leverage}x"
+                + (" | reduceOnly" if reduce_only else "")
                 + (f" | inline SL={sl_price}" if sl_price else "")
                 + (f" TP={tp_price}" if tp_price else "")
             )
@@ -228,6 +230,8 @@ class LiveExecutor:
         # For entry orders: BUY=Long, SELL=Short.
         # For exit/reduce orders: use reduceOnly instead (simpler and mode-agnostic).
         extra_params: dict = {"clientOrderId": order_id}
+        if reduce_only:
+            extra_params["reduceOnly"] = True
         if self._hedge_mode:
             extra_params["positionSide"] = "Long" if ccxt_side == "buy" else "Short"
         if sl_price and sl_price > 0:
@@ -810,8 +814,9 @@ class LiveExecutor:
                 "clientOrderId": order_id,
                 "reduceOnly": True,
                 "closeOnTrigger": True,
-                "activationPrice": activation_price,
                 "callbackRate": callback_rate,
+                # activationPrice is passed as price= (standard CCXT path for Phemex)
+                # rather than via params to avoid double-mapping by CCXT's Phemex adapter.
             }
             if self._hedge_mode:
                 trail_params["positionSide"] = "Long" if side.upper() == "SELL" else "Short"

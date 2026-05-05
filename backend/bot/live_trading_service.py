@@ -981,15 +981,12 @@ class LiveTradingService:
                 reason_type="stale_entry")
             return
 
-        # Inline TP1 + SL: attached to the entry order itself per Phemex conditional
-        # order spec. Provides atomic crash protection — protection is on the exchange
-        # the moment the entry fills, not in a subsequent API call.
-        _targets = getattr(plan, "targets", None) or []
-        _tp1_price = None
-        if _targets:
-            _sorted = sorted(_targets, key=lambda t: t.level, reverse=not is_long)
-            _tp1_price = _sorted[0].level if _sorted else None
-
+        # Inline SL only: attached to the entry order for atomic crash protection.
+        # The SL fires on the exchange even if our server goes down before
+        # _place_exchange_stop() runs.  TP1 is NOT attached inline because
+        # _place_exchange_stop() places an explicit reduce-only limit order for TP1;
+        # having both would create two overlapping TP orders at the same price and
+        # quantity, risking a 2× exit on TP hit.
         order = self.executor.place_order(
             symbol=symbol,
             side="BUY" if is_long else "SELL",
@@ -997,7 +994,6 @@ class LiveTradingService:
             quantity=quantity,
             price=entry_price,
             sl_price=stop_level,
-            tp_price=_tp1_price,
         )
 
         if order.status.value in ("REJECTED",):
@@ -1102,7 +1098,7 @@ class LiveTradingService:
                     break
 
         try:
-            order = self.executor.place_order(symbol=symbol, side=side, order_type="MARKET", quantity=quantity, price=price)
+            order = self.executor.place_order(symbol=symbol, side=side, order_type="MARKET", quantity=quantity, price=price, reduce_only=True)
             if order is None:
                 return False
             if order.status == OrderStatus.REJECTED:
@@ -1207,7 +1203,7 @@ class LiveTradingService:
         if _risk > 0 and entry_price > 0:
             _trail_r = {"scalp": 0.3, "intraday": 0.5, "swing": 1.0}
             _trade_type = getattr(plan, "trade_type", "intraday") or "intraday"
-            _callback_rate = round(_trail_r.get(_trade_type, 0.5) * (_risk / entry_price) * 100, 3)
+            _callback_rate = max(0.1, round(_trail_r.get(_trade_type, 0.5) * (_risk / entry_price) * 100, 3))
             _is_long = plan.direction == "LONG"
             _activation = entry_price + 1.5 * _risk if _is_long else entry_price - 1.5 * _risk
             trail_order = self.executor.place_trailing_stop_order(
