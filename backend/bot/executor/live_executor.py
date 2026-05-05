@@ -344,6 +344,55 @@ class LiveExecutor:
             logger.error(f"Failed to poll limit order {order_id}: {e}")
             return None
 
+    def check_fill_via_positions(self, order_id: str) -> Optional[Fill]:
+        """
+        Secondary fill confirmation using exchange positions.
+
+        Phemex's fetch_order can return stale data (status="open", filled=0) for
+        an already-filled limit order. This method cross-checks by fetching the
+        actual position for the symbol — if a non-zero position exists, the order
+        must have filled. Called only after the primary poll has failed for ≥2 minutes
+        to avoid unnecessary round-trips.
+        """
+        if order_id not in self._orders:
+            return None
+        order = self._orders[order_id]
+        if order.status in (OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
+            return None
+        if self.dry_run:
+            return None
+
+        try:
+            ex_positions = self._adapter.fetch_positions([order.symbol])
+            for pos in ex_positions:
+                if pos.get("symbol", "") != order.symbol:
+                    continue
+                ex_qty = float(pos.get("contracts", 0.0) or 0.0)
+                if ex_qty < 1e-9:
+                    continue
+                # Live position confirmed — the order filled on the exchange.
+                entry_price = (
+                    float(pos.get("entryPrice", 0.0) or 0.0)
+                    or float(pos.get("entry_price", 0.0) or 0.0)
+                    or order.price
+                    or 0.0
+                )
+                fill_qty = ex_qty - order.filled_quantity
+                if fill_qty < 1e-9:
+                    # Already accounted for in a prior poll — just sync status.
+                    order.status = OrderStatus.FILLED
+                    return None
+                logger.info(
+                    f"Position-fill recovery: {order_id} {order.symbol} "
+                    f"qty={ex_qty:.6f} @ {entry_price:.5f} — confirmed via fetch_positions"
+                )
+                fill = self._record_fill(order, fill_qty, entry_price)
+                order.status = OrderStatus.FILLED
+                return fill
+        except Exception as e:
+            logger.debug(f"check_fill_via_positions failed for {order_id}: {e}")
+        return None
+
     def _process_exchange_order(self, order: Order, ex_order: Dict) -> Optional[Fill]:
         """Map a CCXT order response to our internal Order/Fill state."""
         ex_status = ex_order.get("status", "open")

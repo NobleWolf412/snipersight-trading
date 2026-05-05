@@ -546,6 +546,19 @@ class LiveTradingService:
                                 price = self._price_cache.get(order.symbol)
                                 if price:
                                     fill = executor.execute_limit_order(order.order_id, price)
+                                    # Fallback: fetch_order can return stale "open"/filled=0 on Phemex.
+                                    # After ≥2 minutes of pending with no fill detected, cross-check
+                                    # via fetch_positions — if a live position exists the order filled.
+                                    if fill is None and order.status not in (
+                                        OrderStatus.FILLED, OrderStatus.CANCELLED
+                                    ):
+                                        placed_at = self._pending_placed_at.get(order.order_id)
+                                        if placed_at:
+                                            pending_secs = (
+                                                datetime.now(timezone.utc) - placed_at
+                                            ).total_seconds()
+                                            if pending_secs >= 120:
+                                                fill = executor.check_fill_via_positions(order.order_id)
                                     # Also check order.status directly — Phemex may return filled=0
                                     # on a closed order causing fill=None, but executor still updates status.
                                     order_done = fill or order.status == OrderStatus.FILLED
