@@ -1282,11 +1282,15 @@ class Orchestrator:
             _symbol_regime = context.metadata.get("symbol_regime")
             _btc_impulse = None
             if context.macro_context and "BTC" not in symbol.upper():
-                _btc_dir = getattr(context.macro_context, "btc_dir", "flat") or "flat"
-                _btc_impulse = {
-                    "up": "strong_up", "strong_up": "strong_up",
-                    "down": "strong_down", "strong_down": "strong_down",
-                }.get(_btc_dir.lower())
+                _btc_vel = getattr(context.macro_context, "btc_velocity_1h", 0.0) or 0.0
+                # Hard-block alts only on genuinely strong BTC moves (≥1.0% in last 1H).
+                # "up"/"down" from _dir_from_pct fires at just 0.2% — typical hourly noise
+                # in a bull market. Treating that as "strong_up" blocks nearly all alt SHORTs
+                # every scan. Require ≥1.0% to classify as a meaningful BTC impulse.
+                if _btc_vel >= 1.0:
+                    _btc_impulse = "strong_up"
+                elif _btc_vel <= -1.0:
+                    _btc_impulse = "strong_down"
             _is_btc = "BTC" in symbol.upper()
 
             if context.smc_snapshot:
@@ -2952,11 +2956,11 @@ class Orchestrator:
         _c_is_btc = "BTC" in context.symbol.upper()
         _c_btc_impulse = None
         if context.macro_context and not _c_is_btc:
-            _c_btc_dir = getattr(context.macro_context, "btc_dir", "flat") or "flat"
-            _c_btc_impulse = {
-                "up": "strong_up", "strong_up": "strong_up",
-                "down": "strong_down", "strong_down": "strong_down",
-            }.get(_c_btc_dir.lower())
+            _c_btc_vel = getattr(context.macro_context, "btc_velocity_1h", 0.0) or 0.0
+            if _c_btc_vel >= 1.0:
+                _c_btc_impulse = "strong_up"
+            elif _c_btc_vel <= -1.0:
+                _c_btc_impulse = "strong_down"
         _c_regime = context.metadata.get("symbol_regime")
         _session_direction = context.metadata.get("chosen_direction", "LONG")
 

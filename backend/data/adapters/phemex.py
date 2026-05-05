@@ -299,7 +299,7 @@ class PhemexAdapter:
             tickers = self.exchange.fetch_tickers()
 
             # Filter: active, correct quote currency, correct market type, has ticker data
-            MIN_VOLUME_USDT = 500_000
+            MIN_VOLUME_USDT = 5_000_000  # $5M daily minimum — filters out pump-and-dump micro-caps
             valid_symbols = []
             for symbol, market in markets.items():
                 if (
@@ -321,12 +321,14 @@ class PhemexAdapter:
 
                 volatility = (high - low) / close if close > 0 else 0
 
-                # Momentum: pairs with a large 24h move (either direction) score higher.
-                # A 20% move adds 50% to the base score (momentum_factor caps at 1.0).
+                # Momentum bonus: capped at 10% move → max 0.25x boost.
+                # Prior cap was 20% → 0.5x, which rewarded already-pumped meme coins
+                # and caused the bot to select exhausted setups over liquid majors.
+                # Momentum is a tiebreaker, not a primary ranking signal.
                 pct_change = abs(ticker.get("percentage", 0) or 0)
-                momentum_factor = min(pct_change / 20.0, 1.0)
+                momentum_factor = min(pct_change / 10.0, 1.0)
 
-                return volume * (1 + volatility) * (1 + momentum_factor * 0.5)
+                return volume * (1 + volatility) * (1 + momentum_factor * 0.25)
 
             sorted_symbols = sorted(valid_symbols, key=calculate_score, reverse=True)
             result = sorted_symbols[:n]
