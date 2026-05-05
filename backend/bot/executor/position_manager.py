@@ -1038,8 +1038,10 @@ class PositionManager:
                     old_stop = pos.stop_loss
                     buffer = risk * 0.1
                     new_stop = pos.entry_price + buffer
-                    if new_stop > pos.stop_loss:
-                        # New stop is tighter (higher for SHORT) than current — only tighten
+                    if new_stop < pos.stop_loss:
+                        # New stop is tighter (lower) than current — only tighten.
+                        # For SHORT: initial stop is ABOVE entry ($105), breakeven is entry+buffer
+                        # ($100.1) which is LOWER than the initial stop. Tightening = lowering.
                         pos.stop_loss = new_stop
                         pos.breakeven_active = True
                         actions.append((pos.symbol, pos_id, f"breakeven {old_stop:.4f}→{new_stop:.4f}"))
@@ -1052,7 +1054,7 @@ class PositionManager:
                     profit_r = (pos.entry_price - current_price) / risk
                     if profit_r > 0:
                         trail_stop = current_price + risk * 0.25
-                        if trail_stop > pos.stop_loss:
+                        if trail_stop < pos.stop_loss:
                             old_stop = pos.stop_loss
                             pos.stop_loss = trail_stop
                             pos.trailing_active = True
