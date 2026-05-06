@@ -233,7 +233,8 @@ class LiveExecutor:
         if reduce_only:
             extra_params["reduceOnly"] = True
         if self._hedge_mode:
-            extra_params["positionSide"] = "Long" if ccxt_side == "buy" else "Short"
+            # CCXT Phemex reads posSide (not positionSide) — see ccxt/phemex.py line 2660.
+            extra_params["posSide"] = "Long" if ccxt_side == "buy" else "Short"
         if sl_price and sl_price > 0:
             extra_params["stopLossPrice"] = sl_price
             extra_params["slTrigger"] = "ByMarkPrice"
@@ -279,7 +280,7 @@ class LiveExecutor:
                     f"Retrying with positionSide and switching to hedge-mode operation."
                 )
                 hedge_params = dict(extra_params)
-                hedge_params["positionSide"] = "Long" if ccxt_side == "buy" else "Short"
+                hedge_params["posSide"] = "Long" if ccxt_side == "buy" else "Short"
                 try:
                     exchange_order = _send_order(hedge_params)
                     exchange_id = str(exchange_order.get("id", ""))
@@ -662,27 +663,33 @@ class LiveExecutor:
             return order
 
         try:
-            # CCXT Phemex: for stop_market, price= is the trigger (maps to stopPx).
-            # triggerType=ByMarkPrice prevents wick-hunt triggers on last-price spikes.
-            # closeOnTrigger cancels other same-direction orders when the stop fires,
-            # ensuring the position fully closes rather than just reducing.
+            # Phemex stop-market via CCXT:
+            #   order_type="market" + params["stopPrice"] → CCXT sets ordType="Stop" + stopPxRp
+            #   triggerDirection is required by CCXT's Phemex adapter when a stopPrice is present:
+            #     SELL stop (close LONG): price must fall to trigger → "descending"
+            #     BUY  stop (close SHORT): price must rise to trigger → "ascending"
+            #   triggerType=ByMarkPrice prevents wick-hunt triggers on last-price spikes.
+            #   closeOnTrigger: when this stop fires, Phemex auto-cancels other
+            #   closeOnTrigger orders (e.g. trailing stop) on the same position.
+            trigger_dir = "descending" if side.upper() == "SELL" else "ascending"
             stop_params: dict = {
                 "clientOrderId": order_id,
+                "stopPrice": stop_price,
+                "triggerDirection": trigger_dir,
+                "triggerType": "ByMarkPrice",
                 "reduceOnly": True,
                 "closeOnTrigger": True,
-                "triggerType": "ByMarkPrice",
             }
             if self._hedge_mode:
-                # In hedge mode, the stop's positionSide is the position being closed:
-                # SELL stop closes a LONG → positionSide=Long
-                # BUY stop closes a SHORT → positionSide=Short
-                stop_params["positionSide"] = "Long" if side.upper() == "SELL" else "Short"
+                # CCXT Phemex reads posSide (not positionSide) at line 2660 of ccxt/phemex.py.
+                # SELL stop closes a LONG → posSide=Long; BUY stop closes SHORT → posSide=Short.
+                stop_params["posSide"] = "Long" if side.upper() == "SELL" else "Short"
             exchange_order = self._adapter.create_order(
                 symbol=symbol,
-                order_type="stop_market",
+                order_type="market",    # CCXT converts to "Stop" ordType when stopPrice is set
                 side=side.lower(),
                 amount=quantity,
-                price=stop_price,    # trigger level — CCXT maps this to Phemex stopPx
+                price=None,             # No limit price for a stop-market
                 params=stop_params,
             )
             exchange_id = str(exchange_order.get("id", ""))
@@ -736,16 +743,15 @@ class LiveExecutor:
             return order
 
         try:
-            # closeOnTrigger ensures this TP is treated as a closing order and cancels
-            # other same-direction orders when it fills. TP is a resting limit order —
-            # no triggerType needed since the limit price IS the trigger.
+            # TP is a plain reduce-only limit order. closeOnTrigger is only meaningful
+            # on Phemex conditional orders (Stop, StopLimit) — on a resting limit it is
+            # silently ignored. reduceOnly alone is sufficient to ensure it only closes.
             tp_params: dict = {
                 "clientOrderId": order_id,
                 "reduceOnly": True,
-                "closeOnTrigger": True,
             }
             if self._hedge_mode:
-                tp_params["positionSide"] = "Long" if side.upper() == "SELL" else "Short"
+                tp_params["posSide"] = "Long" if side.upper() == "SELL" else "Short"
             exchange_order = self._adapter.create_order(
                 symbol=symbol,
                 order_type="limit",
@@ -810,22 +816,33 @@ class LiveExecutor:
             return order
 
         try:
+            # Phemex trailing stop parameters (NOT Binance's callbackRate API):
+            #   pegPriceType="TrailingStopPeg" enables server-managed trailing.
+            #   pegOffsetValueRp: absolute offset from the peak price. Sign convention:
+            #     SELL trail (close LONG): stop trails BELOW price → negative offset
+            #     BUY  trail (close SHORT): stop trails ABOVE price → positive offset
+            #   stopPrice: activation price — trailing begins tracking once touched.
+            #   triggerDirection: "descending" for SELL, "ascending" for BUY.
+            offset = round(activation_price * callback_rate / 100, 8)
+            trigger_dir = "descending" if side.upper() == "SELL" else "ascending"
+            peg_offset = -offset if side.upper() == "SELL" else offset
             trail_params: dict = {
                 "clientOrderId": order_id,
+                "stopPrice": activation_price,
+                "triggerDirection": trigger_dir,
+                "pegPriceType": "TrailingStopPeg",
+                "pegOffsetValueRp": str(peg_offset),
                 "reduceOnly": True,
                 "closeOnTrigger": True,
-                "callbackRate": callback_rate,
-                # activationPrice is passed as price= (standard CCXT path for Phemex)
-                # rather than via params to avoid double-mapping by CCXT's Phemex adapter.
             }
             if self._hedge_mode:
-                trail_params["positionSide"] = "Long" if side.upper() == "SELL" else "Short"
+                trail_params["posSide"] = "Long" if side.upper() == "SELL" else "Short"
             exchange_order = self._adapter.create_order(
                 symbol=symbol,
-                order_type="trailing_stop_market",
+                order_type="market",    # CCXT converts to trailing stop ordType via pegPriceType
                 side=side.lower(),
                 amount=quantity,
-                price=activation_price,
+                price=None,
                 params=trail_params,
             )
             exchange_id = str(exchange_order.get("id", ""))
@@ -969,10 +986,12 @@ class LiveExecutor:
                         f"Position discrepancy for {symbol}: "
                         f"local={local_qty:.6f} exchange={ex_qty:.6f} — syncing"
                     )
-                    # Sync: adjust local quantity and entry price to match exchange reality
+                    # Sync: adjust local quantity and entry price to match exchange reality.
+                    # Use the exchange's own side field as source of truth — local state
+                    # may be stale (e.g. after a restart) and its sign cannot be trusted.
                     if ex_qty > 1e-9:
-                        # Preserve direction sign from local state
-                        self._positions[symbol] = ex_qty if local_qty >= 0 else -ex_qty
+                        ex_side = pos.get("side", "long").lower()
+                        self._positions[symbol] = ex_qty if ex_side == "long" else -ex_qty
                         entry_px = float(pos.get("entryPrice", 0.0) or 0.0)
                         if entry_px > 0:
                             self._position_avg_price[symbol] = entry_px

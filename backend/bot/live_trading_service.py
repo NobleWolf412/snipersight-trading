@@ -328,7 +328,8 @@ class LiveTradingService:
                 except asyncio.CancelledError:
                     pass
 
-        # Cancel all open orders on exchange
+        # Cancel all pending entry orders on exchange (don't cancel stops — _close_all_positions
+        # handles that as part of the exit sequence for each position).
         if self.executor:
             for order in self.executor.get_open_orders():
                 try:
@@ -336,9 +337,9 @@ class LiveTradingService:
                 except Exception as e:
                     logger.error(f"Failed to cancel order {order.order_id}: {e}")
 
-        # Close all positions
-        if self.position_manager:
-            self.position_manager.emergency_close_all("KILL_SWITCH")
+        # Flatten all positions on the exchange with market orders.
+        # _close_all_positions cancels exchange stops/TPs and sends reduce-only market exits.
+        await self._close_all_positions("kill_switch")
 
         self.stopped_at = datetime.now(timezone.utc)
         return self.get_status()
@@ -461,40 +462,21 @@ class LiveTradingService:
         """
         Sync exchange state on session start to prevent double-entry after restart.
 
-        Two cases handled:
-        1. Orphaned limit orders — we lost the TradePlan on restart so we cannot
-           manage a fill correctly. Cancel them and let the next scan re-evaluate.
-        2. Orphaned open positions — register their symbols in _orphaned_symbols so
-           _has_position() blocks new entries. The exchange-native stop still protects
-           the position; the bot won't trail/target it but won't add to it either.
+        Order of operations matters:
+        1. Fetch open positions FIRST — build the set of protected symbols.
+        2. Cancel orphaned orders, but PRESERVE stops/trailing-stops on symbols
+           that still have an open position (those orders protect the position).
+           Only limit entry orders are always cancelled (no TradePlan to manage them).
+        3. Register orphaned position symbols in _orphaned_symbols so _has_position()
+           blocks new entries for the remainder of the session.
         """
         if not self.adapter or not self.executor or (self.config and self.config.dry_run):
             return
 
         loop = asyncio.get_running_loop()
 
-        # ── 1. Cancel orphaned limit orders ──────────────────────────────────
-        try:
-            raw_orders = await loop.run_in_executor(
-                None, lambda: self.adapter.exchange.fetch_open_orders()
-            )
-            for o in raw_orders:
-                if o.get("type", "").lower() not in ("limit", "stop_market", "stop", "trailing_stop_market"):
-                    continue
-                symbol = o.get("symbol", "")
-                oid = str(o.get("id", ""))
-                try:
-                    await loop.run_in_executor(
-                        None, lambda s=symbol, i=oid: self.adapter.cancel_order(i, s)
-                    )
-                    logger.warning(f"Startup reconcile: cancelled orphaned order {oid} {symbol}")
-                    self._log_activity("orphaned_order_cancelled", {"order_id": oid, "symbol": symbol})
-                except Exception as e:
-                    logger.error(f"Startup reconcile: could not cancel {oid} {symbol}: {e}")
-        except Exception as e:
-            logger.warning(f"Startup reconcile: could not fetch open orders: {e}")
-
-        # ── 2. Block new entries on symbols with existing positions ───────────
+        # ── 1. Fetch open positions first ─────────────────────────────────────
+        protected_symbols: set = set()
         try:
             positions = await loop.run_in_executor(None, self.adapter.fetch_positions)
             for pos in positions:
@@ -504,21 +486,56 @@ class LiveTradingService:
                 symbol = pos.get("symbol", "")
                 side = pos.get("side", "long")
                 entry_price = float(pos.get("entryPrice", 0) or 0)
+                protected_symbols.add(symbol)
                 self._orphaned_symbols.add(symbol)
                 logger.warning(
                     f"Startup reconcile: orphaned position detected — {symbol} "
                     f"{side.upper()} qty={qty:.4f} @ {entry_price:.4f}. "
-                    f"Exchange-native stop still active. Bot will not add to this position."
+                    f"Exchange-native stop preserved. Bot will not add to this position."
                 )
                 self._log_activity("orphaned_position_detected", {
                     "symbol": symbol,
                     "side": side,
                     "quantity": qty,
                     "entry_price": entry_price,
-                    "note": "Exchange stop active. No new entries will be placed.",
+                    "note": "Exchange stop preserved. No new entries will be placed.",
                 })
         except Exception as e:
             logger.warning(f"Startup reconcile: could not fetch positions: {e}")
+
+        # ── 2. Cancel orphaned orders (preserving stops on open positions) ─────
+        try:
+            raw_orders = await loop.run_in_executor(
+                None, lambda: self.adapter.exchange.fetch_open_orders()
+            )
+            protective_types = {"stop_market", "stop", "trailing_stop_market"}
+            for o in raw_orders:
+                order_type = o.get("type", "").lower()
+                symbol = o.get("symbol", "")
+                oid = str(o.get("id", ""))
+
+                if order_type not in ("limit",) | protective_types:
+                    continue  # ignore other order types (e.g. take_profit_market)
+
+                # Preserve stop/trailing orders that are protecting an open position.
+                # Cancelling them would leave the position unguarded on the exchange.
+                if order_type in protective_types and symbol in protected_symbols:
+                    logger.info(
+                        f"Startup reconcile: preserving {order_type} {oid} on {symbol} "
+                        f"(protects orphaned position)"
+                    )
+                    continue
+
+                try:
+                    await loop.run_in_executor(
+                        None, lambda s=symbol, i=oid: self.adapter.cancel_order(i, s)
+                    )
+                    logger.warning(f"Startup reconcile: cancelled orphaned order {oid} {symbol} ({order_type})")
+                    self._log_activity("orphaned_order_cancelled", {"order_id": oid, "symbol": symbol, "type": order_type})
+                except Exception as e:
+                    logger.error(f"Startup reconcile: could not cancel {oid} {symbol}: {e}")
+        except Exception as e:
+            logger.warning(f"Startup reconcile: could not fetch open orders: {e}")
 
     # ------------------------------------------------------------------
     # Background loops
@@ -1478,10 +1495,22 @@ class LiveTradingService:
                 logger.warning(f"Failed to write live trade to journal: {e}")
 
     async def _close_all_positions(self, reason: str):
-        if not self.position_manager:
+        """Send market exit orders to the exchange for every open position, then mark closed."""
+        if not self.position_manager or not self.executor:
             return
         for pos in self.position_manager.get_open_positions():
             try:
+                close_side = "SELL" if pos.direction == "LONG" else "BUY"
+                qty = getattr(pos, "remaining_quantity", None) or pos.quantity
+                price = self._price_cache.get(pos.symbol, pos.entry_price)
+                # _execute_exit_order cancels exchange stop/TP/trailing and places
+                # a reduce-only market order — actually flattens on the exchange.
+                success = await self._execute_exit_order(pos.symbol, close_side, qty, price)
+                if not success:
+                    logger.warning(
+                        f"Market exit failed for {pos.symbol} {pos.position_id} — "
+                        f"exchange-native stop remains active as fallback."
+                    )
                 self.position_manager.close_position(pos.position_id, reason)
             except Exception as e:
                 logger.error(f"Failed to close position {pos.position_id}: {e}")
