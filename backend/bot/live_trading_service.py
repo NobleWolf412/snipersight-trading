@@ -583,6 +583,22 @@ class LiveTradingService:
                         # Poll open orders for fills
                         for order in executor.get_open_orders():
                             if order.order_type == OrderType.LIMIT:
+                                # Immediately drop rejected entry orders — no fill, no position.
+                                if order.status == OrderStatus.REJECTED:
+                                    if order.order_id in self._pending_plans:
+                                        plan = self._pending_plans.pop(order.order_id, None)
+                                        self._pending_placed_at.pop(order.order_id, None)
+                                        self._pending_placed_price.pop(order.order_id, None)
+                                        sym = getattr(plan, "symbol", order.symbol) if plan else order.symbol
+                                        logger.warning(
+                                            "Entry order REJECTED by exchange — dropping plan: "
+                                            "%s %s", order.order_id, sym
+                                        )
+                                        self._log_activity("order_rejected", {
+                                            "symbol": sym,
+                                            "order_id": order.order_id,
+                                        })
+                                    continue
                                 price = self._price_cache.get(order.symbol)
                                 if price:
                                     fill = executor.execute_limit_order(order.order_id, price)
@@ -654,11 +670,20 @@ class LiveTradingService:
                                         self._pending_placed_at.pop(order_id, None)
                                         logger.info(f"Pending order expired and cancelled: {order_id} {plan.symbol}")
                                     else:
-                                        # Cancel failed — check if the order filled during the TTL window.
+                                        # Cancel failed — check if the order filled or was rejected.
                                         # cancel_order() calls _process_exchange_order() when it detects a
                                         # fill, so order.status == FILLED means we have fill data recorded.
                                         expired_order = executor.get_order(order_id)
-                                        if expired_order and expired_order.status == OrderStatus.FILLED:
+                                        if expired_order and expired_order.status == OrderStatus.REJECTED:
+                                            # Exchange rejected the order — it never filled; drop cleanly.
+                                            self._pending_plans.pop(order_id, None)
+                                            self._pending_placed_at.pop(order_id, None)
+                                            self._pending_placed_price.pop(order_id, None)
+                                            logger.warning(
+                                                f"Expired order was REJECTED by exchange, dropping: "
+                                                f"{order_id} {plan.symbol}"
+                                            )
+                                        elif expired_order and expired_order.status == OrderStatus.FILLED:
                                             entry_px = expired_order.average_fill_price or expired_order.price or 0.0
                                             entry_qty = expired_order.filled_quantity or expired_order.quantity
                                             active_count = len(self._get_active_positions())
