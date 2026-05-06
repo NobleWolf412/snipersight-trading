@@ -1450,11 +1450,23 @@ class LiveTradingService:
             if pos.position_id in self._completed_trade_ids:
                 continue
 
-            # Clean up any remaining exchange stop/TP/trailing (e.g. fired natively or was never cancelled)
-            self._exchange_stop_orders.pop(pos.position_id, None)
+            # Cancel any remaining exchange stop/TP/trailing that wasn't cancelled
+            # via _execute_exit_order (e.g. stagnation, direction-flip, or native stop
+            # that fired while software was lagging).  Pop AFTER attempting cancel so
+            # the order_id is still available for the cancel call.
+            for _cancel_dict, _label in [
+                (self._exchange_stop_orders, "stop"),
+                (self._exchange_tp_orders, "tp"),
+                (self._exchange_trailing_orders, "trailing"),
+            ]:
+                _oid = _cancel_dict.pop(pos.position_id, None)
+                if _oid and self.executor:
+                    try:
+                        self.executor.cancel_order(_oid)
+                        logger.debug("Cancelled orphaned exchange %s %s on position close", _label, _oid)
+                    except Exception as _ce:
+                        logger.debug("Could not cancel orphaned %s %s (may have already fired): %s", _label, _oid, _ce)
             self._exchange_stop_levels.pop(pos.position_id, None)
-            self._exchange_tp_orders.pop(pos.position_id, None)
-            self._exchange_trailing_orders.pop(pos.position_id, None)
 
             exit_reason = pos.exit_reason or ("target" if pos.status == PositionStatus.CLOSED else "stop_loss")
             if pos.status == PositionStatus.EMERGENCY_EXIT:
