@@ -14,6 +14,7 @@ import { PageContainer } from '@/components/layout/PageContainer';
 import { HomeButton } from '@/components/layout/HomeButton';
 import { TacticalPanel } from '@/components/TacticalPanel';
 import { GauntletBreakdown } from '@/components/bot/GauntletBreakdown';
+import { WatchlistRadar } from '@/components/bot/WatchlistRadar';
 import {
   liveTradingService,
   type LiveTradingStatus,
@@ -159,7 +160,7 @@ function PositionChartModal({ open, onClose, symbol, direction, levels, title }:
 }
 
 // ── Position Card ─────────────────────────────────────────────────────────────
-function PositionCard({ position }: { position: LivePosition }) {
+function PositionCard({ position, leverage }: { position: LivePosition; leverage?: number }) {
   const isLong = position.direction === 'LONG';
   const isProfitable = position.unrealized_pnl >= 0;
   const [chartOpen, setChartOpen] = useState(false);
@@ -189,22 +190,27 @@ function PositionCard({ position }: { position: LivePosition }) {
 
   const sl = position.stop_loss;
   const entry = position.entry_price;
-  const tp1 = position.tp1 ?? (isLong ? entry * 1.015 : entry * 0.985);
+  const tp1 = position.tp1 ?? null;
   const current = position.current_price;
+  const timeInTrade = useMemo(() => {
+    if (!position.opened_at) return null;
+    const ms = Date.now() - new Date(position.opened_at).getTime();
+    return formatDuration(Math.floor(ms / 1000));
+  }, [position.opened_at]);
   let progressPct = 50;
   if (isLong) {
-    if (current >= entry) {
+    if (current >= entry && tp1 != null) {
       const range = tp1 - entry;
       progressPct = range > 0 ? 50 + ((current - entry) / range) * 50 : 50;
-    } else {
+    } else if (current < entry) {
       const range = entry - sl;
       progressPct = range > 0 ? ((current - sl) / range) * 50 : 50;
     }
   } else {
-    if (current <= entry) {
+    if (current <= entry && tp1 != null) {
       const range = entry - tp1;
       progressPct = range > 0 ? 50 + ((entry - current) / range) * 50 : 50;
-    } else {
+    } else if (current > entry) {
       const range = sl - entry;
       progressPct = range > 0 ? ((sl - current) / range) * 50 : 50;
     }
@@ -294,11 +300,25 @@ function PositionCard({ position }: { position: LivePosition }) {
           <div>
             <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">TP / SL</div>
             <div className="font-mono text-[10px] opacity-80">
-              <span className="text-green-500/80">${tp1 < 1 ? tp1.toFixed(5) : tp1 < 100 ? tp1.toFixed(4) : tp1.toFixed(2)}</span>
-              <span className="mx-1 opacity-30">/</span>
+              {tp1 != null && (
+                <><span className="text-green-500/80">${tp1 < 1 ? tp1.toFixed(5) : tp1 < 100 ? tp1.toFixed(4) : tp1.toFixed(2)}</span>
+                <span className="mx-1 opacity-30">/</span></>
+              )}
               <span className="text-red-500/80">${sl < 1 ? sl.toFixed(5) : sl < 100 ? sl.toFixed(4) : sl.toFixed(2)}</span>
             </div>
           </div>
+          {timeInTrade && (
+            <div>
+              <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Open</div>
+              <div className="font-mono text-[10px] text-amber-400/80">{timeInTrade}</div>
+            </div>
+          )}
+          {leverage != null && leverage > 1 && (
+            <div>
+              <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Leverage</div>
+              <div className="font-mono text-[10px] font-bold">{leverage}×</div>
+            </div>
+          )}
         </div>
 
         {/* Progress bar */}
@@ -313,20 +333,25 @@ function PositionCard({ position }: { position: LivePosition }) {
           </div>
         </div>
 
-        {/* Scale ladder */}
-        <div className="mt-2 pt-3 border-t border-border/50">
-          <div className="flex items-center justify-between text-[9px] uppercase font-bold text-muted-foreground mb-1.5 tracking-widest">
-            <span className="flex items-center gap-1"><Gear size={10} className="animate-spin-slow" /> Phantom Scale Ladder</span>
-            <span className="text-accent/80 font-mono">Fill: 100% (L1)</span>
-          </div>
-          <div className="flex gap-1.5">
-            <div className={cn('h-1.5 flex-1 rounded-sm relative overflow-hidden', isLong ? 'bg-green-400/50' : 'bg-red-400/50')}>
-              <div className="absolute inset-0 bg-white/20 animate-pulse" />
+        {/* Target ladder */}
+        {((position.targets_hit ?? 0) + (position.targets_remaining ?? 0)) > 0 && (
+          <div className="mt-2 pt-3 border-t border-border/50">
+            <div className="flex items-center justify-between text-[9px] uppercase font-bold text-muted-foreground mb-1.5 tracking-widest">
+              <span className="flex items-center gap-1"><Target size={10} /> Targets</span>
+              <span className="text-accent/80 font-mono">{position.targets_hit ?? 0}/{(position.targets_hit ?? 0) + (position.targets_remaining ?? 0)} hit</span>
             </div>
-            <div className="h-1.5 flex-1 rounded-sm bg-muted/20 border border-border/30" />
-            <div className="h-1.5 flex-1 rounded-sm bg-muted/20 border border-border/30" />
+            <div className="flex gap-1.5">
+              {Array.from({ length: (position.targets_hit ?? 0) + (position.targets_remaining ?? 0) }).map((_, i) => (
+                <div key={i} className={cn('h-1.5 flex-1 rounded-sm relative overflow-hidden',
+                  i < (position.targets_hit ?? 0)
+                    ? (isLong ? 'bg-green-400/70' : 'bg-red-400/70')
+                    : 'bg-muted/20 border border-border/30')}>
+                  {i < (position.targets_hit ?? 0) && <div className="absolute inset-0 bg-white/10" />}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="mt-3 flex items-center gap-2 text-xs">
           {position.breakeven_active && (
@@ -460,8 +485,8 @@ function TradeHistoryItem({ trade }: { trade: CompletedLiveTrade }) {
             <div className="space-y-1">
               <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">Excursion</div>
               <div className="text-xs font-mono flex flex-col gap-0.5">
-                <span className="flex justify-between"><span className="text-muted-foreground/50">Peak:</span><span className="text-green-400/80">+{formatPct(trade.max_favorable)}</span></span>
-                <span className="flex justify-between"><span className="text-muted-foreground/50">Dip:</span><span className="text-red-400/80">{formatPct(trade.max_adverse)}</span></span>
+                <span className="flex justify-between"><span className="text-muted-foreground/50">Peak:</span><span className="text-green-400/80">{formatPct(trade.max_favorable)}</span></span>
+                <span className="flex justify-between"><span className="text-muted-foreground/50">Dip:</span><span className="text-red-400/80">{formatPct(-Math.abs(trade.max_adverse))}</span></span>
                 <span className="flex justify-between mt-0.5 pt-0.5 border-t border-border/30"><span className="text-muted-foreground/50">Qty:</span><span className="text-foreground/80">{trade.quantity.toFixed(4)}</span></span>
               </div>
             </div>
@@ -501,6 +526,8 @@ export function BotStatus() {
   const [analyzeOutput, setAnalyzeOutput] = useState<string | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const fetchFailCount = useRef(0);
+  const fastPollRef = useRef(false);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const connectionErrorRef = useRef<string | null>(null);
   connectionErrorRef.current = connectionError;
@@ -509,11 +536,12 @@ export function BotStatus() {
     try {
       const data = await liveTradingService.getStatus();
       setStatus(data);
+      fastPollRef.current = (data.positions?.length ?? 0) > 0 || data.current_scan?.status === 'running';
       fetchFailCount.current = 0;
       if (connectionErrorRef.current) setConnectionError(null);
     } catch (e: any) {
       fetchFailCount.current += 1;
-      if (fetchFailCount.current >= 3) setConnectionError('Backend unreachable — data may be stale');
+      if (fetchFailCount.current >= 2) setConnectionError('Backend unreachable — data may be stale');
     } finally {
       setLoading(false);
     }
@@ -529,8 +557,15 @@ export function BotStatus() {
   useEffect(() => {
     loadStatus();
     loadTrades();
-    const interval = setInterval(() => { loadStatus(); loadTrades(); }, 10000);
-    return () => clearInterval(interval);
+    const schedule = () => {
+      const delay = fastPollRef.current ? 2000 : 10000;
+      pollTimerRef.current = setTimeout(async () => {
+        await Promise.all([loadStatus(), loadTrades()]);
+        schedule();
+      }, delay);
+    };
+    schedule();
+    return () => { if (pollTimerRef.current) clearTimeout(pollTimerRef.current); };
   }, [loadStatus, loadTrades]);
 
   const handleStop = async () => {
@@ -851,8 +886,9 @@ export function BotStatus() {
                       </div>
                       {(() => {
                         const initial = initialBalance;
-                        const pnl = trades.reduce((s, t) => s + t.pnl, 0);
-                        const pnlPct = initial > 0 ? (pnl / initial) * 100 : 0;
+                        const pnl = balance?.pnl ?? trades.reduce((s, t) => s + t.pnl, 0);
+                        const pnlPct = balance?.pnl_pct ?? (initial > 0 ? (pnl / initial) * 100 : 0);
+                        const realizedPnl = trades.reduce((s, t) => s + t.pnl, 0);
                         const wins = stats?.winning_trades ?? 0;
                         const losses = stats?.losing_trades ?? 0;
                         const avgWin = stats?.avg_win ?? 0;
@@ -873,7 +909,7 @@ export function BotStatus() {
                                   {isPos ? '+' : ''}{pnlPct.toFixed(2)}%
                                 </Badge>
                                 <div className="text-[10px] text-muted-foreground/50 font-mono">
-                                  realized · started {formatCurrency(initial)}
+                                  {realizedPnl !== pnl ? `realized ${formatCurrency(realizedPnl)} · ` : ''}started {formatCurrency(initial)}
                                 </div>
                               </div>
                             </div>
@@ -1079,7 +1115,7 @@ export function BotStatus() {
                             <div className="h-px flex-1 bg-gradient-to-r from-transparent via-green-500/20 to-transparent" />
                           </div>
                           <div className="space-y-4">
-                            {status.positions.map((pos) => <PositionCard key={pos.position_id} position={pos} />)}
+                            {status.positions.map((pos) => <PositionCard key={pos.position_id} position={pos} leverage={status?.config?.leverage} />)}
                           </div>
                         </div>
                       ) : null}
@@ -1195,6 +1231,11 @@ export function BotStatus() {
                     </div>
                   </section>
                 </div>
+
+                {/* ── Watchlist Radar ──────────────────────────────────────── */}
+                {status.signal_log && status.signal_log.length > 0 && (
+                  <WatchlistRadar status={status as any} />
+                )}
 
                 {/* ── Trade History ────────────────────────────────────────── */}
                 <section className="glass-card glow-border-amber p-5 rounded-2xl relative overflow-hidden group">
