@@ -57,6 +57,21 @@ class PhemexAdapter:
         self.default_type = default_type
         self.testnet = testnet
 
+        # Lightweight in-process counters surfaced via /api/integrations/phemex/healthz
+        # so the integration is never a black box. Updated on every REST call.
+        self.metrics: Dict[str, Any] = {
+            "rest_calls_total": 0,
+            "rest_5xx_total": 0,
+            "rest_429_total": 0,
+            "rest_auth_errors_total": 0,
+            "rest_other_errors_total": 0,
+            "fetch_my_trades_calls_total": 0,
+            "fetch_my_trades_rows_total": 0,
+            "last_rest_call_ts": None,
+            "last_rest_error_ts": None,
+            "last_rest_error_msg": None,
+        }
+
         if testnet:
             self.exchange.set_sandbox_mode(True)
             logger.info(f"Phemex adapter initialized in TESTNET mode (type: {default_type})")
@@ -383,8 +398,8 @@ class PhemexAdapter:
                 if available:
                     logger.info(f"Fallback: {len(available)} pairs available on Phemex")
                     return available[:n]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"get_top_symbols fallback validation failed: {e}")
 
             return fallback_pairs[:n]
 
@@ -403,8 +418,8 @@ class PhemexAdapter:
                 info.get("type") == "swap" or (info.get("contract") and not info.get("spot"))
             ):
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"is_perp({symbol}) market lookup failed, falling back to string match: {e}")
         su = symbol.upper()
         return (":USDT" in su) or ("-SWAP" in su) or ("PERP" in su)
 
@@ -419,8 +434,8 @@ class PhemexAdapter:
             info = markets_obj.get(symbol) if isinstance(markets_obj, dict) else None
             if info and info.get("type") == "spot":
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"is_spot({symbol}) market lookup failed: {e}")
         return False
 
     def supports_trading(self) -> bool:
@@ -525,6 +540,67 @@ class PhemexAdapter:
         if not self.supports_trading():
             raise ccxt.AuthenticationError("API keys required to fetch positions")
         return self.exchange.fetch_positions(symbols)
+
+    @retry_on_rate_limit(max_retries=3)
+    def fetch_my_trades(
+        self,
+        symbol: Optional[str] = None,
+        since: Optional[int] = None,
+        limit: int = 200,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch the authenticated user's executed trades (fills) from Phemex.
+
+        Used by the periodic backfill task to recover fills that occurred while
+        the bot was offline or while the websocket was disconnected. Without
+        this, the integration's only source of fills is real-time WS+REST and
+        any gap is permanent loss-of-visibility.
+
+        Args:
+            symbol: Filter by trading pair (None = all symbols, supported by
+                ccxt for Phemex perpetual swaps).
+            since: Unix ms timestamp — only trades at-or-after this time.
+            limit: Max trades to return (Phemex caps at ~200/page).
+            params: Extra ccxt params passed through verbatim.
+
+        Returns:
+            List of ccxt trade dicts with at least: id, order, symbol, side,
+            price, amount, cost, fee, timestamp, datetime.
+        """
+        if not self.supports_trading():
+            raise ccxt.AuthenticationError("API keys required to fetch trades")
+        self.metrics["rest_calls_total"] += 1
+        self.metrics["fetch_my_trades_calls_total"] += 1
+        self.metrics["last_rest_call_ts"] = int(time.time() * 1000)
+        try:
+            trades = self.exchange.fetch_my_trades(symbol, since, limit, params or {})
+        except ccxt.AuthenticationError as e:
+            self.metrics["rest_auth_errors_total"] += 1
+            self.metrics["last_rest_error_ts"] = int(time.time() * 1000)
+            self.metrics["last_rest_error_msg"] = f"auth: {e}"
+            raise
+        except ccxt.RateLimitExceeded as e:
+            self.metrics["rest_429_total"] += 1
+            self.metrics["last_rest_error_ts"] = int(time.time() * 1000)
+            self.metrics["last_rest_error_msg"] = f"429: {e}"
+            raise
+        except ccxt.ExchangeError as e:
+            self.metrics["rest_5xx_total"] += 1
+            self.metrics["last_rest_error_ts"] = int(time.time() * 1000)
+            self.metrics["last_rest_error_msg"] = f"exchange: {e}"
+            raise
+        except Exception as e:
+            self.metrics["rest_other_errors_total"] += 1
+            self.metrics["last_rest_error_ts"] = int(time.time() * 1000)
+            self.metrics["last_rest_error_msg"] = f"other: {e}"
+            raise
+        self.metrics["fetch_my_trades_rows_total"] += len(trades)
+        logger.debug(
+            f"fetch_my_trades(symbol={symbol}, since={since}, limit={limit}) "
+            f"returned {len(trades)} rows"
+        )
+        return trades
 
     @retry_on_rate_limit(max_retries=3)
     def set_leverage(self, leverage: int, symbol: str) -> None:

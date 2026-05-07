@@ -46,6 +46,51 @@ class TradeJournalService:
             with self._path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(record, default=str) + "\n")
 
+    def upsert(self, trade_dict: Dict[str, Any], session_id: str) -> bool:
+        """
+        Append the trade only if no existing row shares the same trade_id.
+
+        Used by the periodic Phemex backfill task so re-running the sync does
+        not duplicate rows. Returns True if the row was newly written, False
+        if it was already present.
+
+        Note: dedupe is by trade_id only (the natural key from the exchange).
+        Backfill code is responsible for choosing a stable trade_id —
+        typically the Phemex order id, or a composite of (order_id, fill_seq).
+        """
+        trade_id = trade_dict.get("trade_id")
+        if not trade_id:
+            # No id → fall back to plain append; better to risk a duplicate than drop.
+            self.append(trade_dict, session_id)
+            return True
+        with self._lock:
+            existing_ids = self._existing_trade_ids_unlocked()
+            if trade_id in existing_ids:
+                return False
+            record = {**trade_dict, "session_id": session_id}
+            with self._path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record, default=str) + "\n")
+            return True
+
+    def _existing_trade_ids_unlocked(self) -> set:
+        """Return the set of trade_ids currently in the journal. Caller holds the lock."""
+        ids: set = set()
+        if not self._path.exists():
+            return ids
+        with self._path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                tid = rec.get("trade_id")
+                if tid:
+                    ids.add(tid)
+        return ids
+
     # ------------------------------------------------------------------
     # Read
     # ------------------------------------------------------------------

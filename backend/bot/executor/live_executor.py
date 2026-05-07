@@ -65,6 +65,22 @@ class LiveExecutor:
         self._leverage_confirmed: set = set()  # symbols with leverage already set this session
         self._hedge_mode: bool = False  # True if account is in hedge mode (needs positionSide)
 
+        # Balance-fetch failures used to silently return 0.0, which made the risk
+        # manager believe the account was empty. Track the failure state so callers
+        # (and /healthz) can distinguish "balance is zero" from "we don't know".
+        self.balance_known: bool = False
+        self.last_balance_error: Optional[str] = None
+
+        # Fill-source counters for /api/integrations/phemex/healthz so the operator
+        # can see whether fills are arriving via WS, REST poll, or the position-check
+        # fallback. A stuck-at-zero counter is a strong smoke signal.
+        self.metrics: Dict[str, int] = {
+            "fills_recorded_via_ws": 0,
+            "fills_recorded_via_rest": 0,
+            "fills_recovered_via_position_check": 0,
+            "balance_fetch_failures": 0,
+        }
+
         # Switch to one-way position mode at startup.
         # Phemex TE_ERR_INCONSISTENT_POS_MODE fires when the account is in hedge mode
         # but orders don't include positionSide. The bot uses one-way mode exclusively.
@@ -93,14 +109,26 @@ class LiveExecutor:
 
     def _fetch_balance_from_exchange(self) -> float:
         if self.dry_run:
+            self.balance_known = True
             return 0.0
         try:
             balance = self._adapter.fetch_balance()
             usdt_free = balance.get("free", {}).get("USDT", 0.0) or 0.0
+            self.balance_known = True
+            self.last_balance_error = None
             return float(usdt_free)
         except Exception as e:
+            # Returning 0.0 here makes the risk manager think the account is empty,
+            # which silently disables every new entry. Surface the failure via flags
+            # so callers and /healthz can react instead of trading on phantom zero.
+            self.metrics["balance_fetch_failures"] += 1
+            self.balance_known = False
+            self.last_balance_error = str(e)
             logger.error(f"Failed to fetch balance from exchange: {e}")
-            return 0.0
+            # Preserve the previously-known balance so a single transient error
+            # doesn't trip the floor; only the flag changes so the caller knows
+            # this number is stale.
+            return self._cached_balance if self._cached_balance else 0.0
 
     def _total_exposure_usd(self) -> float:
         """Estimate total open exposure in USD based on current positions."""
@@ -412,6 +440,7 @@ class LiveExecutor:
                     f"qty={ex_qty:.6f} @ {entry_price:.5f} — confirmed via fetch_positions"
                 )
                 fill = self._record_fill(order, fill_qty, entry_price)
+                self.metrics["fills_recovered_via_position_check"] += 1
                 order.status = OrderStatus.FILLED
                 return fill
         except Exception as e:
@@ -459,6 +488,7 @@ class LiveExecutor:
 
         fill_price = ex_avg_price if ex_avg_price > 0 else (order.price or 0.0)
         fill = self._record_fill(order, new_qty, fill_price)
+        self.metrics["fills_recorded_via_rest"] += 1
 
         if ex_status in ("closed", "filled"):
             order.status = OrderStatus.FILLED
@@ -913,6 +943,7 @@ class LiveExecutor:
 
             if incremental > 1e-9 and entry_order:
                 self._record_fill(order, incremental, fill_price)
+                self.metrics["fills_recorded_via_ws"] += 1
             elif incremental > 1e-9:
                 # Stop/TP/trailing stop fired — just record qty/price without touching
                 # position accounting (reconcile_positions handles the position side)
@@ -933,6 +964,7 @@ class LiveExecutor:
                 fill_price = avg_price if avg_price > 0 else (order.price or 0.0)
                 if entry_order:
                     self._record_fill(order, incremental, fill_price)
+                    self.metrics["fills_recorded_via_ws"] += 1
                 else:
                     order.filled_quantity = filled_qty
                 order.status = OrderStatus.PARTIALLY_FILLED

@@ -68,6 +68,23 @@ class PhemexWebSocketClient:
         self._running = False
         self._msg_id = 0
 
+        # Lightweight observability — read by /api/integrations/phemex/healthz so
+        # operators can see WS state without rummaging through logs.
+        self.metrics = {
+            "connected": False,
+            "connect_ts": None,
+            "disconnect_ts": None,
+            "last_frame_ts": None,
+            "frames_in_total": 0,
+            "frames_aop_total": 0,
+            "frames_other_total": 0,
+            "parse_errors_total": 0,
+            "auth_errors_total": 0,
+            "disconnects_total": 0,
+            "heartbeat_failures_total": 0,
+            "order_events_total": 0,
+        }
+
     def _next_id(self) -> int:
         self._msg_id += 1
         return self._msg_id
@@ -92,6 +109,9 @@ class PhemexWebSocketClient:
             except asyncio.CancelledError:
                 break
             except Exception as exc:
+                self.metrics["disconnects_total"] += 1
+                self.metrics["connected"] = False
+                self.metrics["disconnect_ts"] = int(time.time() * 1000)
                 logger.warning(
                     f"Phemex WS disconnected ({exc!r}) — "
                     f"reconnecting in {_RECONNECT_DELAY}s"
@@ -110,6 +130,8 @@ class PhemexWebSocketClient:
                 heartbeat=30,
                 max_msg_size=0,
             ) as ws:
+                self.metrics["connected"] = True
+                self.metrics["connect_ts"] = int(time.time() * 1000)
                 logger.info(f"Phemex WS connected: {self._ws_url}")
 
                 # --- Authenticate ---
@@ -127,6 +149,7 @@ class PhemexWebSocketClient:
                     return
                 auth_data = json.loads(auth_msg.data)
                 if auth_data.get("error"):
+                    self.metrics["auth_errors_total"] += 1
                     logger.error(f"Phemex WS auth failed: {auth_data['error']}")
                     return
                 logger.info("Phemex WS authenticated")
@@ -171,14 +194,25 @@ class PhemexWebSocketClient:
                     "params": [],
                     "id": self._next_id(),
                 }))
-            except Exception:
+            except Exception as e:
+                self.metrics["heartbeat_failures_total"] += 1
+                logger.warning(f"Phemex WS heartbeat send failed: {e!r}")
                 break
 
     def _dispatch(self, raw: str) -> None:
         """Parse an incoming message and call the order update callback if appropriate."""
+        self.metrics["frames_in_total"] += 1
+        self.metrics["last_frame_ts"] = int(time.time() * 1000)
         try:
             msg = json.loads(raw)
-        except (json.JSONDecodeError, ValueError):
+        except (json.JSONDecodeError, ValueError) as e:
+            # Don't crash on bad JSON, but make it visible — silently dropping frames
+            # masks malformed-message bugs and protocol drift.
+            self.metrics["parse_errors_total"] += 1
+            logger.warning(
+                "Phemex WS JSON parse error: %s (raw_len=%d, head=%r)",
+                e, len(raw), raw[:120],
+            )
             return
 
         msg_type = msg.get("type")
@@ -187,11 +221,14 @@ class PhemexWebSocketClient:
         if msg_type != "aop_p":
             # Log any non-trivial message so format changes are visible in debug logs
             if msg_type and msg_type not in ("pong",):
+                self.metrics["frames_other_total"] += 1
                 logger.debug("Unhandled WS message type=%r id=%s", msg_type, msg.get("id"))
             return
 
+        self.metrics["frames_aop_total"] += 1
         orders = msg.get("orders") or msg.get("data", {}).get("orders", [])
         for order in orders:
+            self.metrics["order_events_total"] += 1
             self._handle_order_event(order)
 
     def _handle_order_event(self, order: dict) -> None:
