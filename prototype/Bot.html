@@ -1,0 +1,2799 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>SniperSight — Bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+.bot-tab-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 14px;border:1px solid var(--border-soft);border-radius:8px;background:rgba(0,0,0,.4);margin-bottom:14px;flex-wrap:wrap}
+.tab-switch{display:flex;gap:0;border:1px solid var(--border-soft);border-radius:8px;overflow:hidden}
+.tab-switch button{background:rgba(0,0,0,.4);border:none;color:var(--fg-3);padding:8px 16px;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.18em;cursor:pointer;transition:all .15s;border-right:1px solid var(--border-soft)}
+.tab-switch button:last-child{border-right:none}
+.tab-switch button.active{background:var(--accent-bg);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+.tab-switch button:hover:not(.active){background:rgba(255,255,255,.04);color:var(--fg)}
+
+:root {
+  --bg: oklch(0.18 0.008 120);
+  --bg-2: oklch(0.22 0.010 125);
+  --card: oklch(0.26 0.012 125);
+  --card-2: oklch(0.30 0.012 125);
+  --border: oklch(0.36 0.015 130);
+  --border-soft: oklch(0.32 0.015 130 / 0.6);
+  --fg: oklch(0.94 0.012 150);
+  --fg-2: oklch(0.78 0.012 150);
+  --fg-3: oklch(0.58 0.015 150);
+  --fg-4: oklch(0.42 0.012 150);
+  --green: #00ffaa;
+  --green-soft: #4ade80;
+  --green-bg: rgba(0,255,170,.10);
+  --green-border: rgba(0,255,170,.30);
+  --amber: #ffc266;
+  --amber-2: #fbbf24;
+  --amber-bg: rgba(251,191,36,.10);
+  --amber-border: rgba(251,191,36,.35);
+  --red: #ff6464;
+  --red-2: #f87171;
+  --red-bg: rgba(248,113,113,.10);
+  --red-border: rgba(248,113,113,.35);
+  --blue: #60a5fa;
+  --blue-bg: rgba(96,165,250,.10);
+  --blue-border: rgba(96,165,250,.30);
+  --cyan: #22d3ee;
+  --purple: #c084fc;
+  /* accent applied dynamically via tweaks (green/amber/blue) */
+  --accent: var(--green);
+  --accent-bg: var(--green-bg);
+  --accent-border: var(--green-border);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:'Inter',ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;}
+body{min-height:100vh;overflow-x:hidden;position:relative;}
+
+/* ── Tactical background layers ─────────────────────────── */
+.tactical-bg{position:fixed;inset:0;z-index:-10;pointer-events:none;overflow:hidden;}
+.tactical-bg.off{display:none;}
+.tactical-bg::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg, oklch(0.14 0.010 120) 0%, oklch(0.10 0.008 120) 50%, oklch(0.13 0.010 120) 100%);
+}
+.tactical-bg .glow{
+  position:absolute;inset:-20%;
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 30%, color-mix(in oklch, var(--accent) 8%, transparent) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 60% at 85% 75%, rgba(96,165,250,.06) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 40% at 50% 50%, color-mix(in oklch, var(--accent) 4%, transparent) 0%, transparent 50%);
+  animation:glowDrift 30s ease-in-out infinite;
+}
+@keyframes glowDrift{
+  0%,100%{transform:translate(0,0) scale(1);opacity:.7;}
+  50%{transform:translate(2%,-2%) scale(1.05);opacity:1;}
+}
+.tactical-bg .grid{
+  position:absolute;inset:0;
+  background-image:radial-gradient(circle at center, color-mix(in oklch, var(--accent) 22%, transparent) 1px, transparent 1px);
+  background-size:40px 40px;
+  opacity:.06;
+  animation:gridDrift 120s linear infinite;
+}
+@keyframes gridDrift{from{background-position:0 0}to{background-position:40px 0}}
+.tactical-bg .scanline{
+  position:absolute;left:0;right:0;height:3px;
+  background:linear-gradient(90deg, transparent, color-mix(in oklch, var(--accent) 40%, transparent) 30%, color-mix(in oklch, var(--accent) 60%, transparent) 50%, color-mix(in oklch, var(--accent) 40%, transparent) 70%, transparent);
+  box-shadow:0 0 18px color-mix(in oklch, var(--accent) 50%, transparent);
+  animation:scanSweep 8s linear infinite;
+}
+@keyframes scanSweep{0%{transform:translateY(-100%)}100%{transform:translateY(100vh)}}
+.tactical-bg .grain{
+  position:absolute;inset:0;opacity:.04;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  animation:grainFlick .5s steps(2) infinite;
+}
+@keyframes grainFlick{0%,100%{opacity:.03}50%{opacity:.05}}
+
+/* ── HUD type ───────────────────────────────────────────── */
+.hud{font-family:'Share Tech Mono',ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;}
+.term{font-family:'VT323',ui-monospace,monospace;letter-spacing:.04em;}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+.hud-glow{color:var(--accent);text-shadow:0 0 6px color-mix(in oklch, var(--accent) 60%, transparent), 0 0 14px color-mix(in oklch, var(--accent) 35%, transparent);}
+.hud-glow-amber{color:var(--amber);text-shadow:0 0 6px rgba(255,194,102,.7),0 0 14px rgba(255,194,102,.35);}
+.hud-glow-red{color:var(--red);text-shadow:0 0 6px rgba(255,100,100,.7),0 0 14px rgba(255,100,100,.35);}
+
+/* ── Surfaces ───────────────────────────────────────────── */
+.panel{
+  position:relative;
+  background:linear-gradient(135deg, rgba(0,0,0,.55) 0%, oklch(0.22 0.010 125 / .6) 100%);
+  border:1px solid var(--border-soft);
+  border-radius:14px;
+  overflow:hidden;
+}
+.panel::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg, transparent 0 2px, rgba(255,255,255,.012) 2px 4px);
+  z-index:1;
+}
+.panel.scanlines-off::before{display:none;}
+.panel > *{position:relative;z-index:2;}
+
+.panel-accent{
+  border-color: color-mix(in oklch, var(--accent) 25%, var(--border-soft));
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 8%, transparent), 0 8px 40px rgba(0,0,0,.4);
+}
+.panel-accent::after{
+  content:'';position:absolute;inset:0;pointer-events:none;z-index:1;
+  background:radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in oklch, var(--accent) 8%, transparent) 0%, transparent 70%);
+}
+
+/* corner brackets */
+.brackets::before,.brackets::after{
+  content:'';position:absolute;width:14px;height:14px;border:1.5px solid color-mix(in oklch, var(--accent) 60%, transparent);pointer-events:none;
+}
+.brackets::before{top:6px;left:6px;border-right:none;border-bottom:none;}
+.brackets::after{bottom:6px;right:6px;border-left:none;border-top:none;}
+
+/* ── Tiny utilities ─────────────────────────────────────── */
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;padding:3px 8px;border:1px solid var(--border-soft);border-radius:999px;color:var(--fg-2);background:rgba(255,255,255,.04);}
+.chip-accent{color:var(--accent);border-color:var(--accent-border);background:var(--accent-bg);}
+.chip-green{color:var(--green-soft);border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.08);}
+.chip-red{color:var(--red-2);border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.08);}
+.chip-amber{color:var(--amber-2);border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.08);}
+.chip-blue{color:var(--blue);border-color:rgba(96,165,250,.30);background:rgba(96,165,250,.08);}
+.chip-purple{color:var(--purple);border-color:rgba(192,132,252,.30);background:rgba(192,132,252,.08);}
+
+.divider{height:1px;background:linear-gradient(90deg, transparent, color-mix(in oklch, var(--accent) 30%, transparent) 50%, transparent);}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:9px 14px;border-radius:10px;
+  font-family:'JetBrains Mono',monospace;font-weight:800;font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;
+  border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--fg-2);cursor:pointer;
+  transition:all .18s ease;
+  user-select:none;
+}
+.btn:hover{background:rgba(255,255,255,.06);color:var(--fg);}
+.btn-red{color:var(--red-2);border-color:rgba(248,113,113,.30);background:rgba(248,113,113,.10);}
+.btn-red:hover{background:rgba(248,113,113,.18);color:#fff;}
+.btn-orange{color:#fdba74;border-color:rgba(251,146,60,.30);background:rgba(251,146,60,.10);}
+.btn-orange:hover{background:rgba(251,146,60,.18);color:#fff;}
+.btn-green{color:var(--green-soft);border-color:rgba(74,222,128,.30);background:rgba(74,222,128,.10);}
+.btn-green:hover{background:rgba(74,222,128,.18);color:#fff;}
+.btn-cyan{
+  color:#67e8f9;border:1px solid rgba(34,211,238,.4);
+  background:linear-gradient(180deg,#164e63 0%,#0e3a4a 60%,#0a2d3a 100%);
+  box-shadow:0 4px 0 0 #061e27, 0 0 12px rgba(34,211,238,.18), inset 0 1px 0 rgba(255,255,255,.07);
+}
+.btn-cyan:hover{filter:brightness(1.15);}
+.btn-cyan:active{transform:translateY(1px);box-shadow:0 1px 0 0 #061e27, 0 0 8px rgba(34,211,238,.18);}
+.btn-icon{padding:0;width:36px;height:36px;}
+
+.metric-tile{
+  background:rgba(0,0,0,.4);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:12px;
+  padding:14px 16px;
+  position:relative;
+  overflow:hidden;
+}
+.metric-label{font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:600;color:var(--fg-4);text-transform:uppercase;letter-spacing:.2em;margin-bottom:10px;}
+.metric-value{font-family:'Share Tech Mono','JetBrains Mono',monospace;font-size:26px;font-weight:800;letter-spacing:-.01em;line-height:1;color:var(--fg);}
+.metric-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--fg-4);text-transform:uppercase;letter-spacing:.12em;margin-top:6px;}
+
+/* ── Pulsing orb ─────────────────────────────────────────── */
+.orb{position:relative;width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.orb .core{width:14px;height:14px;border-radius:50%;background:var(--green);box-shadow:0 0 18px var(--green);}
+.orb .ping{position:absolute;inset:0;border-radius:50%;background:var(--green);opacity:.25;animation:ping 2.5s ease-out infinite;}
+.orb .blur{position:absolute;inset:4px;border-radius:50%;background:var(--green);opacity:.35;filter:blur(5px);}
+@keyframes ping{0%{transform:scale(.8);opacity:.45}80%,100%{transform:scale(2.2);opacity:0}}
+.orb.amber .core{background:var(--amber-2);box-shadow:0 0 18px var(--amber-2);}
+.orb.amber .ping,.orb.amber .blur{background:var(--amber-2);}
+.orb.red .core{background:var(--red-2);box-shadow:0 0 18px var(--red-2);}
+.orb.red .ping,.orb.red .blur{background:var(--red-2);}
+
+/* ── Reticle ─────────────────────────────────────────────── */
+.reticle{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;opacity:.18;}
+.reticle.off{display:none;}
+.reticle svg{width:120%;height:120%;}
+.reticle .ring-rotate{animation:rRotate 45s linear infinite;transform-origin:center;}
+.reticle .ring-rotate-rev{animation:rRotateRev 30s linear infinite;transform-origin:center;}
+@keyframes rRotate{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes rRotateRev{from{transform:rotate(360deg)}to{transform:rotate(0)}}
+
+/* ── HUD progress bar (entry/SL/TP) ─────────────────────── */
+.hud-prog{position:relative;height:6px;border-radius:3px;background:linear-gradient(90deg,#7f1d1d 0%,#3a1212 18%,#1d1d1d 30%,#1d1d1d 70%,#0e3326 82%,#065f46 100%);overflow:visible;}
+.hud-prog .marker{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid var(--green);box-shadow:0 0 10px var(--green);transform:translate(-50%,-50%);transition:left .8s cubic-bezier(.22,.9,.3,1);}
+.hud-prog .tick{position:absolute;top:-3px;width:1px;height:12px;background:rgba(255,255,255,.3);}
+
+/* ── Animations ─────────────────────────────────────────── */
+@keyframes flashGreen{0%{background:rgba(0,255,170,0)}20%{background:rgba(0,255,170,.18)}100%{background:rgba(0,255,170,0)}}
+@keyframes flashRed{0%{background:rgba(248,113,113,0)}20%{background:rgba(248,113,113,.18)}100%{background:rgba(248,113,113,0)}}
+.flash-green{animation:flashGreen .9s ease-out;}
+.flash-red{animation:flashRed .9s ease-out;}
+
+@keyframes barShimmer{0%{transform:translateX(-100%)}100%{transform:translateX(200%)}}
+
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:.2}}
+.cursor-blink{animation:blink 1s steps(2) infinite;}
+
+@keyframes radarSweep{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* ── Layout ─────────────────────────────────────────────── */
+.shell{max-width:1320px;margin:0 auto;padding:24px 28px 60px;}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0 22px;border-bottom:1px solid var(--border-soft);margin-bottom:24px;}
+.topbar .brand{display:flex;align-items:center;gap:14px;}
+.brand-mark{width:34px;height:34px;border:1px solid var(--accent-border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--accent-bg);}
+.brand-name{font-family:'Share Tech Mono',monospace;font-size:15px;letter-spacing:.22em;text-transform:uppercase;color:var(--fg);}
+.brand-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--fg-4);letter-spacing:.18em;text-transform:uppercase;}
+
+.nav{display:flex;align-items:center;gap:4px;}
+.nav a{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-3);padding:8px 12px;border-radius:8px;text-decoration:none;border:1px solid transparent;}
+.nav a:hover{color:var(--fg);background:rgba(255,255,255,.04);}
+.nav a.active{color:var(--accent);border-color:var(--accent-border);background:var(--accent-bg);}
+
+/* page header */
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:22px;}
+.page-title{display:flex;align-items:center;gap:18px;}
+.page-title .icon{width:54px;height:54px;border:1px solid var(--amber-border);border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(251,191,36,.06);}
+.page-title h1{font-family:'Share Tech Mono',monospace;font-size:32px;letter-spacing:.2em;text-transform:uppercase;margin:0;line-height:1;color:var(--amber);text-shadow:0 0 14px rgba(251,191,36,.35);}
+.page-title .sub{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--fg-3);letter-spacing:.18em;text-transform:uppercase;margin-top:6px;}
+.page-title h1.live{color:var(--red);text-shadow:0 0 14px rgba(248,113,113,.45);}
+
+.layout-grid{display:grid;grid-template-columns:1.6fr .9fr;gap:18px;align-items:start;}
+.layout-grid.single{grid-template-columns:1fr;}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0;}
+
+@media (max-width: 980px){
+  .shell{padding:14px 14px 80px;}
+  .topbar{flex-wrap:wrap;}
+  .nav{order:3;width:100%;overflow-x:auto;padding-bottom:4px;}
+  .nav a{flex-shrink:0;}
+  .layout-grid{grid-template-columns:1fr;}
+  .page-title h1{font-size:24px;}
+  .metric-value{font-size:22px;}
+}
+
+/* Section header inside panel */
+.sec-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border-soft);}
+.sec-title{font-family:'Share Tech Mono',monospace;font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--fg);display:flex;align-items:center;gap:10px;}
+.sec-title .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);}
+
+/* No scrollbar utility */
+.no-scrollbar::-webkit-scrollbar{display:none;}
+.no-scrollbar{scrollbar-width:none;}
+
+/* density */
+.density-sparse .metric-tile{padding:18px 20px;}
+.density-sparse .metric-value{font-size:30px;}
+.density-dense .metric-tile{padding:10px 12px;}
+.density-dense .metric-value{font-size:22px;}
+.density-dense .metric-label{margin-bottom:6px;}
+
+/* Position card */
+.pos{
+  position:relative;padding:14px 16px;border:1px solid var(--border-soft);border-radius:12px;
+  background:linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,.25));
+  cursor:pointer;transition:border-color .2s ease, transform .2s ease;
+  overflow:hidden;
+}
+.pos:hover{border-color:var(--accent-border);}
+
+/* History */
+.hist{padding:11px 14px;border:1px solid var(--border-soft);border-radius:12px;background:rgba(0,0,0,.3);cursor:pointer;transition:border-color .2s ease;}
+.hist:hover{border-color:var(--border);}
+.hist.expanded{border-color:var(--accent-border);background:rgba(0,0,0,.45);box-shadow:0 0 18px color-mix(in oklch, var(--accent) 7%, transparent);}
+
+/* Modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);z-index:60;display:flex;align-items:center;justify-content:center;padding:20px;}
+.modal{width:100%;max-width:480px;background:linear-gradient(180deg, oklch(0.20 0.010 125), oklch(0.16 0.010 125));border:1px solid var(--accent-border);border-radius:14px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6), 0 0 0 1px color-mix(in oklch, var(--accent) 15%, transparent);}
+
+/* ── HUD overlays toggle ─────────────────────────────────── */
+.hud-overlays-off .reticle{display:none;}
+.hud-overlays-off .panel::before{display:none;}
+.hud-overlays-off .corner-tag{display:none;}
+.hud-overlays-off .brackets::before,.hud-overlays-off .brackets::after{display:none;}
+
+/* corner tags */
+.corner-tag{position:absolute;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--fg-4);letter-spacing:.18em;text-transform:uppercase;z-index:3;pointer-events:none;}
+.corner-tag.tl{top:8px;left:14px;}
+.corner-tag.tr{top:8px;right:14px;color:var(--accent);}
+.corner-tag.br{bottom:8px;right:14px;}
+
+/* equity line */
+.eq-svg{width:100%;height:80px;display:block;}
+
+/* Watchlist symbol */
+.watch-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px dashed var(--border-soft);}
+.watch-row:last-child{border-bottom:none;}
+
+/* Scan log row */
+.log-row{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--fg-2);padding:5px 0;display:grid;grid-template-columns:64px 60px 1fr auto;gap:10px;align-items:center;}
+.log-row .t{color:var(--fg-4);}
+.log-row .pass{color:var(--green-soft);}
+.log-row .rej{color:var(--fg-4);}
+.log-row .sym{color:var(--fg);font-weight:700;}
+
+/* radar */
+.radar-wrap{position:relative;width:100%;aspect-ratio:1/1;max-width:240px;margin:0 auto;}
+.radar-sweep{animation:radarSweep 4s linear infinite;transform-origin:center;}
+
+/* selection cosmetic */
+::selection{background:color-mix(in oklch, var(--accent) 50%, transparent);color:#000;}
+</style></head><body>
+<div class="tactical-bg" id="tactical-bg"><div class="glow"></div><div class="grid"></div><div class="grain"></div><div class="scanline"></div></div>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel">
+// gauntlet.jsx (inlined)
+// ── Gauntlet Breakdown ──────────────────────────────────────
+// Signal-funnel visualizer for Bot Status. Shows where each candidate
+// signal died across the 21-stage filter chain.
+
+const GAUNTLET_STAGES = [
+  // group, id, label, hint
+  { group:'PRE-SCORE',   id:'NO_DATA',           label:'NO DATA',            hint:'OHLCV missing for required TFs' },
+  { group:'PRE-SCORE',   id:'MISSING_TF',        label:'MISSING TF',         hint:'Critical timeframe failed to load' },
+  { group:'PRE-SCORE',   id:'STRUCTURAL_ANCHOR', label:'STRUCTURAL ANCHOR',  hint:'No valid HTF anchor (BOS/CHoCH/OB)' },
+  { group:'PRE-SCORE',   id:'REGIME_ALIGNMENT',  label:'REGIME ALIGNMENT',   hint:'Direction conflicts with macro regime' },
+  { group:'PRE-SCORE',   id:'BTC_IMPULSE',       label:'BTC IMPULSE',        hint:'BTC moving against the trade' },
+  { group:'PRE-SCORE',   id:'CONFLICT_DENSITY',  label:'CONFLICT DENSITY',   hint:'Too many opposing signals nearby' },
+  { group:'PRE-SCORE',   id:'COOLDOWN',          label:'COOLDOWN',           hint:'Symbol just lost / recently rejected' },
+  { group:'POST-SCORE',  id:'CONFLUENCE',        label:'CONFLUENCE',         hint:'Score < mode min_confluence_score' },
+  { group:'POST-SCORE',  id:'NO_TRADE_PLAN',     label:'NO TRADE PLAN',      hint:'Planner couldn\u2019t build entry/stop/TP' },
+  { group:'POST-SCORE',  id:'RISK_VALIDATION',   label:'RISK VALIDATION',    hint:'R:R below min, or stops too wide/tight' },
+  { group:'POST-SCORE',  id:'ML_GATE',           label:'ML GATE',            hint:'Edge model said skip' },
+  { group:'EXECUTION',   id:'REGIME_VETO',       label:'REGIME VETO',        hint:'Late-stage regime check killed it' },
+  { group:'EXECUTION',   id:'MAX_POSITIONS',     label:'MAX POSITIONS',      hint:'Already at concurrent-position cap' },
+  { group:'EXECUTION',   id:'HAS_POSITION',      label:'HAS POSITION',       hint:'Already have a position on this symbol' },
+  { group:'EXECUTION',   id:'PENDING_ORDER',     label:'PENDING ORDER',      hint:'Already have a pending order on this symbol' },
+  { group:'EXECUTION',   id:'POSITION_SIZE',     label:'POSITION SIZE',      hint:'Sizing math returned zero / dust' },
+  { group:'EXECUTION',   id:'PULLBACK_PROB',     label:'PULLBACK PROB',      hint:'Entry zone too far from price' },
+  { group:'EXECUTION',   id:'PRICE_FETCH',       label:'PRICE FETCH',        hint:'Couldn\u2019t fetch current price' },
+  { group:'EXECUTION',   id:'EXEC_ERROR',        label:'EXEC ERROR',         hint:'Exchange call failed' },
+  { group:'EXECUTION',   id:'PENDING_FILL',      label:'PENDING FILL',       hint:'Order placed, waiting on fill' },
+  { group:'EXECUTION',   id:'EXECUTED',          label:'EXECUTED',           hint:'Survived everything · position opened', terminal:true },
+];
+
+// Mock signal log — distributes ~52 candidates across stages so the funnel
+// reads like a real session. In prod this comes from /api/bot/status.signal_log
+const MOCK_SIGNALS = [
+  // PRE-SCORE
+  { sym:'JTO/USDT',  tf:'15m', dir:'LONG',  score:null, threshold:7.0, stage:'NO_DATA',           ts:'14:02:11', extra:'1H OHLCV pull failed' },
+  { sym:'WLD/USDT',  tf:'15m', dir:'SHORT', score:null, threshold:7.0, stage:'MISSING_TF',        ts:'14:03:48', extra:'4H feed disconnected' },
+  { sym:'PEPE/USDT', tf:'5m',  dir:'LONG',  score:null, threshold:7.0, stage:'STRUCTURAL_ANCHOR', ts:'14:05:02', extra:'no HTF BOS within 50 bars' },
+  { sym:'INJ/USDT',  tf:'15m', dir:'SHORT', score:null, threshold:7.0, stage:'REGIME_ALIGNMENT',  ts:'14:06:33', extra:'macro: BULL · trade: SHORT' },
+  { sym:'SUI/USDT',  tf:'15m', dir:'SHORT', score:null, threshold:7.0, stage:'REGIME_ALIGNMENT',  ts:'14:07:01', extra:'macro: BULL · trade: SHORT' },
+  { sym:'ARB/USDT',  tf:'15m', dir:'LONG',  score:null, threshold:7.0, stage:'BTC_IMPULSE',       ts:'14:08:24', extra:'BTC −0.8% / 5m' },
+  { sym:'OP/USDT',   tf:'15m', dir:'LONG',  score:null, threshold:7.0, stage:'BTC_IMPULSE',       ts:'14:08:51', extra:'BTC −0.8% / 5m' },
+  { sym:'TIA/USDT',  tf:'15m', dir:'LONG',  score:null, threshold:7.0, stage:'CONFLICT_DENSITY',  ts:'14:09:18', extra:'4 opposing signals in 30m' },
+  { sym:'AVAX/USDT', tf:'15m', dir:'SHORT', score:null, threshold:7.0, stage:'COOLDOWN',          ts:'14:10:55', extra:'lost 12m ago' },
+  { sym:'LINK/USDT', tf:'15m', dir:'LONG',  score:null, threshold:7.0, stage:'COOLDOWN',          ts:'14:11:22', extra:'rejected 8m ago' },
+
+  // POST-SCORE — CONFLUENCE is the bottleneck (18 signals)
+  { sym:'NEAR/USDT', tf:'15m', dir:'LONG',  score:5.8, threshold:7.0, stage:'CONFLUENCE',         ts:'14:12:04' },
+  { sym:'APT/USDT',  tf:'15m', dir:'LONG',  score:6.2, threshold:7.0, stage:'CONFLUENCE',         ts:'14:12:33' },
+  { sym:'DYDX/USDT', tf:'15m', dir:'SHORT', score:6.4, threshold:7.0, stage:'CONFLUENCE',         ts:'14:13:01' },
+  { sym:'MKR/USDT',  tf:'1H',  dir:'LONG',  score:5.5, threshold:7.0, stage:'CONFLUENCE',         ts:'14:13:18' },
+  { sym:'GMT/USDT',  tf:'15m', dir:'LONG',  score:6.7, threshold:7.0, stage:'CONFLUENCE',         ts:'14:13:42' },
+  { sym:'CRV/USDT',  tf:'15m', dir:'SHORT', score:6.1, threshold:7.0, stage:'CONFLUENCE',         ts:'14:14:11' },
+  { sym:'AAVE/USDT', tf:'15m', dir:'LONG',  score:6.8, threshold:7.0, stage:'CONFLUENCE',         ts:'14:14:33' },
+  { sym:'LDO/USDT',  tf:'15m', dir:'LONG',  score:5.9, threshold:7.0, stage:'CONFLUENCE',         ts:'14:15:01' },
+  { sym:'GMX/USDT',  tf:'15m', dir:'SHORT', score:6.3, threshold:7.0, stage:'CONFLUENCE',         ts:'14:15:24' },
+  { sym:'STRK/USDT', tf:'15m', dir:'LONG',  score:6.6, threshold:7.0, stage:'CONFLUENCE',         ts:'14:15:48' },
+  { sym:'PYTH/USDT', tf:'15m', dir:'LONG',  score:5.7, threshold:7.0, stage:'CONFLUENCE',         ts:'14:16:12' },
+  { sym:'JUP/USDT',  tf:'15m', dir:'SHORT', score:6.5, threshold:7.0, stage:'CONFLUENCE',         ts:'14:16:38' },
+  { sym:'MANTA/USDT',tf:'15m', dir:'LONG',  score:6.0, threshold:7.0, stage:'CONFLUENCE',         ts:'14:17:01' },
+  { sym:'ENA/USDT',  tf:'15m', dir:'LONG',  score:6.4, threshold:7.0, stage:'CONFLUENCE',         ts:'14:17:24' },
+  { sym:'IMX/USDT',  tf:'15m', dir:'SHORT', score:6.2, threshold:7.0, stage:'CONFLUENCE',         ts:'14:17:48' },
+  { sym:'ONDO/USDT', tf:'15m', dir:'LONG',  score:6.9, threshold:7.0, stage:'CONFLUENCE',         ts:'14:18:11' },
+  { sym:'WIF/USDT',  tf:'5m',  dir:'LONG',  score:6.1, threshold:7.0, stage:'CONFLUENCE',         ts:'14:18:33' },
+  { sym:'BONK/USDT', tf:'5m',  dir:'LONG',  score:5.4, threshold:7.0, stage:'CONFLUENCE',         ts:'14:18:51' },
+  { sym:'FET/USDT',  tf:'15m', dir:'SHORT', score:7.1, threshold:7.0, stage:'NO_TRADE_PLAN',      ts:'14:19:18', extra:'no valid OB within 1.5R' },
+  { sym:'RNDR/USDT', tf:'15m', dir:'LONG',  score:7.3, threshold:7.0, stage:'NO_TRADE_PLAN',      ts:'14:19:42', extra:'TP1 inside spread' },
+  { sym:'FIL/USDT',  tf:'15m', dir:'LONG',  score:7.2, threshold:7.0, stage:'RISK_VALIDATION',    ts:'14:20:11', extra:'R:R 0.92 < 1.50 min' },
+  { sym:'ATOM/USDT', tf:'15m', dir:'SHORT', score:7.4, threshold:7.0, stage:'RISK_VALIDATION',    ts:'14:20:38', extra:'stop too tight (0.18%)' },
+  { sym:'DOT/USDT',  tf:'15m', dir:'LONG',  score:7.6, threshold:7.0, stage:'RISK_VALIDATION',    ts:'14:21:04', extra:'R:R 1.14 < 1.50 min' },
+  { sym:'XRP/USDT',  tf:'15m', dir:'LONG',  score:7.5, threshold:7.0, stage:'ML_GATE',            ts:'14:21:28', extra:'edge p=0.41 < 0.55' },
+  { sym:'ADA/USDT',  tf:'15m', dir:'SHORT', score:7.3, threshold:7.0, stage:'ML_GATE',            ts:'14:21:52', extra:'edge p=0.46 < 0.55' },
+
+  // EXECUTION
+  { sym:'LTC/USDT',  tf:'15m', dir:'LONG',  score:7.8, threshold:7.0, stage:'REGIME_VETO',        ts:'14:22:18', extra:'4H regime flipped CHOP' },
+  { sym:'BCH/USDT',  tf:'15m', dir:'SHORT', score:7.6, threshold:7.0, stage:'MAX_POSITIONS',      ts:'14:22:44', extra:'4/4 slots full' },
+  { sym:'BTC/USDT',  tf:'15m', dir:'LONG',  score:8.2, threshold:7.0, stage:'HAS_POSITION',       ts:'14:23:01', extra:'already long BTC' },
+  { sym:'ETH/USDT',  tf:'15m', dir:'LONG',  score:7.9, threshold:7.0, stage:'PENDING_ORDER',      ts:'14:23:25', extra:'limit order live @ 3198' },
+  { sym:'STX/USDT',  tf:'15m', dir:'LONG',  score:7.5, threshold:7.0, stage:'POSITION_SIZE',      ts:'14:23:48', extra:'$8 size after risk math' },
+  { sym:'KAS/USDT',  tf:'15m', dir:'LONG',  score:7.7, threshold:7.0, stage:'PULLBACK_PROB',      ts:'14:24:11', extra:'entry 0.8% from price' },
+  { sym:'TON/USDT',  tf:'15m', dir:'LONG',  score:7.8, threshold:7.0, stage:'PRICE_FETCH',        ts:'14:24:38', extra:'mark-price RPC timeout' },
+  { sym:'ENS/USDT',  tf:'15m', dir:'SHORT', score:7.6, threshold:7.0, stage:'EXEC_ERROR',         ts:'14:25:01', extra:'Bybit · -1013 size precision' },
+  { sym:'SEI/USDT',  tf:'15m', dir:'LONG',  score:7.9, threshold:7.0, stage:'PENDING_FILL',       ts:'14:25:24', extra:'limit @ 0.412 · 18s old' },
+
+  // EXECUTED
+  { sym:'BTC/USDT',  tf:'15m', dir:'LONG',  score:8.4, threshold:7.0, stage:'EXECUTED',           ts:'13:54:18', extra:'+0.42% · TP1 hit' },
+  { sym:'SOL/USDT',  tf:'15m', dir:'LONG',  score:8.1, threshold:7.0, stage:'EXECUTED',           ts:'14:01:42', extra:'+0.18% · running' },
+];
+
+// Auto-detect the dominant kill stage and produce an actionable insight
+function deriveBottleneck(counts){
+  // Skip terminal & ok-for-now stages
+  const skip = new Set(['EXECUTED','PENDING_FILL']);
+  const total = Object.entries(counts).reduce((s,[k,v])=> skip.has(k) ? s : s+v, 0);
+  if (total === 0) return null;
+  let topId = null, topCount = 0;
+  for (const [id,c] of Object.entries(counts)){
+    if (skip.has(id)) continue;
+    if (c > topCount) { topCount = c; topId = id; }
+  }
+  if (!topId || topCount === 0) return null;
+  const pct = Math.round((topCount/total)*100);
+
+  const ACTION_MAP = {
+    CONFLUENCE:        { msg:'Confluence threshold may be too high for current conditions.', cta:'Switch to STRIKE (≥6.8)', href:'Bot.html#setup' },
+    REGIME_ALIGNMENT:  { msg:'Most signals fight the macro regime — your direction bias is wrong.', cta:'Review regime detector', href:'Intel.html' },
+    REGIME_VETO:       { msg:'Late-stage regime check is killing approved plans.', cta:'Inspect regime detector', href:'Intel.html' },
+    BTC_IMPULSE:       { msg:'BTC volatility is breaking signals before entry.', cta:'Open BTC chart', href:'Intel.html#btc' },
+    RISK_VALIDATION:   { msg:'Plans don\u2019t meet R:R floor — stops or TPs need recalibrating.', cta:'Tune risk params', href:'Settings.html' },
+    ML_GATE:           { msg:'Edge model is rejecting most signals — model may be stale.', cta:'Retrain model', href:'Training.html' },
+    MAX_POSITIONS:     { msg:'Concurrent-position cap is the bottleneck, not detection.', cta:'Raise cap in Risk Center', href:'Settings.html' },
+    COOLDOWN:          { msg:'Cooldown filter eating most signals — recent loss streak.', cta:'Review Journal', href:'Journal.html' },
+    NO_TRADE_PLAN:     { msg:'Planner can\u2019t build valid plans — anchors may be too sparse.', cta:'Tune planner', href:'Bot.html#triggers' },
+    STRUCTURAL_ANCHOR: { msg:'No HTF anchors are forming — market is choppy.', cta:'Wait for trend', href:'Intel.html' },
+    EXEC_ERROR:        { msg:'Exchange is rejecting orders — check API keys / size precision.', cta:'Open Risk Center', href:'Settings.html' },
+  };
+  const action = ACTION_MAP[topId] || { msg:'Investigate this stage in detail mode.', cta:'View detail', href:'#' };
+  const stage = GAUNTLET_STAGES.find(s=>s.id===topId);
+  return { id:topId, label: stage?.label || topId, count: topCount, pct, ...action };
+}
+
+function GauntletBreakdown({ signals }){
+  const sigs = signals || MOCK_SIGNALS;
+  const [detail, setDetail] = useState(false);
+  const [filterStage, setFilterStage] = useState(null);
+
+  const counts = useMemo(()=>{
+    const c = {};
+    GAUNTLET_STAGES.forEach(s=>{ c[s.id] = 0; });
+    sigs.forEach(s => { c[s.stage] = (c[s.stage]||0) + 1; });
+    return c;
+  }, [sigs]);
+
+  const total = sigs.length;
+  const executed = counts['EXECUTED'] || 0;
+  const conversion = total > 0 ? (executed/total)*100 : 0;
+  const bottleneck = useMemo(()=>deriveBottleneck(counts), [counts]);
+
+  // Max count for bar scaling (excluding zero stages for nicer look)
+  const maxCount = Math.max(...Object.values(counts), 1);
+
+  // Group stages
+  const groups = ['PRE-SCORE','POST-SCORE','EXECUTION'];
+
+  const stageColor = (id, count) => {
+    if (count === 0) return 'var(--fg-4)';
+    if (id === 'EXECUTED') return 'var(--green-soft)';
+    if (id === 'PENDING_FILL') return 'var(--amber-2)';
+    return 'var(--red-2)';
+  };
+  const stageBg = (id, count) => {
+    if (count === 0) return 'transparent';
+    if (id === 'EXECUTED') return 'rgba(74,222,128,.12)';
+    if (id === 'PENDING_FILL') return 'rgba(251,191,36,.10)';
+    return 'rgba(248,113,113,.10)';
+  };
+
+  const filteredSigs = filterStage ? sigs.filter(s=>s.stage===filterStage) : sigs;
+
+  return (
+    <section className="panel">
+      <div className="sec-head">
+        <div className="sec-title"><span className="dot"/> Gauntlet Breakdown</div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span className="chip">{total} CANDIDATES · {executed} EXECUTED · {conversion.toFixed(1)}%</span>
+          <button className="btn" onClick={()=>setDetail(!detail)} style={{padding:'4px 10px',fontSize:9,letterSpacing:'.18em'}}>{detail?'◉ DETAIL':'◯ DETAIL'}</button>
+        </div>
+      </div>
+
+      {/* Bottleneck insight pill */}
+      {bottleneck && (
+        <div style={{margin:'14px 18px 0',padding:'10px 14px',border:'1px solid var(--amber-border)',borderRadius:8,background:'var(--amber-bg)',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{color:'var(--amber-2)',fontSize:14}}>⚠</span>
+            <span className="mono" style={{fontSize:9,color:'var(--amber-2)',letterSpacing:'.18em',fontWeight:700}}>BOTTLENECK</span>
+            <span className="mono" style={{fontSize:11,color:'var(--fg)',fontWeight:700,letterSpacing:'.14em'}}>{bottleneck.label}</span>
+            <span className="mono" style={{fontSize:10,color:'var(--fg-3)'}}>· {bottleneck.count} signals · {bottleneck.pct}% of rejects</span>
+          </div>
+          <div style={{flex:1,minWidth:200,fontSize:11,color:'var(--fg-2)',lineHeight:1.4}}>{bottleneck.msg}</div>
+          <a href={bottleneck.href} className="btn" style={{padding:'5px 12px',fontSize:10,letterSpacing:'.16em',textDecoration:'none',background:'var(--amber-bg)',borderColor:'var(--amber-border)',color:'var(--amber-2)'}}>{bottleneck.cta} →</a>
+        </div>
+      )}
+
+      {/* Funnel */}
+      <div style={{padding:'14px 18px',display:'grid',gridTemplateColumns:detail?'1fr':'1fr 1fr 1fr',gap:18}}>
+        {groups.map(g=>(
+          <div key={g}>
+            <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.20em',marginBottom:8,paddingBottom:6,borderBottom:'1px dashed var(--border-soft)'}}>// {g} {g==='PRE-SCORE'?'· cheap rejects':g==='POST-SCORE'?'· after confluence math':'· execution layer'}</div>
+            <div style={{display:'flex',flexDirection:'column',gap:detail?2:3}}>
+              {GAUNTLET_STAGES.filter(s=>s.group===g).map(s=>{
+                const c = counts[s.id] || 0;
+                const w = (c/maxCount)*100;
+                const sel = filterStage === s.id;
+                return (
+                  <div key={s.id}
+                       onClick={()=>setFilterStage(sel?null:s.id)}
+                       title={s.hint}
+                       style={{display:'grid',gridTemplateColumns:detail?'160px 1fr 50px':'130px 1fr 32px',gap:8,alignItems:'center',padding:'5px 8px',borderRadius:4,cursor:'pointer',background:sel?'rgba(255,255,255,.04)':'transparent',border:sel?'1px solid var(--accent-border)':'1px solid transparent',transition:'all .15s'}}>
+                    <span className="mono" style={{fontSize:9,color: c===0?'var(--fg-4)':'var(--fg-2)',letterSpacing:'.10em',fontWeight:c>0?700:400,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s.label}</span>
+                    <div style={{height:detail?16:12,background:'rgba(0,0,0,.35)',borderRadius:2,position:'relative',overflow:'hidden',border:'1px solid var(--border-soft)'}}>
+                      <div style={{position:'absolute',left:0,top:0,bottom:0,width:`${w}%`,background:stageBg(s.id,c),borderRight:c>0?`2px solid ${stageColor(s.id,c)}`:'none',transition:'width .3s'}}/>
+                    </div>
+                    <span className="mono" style={{fontSize:10,fontWeight:700,color:stageColor(s.id,c),textAlign:'right',letterSpacing:'.06em'}}>{c}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Detail rows — visible when DETAIL toggle on, OR when filtering by stage */}
+      {(detail || filterStage) && (
+        <div style={{padding:'0 18px 18px'}}>
+          <div style={{paddingTop:10,borderTop:'1px dashed var(--border-soft)'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+              <span className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.20em'}}>// {filterStage ? `STAGE: ${filterStage}` : 'ALL SIGNALS'} · {filteredSigs.length} ROWS</span>
+              {filterStage && <button className="btn" onClick={()=>setFilterStage(null)} style={{padding:'3px 10px',fontSize:9,letterSpacing:'.16em'}}>× CLEAR FILTER</button>}
+            </div>
+            <table className="mono" style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+              <thead>
+                <tr style={{textAlign:'left',color:'var(--fg-4)',fontSize:9,letterSpacing:'.18em',textTransform:'uppercase'}}>
+                  <th style={{padding:'4px 0'}}>Time</th>
+                  <th>Symbol</th>
+                  <th>TF</th>
+                  <th>Side</th>
+                  <th>Score</th>
+                  <th>Stage</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSigs.slice().reverse().map((s,i)=>{
+                  const c = stageColor(s.stage, 1);
+                  return (
+                    <tr key={i} style={{borderTop:'1px dashed var(--border-soft)'}}>
+                      <td style={{padding:'6px 0',color:'var(--fg-4)',fontSize:10}}>{s.ts}</td>
+                      <td style={{fontWeight:700}}>{s.sym}</td>
+                      <td style={{color:'var(--fg-3)'}}>{s.tf}</td>
+                      <td style={{color:s.dir==='LONG'?'var(--green-soft)':'var(--red-2)',fontWeight:700,fontSize:10,letterSpacing:'.12em'}}>{s.dir}</td>
+                      <td style={{color: s.score==null ? 'var(--fg-4)' : s.score>=s.threshold?'var(--green-soft)':'var(--red-2)'}}>
+                        {s.score==null ? '—' : `${s.score.toFixed(1)} / ${s.threshold.toFixed(1)}`}
+                      </td>
+                      <td><span style={{color:c,fontWeight:700,fontSize:9,letterSpacing:'.14em',padding:'2px 8px',border:`1px solid ${c}`,borderRadius:3,background:stageBg(s.stage,1)}}>{s.stage}</span></td>
+                      <td style={{color:'var(--fg-3)',fontSize:10}}>{s.extra || '—'}</td>
+                    </tr>
+                  );
+                })}
+                {filteredSigs.length === 0 && (
+                  <tr><td colSpan={7} style={{textAlign:'center',padding:'20px 0',color:'var(--fg-4)',fontSize:11,letterSpacing:'.16em'}}>// no signals at this stage</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+window.GauntletBreakdown = GauntletBreakdown;
+
+</script>
+<script>window.__BOT_SHELL__=true;</script>
+<script type="text/babel">
+// tweaks-panel.jsx
+// Reusable Tweaks shell + form-control helpers.
+//
+// Owns the host protocol (listens for __activate_edit_mode / __deactivate_edit_mode,
+// posts __edit_mode_available / __edit_mode_set_keys / __edit_mode_dismissed) so
+// individual prototypes don't re-roll it. Ships a consistent set of controls so you
+// don't hand-draw <input type="range">, segmented radios, steppers, etc.
+//
+// Usage (in an HTML file that loads React + Babel):
+//
+//   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+//     "primaryColor": "#D97757",
+//     "palette": ["#D97757", "#29261b", "#f6f4ef"],
+//     "fontSize": 16,
+//     "density": "regular",
+//     "dark": false
+//   }/*EDITMODE-END*/;
+//
+//   function App() {
+//     const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+//     return (
+//       <div style={{ fontSize: t.fontSize, color: t.primaryColor }}>
+//         Hello
+//         <TweaksPanel>
+//           <TweakSection label="Typography" />
+//           <TweakSlider label="Font size" value={t.fontSize} min={10} max={32} unit="px"
+//                        onChange={(v) => setTweak('fontSize', v)} />
+//           <TweakRadio  label="Density" value={t.density}
+//                        options={['compact', 'regular', 'comfy']}
+//                        onChange={(v) => setTweak('density', v)} />
+//           <TweakSection label="Theme" />
+//           <TweakColor  label="Primary" value={t.primaryColor}
+//                        options={['#D97757', '#2A6FDB', '#1F8A5B', '#7A5AE0']}
+//                        onChange={(v) => setTweak('primaryColor', v)} />
+//           <TweakColor  label="Palette" value={t.palette}
+//                        options={[['#D97757', '#29261b', '#f6f4ef'],
+//                                  ['#475569', '#0f172a', '#f1f5f9']]}
+//                        onChange={(v) => setTweak('palette', v)} />
+//           <TweakToggle label="Dark mode" value={t.dark}
+//                        onChange={(v) => setTweak('dark', v)} />
+//         </TweaksPanel>
+//       </div>
+//     );
+//   }
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    transform:scale(var(--dc-inv-zoom,1));transform-origin:bottom right;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-body::-webkit-scrollbar{width:8px}
+  .twk-body::-webkit-scrollbar-track{background:transparent;margin:2px}
+  .twk-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  .twk-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25);
+    border:2px solid transparent;background-clip:content-box}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+    color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+
+  .twk-field{appearance:none;width:100%;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;
+    overflow-wrap:anywhere}
+
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+
+  .twk-num{display:flex;align-items:center;height:26px;padding:0 0 0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
+  .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
+    user-select:none;padding-right:8px}
+  .twk-num input{flex:1;min-width:0;height:100%;border:0;background:transparent;
+    font:inherit;font-variant-numeric:tabular-nums;text-align:right;padding:0 8px 0 0;
+    outline:none;color:inherit;-moz-appearance:textfield}
+  .twk-num input::-webkit-inner-spin-button,.twk-num input::-webkit-outer-spin-button{
+    -webkit-appearance:none;margin:0}
+  .twk-num-unit{padding-right:8px;color:rgba(41,38,27,.45)}
+
+  .twk-btn{appearance:none;height:26px;padding:0 12px;border:0;border-radius:7px;
+    background:rgba(0,0,0,.78);color:#fff;font:inherit;font-weight:500;cursor:default}
+  .twk-btn:hover{background:rgba(0,0,0,.88)}
+  .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
+  .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
+
+  .twk-swatch{appearance:none;-webkit-appearance:none;width:56px;height:22px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:6px;padding:0;cursor:default;
+    background:transparent;flex-shrink:0}
+  .twk-swatch::-webkit-color-swatch-wrapper{padding:0}
+  .twk-swatch::-webkit-color-swatch{border:0;border-radius:5.5px}
+  .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
+
+  .twk-chips{display:flex;gap:6px}
+  .twk-chip{position:relative;appearance:none;flex:1;min-width:0;height:46px;
+    padding:0;border:0;border-radius:6px;overflow:hidden;cursor:default;
+    box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
+    transition:transform .12s cubic-bezier(.3,.7,.4,1),box-shadow .12s}
+  .twk-chip:hover{transform:translateY(-1px);
+    box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 4px 10px rgba(0,0,0,.12)}
+  .twk-chip[data-on="1"]{box-shadow:0 0 0 1.5px rgba(0,0,0,.85),
+    0 2px 6px rgba(0,0,0,.15)}
+  .twk-chip>span{position:absolute;top:0;bottom:0;right:0;width:34%;
+    display:flex;flex-direction:column;box-shadow:-1px 0 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i{flex:1;box-shadow:0 -1px 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i:first-child{box-shadow:none}
+  .twk-chip svg{position:absolute;top:6px;left:6px;width:13px;height:13px;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+`;
+
+// ── useTweaks ───────────────────────────────────────────────────────────────
+// Single source of truth for tweak values. setTweak persists via the host
+// (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  // Accepts either setTweak('key', value) or setTweak({ key: value, ... }) so a
+  // useState-style call doesn't write a "[object Object]" key into the persisted
+  // JSON block.
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+    // Same-window signal so in-page listeners (deck-stage rail thumbnails)
+    // can react — the parent message only reaches the host, not peers.
+    window.dispatchEvent(new CustomEvent('tweakchange', { detail: edits }));
+  }, []);
+  return [values, setTweak];
+}
+
+// ── TweaksPanel ─────────────────────────────────────────────────────────────
+// Floating shell. Registers the protocol listener BEFORE announcing
+// availability — if the announce ran first, the host's activate could land
+// before our handler exists and the toolbar toggle would silently no-op.
+// The close button posts __edit_mode_dismissed so the host's toolbar toggle
+// flips off in lockstep; the host echoes __deactivate_edit_mode back which
+// is what actually hides the panel.
+function TweaksPanel({ title = 'Tweaks', noDeckControls = false, children }) {
+  const [open, setOpen] = React.useState(false);
+  const dragRef = React.useRef(null);
+  // Auto-inject a rail toggle when a <deck-stage> is on the page. The
+  // toggle drives the deck's per-viewer _railVisible via window message;
+  // state is mirrored from the same localStorage key the deck reads so
+  // the control reflects reality across reloads. The mechanism is the
+  // message — authors who want custom placement can post it directly
+  // and pass noDeckControls to suppress this one.
+  const hasDeckStage = React.useMemo(
+    () => typeof document !== 'undefined' && !!document.querySelector('deck-stage'),
+    [],
+  );
+  // Hide the toggle until the host has actually enabled the rail (the
+  // __omelette_rail_enabled window message, posted only when the
+  // omelette_deck_rail_enabled flag is on for this user). The initial read
+  // covers TweaksPanel mounting after the message already arrived; the
+  // listener covers the common case of mounting first.
+  const [railEnabled, setRailEnabled] = React.useState(
+    () => hasDeckStage && !!document.querySelector('deck-stage')?._railEnabled,
+  );
+  React.useEffect(() => {
+    if (!hasDeckStage || railEnabled) return undefined;
+    const onMsg = (e) => {
+      if (e.data && e.data.type === '__omelette_rail_enabled') setRailEnabled(true);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [hasDeckStage, railEnabled]);
+  const [railVisible, setRailVisible] = React.useState(() => {
+    try { return localStorage.getItem('deck-stage.railVisible') !== '0'; } catch (e) { return true; }
+  });
+  const toggleRail = (on) => {
+    setRailVisible(on);
+    window.postMessage({ type: '__deck_rail_visible', on }, '*');
+  };
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', clampToViewport);
+      return () => window.removeEventListener('resize', clampToViewport);
+    }
+    const ro = new ResizeObserver(clampToViewport);
+    ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  }, [open, clampToViewport]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const t = e?.data?.type;
+      if (t === '__activate_edit_mode') setOpen(true);
+      else if (t === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const dismiss = () => {
+    setOpen(false);
+    window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+  };
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight = window.innerWidth - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = {
+        x: startRight - (ev.clientX - sx),
+        y: startBottom - (ev.clientY - sy),
+      };
+      clampToViewport();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel" data-noncommentable=""
+           style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+        <div className="twk-hd" onMouseDown={onDragStart}>
+          <b>{title}</b>
+          <button className="twk-x" aria-label="Close tweaks"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={dismiss}>✕</button>
+        </div>
+        <div className="twk-body">
+          {children}
+          {hasDeckStage && railEnabled && !noDeckControls && (
+            <TweakSection label="Deck">
+              <TweakToggle label="Thumbnail rail" value={railVisible} onChange={toggleRail} />
+            </TweakSection>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Layout helpers ──────────────────────────────────────────────────────────
+
+function TweakSection({ label, children }) {
+  return (
+    <>
+      <div className="twk-sect">{label}</div>
+      {children}
+    </>
+  );
+}
+
+function TweakRow({ label, value, children, inline = false }) {
+  return (
+    <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Controls ────────────────────────────────────────────────────────────────
+
+function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+  return (
+    <TweakRow label={label} value={`${value}${unit}`}>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+             value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </TweakRow>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value}
+              onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  // The active value is read by pointer-move handlers attached for the lifetime
+  // of a drag — ref it so a stale closure doesn't fire onChange for every move.
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  // Segments wrap mid-word once per-segment width runs out. The track is
+  // ~248px (280 panel − 28 body pad − 4 seg pad), each button loses 12px
+  // to its own padding, and 11.5px system-ui averages ~6.3px/char — so 2
+  // options fit ~16 chars each, 3 fit ~10. Past that (or >3 options), fall
+  // back to a dropdown rather than wrap.
+  const labelLen = (o) => String(typeof o === 'object' ? o.label : o).length;
+  const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
+  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 }[options.length] ?? 0);
+  if (!fitsAsSegments) {
+    // <select> emits strings — map back to the original option value so the
+    // fallback stays type-preserving (numbers, booleans) like the segment path.
+    const resolve = (s) => {
+      const m = options.find((o) => String(typeof o === 'object' ? o.value : o) === s);
+      return m === undefined ? s : typeof m === 'object' ? m.value : m;
+    };
+    return <TweakSelect label={label} value={value} options={options}
+                        onChange={(s) => onChange(resolve(s))} />;
+  }
+  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+  const n = opts.length;
+
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const inner = r.width - 4;
+    const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+    return opts[Math.max(0, Math.min(n - 1, i))].value;
+  };
+
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => {
+      if (!trackRef.current) return;
+      const v = segAt(ev.clientX);
+      if (v !== valueRef.current) onChange(v);
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`,
+                      width: `calc((100% - 4px) / ${n})` }} />
+        {opts.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => {
+          const v = typeof o === 'object' ? o.value : o;
+          const l = typeof o === 'object' ? o.label : o;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </TweakRow>
+  );
+}
+
+function TweakText({ label, value, placeholder, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <input className="twk-field" type="text" value={value} placeholder={placeholder}
+             onChange={(e) => onChange(e.target.value)} />
+    </TweakRow>
+  );
+}
+
+function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }) {
+  const clamp = (n) => {
+    if (min != null && n < min) return min;
+    if (max != null && n > max) return max;
+    return n;
+  };
+  const startRef = React.useRef({ x: 0, val: 0 });
+  const onScrubStart = (e) => {
+    e.preventDefault();
+    startRef.current = { x: e.clientX, val: value };
+    const decimals = (String(step).split('.')[1] || '').length;
+    const move = (ev) => {
+      const dx = ev.clientX - startRef.current.x;
+      const raw = startRef.current.val + dx * step;
+      const snapped = Math.round(raw / step) * step;
+      onChange(clamp(Number(snapped.toFixed(decimals))));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="twk-num">
+      <span className="twk-num-lbl" onPointerDown={onScrubStart}>{label}</span>
+      <input type="number" value={value} min={min} max={max} step={step}
+             onChange={(e) => onChange(clamp(Number(e.target.value)))} />
+      {unit && <span className="twk-num-unit">{unit}</span>}
+    </div>
+  );
+}
+
+// Relative-luminance contrast pick — checkmarks drawn over a swatch need to
+// read on both #111 and #fafafa without per-option configuration. Hex input
+// only (#rgb / #rrggbb); named or rgb()/hsl() colors fall through to "light".
+function __twkIsLight(hex) {
+  const h = String(hex).replace('#', '');
+  const x = h.length === 3 ? h.replace(/./g, (c) => c + c) : h.padEnd(6, '0');
+  const n = parseInt(x.slice(0, 6), 16);
+  if (Number.isNaN(n)) return true;
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return r * 299 + g * 587 + b * 114 > 148000;
+}
+
+const __TwkCheck = ({ light }) => (
+  <svg viewBox="0 0 14 14" aria-hidden="true">
+    <path d="M3 7.2 5.8 10 11 4.2" fill="none" strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round"
+          stroke={light ? 'rgba(0,0,0,.78)' : '#fff'} />
+  </svg>
+);
+
+// TweakColor — curated color/palette picker. Each option is either a single
+// hex string or an array of 1-5 hex strings; the card adapts — a lone color
+// renders solid, a palette renders colors[0] as the hero (left ~2/3) with the
+// rest stacked in a sharp column on the right. onChange emits the
+// option in the shape it was passed (string stays string, array stays array).
+// Without options it falls back to the native color input for back-compat.
+function TweakColor({ label, value, options, onChange }) {
+  if (!options || !options.length) {
+    return (
+      <div className="twk-row twk-row-h">
+        <div className="twk-lbl"><span>{label}</span></div>
+        <input type="color" className="twk-swatch" value={value}
+               onChange={(e) => onChange(e.target.value)} />
+      </div>
+    );
+  }
+  // Native <input type=color> emits lowercase hex per the HTML spec, so
+  // compare case-insensitively. String() guards JSON.stringify(undefined),
+  // which returns the primitive undefined (no .toLowerCase).
+  const key = (o) => String(JSON.stringify(o)).toLowerCase();
+  const cur = key(value);
+  return (
+    <TweakRow label={label}>
+      <div className="twk-chips" role="radiogroup">
+        {options.map((o, i) => {
+          const colors = Array.isArray(o) ? o : [o];
+          const [hero, ...rest] = colors;
+          const sup = rest.slice(0, 4);
+          const on = key(o) === cur;
+          return (
+            <button key={i} type="button" className="twk-chip" role="radio"
+                    aria-checked={on} data-on={on ? '1' : '0'}
+                    aria-label={colors.join(', ')} title={colors.join(' · ')}
+                    style={{ background: hero }}
+                    onClick={() => onChange(o)}>
+              {sup.length > 0 && (
+                <span>
+                  {sup.map((c, j) => <i key={j} style={{ background: c }} />)}
+                </span>
+              )}
+              {on && <__TwkCheck light={__twkIsLight(hero)} />}
+            </button>
+          );
+        })}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakButton({ label, onClick, secondary = false }) {
+  return (
+    <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'}
+            onClick={onClick}>{label}</button>
+  );
+}
+
+Object.assign(window, {
+  useTweaks, TweaksPanel, TweakSection, TweakRow,
+  TweakSlider, TweakToggle, TweakRadio, TweakSelect,
+  TweakText, TweakNumber, TweakColor, TweakButton,
+});
+</script>
+<script type="text/babel">// ── SniperSight shared chrome ─────────────────────────────────
+// Loaded into every page; exposes globals on window.SS_*
+
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+// ── Tactical Background controller ──────────────────────────
+function applyTweaks(t, pageAccent){
+  const root = document.documentElement;
+  // page accent override wins unless tweak forces a theme
+  const accents = {
+    green: { c:'#00ffaa', bg:'rgba(0,255,170,.10)', bd:'rgba(0,255,170,.30)' },
+    amber: { c:'#fbbf24', bg:'rgba(251,191,36,.10)', bd:'rgba(251,191,36,.35)' },
+    blue:  { c:'#60a5fa', bg:'rgba(96,165,250,.10)', bd:'rgba(96,165,250,.30)' },
+    cyan:  { c:'#22d3ee', bg:'rgba(34,211,238,.10)',  bd:'rgba(34,211,238,.30)' },
+    purple:{ c:'#c084fc', bg:'rgba(192,132,252,.10)', bd:'rgba(192,132,252,.30)' },
+    red:   { c:'#f87171', bg:'rgba(248,113,113,.10)', bd:'rgba(248,113,113,.35)' },
+  };
+  const themeKey = (t.theme === 'page') ? pageAccent : t.theme;
+  const a = accents[themeKey] || accents[pageAccent] || accents.green;
+  root.style.setProperty('--accent', a.c);
+  root.style.setProperty('--accent-bg', a.bg);
+  root.style.setProperty('--accent-border', a.bd);
+
+  const bg = document.getElementById('tactical-bg');
+  if (bg) bg.classList.toggle('off', !t.tacticalBg);
+
+  document.body.classList.toggle('hud-overlays-off', !t.hudOverlays);
+
+  document.body.classList.remove('density-sparse','density-balanced','density-dense');
+  document.body.classList.add('density-' + (t.density || 'balanced'));
+}
+
+// ── Formatters ──────────────────────────────────────────────
+function fmtMoney(v, d){ d = d == null ? 2 : d; return (v<0?'-$':'$') + Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function fmtPct(v, d){ d = d == null ? 2 : d; return (v>=0?'+':'') + v.toFixed(d) + '%'; }
+function fmtPrice(p){ if(p<1) return '$'+p.toFixed(5); if(p<100) return '$'+p.toFixed(4); return '$'+p.toFixed(2); }
+function fmtDur(seconds){
+  if (seconds<60) return seconds+'s';
+  if (seconds<3600) return Math.floor(seconds/60)+'m '+(seconds%60)+'s';
+  const h=Math.floor(seconds/3600), m=Math.floor((seconds%3600)/60);
+  return h+'h '+m+'m';
+}
+function fmtNum(v){
+  if (Math.abs(v) >= 1e9) return (v/1e9).toFixed(2)+'B';
+  if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(2)+'M';
+  if (Math.abs(v) >= 1e3) return (v/1e3).toFixed(2)+'K';
+  return v.toFixed(2);
+}
+
+// ── Reticle SVG (top-right corner of accent panels) ─────────
+function Reticle(){
+  return (
+    <div className="reticle">
+      <svg viewBox="-100 -100 200 200" fill="none">
+        <g className="ring-rotate">
+          <circle r="80" stroke="currentColor" strokeOpacity=".35" strokeWidth=".4" strokeDasharray="2 4"/>
+          <line x1="-90" y1="0" x2="-72" y2="0" stroke="currentColor" strokeOpacity=".5" strokeWidth=".6"/>
+          <line x1="72"  y1="0" x2="90"  y2="0" stroke="currentColor" strokeOpacity=".5" strokeWidth=".6"/>
+        </g>
+        <g className="ring-rotate-rev">
+          <circle r="55" stroke="currentColor" strokeOpacity=".5" strokeWidth=".5"/>
+          <line y1="-65" x1="0" y2="-48" x2="0" stroke="currentColor" strokeOpacity=".6" strokeWidth=".8"/>
+          <line y1="48"  x1="0" y2="65"  x2="0" stroke="currentColor" strokeOpacity=".6" strokeWidth=".8"/>
+        </g>
+        <circle r="3" fill="currentColor"/>
+        <circle r="22" stroke="currentColor" strokeOpacity=".4" strokeWidth=".5"/>
+      </svg>
+    </div>
+  );
+}
+
+// ── Topbar / Page head / Footer ─────────────────────────────
+function Topbar({ active, now }){
+  const links = [
+    { id:'intel',   label:'Intel',    href:'Intel.html' },
+    { id:'scanner', label:'Scanner',  href:'Scanner.html' },
+    { id:'bot',     label:'Bot',      href:'Bot.html' },
+    { id:'training',label:'Training', href:'Training.html' },
+    { id:'settings',label:'Settings', href:'Settings.html' },
+  ];
+  return (
+    <div className="topbar">
+      <a href="Landing.html" className="brand" style={{textDecoration:'none',color:'inherit'}}>
+        <img src="logo.png" alt="SniperSight" style={{height:34,width:'auto',display:'block',filter:'drop-shadow(0 0 12px rgba(0,255,170,.25))'}}/>
+      </a>
+      <nav className="nav">
+        {links.map(l => (
+          <a key={l.id} href={l.href} className={active===l.id?'active':''}>{l.label}</a>
+        ))}
+      </nav>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <span className="chip chip-green">● ONLINE</span>
+        <span className="chip">UTC {new Date(now).toUTCString().slice(17,25)}</span>
+      </div>
+    </div>
+  );
+}
+
+function PageHead({ icon, title, subtitle, badges, accent }){
+  return (
+    <div className="page-head">
+      <div className="page-title">
+        <div className="icon">{icon}</div>
+        <div>
+          <h1 style={accent==='red'?{}:{}} className={accent==='red'?'live':''}>{title}</h1>
+          <div className="sub">{subtitle}</div>
+        </div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+        {badges}
+      </div>
+    </div>
+  );
+}
+
+function FooterStatus({ now, latency }){
+  return (
+    <div style={{marginTop:24,padding:'12px 18px',border:'1px solid var(--border-soft)',borderRadius:10,background:'rgba(0,0,0,.3)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:14,flexWrap:'wrap'}}>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+        <span className="chip chip-green">● BINANCE WS</span>
+        <span className="chip chip-green">● PHEMEX REST</span>
+        <span className="chip chip-green">● TELEGRAM</span>
+        <span className="chip">● BACKEND {latency || 41}ms</span>
+      </div>
+      <div className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>build 1.0.0+5cdb504 · {new Date(now).toISOString().slice(0,19).replace('T',' ')}Z</div>
+    </div>
+  );
+}
+
+// ── Mini metric tile ────────────────────────────────────────
+function Mini({ label, value, accent, bold, valueColor }){
+  return (
+    <div>
+      <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:4}}>{label}</div>
+      <div className="mono" style={{fontSize:13,fontWeight: bold?800:600, color: valueColor || (accent?'var(--accent)':'var(--fg)')}}>{value}</div>
+    </div>
+  );
+}
+
+// ── SectionHead w/ pulsing dot ──────────────────────────────
+function SectionHead({ title, right }){
+  return (
+    <div className="sec-head">
+      <div className="sec-title"><span className="dot"/> {title}</div>
+      {right}
+    </div>
+  );
+}
+
+// ── RiskBar (small horizontal limit bar) ────────────────────
+function RiskBar({ label, value, max, unit, color }){
+  const pct = Math.min(100, (value/max)*100);
+  const c = color || 'var(--green-soft)';
+  return (
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+        <span className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>{label}</span>
+        <span className="mono" style={{fontSize:11,color:c,fontWeight:700}}>{value}{unit||''} <span style={{color:'var(--fg-4)'}}>/ {max}{unit||''}</span></span>
+      </div>
+      <div style={{position:'relative',height:6,borderRadius:3,background:'rgba(0,0,0,.5)',overflow:'hidden',border:'1px solid var(--border-soft)'}}>
+        <div style={{height:'100%',width:pct+'%',background:`linear-gradient(90deg, ${c}, color-mix(in oklch, ${c} 60%, transparent))`,boxShadow:`0 0 10px ${c}`,transition:'width .6s ease'}}/>
+      </div>
+    </div>
+  );
+}
+
+// ── Pill / Chip helpers ─────────────────────────────────────
+function Chip({ kind, children, style }){
+  const cls = 'chip ' + (kind ? 'chip-'+kind : '');
+  return <span className={cls} style={style}>{children}</span>;
+}
+
+// ── Modal shell ─────────────────────────────────────────────
+function Modal({ onClose, children, maxWidth }){
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" style={{maxWidth: maxWidth||620}} onClick={e=>e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── Default tweaks shared across all pages ──────────────────
+const SHARED_TWEAK_DEFAULTS = {
+  theme: 'page',           // 'page' = use the page's own accent; or override green/amber/blue
+  density: 'balanced',
+  tacticalBg: true,
+  hudOverlays: true,
+  simSpeed: 1,
+};
+
+// ── Shared TweaksPanel helper (pages add page-specific bits) ─
+function SharedTweaksControls({ t, setTweak }){
+  return (
+    <window.TweakSection title="Theme">
+      <window.TweakRadio label="Accent" value={t.theme} onChange={v=>setTweak('theme',v)} options={[
+        {label:'Page', value:'page'},
+        {label:'Green',value:'green'},
+        {label:'Amber',value:'amber'},
+        {label:'Blue', value:'blue'},
+      ]}/>
+      <window.TweakRadio label="Density" value={t.density} onChange={v=>setTweak('density',v)} options={[
+        {label:'Sparse',  value:'sparse'},
+        {label:'Balanced',value:'balanced'},
+        {label:'Dense',   value:'dense'},
+      ]}/>
+      <window.TweakToggle label="Tactical Background" value={t.tacticalBg} onChange={v=>setTweak('tacticalBg',v)} hint="Scanlines, grid, drift glow"/>
+      <window.TweakToggle label="HUD Overlays" value={t.hudOverlays} onChange={v=>setTweak('hudOverlays',v)} hint="Reticles, brackets, scanline texture"/>
+      <window.TweakSlider label="Sim Speed" value={t.simSpeed} min={0.5} max={4} step={0.5} onChange={v=>setTweak('simSpeed',v)}/>
+    </window.TweakSection>
+  );
+}
+
+// ── Tactical background DOM (rendered once per page) ────────
+function TacticalBgDom(){
+  // Used by pages that prefer to mount via React rather than static HTML.
+  return (
+    <div className="tactical-bg" id="tactical-bg">
+      <div className="glow"></div>
+      <div className="grid"></div>
+      <div className="grain"></div>
+      <div className="scanline"></div>
+    </div>
+  );
+}
+
+// Expose all helpers globally so each page's app script can use them
+Object.assign(window, {
+  SS: {
+    applyTweaks, fmtMoney, fmtPct, fmtPrice, fmtDur, fmtNum,
+    Reticle, Topbar, PageHead, FooterStatus, Mini, SectionHead,
+    RiskBar, Chip, Modal, SharedTweaksControls, TacticalBgDom,
+    SHARED_TWEAK_DEFAULTS,
+  },
+});
+</script>
+<script type="text/babel">// ── BOT SETUP — strategy, risk, execution, exchanges, presets
+const SS = window.SS;
+
+const PRESETS = [
+  { id:'sniper',     name:'SNIPER',      desc:'High-conf only · A+ setups · 0.5–1.5R',  risk:1.0, conf:8.0, lev:5,  freq:'low',    accent:'red' },
+  { id:'tactical',   name:'TACTICAL',    desc:'Balanced · OB/FVG + structure',          risk:1.5, conf:7.0, lev:5,  freq:'medium', accent:'amber' },
+  { id:'aggressive', name:'AGGRESSIVE',  desc:'More signals · faster scalps',           risk:2.0, conf:6.0, lev:8,  freq:'high',   accent:'green' },
+  { id:'stealth',    name:'STEALTH',     desc:'Hidden orders · iceberg · low footprint',risk:1.0, conf:7.5, lev:4,  freq:'medium', accent:'cyan' },
+];
+
+const SETUPS = ['OB+FVG','BOS','CHoCH','LIQ-SWEEP','OB-RETEST','FVG-FILL','BREAKER'];
+const TFS = ['1m','5m','15m','1h','4h','1D'];
+const SESSIONS = [
+  { id:'asia', name:'ASIA',  hours:'00:00 – 08:00 UTC' },
+  { id:'eu',   name:'LONDON',hours:'08:00 – 16:00 UTC' },
+  { id:'us',   name:'NY',    hours:'13:00 – 21:00 UTC' },
+];
+const EXCHANGES = [
+  { id:'bybit',   name:'BYBIT',   status:'connected', balance:'$5,842.18', acct:'••••8421', latency:38 },
+  { id:'binance', name:'BINANCE', status:'connected', balance:'$2,140.00', acct:'••••0033', latency:42 },
+  { id:'okx',     name:'OKX',     status:'disconnected', balance:'—', acct:'—', latency:null },
+  { id:'bitget',  name:'BITGET',  status:'disconnected', balance:'—', acct:'—', latency:null },
+];
+
+function Toggle({ value, onChange, hint, label, disabled }){
+  return (
+    <div onClick={()=>!disabled && onChange(!value)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',border:'1px solid var(--border-soft)',borderRadius:6,background:'rgba(0,0,0,.3)',cursor:disabled?'not-allowed':'pointer',opacity:disabled?0.5:1,transition:'all .15s'}}>
+      <div style={{width:36,height:18,borderRadius:9,background:value?'var(--accent)':'rgba(0,0,0,.6)',position:'relative',flexShrink:0,border:'1px solid var(--border-soft)',boxShadow:value?'0 0 8px var(--accent)':'none',transition:'all .15s'}}>
+        <div style={{position:'absolute',top:1,left:value?19:1,width:14,height:14,borderRadius:'50%',background:value?'#0a0c0e':'var(--fg-3)',transition:'left .15s'}}/>
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontFamily:'Share Tech Mono,monospace',fontSize:12,letterSpacing:'.05em',color:'var(--fg)'}}>{label}</div>
+        {hint && <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.1em',marginTop:2}}>{hint}</div>}
+      </div>
+      <span className="mono" style={{fontSize:9,color:value?'var(--green-soft)':'var(--fg-4)',letterSpacing:'.18em'}}>{value?'ENGAGED':'OFF'}</span>
+    </div>
+  );
+}
+
+function Slider({ label, value, min, max, step, onChange, suffix, color }){
+  return (
+    <div style={{padding:'12px 14px',border:'1px solid var(--border-soft)',borderRadius:6,background:'rgba(0,0,0,.3)'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <span className="mono" style={{fontSize:10,color:'var(--fg-3)',letterSpacing:'.16em',textTransform:'uppercase'}}>{label}</span>
+        <span className="mono" style={{fontSize:14,fontWeight:800,color:color||'var(--accent)'}}>{value}{suffix||''}</span>
+      </div>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={e=>onChange(+e.target.value)} style={{width:'100%'}}/>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:2}}>
+        <span className="mono" style={{fontSize:8,color:'var(--fg-4)'}}>{min}{suffix||''}</span>
+        <span className="mono" style={{fontSize:8,color:'var(--fg-4)'}}>{max}{suffix||''}</span>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, num, desc, children }){
+  return (
+    <section className="panel" style={{marginBottom:14}}>
+      <div style={{padding:'14px 18px',borderBottom:'1px solid var(--border-soft)',background:'rgba(0,0,0,.4)',display:'flex',alignItems:'center',gap:14}}>
+        <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:32,height:32,border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:'JetBrains Mono,monospace',fontSize:11,fontWeight:700,letterSpacing:'.08em',borderRadius:3,boxShadow:'0 0 8px rgba(34,211,238,.2)'}}>{num}</span>
+        <div style={{flex:1}}>
+          <div style={{fontFamily:'Share Tech Mono,monospace',fontSize:15,letterSpacing:'.08em',color:'var(--fg)',textTransform:'uppercase'}}>{title}</div>
+          {desc && <div className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.1em',marginTop:2}}>{desc}</div>}
+        </div>
+      </div>
+      <div style={{padding:'14px 18px'}}>{children}</div>
+    </section>
+  );
+}
+
+function SetupApp(){
+  const [t, setTweak] = window.useTweaks({
+    ...SS.SHARED_TWEAK_DEFAULTS,
+    preset: 'tactical',
+    riskPerTrade: 1.5,
+    maxConcurrent: 3,
+    leverage: 5,
+    minConf: 7.0,
+    dailyDDStop: 5,
+    weeklyDDStop: 12,
+    selectedSetups: ['OB+FVG','BOS','CHoCH','LIQ-SWEEP','OB-RETEST','FVG-FILL'],
+    selectedTfs: ['15m','1h','4h'],
+    selectedSessions: ['eu','us'],
+    selectedExchanges: ['bybit','binance'],
+    autoExecute: true,
+    martingale: false,
+    avgIn: false,
+    trailStop: true,
+    breakeven: true,
+    notifyDiscord: true,
+    notifyTg: false,
+    notifyEmail: false,
+    btcVeto: true,
+    fundingFilter: true,
+    spreadFilter: true,
+  });
+  useEffect(()=>{ SS.applyTweaks(t, 'cyan'); }, [t]);
+
+  const [now, setNow] = useState(Date.now());
+  const [savedFlash, setSavedFlash] = useState(false);
+  const [confirmDeploy, setConfirmDeploy] = useState(false);
+  useEffect(()=>{
+    const id = setInterval(()=>setNow(Date.now()), 1000);
+    return ()=>clearInterval(id);
+  },[]);
+
+  const toggleArr = (key, val) => {
+    const set = new Set(t[key]);
+    if (set.has(val)) set.delete(val); else set.add(val);
+    setTweak(key, [...set]);
+  };
+
+  const applyPreset = (p) => {
+    setTweak({ preset:p.id, riskPerTrade:p.risk, minConf:p.conf, leverage:p.lev });
+  };
+
+  const onSave = () => { setSavedFlash(true); setTimeout(()=>setSavedFlash(false), 1600); };
+
+  // Risk preview
+  const balance = 5842.18;
+  const riskUsd = (balance * t.riskPerTrade) / 100;
+  const positionUsd = riskUsd * t.leverage;
+  const dailyMaxUsd = (balance * t.dailyDDStop) / 100;
+
+  return (
+    <div>
+      {!window.__BOT_SHELL__ && <SS.Topbar active="setup" now={now}/>}
+      <SS.PageHead
+        icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+          <circle cx="6" cy="6" r="2" stroke="var(--accent)" strokeWidth="1.6"/>
+          <line x1="9" y1="6" x2="22" y2="6" stroke="var(--accent)" strokeWidth="1.6"/>
+          <circle cx="16" cy="12" r="2" stroke="var(--accent)" strokeWidth="1.6"/>
+          <line x1="2" y1="12" x2="13" y2="12" stroke="var(--accent)" strokeWidth="1.6"/>
+          <line x1="19" y1="12" x2="22" y2="12" stroke="var(--accent)" strokeWidth="1.6"/>
+          <circle cx="9" cy="18" r="2" stroke="var(--accent)" strokeWidth="1.6"/>
+          <line x1="2" y1="18" x2="6" y2="18" stroke="var(--accent)" strokeWidth="1.6"/>
+          <line x1="12" y1="18" x2="22" y2="18" stroke="var(--accent)" strokeWidth="1.6"/>
+        </svg>}
+        title="Bot Setup"
+        subtitle="strategy · risk · execution · exchanges"
+        badges={<>
+          <SS.Chip kind="cyan">PRESET · {(PRESETS.find(p=>p.id===t.preset)||PRESETS[1]).name}</SS.Chip>
+          <SS.Chip kind={savedFlash?'green':'amber'}>{savedFlash?'✓ SAVED':'● UNSAVED'}</SS.Chip>
+          <button className="btn btn-cyan" style={{padding:'6px 12px'}} onClick={onSave}>SAVE CONFIG</button>
+        </>}
+      />
+
+      {/* Top — preset selector + apply */}
+      <section className="panel panel-accent" style={{marginBottom:18}}>
+        <SS.Reticle/>
+        <div className="corner-tag tl">// MODE-SELECT</div>
+        <div className="corner-tag tr">PHANTOM ENGINE / 4 PROFILES</div>
+        <div style={{padding:'18px 22px'}}>
+          <div className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.20em',textTransform:'uppercase',marginBottom:12}}>// SELECT OPERATING PROFILE</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4, 1fr)',gap:12}}>
+            {PRESETS.map(p => {
+              const active = t.preset === p.id;
+              const colorMap = { red:'var(--red-2)', amber:'var(--amber)', green:'var(--green-soft)', cyan:'var(--cyan)' };
+              const c = colorMap[p.accent];
+              return (
+                <button key={p.id} onClick={()=>applyPreset(p)} style={{textAlign:'left',padding:'16px 14px',border:`1.5px solid ${active?c:'var(--border-soft)'}`,background:active?`rgba(0,0,0,.5)`:'rgba(0,0,0,.3)',borderRadius:8,cursor:'pointer',position:'relative',overflow:'hidden',transition:'all .2s',boxShadow:active?`0 0 16px ${c}55, inset 0 0 0 1px ${c}33`:'none'}}>
+                  {active && <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:c,boxShadow:`0 0 8px ${c}`}}/>}
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                    <span style={{fontFamily:'Share Tech Mono,monospace',fontSize:18,letterSpacing:'.1em',color:active?c:'var(--fg-2)',fontWeight:700}}>{p.name}</span>
+                    {active && <span className="mono" style={{fontSize:9,color:c,letterSpacing:'.18em',padding:'2px 6px',border:`1px solid ${c}`,borderRadius:3}}>ACTIVE</span>}
+                  </div>
+                  <div style={{fontSize:11,color:'var(--fg-3)',marginBottom:10,lineHeight:1.4}}>{p.desc}</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,paddingTop:10,borderTop:`1px dashed ${active?c+'66':'var(--border-soft)'}`}}>
+                    <div><div className="mono" style={{fontSize:8,color:'var(--fg-4)',letterSpacing:'.14em'}}>RISK</div><div className="mono" style={{fontSize:11,color:'var(--fg)',fontWeight:700}}>{p.risk}%</div></div>
+                    <div><div className="mono" style={{fontSize:8,color:'var(--fg-4)',letterSpacing:'.14em'}}>CONF</div><div className="mono" style={{fontSize:11,color:'var(--fg)',fontWeight:700}}>≥{p.conf}</div></div>
+                    <div><div className="mono" style={{fontSize:8,color:'var(--fg-4)',letterSpacing:'.14em'}}>LEV</div><div className="mono" style={{fontSize:11,color:'var(--fg)',fontWeight:700}}>{p.lev}×</div></div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:14,alignItems:'start'}}>
+        {/* MAIN */}
+        <div>
+          {/* RISK */}
+          <Section title="Risk Engine" num="01" desc="position sizing · loss limits · concurrent exposure">
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+              <Slider label="Risk per Trade"   value={t.riskPerTrade}  min={0.25} max={5} step={0.25} suffix="%"  onChange={v=>setTweak('riskPerTrade',v)} color="var(--amber)"/>
+              <Slider label="Max Concurrent"   value={t.maxConcurrent} min={1}    max={10} step={1}  suffix=" pos" onChange={v=>setTweak('maxConcurrent',v)}/>
+              <Slider label="Leverage"          value={t.leverage}      min={1}    max={20} step={1}  suffix="×"   onChange={v=>setTweak('leverage',v)} color={t.leverage>10?'var(--red-2)':t.leverage>5?'var(--amber)':'var(--green-soft)'}/>
+              <Slider label="Min Confidence"    value={t.minConf}       min={5}    max={10} step={0.1} onChange={v=>setTweak('minConf',v)}/>
+              <Slider label="Daily DD Stop"     value={t.dailyDDStop}   min={1}    max={15} step={0.5} suffix="%"   onChange={v=>setTweak('dailyDDStop',v)} color="var(--red-2)"/>
+              <Slider label="Weekly DD Stop"    value={t.weeklyDDStop}  min={3}    max={30} step={1}    suffix="%"   onChange={v=>setTweak('weeklyDDStop',v)} color="var(--red-2)"/>
+            </div>
+            {/* Risk preview tile */}
+            <div style={{marginTop:8,padding:'14px 16px',border:'1px dashed var(--accent)',borderRadius:6,background:'rgba(34,211,238,.05)'}}>
+              <div className="mono" style={{fontSize:9,color:'var(--accent)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:10}}>// LIVE RISK PREVIEW · BAL ${balance.toLocaleString()}</div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
+                <div className="metric-tile"><div className="metric-label">Risk / Trade</div><div className="metric-value" style={{color:'var(--amber)'}}>${riskUsd.toFixed(2)}</div><div className="metric-sub">{t.riskPerTrade}% of equity</div></div>
+                <div className="metric-tile"><div className="metric-label">Position Size</div><div className="metric-value">${positionUsd.toFixed(0)}</div><div className="metric-sub">@ {t.leverage}× lev</div></div>
+                <div className="metric-tile"><div className="metric-label">Max Daily Loss</div><div className="metric-value" style={{color:'var(--red-2)'}}>-${dailyMaxUsd.toFixed(0)}</div><div className="metric-sub">kills bot @ -{t.dailyDDStop}%</div></div>
+                <div className="metric-tile"><div className="metric-label">Max Exposure</div><div className="metric-value">${(positionUsd*t.maxConcurrent).toFixed(0)}</div><div className="metric-sub">{t.maxConcurrent} concurrent</div></div>
+              </div>
+            </div>
+          </Section>
+
+          {/* STRATEGY — setups + tfs */}
+          <Section title="Strategy Filter" num="02" desc="setup library · timeframes · sessions">
+            <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:8}}>// SETUPS · {t.selectedSetups.length} ENABLED</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
+              {SETUPS.map(s => {
+                const active = t.selectedSetups.includes(s);
+                return <button key={s} onClick={()=>toggleArr('selectedSetups',s)} className={`btn ${active?'btn-cyan':''}`} style={{padding:'7px 12px',fontSize:11}}>{active?'◉ ':'○ '}{s}</button>;
+              })}
+            </div>
+
+            <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:8}}>// TIMEFRAMES · {t.selectedTfs.length} ENABLED</div>
+            <div style={{display:'flex',gap:6,marginBottom:14}}>
+              {TFS.map(tf => {
+                const active = t.selectedTfs.includes(tf);
+                return <button key={tf} onClick={()=>toggleArr('selectedTfs',tf)} className={`btn ${active?'btn-cyan':''}`} style={{padding:'8px 14px',fontSize:12,flex:1,fontFamily:'JetBrains Mono,monospace'}}>{tf}</button>;
+              })}
+            </div>
+
+            <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:8}}>// SESSIONS · scan only during selected sessions</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6}}>
+              {SESSIONS.map(s => {
+                const active = t.selectedSessions.includes(s.id);
+                return (
+                  <button key={s.id} onClick={()=>toggleArr('selectedSessions',s.id)} style={{textAlign:'left',padding:'10px 12px',border:`1px solid ${active?'var(--accent)':'var(--border-soft)'}`,background:active?'rgba(34,211,238,.07)':'rgba(0,0,0,.3)',borderRadius:6,cursor:'pointer'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                      <span style={{fontFamily:'Share Tech Mono,monospace',fontSize:12,color:active?'var(--accent)':'var(--fg-2)',letterSpacing:'.08em'}}>{s.name}</span>
+                      <span className="mono" style={{fontSize:9,color:active?'var(--green-soft)':'var(--fg-4)',letterSpacing:'.16em'}}>{active?'ON':'OFF'}</span>
+                    </div>
+                    <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.05em',marginTop:3}}>{s.hours}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </Section>
+
+          {/* EXECUTION */}
+          <Section title="Execution Behavior" num="03" desc="auto-trade rules · stop management · safety filters">
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <Toggle label="Auto-Execute"        value={t.autoExecute}    hint="bot takes signals automatically (no confirm)" onChange={v=>setTweak('autoExecute',v)}/>
+              <Toggle label="Move SL → BE @ TP1"  value={t.breakeven}      hint="lock in zero risk after first target" onChange={v=>setTweak('breakeven',v)}/>
+              <Toggle label="Trailing Stop"       value={t.trailStop}      hint="trail by ATR after TP1" onChange={v=>setTweak('trailStop',v)}/>
+              <Toggle label="BTC Veto Filter"      value={t.btcVeto}        hint="block alt longs if BTC down >2% in 1h" onChange={v=>setTweak('btcVeto',v)}/>
+              <Toggle label="Funding Rate Filter"  value={t.fundingFilter}  hint="skip when funding extreme (>0.1%)" onChange={v=>setTweak('fundingFilter',v)}/>
+              <Toggle label="Spread Filter"        value={t.spreadFilter}   hint="reject when spread > 0.05%" onChange={v=>setTweak('spreadFilter',v)}/>
+              <Toggle label="Average-In on Pullback" value={t.avgIn}        hint="add second tranche at -0.5R (advanced)" onChange={v=>setTweak('avgIn',v)}/>
+              <Toggle label="Martingale (DANGER)"  value={t.martingale}     hint="size up after losses · disabled by default" onChange={v=>setTweak('martingale',v)}/>
+            </div>
+          </Section>
+
+          {/* EXCHANGES */}
+          <Section title="Exchange Routing" num="04" desc="API keys · venue selection · per-account limits">
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {EXCHANGES.map(ex => {
+                const enabled = t.selectedExchanges.includes(ex.id);
+                const conn = ex.status === 'connected';
+                return (
+                  <div key={ex.id} style={{display:'grid',gridTemplateColumns:'auto 1fr 90px 130px 100px auto',gap:14,alignItems:'center',padding:'12px 14px',border:`1px solid ${enabled && conn?'rgba(34,197,94,.4)':'var(--border-soft)'}`,borderRadius:6,background:enabled && conn?'rgba(34,197,94,.04)':'rgba(0,0,0,.3)'}}>
+                    <div style={{width:36,height:36,border:'1px solid var(--border-soft)',borderRadius:4,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'JetBrains Mono,monospace',fontSize:9,color:'var(--accent)',letterSpacing:'.1em',background:'rgba(0,0,0,.4)',fontWeight:700}}>{ex.name.slice(0,2)}</div>
+                    <div>
+                      <div style={{fontFamily:'Share Tech Mono,monospace',fontSize:14,letterSpacing:'.06em'}}>{ex.name}</div>
+                      <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.1em',marginTop:2}}>API · {ex.acct}</div>
+                    </div>
+                    <SS.Chip kind={conn?'green':'red'}>{conn?'● LIVE':'○ OFFLINE'}</SS.Chip>
+                    <div style={{textAlign:'right'}}>
+                      <div className="mono" style={{fontSize:13,fontWeight:700,color:conn?'var(--green-soft)':'var(--fg-4)'}}>{ex.balance}</div>
+                      <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.12em'}}>{conn?`LATENCY ${ex.latency}ms`:'NOT CONNECTED'}</div>
+                    </div>
+                    <button className="btn" style={{padding:'6px 10px',fontSize:10}}>{conn?'CONFIGURE':'+ CONNECT'}</button>
+                    <Toggle label="" value={enabled && conn} disabled={!conn} onChange={v=>toggleArr('selectedExchanges',ex.id)}/>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{marginTop:14,padding:'12px 14px',border:'1px dashed var(--border-soft)',borderRadius:6,display:'flex',justifyContent:'space-between',alignItems:'center',background:'rgba(0,0,0,.25)'}}>
+              <div className="mono" style={{fontSize:11,color:'var(--fg-3)',letterSpacing:'.05em'}}>// keys are encrypted at rest · withdrawals always disabled · IP-pinned</div>
+              <button className="btn btn-cyan" style={{padding:'6px 12px',fontSize:11}}>+ ADD EXCHANGE</button>
+            </div>
+          </Section>
+
+          {/* NOTIFICATIONS */}
+          <Section title="Notifications" num="05" desc="alerts on entry · exit · errors">
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+              <Toggle label="Discord Webhook" value={t.notifyDiscord} hint="real-time embeds · #trades" onChange={v=>setTweak('notifyDiscord',v)}/>
+              <Toggle label="Telegram"        value={t.notifyTg}      hint="DMs to @user_id" onChange={v=>setTweak('notifyTg',v)}/>
+              <Toggle label="Email Digest"    value={t.notifyEmail}   hint="daily summary @ 23:00 UTC" onChange={v=>setTweak('notifyEmail',v)}/>
+            </div>
+          </Section>
+        </div>
+
+        {/* RIGHT SIDEBAR — DEPLOY */}
+        <div style={{position:'sticky',top:14}}>
+          <section className="panel panel-accent">
+            <SS.SectionHead title="Deploy"/>
+            <div style={{padding:'18px 16px'}}>
+              <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:10}}>// CONFIG SUMMARY</div>
+              <div style={{display:'flex',flexDirection:'column',gap:4,fontFamily:'JetBrains Mono,monospace',fontSize:11,marginBottom:14}}>
+                {[
+                  ['preset',  PRESETS.find(p=>p.id===t.preset)?.name],
+                  ['risk',    t.riskPerTrade+'%'],
+                  ['leverage',t.leverage+'×'],
+                  ['min conf',t.minConf.toFixed(1)],
+                  ['setups',  t.selectedSetups.length],
+                  ['tfs',     t.selectedTfs.join(', ')],
+                  ['sessions',t.selectedSessions.length+'/3'],
+                  ['venues',  t.selectedExchanges.length+'/4'],
+                  ['auto-exec', t.autoExecute?'YES':'NO'],
+                ].map(([k,v]) => (
+                  <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px dashed var(--border-soft)'}}>
+                    <span style={{color:'var(--fg-4)',letterSpacing:'.1em',textTransform:'uppercase',fontSize:9}}>{k}</span>
+                    <span style={{color:'var(--fg)',fontWeight:600}}>{v}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{padding:'10px 12px',border:'1px solid var(--amber-2)',background:'rgba(251,191,36,.08)',borderRadius:6,marginBottom:14}}>
+                <div className="mono" style={{fontSize:9,color:'var(--amber-2)',letterSpacing:'.16em',textTransform:'uppercase',marginBottom:4}}>⚠ PRE-FLIGHT</div>
+                <div style={{fontSize:11,color:'var(--fg-2)',lineHeight:1.5}}>
+                  Bot will trade <b style={{color:'var(--accent)'}}>real funds</b> on {t.selectedExchanges.length} venues using <b style={{color:'var(--accent)'}}>{t.riskPerTrade}% risk</b> per trade. Stops auto-managed. Daily kill at -{t.dailyDDStop}%.
+                </div>
+              </div>
+
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                <button className="btn btn-cyan" style={{padding:'12px',fontSize:12}} onClick={onSave}>{savedFlash?'✓ SAVED':'SAVE CONFIG'}</button>
+                {!confirmDeploy
+                  ? <button className="btn btn-green" style={{padding:'14px',fontSize:13,fontWeight:800,letterSpacing:'.18em'}} onClick={()=>setConfirmDeploy(true)}>▶ DEPLOY BOT</button>
+                  : (
+                    <div style={{padding:12,border:'2px solid var(--green-soft)',borderRadius:6,background:'rgba(34,197,94,.08)'}}>
+                      <div className="mono" style={{fontSize:9,color:'var(--green-soft)',letterSpacing:'.18em',marginBottom:8}}>// CONFIRM DEPLOYMENT</div>
+                      <div style={{fontSize:11,color:'var(--fg-2)',marginBottom:12,lineHeight:1.5}}>This will <b>start the bot</b>: kick off the scanner, arm execution, and trade the next qualifying signal LIVE. Begin?</div>
+                      <div style={{display:'flex',gap:6}}>
+                        <button className="btn" style={{flex:1,padding:'8px'}} onClick={()=>setConfirmDeploy(false)}>CANCEL</button>
+                        <button className="btn btn-green" style={{flex:1,padding:'8px'}} onClick={()=>{setConfirmDeploy(false); onSave();}}>▶ CONFIRM</button>
+                      </div>
+                    </div>
+                  )
+                }
+                <button className="btn" style={{padding:'10px',fontSize:10,color:'var(--red-2)',borderColor:'rgba(248,113,113,.4)'}}>↺ RESET TO DEFAULTS</button>
+              </div>
+            </div>
+          </section>
+
+          <section className="panel">
+            <SS.SectionHead title="Backtest"/>
+            <div style={{padding:'14px 16px'}}>
+              <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:10}}>// 90D · CURRENT CONFIG</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+                <div className="metric-tile"><div className="metric-label">PnL</div><div className="metric-value" style={{color:'var(--green-soft)'}}>+34.8%</div></div>
+                <div className="metric-tile"><div className="metric-label">Sharpe</div><div className="metric-value" style={{color:'var(--accent)'}}>1.84</div></div>
+                <div className="metric-tile"><div className="metric-label">Win Rate</div><div className="metric-value">62%</div></div>
+                <div className="metric-tile"><div className="metric-label">Max DD</div><div className="metric-value" style={{color:'var(--red-2)'}}>-8.4%</div></div>
+              </div>
+              <button className="btn" style={{width:'100%',padding:'8px',fontSize:11}}>▶ RUN BACKTEST</button>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <SS.FooterStatus now={now} latency={28}/>
+
+      <window.TweaksPanel title="Tweaks" defaultOpen={false}>
+        <SS.SharedTweaksControls t={t} setTweak={setTweak}/>
+      </window.TweaksPanel>
+    </div>
+  );
+}
+
+window.SetupApp = SetupApp;
+if (!window.__BOT_SHELL__) ReactDOM.createRoot(document.getElementById('root')).render(<SetupApp/>);
+</script>
+<script type="text/babel">const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+// ── Sample data ─────────────────────────────────────────────
+const SEED_POSITIONS = [
+  {
+    id: 'p1', symbol: 'BTC/USDT', direction: 'LONG', trade_type: 'swing',
+    entry_price: 64280.50, current_price: 65120.25, stop_loss: 63450, initial_stop_loss: 63450,
+    tp1: 65800, tp2: 66600, tp_final: 67900,
+    quantity: 0.0312, unrealized_pnl: 26.20, unrealized_pnl_pct: 1.31,
+    target_pnl: 47.30, risk_pnl: -25.85,
+    targets_hit: 0, targets_remaining: 3,
+    breakeven_active: false, trailing_active: false,
+    opened_at: Date.now() - 1000 * 60 * 47,
+    confluence: 8.2, leverage: 5,
+  },
+  {
+    id: 'p2', symbol: 'ETH/USDT', direction: 'LONG', trade_type: 'intraday',
+    entry_price: 3214.80, current_price: 3198.40, stop_loss: 3168, initial_stop_loss: 3168,
+    tp1: 3260, tp2: 3305, tp_final: 3360,
+    quantity: 0.62, unrealized_pnl: -10.17, unrealized_pnl_pct: -0.51,
+    target_pnl: 28.04, risk_pnl: -29.02,
+    targets_hit: 0, targets_remaining: 3,
+    breakeven_active: false, trailing_active: false,
+    opened_at: Date.now() - 1000 * 60 * 22,
+    confluence: 7.4, leverage: 3,
+  },
+  {
+    id: 'p3', symbol: 'SOL/USDT', direction: 'SHORT', trade_type: 'scalp',
+    entry_price: 143.82, current_price: 141.05, stop_loss: 145.40, initial_stop_loss: 146.10,
+    tp1: 141.20, tp2: 139.40, tp_final: 137.00,
+    quantity: 6.8, unrealized_pnl: 18.84, unrealized_pnl_pct: 1.93,
+    target_pnl: 22.40, risk_pnl: -10.74,
+    targets_hit: 1, targets_remaining: 2,
+    breakeven_active: true, trailing_active: false,
+    opened_at: Date.now() - 1000 * 60 * 11,
+    confluence: 7.8, leverage: 8,
+  },
+];
+
+const SEED_HISTORY = [
+  { id:'t1', symbol:'AVAX/USDT', direction:'LONG',  trade_type:'intraday', entry_price:34.420, exit_price:35.180, pnl:23.18, pnl_pct:2.21, exit_reason:'tp2_hit',       entry_time: Date.now()-1000*60*180, exit_time: Date.now()-1000*60*132, max_favorable:2.45, max_adverse:0.32, quantity:30.4, targets_hit:[1,1], confidence_score:81 },
+  { id:'t2', symbol:'LINK/USDT', direction:'SHORT', trade_type:'scalp',    entry_price:14.860, exit_price:14.620, pnl:11.40, pnl_pct:1.61, exit_reason:'tp1_hit',       entry_time: Date.now()-1000*60*240, exit_time: Date.now()-1000*60*222, max_favorable:1.71, max_adverse:0.18, quantity:47.5, targets_hit:[1],   confidence_score:74 },
+  { id:'t3', symbol:'DOGE/USDT', direction:'LONG',  trade_type:'scalp',    entry_price:0.13420,exit_price:0.13290,pnl:-6.20, pnl_pct:-0.97,exit_reason:'stop_loss',     entry_time: Date.now()-1000*60*310, exit_time: Date.now()-1000*60*286, max_favorable:.42, max_adverse:1.10, quantity:480,   targets_hit:[],    confidence_score:69 },
+  { id:'t4', symbol:'ARB/USDT',  direction:'LONG',  trade_type:'swing',    entry_price:1.0820, exit_price:1.1130, pnl:18.60, pnl_pct:2.86, exit_reason:'trailing_stop', entry_time: Date.now()-1000*60*420, exit_time: Date.now()-1000*60*330, max_favorable:3.12, max_adverse:0.51, quantity:600,   targets_hit:[1,1], confidence_score:79 },
+  { id:'t5', symbol:'BNB/USDT',  direction:'SHORT', trade_type:'intraday', entry_price:572.40, exit_price:570.10, pnl:5.10,  pnl_pct:0.40, exit_reason:'breakeven_stop',entry_time: Date.now()-1000*60*505, exit_time: Date.now()-1000*60*460, max_favorable:.92, max_adverse:0.21, quantity:2.2,   targets_hit:[],    confidence_score:71 },
+  { id:'t6', symbol:'INJ/USDT',  direction:'LONG',  trade_type:'intraday', entry_price:24.180, exit_price:24.760, pnl:14.92, pnl_pct:2.40, exit_reason:'tp1_hit',       entry_time: Date.now()-1000*60*620, exit_time: Date.now()-1000*60*580, max_favorable:2.62, max_adverse:0.41, quantity:25.7,  targets_hit:[1],   confidence_score:76 },
+];
+
+const SEED_WATCHLIST = [
+  { symbol:'BTC/USDT', score: 8.2, last: 65120.25, change: 1.42, htf:'BULL', regime:'TREND',  status:'ARMED' },
+  { symbol:'ETH/USDT', score: 7.4, last: 3198.40,  change: -.32, htf:'BULL', regime:'TREND',  status:'ARMED' },
+  { symbol:'SOL/USDT', score: 7.8, last: 141.05,   change:  .81, htf:'BEAR', regime:'RANGE',  status:'ARMED' },
+  { symbol:'TIA/USDT', score: 6.9, last: 6.842,    change: 2.10, htf:'BULL', regime:'TREND',  status:'WATCH' },
+  { symbol:'AAVE/USDT',score: 6.1, last: 92.18,    change: -.45, htf:'NEUT', regime:'RANGE',  status:'WATCH' },
+  { symbol:'OP/USDT',  score: 5.8, last: 1.892,    change: -.91, htf:'BEAR', regime:'RANGE',  status:'WATCH' },
+  { symbol:'NEAR/USDT',score: 5.2, last: 4.310,    change:  .12, htf:'NEUT', regime:'CHOP',   status:'COLD' },
+];
+
+const SCAN_SYMBOLS = ['BTC','ETH','SOL','BNB','XRP','TON','AVAX','TIA','LINK','DOGE','SHIB','ADA','APT','SUI','SEI','OP','ARB','INJ','RNDR','PEPE','NEAR','AAVE','LDO','ATOM','PENDLE'];
+
+function fmtMoney(v, d=2){ return (v<0?'-$':'$') + Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function fmtPct(v,d=2){ return (v>=0?'+':'') + v.toFixed(d) + '%'; }
+function fmtPrice(p){ if(p<1) return '$'+p.toFixed(5); if(p<100) return '$'+p.toFixed(4); return '$'+p.toFixed(2); }
+function fmtDur(seconds){
+  if (seconds<60) return seconds+'s';
+  if (seconds<3600) return Math.floor(seconds/60)+'m '+(seconds%60)+'s';
+  const h=Math.floor(seconds/3600), m=Math.floor((seconds%3600)/60);
+  return h+'h '+m+'m';
+}
+
+// ── Tactical Background controller (toggled by tweaks) ──────
+function applyTweaks(t){
+  const root = document.documentElement;
+  // accent color
+  const accents = {
+    green: { c:'#00ffaa', bg:'rgba(0,255,170,.10)', bd:'rgba(0,255,170,.30)' },
+    amber: { c:'#fbbf24', bg:'rgba(251,191,36,.10)', bd:'rgba(251,191,36,.35)' },
+    blue:  { c:'#60a5fa', bg:'rgba(96,165,250,.10)', bd:'rgba(96,165,250,.30)' },
+  };
+  const a = accents[t.theme] || accents.green;
+  root.style.setProperty('--accent', a.c);
+  root.style.setProperty('--accent-bg', a.bg);
+  root.style.setProperty('--accent-border', a.bd);
+
+  // background intensity
+  const bg = document.getElementById('tactical-bg');
+  if (bg) bg.classList.toggle('off', !t.tacticalBg);
+
+  // hud overlays
+  document.body.classList.toggle('hud-overlays-off', !t.hudOverlays);
+
+  // density
+  document.body.classList.remove('density-sparse','density-balanced','density-dense');
+  document.body.classList.add('density-' + (t.density || 'balanced'));
+}
+
+// ── Reticle SVG ────────────────────────────────────────────
+function Reticle(){
+  return (
+    <div className="reticle">
+      <svg viewBox="-100 -100 200 200" fill="none">
+        <g className="ring-rotate">
+          <circle r="80" stroke="currentColor" strokeOpacity=".35" strokeWidth=".4" strokeDasharray="2 4"/>
+          <line x1="-90" y1="0" x2="-72" y2="0" stroke="currentColor" strokeOpacity=".5" strokeWidth=".6"/>
+          <line x1="72"  y1="0" x2="90"  y2="0" stroke="currentColor" strokeOpacity=".5" strokeWidth=".6"/>
+        </g>
+        <g className="ring-rotate-rev">
+          <circle r="55" stroke="currentColor" strokeOpacity=".5" strokeWidth=".5"/>
+          <line y1="-65" x1="0" y2="-48" x2="0" stroke="currentColor" strokeOpacity=".6" strokeWidth=".8"/>
+          <line y1="48"  x1="0" y2="65"  x2="0" stroke="currentColor" strokeOpacity=".6" strokeWidth=".8"/>
+        </g>
+        <circle r="3" fill="currentColor"/>
+        <circle r="22" stroke="currentColor" strokeOpacity=".4" strokeWidth=".5"/>
+      </svg>
+    </div>
+  );
+}
+
+// ── Equity Sparkline ────────────────────────────────────────
+function EquitySparkline({ trades, initial }){
+  const pts = useMemo(()=>{
+    let eq = initial;
+    const arr = [{x:0, y:eq}];
+    [...trades].reverse().forEach((t,i)=>{ eq += t.pnl; arr.push({x:i+1, y:eq}); });
+    return arr;
+  }, [trades, initial]);
+  if (pts.length<2) return <div style={{height:80, display:'flex',alignItems:'center',justifyContent:'center',color:'var(--fg-4)',fontFamily:'JetBrains Mono,monospace',fontSize:10,letterSpacing:'.18em',textTransform:'uppercase'}}>Awaiting trades…</div>;
+  const minY = Math.min(...pts.map(p=>p.y)), maxY=Math.max(...pts.map(p=>p.y));
+  const rangeY = maxY-minY || 1;
+  const W=600, H=80, pad=4;
+  const path = pts.map((p,i)=>{
+    const x = pad + (p.x/(pts.length-1))*(W-2*pad);
+    const y = H - pad - ((p.y-minY)/rangeY)*(H-2*pad);
+    return (i?'L':'M')+' '+x.toFixed(1)+' '+y.toFixed(1);
+  }).join(' ');
+  const last = pts[pts.length-1];
+  const isUp = last.y >= initial;
+  const stroke = isUp ? 'var(--green)' : 'var(--red-2)';
+  const lastX = pad + 1*(W-2*pad);
+  const lastY = H - pad - ((last.y-minY)/rangeY)*(H-2*pad);
+  const area = path + ` L ${lastX.toFixed(1)} ${H} L ${pad} ${H} Z`;
+  return (
+    <svg className="eq-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="eqg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"  stopColor={stroke} stopOpacity=".25"/>
+          <stop offset="100%" stopColor={stroke} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#eqg)"/>
+      <path d={path} stroke={stroke} strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx={lastX} cy={lastY} r="3" fill={stroke}/>
+    </svg>
+  );
+}
+
+// ── Position Card ───────────────────────────────────────────
+function PositionCard({ pos, onOpen }){
+  const isLong = pos.direction==='LONG';
+  const profit = pos.unrealized_pnl >= 0;
+
+  // flash on price tick
+  const prev = useRef(pos.current_price);
+  const [flash, setFlash] = useState('');
+  useEffect(()=>{
+    if (pos.current_price > prev.current) { setFlash('flash-green'); }
+    else if (pos.current_price < prev.current) { setFlash('flash-red'); }
+    prev.current = pos.current_price;
+    const t=setTimeout(()=>setFlash(''),900);
+    return ()=>clearTimeout(t);
+  }, [pos.current_price]);
+
+  const initialRisk = Math.abs(pos.entry_price - pos.initial_stop_loss);
+  const moved = isLong ? (pos.current_price - pos.entry_price) : (pos.entry_price - pos.current_price);
+  const rMult = initialRisk>0 ? moved/initialRisk : 0;
+
+  // progress between SL and TP1
+  let progress = 50;
+  const { stop_loss:sl, entry_price:e, tp1, current_price:c } = pos;
+  if (isLong){
+    if (c>=e && tp1!=null){ const r=tp1-e; progress = r>0 ? 50+((c-e)/r)*50 : 50; }
+    else if (c<e){ const r=e-sl; progress = r>0 ? ((c-sl)/r)*50 : 50; }
+  } else {
+    if (c<=e && tp1!=null){ const r=e-tp1; progress = r>0 ? 50+((e-c)/r)*50 : 50; }
+    else if (c>e){ const r=sl-e; progress = r>0 ? ((sl-c)/r)*50 : 50; }
+  }
+  progress = Math.max(2, Math.min(98, progress));
+
+  const timeOpen = fmtDur(Math.floor((Date.now()-pos.opened_at)/1000));
+
+  return (
+    <div className={`pos brackets ${flash}`} onClick={()=>onOpen(pos)}>
+      <div className="corner-tag tl">// {pos.id.toUpperCase()}</div>
+      <div className="corner-tag tr">{pos.confluence.toFixed(1)} CONF</div>
+
+      {/* Top row */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:14,marginTop:6,flexWrap:'wrap'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span className={`chip ${isLong?'chip-green':'chip-red'}`}>{isLong?'▲':'▼'} {pos.direction}</span>
+          <span style={{fontFamily:'Share Tech Mono,monospace',fontSize:18,letterSpacing:'.06em',color:'var(--fg)'}}>{pos.symbol}</span>
+          <span className={`chip ${pos.trade_type==='scalp'?'chip-amber':pos.trade_type==='swing'?'chip-purple':'chip-blue'}`} style={{fontSize:9}}>{pos.trade_type}</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span className={`chip ${rMult>=0?'chip-green':'chip-red'}`}>{rMult>=0?'+':''}{rMult.toFixed(2)}R</span>
+          <span className="mono" style={{fontWeight:800,fontSize:15,color:profit?'var(--green-soft)':'var(--red-2)'}}>{fmtPct(pos.unrealized_pnl_pct)}</span>
+        </div>
+      </div>
+
+      {/* Metric row */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4, 1fr)',gap:'10px 14px',marginBottom:14}}>
+        <Mini label="Size"   value={fmtMoney(pos.quantity*pos.entry_price)} accent />
+        <Mini label="Entry"  value={fmtPrice(pos.entry_price)} />
+        <Mini label="Now"    value={fmtPrice(pos.current_price)} bold />
+        <Mini label="P&L"    value={(profit?'+':'')+fmtMoney(pos.unrealized_pnl)} valueColor={profit?'var(--green-soft)':'var(--red-2)'} />
+        <Mini label="Target" value={fmtMoney(pos.target_pnl)} valueColor="var(--green-soft)" />
+        <Mini label="Risk"   value={fmtMoney(pos.risk_pnl)} valueColor="var(--red-2)" />
+        <Mini label="Open"   value={timeOpen} valueColor="var(--amber)" />
+        <Mini label="Lev"    value={pos.leverage+'×'} bold />
+      </div>
+
+      {/* Hud progress */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',marginBottom:6}}>
+        <span className="mono" style={{fontSize:9,color:'var(--red-2)',textTransform:'uppercase',letterSpacing:'.16em',opacity:.85}}>SL · {fmtMoney(pos.risk_pnl)}</span>
+        <span className="mono" style={{fontSize:9,textAlign:'center',color:'var(--fg-4)',textTransform:'uppercase',letterSpacing:'.16em'}}>ENTRY</span>
+        <span className="mono" style={{fontSize:9,textAlign:'right',color:'var(--green-soft)',textTransform:'uppercase',letterSpacing:'.16em',opacity:.85}}>TP · {fmtMoney(pos.target_pnl)}</span>
+      </div>
+      <div className="hud-prog">
+        <div className="tick" style={{left:'25%'}}/>
+        <div className="tick" style={{left:'50%'}}/>
+        <div className="tick" style={{left:'75%'}}/>
+        <div className="marker" style={{left: progress + '%'}}/>
+      </div>
+
+      {/* Targets ladder */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:14,gap:10}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+          <span className="mono" style={{fontSize:9,color:'var(--fg-4)',textTransform:'uppercase',letterSpacing:'.18em'}}>TARGETS {pos.targets_hit}/{pos.targets_hit+pos.targets_remaining}</span>
+          <div style={{display:'flex',gap:4}}>
+            {Array.from({length: pos.targets_hit + pos.targets_remaining}).map((_,i)=>(
+              <div key={i} style={{
+                width:18,height:5,borderRadius:2,
+                background: i<pos.targets_hit ? (isLong?'var(--green)':'var(--red-2)') : 'rgba(255,255,255,.06)',
+                border: i<pos.targets_hit ? 'none' : '1px solid var(--border-soft)',
+                boxShadow: i<pos.targets_hit ? '0 0 8px '+(isLong?'rgba(0,255,170,.4)':'rgba(248,113,113,.4)') : 'none'
+              }}/>
+            ))}
+          </div>
+        </div>
+        <div style={{display:'flex',gap:6,flexShrink:0}}>
+          {pos.breakeven_active && <span className="chip chip-blue">BE</span>}
+          {pos.trailing_active && <span className="chip chip-accent">TRAIL</span>}
+          <span className="chip">CHART →</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Mini({ label, value, accent, bold, valueColor }){
+  return (
+    <div>
+      <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:4}}>{label}</div>
+      <div className="mono" style={{fontSize:13,fontWeight: bold?800:600, color: valueColor || (accent?'var(--accent)':'var(--fg)')}}>{value}</div>
+    </div>
+  );
+}
+
+// ── Position Chart Modal ────────────────────────────────────
+function PositionChartModal({ pos, onClose }){
+  if (!pos) return null;
+  const isLong = pos.direction === 'LONG';
+  const levels = [
+    { label:'TP3',     price: pos.tp_final, color:'#86efac' },
+    { label:'TP2',     price: pos.tp2,      color:'#4ade80' },
+    { label:'TP1',     price: pos.tp1,      color:'#22c55e' },
+    { label:'CURRENT', price: pos.current_price, color:'#fbbf24' },
+    { label:'ENTRY',   price: pos.entry_price,   color:'#60a5fa' },
+    { label:'STOP',    price: pos.stop_loss, color:'#f87171' },
+  ].sort((a,b)=>b.price-a.price);
+  const prices = levels.map(l=>l.price);
+  const minP = Math.min(...prices), maxP = Math.max(...prices);
+  const range = maxP-minP || maxP*.01;
+
+  // synthetic candles biased by direction
+  const candles = useMemo(()=>{
+    const N = 36;
+    const arr = [];
+    let p = pos.entry_price * (isLong ? 0.985 : 1.015);
+    for (let i=0;i<N;i++){
+      const drift = isLong ? 0.0015 : -0.0015;
+      const vol = (Math.sin(i*1.7)+Math.cos(i*0.9))*0.004 + (Math.random()-.5)*0.005;
+      const open = p;
+      const close = p * (1 + drift + vol);
+      const high = Math.max(open,close) * (1 + Math.abs(Math.random()*0.003));
+      const low  = Math.min(open,close) * (1 - Math.abs(Math.random()*0.003));
+      arr.push({open,close,high,low});
+      p = close;
+    }
+    // anchor end at current
+    const factor = pos.current_price / arr[arr.length-1].close;
+    arr.forEach(c=>{ c.open*=factor; c.close*=factor; c.high*=factor; c.low*=factor; });
+    return arr;
+  }, [pos]);
+
+  const allP = [...prices, ...candles.flatMap(c=>[c.high,c.low])];
+  const yMin = Math.min(...allP)*.998;
+  const yMax = Math.max(...allP)*1.002;
+  const yRng = yMax - yMin;
+  const W = 540, H = 280, leftPad=10, rightPad=70, topPad=14, botPad=14;
+  const innerW = W-leftPad-rightPad;
+  const innerH = H-topPad-botPad;
+  const cw = innerW / candles.length;
+
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" style={{maxWidth:620}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:'14px 18px',borderBottom:'1px solid var(--border-soft)',background:'rgba(0,0,0,.35)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <span className={`chip ${isLong?'chip-green':'chip-red'}`}>{isLong?'▲':'▼'} {pos.direction}</span>
+            <span style={{fontFamily:'Share Tech Mono,monospace',fontSize:18,letterSpacing:'.08em'}}>{pos.symbol}</span>
+            <span className="chip">{pos.trade_type}</span>
+          </div>
+          <button className="btn" style={{padding:'6px 10px'}} onClick={onClose}>✕ CLOSE</button>
+        </div>
+        <div style={{padding:'14px 18px'}}>
+          <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',background:'rgba(0,0,0,.35)',border:'1px solid var(--border-soft)',borderRadius:8}}>
+            {/* grid */}
+            {[0,.25,.5,.75,1].map(g=>(
+              <line key={g} x1={leftPad} x2={W-rightPad} y1={topPad+g*innerH} y2={topPad+g*innerH} stroke="rgba(255,255,255,.05)" strokeDasharray="2 3"/>
+            ))}
+            {/* candles */}
+            {candles.map((c,i)=>{
+              const x = leftPad + i*cw + cw*0.15;
+              const cx = leftPad + i*cw + cw/2;
+              const yO = topPad + ((yMax-c.open)/yRng)*innerH;
+              const yC = topPad + ((yMax-c.close)/yRng)*innerH;
+              const yH = topPad + ((yMax-c.high)/yRng)*innerH;
+              const yL = topPad + ((yMax-c.low)/yRng)*innerH;
+              const up = c.close>=c.open;
+              const fill = up ? '#22c55e' : '#f87171';
+              const w = cw*0.7;
+              return (
+                <g key={i} opacity={i<candles.length-1?.85:1}>
+                  <line x1={cx} x2={cx} y1={yH} y2={yL} stroke={fill} strokeWidth=".8" opacity=".7"/>
+                  <rect x={x} width={w} y={Math.min(yO,yC)} height={Math.max(1.2,Math.abs(yC-yO))} fill={fill} opacity={up?.85:.85} stroke={fill} strokeOpacity=".4"/>
+                </g>
+              );
+            })}
+            {/* level lines */}
+            {levels.map((l,i)=>{
+              const y = topPad + ((yMax-l.price)/yRng)*innerH;
+              if (y<topPad-2 || y>H-botPad+2) return null;
+              return (
+                <g key={i}>
+                  <line x1={leftPad} x2={W-rightPad} y1={y} y2={y} stroke={l.color} strokeWidth=".7" strokeDasharray="3 3" opacity=".7"/>
+                  <rect x={W-rightPad+2} y={y-9} width={66} height={18} fill={l.color} opacity=".15" stroke={l.color} strokeOpacity=".55"/>
+                  <text x={W-rightPad+6} y={y+4} fill={l.color} fontFamily="JetBrains Mono,monospace" fontSize="9" fontWeight="700" letterSpacing=".15em">{l.label}</text>
+                  <text x={W-2} y={y+4} fill={l.color} fontFamily="JetBrains Mono,monospace" fontSize="9" fontWeight="700" textAnchor="end">{l.price<1?l.price.toFixed(5):l.price<100?l.price.toFixed(3):l.price.toFixed(2)}</text>
+                </g>
+              );
+            })}
+            {/* current price marker */}
+            {(() => {
+              const y = topPad + ((yMax-pos.current_price)/yRng)*innerH;
+              return <circle cx={W-rightPad-4} cy={y} r="4" fill="#fbbf24" style={{filter:'drop-shadow(0 0 6px #fbbf24)'}}/>;
+            })()}
+          </svg>
+
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginTop:14}}>
+            {levels.map((l,i)=>(
+              <div key={i} style={{padding:'8px 10px',border:'1px solid var(--border-soft)',borderRadius:8,background:'rgba(0,0,0,.3)'}}>
+                <div className="mono" style={{fontSize:9,color:l.color,letterSpacing:'.18em',textTransform:'uppercase',marginBottom:4,fontWeight:700}}>{l.label}</div>
+                <div className="mono" style={{fontSize:13,fontWeight:800,color:l.color}}>{l.price<1?'$'+l.price.toFixed(5):l.price<100?'$'+l.price.toFixed(3):'$'+l.price.toFixed(2)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Trade History Item ──────────────────────────────────────
+function HistoryItem({ trade }){
+  const [expanded, setExpanded] = useState(false);
+  const isLong = trade.direction === 'LONG';
+  const profit = trade.pnl >= 0;
+  const dur = fmtDur(Math.floor((trade.exit_time - trade.entry_time)/1000));
+  const reason = (trade.exit_reason||'unknown').replace(/_/g,' ');
+  return (
+    <div className={`hist ${expanded?'expanded':''}`} onClick={()=>setExpanded(!expanded)}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+        <div style={{display:'flex',alignItems:'center',gap:12,minWidth:0}}>
+          <span className={`chip ${isLong?'chip-green':'chip-red'}`}>{trade.direction}</span>
+          <div style={{minWidth:0}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+              <span style={{fontFamily:'Share Tech Mono,monospace',fontSize:14,letterSpacing:'.06em'}}>{trade.symbol}</span>
+              <span className="chip" style={{fontSize:9}}>{reason}</span>
+              <span className={`chip ${trade.trade_type==='scalp'?'chip-amber':trade.trade_type==='swing'?'chip-purple':'chip-blue'}`} style={{fontSize:9}}>{trade.trade_type}</span>
+            </div>
+            <div className="mono" style={{fontSize:11,color:'var(--fg-3)',marginTop:3}}>
+              {fmtPrice(trade.entry_price)} <span style={{color:profit?'var(--green-soft)':'var(--red-2)'}}>{isLong?'→':'→'}</span> {fmtPrice(trade.exit_price)} · {dur}
+            </div>
+          </div>
+        </div>
+        <div style={{textAlign:'right'}}>
+          <div className="mono" style={{fontSize:13,fontWeight:800,color:profit?'var(--green-soft)':'var(--red-2)'}}>{(profit?'+':'')+fmtMoney(trade.pnl)}</div>
+          <div className="mono" style={{fontSize:10,color:profit?'var(--green-soft)':'var(--red-2)',opacity:.75}}>{fmtPct(trade.pnl_pct)}</div>
+        </div>
+      </div>
+      {expanded && (
+        <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid var(--border-soft)',display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14}}>
+          <Stack label="Timing">
+            <Row k="In"  v={new Date(trade.entry_time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}/>
+            <Row k="Out" v={new Date(trade.exit_time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}/>
+            <Row k="Dur" v={dur} accent/>
+          </Stack>
+          <Stack label="Excursion">
+            <Row k="MFE" v={fmtPct(trade.max_favorable)} green/>
+            <Row k="MAE" v={fmtPct(-Math.abs(trade.max_adverse))} red/>
+            <Row k="Qty" v={trade.quantity.toString()}/>
+          </Stack>
+          <Stack label="Execution">
+            <Row k="TPs Hit" v={trade.targets_hit.length+' / '+(trade.targets_hit.length+(trade.exit_reason==='stop_loss'?2:0))} amber/>
+            <Row k="Conf"    v={trade.confidence_score.toString()}/>
+            <Row k="R Mult"  v={(trade.pnl_pct/1.5).toFixed(2)+'R'}/>
+          </Stack>
+        </div>
+      )}
+    </div>
+  );
+}
+function Stack({ label, children }){
+  return (
+    <div>
+      <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:6}}>{label}</div>
+      <div style={{display:'flex',flexDirection:'column',gap:4}}>{children}</div>
+    </div>
+  );
+}
+function Row({ k, v, accent, green, red, amber }){
+  let color = 'var(--fg-2)';
+  if (accent) color = 'var(--accent)';
+  if (green) color = 'var(--green-soft)';
+  if (red) color = 'var(--red-2)';
+  if (amber) color = 'var(--amber)';
+  return (
+    <div style={{display:'flex',justifyContent:'space-between',fontFamily:'JetBrains Mono,monospace',fontSize:11}}>
+      <span style={{color:'var(--fg-4)'}}>{k}</span>
+      <span style={{color,fontWeight:600}}>{v}</span>
+    </div>
+  );
+}
+
+// ── Watchlist Radar (mini) ──────────────────────────────────
+function WatchlistRadar({ items }){
+  return (
+    <div className="radar-wrap">
+      <svg viewBox="-100 -100 200 200" style={{width:'100%',height:'100%'}}>
+        <defs>
+          <linearGradient id="sweep" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0"/>
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity=".5"/>
+          </linearGradient>
+        </defs>
+        {/* rings */}
+        {[30,55,80].map(r=><circle key={r} r={r} fill="none" stroke="var(--accent)" strokeOpacity=".18" strokeWidth=".4"/>)}
+        <line x1="-90" y1="0" x2="90" y2="0" stroke="var(--accent)" strokeOpacity=".15" strokeWidth=".4"/>
+        <line x1="0" y1="-90" x2="0" y2="90" stroke="var(--accent)" strokeOpacity=".15" strokeWidth=".4"/>
+        {/* sweep */}
+        <g className="radar-sweep">
+          <path d="M 0 0 L 88 0 A 88 88 0 0 0 67 -57 Z" fill="url(#sweep)"/>
+          <line x1="0" y1="0" x2="88" y2="0" stroke="var(--accent)" strokeOpacity=".55" strokeWidth=".6"/>
+        </g>
+        {/* blips */}
+        {items.slice(0,7).map((it,i)=>{
+          const angle = (i/7)*Math.PI*2 - Math.PI/2;
+          const dist = 28 + (10-it.score)*5;
+          const x = Math.cos(angle)*dist;
+          const y = Math.sin(angle)*dist;
+          const armed = it.status==='ARMED';
+          return (
+            <g key={it.symbol}>
+              <circle cx={x} cy={y} r={armed?2.6:1.6} fill={armed?'var(--accent)':'var(--fg-3)'}>
+                {armed && <animate attributeName="opacity" values="1;.3;1" dur="2s" repeatCount="indefinite"/>}
+              </circle>
+              {armed && <circle cx={x} cy={y} r="6" fill="none" stroke="var(--accent)" strokeOpacity=".3"><animate attributeName="r" values="3;9" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values=".7;0" dur="2s" repeatCount="indefinite"/></circle>}
+              <text x={x+5} y={y-3} fontFamily="JetBrains Mono, monospace" fontSize="6" fill={armed?'var(--accent)':'var(--fg-3)'} fontWeight="700">{it.symbol.split('/')[0]}</text>
+            </g>
+          );
+        })}
+        {/* center */}
+        <circle r="3" fill="var(--accent)"/>
+      </svg>
+    </div>
+  );
+}
+
+// ── App ─────────────────────────────────────────────────────
+function StatusApp(){
+  const [t, setTweak] = window.useTweaks({
+    theme: 'green',
+    density: 'balanced',
+    tacticalBg: true,
+    hudOverlays: true,
+    layout: 'split',
+    simSpeed: 1,
+    tradingMode: 'live',
+  });
+  useEffect(()=>{ applyTweaks(t); }, [t]);
+
+  const [running, setRunning] = useState(true);
+  const [showKill, setShowKill] = useState(false);
+  const [killing, setKilling] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [openPos, setOpenPos] = useState(null);
+  const [now, setNow] = useState(Date.now());
+  const [uptime, setUptime] = useState(60*60*3 + 60*42);  // 3h 42m
+  const [nextScan, setNextScan] = useState(47);
+  const [positions, setPositions] = useState(SEED_POSITIONS);
+  const [trades, setTrades] = useState(SEED_HISTORY);
+  const [scanProgress, setScanProgress] = useState({ done: 18, total: 25, passed: 3, rejected: 15, current: 'INJ/USDT', recent: [
+    { sym:'BTC', passed:true }, { sym:'ETH', passed:true }, { sym:'SOL', passed:true },
+    { sym:'TIA', passed:false }, { sym:'AAVE', passed:false }, { sym:'OP', passed:false },
+    { sym:'NEAR', passed:false }, { sym:'INJ', passed:false }, { sym:'ARB', passed:false },
+  ]});
+  const [logs, setLogs] = useState([
+    { t:'14:42:18', sym:'BTC/USDT',  passed:true,  reason:'OB+FVG aligned · BOS confirmed', conf:8.2 },
+    { t:'14:41:55', sym:'ETH/USDT',  passed:true,  reason:'4H OB · sweep + displacement',   conf:7.4 },
+    { t:'14:41:32', sym:'SOL/USDT',  passed:true,  reason:'liquidity sweep · CHoCH 15m',    conf:7.8 },
+    { t:'14:41:09', sym:'AVAX/USDT', passed:false, reason:'HTF misaligned · regime CHOP',   conf:5.1 },
+    { t:'14:40:46', sym:'TIA/USDT',  passed:false, reason:'displacement < 1.5 ATR',         conf:4.6 },
+    { t:'14:40:23', sym:'AAVE/USDT', passed:false, reason:'no fresh OB in last 50 candles', conf:3.9 },
+    { t:'14:40:00', sym:'LINK/USDT', passed:false, reason:'volume gate failed',             conf:3.2 },
+    { t:'14:39:37', sym:'OP/USDT',   passed:false, reason:'BTC impulse veto',               conf:0   },
+  ]);
+
+  // tick clock + uptime
+  useEffect(()=>{
+    const id = setInterval(()=>{ setNow(Date.now()); setUptime(u=>u+1); setNextScan(s=> s>0?s-1:Math.floor(Math.random()*45+30)); }, 1000 / (t.simSpeed || 1));
+    return ()=>clearInterval(id);
+  }, [t.simSpeed]);
+
+  // simulated price ticks
+  useEffect(()=>{
+    const id = setInterval(()=>{
+      setPositions(prev => prev.map(p=>{
+        const drift = (Math.random()-0.48) * p.entry_price * 0.0008;
+        const price = p.current_price + drift;
+        const isLong = p.direction === 'LONG';
+        const pnl = (isLong ? price - p.entry_price : p.entry_price - price) * p.quantity;
+        const pnlPct = (pnl / (p.entry_price * p.quantity)) * 100 * p.leverage;
+        return {...p, current_price: price, unrealized_pnl: pnl, unrealized_pnl_pct: pnlPct };
+      }));
+    }, 1500 / (t.simSpeed || 1));
+    return ()=>clearInterval(id);
+  }, [t.simSpeed]);
+
+  // simulated scan progress
+  useEffect(()=>{
+    if (!running) return;
+    const id = setInterval(()=>{
+      setScanProgress(sp=>{
+        if (sp.done >= sp.total) {
+          // restart cycle
+          return { done: 1, total: 25, passed: Math.random()<.5?1:0, rejected: Math.random()<.5?0:1, current: SCAN_SYMBOLS[0]+'/USDT', recent: [{sym: SCAN_SYMBOLS[0], passed: Math.random()<.4}] };
+        }
+        const passed = Math.random()<.2;
+        const sym = SCAN_SYMBOLS[(sp.done) % SCAN_SYMBOLS.length];
+        return {
+          done: sp.done+1,
+          total: sp.total,
+          passed: sp.passed + (passed?1:0),
+          rejected: sp.rejected + (passed?0:1),
+          current: SCAN_SYMBOLS[(sp.done+1) % SCAN_SYMBOLS.length] + '/USDT',
+          recent: [{ sym, passed }, ...sp.recent].slice(0,12),
+        };
+      });
+      setLogs(prev=>{
+        const sym = SCAN_SYMBOLS[Math.floor(Math.random()*SCAN_SYMBOLS.length)];
+        const passed = Math.random()<.2;
+        const conf = passed ? +(7+Math.random()*1.5).toFixed(1) : +(2+Math.random()*4).toFixed(1);
+        const reasons = passed
+          ? ['OB+FVG aligned · BOS confirmed','4H OB · sweep + displacement','liquidity sweep · CHoCH 15m','HTF + LTF aligned · trail tight']
+          : ['HTF misaligned · regime CHOP','displacement < 1.5 ATR','no fresh OB','volume gate failed','BTC impulse veto','spread > limit'];
+        const time = new Date(Date.now());
+        const t = `${String(time.getHours()).padStart(2,'0')}:${String(time.getMinutes()).padStart(2,'0')}:${String(time.getSeconds()).padStart(2,'0')}`;
+        return [{ t, sym: sym+'/USDT', passed, reason: reasons[Math.floor(Math.random()*reasons.length)], conf }, ...prev].slice(0,12);
+      });
+    }, 2200 / (t.simSpeed || 1));
+    return ()=>clearInterval(id);
+  }, [running, t.simSpeed]);
+
+  const handleStop = () => {
+    setStopping(true);
+    setTimeout(()=>{ setRunning(false); setStopping(false); }, 900);
+  };
+  const handleKill = () => {
+    setKilling(true); setShowKill(false);
+    setTimeout(()=>{ setRunning(false); setPositions([]); setKilling(false); }, 1100);
+  };
+  const handleStart = () => setRunning(true);
+
+  // stats
+  const winCount = trades.filter(t=>t.pnl>0).length;
+  const winRate = (winCount/trades.length)*100;
+  const totalPnl = trades.reduce((a,t)=>a+t.pnl,0) + positions.reduce((a,p)=>a+p.unrealized_pnl,0);
+  const initialBal = 5000;
+  const balance = initialBal + trades.reduce((a,t)=>a+t.pnl,0);
+  const equity = balance + positions.reduce((a,p)=>a+p.unrealized_pnl,0);
+
+  const isLive = t.tradingMode === 'live';
+  const isLayoutSingle = t.layout === 'single';
+
+  return (
+    <div className="shell">
+      {/* Topbar */}
+      <div className="topbar" style={{display: window.__BOT_SHELL__ ? 'none' : ''}}>
+        <div className="brand">
+          <div className="brand-mark">
+            <svg width="20" height="20" viewBox="-12 -12 24 24" fill="none">
+              <circle r="9" stroke="currentColor" strokeWidth="1.2" style={{color:'var(--accent)'}}/>
+              <line x1="-11" y1="0" x2="-5" y2="0" stroke="currentColor" strokeWidth="1.2" style={{color:'var(--accent)'}}/>
+              <line x1="11" y1="0" x2="5" y2="0" stroke="currentColor" strokeWidth="1.2" style={{color:'var(--accent)'}}/>
+              <line x1="0" y1="-11" x2="0" y2="-5" stroke="currentColor" strokeWidth="1.2" style={{color:'var(--accent)'}}/>
+              <line x1="0" y1="11" x2="0" y2="5" stroke="currentColor" strokeWidth="1.2" style={{color:'var(--accent)'}}/>
+              <circle r="2" fill="currentColor" style={{color:'var(--accent)'}}/>
+            </svg>
+          </div>
+          <div>
+            <div className="brand-name">SniperSight<span style={{color:'var(--accent)'}}>·</span>HUD</div>
+            <div className="brand-sub">v1.0 · institutional scanner</div>
+          </div>
+        </div>
+        <nav className="nav">
+          <a href="#">Intel</a>
+          <a href="#">Scanner</a>
+          <a href="#" className="active">Bot Status</a>
+          <a href="#">Journal</a>
+          <a href="#">Training</a>
+        </nav>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span className="chip chip-green">● ONLINE</span>
+          <span className="chip">UTC {new Date(now).toUTCString().slice(17,25)}</span>
+        </div>
+      </div>
+
+      {/* Page head */}
+      <div className="page-head">
+        <div className="page-title">
+          <div className="icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+              <rect x="4" y="6" width="16" height="12" rx="2" stroke={isLive?'var(--red)':'var(--amber)'} strokeWidth="1.7"/>
+              <circle cx="9"  cy="12" r="1.5" fill={isLive?'var(--red)':'var(--amber)'}/>
+              <circle cx="15" cy="12" r="1.5" fill={isLive?'var(--red)':'var(--amber)'}/>
+              <line x1="9"  y1="3" x2="9"  y2="6" stroke={isLive?'var(--red)':'var(--amber)'} strokeWidth="1.7"/>
+              <line x1="15" y1="3" x2="15" y2="6" stroke={isLive?'var(--red)':'var(--amber)'} strokeWidth="1.7"/>
+            </svg>
+          </div>
+          <div>
+            <h1 className={isLive?'live':''}>Live Deployment</h1>
+            <div className="sub">{isLive?'real money · phemex perpetuals':'testnet · simulated fills'}</div>
+          </div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          <span className={`chip ${running?'chip-green':'chip-red'}`}>{running?'● RUNNING':'⏹ STOPPED'}</span>
+          <span className={`chip ${isLive?'chip-red':'chip-amber'}`}>{isLive?'⚠ LIVE — REAL MONEY':'TESTNET'}</span>
+          <span className="chip">SESSION 7F2A·9D</span>
+        </div>
+      </div>
+
+      {/* COMMAND CENTER */}
+      <section className="panel panel-accent" style={{marginBottom:18}}>
+        <Reticle/>
+        <div className="corner-tag tl">// CMD-CENTER</div>
+        <div className="corner-tag tr">PHANTOM ENGINE</div>
+        <div style={{padding:'22px 22px 18px'}}>
+          {/* Identity row */}
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:14,flexWrap:'wrap',marginBottom:18}}>
+            <div style={{display:'flex',alignItems:'center',gap:14}}>
+              <div className={`orb ${running?'':isLive?'red':'amber'}`}>
+                <div className="ping"/>
+                <div className="blur"/>
+                <div className="core"/>
+              </div>
+              <div>
+                <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:4}}>
+                  <span style={{fontFamily:'Share Tech Mono,monospace',fontSize:18,letterSpacing:'.15em',color:'var(--fg)',textTransform:'uppercase'}}>Phantom Engine</span>
+                  <span className={`chip ${isLive?'chip-red':'chip-amber'}`}>{isLive?'LIVE — REAL':'TESTNET'}</span>
+                  <span className={`chip ${running?'chip-green':'chip-red'}`}>{running?'LIVE':'PAUSED'}</span>
+                </div>
+                <div className="mono" style={{fontSize:11,color:'var(--fg-4)',letterSpacing:'.12em'}}>⏱ {fmtDur(uptime)} · session 7f2a9d · binance + phemex feed</div>
+              </div>
+            </div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {running ? (
+                <>
+                  <button className="btn btn-red" onClick={handleStop} disabled={stopping}>{stopping?'⟳ STOPPING…':'⏹ STOP'}</button>
+                  <button className="btn btn-orange" onClick={()=>setShowKill(true)}>☠ KILL</button>
+                </>
+              ) : (
+                <>
+                  <button className="btn btn-green" onClick={handleStart}>▶ START</button>
+                  <button className="btn btn-icon" title="Reset">⟳</button>
+                </>
+              )}
+              <button className="btn btn-cyan">⌬ ANALYZE</button>
+            </div>
+          </div>
+
+          {/* Kill confirm */}
+          {showKill && (
+            <div style={{padding:14,border:'1px solid rgba(248,113,113,.6)',borderRadius:10,background:'rgba(248,113,113,.10)',marginBottom:18}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,color:'var(--red-2)',fontFamily:'Share Tech Mono,monospace',fontSize:14,letterSpacing:'.18em',textTransform:'uppercase',marginBottom:6}}>☠ Confirm Kill Switch</div>
+              <p style={{margin:'0 0 12px',fontSize:12,color:'var(--fg-2)',lineHeight:1.5}}>Cancel all open orders and close all <b>{positions.length}</b> positions at market price immediately.{isLive && ' This will execute with real funds.'}</p>
+              <div style={{display:'flex',gap:8}}>
+                <button className="btn" onClick={()=>setShowKill(false)}>Cancel</button>
+                <button className="btn btn-red" onClick={handleKill} disabled={killing}>{killing?'⟳ EXECUTING…':'☠ Confirm Kill Switch'}</button>
+              </div>
+            </div>
+          )}
+
+          {/* Metrics grid */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4, minmax(0,1fr))',gap:10}} className="metrics-grid">
+            <div className="metric-tile">
+              <div className="metric-label">Running</div>
+              <div className="metric-value">{fmtDur(uptime)}</div>
+              <div className="metric-sub">session uptime</div>
+            </div>
+            <div className="metric-tile">
+              <div className="metric-label">Regime</div>
+              <div className="metric-value" style={{color:'var(--blue)'}}>BULL</div>
+              <div className="metric-sub">bull · trend confirmed</div>
+            </div>
+            <div className="metric-tile">
+              <div className="metric-label">Next Scan</div>
+              <div className="metric-value hud-glow-amber">{fmtDur(nextScan)}</div>
+              <div className="metric-sub">until next sweep</div>
+            </div>
+            <div className="metric-tile">
+              <div className="metric-label">Min Score</div>
+              <div className="metric-value">≥ 7.0</div>
+              <div className="metric-sub">confluence</div>
+            </div>
+          </div>
+
+          {/* Config pills */}
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:14}}>
+            <span className="chip">SNIPER MODE · BALANCED</span>
+            <span className="chip">SENSITIVITY · STRICT</span>
+            <span className="chip">DURATION · 8H</span>
+            <span className="chip">MAX SLOTS · 5</span>
+            <span className="chip">RISK · 1.5%</span>
+            <span className="chip">LEVERAGE · 5×</span>
+            <span className="chip">NOTIFY · TELEGRAM</span>
+          </div>
+
+          {/* Scan progress */}
+          <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid var(--border-soft)'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:8,flexWrap:'wrap'}}>
+              <div className="mono" style={{fontSize:11,color:'var(--fg-4)',letterSpacing:'.16em',textTransform:'uppercase'}}>
+                <span style={{color:'var(--amber)'}}>◉</span> {running? `SCANNING ${scanProgress.current}` : 'SCAN PAUSED'}<span className="cursor-blink">_</span>
+              </div>
+              <div style={{display:'flex',gap:14,fontFamily:'JetBrains Mono,monospace',fontSize:11}}>
+                <span style={{color:'var(--green-soft)',fontWeight:700}}>{scanProgress.passed} passed</span>
+                <span style={{color:'var(--fg-3)'}}>{scanProgress.rejected} filtered</span>
+                <span style={{color:'var(--fg-4)'}}>{scanProgress.done}/{scanProgress.total}</span>
+              </div>
+            </div>
+            <div style={{position:'relative',height:4,borderRadius:2,background:'rgba(0,0,0,.5)',overflow:'hidden'}}>
+              <div style={{
+                position:'absolute',inset:0,
+                width: ((scanProgress.done/scanProgress.total)*100)+'%',
+                background: running ? 'linear-gradient(90deg, rgba(251,191,36,.7), rgba(251,191,36,1))' : 'rgba(120,120,120,.4)',
+                boxShadow: running ? '0 0 14px rgba(251,191,36,.5)':'none',
+                transition:'width .8s ease',
+              }}/>
+              {running && <div style={{position:'absolute',inset:0,width:'30%',background:'linear-gradient(90deg,transparent,rgba(255,255,255,.18),transparent)',animation:'barShimmer 1.6s ease-in-out infinite'}}/>}
+            </div>
+            <div style={{display:'flex',gap:6,marginTop:10,overflowX:'auto'}} className="no-scrollbar">
+              {scanProgress.recent.slice(0,12).map((r,i)=>(
+                <span key={i} className={`chip ${r.passed?'chip-green':''}`} style={{flexShrink:0,fontSize:9}}>{r.passed?'✓ ':''}{r.sym}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* MAIN GRID */}
+      <div className={`layout-grid ${isLayoutSingle?'single':''}`}>
+        {/* LEFT COL */}
+        <div className="col">
+
+          {/* Equity / P&L panel */}
+          <section className="panel">
+            <div className="sec-head">
+              <div className="sec-title"><span className="dot"/> Account · Equity Curve</div>
+              <div style={{display:'flex',gap:8}}>
+                <span className="chip">USD · {trades.length} TRADES</span>
+                <span className={`chip ${totalPnl>=0?'chip-green':'chip-red'}`}>{totalPnl>=0?'+':''}{fmtMoney(totalPnl)}</span>
+              </div>
+            </div>
+            <div style={{padding:'18px 22px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4, minmax(0,1fr))',gap:10,marginBottom:14}}>
+                <div className="metric-tile">
+                  <div className="metric-label">Equity</div>
+                  <div className="metric-value">{fmtMoney(equity)}</div>
+                  <div className="metric-sub" style={{color: equity>=initialBal?'var(--green-soft)':'var(--red-2)'}}>{fmtPct(((equity-initialBal)/initialBal)*100)}</div>
+                </div>
+                <div className="metric-tile">
+                  <div className="metric-label">Realized</div>
+                  <div className="metric-value" style={{color:'var(--green-soft)'}}>+{fmtMoney(trades.reduce((a,t)=>a+t.pnl,0))}</div>
+                  <div className="metric-sub">closed pnl</div>
+                </div>
+                <div className="metric-tile">
+                  <div className="metric-label">Unrealized</div>
+                  <div className="metric-value" style={{color: positions.reduce((a,p)=>a+p.unrealized_pnl,0)>=0?'var(--green-soft)':'var(--red-2)'}}>{positions.reduce((a,p)=>a+p.unrealized_pnl,0)>=0?'+':''}{fmtMoney(positions.reduce((a,p)=>a+p.unrealized_pnl,0))}</div>
+                  <div className="metric-sub">{positions.length} open</div>
+                </div>
+                <div className="metric-tile">
+                  <div className="metric-label">Win Rate</div>
+                  <div className="metric-value hud-glow">{winRate.toFixed(0)}%</div>
+                  <div className="metric-sub">{winCount} of {trades.length}</div>
+                </div>
+              </div>
+              <EquitySparkline trades={trades} initial={initialBal}/>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:6}}>
+                <span className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>session start ${initialBal.toFixed(2)}</span>
+                <span className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>now {fmtMoney(equity)}</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Open Positions */}
+          <section className="panel">
+            <div className="sec-head">
+              <div className="sec-title"><span className="dot"/> Open Positions</div>
+              <span className="chip">{positions.length} ACTIVE · MAX 5</span>
+            </div>
+            <div style={{padding:'14px 18px',display:'flex',flexDirection:'column',gap:10}}>
+              {positions.length === 0 && (
+                <div style={{textAlign:'center',padding:'40px 0',color:'var(--fg-4)',fontFamily:'JetBrains Mono,monospace',fontSize:12,letterSpacing:'.18em',textTransform:'uppercase'}}>// no open positions · awaiting signal</div>
+              )}
+              {positions.map(p => <PositionCard key={p.id} pos={p} onOpen={setOpenPos}/>)}
+            </div>
+          </section>
+
+          {/* Gauntlet Breakdown */}
+          <window.GauntletBreakdown/>
+
+          {/* Trade History */}
+          <section className="panel">
+            <div className="sec-head">
+              <div className="sec-title"><span className="dot"/> Trade Log · Session</div>
+              <span className="chip">{trades.length} CLOSED</span>
+            </div>
+            <div style={{padding:'14px 18px',display:'flex',flexDirection:'column',gap:8}}>
+              {trades.map(tr => <HistoryItem key={tr.id} trade={tr}/>)}
+            </div>
+          </section>
+        </div>
+
+        {/* RIGHT COL */}
+        <div className="col">
+          {/* Watchlist Radar */}
+          <section className="panel">
+            <Reticle/>
+            <div className="sec-head">
+              <div className="sec-title"><span className="dot"/> Watchlist Radar</div>
+              <span className="chip chip-accent">{SEED_WATCHLIST.filter(w=>w.status==='ARMED').length} ARMED</span>
+            </div>
+            <div style={{padding:'14px 18px'}}>
+              <WatchlistRadar items={SEED_WATCHLIST}/>
+              <div style={{marginTop:10}}>
+                {SEED_WATCHLIST.map(w => (
+                  <div className="watch-row" key={w.symbol}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+                      <span className={`chip ${w.status==='ARMED'?'chip-accent':w.status==='WATCH'?'chip-amber':''}`} style={{fontSize:9}}>{w.status}</span>
+                      <span style={{fontFamily:'Share Tech Mono,monospace',fontSize:13,letterSpacing:'.06em'}}>{w.symbol.split('/')[0]}</span>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <span className="mono" style={{fontSize:10,color:'var(--fg-4)'}}>{w.regime}</span>
+                      <span className="mono" style={{fontSize:11,fontWeight:700,color:w.score>=7?'var(--green-soft)':w.score>=6?'var(--amber)':'var(--fg-4)'}}>{w.score.toFixed(1)}</span>
+                      <span className="mono" style={{fontSize:11,color:w.change>=0?'var(--green-soft)':'var(--red-2)',width:48,textAlign:'right'}}>{fmtPct(w.change,1)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Live scan log */}
+          <section className="panel">
+            <div className="sec-head">
+              <div className="sec-title"><span className="dot"/> Scanner Console</div>
+              <span className="chip chip-amber">// LIVE</span>
+            </div>
+            <div style={{padding:'14px 18px',background:'rgba(0,0,0,.45)',maxHeight:380,overflowY:'auto',borderTop:'1px solid var(--border-soft)'}}>
+              <div className="term" style={{fontSize:14,color:'var(--green)',marginBottom:8,opacity:.7}}>
+                {`> tail -f /var/log/snipersight/scanner.log`}<span className="cursor-blink">_</span>
+              </div>
+              {logs.map((l,i)=>(
+                <div className="log-row" key={i}>
+                  <span className="t">{l.t}</span>
+                  <span className={l.passed?'pass':'rej'}>{l.passed?'PASS':'FILT'}</span>
+                  <span><span className="sym">{l.sym}</span> · <span style={{color:l.passed?'var(--green-soft)':'var(--fg-3)'}}>{l.reason}</span></span>
+                  <span className="mono" style={{fontSize:11,color:l.passed?'var(--green-soft)':'var(--fg-4)'}}>{l.conf.toFixed(1)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Risk panel */}
+          <section className="panel">
+            <div className="sec-head">
+              <div className="sec-title"><span className="dot"/> Risk · Exposure</div>
+              <span className="chip chip-green">WITHIN LIMITS</span>
+            </div>
+            <div style={{padding:'14px 18px',display:'flex',flexDirection:'column',gap:14}}>
+              <RiskBar label="Capital at Risk" value={positions.length>0?2.4:0} max={5} unit="%" />
+              <RiskBar label="Slot Usage" value={positions.length} max={5} unit="" />
+              <RiskBar label="Daily Loss" value={1.2} max={3} unit="%" amber />
+              <RiskBar label="Correlation" value={0.42} max={1} unit="" amber />
+              <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0 0',borderTop:'1px solid var(--border-soft)'}}>
+                <span className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>kill switch</span>
+                <span className="chip chip-green">● ARMED</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      {/* footer status strip */}
+      <div style={{marginTop:24,padding:'12px 18px',border:'1px solid var(--border-soft)',borderRadius:10,background:'rgba(0,0,0,.3)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:14,flexWrap:'wrap'}}>
+        <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+          <span className="chip chip-green">● BINANCE WS</span>
+          <span className="chip chip-green">● PHEMEX REST</span>
+          <span className="chip chip-green">● TELEGRAM</span>
+          <span className="chip">● BACKEND 41ms</span>
+        </div>
+        <div className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>build 1.0.0+5cdb504 · {new Date(now).toISOString().slice(0,19).replace('T',' ')}Z</div>
+      </div>
+
+      {openPos && <PositionChartModal pos={openPos} onClose={()=>setOpenPos(null)}/>}
+
+      {/* TWEAKS PANEL */}
+      <window.TweaksPanel title="Tweaks" defaultOpen={false}>
+        <window.TweakSection title="Theme">
+          <window.TweakRadio label="Accent" value={t.theme} onChange={v=>setTweak('theme',v)} options={[
+            {label:'Green', value:'green'},
+            {label:'Amber', value:'amber'},
+            {label:'Blue',  value:'blue'},
+          ]}/>
+          <window.TweakRadio label="Density" value={t.density} onChange={v=>setTweak('density',v)} options={[
+            {label:'Sparse',  value:'sparse'},
+            {label:'Balanced',value:'balanced'},
+            {label:'Dense',   value:'dense'},
+          ]}/>
+          <window.TweakRadio label="Layout" value={t.layout} onChange={v=>setTweak('layout',v)} options={[
+            {label:'Split', value:'split'},
+            {label:'Single',value:'single'},
+          ]}/>
+          <window.TweakRadio label="Mode" value={t.tradingMode} onChange={v=>setTweak('tradingMode',v)} options={[
+            {label:'Live', value:'live'},
+            {label:'Test', value:'testnet'},
+          ]}/>
+        </window.TweakSection>
+        <window.TweakSection title="HUD">
+          <window.TweakToggle label="Tactical Background" value={t.tacticalBg} onChange={v=>setTweak('tacticalBg',v)} hint="Scanlines, grid, drift glow"/>
+          <window.TweakToggle label="HUD Overlays" value={t.hudOverlays} onChange={v=>setTweak('hudOverlays',v)} hint="Reticles, scanline texture, brackets"/>
+        </window.TweakSection>
+        <window.TweakSection title="Sim">
+          <window.TweakSlider label="Speed" value={t.simSpeed} min={0.5} max={4} step={0.5} onChange={v=>setTweak('simSpeed',v)}/>
+          <window.TweakButton label={running?'Stop Engine':'Start Engine'} onClick={()=>running?handleStop():handleStart()}/>
+          <window.TweakButton label="Reset Session" onClick={()=>{ setPositions(SEED_POSITIONS); setTrades(SEED_HISTORY); setRunning(true); }}/>
+        </window.TweakSection>
+      </window.TweaksPanel>
+    </div>
+  );
+}
+
+function RiskBar({ label, value, max, unit, amber }){
+  const pct = Math.min(100, (value/max)*100);
+  const color = amber ? 'var(--amber)' : 'var(--green-soft)';
+  return (
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+        <span className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>{label}</span>
+        <span className="mono" style={{fontSize:11,color,fontWeight:700}}>{value}{unit} <span style={{color:'var(--fg-4)'}}>/ {max}{unit}</span></span>
+      </div>
+      <div style={{position:'relative',height:6,borderRadius:3,background:'rgba(0,0,0,.5)',overflow:'hidden',border:'1px solid var(--border-soft)'}}>
+        <div style={{height:'100%',width:pct+'%',background:`linear-gradient(90deg, ${color}, color-mix(in oklch, ${color} 60%, transparent))`,boxShadow:`0 0 10px ${color}`,transition:'width .6s ease'}}/>
+      </div>
+    </div>
+  );
+}
+
+window.StatusApp = StatusApp;
+if (!window.__BOT_SHELL__) ReactDOM.createRoot(document.getElementById('root')).render(<StatusApp/>);
+</script>
+<script type="text/babel">// ── BOT — unified tabbed shell ──────────────────────────────
+const BotSS = window.SS;
+function BotShell(){
+  const [tab, setTab] = useState(()=>{
+    const h = (location.hash || '').replace('#','').toLowerCase();
+    return (h==='status'||h==='setup') ? h : 'setup';
+  });
+  useEffect(()=>{ location.hash = tab; },[tab]);
+  const [now, setNow] = useState(Date.now());
+  useEffect(()=>{ const id=setInterval(()=>setNow(Date.now()),1000); return ()=>clearInterval(id); },[]);
+  return (
+    <div className="page">
+      <BotSS.Topbar active="bot" now={now}/>
+      <div className="bot-tab-banner">
+        <div className="tab-switch">
+          <button className={tab==='setup'?'active':''} onClick={()=>setTab('setup')}>◇ SETUP · pre-deploy</button>
+          <button className={tab==='status'?'active':''} onClick={()=>setTab('status')}>● STATUS · live exchange</button>
+        </div>
+        <span className="mono" style={{fontSize:10,color:'var(--fg-3)',letterSpacing:'.18em'}}>
+          {tab==='setup'?'// CONFIGURE → DEPLOY':'// LIVE · REAL FUNDS · IRREVERSIBLE'}
+        </span>
+      </div>
+      <div style={{display: tab==='setup'?'block':'none'}}><window.SetupApp/></div>
+      <div style={{display: tab==='status'?'block':'none'}}><window.StatusApp/></div>
+    </div>
+  );
+}
+function bootBot(){
+  if (window.SetupApp && window.StatusApp) {
+    ReactDOM.createRoot(document.getElementById('root')).render(<BotShell/>);
+  } else { setTimeout(bootBot, 30); }
+}
+bootBot();
+</script></body></html>

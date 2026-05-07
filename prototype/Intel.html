@@ -1,0 +1,1704 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>SniperSight — Intel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+.bot-tab-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 14px;border:1px solid var(--border-soft);border-radius:8px;background:rgba(0,0,0,.4);margin-bottom:14px;flex-wrap:wrap}
+.tab-switch{display:flex;gap:0;border:1px solid var(--border-soft);border-radius:8px;overflow:hidden}
+.tab-switch button{background:rgba(0,0,0,.4);border:none;color:var(--fg-3);padding:8px 16px;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.18em;cursor:pointer;transition:all .15s;border-right:1px solid var(--border-soft)}
+.tab-switch button:last-child{border-right:none}
+.tab-switch button.active{background:var(--accent-bg);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+.tab-switch button:hover:not(.active){background:rgba(255,255,255,.04);color:var(--fg)}
+
+:root {
+  --bg: oklch(0.18 0.008 120);
+  --bg-2: oklch(0.22 0.010 125);
+  --card: oklch(0.26 0.012 125);
+  --card-2: oklch(0.30 0.012 125);
+  --border: oklch(0.36 0.015 130);
+  --border-soft: oklch(0.32 0.015 130 / 0.6);
+  --fg: oklch(0.94 0.012 150);
+  --fg-2: oklch(0.78 0.012 150);
+  --fg-3: oklch(0.58 0.015 150);
+  --fg-4: oklch(0.42 0.012 150);
+  --green: #00ffaa;
+  --green-soft: #4ade80;
+  --green-bg: rgba(0,255,170,.10);
+  --green-border: rgba(0,255,170,.30);
+  --amber: #ffc266;
+  --amber-2: #fbbf24;
+  --amber-bg: rgba(251,191,36,.10);
+  --amber-border: rgba(251,191,36,.35);
+  --red: #ff6464;
+  --red-2: #f87171;
+  --red-bg: rgba(248,113,113,.10);
+  --red-border: rgba(248,113,113,.35);
+  --blue: #60a5fa;
+  --blue-bg: rgba(96,165,250,.10);
+  --blue-border: rgba(96,165,250,.30);
+  --cyan: #22d3ee;
+  --purple: #c084fc;
+  /* accent applied dynamically via tweaks (green/amber/blue) */
+  --accent: var(--green);
+  --accent-bg: var(--green-bg);
+  --accent-border: var(--green-border);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:'Inter',ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;}
+body{min-height:100vh;overflow-x:hidden;position:relative;}
+
+/* ── Tactical background layers ─────────────────────────── */
+.tactical-bg{position:fixed;inset:0;z-index:-10;pointer-events:none;overflow:hidden;}
+.tactical-bg.off{display:none;}
+.tactical-bg::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg, oklch(0.14 0.010 120) 0%, oklch(0.10 0.008 120) 50%, oklch(0.13 0.010 120) 100%);
+}
+.tactical-bg .glow{
+  position:absolute;inset:-20%;
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 30%, color-mix(in oklch, var(--accent) 8%, transparent) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 60% at 85% 75%, rgba(96,165,250,.06) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 40% at 50% 50%, color-mix(in oklch, var(--accent) 4%, transparent) 0%, transparent 50%);
+  animation:glowDrift 30s ease-in-out infinite;
+}
+@keyframes glowDrift{
+  0%,100%{transform:translate(0,0) scale(1);opacity:.7;}
+  50%{transform:translate(2%,-2%) scale(1.05);opacity:1;}
+}
+.tactical-bg .grid{
+  position:absolute;inset:0;
+  background-image:radial-gradient(circle at center, color-mix(in oklch, var(--accent) 22%, transparent) 1px, transparent 1px);
+  background-size:40px 40px;
+  opacity:.06;
+  animation:gridDrift 120s linear infinite;
+}
+@keyframes gridDrift{from{background-position:0 0}to{background-position:40px 0}}
+.tactical-bg .scanline{
+  position:absolute;left:0;right:0;height:3px;
+  background:linear-gradient(90deg, transparent, color-mix(in oklch, var(--accent) 40%, transparent) 30%, color-mix(in oklch, var(--accent) 60%, transparent) 50%, color-mix(in oklch, var(--accent) 40%, transparent) 70%, transparent);
+  box-shadow:0 0 18px color-mix(in oklch, var(--accent) 50%, transparent);
+  animation:scanSweep 8s linear infinite;
+}
+@keyframes scanSweep{0%{transform:translateY(-100%)}100%{transform:translateY(100vh)}}
+.tactical-bg .grain{
+  position:absolute;inset:0;opacity:.04;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  animation:grainFlick .5s steps(2) infinite;
+}
+@keyframes grainFlick{0%,100%{opacity:.03}50%{opacity:.05}}
+
+/* ── HUD type ───────────────────────────────────────────── */
+.hud{font-family:'Share Tech Mono',ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;}
+.term{font-family:'VT323',ui-monospace,monospace;letter-spacing:.04em;}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+.hud-glow{color:var(--accent);text-shadow:0 0 6px color-mix(in oklch, var(--accent) 60%, transparent), 0 0 14px color-mix(in oklch, var(--accent) 35%, transparent);}
+.hud-glow-amber{color:var(--amber);text-shadow:0 0 6px rgba(255,194,102,.7),0 0 14px rgba(255,194,102,.35);}
+.hud-glow-red{color:var(--red);text-shadow:0 0 6px rgba(255,100,100,.7),0 0 14px rgba(255,100,100,.35);}
+
+/* ── Surfaces ───────────────────────────────────────────── */
+.panel{
+  position:relative;
+  background:linear-gradient(135deg, rgba(0,0,0,.55) 0%, oklch(0.22 0.010 125 / .6) 100%);
+  border:1px solid var(--border-soft);
+  border-radius:14px;
+  overflow:hidden;
+}
+.panel::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg, transparent 0 2px, rgba(255,255,255,.012) 2px 4px);
+  z-index:1;
+}
+.panel.scanlines-off::before{display:none;}
+.panel > *{position:relative;z-index:2;}
+
+.panel-accent{
+  border-color: color-mix(in oklch, var(--accent) 25%, var(--border-soft));
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 8%, transparent), 0 8px 40px rgba(0,0,0,.4);
+}
+.panel-accent::after{
+  content:'';position:absolute;inset:0;pointer-events:none;z-index:1;
+  background:radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in oklch, var(--accent) 8%, transparent) 0%, transparent 70%);
+}
+
+/* corner brackets */
+.brackets::before,.brackets::after{
+  content:'';position:absolute;width:14px;height:14px;border:1.5px solid color-mix(in oklch, var(--accent) 60%, transparent);pointer-events:none;
+}
+.brackets::before{top:6px;left:6px;border-right:none;border-bottom:none;}
+.brackets::after{bottom:6px;right:6px;border-left:none;border-top:none;}
+
+/* ── Tiny utilities ─────────────────────────────────────── */
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;padding:3px 8px;border:1px solid var(--border-soft);border-radius:999px;color:var(--fg-2);background:rgba(255,255,255,.04);}
+.chip-accent{color:var(--accent);border-color:var(--accent-border);background:var(--accent-bg);}
+.chip-green{color:var(--green-soft);border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.08);}
+.chip-red{color:var(--red-2);border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.08);}
+.chip-amber{color:var(--amber-2);border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.08);}
+.chip-blue{color:var(--blue);border-color:rgba(96,165,250,.30);background:rgba(96,165,250,.08);}
+.chip-purple{color:var(--purple);border-color:rgba(192,132,252,.30);background:rgba(192,132,252,.08);}
+
+.divider{height:1px;background:linear-gradient(90deg, transparent, color-mix(in oklch, var(--accent) 30%, transparent) 50%, transparent);}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:9px 14px;border-radius:10px;
+  font-family:'JetBrains Mono',monospace;font-weight:800;font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;
+  border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--fg-2);cursor:pointer;
+  transition:all .18s ease;
+  user-select:none;
+}
+.btn:hover{background:rgba(255,255,255,.06);color:var(--fg);}
+.btn-red{color:var(--red-2);border-color:rgba(248,113,113,.30);background:rgba(248,113,113,.10);}
+.btn-red:hover{background:rgba(248,113,113,.18);color:#fff;}
+.btn-orange{color:#fdba74;border-color:rgba(251,146,60,.30);background:rgba(251,146,60,.10);}
+.btn-orange:hover{background:rgba(251,146,60,.18);color:#fff;}
+.btn-green{color:var(--green-soft);border-color:rgba(74,222,128,.30);background:rgba(74,222,128,.10);}
+.btn-green:hover{background:rgba(74,222,128,.18);color:#fff;}
+.btn-cyan{
+  color:#67e8f9;border:1px solid rgba(34,211,238,.4);
+  background:linear-gradient(180deg,#164e63 0%,#0e3a4a 60%,#0a2d3a 100%);
+  box-shadow:0 4px 0 0 #061e27, 0 0 12px rgba(34,211,238,.18), inset 0 1px 0 rgba(255,255,255,.07);
+}
+.btn-cyan:hover{filter:brightness(1.15);}
+.btn-cyan:active{transform:translateY(1px);box-shadow:0 1px 0 0 #061e27, 0 0 8px rgba(34,211,238,.18);}
+.btn-icon{padding:0;width:36px;height:36px;}
+
+.metric-tile{
+  background:rgba(0,0,0,.4);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:12px;
+  padding:14px 16px;
+  position:relative;
+  overflow:hidden;
+}
+.metric-label{font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:600;color:var(--fg-4);text-transform:uppercase;letter-spacing:.2em;margin-bottom:10px;}
+.metric-value{font-family:'Share Tech Mono','JetBrains Mono',monospace;font-size:26px;font-weight:800;letter-spacing:-.01em;line-height:1;color:var(--fg);}
+.metric-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--fg-4);text-transform:uppercase;letter-spacing:.12em;margin-top:6px;}
+
+/* ── Pulsing orb ─────────────────────────────────────────── */
+.orb{position:relative;width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.orb .core{width:14px;height:14px;border-radius:50%;background:var(--green);box-shadow:0 0 18px var(--green);}
+.orb .ping{position:absolute;inset:0;border-radius:50%;background:var(--green);opacity:.25;animation:ping 2.5s ease-out infinite;}
+.orb .blur{position:absolute;inset:4px;border-radius:50%;background:var(--green);opacity:.35;filter:blur(5px);}
+@keyframes ping{0%{transform:scale(.8);opacity:.45}80%,100%{transform:scale(2.2);opacity:0}}
+.orb.amber .core{background:var(--amber-2);box-shadow:0 0 18px var(--amber-2);}
+.orb.amber .ping,.orb.amber .blur{background:var(--amber-2);}
+.orb.red .core{background:var(--red-2);box-shadow:0 0 18px var(--red-2);}
+.orb.red .ping,.orb.red .blur{background:var(--red-2);}
+
+/* ── Reticle ─────────────────────────────────────────────── */
+.reticle{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;opacity:.18;}
+.reticle.off{display:none;}
+.reticle svg{width:120%;height:120%;}
+.reticle .ring-rotate{animation:rRotate 45s linear infinite;transform-origin:center;}
+.reticle .ring-rotate-rev{animation:rRotateRev 30s linear infinite;transform-origin:center;}
+@keyframes rRotate{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes rRotateRev{from{transform:rotate(360deg)}to{transform:rotate(0)}}
+
+/* ── HUD progress bar (entry/SL/TP) ─────────────────────── */
+.hud-prog{position:relative;height:6px;border-radius:3px;background:linear-gradient(90deg,#7f1d1d 0%,#3a1212 18%,#1d1d1d 30%,#1d1d1d 70%,#0e3326 82%,#065f46 100%);overflow:visible;}
+.hud-prog .marker{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid var(--green);box-shadow:0 0 10px var(--green);transform:translate(-50%,-50%);transition:left .8s cubic-bezier(.22,.9,.3,1);}
+.hud-prog .tick{position:absolute;top:-3px;width:1px;height:12px;background:rgba(255,255,255,.3);}
+
+/* ── Animations ─────────────────────────────────────────── */
+@keyframes flashGreen{0%{background:rgba(0,255,170,0)}20%{background:rgba(0,255,170,.18)}100%{background:rgba(0,255,170,0)}}
+@keyframes flashRed{0%{background:rgba(248,113,113,0)}20%{background:rgba(248,113,113,.18)}100%{background:rgba(248,113,113,0)}}
+.flash-green{animation:flashGreen .9s ease-out;}
+.flash-red{animation:flashRed .9s ease-out;}
+
+@keyframes barShimmer{0%{transform:translateX(-100%)}100%{transform:translateX(200%)}}
+
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:.2}}
+.cursor-blink{animation:blink 1s steps(2) infinite;}
+
+@keyframes radarSweep{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* ── Layout ─────────────────────────────────────────────── */
+.shell{max-width:1320px;margin:0 auto;padding:24px 28px 60px;}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0 22px;border-bottom:1px solid var(--border-soft);margin-bottom:24px;}
+.topbar .brand{display:flex;align-items:center;gap:14px;}
+.brand-mark{width:34px;height:34px;border:1px solid var(--accent-border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--accent-bg);}
+.brand-name{font-family:'Share Tech Mono',monospace;font-size:15px;letter-spacing:.22em;text-transform:uppercase;color:var(--fg);}
+.brand-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--fg-4);letter-spacing:.18em;text-transform:uppercase;}
+
+.nav{display:flex;align-items:center;gap:4px;}
+.nav a{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-3);padding:8px 12px;border-radius:8px;text-decoration:none;border:1px solid transparent;}
+.nav a:hover{color:var(--fg);background:rgba(255,255,255,.04);}
+.nav a.active{color:var(--accent);border-color:var(--accent-border);background:var(--accent-bg);}
+
+/* page header */
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:22px;}
+.page-title{display:flex;align-items:center;gap:18px;}
+.page-title .icon{width:54px;height:54px;border:1px solid var(--amber-border);border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(251,191,36,.06);}
+.page-title h1{font-family:'Share Tech Mono',monospace;font-size:32px;letter-spacing:.2em;text-transform:uppercase;margin:0;line-height:1;color:var(--amber);text-shadow:0 0 14px rgba(251,191,36,.35);}
+.page-title .sub{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--fg-3);letter-spacing:.18em;text-transform:uppercase;margin-top:6px;}
+.page-title h1.live{color:var(--red);text-shadow:0 0 14px rgba(248,113,113,.45);}
+
+.layout-grid{display:grid;grid-template-columns:1.6fr .9fr;gap:18px;align-items:start;}
+.layout-grid.single{grid-template-columns:1fr;}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0;}
+
+@media (max-width: 980px){
+  .shell{padding:14px 14px 80px;}
+  .topbar{flex-wrap:wrap;}
+  .nav{order:3;width:100%;overflow-x:auto;padding-bottom:4px;}
+  .nav a{flex-shrink:0;}
+  .layout-grid{grid-template-columns:1fr;}
+  .page-title h1{font-size:24px;}
+  .metric-value{font-size:22px;}
+}
+
+/* Section header inside panel */
+.sec-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border-soft);}
+.sec-title{font-family:'Share Tech Mono',monospace;font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--fg);display:flex;align-items:center;gap:10px;}
+.sec-title .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);}
+
+/* No scrollbar utility */
+.no-scrollbar::-webkit-scrollbar{display:none;}
+.no-scrollbar{scrollbar-width:none;}
+
+/* density */
+.density-sparse .metric-tile{padding:18px 20px;}
+.density-sparse .metric-value{font-size:30px;}
+.density-dense .metric-tile{padding:10px 12px;}
+.density-dense .metric-value{font-size:22px;}
+.density-dense .metric-label{margin-bottom:6px;}
+
+/* Position card */
+.pos{
+  position:relative;padding:14px 16px;border:1px solid var(--border-soft);border-radius:12px;
+  background:linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,.25));
+  cursor:pointer;transition:border-color .2s ease, transform .2s ease;
+  overflow:hidden;
+}
+.pos:hover{border-color:var(--accent-border);}
+
+/* History */
+.hist{padding:11px 14px;border:1px solid var(--border-soft);border-radius:12px;background:rgba(0,0,0,.3);cursor:pointer;transition:border-color .2s ease;}
+.hist:hover{border-color:var(--border);}
+.hist.expanded{border-color:var(--accent-border);background:rgba(0,0,0,.45);box-shadow:0 0 18px color-mix(in oklch, var(--accent) 7%, transparent);}
+
+/* Modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);z-index:60;display:flex;align-items:center;justify-content:center;padding:20px;}
+.modal{width:100%;max-width:480px;background:linear-gradient(180deg, oklch(0.20 0.010 125), oklch(0.16 0.010 125));border:1px solid var(--accent-border);border-radius:14px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6), 0 0 0 1px color-mix(in oklch, var(--accent) 15%, transparent);}
+
+/* ── HUD overlays toggle ─────────────────────────────────── */
+.hud-overlays-off .reticle{display:none;}
+.hud-overlays-off .panel::before{display:none;}
+.hud-overlays-off .corner-tag{display:none;}
+.hud-overlays-off .brackets::before,.hud-overlays-off .brackets::after{display:none;}
+
+/* corner tags */
+.corner-tag{position:absolute;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--fg-4);letter-spacing:.18em;text-transform:uppercase;z-index:3;pointer-events:none;}
+.corner-tag.tl{top:8px;left:14px;}
+.corner-tag.tr{top:8px;right:14px;color:var(--accent);}
+.corner-tag.br{bottom:8px;right:14px;}
+
+/* equity line */
+.eq-svg{width:100%;height:80px;display:block;}
+
+/* Watchlist symbol */
+.watch-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px dashed var(--border-soft);}
+.watch-row:last-child{border-bottom:none;}
+
+/* Scan log row */
+.log-row{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--fg-2);padding:5px 0;display:grid;grid-template-columns:64px 60px 1fr auto;gap:10px;align-items:center;}
+.log-row .t{color:var(--fg-4);}
+.log-row .pass{color:var(--green-soft);}
+.log-row .rej{color:var(--fg-4);}
+.log-row .sym{color:var(--fg);font-weight:700;}
+
+/* radar */
+.radar-wrap{position:relative;width:100%;aspect-ratio:1/1;max-width:240px;margin:0 auto;}
+.radar-sweep{animation:radarSweep 4s linear infinite;transform-origin:center;}
+
+/* selection cosmetic */
+::selection{background:color-mix(in oklch, var(--accent) 50%, transparent);color:#000;}
+
+</style></head><body>
+<div class="tactical-bg" id="tactical-bg"><div class="glow"></div><div class="grid"></div><div class="grain"></div><div class="scanline"></div></div>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel">
+// tweaks-panel.jsx
+// Reusable Tweaks shell + form-control helpers.
+//
+// Owns the host protocol (listens for __activate_edit_mode / __deactivate_edit_mode,
+// posts __edit_mode_available / __edit_mode_set_keys / __edit_mode_dismissed) so
+// individual prototypes don't re-roll it. Ships a consistent set of controls so you
+// don't hand-draw <input type="range">, segmented radios, steppers, etc.
+//
+// Usage (in an HTML file that loads React + Babel):
+//
+//   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+//     "primaryColor": "#D97757",
+//     "palette": ["#D97757", "#29261b", "#f6f4ef"],
+//     "fontSize": 16,
+//     "density": "regular",
+//     "dark": false
+//   }/*EDITMODE-END*/;
+//
+//   function App() {
+//     const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+//     return (
+//       <div style={{ fontSize: t.fontSize, color: t.primaryColor }}>
+//         Hello
+//         <TweaksPanel>
+//           <TweakSection label="Typography" />
+//           <TweakSlider label="Font size" value={t.fontSize} min={10} max={32} unit="px"
+//                        onChange={(v) => setTweak('fontSize', v)} />
+//           <TweakRadio  label="Density" value={t.density}
+//                        options={['compact', 'regular', 'comfy']}
+//                        onChange={(v) => setTweak('density', v)} />
+//           <TweakSection label="Theme" />
+//           <TweakColor  label="Primary" value={t.primaryColor}
+//                        options={['#D97757', '#2A6FDB', '#1F8A5B', '#7A5AE0']}
+//                        onChange={(v) => setTweak('primaryColor', v)} />
+//           <TweakColor  label="Palette" value={t.palette}
+//                        options={[['#D97757', '#29261b', '#f6f4ef'],
+//                                  ['#475569', '#0f172a', '#f1f5f9']]}
+//                        onChange={(v) => setTweak('palette', v)} />
+//           <TweakToggle label="Dark mode" value={t.dark}
+//                        onChange={(v) => setTweak('dark', v)} />
+//         </TweaksPanel>
+//       </div>
+//     );
+//   }
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    transform:scale(var(--dc-inv-zoom,1));transform-origin:bottom right;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-body::-webkit-scrollbar{width:8px}
+  .twk-body::-webkit-scrollbar-track{background:transparent;margin:2px}
+  .twk-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  .twk-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25);
+    border:2px solid transparent;background-clip:content-box}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+    color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+
+  .twk-field{appearance:none;width:100%;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;
+    overflow-wrap:anywhere}
+
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+
+  .twk-num{display:flex;align-items:center;height:26px;padding:0 0 0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
+  .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
+    user-select:none;padding-right:8px}
+  .twk-num input{flex:1;min-width:0;height:100%;border:0;background:transparent;
+    font:inherit;font-variant-numeric:tabular-nums;text-align:right;padding:0 8px 0 0;
+    outline:none;color:inherit;-moz-appearance:textfield}
+  .twk-num input::-webkit-inner-spin-button,.twk-num input::-webkit-outer-spin-button{
+    -webkit-appearance:none;margin:0}
+  .twk-num-unit{padding-right:8px;color:rgba(41,38,27,.45)}
+
+  .twk-btn{appearance:none;height:26px;padding:0 12px;border:0;border-radius:7px;
+    background:rgba(0,0,0,.78);color:#fff;font:inherit;font-weight:500;cursor:default}
+  .twk-btn:hover{background:rgba(0,0,0,.88)}
+  .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
+  .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
+
+  .twk-swatch{appearance:none;-webkit-appearance:none;width:56px;height:22px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:6px;padding:0;cursor:default;
+    background:transparent;flex-shrink:0}
+  .twk-swatch::-webkit-color-swatch-wrapper{padding:0}
+  .twk-swatch::-webkit-color-swatch{border:0;border-radius:5.5px}
+  .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
+
+  .twk-chips{display:flex;gap:6px}
+  .twk-chip{position:relative;appearance:none;flex:1;min-width:0;height:46px;
+    padding:0;border:0;border-radius:6px;overflow:hidden;cursor:default;
+    box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
+    transition:transform .12s cubic-bezier(.3,.7,.4,1),box-shadow .12s}
+  .twk-chip:hover{transform:translateY(-1px);
+    box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 4px 10px rgba(0,0,0,.12)}
+  .twk-chip[data-on="1"]{box-shadow:0 0 0 1.5px rgba(0,0,0,.85),
+    0 2px 6px rgba(0,0,0,.15)}
+  .twk-chip>span{position:absolute;top:0;bottom:0;right:0;width:34%;
+    display:flex;flex-direction:column;box-shadow:-1px 0 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i{flex:1;box-shadow:0 -1px 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i:first-child{box-shadow:none}
+  .twk-chip svg{position:absolute;top:6px;left:6px;width:13px;height:13px;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+`;
+
+// ── useTweaks ───────────────────────────────────────────────────────────────
+// Single source of truth for tweak values. setTweak persists via the host
+// (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  // Accepts either setTweak('key', value) or setTweak({ key: value, ... }) so a
+  // useState-style call doesn't write a "[object Object]" key into the persisted
+  // JSON block.
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+    // Same-window signal so in-page listeners (deck-stage rail thumbnails)
+    // can react — the parent message only reaches the host, not peers.
+    window.dispatchEvent(new CustomEvent('tweakchange', { detail: edits }));
+  }, []);
+  return [values, setTweak];
+}
+
+// ── TweaksPanel ─────────────────────────────────────────────────────────────
+// Floating shell. Registers the protocol listener BEFORE announcing
+// availability — if the announce ran first, the host's activate could land
+// before our handler exists and the toolbar toggle would silently no-op.
+// The close button posts __edit_mode_dismissed so the host's toolbar toggle
+// flips off in lockstep; the host echoes __deactivate_edit_mode back which
+// is what actually hides the panel.
+function TweaksPanel({ title = 'Tweaks', noDeckControls = false, children }) {
+  const [open, setOpen] = React.useState(false);
+  const dragRef = React.useRef(null);
+  // Auto-inject a rail toggle when a <deck-stage> is on the page. The
+  // toggle drives the deck's per-viewer _railVisible via window message;
+  // state is mirrored from the same localStorage key the deck reads so
+  // the control reflects reality across reloads. The mechanism is the
+  // message — authors who want custom placement can post it directly
+  // and pass noDeckControls to suppress this one.
+  const hasDeckStage = React.useMemo(
+    () => typeof document !== 'undefined' && !!document.querySelector('deck-stage'),
+    [],
+  );
+  // Hide the toggle until the host has actually enabled the rail (the
+  // __omelette_rail_enabled window message, posted only when the
+  // omelette_deck_rail_enabled flag is on for this user). The initial read
+  // covers TweaksPanel mounting after the message already arrived; the
+  // listener covers the common case of mounting first.
+  const [railEnabled, setRailEnabled] = React.useState(
+    () => hasDeckStage && !!document.querySelector('deck-stage')?._railEnabled,
+  );
+  React.useEffect(() => {
+    if (!hasDeckStage || railEnabled) return undefined;
+    const onMsg = (e) => {
+      if (e.data && e.data.type === '__omelette_rail_enabled') setRailEnabled(true);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [hasDeckStage, railEnabled]);
+  const [railVisible, setRailVisible] = React.useState(() => {
+    try { return localStorage.getItem('deck-stage.railVisible') !== '0'; } catch (e) { return true; }
+  });
+  const toggleRail = (on) => {
+    setRailVisible(on);
+    window.postMessage({ type: '__deck_rail_visible', on }, '*');
+  };
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', clampToViewport);
+      return () => window.removeEventListener('resize', clampToViewport);
+    }
+    const ro = new ResizeObserver(clampToViewport);
+    ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  }, [open, clampToViewport]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const t = e?.data?.type;
+      if (t === '__activate_edit_mode') setOpen(true);
+      else if (t === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const dismiss = () => {
+    setOpen(false);
+    window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+  };
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight = window.innerWidth - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = {
+        x: startRight - (ev.clientX - sx),
+        y: startBottom - (ev.clientY - sy),
+      };
+      clampToViewport();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel" data-noncommentable=""
+           style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+        <div className="twk-hd" onMouseDown={onDragStart}>
+          <b>{title}</b>
+          <button className="twk-x" aria-label="Close tweaks"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={dismiss}>✕</button>
+        </div>
+        <div className="twk-body">
+          {children}
+          {hasDeckStage && railEnabled && !noDeckControls && (
+            <TweakSection label="Deck">
+              <TweakToggle label="Thumbnail rail" value={railVisible} onChange={toggleRail} />
+            </TweakSection>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Layout helpers ──────────────────────────────────────────────────────────
+
+function TweakSection({ label, children }) {
+  return (
+    <>
+      <div className="twk-sect">{label}</div>
+      {children}
+    </>
+  );
+}
+
+function TweakRow({ label, value, children, inline = false }) {
+  return (
+    <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Controls ────────────────────────────────────────────────────────────────
+
+function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+  return (
+    <TweakRow label={label} value={`${value}${unit}`}>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+             value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </TweakRow>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value}
+              onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  // The active value is read by pointer-move handlers attached for the lifetime
+  // of a drag — ref it so a stale closure doesn't fire onChange for every move.
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  // Segments wrap mid-word once per-segment width runs out. The track is
+  // ~248px (280 panel − 28 body pad − 4 seg pad), each button loses 12px
+  // to its own padding, and 11.5px system-ui averages ~6.3px/char — so 2
+  // options fit ~16 chars each, 3 fit ~10. Past that (or >3 options), fall
+  // back to a dropdown rather than wrap.
+  const labelLen = (o) => String(typeof o === 'object' ? o.label : o).length;
+  const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
+  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 }[options.length] ?? 0);
+  if (!fitsAsSegments) {
+    // <select> emits strings — map back to the original option value so the
+    // fallback stays type-preserving (numbers, booleans) like the segment path.
+    const resolve = (s) => {
+      const m = options.find((o) => String(typeof o === 'object' ? o.value : o) === s);
+      return m === undefined ? s : typeof m === 'object' ? m.value : m;
+    };
+    return <TweakSelect label={label} value={value} options={options}
+                        onChange={(s) => onChange(resolve(s))} />;
+  }
+  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+  const n = opts.length;
+
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const inner = r.width - 4;
+    const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+    return opts[Math.max(0, Math.min(n - 1, i))].value;
+  };
+
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => {
+      if (!trackRef.current) return;
+      const v = segAt(ev.clientX);
+      if (v !== valueRef.current) onChange(v);
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`,
+                      width: `calc((100% - 4px) / ${n})` }} />
+        {opts.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => {
+          const v = typeof o === 'object' ? o.value : o;
+          const l = typeof o === 'object' ? o.label : o;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </TweakRow>
+  );
+}
+
+function TweakText({ label, value, placeholder, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <input className="twk-field" type="text" value={value} placeholder={placeholder}
+             onChange={(e) => onChange(e.target.value)} />
+    </TweakRow>
+  );
+}
+
+function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }) {
+  const clamp = (n) => {
+    if (min != null && n < min) return min;
+    if (max != null && n > max) return max;
+    return n;
+  };
+  const startRef = React.useRef({ x: 0, val: 0 });
+  const onScrubStart = (e) => {
+    e.preventDefault();
+    startRef.current = { x: e.clientX, val: value };
+    const decimals = (String(step).split('.')[1] || '').length;
+    const move = (ev) => {
+      const dx = ev.clientX - startRef.current.x;
+      const raw = startRef.current.val + dx * step;
+      const snapped = Math.round(raw / step) * step;
+      onChange(clamp(Number(snapped.toFixed(decimals))));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="twk-num">
+      <span className="twk-num-lbl" onPointerDown={onScrubStart}>{label}</span>
+      <input type="number" value={value} min={min} max={max} step={step}
+             onChange={(e) => onChange(clamp(Number(e.target.value)))} />
+      {unit && <span className="twk-num-unit">{unit}</span>}
+    </div>
+  );
+}
+
+// Relative-luminance contrast pick — checkmarks drawn over a swatch need to
+// read on both #111 and #fafafa without per-option configuration. Hex input
+// only (#rgb / #rrggbb); named or rgb()/hsl() colors fall through to "light".
+function __twkIsLight(hex) {
+  const h = String(hex).replace('#', '');
+  const x = h.length === 3 ? h.replace(/./g, (c) => c + c) : h.padEnd(6, '0');
+  const n = parseInt(x.slice(0, 6), 16);
+  if (Number.isNaN(n)) return true;
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return r * 299 + g * 587 + b * 114 > 148000;
+}
+
+const __TwkCheck = ({ light }) => (
+  <svg viewBox="0 0 14 14" aria-hidden="true">
+    <path d="M3 7.2 5.8 10 11 4.2" fill="none" strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round"
+          stroke={light ? 'rgba(0,0,0,.78)' : '#fff'} />
+  </svg>
+);
+
+// TweakColor — curated color/palette picker. Each option is either a single
+// hex string or an array of 1-5 hex strings; the card adapts — a lone color
+// renders solid, a palette renders colors[0] as the hero (left ~2/3) with the
+// rest stacked in a sharp column on the right. onChange emits the
+// option in the shape it was passed (string stays string, array stays array).
+// Without options it falls back to the native color input for back-compat.
+function TweakColor({ label, value, options, onChange }) {
+  if (!options || !options.length) {
+    return (
+      <div className="twk-row twk-row-h">
+        <div className="twk-lbl"><span>{label}</span></div>
+        <input type="color" className="twk-swatch" value={value}
+               onChange={(e) => onChange(e.target.value)} />
+      </div>
+    );
+  }
+  // Native <input type=color> emits lowercase hex per the HTML spec, so
+  // compare case-insensitively. String() guards JSON.stringify(undefined),
+  // which returns the primitive undefined (no .toLowerCase).
+  const key = (o) => String(JSON.stringify(o)).toLowerCase();
+  const cur = key(value);
+  return (
+    <TweakRow label={label}>
+      <div className="twk-chips" role="radiogroup">
+        {options.map((o, i) => {
+          const colors = Array.isArray(o) ? o : [o];
+          const [hero, ...rest] = colors;
+          const sup = rest.slice(0, 4);
+          const on = key(o) === cur;
+          return (
+            <button key={i} type="button" className="twk-chip" role="radio"
+                    aria-checked={on} data-on={on ? '1' : '0'}
+                    aria-label={colors.join(', ')} title={colors.join(' · ')}
+                    style={{ background: hero }}
+                    onClick={() => onChange(o)}>
+              {sup.length > 0 && (
+                <span>
+                  {sup.map((c, j) => <i key={j} style={{ background: c }} />)}
+                </span>
+              )}
+              {on && <__TwkCheck light={__twkIsLight(hero)} />}
+            </button>
+          );
+        })}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakButton({ label, onClick, secondary = false }) {
+  return (
+    <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'}
+            onClick={onClick}>{label}</button>
+  );
+}
+
+Object.assign(window, {
+  useTweaks, TweaksPanel, TweakSection, TweakRow,
+  TweakSlider, TweakToggle, TweakRadio, TweakSelect,
+  TweakText, TweakNumber, TweakColor, TweakButton,
+});
+;// ── SniperSight shared chrome ─────────────────────────────────
+// Loaded into every page; exposes globals on window.SS_*
+
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+// ── Tactical Background controller ──────────────────────────
+function applyTweaks(t, pageAccent){
+  const root = document.documentElement;
+  // page accent override wins unless tweak forces a theme
+  const accents = {
+    green: { c:'#00ffaa', bg:'rgba(0,255,170,.10)', bd:'rgba(0,255,170,.30)' },
+    amber: { c:'#fbbf24', bg:'rgba(251,191,36,.10)', bd:'rgba(251,191,36,.35)' },
+    blue:  { c:'#60a5fa', bg:'rgba(96,165,250,.10)', bd:'rgba(96,165,250,.30)' },
+    cyan:  { c:'#22d3ee', bg:'rgba(34,211,238,.10)',  bd:'rgba(34,211,238,.30)' },
+    purple:{ c:'#c084fc', bg:'rgba(192,132,252,.10)', bd:'rgba(192,132,252,.30)' },
+    red:   { c:'#f87171', bg:'rgba(248,113,113,.10)', bd:'rgba(248,113,113,.35)' },
+  };
+  const themeKey = (t.theme === 'page') ? pageAccent : t.theme;
+  const a = accents[themeKey] || accents[pageAccent] || accents.green;
+  root.style.setProperty('--accent', a.c);
+  root.style.setProperty('--accent-bg', a.bg);
+  root.style.setProperty('--accent-border', a.bd);
+
+  const bg = document.getElementById('tactical-bg');
+  if (bg) bg.classList.toggle('off', !t.tacticalBg);
+
+  document.body.classList.toggle('hud-overlays-off', !t.hudOverlays);
+
+  document.body.classList.remove('density-sparse','density-balanced','density-dense');
+  document.body.classList.add('density-' + (t.density || 'balanced'));
+}
+
+// ── Formatters ──────────────────────────────────────────────
+function fmtMoney(v, d){ d = d == null ? 2 : d; return (v<0?'-$':'$') + Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function fmtPct(v, d){ d = d == null ? 2 : d; return (v>=0?'+':'') + v.toFixed(d) + '%'; }
+function fmtPrice(p){ if(p<1) return '$'+p.toFixed(5); if(p<100) return '$'+p.toFixed(4); return '$'+p.toFixed(2); }
+function fmtDur(seconds){
+  if (seconds<60) return seconds+'s';
+  if (seconds<3600) return Math.floor(seconds/60)+'m '+(seconds%60)+'s';
+  const h=Math.floor(seconds/3600), m=Math.floor((seconds%3600)/60);
+  return h+'h '+m+'m';
+}
+function fmtNum(v){
+  if (Math.abs(v) >= 1e9) return (v/1e9).toFixed(2)+'B';
+  if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(2)+'M';
+  if (Math.abs(v) >= 1e3) return (v/1e3).toFixed(2)+'K';
+  return v.toFixed(2);
+}
+
+// ── Reticle SVG (top-right corner of accent panels) ─────────
+function Reticle(){
+  return (
+    <div className="reticle">
+      <svg viewBox="-100 -100 200 200" fill="none">
+        <g className="ring-rotate">
+          <circle r="80" stroke="currentColor" strokeOpacity=".35" strokeWidth=".4" strokeDasharray="2 4"/>
+          <line x1="-90" y1="0" x2="-72" y2="0" stroke="currentColor" strokeOpacity=".5" strokeWidth=".6"/>
+          <line x1="72"  y1="0" x2="90"  y2="0" stroke="currentColor" strokeOpacity=".5" strokeWidth=".6"/>
+        </g>
+        <g className="ring-rotate-rev">
+          <circle r="55" stroke="currentColor" strokeOpacity=".5" strokeWidth=".5"/>
+          <line y1="-65" x1="0" y2="-48" x2="0" stroke="currentColor" strokeOpacity=".6" strokeWidth=".8"/>
+          <line y1="48"  x1="0" y2="65"  x2="0" stroke="currentColor" strokeOpacity=".6" strokeWidth=".8"/>
+        </g>
+        <circle r="3" fill="currentColor"/>
+        <circle r="22" stroke="currentColor" strokeOpacity=".4" strokeWidth=".5"/>
+      </svg>
+    </div>
+  );
+}
+
+// ── Topbar / Page head / Footer ─────────────────────────────
+function Topbar({ active, now }){
+  const links = [
+    { id:'intel',   label:'Intel',    href:'Intel.html' },
+    { id:'scanner', label:'Scanner',  href:'Scanner.html' },
+    { id:'bot',     label:'Bot',      href:'Bot.html' },
+    { id:'training',label:'Training', href:'Training.html' },
+    { id:'settings',label:'Settings', href:'Settings.html' },
+  ];
+  return (
+    <div className="topbar">
+      <a href="Landing.html" className="brand" style={{textDecoration:'none',color:'inherit'}}>
+        <img src="logo.png" alt="SniperSight" style={{height:34,width:'auto',display:'block',filter:'drop-shadow(0 0 12px rgba(0,255,170,.25))'}}/>
+      </a>
+      <nav className="nav">
+        {links.map(l => (
+          <a key={l.id} href={l.href} className={active===l.id?'active':''}>{l.label}</a>
+        ))}
+      </nav>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <span className="chip chip-green">● ONLINE</span>
+        <span className="chip">UTC {new Date(now).toUTCString().slice(17,25)}</span>
+      </div>
+    </div>
+  );
+}
+
+function PageHead({ icon, title, subtitle, badges, accent }){
+  return (
+    <div className="page-head">
+      <div className="page-title">
+        <div className="icon">{icon}</div>
+        <div>
+          <h1 style={accent==='red'?{}:{}} className={accent==='red'?'live':''}>{title}</h1>
+          <div className="sub">{subtitle}</div>
+        </div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+        {badges}
+      </div>
+    </div>
+  );
+}
+
+function FooterStatus({ now, latency }){
+  return (
+    <div style={{marginTop:24,padding:'12px 18px',border:'1px solid var(--border-soft)',borderRadius:10,background:'rgba(0,0,0,.3)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:14,flexWrap:'wrap'}}>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+        <span className="chip chip-green">● BINANCE WS</span>
+        <span className="chip chip-green">● PHEMEX REST</span>
+        <span className="chip chip-green">● TELEGRAM</span>
+        <span className="chip">● BACKEND {latency || 41}ms</span>
+      </div>
+      <div className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>build 1.0.0+5cdb504 · {new Date(now).toISOString().slice(0,19).replace('T',' ')}Z</div>
+    </div>
+  );
+}
+
+// ── Mini metric tile ────────────────────────────────────────
+function Mini({ label, value, accent, bold, valueColor }){
+  return (
+    <div>
+      <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:4}}>{label}</div>
+      <div className="mono" style={{fontSize:13,fontWeight: bold?800:600, color: valueColor || (accent?'var(--accent)':'var(--fg)')}}>{value}</div>
+    </div>
+  );
+}
+
+// ── SectionHead w/ pulsing dot ──────────────────────────────
+function SectionHead({ title, right }){
+  return (
+    <div className="sec-head">
+      <div className="sec-title"><span className="dot"/> {title}</div>
+      {right}
+    </div>
+  );
+}
+
+// ── RiskBar (small horizontal limit bar) ────────────────────
+function RiskBar({ label, value, max, unit, color }){
+  const pct = Math.min(100, (value/max)*100);
+  const c = color || 'var(--green-soft)';
+  return (
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+        <span className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>{label}</span>
+        <span className="mono" style={{fontSize:11,color:c,fontWeight:700}}>{value}{unit||''} <span style={{color:'var(--fg-4)'}}>/ {max}{unit||''}</span></span>
+      </div>
+      <div style={{position:'relative',height:6,borderRadius:3,background:'rgba(0,0,0,.5)',overflow:'hidden',border:'1px solid var(--border-soft)'}}>
+        <div style={{height:'100%',width:pct+'%',background:`linear-gradient(90deg, ${c}, color-mix(in oklch, ${c} 60%, transparent))`,boxShadow:`0 0 10px ${c}`,transition:'width .6s ease'}}/>
+      </div>
+    </div>
+  );
+}
+
+// ── Pill / Chip helpers ─────────────────────────────────────
+function Chip({ kind, children, style }){
+  const cls = 'chip ' + (kind ? 'chip-'+kind : '');
+  return <span className={cls} style={style}>{children}</span>;
+}
+
+// ── Modal shell ─────────────────────────────────────────────
+function Modal({ onClose, children, maxWidth }){
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" style={{maxWidth: maxWidth||620}} onClick={e=>e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── Default tweaks shared across all pages ──────────────────
+const SHARED_TWEAK_DEFAULTS = {
+  theme: 'page',           // 'page' = use the page's own accent; or override green/amber/blue
+  density: 'balanced',
+  tacticalBg: true,
+  hudOverlays: true,
+  simSpeed: 1,
+};
+
+// ── Shared TweaksPanel helper (pages add page-specific bits) ─
+function SharedTweaksControls({ t, setTweak }){
+  return (
+    <window.TweakSection title="Theme">
+      <window.TweakRadio label="Accent" value={t.theme} onChange={v=>setTweak('theme',v)} options={[
+        {label:'Page', value:'page'},
+        {label:'Green',value:'green'},
+        {label:'Amber',value:'amber'},
+        {label:'Blue', value:'blue'},
+      ]}/>
+      <window.TweakRadio label="Density" value={t.density} onChange={v=>setTweak('density',v)} options={[
+        {label:'Sparse',  value:'sparse'},
+        {label:'Balanced',value:'balanced'},
+        {label:'Dense',   value:'dense'},
+      ]}/>
+      <window.TweakToggle label="Tactical Background" value={t.tacticalBg} onChange={v=>setTweak('tacticalBg',v)} hint="Scanlines, grid, drift glow"/>
+      <window.TweakToggle label="HUD Overlays" value={t.hudOverlays} onChange={v=>setTweak('hudOverlays',v)} hint="Reticles, brackets, scanline texture"/>
+      <window.TweakSlider label="Sim Speed" value={t.simSpeed} min={0.5} max={4} step={0.5} onChange={v=>setTweak('simSpeed',v)}/>
+    </window.TweakSection>
+  );
+}
+
+// ── Tactical background DOM (rendered once per page) ────────
+function TacticalBgDom(){
+  // Used by pages that prefer to mount via React rather than static HTML.
+  return (
+    <div className="tactical-bg" id="tactical-bg">
+      <div className="glow"></div>
+      <div className="grid"></div>
+      <div className="grain"></div>
+      <div className="scanline"></div>
+    </div>
+  );
+}
+
+// Expose all helpers globally so each page's app script can use them
+Object.assign(window, {
+  SS: {
+    applyTweaks, fmtMoney, fmtPct, fmtPrice, fmtDur, fmtNum,
+    Reticle, Topbar, PageHead, FooterStatus, Mini, SectionHead,
+    RiskBar, Chip, Modal, SharedTweaksControls, TacticalBgDom,
+    SHARED_TWEAK_DEFAULTS,
+  },
+});
+;// ── INTEL — Macro / Regime / Liquidations / News ───────────
+const SS = window.SS;
+
+// ── Synthetic data ──────────────────────────────────────────
+const FUNDING_SEED = [
+  { sym:'BTC',  oi: 23.4e9, oiΔ:  2.1, fund: 0.0118, mark: 65120, change24:  1.42 },
+  { sym:'ETH',  oi: 11.8e9, oiΔ: -0.6, fund: 0.0094, mark: 3198,  change24: -0.32 },
+  { sym:'SOL',  oi:  3.62e9,oiΔ:  4.7, fund: 0.0240, mark: 141.05,change24:  0.81 },
+  { sym:'BNB',  oi:  1.94e9,oiΔ:  0.4, fund: 0.0061, mark: 572.4, change24:  0.22 },
+  { sym:'XRP',  oi:  1.41e9,oiΔ: -1.8, fund: 0.0042, mark: 0.524, change24: -0.91 },
+  { sym:'TON',  oi:  0.82e9,oiΔ:  6.1, fund: 0.0180, mark: 6.84,  change24:  2.10 },
+  { sym:'AVAX', oi:  0.51e9,oiΔ: -0.9, fund: 0.0072, mark: 34.18, change24:  1.10 },
+  { sym:'LINK', oi:  0.46e9,oiΔ:  1.1, fund: 0.0085, mark: 14.86, change24:  0.50 },
+  { sym:'INJ',  oi:  0.31e9,oiΔ:  3.2, fund: 0.0301, mark: 24.18, change24:  3.40 },
+  { sym:'DOGE', oi:  0.62e9,oiΔ: -2.4, fund: 0.0035, mark: 0.134, change24: -0.97 },
+];
+
+const LIQ_SEED = [
+  { sym:'BTC',  longs:  4.2e6, shorts: 12.8e6, ts: 14*60+12 },
+  { sym:'ETH',  longs:  1.8e6, shorts:  6.4e6, ts: 13*60+58 },
+  { sym:'SOL',  longs:  0.9e6, shorts:  3.1e6, ts: 13*60+44 },
+  { sym:'BTC',  longs:  2.1e6, shorts:  0.8e6, ts: 13*60+22 },
+  { sym:'TON',  longs:  0.4e6, shorts:  1.9e6, ts: 13*60+10 },
+  { sym:'INJ',  longs:  0.2e6, shorts:  0.7e6, ts: 12*60+58 },
+  { sym:'ETH',  longs:  0.3e6, shorts:  2.4e6, ts: 12*60+44 },
+  { sym:'AVAX', longs:  0.1e6, shorts:  0.5e6, ts: 12*60+22 },
+];
+
+const NEWS_SEED = [
+  { id:'n1', tag:'MACRO',  pri:'HIGH', t:'14:32',  src:'Bloomberg', headline:'Fed minutes signal patience on rate cuts; market prices in 2 cuts by Q4', impact:'bullish' },
+  { id:'n2', tag:'CHAIN',  pri:'MED',  t:'14:11',  src:'Coindesk',  headline:'BTC ETF inflows hit $312M in single session, breaking 6-day outflow streak', impact:'bullish' },
+  { id:'n3', tag:'REG',    pri:'HIGH', t:'13:58',  src:'Reuters',   headline:'SEC delays decision on ETH staking ETF amendment to mid-Q3', impact:'neutral' },
+  { id:'n4', tag:'WHALE',  pri:'LOW',  t:'13:42',  src:'WhaleAlert',headline:'2,400 BTC moved from cold wallet (origin: 2017) to Coinbase deposit', impact:'bearish' },
+  { id:'n5', tag:'CHAIN',  pri:'MED',  t:'13:21',  src:'Coindesk',  headline:'Solana validator count crosses 1,950; Jito MEV revenue up 24% week-over-week', impact:'bullish' },
+  { id:'n6', tag:'MACRO',  pri:'MED',  t:'12:55',  src:'WSJ',       headline:'DXY softens to 103.4 as 10Y yields drop 6bp on weaker ISM print', impact:'bullish' },
+  { id:'n7', tag:'EXCH',   pri:'LOW',  t:'12:18',  src:'TheBlock',  headline:'Binance lists PERP for new L2 token; OI builds $112M in first 4h', impact:'neutral' },
+  { id:'n8', tag:'WHALE',  pri:'HIGH', t:'11:44',  src:'Arkham',    headline:'Mt. Gox trustee wallet shifts 47K BTC — likely creditor distribution prep', impact:'bearish' },
+];
+
+const SESSIONS = [
+  { name:'TOKYO',   open: 0,  close: 9,  active: false, color:'#60a5fa' },
+  { name:'LONDON',  open: 8,  close: 17, active: true,  color:'#fbbf24' },
+  { name:'NEW YORK',open: 13, close: 22, active: true,  color:'#22c55e' },
+];
+
+// ── BTC Dominance Dial ──────────────────────────────────────
+function DominanceDial({ value, label, range, color, sub }){
+  const pct = (value - range[0]) / (range[1] - range[0]);
+  const angle = -135 + pct * 270;
+  const r = 90;
+  const cx = 0, cy = 0;
+  // arc generator
+  const arc = (start, end) => {
+    const s = (start * Math.PI)/180, e = (end * Math.PI)/180;
+    const x1 = cx + r * Math.cos(s), y1 = cy + r * Math.sin(s);
+    const x2 = cx + r * Math.cos(e), y2 = cy + r * Math.sin(e);
+    const large = (end - start) > 180 ? 1 : 0;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
+  };
+  return (
+    <div style={{position:'relative',width:'100%',aspectRatio:'1.6/1',maxWidth:340,margin:'0 auto'}}>
+      <svg viewBox="-110 -110 220 130" style={{width:'100%',height:'100%'}}>
+        {/* track */}
+        <path d={arc(-180+45, 45)} stroke="rgba(255,255,255,.06)" strokeWidth="6" fill="none" strokeLinecap="round"/>
+        {/* tick marks */}
+        {Array.from({length: 11}).map((_,i)=>{
+          const a = (-135 + i*27) * Math.PI/180;
+          const x1 = Math.cos(a)*82, y1 = Math.sin(a)*82;
+          const x2 = Math.cos(a)*98, y2 = Math.sin(a)*98;
+          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(255,255,255,.12)" strokeWidth=".7"/>;
+        })}
+        {/* fill */}
+        <path d={arc(-135, angle)} stroke={color} strokeWidth="6" fill="none" strokeLinecap="round" style={{filter:`drop-shadow(0 0 6px ${color})`}}/>
+        {/* needle */}
+        <g transform={`rotate(${angle})`}>
+          <line x1="0" y1="0" x2={r-8} y2="0" stroke={color} strokeWidth="2.4" strokeLinecap="round"/>
+          <circle cx={r-8} cy={0} r="3" fill={color} style={{filter:`drop-shadow(0 0 4px ${color})`}}/>
+        </g>
+        <circle r="6" fill="rgba(0,0,0,.6)" stroke={color} strokeWidth="1.5"/>
+        {/* range labels */}
+        <text x="-94" y="14" fill="var(--fg-4)" fontSize="7" fontFamily="JetBrains Mono,monospace">{range[0]}%</text>
+        <text x="78"  y="14" fill="var(--fg-4)" fontSize="7" fontFamily="JetBrains Mono,monospace">{range[1]}%</text>
+      </svg>
+      <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',pointerEvents:'none',paddingBottom:'8%'}}>
+        <div className="mono" style={{fontSize:9,letterSpacing:'.2em',color:'var(--fg-4)',textTransform:'uppercase',marginBottom:2}}>{label}</div>
+        <div style={{fontFamily:'Share Tech Mono,monospace',fontSize:32,letterSpacing:'.04em',color,fontWeight:700,lineHeight:1}}>{value.toFixed(2)}%</div>
+        <div className="mono" style={{fontSize:10,color:'var(--fg-3)',marginTop:4}}>{sub}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Regime Tape (vertical/horizontal bar w/ labels) ─────────
+function RegimeTape({ score, label, ranges, color }){
+  // ranges: array of {label, min, max, color}
+  const pct = Math.max(0, Math.min(100, ((score - ranges[0].min)/(ranges[ranges.length-1].max - ranges[0].min))*100));
+  return (
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+        <span className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>{label}</span>
+        <span className="mono" style={{fontSize:11,fontWeight:700,color}}>{score.toFixed(0)}</span>
+      </div>
+      <div style={{position:'relative',height:14,borderRadius:3,overflow:'hidden',border:'1px solid var(--border-soft)',background:'rgba(0,0,0,.4)',display:'flex'}}>
+        {ranges.map((r,i)=>{
+          const w = ((r.max - r.min)/(ranges[ranges.length-1].max - ranges[0].min))*100;
+          return <div key={i} style={{width:w+'%',background:r.color,opacity:.25}}/>;
+        })}
+        <div style={{position:'absolute',top:-2,bottom:-2,left:'calc('+pct+'% - 2px)',width:4,background:color,boxShadow:`0 0 8px ${color}`,borderRadius:1}}/>
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
+        {ranges.map((r,i)=>(
+          <span key={i} className="mono" style={{fontSize:8,color:'var(--fg-4)',letterSpacing:'.16em',textTransform:'uppercase'}}>{r.label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Funding heat row ────────────────────────────────────────
+function FundingRow({ row }){
+  const fundColor = row.fund > 0.02 ? 'var(--red-2)' : row.fund > 0.01 ? 'var(--amber)' : row.fund > 0 ? 'var(--green-soft)' : 'var(--blue)';
+  const oiColor = row.oiΔ > 2 ? 'var(--green-soft)' : row.oiΔ < -1 ? 'var(--red-2)' : 'var(--fg-2)';
+  // max funding visualized at 0.04% (annualized danger zone)
+  const fundPct = Math.max(0, Math.min(100, (row.fund / 0.04)*100));
+  return (
+    <div className="watch-row" style={{padding:'10px 4px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,flex:'0 0 70px'}}>
+        <span style={{fontFamily:'Share Tech Mono,monospace',fontSize:13,letterSpacing:'.06em'}}>{row.sym}</span>
+      </div>
+      <div style={{flex:'0 0 100px'}} className="mono">
+        <span style={{fontSize:12,color:'var(--fg)'}}>{SS.fmtPrice(row.mark)}</span>
+        <span style={{fontSize:10,color: row.change24>=0?'var(--green-soft)':'var(--red-2)',marginLeft:6}}>{SS.fmtPct(row.change24,1)}</span>
+      </div>
+      <div style={{flex:1,display:'flex',alignItems:'center',gap:8}}>
+        <div style={{flex:1,position:'relative',height:5,borderRadius:2,background:'rgba(255,255,255,.05)',overflow:'hidden'}}>
+          <div style={{position:'absolute',top:0,bottom:0,left:0,width:fundPct+'%',background:fundColor,boxShadow:`0 0 6px ${fundColor}`}}/>
+        </div>
+        <span className="mono" style={{fontSize:11,color:fundColor,fontWeight:700,minWidth:62,textAlign:'right'}}>{(row.fund*100).toFixed(4)}%</span>
+      </div>
+      <div style={{flex:'0 0 90px',textAlign:'right'}} className="mono">
+        <div style={{fontSize:11,color:'var(--fg-2)'}}>${SS.fmtNum(row.oi).replace(/\$/,'')}</div>
+        <div style={{fontSize:9,color:oiColor}}>{SS.fmtPct(row.oiΔ,1)}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Liquidation Heatmap (synthetic price grid) ──────────────
+function LiqHeatmap({ symbol }){
+  // Bucket levels around current price; each bucket has long+short notional
+  const data = useMemo(()=>{
+    const center = 65120;
+    const buckets = 14;
+    const step = 0.005; // .5% per bucket
+    return Array.from({length:buckets}).map((_,i)=>{
+      const offset = (i - buckets/2) * step;
+      const price = center * (1 + offset);
+      // shorts cluster above price, longs below (typical)
+      const shortHeat = offset > 0 ? Math.abs(Math.sin(offset*100)*0.7 + Math.random()*0.4) : Math.random()*0.25;
+      const longHeat  = offset < 0 ? Math.abs(Math.cos(offset*120)*0.7 + Math.random()*0.4) : Math.random()*0.20;
+      return { offset, price, shortHeat, longHeat };
+    }).reverse();
+  }, [symbol]);
+  const max = Math.max(...data.flatMap(d=>[d.shortHeat,d.longHeat]));
+  return (
+    <div style={{padding:'12px 2px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+        <span className="mono" style={{fontSize:9,color:'var(--red-2)',letterSpacing:'.18em',textTransform:'uppercase'}}>◀ SHORT LIQUIDATIONS</span>
+        <span className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>{symbol} · price ladder</span>
+        <span className="mono" style={{fontSize:9,color:'var(--green-soft)',letterSpacing:'.18em',textTransform:'uppercase'}}>LONG LIQUIDATIONS ▶</span>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:2,fontFamily:'JetBrains Mono,monospace',fontSize:10}}>
+        {data.map((d,i)=>{
+          const sw = (d.shortHeat/max)*100;
+          const lw = (d.longHeat/max)*100;
+          const isCurrent = Math.abs(d.offset) < 0.003;
+          return (
+            <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 90px 1fr',alignItems:'center',gap:8,padding:isCurrent?'2px 0':'0',background:isCurrent?'rgba(251,191,36,.08)':'transparent',borderRadius:isCurrent?4:0}}>
+              <div style={{display:'flex',justifyContent:'flex-end',height:14,position:'relative'}}>
+                <div style={{
+                  width: sw+'%',
+                  background:`linear-gradient(90deg, transparent, rgba(248,113,113, ${0.25+0.55*(d.shortHeat/max)}))`,
+                  border:`1px solid rgba(248,113,113,${0.4+0.4*(d.shortHeat/max)})`,
+                  borderRight:'none',
+                  height:14, borderRadius:'2px 0 0 2px',
+                }}/>
+              </div>
+              <div className="mono" style={{textAlign:'center',fontSize:10,fontWeight:isCurrent?800:500,color:isCurrent?'var(--amber)':'var(--fg-3)'}}>
+                {isCurrent && <span style={{marginRight:4}}>◉</span>}
+                ${d.price.toFixed(0)}
+              </div>
+              <div style={{display:'flex',height:14,position:'relative'}}>
+                <div style={{
+                  width: lw+'%',
+                  background:`linear-gradient(90deg, rgba(34,197,94, ${0.25+0.55*(d.longHeat/max)}), transparent)`,
+                  border:`1px solid rgba(34,197,94,${0.4+0.4*(d.longHeat/max)})`,
+                  borderLeft:'none',
+                  height:14, borderRadius:'0 2px 2px 0',
+                }}/>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── News feed item ─────────────────────────────────────────
+function NewsItem({ item }){
+  const [open, setOpen] = useState(false);
+  const tagColors = { MACRO:'blue', REG:'red', CHAIN:'green', WHALE:'amber', EXCH:'purple' };
+  const priColor = item.pri==='HIGH'?'var(--red-2)':item.pri==='MED'?'var(--amber)':'var(--fg-3)';
+  const impactColor = item.impact==='bullish'?'var(--green-soft)':item.impact==='bearish'?'var(--red-2)':'var(--blue)';
+  return (
+    <div className={`hist ${open?'expanded':''}`} onClick={()=>setOpen(!open)}>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <span className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.14em',width:42,flexShrink:0}}>{item.t}</span>
+        <SS.Chip kind={tagColors[item.tag]||''} style={{flexShrink:0,fontSize:9}}>{item.tag}</SS.Chip>
+        <span style={{flexShrink:0,fontSize:9,color:priColor,fontWeight:700,letterSpacing:'.16em'}} className="mono">▲ {item.pri}</span>
+        <span style={{flex:1,fontSize:12,color:'var(--fg-2)',lineHeight:1.4,minWidth:0,textWrap:'pretty'}}>{item.headline}</span>
+        <span className="mono" style={{fontSize:10,color:impactColor,fontWeight:700,flexShrink:0,letterSpacing:'.16em',textTransform:'uppercase'}}>{item.impact}</span>
+      </div>
+      {open && (
+        <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border-soft)',display:'flex',gap:14,fontFamily:'JetBrains Mono,monospace',fontSize:11,color:'var(--fg-3)'}}>
+          <span>SRC · {item.src}</span>
+          <span>WIRE · {item.t} UTC</span>
+          <span style={{color:impactColor}}>BIAS · {item.impact.toUpperCase()}</span>
+          <span style={{marginLeft:'auto',color:'var(--accent)'}}>OPEN ARTICLE →</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Session clock strip ─────────────────────────────────────
+function SessionStrip(){
+  const now = new Date();
+  const utcHour = now.getUTCHours() + now.getUTCMinutes()/60;
+  const cellW = 100/24;
+  return (
+    <div>
+      <div style={{position:'relative',height:60,border:'1px solid var(--border-soft)',borderRadius:6,background:'rgba(0,0,0,.4)',overflow:'hidden'}}>
+        {/* Hour grid */}
+        {Array.from({length:24}).map((_,i)=>(
+          <div key={i} style={{position:'absolute',top:0,bottom:0,left:`${i*cellW}%`,width:'1px',background:'rgba(255,255,255,.04)'}}/>
+        ))}
+        {/* Sessions */}
+        {SESSIONS.map((s,i)=>{
+          const left = (s.open/24)*100;
+          const width = ((s.close - s.open)/24)*100;
+          return (
+            <div key={s.name} style={{
+              position:'absolute',
+              top: 6 + i*16,
+              height:14,
+              left:`${left}%`,
+              width:`${width}%`,
+              background: s.active ? `linear-gradient(90deg, ${s.color}33, ${s.color}88)` : `${s.color}22`,
+              border: `1px solid ${s.color}${s.active?'cc':'55'}`,
+              borderRadius:3,
+              display:'flex',alignItems:'center',padding:'0 6px',
+              boxShadow: s.active ? `0 0 8px ${s.color}66` : 'none',
+            }}>
+              <span className="mono" style={{fontSize:9,letterSpacing:'.18em',color:s.active?s.color:'var(--fg-3)',fontWeight:700}}>{s.name}</span>
+            </div>
+          );
+        })}
+        {/* Now indicator */}
+        <div style={{position:'absolute',top:0,bottom:0,left:`${(utcHour/24)*100}%`,width:2,background:'var(--accent)',boxShadow:'0 0 8px var(--accent)',zIndex:2}}>
+          <div style={{position:'absolute',top:-6,left:-5,width:12,height:12,borderRadius:6,background:'var(--accent)',boxShadow:'0 0 8px var(--accent)'}}/>
+        </div>
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:6,fontFamily:'JetBrains Mono,monospace',fontSize:9,color:'var(--fg-4)',letterSpacing:'.14em'}}>
+        <span>00 UTC</span><span>06</span><span>12 ◉ {utcHour.toFixed(0).padStart(2,'0')}:{String(now.getUTCMinutes()).padStart(2,'0')}</span><span>18</span><span>24</span>
+      </div>
+    </div>
+  );
+}
+
+// ── AI commentary "terminal" ────────────────────────────────
+function AICommentary(){
+  const lines = [
+    { t:'PRIMARY',  text:'BTC reclaiming 64.5K with rising spot CVD; ETF inflow flip is structural.', conf: 78 },
+    { t:'CAVEAT',   text:'Mt. Gox tranche flagged — distribution overhang next 7-14 sessions.', conf: 62 },
+    { t:'OPP',      text:'Alts (TON, INJ, SOL) showing OI expansion w/ funding under 0.025% — clean longs.', conf: 71 },
+    { t:'HEDGE',    text:'10Y yield pivot < 4.20% would unlock risk-on; >4.40% reverses thesis.', conf: 68 },
+    { t:'TIMING',   text:'NY session momentum window 14:30-16:00 UTC has +1.4σ historical edge.', conf: 74 },
+  ];
+  return (
+    <div style={{padding:'14px 18px',background:'rgba(0,0,0,.45)',borderTop:'1px solid var(--border-soft)',fontFamily:'JetBrains Mono,monospace'}}>
+      <div style={{fontSize:11,color:'var(--accent)',marginBottom:10,opacity:.85}}>
+        {`> ai-analyst.exec --regime --window=24h`}<span className="cursor-blink">_</span>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:10}}>
+        {lines.map((l,i)=>(
+          <div key={i} style={{display:'flex',gap:10,alignItems:'flex-start',fontSize:12,lineHeight:1.45,color:'var(--fg-2)'}}>
+            <span className="mono" style={{fontSize:9,color:'var(--accent)',letterSpacing:'.18em',fontWeight:800,paddingTop:3,minWidth:62}}>{l.t}</span>
+            <span style={{flex:1,color:'var(--fg)'}}>{l.text}</span>
+            <span className="mono" style={{fontSize:10,color: l.conf>=70?'var(--green-soft)':l.conf>=60?'var(--amber)':'var(--fg-3)',fontWeight:700,minWidth:38,textAlign:'right'}}>{l.conf}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Live mini-ticker (header strip values) ──────────────────
+function MacroTicker({ values }){
+  return (
+    <div style={{display:'grid',gridTemplateColumns:'repeat(6, minmax(0,1fr))',gap:0,border:'1px solid var(--border-soft)',borderRadius:8,overflow:'hidden',background:'rgba(0,0,0,.35)'}}>
+      {values.map((v,i)=>(
+        <div key={i} style={{padding:'10px 14px',borderRight: i<values.length-1?'1px solid var(--border-soft)':'none'}}>
+          <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:3}}>{v.label}</div>
+          <div className="mono" style={{fontSize:13,fontWeight:700,color:v.color||'var(--fg)'}}>{v.value}</div>
+          {v.delta != null && <div className="mono" style={{fontSize:9,color:v.delta>=0?'var(--green-soft)':'var(--red-2)',fontWeight:600}}>{SS.fmtPct(v.delta,2)}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── App ─────────────────────────────────────────────────────
+function App(){
+  const [t, setTweak] = window.useTweaks({
+    ...SS.SHARED_TWEAK_DEFAULTS,
+    showAI: true,
+    liqSymbol: 'BTC',
+  });
+  useEffect(()=>{ SS.applyTweaks(t, 'blue'); }, [t]);
+
+  const [now, setNow] = useState(Date.now());
+  const [funding, setFunding] = useState(FUNDING_SEED);
+  const [news, setNews] = useState(NEWS_SEED);
+  const [btcDom, setBtcDom] = useState(54.32);
+  const [usdtDom, setUsdtDom] = useState(4.12);
+  const [fearGreed, setFearGreed] = useState(64);
+
+  useEffect(()=>{
+    const id = setInterval(()=>{
+      setNow(Date.now());
+      setBtcDom(d => d + (Math.random()-0.5)*0.04);
+      setUsdtDom(d => d + (Math.random()-0.5)*0.02);
+      setFearGreed(f => Math.max(5, Math.min(95, f + (Math.random()-0.5)*1.2)));
+      setFunding(prev => prev.map(r => ({
+        ...r,
+        fund: Math.max(-0.01, r.fund + (Math.random()-0.5)*0.0008),
+        mark: r.mark * (1 + (Math.random()-0.5)*0.0008),
+        oiΔ: r.oiΔ + (Math.random()-0.5)*0.15,
+      })));
+    }, 1500/(t.simSpeed||1));
+    return ()=>clearInterval(id);
+  }, [t.simSpeed]);
+
+  const totalLongLiq = LIQ_SEED.reduce((a,l)=>a+l.longs,0);
+  const totalShortLiq = LIQ_SEED.reduce((a,l)=>a+l.shorts,0);
+
+  return (
+    <div className="shell">
+      <SS.Topbar active="intel" now={now}/>
+
+      <SS.PageHead
+        icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="var(--blue)" strokeWidth="1.7"/>
+          <path d="M12 3 v18 M3 12 h18" stroke="var(--blue)" strokeWidth="1.2" strokeOpacity=".5"/>
+          <ellipse cx="12" cy="12" rx="9" ry="4" stroke="var(--blue)" strokeWidth="1.2" strokeOpacity=".7"/>
+          <circle cx="12" cy="12" r="2" fill="var(--blue)"/>
+        </svg>}
+        title="Intel"
+        subtitle="macro regime · funding · liquidations · catalysts"
+        badges={<>
+          <SS.Chip kind="blue">REGIME · BULL TREND</SS.Chip>
+          <SS.Chip kind="green">RISK-ON</SS.Chip>
+          <SS.Chip>UPDATED {new Date(now).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</SS.Chip>
+        </>}
+      />
+
+      {/* Macro ticker strip */}
+      <div style={{marginBottom:18}}>
+        <MacroTicker values={[
+          { label:'BTC', value:'$65,120', delta: 1.42, color:'var(--fg)' },
+          { label:'ETH', value:'$3,198',  delta: -.32, color:'var(--fg)' },
+          { label:'DXY', value:'103.41',  delta: -.18, color:'var(--blue)' },
+          { label:'10Y', value:'4.184%',  delta: -.06, color:'var(--blue)' },
+          { label:'GOLD',value:'$2,408',  delta:  .22, color:'var(--amber)' },
+          { label:'VIX', value:'14.32',   delta: -.81, color:'var(--green-soft)' },
+        ]}/>
+      </div>
+
+      {/* Top: Regime command center */}
+      <section className="panel panel-accent" style={{marginBottom:18}}>
+        <SS.Reticle/>
+        <div className="corner-tag tl">// MACRO-COMMAND</div>
+        <div className="corner-tag tr">REGIME ENGINE</div>
+        <div style={{padding:'22px 22px 18px'}}>
+          <div className="layout-grid" style={{gridTemplateColumns:'1.2fr 1fr',gap:24}}>
+            {/* Dominance & dials */}
+            <div>
+              <div className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.20em',textTransform:'uppercase',marginBottom:10}}>// DOMINANCE & SENTIMENT</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14}}>
+                <DominanceDial value={btcDom} label="BTC.D" color="var(--amber-2)" range={[40,70]} sub={btcDom>54?'consolidating':'rotating'}/>
+                <DominanceDial value={usdtDom} label="USDT.D" color="var(--green-soft)" range={[3,8]} sub={usdtDom>5?'risk-off':'risk-on'}/>
+                <DominanceDial value={fearGreed} label="FEAR · GREED" color={fearGreed>70?'#22c55e':fearGreed>55?'#fbbf24':fearGreed>30?'#f59e0b':'#f87171'} range={[0,100]} sub={fearGreed>74?'extreme greed':fearGreed>55?'greed':fearGreed>45?'neutral':fearGreed>25?'fear':'extreme fear'}/>
+              </div>
+            </div>
+            {/* Regime tapes */}
+            <div>
+              <div className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.20em',textTransform:'uppercase',marginBottom:10}}>// REGIME CLASSIFIER</div>
+              <div style={{display:'flex',flexDirection:'column',gap:14}}>
+                <RegimeTape score={72} label="Trend Strength" color="var(--green-soft)" ranges={[
+                  { label:'CHOP', min:0, max:30, color:'#f87171' },
+                  { label:'WEAK', min:30, max:55, color:'#fbbf24' },
+                  { label:'TREND',min:55, max:80, color:'#22c55e' },
+                  { label:'STRONG',min:80,max:100,color:'#00ffaa' },
+                ]}/>
+                <RegimeTape score={48} label="Volatility (ATR%)" color="var(--amber)" ranges={[
+                  { label:'LOW',  min:0, max:30, color:'#60a5fa' },
+                  { label:'NORM', min:30,max:60, color:'#22c55e' },
+                  { label:'HIGH', min:60,max:85, color:'#fbbf24' },
+                  { label:'EXT',  min:85,max:100,color:'#f87171' },
+                ]}/>
+                <RegimeTape score={68} label="Risk Appetite" color="var(--green-soft)" ranges={[
+                  { label:'OFF',  min:0, max:35, color:'#f87171' },
+                  { label:'NEUT', min:35,max:55, color:'#fbbf24' },
+                  { label:'ON',   min:55,max:80, color:'#22c55e' },
+                  { label:'EUPH', min:80,max:100,color:'#00ffaa' },
+                ]}/>
+                <RegimeTape score={31} label="Correlation" color="var(--blue)" ranges={[
+                  { label:'DECOR',min:0, max:35, color:'#22c55e' },
+                  { label:'NORM', min:35,max:65, color:'#60a5fa' },
+                  { label:'HIGH', min:65,max:85, color:'#fbbf24' },
+                  { label:'CRISIS',min:85,max:100,color:'#f87171' },
+                ]}/>
+              </div>
+            </div>
+          </div>
+
+          <div style={{marginTop:18,paddingTop:14,borderTop:'1px solid var(--border-soft)'}}>
+            <div className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.20em',textTransform:'uppercase',marginBottom:10}}>// SESSION CLOCK · LIVE</div>
+            <SessionStrip/>
+          </div>
+        </div>
+      </section>
+
+      {/* Main Grid */}
+      <div className="layout-grid">
+        <div className="col">
+          {/* Funding & OI */}
+          <section className="panel">
+            <SS.SectionHead title="Funding & Open Interest" right={<>
+              <SS.Chip kind="amber">⚠ {funding.filter(f=>f.fund>0.02).length} OVERHEATED</SS.Chip>
+              <SS.Chip>{funding.length} PERPS</SS.Chip>
+            </>}/>
+            <div style={{padding:'10px 18px 14px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'70px 100px 1fr 90px',gap:8,padding:'4px 4px 8px',borderBottom:'1px solid var(--border-soft)',marginBottom:6}}>
+                <span className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em'}}>SYM</span>
+                <span className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em'}}>MARK · 24H</span>
+                <span className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em'}}>FUNDING (ANNUAL)</span>
+                <span className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textAlign:'right'}}>OI · 24H Δ</span>
+              </div>
+              {funding.map(r => <FundingRow key={r.sym} row={r}/>)}
+            </div>
+          </section>
+
+          {/* Liquidations */}
+          <section className="panel">
+            <SS.SectionHead title="Liquidation Heatmap" right={<>
+              <SS.Chip kind="red">L · {SS.fmtMoney(totalLongLiq/1e6,1)}M</SS.Chip>
+              <SS.Chip kind="green">S · {SS.fmtMoney(totalShortLiq/1e6,1)}M</SS.Chip>
+              <SS.Chip>4H WINDOW</SS.Chip>
+            </>}/>
+            <div style={{padding:'4px 18px 14px'}}>
+              <div style={{display:'flex',gap:6,marginBottom:8}}>
+                {['BTC','ETH','SOL','TON'].map(s => (
+                  <button
+                    key={s}
+                    className={`btn ${t.liqSymbol===s?'btn-cyan':''}`}
+                    style={{padding:'6px 12px',fontSize:10}}
+                    onClick={()=>setTweak('liqSymbol',s)}
+                  >{s}</button>
+                ))}
+              </div>
+              <LiqHeatmap symbol={t.liqSymbol}/>
+              <div style={{marginTop:14,paddingTop:12,borderTop:'1px solid var(--border-soft)'}}>
+                <div className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:8}}>// RECENT LIQUIDATIONS · TAPE</div>
+                <div style={{display:'flex',flexDirection:'column',gap:4,fontFamily:'JetBrains Mono,monospace',fontSize:11}}>
+                  {LIQ_SEED.slice(0,6).map((l,i)=>{
+                    const total = l.longs + l.shorts;
+                    const longHeavy = l.longs > l.shorts;
+                    return (
+                      <div key={i} style={{display:'grid',gridTemplateColumns:'48px 56px 1fr 80px',gap:8,padding:'4px 8px',background:'rgba(0,0,0,.3)',borderRadius:4,border:'1px solid var(--border-soft)'}}>
+                        <span style={{color:'var(--fg-4)'}}>{Math.floor(l.ts/60).toString().padStart(2,'0')}:{(l.ts%60).toString().padStart(2,'0')}</span>
+                        <span style={{color:'var(--fg)',fontWeight:700,letterSpacing:'.06em'}}>{l.sym}</span>
+                        <span style={{color:longHeavy?'var(--red-2)':'var(--green-soft)',fontWeight:600,letterSpacing:'.04em'}}>{longHeavy?'▼ LONGS WIPED':'▲ SHORTS WIPED'}</span>
+                        <span style={{textAlign:'right',color:'var(--fg)',fontWeight:700}}>${SS.fmtNum(total).replace('$','')}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div className="col">
+          {/* News / Catalysts */}
+          <section className="panel">
+            <SS.Reticle/>
+            <SS.SectionHead title="Catalyst Wire" right={<>
+              <SS.Chip kind="red">{news.filter(n=>n.pri==='HIGH').length} HIGH</SS.Chip>
+              <SS.Chip kind="amber">// LIVE FEED</SS.Chip>
+            </>}/>
+            <div style={{padding:'12px 18px',display:'flex',flexDirection:'column',gap:6,maxHeight:520,overflowY:'auto'}}>
+              {news.map(n => <NewsItem key={n.id} item={n}/>)}
+            </div>
+          </section>
+
+          {/* AI Analyst */}
+          <section className="panel">
+            <SS.SectionHead title="AI Analyst · Regime Read" right={<>
+              <SS.Chip kind="accent">CONF · 71</SS.Chip>
+              <SS.Chip>HAIKU 4.5</SS.Chip>
+            </>}/>
+            {t.showAI ? <AICommentary/> : (
+              <div style={{padding:30,textAlign:'center',color:'var(--fg-4)',fontFamily:'JetBrains Mono,monospace',fontSize:11,letterSpacing:'.18em',textTransform:'uppercase'}}>// AI commentary disabled in tweaks</div>
+            )}
+          </section>
+
+          {/* Quick state */}
+          <section className="panel">
+            <SS.SectionHead title="Position · Bias Map" right={<SS.Chip kind="blue">5 SLOTS</SS.Chip>}/>
+            <div style={{padding:'14px 18px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <div className="metric-tile">
+                <div className="metric-label">Bot Bias</div>
+                <div className="metric-value" style={{color:'var(--green-soft)'}}>+ LONG</div>
+                <div className="metric-sub">3 of 5 slots, net +$34.87</div>
+              </div>
+              <div className="metric-tile">
+                <div className="metric-label">Confluence Floor</div>
+                <div className="metric-value">≥ 7.0</div>
+                <div className="metric-sub">strict gate active</div>
+              </div>
+              <div className="metric-tile">
+                <div className="metric-label">Active Setups</div>
+                <div className="metric-value hud-glow">OB · FVG · BOS</div>
+                <div className="metric-sub">priority weighted</div>
+              </div>
+              <div className="metric-tile">
+                <div className="metric-label">BTC Veto</div>
+                <div className="metric-value" style={{color:'var(--green-soft)'}}>● CLEAR</div>
+                <div className="metric-sub">no impulse moves &gt; 2.5σ</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <SS.FooterStatus now={now} latency={38}/>
+
+      <window.TweaksPanel title="Tweaks" defaultOpen={false}>
+        <SS.SharedTweaksControls t={t} setTweak={setTweak}/>
+        <window.TweakSection title="Intel">
+          <window.TweakToggle label="AI Commentary" value={t.showAI} onChange={v=>setTweak('showAI',v)}/>
+          <window.TweakRadio label="Liq Symbol" value={t.liqSymbol} onChange={v=>setTweak('liqSymbol',v)} options={[
+            {label:'BTC',value:'BTC'},
+            {label:'ETH',value:'ETH'},
+            {label:'SOL',value:'SOL'},
+            {label:'TON',value:'TON'},
+          ]}/>
+        </window.TweakSection>
+      </window.TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script></body></html>

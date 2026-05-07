@@ -1,0 +1,2152 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>SniperSight — Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+.bot-tab-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 14px;border:1px solid var(--border-soft);border-radius:8px;background:rgba(0,0,0,.4);margin-bottom:14px;flex-wrap:wrap}
+.tab-switch{display:flex;gap:0;border:1px solid var(--border-soft);border-radius:8px;overflow:hidden}
+.tab-switch button{background:rgba(0,0,0,.4);border:none;color:var(--fg-3);padding:8px 16px;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.18em;cursor:pointer;transition:all .15s;border-right:1px solid var(--border-soft)}
+.tab-switch button:last-child{border-right:none}
+.tab-switch button.active{background:var(--accent-bg);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+.tab-switch button:hover:not(.active){background:rgba(255,255,255,.04);color:var(--fg)}
+
+:root {
+  --bg: oklch(0.18 0.008 120);
+  --bg-2: oklch(0.22 0.010 125);
+  --card: oklch(0.26 0.012 125);
+  --card-2: oklch(0.30 0.012 125);
+  --border: oklch(0.36 0.015 130);
+  --border-soft: oklch(0.32 0.015 130 / 0.6);
+  --fg: oklch(0.94 0.012 150);
+  --fg-2: oklch(0.78 0.012 150);
+  --fg-3: oklch(0.58 0.015 150);
+  --fg-4: oklch(0.42 0.012 150);
+  --green: #00ffaa;
+  --green-soft: #4ade80;
+  --green-bg: rgba(0,255,170,.10);
+  --green-border: rgba(0,255,170,.30);
+  --amber: #ffc266;
+  --amber-2: #fbbf24;
+  --amber-bg: rgba(251,191,36,.10);
+  --amber-border: rgba(251,191,36,.35);
+  --red: #ff6464;
+  --red-2: #f87171;
+  --red-bg: rgba(248,113,113,.10);
+  --red-border: rgba(248,113,113,.35);
+  --blue: #60a5fa;
+  --blue-bg: rgba(96,165,250,.10);
+  --blue-border: rgba(96,165,250,.30);
+  --cyan: #22d3ee;
+  --purple: #c084fc;
+  /* accent applied dynamically via tweaks (green/amber/blue) */
+  --accent: var(--green);
+  --accent-bg: var(--green-bg);
+  --accent-border: var(--green-border);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:'Inter',ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;}
+body{min-height:100vh;overflow-x:hidden;position:relative;}
+
+/* ── Tactical background layers ─────────────────────────── */
+.tactical-bg{position:fixed;inset:0;z-index:-10;pointer-events:none;overflow:hidden;}
+.tactical-bg.off{display:none;}
+.tactical-bg::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg, oklch(0.14 0.010 120) 0%, oklch(0.10 0.008 120) 50%, oklch(0.13 0.010 120) 100%);
+}
+.tactical-bg .glow{
+  position:absolute;inset:-20%;
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 30%, color-mix(in oklch, var(--accent) 8%, transparent) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 60% at 85% 75%, rgba(96,165,250,.06) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 40% at 50% 50%, color-mix(in oklch, var(--accent) 4%, transparent) 0%, transparent 50%);
+  animation:glowDrift 30s ease-in-out infinite;
+}
+@keyframes glowDrift{
+  0%,100%{transform:translate(0,0) scale(1);opacity:.7;}
+  50%{transform:translate(2%,-2%) scale(1.05);opacity:1;}
+}
+.tactical-bg .grid{
+  position:absolute;inset:0;
+  background-image:radial-gradient(circle at center, color-mix(in oklch, var(--accent) 22%, transparent) 1px, transparent 1px);
+  background-size:40px 40px;
+  opacity:.06;
+  animation:gridDrift 120s linear infinite;
+}
+@keyframes gridDrift{from{background-position:0 0}to{background-position:40px 0}}
+.tactical-bg .scanline{
+  position:absolute;left:0;right:0;height:3px;
+  background:linear-gradient(90deg, transparent, color-mix(in oklch, var(--accent) 40%, transparent) 30%, color-mix(in oklch, var(--accent) 60%, transparent) 50%, color-mix(in oklch, var(--accent) 40%, transparent) 70%, transparent);
+  box-shadow:0 0 18px color-mix(in oklch, var(--accent) 50%, transparent);
+  animation:scanSweep 8s linear infinite;
+}
+@keyframes scanSweep{0%{transform:translateY(-100%)}100%{transform:translateY(100vh)}}
+.tactical-bg .grain{
+  position:absolute;inset:0;opacity:.04;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  animation:grainFlick .5s steps(2) infinite;
+}
+@keyframes grainFlick{0%,100%{opacity:.03}50%{opacity:.05}}
+
+/* ── HUD type ───────────────────────────────────────────── */
+.hud{font-family:'Share Tech Mono',ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;}
+.term{font-family:'VT323',ui-monospace,monospace;letter-spacing:.04em;}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+.hud-glow{color:var(--accent);text-shadow:0 0 6px color-mix(in oklch, var(--accent) 60%, transparent), 0 0 14px color-mix(in oklch, var(--accent) 35%, transparent);}
+.hud-glow-amber{color:var(--amber);text-shadow:0 0 6px rgba(255,194,102,.7),0 0 14px rgba(255,194,102,.35);}
+.hud-glow-red{color:var(--red);text-shadow:0 0 6px rgba(255,100,100,.7),0 0 14px rgba(255,100,100,.35);}
+
+/* ── Surfaces ───────────────────────────────────────────── */
+.panel{
+  position:relative;
+  background:linear-gradient(135deg, rgba(0,0,0,.55) 0%, oklch(0.22 0.010 125 / .6) 100%);
+  border:1px solid var(--border-soft);
+  border-radius:14px;
+  overflow:hidden;
+}
+.panel::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg, transparent 0 2px, rgba(255,255,255,.012) 2px 4px);
+  z-index:1;
+}
+.panel.scanlines-off::before{display:none;}
+.panel > *{position:relative;z-index:2;}
+
+.panel-accent{
+  border-color: color-mix(in oklch, var(--accent) 25%, var(--border-soft));
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 8%, transparent), 0 8px 40px rgba(0,0,0,.4);
+}
+.panel-accent::after{
+  content:'';position:absolute;inset:0;pointer-events:none;z-index:1;
+  background:radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in oklch, var(--accent) 8%, transparent) 0%, transparent 70%);
+}
+
+/* corner brackets */
+.brackets::before,.brackets::after{
+  content:'';position:absolute;width:14px;height:14px;border:1.5px solid color-mix(in oklch, var(--accent) 60%, transparent);pointer-events:none;
+}
+.brackets::before{top:6px;left:6px;border-right:none;border-bottom:none;}
+.brackets::after{bottom:6px;right:6px;border-left:none;border-top:none;}
+
+/* ── Tiny utilities ─────────────────────────────────────── */
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;padding:3px 8px;border:1px solid var(--border-soft);border-radius:999px;color:var(--fg-2);background:rgba(255,255,255,.04);}
+.chip-accent{color:var(--accent);border-color:var(--accent-border);background:var(--accent-bg);}
+.chip-green{color:var(--green-soft);border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.08);}
+.chip-red{color:var(--red-2);border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.08);}
+.chip-amber{color:var(--amber-2);border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.08);}
+.chip-blue{color:var(--blue);border-color:rgba(96,165,250,.30);background:rgba(96,165,250,.08);}
+.chip-purple{color:var(--purple);border-color:rgba(192,132,252,.30);background:rgba(192,132,252,.08);}
+
+.divider{height:1px;background:linear-gradient(90deg, transparent, color-mix(in oklch, var(--accent) 30%, transparent) 50%, transparent);}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:9px 14px;border-radius:10px;
+  font-family:'JetBrains Mono',monospace;font-weight:800;font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;
+  border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--fg-2);cursor:pointer;
+  transition:all .18s ease;
+  user-select:none;
+}
+.btn:hover{background:rgba(255,255,255,.06);color:var(--fg);}
+.btn-red{color:var(--red-2);border-color:rgba(248,113,113,.30);background:rgba(248,113,113,.10);}
+.btn-red:hover{background:rgba(248,113,113,.18);color:#fff;}
+.btn-orange{color:#fdba74;border-color:rgba(251,146,60,.30);background:rgba(251,146,60,.10);}
+.btn-orange:hover{background:rgba(251,146,60,.18);color:#fff;}
+.btn-green{color:var(--green-soft);border-color:rgba(74,222,128,.30);background:rgba(74,222,128,.10);}
+.btn-green:hover{background:rgba(74,222,128,.18);color:#fff;}
+.btn-cyan{
+  color:#67e8f9;border:1px solid rgba(34,211,238,.4);
+  background:linear-gradient(180deg,#164e63 0%,#0e3a4a 60%,#0a2d3a 100%);
+  box-shadow:0 4px 0 0 #061e27, 0 0 12px rgba(34,211,238,.18), inset 0 1px 0 rgba(255,255,255,.07);
+}
+.btn-cyan:hover{filter:brightness(1.15);}
+.btn-cyan:active{transform:translateY(1px);box-shadow:0 1px 0 0 #061e27, 0 0 8px rgba(34,211,238,.18);}
+.btn-icon{padding:0;width:36px;height:36px;}
+
+.metric-tile{
+  background:rgba(0,0,0,.4);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:12px;
+  padding:14px 16px;
+  position:relative;
+  overflow:hidden;
+}
+.metric-label{font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:600;color:var(--fg-4);text-transform:uppercase;letter-spacing:.2em;margin-bottom:10px;}
+.metric-value{font-family:'Share Tech Mono','JetBrains Mono',monospace;font-size:26px;font-weight:800;letter-spacing:-.01em;line-height:1;color:var(--fg);}
+.metric-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--fg-4);text-transform:uppercase;letter-spacing:.12em;margin-top:6px;}
+
+/* ── Pulsing orb ─────────────────────────────────────────── */
+.orb{position:relative;width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.orb .core{width:14px;height:14px;border-radius:50%;background:var(--green);box-shadow:0 0 18px var(--green);}
+.orb .ping{position:absolute;inset:0;border-radius:50%;background:var(--green);opacity:.25;animation:ping 2.5s ease-out infinite;}
+.orb .blur{position:absolute;inset:4px;border-radius:50%;background:var(--green);opacity:.35;filter:blur(5px);}
+@keyframes ping{0%{transform:scale(.8);opacity:.45}80%,100%{transform:scale(2.2);opacity:0}}
+.orb.amber .core{background:var(--amber-2);box-shadow:0 0 18px var(--amber-2);}
+.orb.amber .ping,.orb.amber .blur{background:var(--amber-2);}
+.orb.red .core{background:var(--red-2);box-shadow:0 0 18px var(--red-2);}
+.orb.red .ping,.orb.red .blur{background:var(--red-2);}
+
+/* ── Reticle ─────────────────────────────────────────────── */
+.reticle{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;opacity:.18;}
+.reticle.off{display:none;}
+.reticle svg{width:120%;height:120%;}
+.reticle .ring-rotate{animation:rRotate 45s linear infinite;transform-origin:center;}
+.reticle .ring-rotate-rev{animation:rRotateRev 30s linear infinite;transform-origin:center;}
+@keyframes rRotate{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes rRotateRev{from{transform:rotate(360deg)}to{transform:rotate(0)}}
+
+/* ── HUD progress bar (entry/SL/TP) ─────────────────────── */
+.hud-prog{position:relative;height:6px;border-radius:3px;background:linear-gradient(90deg,#7f1d1d 0%,#3a1212 18%,#1d1d1d 30%,#1d1d1d 70%,#0e3326 82%,#065f46 100%);overflow:visible;}
+.hud-prog .marker{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid var(--green);box-shadow:0 0 10px var(--green);transform:translate(-50%,-50%);transition:left .8s cubic-bezier(.22,.9,.3,1);}
+.hud-prog .tick{position:absolute;top:-3px;width:1px;height:12px;background:rgba(255,255,255,.3);}
+
+/* ── Animations ─────────────────────────────────────────── */
+@keyframes flashGreen{0%{background:rgba(0,255,170,0)}20%{background:rgba(0,255,170,.18)}100%{background:rgba(0,255,170,0)}}
+@keyframes flashRed{0%{background:rgba(248,113,113,0)}20%{background:rgba(248,113,113,.18)}100%{background:rgba(248,113,113,0)}}
+.flash-green{animation:flashGreen .9s ease-out;}
+.flash-red{animation:flashRed .9s ease-out;}
+
+@keyframes barShimmer{0%{transform:translateX(-100%)}100%{transform:translateX(200%)}}
+
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:.2}}
+.cursor-blink{animation:blink 1s steps(2) infinite;}
+
+@keyframes radarSweep{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* ── Layout ─────────────────────────────────────────────── */
+.shell{max-width:1320px;margin:0 auto;padding:24px 28px 60px;}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0 22px;border-bottom:1px solid var(--border-soft);margin-bottom:24px;}
+.topbar .brand{display:flex;align-items:center;gap:14px;}
+.brand-mark{width:34px;height:34px;border:1px solid var(--accent-border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--accent-bg);}
+.brand-name{font-family:'Share Tech Mono',monospace;font-size:15px;letter-spacing:.22em;text-transform:uppercase;color:var(--fg);}
+.brand-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--fg-4);letter-spacing:.18em;text-transform:uppercase;}
+
+.nav{display:flex;align-items:center;gap:4px;}
+.nav a{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-3);padding:8px 12px;border-radius:8px;text-decoration:none;border:1px solid transparent;}
+.nav a:hover{color:var(--fg);background:rgba(255,255,255,.04);}
+.nav a.active{color:var(--accent);border-color:var(--accent-border);background:var(--accent-bg);}
+
+/* page header */
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:22px;}
+.page-title{display:flex;align-items:center;gap:18px;}
+.page-title .icon{width:54px;height:54px;border:1px solid var(--amber-border);border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(251,191,36,.06);}
+.page-title h1{font-family:'Share Tech Mono',monospace;font-size:32px;letter-spacing:.2em;text-transform:uppercase;margin:0;line-height:1;color:var(--amber);text-shadow:0 0 14px rgba(251,191,36,.35);}
+.page-title .sub{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--fg-3);letter-spacing:.18em;text-transform:uppercase;margin-top:6px;}
+.page-title h1.live{color:var(--red);text-shadow:0 0 14px rgba(248,113,113,.45);}
+
+.layout-grid{display:grid;grid-template-columns:1.6fr .9fr;gap:18px;align-items:start;}
+.layout-grid.single{grid-template-columns:1fr;}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0;}
+
+@media (max-width: 980px){
+  .shell{padding:14px 14px 80px;}
+  .topbar{flex-wrap:wrap;}
+  .nav{order:3;width:100%;overflow-x:auto;padding-bottom:4px;}
+  .nav a{flex-shrink:0;}
+  .layout-grid{grid-template-columns:1fr;}
+  .page-title h1{font-size:24px;}
+  .metric-value{font-size:22px;}
+}
+
+/* Section header inside panel */
+.sec-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border-soft);}
+.sec-title{font-family:'Share Tech Mono',monospace;font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--fg);display:flex;align-items:center;gap:10px;}
+.sec-title .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);}
+
+/* No scrollbar utility */
+.no-scrollbar::-webkit-scrollbar{display:none;}
+.no-scrollbar{scrollbar-width:none;}
+
+/* density */
+.density-sparse .metric-tile{padding:18px 20px;}
+.density-sparse .metric-value{font-size:30px;}
+.density-dense .metric-tile{padding:10px 12px;}
+.density-dense .metric-value{font-size:22px;}
+.density-dense .metric-label{margin-bottom:6px;}
+
+/* Position card */
+.pos{
+  position:relative;padding:14px 16px;border:1px solid var(--border-soft);border-radius:12px;
+  background:linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,.25));
+  cursor:pointer;transition:border-color .2s ease, transform .2s ease;
+  overflow:hidden;
+}
+.pos:hover{border-color:var(--accent-border);}
+
+/* History */
+.hist{padding:11px 14px;border:1px solid var(--border-soft);border-radius:12px;background:rgba(0,0,0,.3);cursor:pointer;transition:border-color .2s ease;}
+.hist:hover{border-color:var(--border);}
+.hist.expanded{border-color:var(--accent-border);background:rgba(0,0,0,.45);box-shadow:0 0 18px color-mix(in oklch, var(--accent) 7%, transparent);}
+
+/* Modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);z-index:60;display:flex;align-items:center;justify-content:center;padding:20px;}
+.modal{width:100%;max-width:480px;background:linear-gradient(180deg, oklch(0.20 0.010 125), oklch(0.16 0.010 125));border:1px solid var(--accent-border);border-radius:14px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6), 0 0 0 1px color-mix(in oklch, var(--accent) 15%, transparent);}
+
+/* ── HUD overlays toggle ─────────────────────────────────── */
+.hud-overlays-off .reticle{display:none;}
+.hud-overlays-off .panel::before{display:none;}
+.hud-overlays-off .corner-tag{display:none;}
+.hud-overlays-off .brackets::before,.hud-overlays-off .brackets::after{display:none;}
+
+/* corner tags */
+.corner-tag{position:absolute;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--fg-4);letter-spacing:.18em;text-transform:uppercase;z-index:3;pointer-events:none;}
+.corner-tag.tl{top:8px;left:14px;}
+.corner-tag.tr{top:8px;right:14px;color:var(--accent);}
+.corner-tag.br{bottom:8px;right:14px;}
+
+/* equity line */
+.eq-svg{width:100%;height:80px;display:block;}
+
+/* Watchlist symbol */
+.watch-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px dashed var(--border-soft);}
+.watch-row:last-child{border-bottom:none;}
+
+/* Scan log row */
+.log-row{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--fg-2);padding:5px 0;display:grid;grid-template-columns:64px 60px 1fr auto;gap:10px;align-items:center;}
+.log-row .t{color:var(--fg-4);}
+.log-row .pass{color:var(--green-soft);}
+.log-row .rej{color:var(--fg-4);}
+.log-row .sym{color:var(--fg);font-weight:700;}
+
+/* radar */
+.radar-wrap{position:relative;width:100%;aspect-ratio:1/1;max-width:240px;margin:0 auto;}
+.radar-sweep{animation:radarSweep 4s linear infinite;transform-origin:center;}
+
+/* selection cosmetic */
+::selection{background:color-mix(in oklch, var(--accent) 50%, transparent);color:#000;}
+
+</style></head><body>
+<div class="tactical-bg" id="tactical-bg"><div class="glow"></div><div class="grid"></div><div class="grain"></div><div class="scanline"></div></div>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel">
+// scanner-modes.jsx (inlined)
+// ── Scanner Mode Picker ─────────────────────────────────────
+// 4 detection presets: OVERWATCH / STRIKE / SURGICAL / STEALTH (default)
+// Plus an AI-Recommendation hero that suggests one based on regime.
+
+const SCANNER_MODES = [
+  {
+    id: 'overwatch',
+    name: 'OVERWATCH',
+    tagline: 'Macro Surveillance',
+    desc: 'Swing trades · days–weeks · A+ macro setups only',
+    timeframes: ['1W','1D','4H','1H','15m','5m'],
+    critical: ['1W','1D'],
+    primary: '4H',
+    minScore: 72,
+    minRR: 2.0,
+    types: ['SWING'],
+    detection: 'LuxAlgo · strict',
+    bestFor: 'Patient swing traders waiting for weekly + daily structure alignment.',
+    accent: 'cyan',
+    feel: 'premium',
+    bullets: [
+      'Requires 1W + 1D structure alignment',
+      'Enforces 2:1 R:R minimum',
+      'Filters for institutional accumulation zones',
+    ],
+  },
+  {
+    id: 'strike',
+    name: 'STRIKE',
+    tagline: 'Intraday Aggressive',
+    desc: 'Hours · momentum + trend continuation · highest signal volume',
+    timeframes: ['4H','1H','15m','5m'],
+    critical: ['15m'],
+    primary: '15m',
+    minScore: 68,
+    minRR: 1.2,
+    types: ['SWING','INTRADAY','SCALP'],
+    detection: 'LuxAlgo · aggressive',
+    bestFor: 'Active traders who want maximum signal flow on momentum plays.',
+    accent: 'amber',
+    feel: 'fast',
+    bullets: [
+      'Loose detection · maximum signals',
+      '15m is the critical timeframe',
+      'Fast decisions on trend continuation',
+    ],
+  },
+  {
+    id: 'surgical',
+    name: 'SURGICAL',
+    tagline: 'Precision',
+    desc: 'Minutes–hours · scalp + intraday · controlled risk only',
+    timeframes: ['4H','1H','15m','5m'],
+    critical: ['15m'],
+    primary: '15m',
+    minScore: 70,
+    minRR: 1.5,
+    types: ['INTRADAY','SCALP'],
+    detection: 'LuxAlgo · strict',
+    bestFor: 'Experienced traders who want fewer, cleaner setups with tight stops.',
+    accent: 'red',
+    feel: 'tight',
+    bullets: [
+      'Strict detection · quality over quantity',
+      'No swing setups — intraday + scalp only',
+      'Tight stops · controlled risk',
+    ],
+  },
+  {
+    id: 'stealth',
+    name: 'STEALTH',
+    tagline: 'Balanced · Default',
+    desc: 'Hours–days · cascades swing → intraday → scalp · all-around',
+    timeframes: ['1D','4H','1H','15m','5m'],
+    critical: ['4H','1H'],
+    primary: '1H',
+    minScore: 70,
+    minRR: 1.5,
+    types: ['SWING','INTRADAY','SCALP'],
+    detection: 'Defaults · balanced',
+    bestFor: 'All-around trading — solid signal volume with good quality. System default.',
+    accent: 'green',
+    feel: 'default',
+    bullets: [
+      'Cascades swing → intraday → scalp · picks best',
+      '4H + 1H critical timeframes',
+      'System default · pure detection',
+    ],
+  },
+];
+
+const ACCENT_HEX = {
+  green: '#4ade80', amber: '#fbbf24', cyan: '#22d3ee', red: '#f87171',
+};
+
+function ModeIcon({ id, color }){
+  // distinct icon per mode, all monochromatic line-art
+  const s = { stroke:color, strokeWidth:1.5, fill:'none', strokeLinecap:'round', strokeLinejoin:'round' };
+  if (id==='overwatch') return (
+    <svg width="22" height="22" viewBox="0 0 24 24" {...s}>
+      <circle cx="12" cy="12" r="9"/>
+      <circle cx="12" cy="12" r="5"/>
+      <circle cx="12" cy="12" r="1.5" fill={color}/>
+      <path d="M12 1 V4 M12 20 V23 M1 12 H4 M20 12 H23"/>
+    </svg>
+  );
+  if (id==='strike') return (
+    <svg width="22" height="22" viewBox="0 0 24 24" {...s}>
+      <path d="M13 2 L4 14 L11 14 L9 22 L20 9 L13 9 Z" fill={color} fillOpacity=".15"/>
+    </svg>
+  );
+  if (id==='surgical') return (
+    <svg width="22" height="22" viewBox="0 0 24 24" {...s}>
+      <path d="M3 21 L13 11 L17 7 L21 3 L21 7 L17 7 M13 11 L17 15"/>
+      <circle cx="6" cy="18" r="2"/>
+    </svg>
+  );
+  if (id==='stealth') return (
+    <svg width="22" height="22" viewBox="0 0 24 24" {...s}>
+      <path d="M12 3 L12 9 M9 6 L15 6"/>
+      <path d="M3 14 Q12 8 21 14 Q12 20 3 14 Z"/>
+      <circle cx="12" cy="14" r="2.5" fill={color} fillOpacity=".4"/>
+    </svg>
+  );
+  return null;
+}
+
+// Mini gauge for score (0–100)
+function ScoreGauge({ value, color, size=44 }){
+  const r = size/2 - 4;
+  const C = 2*Math.PI*r;
+  const dash = (value/100)*C;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={size/2} cy={size/2} r={r} stroke="rgba(255,255,255,.06)" strokeWidth="3" fill="none"/>
+      <circle cx={size/2} cy={size/2} r={r} stroke={color} strokeWidth="3" fill="none"
+        strokeDasharray={`${dash} ${C}`} strokeLinecap="round"
+        transform={`rotate(-90 ${size/2} ${size/2})`}
+        style={{filter:`drop-shadow(0 0 4px ${color})`}}/>
+      <text x="50%" y="54%" textAnchor="middle" fill={color} fontFamily="Share Tech Mono, monospace" fontSize="11" fontWeight="700">{value}</text>
+    </svg>
+  );
+}
+
+// Background regime — drives the AI recommendation
+function pickRecommendation(){
+  // For now, default per spec: STEALTH unless macro is "loaded"
+  // We pick OVERWATCH ~25% of the time to demo the regime override
+  const r = (typeof window !== 'undefined' && window.__SCANNER_REGIME__) || (Math.random() < 0.25 ? 'macro' : 'balanced');
+  if (r === 'macro') {
+    return {
+      mode: 'overwatch',
+      reason: 'Weekly + Daily structure aligned · BTC dominance compressing · macro accumulation signature detected',
+      confidence: 'HIGH',
+      regime: 'MACRO · LOADED',
+    };
+  }
+  return {
+    mode: 'stealth',
+    reason: 'Balanced regime · mixed signals across HTF · system default in effect',
+    confidence: 'MED',
+    regime: 'BALANCED',
+  };
+}
+
+// ── Hero recommendation block ───────────────────────────────
+function ScannerRecommendationHero({ rec, currentMode, onActivate }){
+  const mode = SCANNER_MODES.find(m => m.id === rec.mode);
+  const color = ACCENT_HEX[mode.accent];
+  const isActive = currentMode === rec.mode;
+  return (
+    <section className="panel panel-accent" style={{marginBottom:18,position:'relative',overflow:'hidden'}}>
+      <div style={{
+        position:'absolute', inset:0,
+        background:`radial-gradient(ellipse 60% 80% at 70% 50%, ${color}18, transparent 60%)`,
+        pointerEvents:'none',
+      }}/>
+      <SS.Reticle/>
+      <div className="corner-tag tl">// AI-ADVISORY</div>
+      <div className="corner-tag tr" style={{color}}>{rec.regime}</div>
+      <div style={{padding:'24px 26px',position:'relative'}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:24,alignItems:'center'}}>
+          <div>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+              <span style={{
+                display:'inline-flex',alignItems:'center',gap:6,
+                fontFamily:'JetBrains Mono,monospace',fontSize:9.5,letterSpacing:'.22em',
+                color, textTransform:'uppercase', padding:'3px 10px',
+                border:`1px solid ${color}55`, background:`${color}11`, borderRadius:99,
+              }}>
+                <span style={{width:5,height:5,borderRadius:'50%',background:color,boxShadow:`0 0 8px ${color}`,animation:'pulse 1.6s ease-in-out infinite'}}/>
+                AI ADVISORY · {rec.confidence} CONVICTION
+              </span>
+              <span className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em'}}>RECOMMENDED MODE</span>
+            </div>
+            <div style={{display:'flex',alignItems:'baseline',gap:14,marginBottom:8,flexWrap:'wrap'}}>
+              <h2 style={{
+                margin:0,fontFamily:'Share Tech Mono,monospace',fontSize:54,letterSpacing:'.04em',
+                color, textShadow:`0 0 18px ${color}66, 0 0 36px ${color}33`,lineHeight:.95,
+              }}>{mode.name}</h2>
+              <span className="mono" style={{fontSize:13,color:'var(--fg-2)',letterSpacing:'.12em',textTransform:'uppercase'}}>{mode.tagline}</span>
+            </div>
+            <p style={{
+              margin:'6px 0 14px',maxWidth:680,
+              fontSize:14,lineHeight:1.55,color:'var(--fg-2)',
+              borderLeft:`2px solid ${color}66`,paddingLeft:12,fontStyle:'italic',
+            }}>"{rec.reason}"</p>
+            {isActive ? (
+              <div style={{
+                display:'inline-flex',alignItems:'center',gap:10,padding:'10px 18px',
+                border:`1.5px solid ${color}`,background:`${color}14`,borderRadius:8,
+                fontFamily:'Share Tech Mono,monospace',fontSize:13,letterSpacing:'.22em',color,textTransform:'uppercase',
+              }}>
+                ✓ Protocol Active
+              </div>
+            ) : (
+              <button onClick={()=>onActivate(rec.mode)} style={{
+                display:'inline-flex',alignItems:'center',gap:10,padding:'12px 22px',
+                border:'none',background:color,color:'#0a0a0a',borderRadius:8,cursor:'pointer',
+                fontFamily:'Share Tech Mono,monospace',fontSize:13,letterSpacing:'.22em',fontWeight:800,textTransform:'uppercase',
+                boxShadow:`0 0 0 1px ${color}, 0 0 24px ${color}66`,
+                transition:'transform .12s, box-shadow .15s',
+              }}
+              onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-1px)';e.currentTarget.style.boxShadow=`0 0 0 1px ${color}, 0 0 36px ${color}99`;}}
+              onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=`0 0 0 1px ${color}, 0 0 24px ${color}66`;}}
+              >
+                ⌬ ACTIVATE {mode.name}
+              </button>
+            )}
+          </div>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+            <ScoreGauge value={mode.minScore} color={color} size={86}/>
+            <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.20em'}}>MIN SCORE</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── Mode card ──────────────────────────────────────────────
+function ModeCard({ mode, selected, recommended, onSelect }){
+  const color = ACCENT_HEX[mode.accent];
+  return (
+    <button
+      type="button"
+      onClick={()=>onSelect(mode.id)}
+      style={{
+        position:'relative', textAlign:'left',
+        padding:'16px 16px 14px',
+        background: selected ? `linear-gradient(180deg, ${color}18, ${color}06)` : 'rgba(0,0,0,.40)',
+        border: `1.5px solid ${selected ? color : 'var(--border-soft)'}`,
+        borderRadius:10, cursor:'pointer',
+        transition:'all .15s',
+        color:'var(--fg)', fontFamily:'inherit',
+        boxShadow: selected ? `0 0 0 1px ${color}, 0 0 22px ${color}33, inset 0 0 30px ${color}10` : 'none',
+        display:'flex', flexDirection:'column', gap:10,
+        minHeight:200,
+      }}
+      onMouseEnter={e=>{ if(!selected) e.currentTarget.style.borderColor = `${color}88`; }}
+      onMouseLeave={e=>{ if(!selected) e.currentTarget.style.borderColor = 'var(--border-soft)'; }}
+    >
+      {recommended && (
+        <span style={{
+          position:'absolute', top:-9, right:14, padding:'2px 8px',
+          background:'#0a0a0a', border:`1px solid ${color}`, color, borderRadius:4,
+          fontFamily:'JetBrains Mono,monospace', fontSize:8.5, letterSpacing:'.22em', fontWeight:700,
+        }}>★ RECOMMENDED</span>
+      )}
+      {selected && (
+        <span style={{
+          position:'absolute', top:10, right:10,
+          fontFamily:'JetBrains Mono,monospace', fontSize:8.5, letterSpacing:'.22em', fontWeight:700,
+          color, padding:'2px 6px', border:`1px solid ${color}`, borderRadius:3,
+        }}>● ACTIVE</span>
+      )}
+
+      {/* header */}
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <div style={{
+          width:34,height:34,display:'grid',placeItems:'center',
+          border:`1px solid ${color}55`,background:`${color}10`,borderRadius:8,
+        }}>
+          <ModeIcon id={mode.id} color={color}/>
+        </div>
+        <div>
+          <div style={{
+            fontFamily:'Share Tech Mono,monospace',fontSize:18,letterSpacing:'.14em',
+            color:selected?color:'var(--fg)', textShadow:selected?`0 0 10px ${color}55`:'none',
+          }}>{mode.name}</div>
+          <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.16em',textTransform:'uppercase',marginTop:2}}>{mode.tagline}</div>
+        </div>
+      </div>
+
+      {/* desc */}
+      <div style={{fontSize:11.5,color:'var(--fg-3)',lineHeight:1.45,minHeight:32}}>{mode.desc}</div>
+
+      {/* metric strip */}
+      <div style={{display:'grid',gridTemplateColumns:'auto 1fr 1fr',gap:10,alignItems:'center',padding:'8px 0',borderTop:'1px dashed var(--border-soft)',borderBottom:'1px dashed var(--border-soft)'}}>
+        <ScoreGauge value={mode.minScore} color={color} size={40}/>
+        <div>
+          <div className="mono" style={{fontSize:8.5,color:'var(--fg-4)',letterSpacing:'.18em'}}>MIN R:R</div>
+          <div className="mono" style={{fontSize:14,color,fontWeight:700}}>{mode.minRR.toFixed(1)}</div>
+        </div>
+        <div>
+          <div className="mono" style={{fontSize:8.5,color:'var(--fg-4)',letterSpacing:'.18em'}}>PRIMARY</div>
+          <div className="mono" style={{fontSize:14,color:'var(--fg)',fontWeight:700}}>{mode.primary}</div>
+        </div>
+      </div>
+
+      {/* trade types */}
+      <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+        {mode.types.map(t => (
+          <span key={t} className="chip" style={{fontSize:8.5,color,borderColor:`${color}55`,background:`${color}10`,padding:'2px 7px'}}>{t}</span>
+        ))}
+      </div>
+
+      {/* critical TFs */}
+      <div style={{marginTop:'auto'}}>
+        <div className="mono" style={{fontSize:8.5,color:'var(--fg-4)',letterSpacing:'.18em',marginBottom:4}}>CRITICAL · REJECTS IF MISSING</div>
+        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+          {mode.timeframes.map(tf => {
+            const isCritical = mode.critical.includes(tf);
+            return (
+              <span key={tf} className="mono" style={{
+                fontSize:9.5, padding:'2px 6px', borderRadius:3,
+                color: isCritical ? color : 'var(--fg-4)',
+                background: isCritical ? `${color}14` : 'transparent',
+                border:`1px solid ${isCritical ? color+'66' : 'var(--border-soft)'}`,
+                fontWeight: isCritical ? 700 : 500,
+                letterSpacing:'.06em',
+              }}>{tf}{isCritical?' ●':''}</span>
+            );
+          })}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ── Wrapper section ────────────────────────────────────────
+function ScannerModePicker({ mode, setMode, recommendation }){
+  return (
+    <div style={{marginBottom:18}}>
+      <ScannerRecommendationHero rec={recommendation} currentMode={mode} onActivate={setMode}/>
+      <section className="panel" style={{position:'relative'}}>
+        <SS.SectionHead
+          title="Detection Modes"
+          right={<>
+            <SS.Chip kind="accent">{SCANNER_MODES.find(m=>m.id===mode)?.name || ''}</SS.Chip>
+            <SS.Chip>SIGNAL CONFIG</SS.Chip>
+          </>}
+        />
+        <div className="corner-tag tl">// MODE-SELECT</div>
+        <div className="corner-tag tr">4 PROFILES</div>
+        <div style={{padding:'18px 18px 14px'}}>
+          <div className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.20em',textTransform:'uppercase',marginBottom:14}}>// SCANNER · WHICH SIGNALS GET SURFACED TO THE BOT</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4, 1fr)',gap:12}} className="mode-grid">
+            {SCANNER_MODES.map(m => (
+              <ModeCard
+                key={m.id}
+                mode={m}
+                selected={mode === m.id}
+                recommended={recommendation.mode === m.id}
+                onSelect={setMode}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+Object.assign(window, {
+  SCANNER_MODES, ScannerModePicker, pickRecommendation,
+});
+
+</script>
+<script type="text/babel">
+// tweaks-panel.jsx
+// Reusable Tweaks shell + form-control helpers.
+//
+// Owns the host protocol (listens for __activate_edit_mode / __deactivate_edit_mode,
+// posts __edit_mode_available / __edit_mode_set_keys / __edit_mode_dismissed) so
+// individual prototypes don't re-roll it. Ships a consistent set of controls so you
+// don't hand-draw <input type="range">, segmented radios, steppers, etc.
+//
+// Usage (in an HTML file that loads React + Babel):
+//
+//   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+//     "primaryColor": "#D97757",
+//     "palette": ["#D97757", "#29261b", "#f6f4ef"],
+//     "fontSize": 16,
+//     "density": "regular",
+//     "dark": false
+//   }/*EDITMODE-END*/;
+//
+//   function App() {
+//     const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+//     return (
+//       <div style={{ fontSize: t.fontSize, color: t.primaryColor }}>
+//         Hello
+//         <TweaksPanel>
+//           <TweakSection label="Typography" />
+//           <TweakSlider label="Font size" value={t.fontSize} min={10} max={32} unit="px"
+//                        onChange={(v) => setTweak('fontSize', v)} />
+//           <TweakRadio  label="Density" value={t.density}
+//                        options={['compact', 'regular', 'comfy']}
+//                        onChange={(v) => setTweak('density', v)} />
+//           <TweakSection label="Theme" />
+//           <TweakColor  label="Primary" value={t.primaryColor}
+//                        options={['#D97757', '#2A6FDB', '#1F8A5B', '#7A5AE0']}
+//                        onChange={(v) => setTweak('primaryColor', v)} />
+//           <TweakColor  label="Palette" value={t.palette}
+//                        options={[['#D97757', '#29261b', '#f6f4ef'],
+//                                  ['#475569', '#0f172a', '#f1f5f9']]}
+//                        onChange={(v) => setTweak('palette', v)} />
+//           <TweakToggle label="Dark mode" value={t.dark}
+//                        onChange={(v) => setTweak('dark', v)} />
+//         </TweaksPanel>
+//       </div>
+//     );
+//   }
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    transform:scale(var(--dc-inv-zoom,1));transform-origin:bottom right;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-body::-webkit-scrollbar{width:8px}
+  .twk-body::-webkit-scrollbar-track{background:transparent;margin:2px}
+  .twk-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  .twk-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25);
+    border:2px solid transparent;background-clip:content-box}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+    color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+
+  .twk-field{appearance:none;width:100%;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;
+    overflow-wrap:anywhere}
+
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+
+  .twk-num{display:flex;align-items:center;height:26px;padding:0 0 0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
+  .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
+    user-select:none;padding-right:8px}
+  .twk-num input{flex:1;min-width:0;height:100%;border:0;background:transparent;
+    font:inherit;font-variant-numeric:tabular-nums;text-align:right;padding:0 8px 0 0;
+    outline:none;color:inherit;-moz-appearance:textfield}
+  .twk-num input::-webkit-inner-spin-button,.twk-num input::-webkit-outer-spin-button{
+    -webkit-appearance:none;margin:0}
+  .twk-num-unit{padding-right:8px;color:rgba(41,38,27,.45)}
+
+  .twk-btn{appearance:none;height:26px;padding:0 12px;border:0;border-radius:7px;
+    background:rgba(0,0,0,.78);color:#fff;font:inherit;font-weight:500;cursor:default}
+  .twk-btn:hover{background:rgba(0,0,0,.88)}
+  .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
+  .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
+
+  .twk-swatch{appearance:none;-webkit-appearance:none;width:56px;height:22px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:6px;padding:0;cursor:default;
+    background:transparent;flex-shrink:0}
+  .twk-swatch::-webkit-color-swatch-wrapper{padding:0}
+  .twk-swatch::-webkit-color-swatch{border:0;border-radius:5.5px}
+  .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
+
+  .twk-chips{display:flex;gap:6px}
+  .twk-chip{position:relative;appearance:none;flex:1;min-width:0;height:46px;
+    padding:0;border:0;border-radius:6px;overflow:hidden;cursor:default;
+    box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
+    transition:transform .12s cubic-bezier(.3,.7,.4,1),box-shadow .12s}
+  .twk-chip:hover{transform:translateY(-1px);
+    box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 4px 10px rgba(0,0,0,.12)}
+  .twk-chip[data-on="1"]{box-shadow:0 0 0 1.5px rgba(0,0,0,.85),
+    0 2px 6px rgba(0,0,0,.15)}
+  .twk-chip>span{position:absolute;top:0;bottom:0;right:0;width:34%;
+    display:flex;flex-direction:column;box-shadow:-1px 0 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i{flex:1;box-shadow:0 -1px 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i:first-child{box-shadow:none}
+  .twk-chip svg{position:absolute;top:6px;left:6px;width:13px;height:13px;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+`;
+
+// ── useTweaks ───────────────────────────────────────────────────────────────
+// Single source of truth for tweak values. setTweak persists via the host
+// (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  // Accepts either setTweak('key', value) or setTweak({ key: value, ... }) so a
+  // useState-style call doesn't write a "[object Object]" key into the persisted
+  // JSON block.
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+    // Same-window signal so in-page listeners (deck-stage rail thumbnails)
+    // can react — the parent message only reaches the host, not peers.
+    window.dispatchEvent(new CustomEvent('tweakchange', { detail: edits }));
+  }, []);
+  return [values, setTweak];
+}
+
+// ── TweaksPanel ─────────────────────────────────────────────────────────────
+// Floating shell. Registers the protocol listener BEFORE announcing
+// availability — if the announce ran first, the host's activate could land
+// before our handler exists and the toolbar toggle would silently no-op.
+// The close button posts __edit_mode_dismissed so the host's toolbar toggle
+// flips off in lockstep; the host echoes __deactivate_edit_mode back which
+// is what actually hides the panel.
+function TweaksPanel({ title = 'Tweaks', noDeckControls = false, children }) {
+  const [open, setOpen] = React.useState(false);
+  const dragRef = React.useRef(null);
+  // Auto-inject a rail toggle when a <deck-stage> is on the page. The
+  // toggle drives the deck's per-viewer _railVisible via window message;
+  // state is mirrored from the same localStorage key the deck reads so
+  // the control reflects reality across reloads. The mechanism is the
+  // message — authors who want custom placement can post it directly
+  // and pass noDeckControls to suppress this one.
+  const hasDeckStage = React.useMemo(
+    () => typeof document !== 'undefined' && !!document.querySelector('deck-stage'),
+    [],
+  );
+  // Hide the toggle until the host has actually enabled the rail (the
+  // __omelette_rail_enabled window message, posted only when the
+  // omelette_deck_rail_enabled flag is on for this user). The initial read
+  // covers TweaksPanel mounting after the message already arrived; the
+  // listener covers the common case of mounting first.
+  const [railEnabled, setRailEnabled] = React.useState(
+    () => hasDeckStage && !!document.querySelector('deck-stage')?._railEnabled,
+  );
+  React.useEffect(() => {
+    if (!hasDeckStage || railEnabled) return undefined;
+    const onMsg = (e) => {
+      if (e.data && e.data.type === '__omelette_rail_enabled') setRailEnabled(true);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [hasDeckStage, railEnabled]);
+  const [railVisible, setRailVisible] = React.useState(() => {
+    try { return localStorage.getItem('deck-stage.railVisible') !== '0'; } catch (e) { return true; }
+  });
+  const toggleRail = (on) => {
+    setRailVisible(on);
+    window.postMessage({ type: '__deck_rail_visible', on }, '*');
+  };
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', clampToViewport);
+      return () => window.removeEventListener('resize', clampToViewport);
+    }
+    const ro = new ResizeObserver(clampToViewport);
+    ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  }, [open, clampToViewport]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const t = e?.data?.type;
+      if (t === '__activate_edit_mode') setOpen(true);
+      else if (t === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const dismiss = () => {
+    setOpen(false);
+    window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+  };
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight = window.innerWidth - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = {
+        x: startRight - (ev.clientX - sx),
+        y: startBottom - (ev.clientY - sy),
+      };
+      clampToViewport();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel" data-noncommentable=""
+           style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+        <div className="twk-hd" onMouseDown={onDragStart}>
+          <b>{title}</b>
+          <button className="twk-x" aria-label="Close tweaks"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={dismiss}>✕</button>
+        </div>
+        <div className="twk-body">
+          {children}
+          {hasDeckStage && railEnabled && !noDeckControls && (
+            <TweakSection label="Deck">
+              <TweakToggle label="Thumbnail rail" value={railVisible} onChange={toggleRail} />
+            </TweakSection>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Layout helpers ──────────────────────────────────────────────────────────
+
+function TweakSection({ label, children }) {
+  return (
+    <>
+      <div className="twk-sect">{label}</div>
+      {children}
+    </>
+  );
+}
+
+function TweakRow({ label, value, children, inline = false }) {
+  return (
+    <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Controls ────────────────────────────────────────────────────────────────
+
+function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+  return (
+    <TweakRow label={label} value={`${value}${unit}`}>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+             value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </TweakRow>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value}
+              onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  // The active value is read by pointer-move handlers attached for the lifetime
+  // of a drag — ref it so a stale closure doesn't fire onChange for every move.
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  // Segments wrap mid-word once per-segment width runs out. The track is
+  // ~248px (280 panel − 28 body pad − 4 seg pad), each button loses 12px
+  // to its own padding, and 11.5px system-ui averages ~6.3px/char — so 2
+  // options fit ~16 chars each, 3 fit ~10. Past that (or >3 options), fall
+  // back to a dropdown rather than wrap.
+  const labelLen = (o) => String(typeof o === 'object' ? o.label : o).length;
+  const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
+  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 }[options.length] ?? 0);
+  if (!fitsAsSegments) {
+    // <select> emits strings — map back to the original option value so the
+    // fallback stays type-preserving (numbers, booleans) like the segment path.
+    const resolve = (s) => {
+      const m = options.find((o) => String(typeof o === 'object' ? o.value : o) === s);
+      return m === undefined ? s : typeof m === 'object' ? m.value : m;
+    };
+    return <TweakSelect label={label} value={value} options={options}
+                        onChange={(s) => onChange(resolve(s))} />;
+  }
+  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+  const n = opts.length;
+
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const inner = r.width - 4;
+    const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+    return opts[Math.max(0, Math.min(n - 1, i))].value;
+  };
+
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => {
+      if (!trackRef.current) return;
+      const v = segAt(ev.clientX);
+      if (v !== valueRef.current) onChange(v);
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`,
+                      width: `calc((100% - 4px) / ${n})` }} />
+        {opts.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => {
+          const v = typeof o === 'object' ? o.value : o;
+          const l = typeof o === 'object' ? o.label : o;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </TweakRow>
+  );
+}
+
+function TweakText({ label, value, placeholder, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <input className="twk-field" type="text" value={value} placeholder={placeholder}
+             onChange={(e) => onChange(e.target.value)} />
+    </TweakRow>
+  );
+}
+
+function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }) {
+  const clamp = (n) => {
+    if (min != null && n < min) return min;
+    if (max != null && n > max) return max;
+    return n;
+  };
+  const startRef = React.useRef({ x: 0, val: 0 });
+  const onScrubStart = (e) => {
+    e.preventDefault();
+    startRef.current = { x: e.clientX, val: value };
+    const decimals = (String(step).split('.')[1] || '').length;
+    const move = (ev) => {
+      const dx = ev.clientX - startRef.current.x;
+      const raw = startRef.current.val + dx * step;
+      const snapped = Math.round(raw / step) * step;
+      onChange(clamp(Number(snapped.toFixed(decimals))));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="twk-num">
+      <span className="twk-num-lbl" onPointerDown={onScrubStart}>{label}</span>
+      <input type="number" value={value} min={min} max={max} step={step}
+             onChange={(e) => onChange(clamp(Number(e.target.value)))} />
+      {unit && <span className="twk-num-unit">{unit}</span>}
+    </div>
+  );
+}
+
+// Relative-luminance contrast pick — checkmarks drawn over a swatch need to
+// read on both #111 and #fafafa without per-option configuration. Hex input
+// only (#rgb / #rrggbb); named or rgb()/hsl() colors fall through to "light".
+function __twkIsLight(hex) {
+  const h = String(hex).replace('#', '');
+  const x = h.length === 3 ? h.replace(/./g, (c) => c + c) : h.padEnd(6, '0');
+  const n = parseInt(x.slice(0, 6), 16);
+  if (Number.isNaN(n)) return true;
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return r * 299 + g * 587 + b * 114 > 148000;
+}
+
+const __TwkCheck = ({ light }) => (
+  <svg viewBox="0 0 14 14" aria-hidden="true">
+    <path d="M3 7.2 5.8 10 11 4.2" fill="none" strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round"
+          stroke={light ? 'rgba(0,0,0,.78)' : '#fff'} />
+  </svg>
+);
+
+// TweakColor — curated color/palette picker. Each option is either a single
+// hex string or an array of 1-5 hex strings; the card adapts — a lone color
+// renders solid, a palette renders colors[0] as the hero (left ~2/3) with the
+// rest stacked in a sharp column on the right. onChange emits the
+// option in the shape it was passed (string stays string, array stays array).
+// Without options it falls back to the native color input for back-compat.
+function TweakColor({ label, value, options, onChange }) {
+  if (!options || !options.length) {
+    return (
+      <div className="twk-row twk-row-h">
+        <div className="twk-lbl"><span>{label}</span></div>
+        <input type="color" className="twk-swatch" value={value}
+               onChange={(e) => onChange(e.target.value)} />
+      </div>
+    );
+  }
+  // Native <input type=color> emits lowercase hex per the HTML spec, so
+  // compare case-insensitively. String() guards JSON.stringify(undefined),
+  // which returns the primitive undefined (no .toLowerCase).
+  const key = (o) => String(JSON.stringify(o)).toLowerCase();
+  const cur = key(value);
+  return (
+    <TweakRow label={label}>
+      <div className="twk-chips" role="radiogroup">
+        {options.map((o, i) => {
+          const colors = Array.isArray(o) ? o : [o];
+          const [hero, ...rest] = colors;
+          const sup = rest.slice(0, 4);
+          const on = key(o) === cur;
+          return (
+            <button key={i} type="button" className="twk-chip" role="radio"
+                    aria-checked={on} data-on={on ? '1' : '0'}
+                    aria-label={colors.join(', ')} title={colors.join(' · ')}
+                    style={{ background: hero }}
+                    onClick={() => onChange(o)}>
+              {sup.length > 0 && (
+                <span>
+                  {sup.map((c, j) => <i key={j} style={{ background: c }} />)}
+                </span>
+              )}
+              {on && <__TwkCheck light={__twkIsLight(hero)} />}
+            </button>
+          );
+        })}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakButton({ label, onClick, secondary = false }) {
+  return (
+    <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'}
+            onClick={onClick}>{label}</button>
+  );
+}
+
+Object.assign(window, {
+  useTweaks, TweaksPanel, TweakSection, TweakRow,
+  TweakSlider, TweakToggle, TweakRadio, TweakSelect,
+  TweakText, TweakNumber, TweakColor, TweakButton,
+});
+;// ── SniperSight shared chrome ─────────────────────────────────
+// Loaded into every page; exposes globals on window.SS_*
+
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+// ── Tactical Background controller ──────────────────────────
+function applyTweaks(t, pageAccent){
+  const root = document.documentElement;
+  // page accent override wins unless tweak forces a theme
+  const accents = {
+    green: { c:'#00ffaa', bg:'rgba(0,255,170,.10)', bd:'rgba(0,255,170,.30)' },
+    amber: { c:'#fbbf24', bg:'rgba(251,191,36,.10)', bd:'rgba(251,191,36,.35)' },
+    blue:  { c:'#60a5fa', bg:'rgba(96,165,250,.10)', bd:'rgba(96,165,250,.30)' },
+    cyan:  { c:'#22d3ee', bg:'rgba(34,211,238,.10)',  bd:'rgba(34,211,238,.30)' },
+    purple:{ c:'#c084fc', bg:'rgba(192,132,252,.10)', bd:'rgba(192,132,252,.30)' },
+    red:   { c:'#f87171', bg:'rgba(248,113,113,.10)', bd:'rgba(248,113,113,.35)' },
+  };
+  const themeKey = (t.theme === 'page') ? pageAccent : t.theme;
+  const a = accents[themeKey] || accents[pageAccent] || accents.green;
+  root.style.setProperty('--accent', a.c);
+  root.style.setProperty('--accent-bg', a.bg);
+  root.style.setProperty('--accent-border', a.bd);
+
+  const bg = document.getElementById('tactical-bg');
+  if (bg) bg.classList.toggle('off', !t.tacticalBg);
+
+  document.body.classList.toggle('hud-overlays-off', !t.hudOverlays);
+
+  document.body.classList.remove('density-sparse','density-balanced','density-dense');
+  document.body.classList.add('density-' + (t.density || 'balanced'));
+}
+
+// ── Formatters ──────────────────────────────────────────────
+function fmtMoney(v, d){ d = d == null ? 2 : d; return (v<0?'-$':'$') + Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function fmtPct(v, d){ d = d == null ? 2 : d; return (v>=0?'+':'') + v.toFixed(d) + '%'; }
+function fmtPrice(p){ if(p<1) return '$'+p.toFixed(5); if(p<100) return '$'+p.toFixed(4); return '$'+p.toFixed(2); }
+function fmtDur(seconds){
+  if (seconds<60) return seconds+'s';
+  if (seconds<3600) return Math.floor(seconds/60)+'m '+(seconds%60)+'s';
+  const h=Math.floor(seconds/3600), m=Math.floor((seconds%3600)/60);
+  return h+'h '+m+'m';
+}
+function fmtNum(v){
+  if (Math.abs(v) >= 1e9) return (v/1e9).toFixed(2)+'B';
+  if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(2)+'M';
+  if (Math.abs(v) >= 1e3) return (v/1e3).toFixed(2)+'K';
+  return v.toFixed(2);
+}
+
+// ── Reticle SVG (top-right corner of accent panels) ─────────
+function Reticle(){
+  return (
+    <div className="reticle">
+      <svg viewBox="-100 -100 200 200" fill="none">
+        <g className="ring-rotate">
+          <circle r="80" stroke="currentColor" strokeOpacity=".35" strokeWidth=".4" strokeDasharray="2 4"/>
+          <line x1="-90" y1="0" x2="-72" y2="0" stroke="currentColor" strokeOpacity=".5" strokeWidth=".6"/>
+          <line x1="72"  y1="0" x2="90"  y2="0" stroke="currentColor" strokeOpacity=".5" strokeWidth=".6"/>
+        </g>
+        <g className="ring-rotate-rev">
+          <circle r="55" stroke="currentColor" strokeOpacity=".5" strokeWidth=".5"/>
+          <line y1="-65" x1="0" y2="-48" x2="0" stroke="currentColor" strokeOpacity=".6" strokeWidth=".8"/>
+          <line y1="48"  x1="0" y2="65"  x2="0" stroke="currentColor" strokeOpacity=".6" strokeWidth=".8"/>
+        </g>
+        <circle r="3" fill="currentColor"/>
+        <circle r="22" stroke="currentColor" strokeOpacity=".4" strokeWidth=".5"/>
+      </svg>
+    </div>
+  );
+}
+
+// ── Topbar / Page head / Footer ─────────────────────────────
+function Topbar({ active, now }){
+  const links = [
+    { id:'intel',   label:'Intel',    href:'Intel.html' },
+    { id:'scanner', label:'Scanner',  href:'Scanner.html' },
+    { id:'bot',     label:'Bot',      href:'Bot.html' },
+    { id:'training',label:'Training', href:'Training.html' },
+    { id:'settings',label:'Settings', href:'Settings.html' },
+  ];
+  return (
+    <div className="topbar">
+      <a href="Landing.html" className="brand" style={{textDecoration:'none',color:'inherit'}}>
+        <img src="logo.png" alt="SniperSight" style={{height:34,width:'auto',display:'block',filter:'drop-shadow(0 0 12px rgba(0,255,170,.25))'}}/>
+      </a>
+      <nav className="nav">
+        {links.map(l => (
+          <a key={l.id} href={l.href} className={active===l.id?'active':''}>{l.label}</a>
+        ))}
+      </nav>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <span className="chip chip-green">● ONLINE</span>
+        <span className="chip">UTC {new Date(now).toUTCString().slice(17,25)}</span>
+      </div>
+    </div>
+  );
+}
+
+function PageHead({ icon, title, subtitle, badges, accent }){
+  return (
+    <div className="page-head">
+      <div className="page-title">
+        <div className="icon">{icon}</div>
+        <div>
+          <h1 style={accent==='red'?{}:{}} className={accent==='red'?'live':''}>{title}</h1>
+          <div className="sub">{subtitle}</div>
+        </div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+        {badges}
+      </div>
+    </div>
+  );
+}
+
+function FooterStatus({ now, latency }){
+  return (
+    <div style={{marginTop:24,padding:'12px 18px',border:'1px solid var(--border-soft)',borderRadius:10,background:'rgba(0,0,0,.3)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:14,flexWrap:'wrap'}}>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+        <span className="chip chip-green">● BINANCE WS</span>
+        <span className="chip chip-green">● PHEMEX REST</span>
+        <span className="chip chip-green">● TELEGRAM</span>
+        <span className="chip">● BACKEND {latency || 41}ms</span>
+      </div>
+      <div className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>build 1.0.0+5cdb504 · {new Date(now).toISOString().slice(0,19).replace('T',' ')}Z</div>
+    </div>
+  );
+}
+
+// ── Mini metric tile ────────────────────────────────────────
+function Mini({ label, value, accent, bold, valueColor }){
+  return (
+    <div>
+      <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:4}}>{label}</div>
+      <div className="mono" style={{fontSize:13,fontWeight: bold?800:600, color: valueColor || (accent?'var(--accent)':'var(--fg)')}}>{value}</div>
+    </div>
+  );
+}
+
+// ── SectionHead w/ pulsing dot ──────────────────────────────
+function SectionHead({ title, right }){
+  return (
+    <div className="sec-head">
+      <div className="sec-title"><span className="dot"/> {title}</div>
+      {right}
+    </div>
+  );
+}
+
+// ── RiskBar (small horizontal limit bar) ────────────────────
+function RiskBar({ label, value, max, unit, color }){
+  const pct = Math.min(100, (value/max)*100);
+  const c = color || 'var(--green-soft)';
+  return (
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+        <span className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>{label}</span>
+        <span className="mono" style={{fontSize:11,color:c,fontWeight:700}}>{value}{unit||''} <span style={{color:'var(--fg-4)'}}>/ {max}{unit||''}</span></span>
+      </div>
+      <div style={{position:'relative',height:6,borderRadius:3,background:'rgba(0,0,0,.5)',overflow:'hidden',border:'1px solid var(--border-soft)'}}>
+        <div style={{height:'100%',width:pct+'%',background:`linear-gradient(90deg, ${c}, color-mix(in oklch, ${c} 60%, transparent))`,boxShadow:`0 0 10px ${c}`,transition:'width .6s ease'}}/>
+      </div>
+    </div>
+  );
+}
+
+// ── Pill / Chip helpers ─────────────────────────────────────
+function Chip({ kind, children, style }){
+  const cls = 'chip ' + (kind ? 'chip-'+kind : '');
+  return <span className={cls} style={style}>{children}</span>;
+}
+
+// ── Modal shell ─────────────────────────────────────────────
+function Modal({ onClose, children, maxWidth }){
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" style={{maxWidth: maxWidth||620}} onClick={e=>e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── Default tweaks shared across all pages ──────────────────
+const SHARED_TWEAK_DEFAULTS = {
+  theme: 'page',           // 'page' = use the page's own accent; or override green/amber/blue
+  density: 'balanced',
+  tacticalBg: true,
+  hudOverlays: true,
+  simSpeed: 1,
+};
+
+// ── Shared TweaksPanel helper (pages add page-specific bits) ─
+function SharedTweaksControls({ t, setTweak }){
+  return (
+    <window.TweakSection title="Theme">
+      <window.TweakRadio label="Accent" value={t.theme} onChange={v=>setTweak('theme',v)} options={[
+        {label:'Page', value:'page'},
+        {label:'Green',value:'green'},
+        {label:'Amber',value:'amber'},
+        {label:'Blue', value:'blue'},
+      ]}/>
+      <window.TweakRadio label="Density" value={t.density} onChange={v=>setTweak('density',v)} options={[
+        {label:'Sparse',  value:'sparse'},
+        {label:'Balanced',value:'balanced'},
+        {label:'Dense',   value:'dense'},
+      ]}/>
+      <window.TweakToggle label="Tactical Background" value={t.tacticalBg} onChange={v=>setTweak('tacticalBg',v)} hint="Scanlines, grid, drift glow"/>
+      <window.TweakToggle label="HUD Overlays" value={t.hudOverlays} onChange={v=>setTweak('hudOverlays',v)} hint="Reticles, brackets, scanline texture"/>
+      <window.TweakSlider label="Sim Speed" value={t.simSpeed} min={0.5} max={4} step={0.5} onChange={v=>setTweak('simSpeed',v)}/>
+    </window.TweakSection>
+  );
+}
+
+// ── Tactical background DOM (rendered once per page) ────────
+function TacticalBgDom(){
+  // Used by pages that prefer to mount via React rather than static HTML.
+  return (
+    <div className="tactical-bg" id="tactical-bg">
+      <div className="glow"></div>
+      <div className="grid"></div>
+      <div className="grain"></div>
+      <div className="scanline"></div>
+    </div>
+  );
+}
+
+// Expose all helpers globally so each page's app script can use them
+Object.assign(window, {
+  SS: {
+    applyTweaks, fmtMoney, fmtPct, fmtPrice, fmtDur, fmtNum,
+    Reticle, Topbar, PageHead, FooterStatus, Mini, SectionHead,
+    RiskBar, Chip, Modal, SharedTweaksControls, TacticalBgDom,
+    SHARED_TWEAK_DEFAULTS,
+  },
+});
+;// ── SCANNER — Live signal grid + radar + console ────────────
+const SS = window.SS;
+
+const SETUPS = ['OB+FVG','BOS','CHoCH','LIQ-SWEEP','OB-RETEST','FVG-FILL','BREAKER'];
+const TFS = ['1m','5m','15m','1h','4h','1D'];
+const REGIMES = ['TREND','RANGE','CHOP'];
+
+const SIGNAL_SEED = [
+  { id:'s1', sym:'BTC/USDT', dir:'LONG',  setup:'OB+FVG',    score:8.2, tf:'1h',  conf:'HIGH', regime:'TREND', mark:65120.25, entry:64580, sl:63450, tp1:65800, tp2:66600, rr:2.1, age:42, bias:[8,9,7,8] },
+  { id:'s2', sym:'ETH/USDT', dir:'LONG',  setup:'BOS',       score:7.4, tf:'15m', conf:'HIGH', regime:'TREND', mark:3198.40,  entry:3180,  sl:3142, tp1:3260,  tp2:3305,  rr:1.8, age:18, bias:[7,8,7,7] },
+  { id:'s3', sym:'SOL/USDT', dir:'SHORT', setup:'LIQ-SWEEP', score:7.8, tf:'15m', conf:'HIGH', regime:'RANGE', mark:141.05,   entry:142.4, sl:145.4,tp1:139.4, tp2:137.8, rr:1.9, age:11, bias:[8,7,8,8] },
+  { id:'s4', sym:'TON/USDT', dir:'LONG',  setup:'OB-RETEST', score:6.9, tf:'1h',  conf:'MED',  regime:'TREND', mark:6.842,    entry:6.78,  sl:6.62, tp1:6.95,  tp2:7.12,  rr:1.6, age:55, bias:[7,7,6,7] },
+  { id:'s5', sym:'INJ/USDT', dir:'LONG',  setup:'FVG-FILL',  score:6.4, tf:'5m',  conf:'MED',  regime:'TREND', mark:24.18,    entry:24.04, sl:23.62,tp1:24.55, tp2:24.85, rr:1.4, age:7,  bias:[6,7,6,6] },
+  { id:'s6', sym:'AAVE/USDT',dir:'SHORT', setup:'CHoCH',     score:6.1, tf:'1h',  conf:'MED',  regime:'RANGE', mark:92.18,    entry:93.0,  sl:95.4, tp1:90.2,  tp2:88.4,  rr:1.5, age:33, bias:[6,5,7,6] },
+  { id:'s7', sym:'OP/USDT',  dir:'SHORT', setup:'BREAKER',   score:5.8, tf:'15m', conf:'LOW',  regime:'RANGE', mark:1.892,    entry:1.910, sl:1.95, tp1:1.85,  tp2:1.81,  rr:1.4, age:22, bias:[5,6,6,5] },
+  { id:'s8', sym:'NEAR/USDT',dir:'LONG',  setup:'OB+FVG',    score:5.2, tf:'5m',  conf:'LOW',  regime:'CHOP',  mark:4.310,    entry:4.28,  sl:4.18, tp1:4.39,  tp2:4.46,  rr:1.3, age:14, bias:[5,5,5,5] },
+];
+
+
+// Derive trade type from primary timeframe (matches mode.allowed_trade_types semantics)
+function tradeTypeOf(tf){
+  if (tf === '1D' || tf === '1W') return 'SWING';
+  if (tf === '4H' || tf === '1h')  return 'INTRADAY';
+  return 'SCALP'; // 15m, 5m, 1m
+}
+
+// Apply mode gates to a signal list. Returns { passing, telemetry }.
+// Telemetry counts WHY signals were dropped — drives the empty-cycle console.
+function applyModeGates(signals, modeId){
+  const mode = (window.SCANNER_MODES||[]).find(m => m.id === modeId);
+  if (!mode) return { passing: signals, telemetry: { scanned: signals.length, criticalTfFail:0, scoreGateFail:0, tradeTypeFail:0, rrFail:0, plans: signals.length } };
+  const minScore10 = (mode.minScore || 70) / 10;          // 72 → 7.2
+  const allowedTfs = new Set(mode.timeframes || []);      // for hard TF gate
+  const criticalTfs = new Set(mode.critical || []);
+  const allowedTypes = new Set(mode.types || []);
+  const minRR = mode.minRR || 0;
+
+  let criticalTfFail = 0, scoreGateFail = 0, tradeTypeFail = 0, rrFail = 0;
+  const passing = [];
+  for (const s of signals){
+    // Hard TF gate: signal's primary tf must be in mode's TF set
+    if (!allowedTfs.has(s.tf)) { criticalTfFail++; continue; }
+    // Score gate
+    if (s.score < minScore10) { scoreGateFail++; continue; }
+    // Trade-type gate
+    const tt = tradeTypeOf(s.tf);
+    if (!allowedTypes.has(tt)) { tradeTypeFail++; continue; }
+    // R:R gate
+    if (s.rr < minRR) { rrFail++; continue; }
+    passing.push({ ...s, tradeType: tt, modeUsed: mode.name, criticalTfs: [...criticalTfs] });
+  }
+  return {
+    passing,
+    telemetry: { scanned: signals.length, criticalTfFail, scoreGateFail, tradeTypeFail, rrFail, plans: passing.length, mode: mode.name, minScore10, minRR }
+  };
+}
+
+function MiniChart({ sig }){
+  const N = 30;
+  const candles = useMemo(()=>{
+    const arr = [];
+    let p = sig.entry * (sig.dir==='LONG'? 0.99 : 1.01);
+    for (let i=0;i<N;i++){
+      const drift = (sig.dir==='LONG'?0.0008:-0.0008);
+      const vol = (Math.sin(i*1.7+sig.id.charCodeAt(1))*0.005);
+      const open = p, close = p*(1+drift+vol);
+      arr.push({open,close,hi:Math.max(open,close)*1.003,lo:Math.min(open,close)*0.997});
+      p = close;
+    }
+    const f = sig.mark / arr[arr.length-1].close;
+    arr.forEach(c=>{c.open*=f;c.close*=f;c.hi*=f;c.lo*=f;});
+    return arr;
+  }, [sig]);
+  const allP = [...candles.flatMap(c=>[c.hi,c.lo]), sig.entry, sig.sl, sig.tp1];
+  const yMin = Math.min(...allP)*.998, yMax=Math.max(...allP)*1.002, yR=yMax-yMin;
+  const W=240, H=70, pad=3;
+  const cw = (W-2*pad)/candles.length;
+  const yOf = p => pad + ((yMax-p)/yR)*(H-2*pad);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:70,background:'rgba(0,0,0,.35)',borderRadius:4}}>
+      <line x1={pad} x2={W-pad} y1={yOf(sig.entry)} y2={yOf(sig.entry)} stroke="#60a5fa" strokeWidth=".5" strokeDasharray="2 3" opacity=".7"/>
+      <line x1={pad} x2={W-pad} y1={yOf(sig.sl)}    y2={yOf(sig.sl)}    stroke="#f87171" strokeWidth=".5" strokeDasharray="2 3" opacity=".7"/>
+      <line x1={pad} x2={W-pad} y1={yOf(sig.tp1)}   y2={yOf(sig.tp1)}   stroke="#22c55e" strokeWidth=".5" strokeDasharray="2 3" opacity=".7"/>
+      {candles.map((c,i)=>{
+        const x=pad+i*cw+cw*0.15, w=cw*0.7;
+        const yO=yOf(c.open), yC=yOf(c.close), yH=yOf(c.hi), yL=yOf(c.lo);
+        const up = c.close>=c.open, color = up?'#22c55e':'#f87171';
+        return <g key={i}>
+          <line x1={x+w/2} x2={x+w/2} y1={yH} y2={yL} stroke={color} strokeWidth=".5" opacity=".6"/>
+          <rect x={x} y={Math.min(yO,yC)} width={w} height={Math.max(.8,Math.abs(yC-yO))} fill={color} opacity=".85"/>
+        </g>;
+      })}
+      <circle cx={W-pad-2} cy={yOf(sig.mark)} r="2" fill="#fbbf24"/>
+    </svg>
+  );
+}
+
+function SignalCard({ sig, onSelect, selected }){
+  const isLong = sig.dir==='LONG';
+  const confCol = sig.conf==='HIGH'?'var(--green-soft)':sig.conf==='MED'?'var(--amber)':'var(--fg-3)';
+  const setupCol = sig.setup.includes('FVG')?'cyan':sig.setup.includes('BOS')||sig.setup.includes('CHoCH')?'purple':sig.setup.includes('LIQ')?'amber':'';
+  return (
+    <div className={`pos brackets ${selected?'flash-green':''}`} style={{cursor:'pointer'}} onClick={()=>onSelect(sig)}>
+      <div className="corner-tag tl">// {sig.id.toUpperCase()}</div>
+      <div className="corner-tag tr">{sig.tf} · {sig.age}m AGO</div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10,marginTop:4,flexWrap:'wrap'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <SS.Chip kind={isLong?'green':'red'}>{isLong?'▲':'▼'} {sig.dir}</SS.Chip>
+          <span style={{fontFamily:'Share Tech Mono,monospace',fontSize:16,letterSpacing:'.06em'}}>{sig.sym}</span>
+          <SS.Chip kind={setupCol} style={{fontSize:9}}>{sig.setup}</SS.Chip>
+        </div>
+        <div style={{textAlign:'right'}}>
+          <div className="mono" style={{fontSize:18,fontWeight:800,color:confCol,lineHeight:1}}>{sig.score.toFixed(1)}</div>
+          <div className="mono" style={{fontSize:8,color:confCol,letterSpacing:'.18em'}}>{sig.conf}</div>
+        </div>
+      </div>
+      <MiniChart sig={sig}/>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'8px 10px',marginTop:10}}>
+        <SS.Mini label="Entry" value={SS.fmtPrice(sig.entry)}/>
+        <SS.Mini label="Stop"  value={SS.fmtPrice(sig.sl)} valueColor="var(--red-2)"/>
+        <SS.Mini label="TP1"   value={SS.fmtPrice(sig.tp1)} valueColor="var(--green-soft)"/>
+        <SS.Mini label="R:R"   value={sig.rr.toFixed(1)+':1'} accent/>
+      </div>
+      <div style={{display:'flex',gap:6,marginTop:10}}>
+        <SS.Chip kind={sig.regime==='TREND'?'green':sig.regime==='RANGE'?'amber':'red'} style={{fontSize:9}}>{sig.regime}</SS.Chip>
+        {sig.bias[0]>=7 && <SS.Chip style={{fontSize:9}}>HTF ✓</SS.Chip>}
+        <span style={{flex:1}}/>
+        <button className="btn" title="Save to Watchlist" style={{padding:'4px 8px',fontSize:11}} onClick={e=>{e.stopPropagation(); window.__scanner?.toggleWatch(sig);}}>{window.__scanner?.isWatched(sig.id)?'★':'☆'}</button>
+        <button className="btn" title="Copy plan as text" style={{padding:'4px 8px',fontSize:10}} onClick={e=>{e.stopPropagation(); window.__scanner?.copyPlan(sig);}}>⧉ COPY</button>
+        <button className="btn btn-cyan" title="Open in detail" style={{padding:'4px 10px',fontSize:10}} onClick={e=>{e.stopPropagation(); onSelect(sig);}}>↗ PLAN</button>
+      </div>
+    </div>
+  );
+}
+
+function FilterRail({ filters, setFilters, counts }){
+  const F = filters;
+  const upd = (k,v) => setFilters({...F, [k]:v});
+  const toggleSet = (k, v) => {
+    const set = new Set(F[k]);
+    if (set.has(v)) set.delete(v); else set.add(v);
+    upd(k, [...set]);
+  };
+  return (
+    <div style={{padding:'14px 16px',display:'flex',flexDirection:'column',gap:14}}>
+      <div>
+        <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:8}}>// MIN SCORE · {F.minScore.toFixed(1)}</div>
+        <input type="range" min="0" max="10" step=".1" value={F.minScore} onChange={e=>upd('minScore',+e.target.value)} style={{width:'100%'}}/>
+        <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
+          <span className="mono" style={{fontSize:9,color:'var(--fg-4)'}}>0.0</span>
+          <span className="mono" style={{fontSize:9,color:'var(--accent)'}}>≥ {F.minScore.toFixed(1)}</span>
+          <span className="mono" style={{fontSize:9,color:'var(--fg-4)'}}>10.0</span>
+        </div>
+      </div>
+      <div>
+        <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:8}}>// DIRECTION</div>
+        <div style={{display:'flex',gap:6}}>
+          {['ALL','LONG','SHORT'].map(d => (
+            <button key={d} className={`btn ${F.dir===d?(d==='LONG'?'btn-green':d==='SHORT'?'btn-red':'btn-cyan'):''}`} style={{padding:'6px 10px',fontSize:10,flex:1}} onClick={()=>upd('dir',d)}>{d}</button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:8}}>// TIMEFRAME</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6}}>
+          {TFS.map(tf => {
+            const active = F.tfs.includes(tf);
+            return <button key={tf} className={`btn ${active?'btn-cyan':''}`} style={{padding:'6px 10px',fontSize:10}} onClick={()=>toggleSet('tfs',tf)}>{tf}</button>;
+          })}
+        </div>
+      </div>
+      <div>
+        <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:8}}>// SETUP</div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+          {SETUPS.map(s => {
+            const active = F.setups.includes(s);
+            return <button key={s} className={`btn ${active?'btn-cyan':''}`} style={{padding:'5px 9px',fontSize:9}} onClick={()=>toggleSet('setups',s)}>{s}</button>;
+          })}
+        </div>
+      </div>
+      <div>
+        <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:8}}>// REGIME</div>
+        <div style={{display:'flex',gap:6}}>
+          {REGIMES.map(r => {
+            const active = F.regimes.includes(r);
+            const kind = r==='TREND'?'btn-green':r==='RANGE'?'btn-cyan':'btn-red';
+            return <button key={r} className={`btn ${active?kind:''}`} style={{padding:'6px 10px',fontSize:10,flex:1}} onClick={()=>toggleSet('regimes',r)}>{r}</button>;
+          })}
+        </div>
+      </div>
+      <div style={{paddingTop:12,borderTop:'1px solid var(--border-soft)',display:'flex',flexDirection:'column',gap:8}}>
+        <div style={{display:'flex',justifyContent:'space-between'}}>
+          <span className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase'}}>passing</span>
+          <span className="mono" style={{fontSize:11,color:'var(--accent)',fontWeight:700}}>{counts.passing} / {counts.total}</span>
+        </div>
+        <button className="btn" style={{padding:'8px',fontSize:10}} onClick={()=>setFilters({minScore:0, dir:'ALL', tfs:[...TFS], setups:[...SETUPS], regimes:[...REGIMES]})}>RESET FILTERS</button>
+      </div>
+    </div>
+  );
+}
+
+function SignalDetail({ sig, onClose, onTake }){
+  if (!sig) return null;
+  const isLong = sig.dir==='LONG';
+  const N = 60;
+  const candles = useMemo(()=>{
+    const arr=[]; let p = sig.entry*(isLong?0.985:1.015);
+    for (let i=0;i<N;i++){
+      const drift = isLong?0.0012:-0.0012;
+      const vol = (Math.sin(i*0.7+sig.id.charCodeAt(1))*0.004) + (Math.random()-.5)*0.005;
+      const open=p, close=p*(1+drift+vol);
+      arr.push({open,close,hi:Math.max(open,close)*1.003,lo:Math.min(open,close)*0.997});
+      p=close;
+    }
+    const f = sig.mark / arr[arr.length-1].close;
+    arr.forEach(c=>{c.open*=f;c.close*=f;c.hi*=f;c.lo*=f;});
+    return arr;
+  },[sig]);
+  const levels = [
+    { l:'TP2',   p: sig.tp2,   c:'#86efac' },
+    { l:'TP1',   p: sig.tp1,   c:'#22c55e' },
+    { l:'MARK',  p: sig.mark,  c:'#fbbf24' },
+    { l:'ENTRY', p: sig.entry, c:'#60a5fa' },
+    { l:'STOP',  p: sig.sl,    c:'#f87171' },
+  ];
+  const allP = [...candles.flatMap(c=>[c.hi,c.lo]), ...levels.map(l=>l.p)];
+  const yMin=Math.min(...allP)*.997, yMax=Math.max(...allP)*1.003, yR=yMax-yMin;
+  const W=560, H=300, lp=10, rp=70, tp=14, bp=14;
+  const inW = W-lp-rp, inH = H-tp-bp;
+  const cw = inW/candles.length;
+  const yOf = p => tp + ((yMax-p)/yR)*inH;
+
+  return (
+    <SS.Modal onClose={onClose} maxWidth={680}>
+      <div style={{padding:'14px 18px',borderBottom:'1px solid var(--border-soft)',background:'rgba(0,0,0,.4)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <SS.Chip kind={isLong?'green':'red'}>{isLong?'▲':'▼'} {sig.dir}</SS.Chip>
+          <span style={{fontFamily:'Share Tech Mono,monospace',fontSize:18,letterSpacing:'.08em'}}>{sig.sym}</span>
+          <SS.Chip>{sig.setup}</SS.Chip>
+          <SS.Chip kind="amber">{sig.tf}</SS.Chip>
+          <SS.Chip kind={sig.conf==='HIGH'?'green':'amber'}>{sig.conf} · {sig.score.toFixed(1)}</SS.Chip>
+        </div>
+        <button className="btn" style={{padding:'6px 10px'}} onClick={onClose}>✕</button>
+      </div>
+      <div style={{padding:'10px 18px 4px',display:'flex',alignItems:'center',gap:14,fontSize:11,color:'var(--fg-3)',fontFamily:'JetBrains Mono,monospace',letterSpacing:'.1em',borderBottom:'1px solid var(--border-soft)',background:'rgba(0,0,0,.2)'}}>
+        <span>// CHART · {sig.sym} · {sig.tf}</span>
+        <span style={{flex:1}}/>
+        <span style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{width:8,height:2,background:'#60a5fa',display:'inline-block'}}/>ENTRY</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{width:8,height:2,background:'#f87171',display:'inline-block'}}/>STOP</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{width:8,height:2,background:'#22c55e',display:'inline-block'}}/>TP1</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{width:8,height:2,background:'#86efac',display:'inline-block'}}/>TP2</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,background:'#fbbf24',display:'inline-block',borderRadius:'50%'}}/>MARK</span>
+      </div>
+      <div style={{padding:'14px 18px'}}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',background:'rgba(0,0,0,.35)',border:'1px solid var(--border-soft)',borderRadius:8}}>
+          {[0,.25,.5,.75,1].map(g=><line key={g} x1={lp} x2={W-rp} y1={tp+g*inH} y2={tp+g*inH} stroke="rgba(255,255,255,.05)" strokeDasharray="2 3"/>)}
+          {/* OB / FVG zone shading */}
+          <rect x={lp} y={yOf(sig.entry*1.003)} width={inW} height={Math.abs(yOf(sig.entry*1.003)-yOf(sig.entry*0.997))} fill="rgba(96,165,250,.12)" stroke="rgba(96,165,250,.3)" strokeDasharray="3 3"/>
+          {candles.map((c,i)=>{
+            const x = lp+i*cw+cw*0.15, w=cw*0.7;
+            const yO=yOf(c.open), yC=yOf(c.close), yH=yOf(c.hi), yL=yOf(c.lo);
+            const up = c.close>=c.open, color = up?'#22c55e':'#f87171';
+            return <g key={i}>
+              <line x1={x+w/2} x2={x+w/2} y1={yH} y2={yL} stroke={color} strokeWidth=".7" opacity=".7"/>
+              <rect x={x} y={Math.min(yO,yC)} width={w} height={Math.max(1,Math.abs(yC-yO))} fill={color} opacity=".88"/>
+            </g>;
+          })}
+          {levels.map((lv,i)=>{
+            const y = yOf(lv.p);
+            return <g key={i}>
+              <line x1={lp} x2={W-rp} y1={y} y2={y} stroke={lv.c} strokeWidth=".7" strokeDasharray="3 3" opacity=".75"/>
+              <rect x={W-rp+2} y={y-9} width={66} height={18} fill={lv.c} opacity=".18" stroke={lv.c} strokeOpacity=".55"/>
+              <text x={W-rp+6} y={y+4} fill={lv.c} fontSize="9" fontWeight="700" fontFamily="JetBrains Mono,monospace" letterSpacing=".15em">{lv.l}</text>
+              <text x={W-2} y={y+4} fill={lv.c} fontSize="9" fontWeight="700" fontFamily="JetBrains Mono,monospace" textAnchor="end">{lv.p<1?lv.p.toFixed(5):lv.p<100?lv.p.toFixed(3):lv.p.toFixed(2)}</text>
+            </g>;
+          })}
+        </svg>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginTop:14}}>
+          <div>
+            <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:8}}>// CONFLUENCE BREAKDOWN</div>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {[
+                {k:'HTF Bias',     v:sig.bias[0]},
+                {k:'Volume / OFI', v:sig.bias[1]},
+                {k:'Setup Quality',v:sig.bias[2]},
+                {k:'Regime Match', v:sig.bias[3]},
+              ].map(x => (
+                <div key={x.k} style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span className="mono" style={{fontSize:10,color:'var(--fg-3)',letterSpacing:'.14em',width:110}}>{x.k}</span>
+                  <div style={{flex:1,height:6,background:'rgba(0,0,0,.5)',borderRadius:3,border:'1px solid var(--border-soft)',overflow:'hidden'}}>
+                    <div style={{height:'100%',width:(x.v*10)+'%',background:x.v>=7?'var(--green-soft)':x.v>=5?'var(--amber)':'var(--red-2)',boxShadow:`0 0 8px ${x.v>=7?'var(--green-soft)':'var(--amber)'}`}}/>
+                  </div>
+                  <span className="mono" style={{fontSize:11,fontWeight:700,color:'var(--fg)',width:24,textAlign:'right'}}>{x.v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:8}}>// EXECUTION SPEC</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              <div className="metric-tile"><div className="metric-label">Risk</div><div className="metric-value">1.5%</div></div>
+              <div className="metric-tile"><div className="metric-label">Lev</div><div className="metric-value">5×</div></div>
+              <div className="metric-tile"><div className="metric-label">R:R</div><div className="metric-value" style={{color:'var(--accent)'}}>{sig.rr.toFixed(1)}:1</div></div>
+              <div className="metric-tile"><div className="metric-label">Size</div><div className="metric-value">$1.2K</div></div>
+            </div>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:10,marginTop:16,paddingTop:14,borderTop:'1px solid var(--border-soft)'}}>
+          <button className="btn" onClick={onClose} style={{flex:1}}>DISMISS</button>
+          <button className="btn btn-cyan" style={{flex:1}}>⌘ STAGE</button>
+          <button className="btn btn-green" onClick={()=>onTake(sig)} style={{flex:2}}>▶ EXECUTE TRADE</button>
+        </div>
+      </div>
+    </SS.Modal>
+  );
+}
+
+function ScannerRadar({ signals }){
+  return (
+    <div className="radar-wrap">
+      <svg viewBox="-100 -100 200 200" style={{width:'100%',height:'100%'}}>
+        <defs>
+          <linearGradient id="sweep2" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0"/>
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity=".5"/>
+          </linearGradient>
+        </defs>
+        {[30,55,80].map(r=><circle key={r} r={r} fill="none" stroke="var(--accent)" strokeOpacity=".18" strokeWidth=".4"/>)}
+        <line x1="-90" y1="0" x2="90" y2="0" stroke="var(--accent)" strokeOpacity=".15" strokeWidth=".4"/>
+        <line x1="0" y1="-90" x2="0" y2="90" stroke="var(--accent)" strokeOpacity=".15" strokeWidth=".4"/>
+        <g className="radar-sweep">
+          <path d="M 0 0 L 88 0 A 88 88 0 0 0 67 -57 Z" fill="url(#sweep2)"/>
+          <line x1="0" y1="0" x2="88" y2="0" stroke="var(--accent)" strokeOpacity=".55" strokeWidth=".6"/>
+        </g>
+        {signals.slice(0,12).map((s,i)=>{
+          const angle = (i/12)*Math.PI*2 - Math.PI/2;
+          const dist = 30 + (10-s.score)*5;
+          const x = Math.cos(angle)*dist, y = Math.sin(angle)*dist;
+          const armed = s.score>=7;
+          const color = s.dir==='LONG'?'var(--green)':'var(--red-2)';
+          return (
+            <g key={s.id}>
+              <circle cx={x} cy={y} r={armed?2.6:1.6} fill={color}>
+                {armed && <animate attributeName="opacity" values="1;.3;1" dur="2s" repeatCount="indefinite"/>}
+              </circle>
+              {armed && <circle cx={x} cy={y} r="6" fill="none" stroke={color} strokeOpacity=".4"><animate attributeName="r" values="3;9" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values=".7;0" dur="2s" repeatCount="indefinite"/></circle>}
+              <text x={x+5} y={y-3} fontFamily="JetBrains Mono,monospace" fontSize="6" fill={color} fontWeight="700">{s.sym.split('/')[0]}</text>
+            </g>
+          );
+        })}
+        <circle r="3" fill="var(--accent)"/>
+      </svg>
+    </div>
+  );
+}
+
+function App(){
+  const [t, setTweak] = window.useTweaks({
+    ...SS.SHARED_TWEAK_DEFAULTS,
+    showRadar: true,
+    autoExecute: false,
+  });
+  useEffect(()=>{ SS.applyTweaks(t, 'amber'); }, [t]);
+
+  const [now, setNow] = useState(Date.now());
+  const [signals, setSignals] = useState([]);          // empty until first scan
+  const [lastScanAt, setLastScanAt] = useState(null);
+  const [scanState, setScanState] = useState('idle');  // 'idle' | 'scanning' | 'done'
+  const [selected, setSelected] = useState(null);
+  const [scannerMode, setScannerMode] = useState('stealth');
+  const [recommendation] = useState(()=>window.pickRecommendation());
+  const [filters, setFilters] = useState({ minScore:0, dir:'ALL', tfs:[...TFS], setups:[...SETUPS], regimes:[...REGIMES] });
+  const [watchlist, setWatchlist] = useState([]);      // saved plans
+  const [logs, setLogs] = useState([]);
+  const [scanProg, setScanProg] = useState({ done:0, total:184, current:'—' });
+
+  // Mark-price ticker keeps levels feeling live AFTER a scan completes — but
+  // the signal LIST stays frozen (snapshot semantics).
+  useEffect(()=>{
+    const id = setInterval(()=>{
+      setNow(Date.now());
+      if (scanState === 'done'){
+        setSignals(prev => prev.map(s => ({ ...s, mark: s.mark*(1+(Math.random()-0.5)*0.0006) })));
+      }
+    }, 2000/(t.simSpeed||1));
+    return ()=>clearInterval(id);
+  }, [t.simSpeed, scanState]);
+
+  // RUN SCAN — single-shot sweep. Builds a progress stream then resolves to seed.
+  function runScan(){
+    if (scanState === 'scanning') return;
+    setScanState('scanning');
+    setSignals([]);
+    setLogs([]);
+    setScanProg({ done:0, total:184, current:'BTC/USDT' });
+    const universe = ['BTC','ETH','SOL','AVAX','LINK','TIA','OP','ARB','AAVE','TON','INJ','NEAR','SUI','APT','DOGE','PEPE','WIF','BONK','FET','RENDER'];
+    let i = 0;
+    const id = setInterval(()=>{
+      i++;
+      const sym = universe[i%universe.length]+'/USDT';
+      setScanProg(p => ({ done: Math.min(p.total, p.done + Math.ceil(p.total/24)), total:p.total, current: sym }));
+      // log entries (mostly rejections — score gate at work)
+      const passed = Math.random() < 0.18;
+      const time = new Date();
+      const tt = `${String(time.getHours()).padStart(2,'0')}:${String(time.getMinutes()).padStart(2,'0')}:${String(time.getSeconds()).padStart(2,'0')}`;
+      const reasons = passed? ['OB+FVG aligned · BOS','sweep + displacement','HTF + LTF aligned'] : ['HTF misaligned','score < gate','no fresh OB','displacement < 1.5 ATR','spread > limit','BTC veto active'];
+      setLogs(prev => [{ t:tt, sym, passed, reason:reasons[Math.floor(Math.random()*reasons.length)], conf: passed?+(7+Math.random()*1.5).toFixed(1):+(2+Math.random()*4).toFixed(1) }, ...prev].slice(0,30));
+      if (i >= 24){
+        clearInterval(id);
+        setScanProg(p => ({ done:p.total, total:p.total, current:'COMPLETE' }));
+        setSignals(SIGNAL_SEED);
+        setLastScanAt(Date.now());
+        setScanState('done');
+      }
+    }, 600/(t.simSpeed||1));
+  }
+
+  function toggleWatch(sig){
+    setWatchlist(prev => prev.find(w=>w.id===sig.id) ? prev.filter(w=>w.id!==sig.id) : [...prev, sig]);
+  }
+  function copyToClipboard(text){
+    try { navigator.clipboard.writeText(text); } catch(e){}
+  }
+  function copyPlan(sig){
+    const txt = `${sig.sym} · ${sig.dir} · ${sig.setup}\nEntry: ${sig.entry}\nStop:  ${sig.sl}\nTP1:   ${sig.tp1}\nTP2:   ${sig.tp2}\nR:R:   ${sig.rr.toFixed(1)}:1\nScore: ${sig.score.toFixed(1)} (${sig.conf})\nTF:    ${sig.tf}\nMode:  ${(window.SCANNER_MODES||[]).find(m=>m.id===scannerMode)?.name}`;
+    copyToClipboard(txt);
+  }
+
+  // Stage 1 — apply scanner mode gates (TF, score, trade type, R:R)
+  const modeGate = useMemo(() => applyModeGates(signals, scannerMode), [signals, scannerMode]);
+  // Stage 2 — apply the user's FilterRail on top of mode-passing plans
+  const filtered = useMemo(() => modeGate.passing.filter(s => {
+    if (s.score < filters.minScore) return false;
+    if (filters.dir !== 'ALL' && s.dir !== filters.dir) return false;
+    if (!filters.tfs.includes(s.tf)) return false;
+    if (!filters.setups.includes(s.setup)) return false;
+    if (!filters.regimes.includes(s.regime)) return false;
+    return true;
+  }), [modeGate, filters]);
+  const telemetry = modeGate.telemetry;
+
+  // When mode changes, clamp FilterRail's minScore to mode's floor (so users see
+  // a sensible baseline). They can still raise it higher.
+  useEffect(() => {
+    const mode = (window.SCANNER_MODES||[]).find(m => m.id === scannerMode);
+    if (!mode) return;
+    const floor = mode.minScore / 10;
+    setFilters(f => ({ ...f, minScore: Math.max(f.minScore, floor) }));
+  }, [scannerMode]);
+
+  const armedCount = filtered.filter(s=>s.score>=7).length;
+  // Expose action handlers for SignalCard's footer buttons
+  useEffect(()=>{
+    window.__scanner = {
+      toggleWatch,
+      isWatched: (id)=> watchlist.some(w=>w.id===id),
+      copyPlan,
+    };
+  }, [watchlist, scannerMode]);
+
+  return (
+    <div className="shell">
+      <SS.Topbar active="scanner" now={now}/>
+      <SS.PageHead
+        icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="var(--amber-2)" strokeWidth="1.7"/>
+          <path d="M12 12 L20 6" stroke="var(--amber-2)" strokeWidth="1.7" strokeLinecap="round"/>
+          <circle cx="12" cy="12" r="3" stroke="var(--amber-2)" strokeWidth="1.2"/>
+          <path d="M12 4 L12 6 M12 18 L12 20 M4 12 L6 12 M18 12 L20 12" stroke="var(--amber-2)" strokeWidth="1.2"/>
+        </svg>}
+        title="Scanner"
+        subtitle="real-time signal detection · 184 symbols · 6 timeframes"
+        badges={<>
+          {scanState==='idle'    && <SS.Chip>○ IDLE</SS.Chip>}
+          {scanState==='scanning'&& <SS.Chip kind="amber">● SCANNING · {scanProg.done}/{scanProg.total}</SS.Chip>}
+          {scanState==='done'    && <SS.Chip kind="green">✓ {signals.length} PLANS</SS.Chip>}
+          {watchlist.length>0    && <SS.Chip kind="cyan">★ {watchlist.length} SAVED</SS.Chip>}
+        </>}
+      />
+
+      <window.ScannerModePicker mode={scannerMode} setMode={setScannerMode} recommendation={recommendation}/>
+
+      {/* Top Command — manual RUN SCAN workflow */}
+      <section className="panel panel-accent" style={{marginBottom:18}}>
+        <SS.Reticle/>
+        <div className="corner-tag tl">// SCAN-CONTROL</div>
+        <div className="corner-tag tr">{scanState==='idle'?'AWAITING ORDERS':scanState==='scanning'?'SWEEPING UNIVERSE':'SNAPSHOT READY'}</div>
+        <div style={{padding:'18px 22px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'minmax(280px,2.4fr) auto auto auto',gap:18,alignItems:'center'}}>
+            <div>
+              <div className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.18em',textTransform:'uppercase',marginBottom:4}}>
+                {scanState==='idle' && '// READY · pick a mode and run a sweep'}
+                {scanState==='scanning' && '// SCANNING'}
+                {scanState==='done' && `// LAST SCAN · ${lastScanAt? new Date(lastScanAt).toLocaleTimeString() : '—'} · ${(window.SCANNER_MODES||[]).find(m=>m.id===scannerMode)?.name}`}
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:10,minHeight:30}}>
+                {scanState==='idle' && <span style={{fontFamily:'Share Tech Mono,monospace',fontSize:22,letterSpacing:'.06em',color:'var(--fg-3)'}}>idle · 0 plans</span>}
+                {scanState==='scanning' && <><span style={{fontFamily:'Share Tech Mono,monospace',fontSize:22,letterSpacing:'.06em',color:'var(--accent)'}}>{scanProg.current}</span><span className="cursor-blink" style={{color:'var(--accent)'}}>_</span></>}
+                {scanState==='done' && <span style={{fontFamily:'Share Tech Mono,monospace',fontSize:22,letterSpacing:'.06em',color:'var(--green-soft)'}}>✓ {signals.length} plans · {filtered.length} after filters</span>}
+              </div>
+              <div style={{position:'relative',height:4,marginTop:8,borderRadius:2,background:'rgba(0,0,0,.5)',overflow:'hidden'}}>
+                <div style={{position:'absolute',inset:0,width:((scanProg.done/scanProg.total)*100)+'%',background:scanState==='done'?'linear-gradient(90deg, rgba(34,197,94,.7), rgba(34,197,94,1))':'linear-gradient(90deg, rgba(251,191,36,.7), rgba(251,191,36,1))',boxShadow:'0 0 12px rgba(251,191,36,.5)',transition:'width .4s ease'}}/>
+              </div>
+            </div>
+            <div className="metric-tile" style={{minWidth:120}}><div className="metric-label">MODE</div><div className="metric-value hud-glow-amber" style={{fontSize:18}}>{(window.SCANNER_MODES||[]).find(m=>m.id===scannerMode)?.name||'—'}</div><div className="metric-sub">≥{(((window.SCANNER_MODES||[]).find(m=>m.id===scannerMode)?.minScore||0)/10).toFixed(1)} score · ≥{((window.SCANNER_MODES||[]).find(m=>m.id===scannerMode)?.minRR||0).toFixed(1)}R</div></div>
+            <div className="metric-tile" style={{minWidth:100}}><div className="metric-label">UNIVERSE</div><div className="metric-value">184</div><div className="metric-sub">symbols</div></div>
+            <button
+              className={`btn ${scanState==='scanning'?'':'btn-green'}`}
+              disabled={scanState==='scanning'}
+              onClick={runScan}
+              style={{padding:'18px 26px',fontSize:14,fontWeight:800,letterSpacing:'.18em',minWidth:180,opacity:scanState==='scanning'?.6:1}}
+            >
+              {scanState==='idle'    && '▶ RUN SCAN'}
+              {scanState==='scanning'&& '⌛ SCANNING…'}
+              {scanState==='done'    && '↻ RUN AGAIN'}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Main 3-col */}
+      <div className="layout-grid" style={{gridTemplateColumns:'260px 1fr 320px'}}>
+        {/* Left rail */}
+        <section className="panel" style={{position:'sticky',top:14,alignSelf:'start'}}>
+          <SS.SectionHead title="Filters"/>
+          <FilterRail filters={filters} setFilters={setFilters} counts={{passing:filtered.length, total:signals.length}}/>
+        </section>
+
+        {/* Center grid */}
+        <section className="panel">
+          <SS.SectionHead title={`Live Signals · ${filtered.length}`} right={<>
+            <SS.Chip kind="green">SORT · SCORE ↓</SS.Chip>
+            <SS.Chip>EXPORT</SS.Chip>
+          </>}/>
+          <div style={{padding:'14px 18px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            {scanState==='idle' && (
+              <div style={{gridColumn:'1 / -1',textAlign:'center',padding:'56px 20px',color:'var(--fg-3)',fontFamily:'JetBrains Mono,monospace'}}>
+                <div style={{fontSize:48,marginBottom:14,opacity:.4}}>⌖</div>
+                <div style={{fontSize:13,letterSpacing:'.18em',textTransform:'uppercase',marginBottom:6,color:'var(--fg)'}}>// scanner idle</div>
+                <div style={{fontSize:11,letterSpacing:'.1em',color:'var(--fg-4)',maxWidth:380,margin:'0 auto'}}>pick a detection mode above and press <span style={{color:'var(--green-soft)',fontWeight:700}}>▶ RUN SCAN</span> to sweep the universe for trade plans.</div>
+              </div>
+            )}
+            {scanState==='scanning' && (
+              <div style={{gridColumn:'1 / -1',textAlign:'center',padding:'56px 20px',color:'var(--accent)',fontFamily:'JetBrains Mono,monospace'}}>
+                <div style={{fontSize:13,letterSpacing:'.18em',textTransform:'uppercase'}}>// sweep in progress · {scanProg.current}<span className="cursor-blink">_</span></div>
+                <div style={{fontSize:10,marginTop:10,color:'var(--fg-4)'}}>{scanProg.done} / {scanProg.total} symbols analyzed</div>
+              </div>
+            )}
+            {scanState==='done' && filtered.length === 0 && (
+              <div style={{gridColumn:'1 / -1',textAlign:'center',padding:'40px 20px',color:'var(--fg-4)',fontFamily:'JetBrains Mono,monospace'}}>
+                <div style={{fontSize:12,letterSpacing:'.18em',textTransform:'uppercase',marginBottom:6}}>// 0 plans this cycle</div>
+                <div style={{fontSize:10,color:'var(--fg-4)'}}>score gate did its job — try a looser mode or different filters.</div>
+              </div>
+            )}
+            {filtered.map(s => <SignalCard key={s.id} sig={s} onSelect={setSelected} selected={selected && selected.id===s.id}/>)}
+          </div>
+        </section>
+
+        {/* Right rail */}
+        <div className="col">
+          {t.showRadar && (
+            <section className="panel">
+              <SS.SectionHead title="Radar" right={<SS.Chip kind="accent">{armedCount} HOT</SS.Chip>}/>
+              <div style={{padding:'14px 18px'}}>
+                <ScannerRadar signals={filtered}/>
+              </div>
+            </section>
+          )}
+
+          <section className="panel">
+            <SS.SectionHead title="Console" right={<SS.Chip kind="amber">// LIVE</SS.Chip>}/>
+            <div style={{padding:'12px 14px',background:'rgba(0,0,0,.45)',maxHeight:340,overflowY:'auto'}}>
+              <div className="term" style={{fontSize:11,color:'var(--accent)',marginBottom:8,opacity:.85}}>{`> tail -f scanner.log`}<span className="cursor-blink">_</span></div>
+              {/* Empty-cycle telemetry — shows WHY plans get dropped */}
+              <div style={{display:'grid',gridTemplateColumns:'repeat(5, 1fr)',gap:6,marginBottom:10,padding:'8px 10px',background:'rgba(0,0,0,.35)',border:'1px solid var(--border-soft)',borderRadius:4}}>
+                <div title="Symbols scanned this cycle"><div className="mono" style={{fontSize:8,color:'var(--fg-4)',letterSpacing:'.16em'}}>SCANNED</div><div className="mono" style={{fontSize:14,color:'var(--accent)',fontWeight:700}}>{telemetry.scanned}</div></div>
+                <div title="Failed mode TF gate (signal's tf not in mode.timeframes)"><div className="mono" style={{fontSize:8,color:'var(--fg-4)',letterSpacing:'.16em'}}>TF FAIL</div><div className="mono" style={{fontSize:14,color:'var(--red-2)',fontWeight:700}}>{telemetry.criticalTfFail}</div></div>
+                <div title={`Confluence score < ${(telemetry.minScore10||0).toFixed(1)}`}><div className="mono" style={{fontSize:8,color:'var(--fg-4)',letterSpacing:'.16em'}}>SCORE</div><div className="mono" style={{fontSize:14,color:'var(--red-2)',fontWeight:700}}>{telemetry.scoreGateFail}</div></div>
+                <div title="Trade type not allowed by active mode"><div className="mono" style={{fontSize:8,color:'var(--fg-4)',letterSpacing:'.16em'}}>TYPE</div><div className="mono" style={{fontSize:14,color:'var(--amber)',fontWeight:700}}>{telemetry.tradeTypeFail}</div></div>
+                <div title={`R:R < ${(telemetry.minRR||0).toFixed(1)}`}><div className="mono" style={{fontSize:8,color:'var(--fg-4)',letterSpacing:'.16em'}}>R:R</div><div className="mono" style={{fontSize:14,color:'var(--amber)',fontWeight:700}}>{telemetry.rrFail}</div></div>
+              </div>
+              <div className="mono" style={{fontSize:9,color:'var(--fg-4)',letterSpacing:'.14em',marginBottom:8,paddingBottom:6,borderBottom:'1px dashed var(--border-soft)'}}>
+                ▸ {telemetry.plans} plans surfaced · mode: <span style={{color:'var(--accent)'}}>{telemetry.mode}</span> · gate: ≥{(telemetry.minScore10||0).toFixed(1)} · ≥{(telemetry.minRR||0).toFixed(1)}R
+              </div>
+              {logs.map((l,i)=>(
+                <div className="log-row" key={i} style={{gridTemplateColumns:'46px 36px 1fr 32px'}}>
+                  <span className="t">{l.t}</span>
+                  <span className={l.passed?'pass':'rej'}>{l.passed?'PASS':'FILT'}</span>
+                  <span><span className="sym">{l.sym}</span><br/><span style={{color:'var(--fg-3)',fontSize:10}}>{l.reason}</span></span>
+                  <span className="mono" style={{fontSize:10,color:l.passed?'var(--green-soft)':'var(--fg-4)',textAlign:'right'}}>{l.conf.toFixed(1)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel">
+            <SS.SectionHead title="Watchlist" right={<SS.Chip kind="cyan">★ {watchlist.length}</SS.Chip>}/>
+            <div style={{padding:'10px 14px',display:'flex',flexDirection:'column',gap:6,minHeight:80}}>
+              {watchlist.length === 0 && (
+                <div className="mono" style={{fontSize:10,color:'var(--fg-4)',letterSpacing:'.14em',padding:'14px 0',textAlign:'center'}}>// star a plan to save it · persists across scans</div>
+              )}
+              {watchlist.map(w => (
+                <div key={w.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:'rgba(0,0,0,.3)',border:'1px solid var(--border-soft)',borderRadius:4}}>
+                  <SS.Chip kind={w.dir==='LONG'?'green':'red'} style={{fontSize:9}}>{w.dir==='LONG'?'▲':'▼'}</SS.Chip>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontFamily:'Share Tech Mono,monospace',fontSize:12,letterSpacing:'.06em'}}>{w.sym}</div>
+                    <div className="mono" style={{fontSize:9,color:'var(--fg-4)'}}>{w.setup} · {w.tf} · {w.score.toFixed(1)}</div>
+                  </div>
+                  <button className="btn" title="Copy" style={{padding:'3px 7px',fontSize:9}} onClick={()=>copyPlan(w)}>⧉</button>
+                  <button className="btn" title="Remove" style={{padding:'3px 7px',fontSize:9}} onClick={()=>toggleWatch(w)}>✕</button>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel">
+            <SS.SectionHead title="Send to Exchange"/>
+            <div style={{padding:'12px 14px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+              {['Binance','Bybit','OKX','Bitget'].map(ex => (
+                <button key={ex} className="btn" style={{padding:'8px 6px',fontSize:10,letterSpacing:'.1em'}} title={`Open ${ex} (manual exec)`}>↗ {ex.toUpperCase()}</button>
+              ))}
+              <div className="mono" style={{gridColumn:'1 / -1',fontSize:9,color:'var(--fg-4)',marginTop:4,letterSpacing:'.12em',textAlign:'center'}}>// pick a plan, copy levels, place manually</div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <SS.FooterStatus now={now} latency={42}/>
+
+      {selected && <SignalDetail sig={selected} onClose={()=>setSelected(null)} onTake={s=>{setSelected(null);}}/>}
+
+      <window.TweaksPanel title="Tweaks" defaultOpen={false}>
+        <SS.SharedTweaksControls t={t} setTweak={setTweak}/>
+        <window.TweakSection title="Scanner">
+          <window.TweakToggle label="Show Radar" value={t.showRadar} onChange={v=>setTweak('showRadar',v)}/>
+          <window.TweakToggle label="Auto-Execute" value={t.autoExecute} onChange={v=>setTweak('autoExecute',v)} hint="Bot takes signals automatically"/>
+        </window.TweakSection>
+      </window.TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script></body></html>
