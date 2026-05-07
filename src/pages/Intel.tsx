@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/utils/api';
 import { useMultiplePrices } from '@/hooks/usePriceData';
-import { ArrowUp, ArrowDown, Warning, CircleNotch } from '@phosphor-icons/react';
+import { ArrowUp, ArrowDown, Warning, CircleNotch, ArrowClockwise } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 import { formatPrice } from '@/utils/formatters';
 
@@ -246,12 +246,6 @@ function PriceRow({ symbol }: { symbol: string }) {
 export function Intel() {
   const { regime, fearGreed, cycle, loading, error, refresh } = useIntelData();
 
-  const [now, setNow] = useState(new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -265,37 +259,31 @@ export function Intel() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* ── HEADER ── */}
-      <header className="sticky top-0 z-40 border-b border-border/50 bg-background/90 backdrop-blur-md px-6 py-3 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Market Intelligence</div>
-          {regime && (
-            <div
-              className={cn(
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+        {/* Page title row — regime badge + refresh, no sticky bar */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-bold tracking-widest uppercase text-foreground">Market Intelligence</h1>
+            {regime && (
+              <div className={cn(
                 'text-xs font-bold tracking-[0.2em] uppercase px-2 py-0.5 rounded border',
-                regScore >= 70
-                  ? 'text-success border-success/40 bg-success/10'
-                  : regScore >= 45
-                  ? 'text-warning border-warning/40 bg-warning/10'
+                regScore >= 70 ? 'text-success border-success/40 bg-success/10'
+                  : regScore >= 45 ? 'text-warning border-warning/40 bg-warning/10'
                   : 'text-destructive border-destructive/40 bg-destructive/10',
-              )}
-            >
-              {compositeLabel}
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-4 text-xs font-mono text-muted-foreground">
-          <span>{now.toUTCString().slice(17, 25)} UTC</span>
+              )}>
+                {compositeLabel}
+              </div>
+            )}
+          </div>
           <button
             onClick={refresh}
-            className="text-primary hover:text-primary/80 transition-colors tracking-widest uppercase"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
           >
+            <ArrowClockwise size={13} />
             Refresh
           </button>
         </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
 
         {error && (
           <div className="flex items-center gap-2 text-warning text-sm p-3 rounded-lg border border-warning/30 bg-warning/10">
