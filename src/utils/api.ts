@@ -592,7 +592,16 @@ class ApiClient {
     const silent = options?.silent ?? (import.meta.env.MODE === 'production');
 
     return this.request<{
-      prices: Array<{ symbol: string; price: number; timestamp: string }>;
+      prices: Array<{
+        symbol: string;
+        price: number;
+        change24h: number;
+        changePercent24h: number;
+        high24h: number;
+        low24h: number;
+        volume24h: number;
+        timestamp: string;
+      }>;
       total: number;
       errors?: Array<{ symbol: string; error: string }>;
       exchange: string;
