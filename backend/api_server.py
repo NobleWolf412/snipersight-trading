@@ -2864,12 +2864,40 @@ async def get_live_trading_positions():
 
 
 @app.get("/api/live-trading/history")
-async def get_live_trading_history(limit: int = Query(default=50, ge=1, le=200)):
-    """Get completed live trade history."""
+async def get_live_trading_history(
+    limit: int = Query(default=50, ge=1, le=200),
+    source: str = Query(default="merged", pattern="^(merged|session|journal)$"),
+):
+    """
+    Get completed live trade history.
+
+    Default source=merged combines the in-memory current-session list with the
+    persistent trade journal, so the UI keeps showing trades after a restart
+    instead of going blank. source=session restores the previous behaviour;
+    source=journal returns only the persisted rows (useful for cross-session views).
+    """
     try:
-        trades = get_live_trading_service().get_trade_history(limit=limit)
-        return {"trades": trades, "total": len(trades)}
+        trades = get_live_trading_service().get_trade_history(limit=limit, source=source)
+        return {"trades": trades, "total": len(trades), "source": source}
     except Exception as e:
+        logger.error(f"Failed to get live trade history (source={source}): {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/integrations/phemex/healthz")
+async def get_phemex_healthz():
+    """
+    Phemex integration health snapshot.
+
+    Returns counters and connection state for the REST adapter, the WS feed,
+    the executor's fill-source breakdown, the periodic backfill loop, and the
+    journal vs in-memory row counts. Use this instead of trawling logs to
+    answer "is Phemex actually working right now?".
+    """
+    try:
+        return get_live_trading_service().get_phemex_healthz()
+    except Exception as e:
+        logger.error(f"Failed to build Phemex healthz: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

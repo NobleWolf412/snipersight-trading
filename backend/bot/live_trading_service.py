@@ -80,7 +80,23 @@ class LiveTradingService:
         self._scan_task: Optional[asyncio.Task] = None
         self._monitor_task: Optional[asyncio.Task] = None
         self._ws_task: Optional[asyncio.Task] = None
+        self._backfill_task: Optional[asyncio.Task] = None
+        self._ws_client: Optional[PhemexWebSocketClient] = None
         self._running = False
+
+        # Phemex fill backfill state — persisted between sessions so a restart
+        # does not re-scan history from epoch.
+        self._last_trade_sync_ts: Optional[int] = None
+        self._backfill_metrics: Dict[str, Any] = {
+            "runs_total": 0,
+            "errors_total": 0,
+            "rows_seen_total": 0,
+            "rows_new_total": 0,
+            "last_run_ts": None,
+            "last_error_ts": None,
+            "last_error_msg": None,
+        }
+        self._fills_log_path: Optional[Path] = None
 
         self._price_cache: Dict[str, float] = {}
         self._price_cache_refreshed_at: Optional[datetime] = None
@@ -212,6 +228,8 @@ class LiveTradingService:
         self._exchange_tp_orders = {}
         self._exchange_trailing_orders = {}
         self._ws_task = None
+        self._backfill_task = None
+        self._ws_client = None
 
         self.started_at = datetime.now(timezone.utc)
         self.stopped_at = None
@@ -250,17 +268,30 @@ class LiveTradingService:
 
         # Start WebSocket order feed for real-time fill detection (skipped in dry_run)
         if not config.dry_run and api_key and api_secret:
-            ws_client = PhemexWebSocketClient(
+            self._ws_client = PhemexWebSocketClient(
                 api_key=api_key,
                 api_secret=api_secret,
                 testnet=config.testnet,
                 on_order_update=self.executor.apply_ws_fill,
             )
             self._ws_task = asyncio.create_task(
-                ws_client.run(), name=f"live_ws_{self.session_id}"
+                self._ws_client.run(), name=f"live_ws_{self.session_id}"
             )
             self._ws_task.add_done_callback(self._task_done_callback)
             logger.info("Phemex WS order feed started")
+        else:
+            self._ws_client = None
+
+        # Periodic Phemex fill backfill — protects against fills lost while WS was
+        # disconnected or while the bot was offline. Skipped in dry_run.
+        if not config.dry_run and self.adapter is not None:
+            self._fills_log_path = self._session_log_dir / "phemex_fills.jsonl"
+            self._load_last_trade_sync_ts()
+            self._backfill_task = asyncio.create_task(
+                self._backfill_loop(), name=f"live_backfill_{self.session_id}"
+            )
+            self._backfill_task.add_done_callback(self._task_done_callback)
+            logger.info("Phemex fill backfill loop started (every 5 min)")
 
         return {
             "session_id": self.session_id,
@@ -279,7 +310,7 @@ class LiveTradingService:
         self.status = LiveBotStatus.STOPPED
         self.stopped_at = datetime.now(timezone.utc)
 
-        for task in (self._scan_task, self._monitor_task, self._ws_task):
+        for task in (self._scan_task, self._monitor_task, self._ws_task, self._backfill_task):
             if task:
                 task.cancel()
                 try:
@@ -320,7 +351,7 @@ class LiveTradingService:
         self._running = False
         self.status = LiveBotStatus.KILL_SWITCHED
 
-        for task in (self._scan_task, self._monitor_task, self._ws_task):
+        for task in (self._scan_task, self._monitor_task, self._ws_task, self._backfill_task):
             if task:
                 task.cancel()
                 try:
@@ -443,16 +474,256 @@ class LiveTradingService:
     def get_positions(self) -> List[Dict[str, Any]]:
         return self._get_active_positions()
 
-    def get_trade_history(self, limit: int = 50) -> List[Dict[str, Any]]:
-        trades = sorted(
-            self.completed_trades,
-            key=lambda t: t.exit_time or t.entry_time,
-            reverse=True,
-        )[:limit]
-        return [t.to_dict() for t in trades]
+    def get_trade_history(
+        self,
+        limit: int = 50,
+        source: str = "merged",
+    ) -> List[Dict[str, Any]]:
+        """
+        Return completed trade history.
+
+        source:
+          "session"  — only in-memory trades from the current session (legacy).
+          "journal"  — only persistent journal rows (survives restarts).
+          "merged"   — in-memory ∪ journal, deduped by trade_id, newest first.
+                       This is the default so the UI keeps showing trades
+                       after a backend restart instead of going blank.
+        """
+        in_mem = [t.to_dict() for t in self.completed_trades]
+
+        if source == "session":
+            in_mem.sort(key=lambda t: t.get("exit_time") or t.get("entry_time") or "", reverse=True)
+            return in_mem[:limit]
+
+        try:
+            journal_rows = get_trade_journal().query(
+                session_id=self.session_id,
+                limit=max(limit * 4, 200),
+            )
+        except Exception as e:
+            logger.warning(f"Trade history: journal read failed, falling back to in-memory only: {e}")
+            journal_rows = []
+
+        if source == "journal":
+            return journal_rows[:limit]
+
+        # merged: prefer in-memory (freshest), fill in from journal
+        seen_ids = {t.get("trade_id") for t in in_mem if t.get("trade_id")}
+        merged = list(in_mem)
+        for row in journal_rows:
+            tid = row.get("trade_id")
+            if tid and tid in seen_ids:
+                continue
+            merged.append(row)
+            if tid:
+                seen_ids.add(tid)
+        merged.sort(key=lambda t: t.get("exit_time") or t.get("entry_time") or "", reverse=True)
+        return merged[:limit]
 
     def get_activity_log(self, limit: int = 100) -> List[Dict[str, Any]]:
         return self.activity_log[-limit:]
+
+    # ------------------------------------------------------------------
+    # Phemex fill backfill (observability + recovery)
+    # ------------------------------------------------------------------
+
+    def _last_trade_sync_path(self) -> Optional[Path]:
+        if not self._session_log_dir:
+            return None
+        # Persist at project-root scope, not per-session, so a new session resumes
+        # from the prior sync timestamp.
+        project_root = Path(__file__).parent.parent.parent
+        state_dir = project_root / ".live_trading"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        return state_dir / "last_trade_sync.json"
+
+    def _load_last_trade_sync_ts(self) -> None:
+        path = self._last_trade_sync_path()
+        if not path or not path.exists():
+            self._last_trade_sync_ts = None
+            return
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            ts = data.get("last_synced_ts")
+            self._last_trade_sync_ts = int(ts) if ts is not None else None
+        except Exception as e:
+            logger.warning(f"Could not read last_trade_sync.json: {e}")
+            self._last_trade_sync_ts = None
+
+    def _save_last_trade_sync_ts(self) -> None:
+        path = self._last_trade_sync_path()
+        if not path or self._last_trade_sync_ts is None:
+            return
+        try:
+            path.write_text(
+                json.dumps({"last_synced_ts": self._last_trade_sync_ts}),
+                encoding="utf-8",
+            )
+        except Exception as e:
+            logger.warning(f"Could not persist last_trade_sync.json: {e}")
+
+    async def _backfill_loop(self) -> None:
+        """
+        Every 5 min, pull Phemex executed-trade history since the last sync
+        timestamp and append unseen rows to a session-scoped fills log.
+
+        This does NOT write into the trade_journal — the journal stores
+        round-trip CompletedTrades and aggregates win-rate from realized P&L.
+        Mixing raw fills in would corrupt those aggregates. Instead this loop
+        gives the operator an audit trail of every fill the exchange recorded
+        (whether or not WS captured it) and powers the
+        /api/integrations/phemex/healthz fill-source breakdown.
+        """
+        BACKFILL_INTERVAL = 300  # 5 minutes
+        # Run once shortly after start, then on the interval, so a freshly-started
+        # session immediately picks up fills that happened while offline.
+        await asyncio.sleep(15)
+        while self._running:
+            try:
+                await self._run_backfill_once()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                self._backfill_metrics["errors_total"] += 1
+                self._backfill_metrics["last_error_ts"] = int(time.time() * 1000)
+                self._backfill_metrics["last_error_msg"] = str(e)
+                logger.warning(f"Phemex backfill iteration failed: {e!r}")
+            try:
+                await asyncio.sleep(BACKFILL_INTERVAL)
+            except asyncio.CancelledError:
+                raise
+
+    async def _run_backfill_once(self) -> None:
+        if not self.adapter:
+            return
+        loop = asyncio.get_running_loop()
+        since = self._last_trade_sync_ts
+        trades = await loop.run_in_executor(
+            None,
+            lambda: self.adapter.fetch_my_trades(symbol=None, since=since, limit=200),
+        )
+        self._backfill_metrics["runs_total"] += 1
+        self._backfill_metrics["last_run_ts"] = int(time.time() * 1000)
+        self._backfill_metrics["rows_seen_total"] += len(trades)
+
+        if not trades:
+            return
+
+        # Track max timestamp seen so the next iteration narrows the window.
+        max_ts = since or 0
+        new_rows = 0
+        seen_ids = self._load_existing_fill_ids()
+        if self._fills_log_path is None:
+            return
+        try:
+            with self._fills_log_path.open("a", encoding="utf-8") as f:
+                for t in trades:
+                    ts = int(t.get("timestamp") or 0)
+                    if ts > max_ts:
+                        max_ts = ts
+                    fill_id = str(t.get("id") or f"{t.get('order')}-{ts}-{t.get('amount')}")
+                    if fill_id in seen_ids:
+                        continue
+                    record = {
+                        "fill_id": fill_id,
+                        "order_id": t.get("order"),
+                        "symbol": t.get("symbol"),
+                        "side": t.get("side"),
+                        "price": t.get("price"),
+                        "amount": t.get("amount"),
+                        "cost": t.get("cost"),
+                        "fee": t.get("fee"),
+                        "timestamp": ts,
+                        "datetime": t.get("datetime"),
+                        "session_id": self.session_id,
+                        "backfilled_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                    f.write(json.dumps(record, default=str) + "\n")
+                    seen_ids.add(fill_id)
+                    new_rows += 1
+        except Exception as e:
+            self._backfill_metrics["errors_total"] += 1
+            self._backfill_metrics["last_error_ts"] = int(time.time() * 1000)
+            self._backfill_metrics["last_error_msg"] = f"write: {e}"
+            logger.warning(f"Phemex backfill: failed to write fills log: {e}")
+            return
+
+        self._backfill_metrics["rows_new_total"] += new_rows
+        if max_ts and (since is None or max_ts > since):
+            # +1ms so the next call doesn't re-fetch the boundary trade.
+            self._last_trade_sync_ts = max_ts + 1
+            self._save_last_trade_sync_ts()
+        if new_rows:
+            logger.info(f"Phemex backfill: appended {new_rows} new fills (since={since})")
+
+    def _load_existing_fill_ids(self) -> set:
+        ids: set = set()
+        if not self._fills_log_path or not self._fills_log_path.exists():
+            return ids
+        try:
+            with self._fills_log_path.open("r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    fid = rec.get("fill_id")
+                    if fid:
+                        ids.add(fid)
+        except Exception as e:
+            logger.debug(f"Could not load existing fills: {e}")
+        return ids
+
+    def get_phemex_healthz(self) -> Dict[str, Any]:
+        """
+        Snapshot of every Phemex-integration counter and connection state.
+        Surfaced via GET /api/integrations/phemex/healthz so the operator can
+        see what the integration is doing without rummaging through logs.
+        """
+        now_ms = int(time.time() * 1000)
+        ws_metrics = self._ws_client.metrics.copy() if self._ws_client else {"enabled": False}
+        if self._ws_client:
+            ws_metrics["enabled"] = True
+            last_frame_ts = ws_metrics.get("last_frame_ts")
+            ws_metrics["seconds_since_last_frame"] = (
+                round((now_ms - last_frame_ts) / 1000.0, 1) if last_frame_ts else None
+            )
+        adapter_metrics = self.adapter.metrics.copy() if self.adapter else {}
+        executor_metrics = (
+            getattr(self.executor, "metrics", {}).copy() if self.executor else {}
+        )
+        return {
+            "session_id": self.session_id,
+            "status": self.status.value,
+            "ws": ws_metrics,
+            "rest": adapter_metrics,
+            "executor": executor_metrics,
+            "backfill": {
+                **self._backfill_metrics,
+                "last_synced_ts": self._last_trade_sync_ts,
+                "fills_log_path": str(self._fills_log_path) if self._fills_log_path else None,
+            },
+            "journal": {
+                "session_rows": self._safe_journal_count(session_only=True),
+                "total_rows": self._safe_journal_count(session_only=False),
+            },
+            "in_memory": {
+                "completed_trades": len(self.completed_trades),
+                "pending_orders": len(self._pending_plans),
+            },
+        }
+
+    def _safe_journal_count(self, session_only: bool) -> int:
+        try:
+            if session_only:
+                rows = get_trade_journal().query(session_id=self.session_id, limit=10_000)
+                return len(rows)
+            return get_trade_journal().count()
+        except Exception:
+            return -1
 
     # ------------------------------------------------------------------
     # Startup reconciliation
@@ -1516,8 +1787,10 @@ class LiveTradingService:
                 try:
                     with open(self._session_log_dir / "trades.jsonl", "a", encoding="utf-8") as f:
                         f.write(json.dumps(trade.to_dict(), default=str) + "\n")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to append trade {trade.trade_id} to session log: {e}"
+                    )
             self._log_activity("trade_closed", {
                 "position_id": pos.position_id,
                 "symbol": pos.symbol,
@@ -1525,11 +1798,20 @@ class LiveTradingService:
                 "exit_reason": exit_reason,
             })
 
-            # Write to journal
+            # Write to journal — use upsert so a re-run / replay doesn't duplicate.
             try:
-                get_trade_journal().append(trade.to_dict(), self.session_id or "live")
+                get_trade_journal().upsert(trade.to_dict(), self.session_id or "live")
             except Exception as e:
-                logger.warning(f"Failed to write live trade to journal: {e}")
+                # Surface persistence failures loudly — losing a trade row is the bug
+                # this whole rework is meant to prevent.
+                logger.error(
+                    f"Failed to write live trade {trade.trade_id} to journal: {e}",
+                    exc_info=True,
+                )
+                self._log_activity("journal_write_error", {
+                    "trade_id": trade.trade_id,
+                    "error": str(e),
+                })
 
     async def _close_all_positions(self, reason: str):
         """Send market exit orders to the exchange for every open position, then mark closed."""

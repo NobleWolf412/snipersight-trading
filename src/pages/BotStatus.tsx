@@ -15,6 +15,7 @@ import { HomeButton } from '@/components/layout/HomeButton';
 import { TacticalPanel } from '@/components/TacticalPanel';
 import { GauntletBreakdown } from '@/components/bot/GauntletBreakdown';
 import { WatchlistRadar } from '@/components/bot/WatchlistRadar';
+import { PhemexStatusPill } from '@/components/bot/PhemexStatusPill';
 import {
   liveTradingService,
   type LiveTradingStatus,
@@ -531,6 +532,10 @@ export function BotStatus() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const connectionErrorRef = useRef<string | null>(null);
   connectionErrorRef.current = connectionError;
+  // Distinguish "fetch failed" from "no trades yet" so the UI doesn't display
+  // a misleading empty state when the backend is actually erroring.
+  const [tradesLoaded, setTradesLoaded] = useState(false);
+  const [tradesError, setTradesError] = useState<string | null>(null);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -541,7 +546,11 @@ export function BotStatus() {
       if (connectionErrorRef.current) setConnectionError(null);
     } catch (e: any) {
       fetchFailCount.current += 1;
-      if (fetchFailCount.current >= 2) setConnectionError('Backend unreachable — data may be stale');
+      // Surface the failure on the first miss with the underlying message,
+      // not after two silent rounds with a generic banner. A stale UI that
+      // claims everything is fine is worse than an obvious error.
+      const detail = e?.message || 'Unknown error';
+      setConnectionError(`Backend unreachable: ${detail}`);
     } finally {
       setLoading(false);
     }
@@ -550,8 +559,22 @@ export function BotStatus() {
   const loadTrades = useCallback(async () => {
     try {
       const data = await liveTradingService.getHistory(50);
-      if (data?.trades) setTrades(data.trades);
-    } catch { /* ignore */ }
+      // The backend always returns {trades:[], total:0, source:"merged"} — treat
+      // a missing trades key as a shape mismatch, not an empty list.
+      if (data && Array.isArray(data.trades)) {
+        setTrades(data.trades);
+        setTradesError(null);
+      } else {
+        setTradesError('Trade history response missing trades array');
+      }
+    } catch (e: any) {
+      // Don't blank the existing trades on a transient error — show the prior
+      // list with a banner so the operator can tell the difference between
+      // "no trades" and "we couldn't fetch."
+      setTradesError(e?.message || 'Could not load trade history');
+    } finally {
+      setTradesLoaded(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -696,6 +719,8 @@ export function BotStatus() {
                               isRunning ? 'text-green-400 border-green-500/40 bg-green-500/10' : 'text-yellow-400 border-yellow-500/40 bg-yellow-500/10')}>
                               {isRunning ? 'LIVE' : 'PAUSED'}
                             </span>
+                            <PhemexStatusPill isRunning={isRunning} />
+
                           </div>
                           <div className="text-[11px] text-white/30 font-mono mt-1 flex items-center gap-2 flex-wrap">
                             <Clock size={10} className="opacity-50" />
@@ -1249,9 +1274,22 @@ export function BotStatus() {
                     </Badge>
                   </div>
                   <div className="relative z-10">
+                    {tradesError && (
+                      <div className="mb-3 px-3 py-2 border border-red-500/40 bg-red-500/10 rounded text-red-400 font-mono text-xs">
+                        TRADE HISTORY ERROR — {tradesError}
+                      </div>
+                    )}
                     {trades.length > 0 ? (
                       <div className="max-h-[480px] overflow-y-auto pr-1 space-y-2 scrollbar-thin scrollbar-thumb-border/50 scrollbar-track-transparent">
                         {trades.map((trade) => <TradeHistoryItem key={trade.trade_id} trade={trade} />)}
+                      </div>
+                    ) : !tradesLoaded ? (
+                      <div className="text-center py-12 border border-border border-dashed rounded-lg bg-background/50">
+                        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground/50">Loading trade history…</p>
+                      </div>
+                    ) : tradesError ? (
+                      <div className="text-center py-12 border border-red-500/30 border-dashed rounded-lg bg-background/50">
+                        <p className="font-mono text-xs uppercase tracking-widest text-red-400/80">Could not load trade history</p>
                       </div>
                     ) : (
                       <div className="text-center py-12 border border-border border-dashed rounded-lg bg-background/50">

@@ -185,19 +185,42 @@ class LiveTradingService {
 
   async getStatus(): Promise<LiveTradingStatus> {
     const res = await fetch(`${BASE}/live-trading/status`);
-    if (!res.ok) throw new Error(`Status failed: ${res.status}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || `Status failed: ${res.status}`);
+    }
     return res.json();
   }
 
   async reset(): Promise<any> {
     const res = await fetch(`${BASE}/live-trading/reset`, { method: 'POST' });
-    if (!res.ok) throw new Error(`Reset failed: ${res.status}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || `Reset failed: ${res.status}`);
+    }
     return res.json();
   }
 
-  async getHistory(limit = 50): Promise<{ trades: CompletedLiveTrade[]; total: number }> {
-    const res = await fetch(`${BASE}/live-trading/history?limit=${limit}`);
-    if (!res.ok) throw new Error(`History failed: ${res.status}`);
+  async getHistory(
+    limit = 50,
+    source: 'merged' | 'session' | 'journal' = 'merged',
+  ): Promise<{ trades: CompletedLiveTrade[]; total: number; source: string }> {
+    const res = await fetch(`${BASE}/live-trading/history?limit=${limit}&source=${source}`);
+    if (!res.ok) {
+      // Surface the backend's detail message instead of a bare status code so
+      // the UI banner can show what actually went wrong.
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || `History failed: ${res.status}`);
+    }
+    return res.json();
+  }
+
+  async getPhemexHealth(): Promise<Record<string, any>> {
+    const res = await fetch(`${BASE}/integrations/phemex/healthz`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || `Phemex healthz failed: ${res.status}`);
+    }
     return res.json();
   }
 
