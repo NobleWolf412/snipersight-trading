@@ -202,11 +202,11 @@ class PriceService {
       const priceData: PriceData = {
         symbol: item.symbol,
         price: Number(item.price) || 0,
-        change24h: 0,
-        changePercent24h: 0,
-        high24h: 0,
-        low24h: 0,
-        volume24h: 0,
+        change24h: Number(item.change24h) || 0,
+        changePercent24h: Number(item.changePercent24h) || 0,
+        high24h: Number(item.high24h) || 0,
+        low24h: Number(item.low24h) || 0,
+        volume24h: Number(item.volume24h) || 0,
         timestamp: new Date(item.timestamp).getTime() || Date.now(),
         exchange: data.exchange,
       };
@@ -248,11 +248,11 @@ class PriceService {
           const priceData: PriceData = {
             symbol: item.symbol,
             price: Number(item.price) || 0,
-            change24h: 0,
-            changePercent24h: 0,
-            high24h: 0,
-            low24h: 0,
-            volume24h: 0,
+            change24h: Number(item.change24h) || 0,
+            changePercent24h: Number(item.changePercent24h) || 0,
+            high24h: Number(item.high24h) || 0,
+            low24h: Number(item.low24h) || 0,
+            volume24h: Number(item.volume24h) || 0,
             timestamp: new Date(item.timestamp).getTime() || Date.now(),
             exchange: data.exchange,
           };

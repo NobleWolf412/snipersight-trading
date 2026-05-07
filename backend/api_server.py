@@ -1621,6 +1621,11 @@ async def get_prices(
                 result = {
                     "symbol": symbol,
                     "price": float(last_price) if last_price is not None else 0.0,
+                    "change24h": float(ticker.get("change") or 0.0),
+                    "changePercent24h": float(ticker.get("percentage") or 0.0),
+                    "high24h": float(ticker.get("high") or 0.0),
+                    "low24h": float(ticker.get("low") or 0.0),
+                    "volume24h": float(ticker.get("quoteVolume") or ticker.get("baseVolume") or 0.0),
                     "timestamp": dt_iso,
                 }
 

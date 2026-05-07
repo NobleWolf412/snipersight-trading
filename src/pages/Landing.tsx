@@ -6,6 +6,8 @@ import { useTelemetry } from '@/hooks/useTelemetry';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { LandingProvider, useLandingData } from '@/context/LandingContext';
 import { LandingLoader } from '@/components/landing/LandingLoader';
+import { LiveTicker } from '@/components/LiveTicker';
+import { SessionIndicator } from '@/components/SessionIndicator/SessionIndicator';
 
 function LandingContent() {
   const { system } = useTelemetry();
@@ -38,8 +40,13 @@ function LandingContent() {
         {/* Hero Section - Full Height */}
         <HeroSection />
 
-        {/* Animated Tactical Page Break */}
-        {/* <TacticalDivider className="mt-24 mb-32 relative z-50" height="h-48" /> */}
+        {/* Live Market Ticker */}
+        <LiveTicker />
+
+        {/* Session + Animated Tactical Page Break */}
+        <div className="flex justify-center px-4 py-6">
+          <SessionIndicator />
+        </div>
 
         {/* Complete Trading Arsenal - The only remaining section */}
         <FeatureTabs />
