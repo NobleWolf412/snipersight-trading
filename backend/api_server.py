@@ -434,6 +434,12 @@ scanner_service = configure_scanner_service(
 app.include_router(scanner_router)
 app.include_router(data_router)
 
+# Observability router — Phase 1 surfaces (trace, confluence, universe, cycles).
+# See backend/routers/observability.py for the full route table and the
+# auth/access boundary doc.
+from backend.routers.observability import router as observability_router  # noqa: E402
+app.include_router(observability_router)
+
 
 import asyncio
 import httpx

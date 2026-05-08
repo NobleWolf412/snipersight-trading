@@ -664,8 +664,9 @@ async def get_signals(
             if IngestionPipeline:
                 orchestrator.ingestion_pipeline = IngestionPipeline(current_adapter)
 
-            # Run scan pipeline
-            trade_plans, rejection_summary = orchestrator.scan(symbols)
+            # Run scan pipeline (with heartbeat — emits a cycle record on
+            # success and failure; powers /api/cycles/* observability).
+            trade_plans, rejection_summary = orchestrator.scan_with_heartbeat(symbols)
 
         if cleanup_old_scan_jobs:
             cleanup_old_scan_jobs()

@@ -561,17 +561,25 @@ class Orchestrator:
         )
 
         # Build rejection summary
+        # by_reason is derived from rejection_stats keys (a defaultdict) so
+        # pre-scoring gate names (structural_anchor / btc_impulse /
+        # regime_alignment / conflict_density) and any future categories
+        # surface automatically without needing this dict updated.
+        by_reason: Dict[str, int] = {k: len(v) for k, v in rejection_stats.items()}
+        # Aggregate FEATURES (SMC + indicator + data failures from diagnostics)
+        # into a single bucket — these don't roll up into rejection_stats today.
+        features_count = (
+            len(self.diagnostics.get("smc_rejections", []))
+            + len(self.diagnostics.get("indicator_failures", []))
+            + len(self.diagnostics.get("data_failures", []))
+        )
+        if features_count > 0:
+            by_reason["features"] = features_count
         rejection_summary = {
+            "run_id": run_id,
+            "start_time": start_time,
             "total_rejected": rejected_count,
-            "by_reason": {
-                "low_confluence": len(rejection_stats["low_confluence"]),
-                "no_data": len(rejection_stats["no_data"]),
-                "missing_critical_tf": len(rejection_stats["missing_critical_tf"]),
-                "risk_validation": len(rejection_stats["risk_validation"]),
-                "no_trade_plan": len(rejection_stats["no_trade_plan"]),
-                "cooldown_active": len(rejection_stats["cooldown_active"]),
-                "errors": len(rejection_stats["errors"]),
-            },
+            "by_reason": by_reason,
             "details": rejection_stats,
             "direction_stats": direction_stats,
             "regime": (
@@ -632,6 +640,110 @@ class Orchestrator:
             s.metadata["scan_rank"] = i + 1
 
         return signals, rejection_summary
+
+    def scan_with_heartbeat(
+        self,
+        symbols: List[str],
+        progress_callback: Optional[Callable[[int, int, str, bool, Optional[Dict[str, Any]]], None]] = None,
+    ) -> tuple[List[TradePlan], Dict[str, Any]]:
+        """
+        Wrapper around scan() that emits a cycle heartbeat on EVERY cycle —
+        success or failure. Prefer this in production scan loops over scan()
+        directly, otherwise a mid-cycle exception leaves no record of the
+        attempt and that cycle becomes invisible (worst diagnostic outcome
+        per CLAUDE.md §11).
+
+        Failed scans emit a heartbeat with failed=True, exception_class
+        populated, and partial counts (zero plans/zero rejections — the
+        body never built them). Mass-conservation assertion is skipped
+        for failed cycles since partial counts are explicitly incomplete.
+
+        Re-raises the original exception after the heartbeat lands.
+        """
+        from backend.engine import cycle_heartbeat as _hb
+
+        # Pre-capture: these survive even if scan() raises before producing them.
+        outer_start = time.time()
+        signals: List[TradePlan] = []
+        rejection_summary: Dict[str, Any] = {}
+        failed = False
+        exc_class: Optional[str] = None
+
+        try:
+            signals, rejection_summary = self.scan(symbols, progress_callback)
+            return signals, rejection_summary
+        except Exception as e:
+            failed = True
+            exc_class = type(e).__name__
+            raise
+        finally:
+            # The heartbeat emit must never itself raise — that would mask
+            # the original scan exception. Wrapped in try/except.
+            try:
+                ts_end = time.time()
+                # Pull run_id and start_time from rejection_summary if scan got
+                # that far; otherwise fall back to outer pre-capture values.
+                run_id = rejection_summary.get("run_id") or "preflight-failure"
+                start_time = rejection_summary.get("start_time") or outer_start
+
+                by_reason = (rejection_summary.get("by_reason") or {})
+                # Materialize as plain dict (defaultdict serialization quirk)
+                signals_per_stage: Dict[str, int] = {k: int(v) for k, v in by_reason.items()}
+
+                # Bottleneck: highest-count stage that's > 0. Count-based by
+                # design — rate-based would require stage-entering counts the
+                # orchestrator does not expose today (gauntlet is implicit).
+                bottleneck_stage: Optional[str] = None
+                non_zero = {k: v for k, v in signals_per_stage.items() if v > 0}
+                if non_zero:
+                    bottleneck_stage = max(non_zero, key=lambda k: non_zero[k])
+
+                scan_interval = float(getattr(self.config, "scan_interval_seconds", 60.0))
+
+                regime_payload = None
+                if getattr(self, "current_regime", None) is not None:
+                    cr = self.current_regime
+                    regime_payload = {
+                        "composite": getattr(cr, "composite", "unknown"),
+                        "score": float(getattr(cr, "score", 0.0)),
+                    }
+
+                snapshot = {
+                    "ts_start": float(start_time),
+                    "ts_end": float(ts_end),
+                    "wall_ms": int((ts_end - start_time) * 1000),
+                    "run_id": run_id,
+                    "mode": getattr(self.scanner_mode, "name", None),
+                    "symbols_scanned": len(symbols),
+                    "plans_emitted": len(signals),
+                    "total_rejected": int(rejection_summary.get("total_rejected", 0)),
+                    "signals_per_stage": signals_per_stage,
+                    "bottleneck_stage": bottleneck_stage,
+                    "direction_stats": dict(rejection_summary.get("direction_stats") or {}),
+                    "regime": regime_payload,
+                    # next_cycle_eta_ts is PREDICTED, not guaranteed. Bot
+                    # pause, dynamic interval, manual stop all invalidate it.
+                    "next_cycle_eta_ts": float(ts_end + scan_interval),
+                    "failed": bool(failed),
+                    "exception_class": exc_class,
+                }
+
+                if not _hb.record(snapshot):
+                    logger.warning(
+                        f"cycle_heartbeat record returned False for run_id={run_id}; "
+                        f"snapshot will be missing from /api/cycles/last"
+                    )
+            except AssertionError:
+                # Mass conservation breach inside record() — propagate so
+                # the regression is loud. The original scan exception (if any)
+                # has already been raised; this assertion is the *new* finding.
+                raise
+            except Exception as hb_e:
+                _safe_run_id = (rejection_summary.get("run_id") if isinstance(rejection_summary, dict) else None) or "unknown"
+                logger.warning(
+                    f"cycle_heartbeat emit failed for run_id={_safe_run_id}: {hb_e}",
+                    exc_info=True,
+                )
 
     def _extract_htf_context(
         self,

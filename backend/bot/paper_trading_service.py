@@ -1450,7 +1450,7 @@ class PaperTradingService:
             loop = asyncio.get_running_loop()
             trade_plans, rejection_summary = await loop.run_in_executor(
                 None,
-                lambda: self.orchestrator.scan(
+                lambda: self.orchestrator.scan_with_heartbeat(
                     symbols=scan_symbols,
                     progress_callback=_progress_callback,
                 ),

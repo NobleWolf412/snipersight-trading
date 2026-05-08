@@ -523,6 +523,23 @@ class LiveTradingService:
     def get_activity_log(self, limit: int = 100) -> List[Dict[str, Any]]:
         return self.activity_log[-limit:]
 
+    def get_signal_by_id(self, signal_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Return the most recent signal_log entry matching the given id, or None.
+
+        Signal ids follow the format `{symbol}_{scan_number}_{tf}_{direction}`
+        (see _log_signal). The Pipeline Tracer endpoint uses this to fetch
+        the gauntlet outcome for a single signal.
+        """
+        if not signal_id:
+            return None
+        # Walk newest-first so a re-emitted (symbol, tf, side) on a later scan
+        # returns its latest entry rather than a stale one.
+        for entry in reversed(self.signal_log):
+            if entry.get("id") == signal_id:
+                return entry
+        return None
+
     # ------------------------------------------------------------------
     # Phemex fill backfill (observability + recovery)
     # ------------------------------------------------------------------
@@ -1075,7 +1092,7 @@ class LiveTradingService:
             loop = asyncio.get_running_loop()
             trade_plans, rejection_summary = await loop.run_in_executor(
                 None,
-                lambda: self.orchestrator.scan(
+                lambda: self.orchestrator.scan_with_heartbeat(
                     symbols=scan_symbols,
                     progress_callback=_progress_callback,
                 ),
@@ -1348,15 +1365,27 @@ class LiveTradingService:
         entry_val = getattr(ez_obj, "near_entry", 0.0) or 0.0
         stop_val = getattr(sl_obj, "level", 0.0) or 0.0
 
+        _symbol = getattr(plan, "symbol", "Unknown")
+        _direction = getattr(plan, "direction", "LONG")
+        _tf = getattr(plan, "primary_timeframe", None) or getattr(plan, "signal_timeframe", None) or "?"
+        _scan_no = self.stats.scans_completed
+        # Stable signal id — same (symbol, scan, tf, side) yields the same id.
+        # Slashes from the symbol are replaced with '-' so the id is safe in
+        # URL path segments (e.g. /api/signals/{id}/trace). The original
+        # symbol is still exposed verbatim in the entry's "symbol" field.
+        _id_safe_symbol = _symbol.replace("/", "-")
+        _signal_id = f"{_id_safe_symbol}_{_scan_no}_{_tf}_{str(_direction).lower()}"
+
         entry = {
+            "id": _signal_id,
             "timestamp": _now.isoformat(),
-            "scan_number": self.stats.scans_completed,
-            "symbol": getattr(plan, "symbol", "Unknown"),
-            "direction": getattr(plan, "direction", "LONG"),
+            "scan_number": _scan_no,
+            "symbol": _symbol,
+            "direction": _direction,
             "confluence": round(float(getattr(plan, "confidence_score", 0.0)), 1),
             "setup_type": getattr(plan, "setup_type", "unknown"),
             "trade_type": getattr(plan, "trade_type", "unknown"),
-            "timeframe": getattr(plan, "primary_timeframe", None) or getattr(plan, "signal_timeframe", None),
+            "timeframe": _tf,
             "entry_zone": round(float(entry_val), 6),
             "stop_loss": round(float(stop_val), 6),
             "rr": round(float(getattr(plan, "risk_reward", 0.0) or 0.0), 2),
@@ -1372,6 +1401,36 @@ class LiveTradingService:
         self.signal_log.append(entry)
         if len(self.signal_log) > 200:
             self.signal_log = self.signal_log[-200:]
+        # Cache the confluence breakdown (if the plan carries one) so the
+        # /api/signals/{id}/confluence endpoint can serve it without re-scoring.
+        # Surfacing failures matters: a silent drop here would orphan the
+        # signal_log entry from its breakdown, which is exactly the kind of
+        # observability hole this whole rebuild is fixing.
+        _br = getattr(plan, "confluence_breakdown", None)
+        if _br is not None:
+            try:
+                from backend.strategy.confluence.cache import record as _record_breakdown
+                if not _record_breakdown(_signal_id, _br):
+                    logger.warning(
+                        f"confluence cache record returned False for {_signal_id} "
+                        f"(symbol={_symbol}, scan={_scan_no}, tf={_tf}, dir={_direction}); "
+                        f"breakdown will be missing from /api/signals/{{id}}/confluence"
+                    )
+            except Exception as _be:
+                logger.warning(
+                    f"confluence cache record raised for {_signal_id}: {_be}",
+                    exc_info=True,
+                )
+        else:
+            # Plan reached _log_signal without a breakdown attached.
+            # Some pre-execution gates short-circuit before scoring, so this
+            # is expected for some reason_types but worth flagging at info.
+            _reason_type = extra.get("reason_type", "?")
+            if _reason_type not in ("max_positions", "has_position", "pending_order", "pending_fill"):
+                logger.info(
+                    f"signal {_signal_id} reached _log_signal with no confluence_breakdown "
+                    f"(reason_type={_reason_type}, result={result}); cache lookup will miss"
+                )
         if self._session_log_dir:
             try:
                 with open(self._session_log_dir / "signals.jsonl", "a", encoding="utf-8") as f:
