@@ -1,13 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+/* ============================================================
+   SniperSight HUD — index.css
+   Layered: prototype HUD theme (top) + existing Tailwind/shadcn (below)
+   Tailwind import retained until Phase 4 finishes restyling kept components.
+   ============================================================ */
+
+/* Fonts: prototype uses Share Tech Mono + VT323 + JetBrains Mono + Inter */
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
 @import "tailwindcss";
-@import "tw-animate-css";
 
-@layer base {
-  * {
-    @apply border-border
-  }
-}
+/* HUD theme: classes loaded here; token override re-applied at END
+   of file to win cascade against the legacy :root block below. */
+@import "./styles/hud.css";
 
 :root {
   /* ========================================
@@ -808,4 +812,46 @@ body {
   border-radius: 50%;
   box-shadow: 0 0 10px #00ff88;
   z-index: 10;
+}
+
+/* ============================================================
+   PROTOTYPE TOKEN OVERRIDE — re-declared at end so HUD tokens
+   win the cascade against the legacy :root block above.
+   New HUD components reference these vars; legacy Tailwind/shadcn
+   components retain their tokens above (different names).
+   Token collisions: --accent, --card, --border are intentionally
+   overridden here so the prototype look applies globally.
+   Full Tailwind/shadcn ejection happens in Phase 4 + Phase 7.
+   ============================================================ */
+:root {
+  --bg: oklch(0.18 0.008 120);
+  --bg-2: oklch(0.22 0.010 125);
+  --card: oklch(0.26 0.012 125);
+  --card-2: oklch(0.30 0.012 125);
+  --border: oklch(0.36 0.015 130);
+  --border-soft: oklch(0.32 0.015 130 / 0.6);
+  --fg: oklch(0.94 0.012 150);
+  --fg-2: oklch(0.78 0.012 150);
+  --fg-3: oklch(0.58 0.015 150);
+  --fg-4: oklch(0.42 0.012 150);
+  --green: #00ffaa;
+  --green-soft: #4ade80;
+  --green-bg: rgba(0,255,170,.10);
+  --green-border: rgba(0,255,170,.30);
+  --amber: #ffc266;
+  --amber-2: #fbbf24;
+  --amber-bg: rgba(251,191,36,.10);
+  --amber-border: rgba(251,191,36,.35);
+  --red: #ff6464;
+  --red-2: #f87171;
+  --red-bg: rgba(248,113,113,.10);
+  --red-border: rgba(248,113,113,.35);
+  --blue: #60a5fa;
+  --blue-bg: rgba(96,165,250,.10);
+  --blue-border: rgba(96,165,250,.30);
+  --cyan: #22d3ee;
+  --purple: #c084fc;
+  --accent: var(--green);
+  --accent-bg: var(--green-bg);
+  --accent-border: var(--green-border);
 }
