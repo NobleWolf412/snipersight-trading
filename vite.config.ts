@@ -1,6 +1,9 @@
-import tailwindcss from "@tailwindcss/vite";
+// Phase 7 sub-step 5: `@tailwindcss/vite` plugin removed alongside the
+// CSS-side `@import "tailwindcss"` and `@theme`/`@config` directives.
+// All HUD pages now use vanilla CSS sourced from src/styles/*.css and
+// the `:root` token block in src/index.css.
 import reactSwc from "@vitejs/plugin-react-swc";
-import { defineConfig, PluginOption } from "vite";
+import { defineConfig } from "vite";
 
 import { resolve } from 'path'
 
@@ -30,7 +33,6 @@ const backendUrl = process.env.BACKEND_URL || 'http://localhost:8001';
 export default defineConfig({
   plugins: [
     reactSwc(),
-    tailwindcss(),
   ],
   server: {
     port: frontendPort,

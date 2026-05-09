@@ -1,5 +1,6 @@
+/* Phase 7 sub-step 5: `@config '../tailwind.config.js'` removed —
+   Tailwind ejected. main.css is now a pure import barrel for the
+   three vanilla CSS layers. */
 @import './index.css';
 @import './styles/hud-effects.css';
 @import './styles/hud-3d.css';
-
-@config '../tailwind.config.js';
