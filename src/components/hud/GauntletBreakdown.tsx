@@ -27,10 +27,17 @@
  *     `<PipelineTracer />` with it. Older signal_log entries lacking the
  *     `id` field fall back to a non-interactive row.
  *
+ * Mode-delta strip (Phase 3g.ii.g):
+ *   - When the bottleneck is CONFLUENCE and the caller supplies
+ *     `scannerModes` + `currentModeName`, a small strip under the pill
+ *     reports for each *other* mode: "switching to STRIKE (≥62) would
+ *     have unblocked 14 of 18". Computed client-side by comparing each
+ *     CONFLUENCE-rejected signal's `confluence` score against each
+ *     other mode's `min_confluence_score`. Direction-agnostic by design
+ *     — confluence scoring is symmetric across long/short (see
+ *     CLAUDE.md §10 #3).
+ *
  * Deferred to later 3g.ii sub-steps:
- *   - Mode-delta tooltip on the bottleneck pill — "If you switched to
- *     STRIKE (≥68), 14 of these 18 would have passed." Lands with the
- *     mode picker integration in 3g.ii.f.
  *   - ConfluenceFactorList embed inside expanded CONFLUENCE rows
  *     (3g.ii.d).
  *
@@ -41,7 +48,7 @@
  * Plan reference: peppy-sniffing-owl §3e (Bot · GauntletBreakdown).
  */
 import { useMemo, useState } from 'react';
-import type { SignalLogEntry } from '@/utils/api';
+import type { ScannerMode, SignalLogEntry } from '@/utils/api';
 import { Chip, SectionHead } from '@/components/hud';
 
 // ─── Stage taxonomy (unchanged from prior component) ───────────────────
@@ -304,9 +311,55 @@ interface Props {
    * If omitted, rows are non-interactive (purely informational table).
    */
   onSignalClick?: (id: string) => void;
+  /**
+   * Scanner-mode catalog from `useScanner().scannerModes`. When supplied
+   * AND the bottleneck stage is CONFLUENCE, the strip below the
+   * bottleneck pill renders a per-mode delta showing how many of the
+   * CONFLUENCE-rejected signals would have passed each *other* mode's
+   * `min_confluence_score`. Omit to suppress the strip entirely.
+   */
+  scannerModes?: ScannerMode[];
+  /** Active mode name (excluded from the delta strip — comparing X to X is noise). */
+  currentModeName?: string | null;
 }
 
-export function GauntletBreakdown({ signals, onSignalClick }: Props) {
+interface ModeDelta {
+  name: string;
+  threshold: number;
+  unblocked: number;
+  total: number;
+}
+
+function computeModeDeltas(
+  bottleneckSignals: SignalLogEntry[],
+  scannerModes: ScannerMode[],
+  currentModeName: string | null | undefined,
+): ModeDelta[] {
+  // §16 #3 mass conservation: every signal counted is part of `total`;
+  // `unblocked <= total` per mode by construction. Negative tests
+  // (signals.length === 0 or no scanner modes) return [] so the strip
+  // does not render.
+  if (bottleneckSignals.length === 0 || scannerModes.length === 0) return [];
+  const total = bottleneckSignals.length;
+  const cur = (currentModeName ?? '').toLowerCase();
+  const out: ModeDelta[] = [];
+  for (const m of scannerModes) {
+    if (m.name.toLowerCase() === cur) continue;
+    let unblocked = 0;
+    for (const s of bottleneckSignals) {
+      if (typeof s.confluence === 'number' && s.confluence >= m.min_confluence_score) {
+        unblocked += 1;
+      }
+    }
+    out.push({ name: m.name, threshold: m.min_confluence_score, unblocked, total });
+  }
+  // Sort descending by unblocked so the most-helpful alternative leads.
+  // Tie-break by lower threshold (less restrictive ranks higher).
+  out.sort((a, b) => b.unblocked - a.unblocked || a.threshold - b.threshold);
+  return out;
+}
+
+export function GauntletBreakdown({ signals, onSignalClick, scannerModes, currentModeName }: Props) {
   const [detail, setDetail] = useState(false);
   const [filterStage, setFilterStage] = useState<GauntletStage | null>(null);
 
@@ -330,6 +383,17 @@ export function GauntletBreakdown({ signals, onSignalClick }: Props) {
 
   const filtered = filterStage ? staged.filter((s) => s.stage === filterStage) : staged;
   const visibleRows = detail || filterStage ? filtered : [];
+
+  // Mode-delta strip: only meaningful when CONFLUENCE is the bottleneck.
+  // Pass the actual rejected-at-CONFLUENCE signals (not all staged) so the
+  // "would have unblocked N of M" math reflects the population the operator
+  // would actually recover by switching mode.
+  const modeDeltas = useMemo(() => {
+    if (!bottleneck || bottleneck.id !== 'CONFLUENCE') return [];
+    if (!scannerModes || scannerModes.length === 0) return [];
+    const conflSignals = staged.filter((s) => s.stage === 'CONFLUENCE');
+    return computeModeDeltas(conflSignals, scannerModes, currentModeName);
+  }, [bottleneck, scannerModes, currentModeName, staged]);
 
   // ─── Empty state ──────────────────────────────────────────────────
   if (signals.length === 0) {
@@ -421,6 +485,68 @@ export function GauntletBreakdown({ signals, onSignalClick }: Props) {
           >
             {bottleneck.cta} {'\u2192'}
           </a>
+        </div>
+      )}
+
+      {/* Mode-delta strip — CONFLUENCE bottleneck only, requires scannerModes prop */}
+      {modeDeltas.length > 0 && (
+        <div
+          style={{
+            margin: '8px 18px 0',
+            padding: '8px 14px',
+            border: '1px dashed var(--amber-border)',
+            borderRadius: 6,
+            background: 'rgba(251,191,36,.04)',
+          }}
+        >
+          <div
+            className="mono"
+            style={{
+              fontSize: 9,
+              color: 'var(--fg-4)',
+              letterSpacing: '.18em',
+              marginBottom: 6,
+            }}
+          >
+            // MODE DELTA · would-pass count if you switched modes
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {modeDeltas.map((d) => {
+              const helpful = d.unblocked > 0;
+              return (
+                <div
+                  key={d.name}
+                  className="mono"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '3px 10px',
+                    border: `1px solid ${helpful ? 'var(--amber-border)' : 'var(--border-soft)'}`,
+                    borderRadius: 4,
+                    background: helpful ? 'rgba(251,191,36,.08)' : 'transparent',
+                    fontSize: 10,
+                    letterSpacing: '.10em',
+                  }}
+                >
+                  <span style={{ color: 'var(--fg-2)', fontWeight: 700 }}>
+                    {d.name.toUpperCase()}
+                  </span>
+                  <span style={{ color: 'var(--fg-4)' }}>
+                    ({'\u2265'}{d.threshold.toFixed(0)})
+                  </span>
+                  <span
+                    style={{
+                      color: helpful ? 'var(--amber-2)' : 'var(--fg-4)',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {d.unblocked} / {d.total}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

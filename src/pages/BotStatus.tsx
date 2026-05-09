@@ -48,8 +48,12 @@
  * checks. Failed steps surface CTAs that deep-link to the right tuning
  * surface (Intel for regime, Scanner for confluence-mode tuning, etc.).
  *
+ * Phase 3g.ii.g landed: Mode-delta strip on the GauntletBreakdown
+ * bottleneck pill — when CONFLUENCE is the bottleneck, shows for each
+ * other scanner mode how many of the rejected signals would have passed
+ * its `min_confluence_score`. Direction-agnostic per CLAUDE.md §10 #3.
+ *
  * Deferred to Phase 3g.ii (with inline `◌ deferred` placeholders):
- *   - Mode-delta tooltip on bottleneck pill.
  *   - PositionChartModal — chart-level modal on each open position row.
  *
  * Synthetic-but-disclosed: none. Every value rendered is sourced from
@@ -87,6 +91,7 @@ import {
   type LivePosition,
   type LiveTradingStatus,
 } from '@/services/liveTradingService';
+import { useScanner } from '@/context/ScannerContext';
 
 // ─── Formatters ─────────────────────────────────────────────────────────
 function fmtDuration(seconds: number): string {
@@ -335,6 +340,11 @@ function StatusPill({ status }: { status: LiveTradingStatus['status'] }) {
 // ─── Main Component ────────────────────────────────────────────────────
 export function BotStatus() {
   const navigate = useNavigate();
+  // Scanner-mode catalog drives the GauntletBreakdown mode-delta strip.
+  // Selector is intentionally wide — useScanner is mounted at the App
+  // root so this is always available; if it ever isn't (test harness),
+  // GauntletBreakdown gracefully no-ops the strip when modes are empty.
+  const { scannerModes, selectedMode } = useScanner();
   const [status, setStatus] = useState<LiveTradingStatus | null>(null);
   const [trades, setTrades] = useState<CompletedLiveTrade[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1075,6 +1085,8 @@ export function BotStatus() {
           <GauntletBreakdown
             signals={signalLog}
             onSignalClick={(id) => setTracerSignalId(id)}
+            scannerModes={scannerModes}
+            currentModeName={selectedMode?.name ?? null}
           />
 
           {/* ── Confluence Distribution — Phase 3g.ii.d ───────────── */}
