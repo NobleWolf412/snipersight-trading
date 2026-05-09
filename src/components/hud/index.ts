@@ -19,6 +19,7 @@ export {
   type PhemexClassifyResult,
 } from './PhemexStatusPill';
 export { ScannerModePicker } from './ScannerModePicker';
+export { ActiveModeBadge } from './ActiveModeBadge';
 export { GauntletBreakdown, classifyStage, type GauntletStage } from './GauntletBreakdown';
 export { PipelineTracer } from './PipelineTracer';
 export { ConfluenceBreakdown } from './ConfluenceBreakdown';

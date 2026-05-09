@@ -16,7 +16,7 @@ import { Suspense, lazy } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { Routes, Route } from 'react-router-dom';
 import { SniperReticle } from '@/components/SniperReticle';
-import { Topbar, TacticalBgDom, PhemexStatusPill } from '@/components/hud';
+import { Topbar, TacticalBgDom, PhemexStatusPill, ActiveModeBadge } from '@/components/hud';
 import { ActiveScanBeacon } from '@/components/ActiveScanBeacon/ActiveScanBeacon';
 
 const Landing = lazy(() => import('@/pages/Landing').then((m) => ({ default: m.Landing })));
@@ -57,7 +57,7 @@ function App() {
       <TacticalBgDom />
       <SniperReticle />
       <div className="shell">
-        <Topbar rightSlot={<PhemexStatusPill />} />
+        <Topbar modeSlot={<ActiveModeBadge />} rightSlot={<PhemexStatusPill />} />
         <main>
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
