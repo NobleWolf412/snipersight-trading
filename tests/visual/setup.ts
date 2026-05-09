@@ -75,14 +75,12 @@ const ROUTE_MOCKS: Array<{
       u.includes('/api/live-trading/history'),
     body: () => ({ data: [], total: 0, trades: [] }),
   },
-  // Universe + signals/* endpoints return empty envelopes.
+  // Scanner universe — populated fixture so the new UniversePanel
+  // (Phase 3g.ii.e) renders qualified+dropped counts and modal content
+  // in BotStatus snapshots.
   {
     match: (u) => u.includes('/api/scanner/universe'),
-    body: () => ({
-      data: { last_refresh_ts: 1746000000.0, qualified: [], dropped: [], counts: { total_candidates: 0, qualified: 0, dropped: 0 } },
-      metadata: { ts: 1746000000.0, source: 'pair_selection', status: 'OK', cost_class: 'cheap' },
-      warnings: [],
-    }),
+    body: () => loadFixture('universe.json'),
   },
   // Confluence distribution — populated fixture so the new
   // ConfluenceBreakdown panel (Phase 3g.ii.d) renders the full

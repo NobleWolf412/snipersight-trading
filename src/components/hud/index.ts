@@ -16,6 +16,7 @@ export { ScannerModePicker } from './ScannerModePicker';
 export { GauntletBreakdown, classifyStage, type GauntletStage } from './GauntletBreakdown';
 export { PipelineTracer } from './PipelineTracer';
 export { ConfluenceBreakdown } from './ConfluenceBreakdown';
+export { UniversePanel } from './UniversePanel';
 export {
   applyTweaks,
   SHARED_TWEAK_DEFAULTS,

@@ -1,0 +1,46 @@
+{
+  "data": {
+    "last_refresh_ts": 1746792074.0,
+    "qualified": [
+      { "symbol": "BTC/USDT",  "sector": "majors", "tags": ["high_liq", "perp"] },
+      { "symbol": "ETH/USDT",  "sector": "majors", "tags": ["high_liq", "perp"] },
+      { "symbol": "SOL/USDT",  "sector": "L1",     "tags": ["high_liq", "perp"] },
+      { "symbol": "AVAX/USDT", "sector": "L1",     "tags": ["perp"] },
+      { "symbol": "BNB/USDT",  "sector": "majors", "tags": ["high_liq", "perp"] },
+      { "symbol": "ADA/USDT",  "sector": "L1",     "tags": ["perp"] },
+      { "symbol": "MATIC/USDT","sector": "L2",     "tags": ["perp"] },
+      { "symbol": "ARB/USDT",  "sector": "L2",     "tags": ["perp"] },
+      { "symbol": "OP/USDT",   "sector": "L2",     "tags": ["perp"] },
+      { "symbol": "LINK/USDT", "sector": "oracle", "tags": ["perp"] },
+      { "symbol": "ATOM/USDT", "sector": "L1",     "tags": ["perp"] },
+      { "symbol": "DOT/USDT",  "sector": "L1",     "tags": ["perp"] }
+    ],
+    "dropped": [
+      { "symbol": "USDC/USDT", "reason": "stable_base" },
+      { "symbol": "USDT/USDT", "reason": "stable_base" },
+      { "symbol": "BUSD/USDT", "reason": "stable_base" },
+      { "symbol": "DAI/USDT",  "reason": "stable_base" },
+      { "symbol": "BTC/USD",   "reason": "non_perp" },
+      { "symbol": "ETH/USD",   "reason": "non_perp" },
+      { "symbol": "SHIB/USDT", "reason": "bucket_excluded" },
+      { "symbol": "PEPE/USDT", "reason": "bucket_excluded" },
+      { "symbol": "DOGE/USDT", "reason": "bucket_excluded" },
+      { "symbol": "FIL/USDT",  "reason": "limit_exhausted" },
+      { "symbol": "NEAR/USDT", "reason": "limit_exhausted" },
+      { "symbol": "ICP/USDT",  "reason": "limit_exhausted" }
+    ],
+    "counts": {
+      "total_candidates": 24,
+      "qualified": 12,
+      "dropped": 12
+    }
+  },
+  "metadata": {
+    "ts": 1746792074.0,
+    "source": "pair_selection",
+    "status": "OK",
+    "cost_class": "cheap",
+    "reason": null
+  },
+  "warnings": []
+}

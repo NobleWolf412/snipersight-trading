@@ -40,8 +40,10 @@
  * stacked-bar over last N signals + by-direction breakdown, sourced
  * from /api/signals/confluence/distribution).
  *
+ * Phase 3g.ii.e landed: UniversePanel — qualified + dropped pair list
+ * with click-to-open modal, sourced from /api/scanner/universe.
+ *
  * Deferred to Phase 3g.ii (with inline `◌ deferred` placeholders):
- *   - UniversePanel modal (qualified+dropped pair list).
  *   - DiagnoseWizard 9-step playbook.
  *   - Mode-delta tooltip on bottleneck pill.
  *   - PositionChartModal — chart-level modal on each open position row.
@@ -72,6 +74,7 @@ import {
   PipelineTracer,
   Reticle,
   SectionHead,
+  UniversePanel,
 } from '@/components/hud';
 import {
   liveTradingService,
@@ -1072,24 +1075,7 @@ export function BotStatus() {
               gap: 14,
             }}
           >
-            <section className="panel" style={{ padding: 14 }}>
-              <SectionHead
-                title="Universe"
-                right={<Chip kind="amber">◌ deferred</Chip>}
-              />
-              <div
-                className="mono"
-                style={{
-                  padding: 14,
-                  textAlign: 'center',
-                  fontSize: 10,
-                  color: 'var(--fg-4)',
-                  letterSpacing: '.14em',
-                }}
-              >
-                — Phase 3g.ii — qualified + dropped pair list —
-              </div>
-            </section>
+            <UniversePanel />
             <section className="panel" style={{ padding: 14 }}>
               <SectionHead
                 title="Diagnose"

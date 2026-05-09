@@ -921,6 +921,20 @@ class ApiClient {
       { silent: true },
     );
   }
+
+  /**
+   * Fetch the current scanner universe — qualified pairs that survived
+   * pair_selection plus the list of dropped candidates with reasons.
+   *
+   * Wire shape: `Envelope<Universe>`. Cost: cheap (cached on the
+   * orchestrator and refreshed once per scan cycle).
+   */
+  async getUniverse() {
+    return this.request<UniverseEnvelope>(
+      `/api/scanner/universe`,
+      { silent: true },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1251,6 +1265,41 @@ export interface ConfluenceDistribution {
 }
 
 export type ConfluenceDistributionEnvelope = Envelope<ConfluenceDistribution>;
+
+// ---------------------------------------------------------------------------
+// Scanner Universe
+// ---------------------------------------------------------------------------
+// Mirrors `backend/shared/models/observability.py:Universe / UniversePair /
+// DroppedPair / UniverseCounts`. Drives the UniversePanel surface in
+// BotStatus (Phase 3g.ii.e). The dropped list with explicit reasons is the
+// whole reason this endpoint exists — silent drops are a §11 observability
+// anti-pattern.
+
+export interface UniversePair {
+  symbol: string;
+  sector: string | null;
+  tags: string[];
+}
+
+export interface DroppedPair {
+  symbol: string;
+  reason: string;
+}
+
+export interface UniverseCounts {
+  total_candidates: number;
+  qualified: number;
+  dropped: number;
+}
+
+export interface Universe {
+  last_refresh_ts: number | null;
+  qualified: UniversePair[];
+  dropped: DroppedPair[];
+  counts: UniverseCounts;
+}
+
+export type UniverseEnvelope = Envelope<Universe>;
 
 export interface PaperTradingStartResponse {
   session_id: string;

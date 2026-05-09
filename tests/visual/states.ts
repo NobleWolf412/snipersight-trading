@@ -228,6 +228,22 @@ export const STATES: SnapshotState[] = [
       await page.locator('text=CONFLUENCE_SCORE').first().waitFor({ state: 'visible' });
     },
   },
+  // UniversePanel modal — Phase 3g.ii.e.
+  // Direction-agnostic: the universe is symbol-level and bull/bear
+  // symmetry is enforced upstream in pair_selection. A single state
+  // captures the full modal (no __long/__short pair needed; documented
+  // exception per CLAUDE.md §10 #3).
+  {
+    route: '/bot/status',
+    state: 'bot_universe_modal',
+    setup: async (page) => {
+      // Default ROUTE_MOCKS already serves the populated universe fixture.
+      // Just open the modal by clicking "OPEN FULL LIST →".
+      await page.getByRole('button', { name: /OPEN FULL LIST/ }).click();
+      // Wait for modal subtitle to appear so capture is deterministic.
+      await page.locator('text=Universe — Full Pair List').waitFor({ state: 'visible' });
+    },
+  },
 ];
 
 /**
