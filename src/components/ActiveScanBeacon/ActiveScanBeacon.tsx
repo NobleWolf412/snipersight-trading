@@ -1,3 +1,14 @@
+// ActiveScanBeacon — Phase 7 sub-step 3 Tailwind eject.
+// Replaced Tailwind utility classes with inline styles. The custom
+// keyframe-driven classes (`beacon-pill-slide-in`, `beacon-glow-breathe`,
+// `beacon-float`, `beacon-sonar-ring`, `beacon-radar-sweep`) live in
+// `src/index.css` and survive the Tailwind ejection.
+//
+// `group-hover` was the only Tailwind feature with no direct inline
+// equivalent — replaced with a local `hovered` state on the wrapping
+// div so the arrow opacity + scale-on-hover behaviour preserves.
+
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useScanner } from '@/context/ScannerContext';
 
@@ -38,86 +49,159 @@ const MODE_CONFIG: Record<string, ModeConfig> = {
 };
 
 function SingleBeacon({ modeKey, onClick }: { modeKey: string; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
   const cfg = MODE_CONFIG[modeKey];
   const { color, glow, ringColor, label, shortCode } = cfg;
 
   return (
     <div
-      className="flex flex-col items-center gap-2 cursor-pointer group select-none"
       onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       title={`Return to ${label}`}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 8,
+        cursor: 'pointer',
+        userSelect: 'none',
+      }}
     >
       {/* Label pill */}
       <div
-        className="beacon-pill-slide-in flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold tracking-[0.15em] border backdrop-blur-sm whitespace-nowrap"
+        className="beacon-pill-slide-in"
         style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 12px',
+          borderRadius: '9999px',
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: '0.15em',
+          border: `1px solid ${color}60`,
+          backdropFilter: 'blur(4px)',
+          whiteSpace: 'nowrap',
           color,
-          borderColor: `${color}60`,
           backgroundColor: `${color}12`,
           boxShadow: `0 0 12px ${color}30`,
           textShadow: `0 0 8px ${color}`,
         }}
       >
         <span
-          className="w-1.5 h-1.5 rounded-full beacon-glow-breathe inline-block"
-          style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}` }}
+          className="beacon-glow-breathe"
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: '9999px',
+            display: 'inline-block',
+            backgroundColor: color,
+            boxShadow: `0 0 6px ${color}`,
+          }}
         />
         {label}
-        <span className="opacity-60 group-hover:opacity-100 transition-opacity ml-1">→</span>
+        <span
+          style={{
+            opacity: hovered ? 1 : 0.6,
+            transition: 'opacity 200ms',
+            marginLeft: 4,
+          }}
+        >
+          →
+        </span>
       </div>
 
       {/* Beacon orb */}
-      <div className="relative flex items-center justify-center beacon-float" style={{ width: 68, height: 68 }}>
-
+      <div
+        className="beacon-float"
+        style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 68,
+          height: 68,
+        }}
+      >
         {/* Sonar rings */}
-        {[0, 1, 2].map(i => (
+        {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="beacon-sonar-ring absolute inset-0 rounded-full border-2"
-            style={{ borderColor: `${ringColor}0.7)` }}
+            className="beacon-sonar-ring"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: '9999px',
+              border: `2px solid ${ringColor}0.7)`,
+            }}
           />
         ))}
 
         {/* Radar sweep layer */}
         <div
-          className="beacon-radar-sweep absolute rounded-full"
+          className="beacon-radar-sweep"
           style={{
+            position: 'absolute',
             inset: 4,
+            borderRadius: '9999px',
             background: `conic-gradient(from 0deg, ${color}90 0deg, ${color}30 55deg, transparent 90deg, transparent 360deg)`,
           }}
         />
 
         {/* Outer ring border */}
         <div
-          className="absolute inset-0 rounded-full border-2 transition-all duration-300 group-hover:scale-105"
           style={{
-            borderColor: `${color}80`,
+            position: 'absolute',
+            inset: 0,
+            borderRadius: '9999px',
+            border: `2px solid ${color}80`,
             boxShadow: glow,
+            transition: 'transform 300ms',
+            transform: hovered ? 'scale(1.05)' : 'scale(1)',
           }}
         />
 
         {/* Inner dark core */}
         <div
-          className="relative z-10 rounded-full flex flex-col items-center justify-center"
           style={{
+            position: 'relative',
+            zIndex: 10,
             width: 44,
             height: 44,
+            borderRadius: '9999px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
             background: 'radial-gradient(circle, #0d0d0d 60%, #000 100%)',
             border: `1px solid ${color}40`,
           }}
         >
           {/* Short code */}
           <span
-            className="text-[9px] font-black tracking-[0.2em]"
-            style={{ color, textShadow: `0 0 8px ${color}` }}
+            style={{
+              fontSize: 9,
+              fontWeight: 900,
+              letterSpacing: '0.2em',
+              color,
+              textShadow: `0 0 8px ${color}`,
+            }}
           >
             {shortCode}
           </span>
 
           {/* Tiny live dot */}
           <span
-            className="w-1 h-1 rounded-full mt-0.5 beacon-glow-breathe"
-            style={{ backgroundColor: color, boxShadow: `0 0 4px ${color}` }}
+            className="beacon-glow-breathe"
+            style={{
+              width: 4,
+              height: 4,
+              borderRadius: '9999px',
+              marginTop: 2,
+              backgroundColor: color,
+              boxShadow: `0 0 4px ${color}`,
+            }}
           />
         </div>
       </div>
@@ -137,7 +221,7 @@ export function ActiveScanBeacon() {
   if (isScanning) activeModes.push('scanner');
 
   // Never show the beacon on the page that's already active
-  const filtered = activeModes.filter(key => {
+  const filtered = activeModes.filter((key) => {
     const cfg = MODE_CONFIG[key];
     return !location.pathname.startsWith(cfg.route.split('/').slice(0, 3).join('/'));
   });
@@ -150,15 +234,29 @@ export function ActiveScanBeacon() {
 
   return (
     <div
-      className="fixed bottom-6 right-6 z-[90] flex flex-col items-center gap-4"
-      style={{ pointerEvents: 'auto' }}
+      style={{
+        position: 'fixed',
+        bottom: 24,
+        right: 24,
+        zIndex: 90,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 16,
+        pointerEvents: 'auto',
+      }}
     >
       {extras > 0 && (
         <div
-          className="self-end text-[9px] font-bold tracking-widest px-2 py-0.5 rounded-full border"
           style={{
+            alignSelf: 'flex-end',
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: '0.1em',
+            padding: '2px 8px',
+            borderRadius: '9999px',
+            border: `1px solid ${MODE_CONFIG[filtered[1]].color}40`,
             color: MODE_CONFIG[filtered[1]].color,
-            borderColor: `${MODE_CONFIG[filtered[1]].color}40`,
             backgroundColor: `${MODE_CONFIG[filtered[1]].color}10`,
           }}
         >
