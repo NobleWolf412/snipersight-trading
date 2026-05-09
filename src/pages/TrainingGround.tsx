@@ -1,2810 +1,1001 @@
-import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
-import { useScanner } from '@/context/ScannerContext';
-import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+/**
+ * TrainingGround — Phase 3d sub-step 1
+ *
+ * REWRITE of the prior 2812-line paper-trading page. The new shape is the
+ * prototype's training-hub: 5 module cards (Range / Drills / Replay /
+ * Quizzes / Lessons) plus an inline ML Drills panel anchored at #drills.
+ *
+ * Data wiring:
+ *   - Real ML state via mlService.getStatus + getFeatureImportance on mount.
+ *   - mlService.train() / resetModel() driving the Drills panel buttons.
+ *   - Module cards are anchor links to existing flows — RANGE ⇒ /bot/setup
+ *     (where paper trading config + start lives), DRILLS ⇒ #drills (this
+ *     page), REPLAY/QUIZZES/LESSONS ⇒ href="#" placeholders (no backend
+ *     content yet; flagged with "coming soon" hint and visually disabled).
+ *
+ * What's intentionally DEFERRED (no backend yet):
+ *   - PROMOTE TO LIVE — mlService has no /ml/promote endpoint. The UI tile
+ *     is rendered but the button is hard-disabled with a "coming soon" hint
+ *     so we don't flash a fake success.
+ *   - "Baseline" comparison — MLStatus carries no baseline accuracy field.
+ *     We display 55% (the typical model-vs-coin-flip floor) labelled
+ *     "BASELINE 55% (placeholder)" so it cannot be mistaken for live data.
+ *   - Accuracy 7-day series — backend has no historical track. The svg
+ *     trend uses a synthetic monotonic line up to the current accuracy
+ *     point, marked "// 7-DAY ACCURACY (synthetic — pending track table)".
+ *   - Paper-trading state from the prior TrainingGround is recoverable
+ *     from git (`pre-hud-rebuild` tag / pre-3d commit history); not
+ *     relocated this sub-step. RANGE module points at /bot/setup which
+ *     already serves the paper-trading config UI.
+ *
+ * body[data-snapshot-ready="true"] is set after the initial mlService
+ * calls settle (resolved or errored). Errored state still completes — the
+ * panel renders with placeholders + an empty-state notice rather than
+ * blocking snapshot capture.
+ */
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Target,
-  PlayCircle,
-  StopCircle,
-  ArrowsClockwise,
-  BookOpen,
-  TrendUp,
-  TrendDown,
-  Wallet,
-  ChartLine,
-  Pulse,
-  Clock,
-  Trophy,
-  Warning,
-  CheckCircle,
-  XCircle,
-  X,
-  Crosshair,
-  ArrowUp,
-  ArrowDown,
-  ListBullets,
-  Gear,
-  Lightning,
-  ShieldCheck,
-  Fire,
-  CaretDown,
-  Cpu,
-  TestTube,
-} from '@phosphor-icons/react';
-import { PageContainer } from '@/components/layout/PageContainer';
-import { HomeButton } from '@/components/layout/HomeButton';
-import { TacticalPanel } from '@/components/TacticalPanel';
-import { PaperTradingConfig } from '@/components/PaperTradingConfig';
+  Chip,
+  FooterStatus,
+  PageHead,
+  Reticle,
+  SectionHead,
+} from '@/components/hud';
 import {
-  api,
-  PaperTradingConfigRequest,
-  PaperTradingStatusResponse,
-  PaperTradingPosition,
-  PaperTradingStats,
-  PaperTradingBalance,
-  CompletedPaperTrade,
-  PaperTradingActivity,
-  SignalLogEntry,
-} from '@/utils/api';
-import { GauntletBreakdown } from '@/components/bot/GauntletBreakdown';
+  mlService,
+  type MLStatus,
+  type FeatureImportanceItem,
+} from '@/services/mlService';
 
+// ─── Module catalog ───────────────────────────────────────────────────────
 
-// Format time duration
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  const hours = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  return `${hours}h ${mins}m`;
+interface ModuleStat {
+  k: string;
+  v: string;
+  vc?: string;
 }
 
-// Format currency
-function formatCurrency(value: number, decimals = 2): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value);
+interface Module {
+  id: string;
+  label: string;
+  tag: string;
+  color: string;
+  body: string;
+  stat: ModuleStat[];
+  cta: string;
+  href: string;
+  disabled?: boolean;
 }
 
-// Format percentage
-function formatPct(value: number, decimals = 2): string {
-  const sign = value >= 0 ? '+' : '';
-  return `${sign}${value.toFixed(decimals)}%`;
-}
+const MODULES: Module[] = [
+  {
+    id: 'range',
+    label: 'RANGE',
+    tag: 'Live-fire paper trader',
+    color: '#22d3ee',
+    body:
+      "Ghost — autonomous bot armed on simulated capital. Same engine as the live bot, no real funds. Generates the trade data the ML model trains on.",
+    stat: [
+      { k: 'Status', v: '● ARMED', vc: '#4ade80' },
+      { k: 'Sim Equity', v: '$5,842' },
+      { k: 'Win', v: '61%' },
+    ],
+    cta: 'ENTER RANGE',
+    href: '/bot/setup',
+  },
+  {
+    id: 'drills',
+    label: 'DRILLS',
+    tag: 'ML model training',
+    color: '#c084fc',
+    body:
+      "Train the bot on Ghost's closed paper trades. Promote new params to the live bot when the model beats baseline — or reset the model to factory defaults.",
+    stat: [
+      { k: 'Model', v: '—', vc: '#c084fc' },
+      { k: 'vs Baseline', v: '—', vc: '#c084fc' },
+      { k: 'Samples', v: '—' },
+    ],
+    cta: 'OPEN DRILLS',
+    href: '#drills',
+  },
+  {
+    id: 'replay',
+    label: 'REPLAY',
+    tag: 'Historical setup walkthrough',
+    color: '#fbbf24',
+    body:
+      'Step through real past trades candle-by-candle. See the entry trigger, stop placement, and exit logic exactly as the bot saw it.',
+    stat: [
+      { k: 'Library', v: '—' },
+      { k: 'Last', v: '—' },
+      { k: 'Yours', v: '—' },
+    ],
+    cta: 'COMING SOON',
+    href: '#',
+    disabled: true,
+  },
+  {
+    id: 'quizzes',
+    label: 'QUIZZES',
+    tag: 'Pattern recognition tests',
+    color: '#60a5fa',
+    body:
+      'Grade A/B/C/D drills on order blocks, liquidity sweeps, structure breaks. Build the eye before you trust the bot.',
+    stat: [
+      { k: 'Bank', v: '—' },
+      { k: 'Streak', v: '—' },
+      { k: 'Score', v: '—' },
+    ],
+    cta: 'COMING SOON',
+    href: '#',
+    disabled: true,
+  },
+  {
+    id: 'lessons',
+    label: 'LESSONS',
+    tag: 'Strategy library',
+    color: '#4ade80',
+    body:
+      'Read-up on every setup the bot trades. Order blocks, FVGs, liquidity sweeps, regime detection, position sizing.',
+    stat: [
+      { k: 'Chapters', v: '—' },
+      { k: 'Done', v: '—' },
+      { k: 'Next', v: '—' },
+    ],
+    cta: 'COMING SOON',
+    href: '#',
+    disabled: true,
+  },
+];
 
-// Mini Equity Sparkline Component
-function EquitySparkline({ trades, initialBalance }: { trades: CompletedPaperTrade[]; initialBalance: number }) {
-  const points = useMemo(() => {
-    if (!trades || trades.length === 0) return [];
-    // Build cumulative equity curve from trades (oldest first)
-    const sorted = [...trades].reverse();
-    let equity = initialBalance;
-    const pts = [{ x: 0, y: equity }];
-    sorted.forEach((t, i) => {
-      equity += t.pnl;
-      pts.push({ x: i + 1, y: equity });
-    });
-    return pts;
-  }, [trades, initialBalance]);
+// ─── ModCard ──────────────────────────────────────────────────────────────
 
-  if (points.length < 2) {
-    return (
-      <div className="h-16 flex items-center justify-center text-[10px] text-muted-foreground/40 font-mono uppercase tracking-widest">
-        Awaiting trades...
-      </div>
-    );
-  }
-
-  const minY = Math.min(...points.map(p => p.y));
-  const maxY = Math.max(...points.map(p => p.y));
-  const rangeY = maxY - minY || 1;
-  const w = 280;
-  const h = 56;
-  const pad = 2;
-
-  const pathD = points.map((p, i) => {
-    const x = pad + (p.x / (points.length - 1)) * (w - 2 * pad);
-    const y = h - pad - ((p.y - minY) / rangeY) * (h - 2 * pad);
-    return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
-  }).join(' ');
-
-  const lastPt = points[points.length - 1];
-  const isUp = lastPt.y >= initialBalance;
-  const strokeColor = isUp ? '#00ff88' : '#ff4444';
-  const fillGradId = 'eq-grad';
-
-  // Area fill: close from the actual last point's X down to the baseline and back to origin
-  const lastPtX = pad + (lastPt.x / (points.length - 1)) * (w - 2 * pad);
-  const lastPtY = h - pad - ((lastPt.y - minY) / rangeY) * (h - 2 * pad);
-  const firstX = pad;
-  const areaD = pathD + ` L ${lastPtX.toFixed(1)} ${h} L ${firstX.toFixed(1)} ${h} Z`;
-
+function ModCard({ m }: { m: Module }) {
+  const onClick = (e: React.MouseEvent) => {
+    if (m.disabled) e.preventDefault();
+  };
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="w-full h-16">
-      <defs>
-        <linearGradient id={fillGradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={strokeColor} stopOpacity="0.15" />
-          <stop offset="100%" stopColor={strokeColor} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaD} fill={`url(#${fillGradId})`} />
-      <path d={pathD} fill="none" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Pulse dot at the actual last data point */}
-      <circle
-        cx={lastPtX}
-        cy={lastPtY}
-        r="3"
-        fill={strokeColor}
-        className="animate-pulse"
-      />
-    </svg>
-  );
-}
-
-// Default Phantom Spec Config — mode is always stealth (hardcoded backend)
-const DEFAULT_CONFIG: PaperTradingConfigRequest = {
-  exchange: 'phemex',
-  sniper_mode: 'stealth', // Fixed: optimal balance for paper trading (adaptive scalp/swing)
-  initial_balance: 10000,
-  risk_per_trade: 2, // Total 2% per thesis
-  max_positions: 3, // 3 limits (L1, L2, L3)
-  leverage: 1, // Default 1x
-  max_drawdown_pct: 10, // 10% session drawdown kill-switch
-  duration_hours: 24,
-  scan_interval_minutes: 2,
-  trailing_stop: true,
-  trailing_activation: 2.0, // WAS 1.0 - changed to 2.0 to give trade room to breathe
-  breakeven_after_target: 1, // Move to BE after TP1 is hit
-  sensitivity_preset: 'balanced',
-  min_confluence: null,          // null = use preset gate (resolved backend-side)
-  confluence_soft_floor: null,   // null = use preset floor (resolved backend-side)
-  symbols: [],
-  exclude_symbols: [],
-  majors: true,
-  altcoins: false,
-  meme_mode: false,
-  universe_size: 20,
-  slippage_bps: 15,
-  fee_rate: 0.001,
-  max_hours_open: 72,
-  use_testnet: false,
-};
-
-export function TrainingGround() {
-  const navigate = useNavigate();
-  const { setIsTrainingActive } = useScanner();
-  const [config, setConfig] = useState<PaperTradingConfigRequest>(DEFAULT_CONFIG);
-  const [status, setStatus] = useState<PaperTradingStatusResponse | null>(null);
-  const [trades, setTrades] = useState<CompletedPaperTrade[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [recommendation, setRecommendation] = useState<{mode: string, reason: string, warning: string | null, confidence: string, recommended_confluence?: number, regime?: any} | null>(null);
-  const [debrief, setDebrief] = useState<{ stats: PaperTradingStats; balance: PaperTradingBalance; config: PaperTradingConfigRequest; uptime: number; signalLog: SignalLogEntry[] } | null>(null);
-
-  const pollRef = useRef<number | null>(null);
-  const fetchFailCount = useRef(0);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-  // Ref mirrors state so fetchStatus can read without being in its deps array,
-  // preventing an infinite re-render loop on backend recovery.
-  const connectionErrorRef = useRef<string | null>(null);
-  connectionErrorRef.current = connectionError;
-
-  // Fetch status
-  const fetchStatus = useCallback(async () => {
-    try {
-      const response = await api.getPaperTradingStatus();
-      if (response.data) {
-        setStatus(response.data);
-        fetchFailCount.current = 0;
-        if (connectionErrorRef.current) setConnectionError(null);
-      }
-    } catch (err) {
-      fetchFailCount.current += 1;
-      console.error('Failed to fetch status:', err);
-      if (fetchFailCount.current >= 3) {
-        setConnectionError('Backend unreachable — data may be stale');
-      }
-    } finally {
-      setIsInitialLoad(false);
-    }
-  }, []);
-
-  // Fetch trade history
-  const fetchTrades = useCallback(async () => {
-    try {
-      const response = await api.getPaperTradingHistory(50);
-      if (response.data?.trades) {
-        setTrades(response.data.trades);
-      }
-    } catch (err) {
-      console.error('Failed to fetch trades:', err);
-    }
-  }, []);
-
-  // Fetch recommendation
-  const fetchRecommendation = useCallback(async () => {
-    try {
-      const response = await api.getScannerRecommendation();
-      if (response.data) {
-        setRecommendation(response.data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch recommendation:', err);
-    }
-  }, []);
-
-  // Poll status when running
-  useEffect(() => {
-    fetchStatus();
-    fetchTrades();
-    fetchRecommendation();
-
-    // Set up polling - use longer interval (15s) to avoid overwhelming backend during heavy scans
-    // Backend can take 10-20s to respond when scanner is actively processing
-    if (status?.status === 'running') {
-      pollRef.current = window.setInterval(() => {
-        fetchStatus();
-        fetchTrades();
-      }, 15000);
-    }
-
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [status?.status, fetchStatus, fetchTrades]);
-
-  // Start paper trading
-  const handleStart = async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await api.startPaperTrading(config);
-      if (response.error) {
-        setError(response.error);
-      } else {
-        await fetchStatus();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start paper trading');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Stop paper trading
-  const handleStop = async () => {
-    setIsLoading(true);
-    setError(null);
-
-    // Snapshot current session data for the debrief modal
-    const preStopStatus = status;
-
-    try {
-      const response = await api.stopPaperTrading();
-      if (response.error) {
-        setError(response.error);
-      } else {
-        await fetchStatus();
-        await fetchTrades();
-        // Show debrief if there was meaningful activity
-        if (preStopStatus?.statistics && preStopStatus.balance && preStopStatus.config) {
-          setDebrief({
-            stats: preStopStatus.statistics,
-            balance: preStopStatus.balance,
-            config: preStopStatus.config,
-            uptime: preStopStatus.uptime_seconds,
-            signalLog: preStopStatus.signal_log ?? [],
-          });
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to stop paper trading');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Reset paper trading
-  const handleReset = async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await api.resetPaperTrading();
-      if (response.error) {
-        setError(response.error);
-      } else {
-        setStatus(null);
-        setTrades([]);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reset paper trading');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const isRunning = status?.status === 'running';
-  const isStopped = status?.status === 'stopped';
-  const isIdle = !status || status.status === 'idle' || status.status === 'stopped';
-
-  // Keep global context in sync — beacon + TopBar indicator read this on every page
-  useLayoutEffect(() => {
-    setIsTrainingActive(isRunning);
-  }, [isRunning, setIsTrainingActive]);
-
-  return (
-    <PageContainer id="main-content">
-      <div className="space-y-8">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <HomeButton />
-          <div>
-            <h1 className="text-2xl font-black tracking-widest font-mono text-emerald-400 flex items-center gap-2">
-              <Target size={22} weight="bold" /> TRAINING GROUND
-            </h1>
-            <p className="text-[10px] font-mono text-white/30 uppercase tracking-[0.2em] mt-0.5">
-              Train your AI strategy on live markets · Zero risk, full insight
-            </p>
-          </div>
-          {status && (
-            <div className={cn(
-              "ml-auto flex items-center gap-1.5 px-3 py-1 text-[9px] font-mono font-black tracking-[0.15em] border",
-              isRunning ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
-                isStopped ? 'bg-red-500/10 text-red-400 border-red-500/30' :
-                  'bg-white/5 text-white/40 border-white/10'
-            )}>
-              {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-              {status.status.toUpperCase()}
-            </div>
-          )}
-        </div>
-
-        {/* Page tab nav */}
-        <div className="flex gap-2 p-1 rounded-lg bg-black/40 border border-white/10 w-fit">
-          <span className="px-4 py-2 rounded-md text-xs font-mono tracking-widest bg-accent/20 text-accent border border-accent/30 font-bold">
-            TRAINING GROUND
-          </span>
-          <button
-            onClick={() => navigate('/journal')}
-            className="px-4 py-2 rounded-md text-xs font-mono tracking-widest text-white/70 hover:bg-white/10 hover:text-white transition-colors font-bold"
+    <a
+      href={m.href}
+      onClick={onClick}
+      className="tg-card"
+      style={{
+        borderColor: `color-mix(in oklch, ${m.color} 30%, var(--border-soft))`,
+        opacity: m.disabled ? 0.55 : 1,
+        cursor: m.disabled ? 'not-allowed' : 'pointer',
+      }}
+    >
+      <div className="tg-card-head">
+        <div className="tg-card-title" style={{ color: m.color }}>
+          <span
+            className="mono"
+            style={{
+              fontSize: 11,
+              letterSpacing: '.32em',
+              opacity: 0.6,
+              marginRight: 8,
+            }}
           >
-            TRADE JOURNAL &amp; ML INSIGHTS
-          </button>
+            {m.id.toUpperCase().padStart(2, '0').slice(0, 2)}
+          </span>
+          {m.label}
         </div>
-
-        {/* Info Alert */}
-        <div className="border border-accent/30 bg-accent/5 p-4 rounded-xl relative overflow-hidden glass-card glow-border-green">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-green-500/5 via-transparent to-transparent opacity-40" />
-          <div className="flex items-start gap-4">
-            <BookOpen size={20} className="text-accent mt-0.5" />
-            <div>
-              <h3 className="text-accent uppercase font-bold tracking-widest text-sm mb-1 font-mono">
-                AI STRATEGY TRAINING
-              </h3>
-              <p className="text-muted-foreground text-sm font-mono leading-relaxed">
-                Runs the full AI engine on live Phemex market data with simulated fills. Every signal, every trade, every exit is tracked — so you can see exactly how your strategy performs before risking real capital. Train here first. Deploy when ready.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Error Alert */}
-        {error && (
-          <Alert variant="destructive">
-            <Warning size={20} />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {connectionError && !error && (
-          <Alert variant="destructive" className="border-yellow-500/50 bg-yellow-500/10">
-            <Warning size={20} className="text-yellow-400" />
-            <AlertTitle className="text-yellow-400">Connection Issue</AlertTitle>
-            <AlertDescription className="text-yellow-300/80">{connectionError}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Main Content Area */}
-        {isInitialLoad ? (
-          <div className="flex h-[400px] items-center justify-center mt-6 glass-card glow-border-green rounded-2xl relative overflow-hidden">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-green-500/5 via-transparent to-transparent opacity-40 pointer-events-none" />
-            <div className="flex flex-col items-center gap-4 text-accent opacity-70 relative z-10">
-              <ArrowsClockwise size={40} className="animate-spin" />
-              <p className="font-mono text-sm tracking-widest uppercase animate-pulse">Establishing Uplink...</p>
-            </div>
-          </div>
-        ) : isIdle ? (
-          <div className="mt-6 cockpit-scanlines">
-            {/* ── System Status Bar ── */}
-            <div className="flex items-center gap-4 px-4 py-2 bg-black/80 border border-white/[0.06] text-[9px] font-mono tracking-[0.18em] overflow-x-auto">
-              <span className="text-white/20">[SYS-01 · TRAINING GROUND]</span>
-              <span className="text-white/10">│</span>
-              <span className="text-white/30">REGIME</span>
-              <span className="font-bold text-cyan-400 capitalize">
-                {recommendation?.regime?.composite
-                  ? recommendation.regime.composite.replace(/_/g, ' ').toUpperCase()
-                  : 'ADAPTIVE'}
-              </span>
-              <span className="text-white/10">│</span>
-              <span className="text-white/30">BALANCE</span>
-              <span className="font-bold text-emerald-400">${(config.initial_balance ?? 10000).toLocaleString()}</span>
-              <span className="text-white/10">│</span>
-              <span className="text-white/30">MODE</span>
-              <span className={cn("font-bold", config.use_testnet ? "text-yellow-400" : "text-emerald-400")}>
-                {config.use_testnet ? 'TESTNET' : 'SIMULATION'}
-              </span>
-            </div>
-
-            {/* ── 12-Col Cockpit Grid ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-[1px] bg-white/[0.06] border border-white/[0.06]">
-
-              {/* ── LEFT PANEL — Execution ── */}
-              <div className="lg:col-span-3 bg-[#050c08] border-t-2 border-emerald-500/50 p-5 space-y-5">
-                <div className="text-[8px] font-mono tracking-[0.2em] text-white/20 uppercase">[SYS-01] EXECUTION</div>
-
-                {/* Execution Mode Toggle */}
-                <div className="space-y-2">
-                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Execution Mode</div>
-                  <div className="flex gap-[1px] bg-white/[0.06]">
-                    <button
-                      onClick={() => setConfig({ ...config, use_testnet: false })}
-                      className={cn(
-                        "flex-1 flex items-center justify-center gap-2 py-2.5 text-[10px] font-mono font-black tracking-[0.15em] transition-all",
-                        !config.use_testnet
-                          ? "bg-emerald-500/20 text-emerald-400"
-                          : "bg-black/40 text-white/20 hover:text-white/50"
-                      )}
-                    >
-                      <Cpu size={12} weight={!config.use_testnet ? "fill" : "bold"} />
-                      SIMULATION
-                    </button>
-                    <button
-                      onClick={() => setConfig({ ...config, use_testnet: true })}
-                      className={cn(
-                        "flex-1 flex items-center justify-center gap-2 py-2.5 text-[10px] font-mono font-black tracking-[0.15em] transition-all",
-                        config.use_testnet
-                          ? "bg-yellow-500/20 text-yellow-400"
-                          : "bg-black/40 text-white/20 hover:text-white/50"
-                      )}
-                    >
-                      <TestTube size={12} weight={config.use_testnet ? "fill" : "bold"} />
-                      TESTNET
-                    </button>
-                  </div>
-                  {config.use_testnet && (
-                    <div className="flex items-center gap-1.5 text-yellow-400/70 text-[9px] font-mono bg-yellow-400/5 border border-yellow-400/20 px-2 py-1.5">
-                      <TestTube size={10} />
-                      Requires PHEMEX_API_KEY in .env
-                    </div>
-                  )}
-                </div>
-
-                {/* Starting Balance */}
-                <div className="space-y-2">
-                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Starting Balance ($)</div>
-                  <input
-                    type="number"
-                    value={config.initial_balance}
-                    onChange={e => setConfig({ ...config, initial_balance: Number(e.target.value) })}
-                    className="w-full h-10 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-emerald-400 focus:outline-none focus:border-emerald-500/30"
-                  />
-                  <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
-                    {[1000, 5000, 10000, 50000].map(preset => (
-                      <button
-                        key={preset}
-                        onClick={() => setConfig({ ...config, initial_balance: preset })}
-                        className={cn(
-                          "py-1 text-[9px] font-mono font-black tracking-tight transition-all",
-                          config.initial_balance === preset
-                            ? "bg-emerald-500/20 text-emerald-400"
-                            : "bg-black/40 text-white/20 hover:text-white/50"
-                        )}
-                      >
-                        {preset >= 1000 ? `${preset / 1000}k` : preset}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Market Regime */}
-                <div className="space-y-2">
-                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Market Regime</div>
-                  <div className="flex items-center gap-2 px-3 py-2 bg-black/40 border border-white/[0.06]">
-                    <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", recommendation?.regime?.composite ? "bg-cyan-400 animate-pulse" : "bg-white/20")} />
-                    <span className="text-sm font-mono font-bold text-cyan-400 capitalize truncate">
-                      {recommendation?.regime?.composite ? recommendation.regime.composite.replace(/_/g, ' — ') : 'ADAPTIVE'}
-                    </span>
-                  </div>
-                  {recommendation?.reason && (
-                    <p className="text-[8px] font-mono text-white/25 leading-tight truncate px-1">{recommendation.reason}</p>
-                  )}
-                </div>
-
-                {/* Engine Mode */}
-                <div className="space-y-2">
-                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Engine Mode</div>
-                  <div className="bg-purple-500/5 border border-purple-500/20 p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <Lightning size={14} weight="fill" className="text-purple-400" />
-                        <span className="text-xs font-black tracking-[0.15em] text-purple-400">STEALTH</span>
-                      </div>
-                      <span className="text-[8px] font-mono text-purple-400/50 border border-purple-500/20 px-1.5 py-0.5">LOCKED</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-[1px] bg-white/[0.04] text-[9px]">
-                      {[
-                        { label: 'R:R MIN', value: '1.8' },
-                        { label: 'RANGE', value: 'D→5m' },
-                        { label: 'TYPES', value: 'S/I/SW' },
-                        { label: 'SCAN', value: `${config.scan_interval_minutes ?? 2}m` },
-                      ].map(({ label, value }) => (
-                        <div key={label} className="bg-black/40 px-2 py-1.5 text-center">
-                          <div className="text-[7px] text-white/25 tracking-[0.15em] uppercase">{label}</div>
-                          <div className="text-[10px] font-mono font-bold text-white/60">{value}</div>
-                        </div>
-                      ))}
-                    </div>
-                    {recommendation?.mode && recommendation.mode !== 'stealth' && (
-                      <div className="text-[8px] font-mono text-emerald-400/60 bg-emerald-500/5 border border-emerald-500/20 px-2 py-1">
-                        ADAPTING → {recommendation.mode.toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* ── CENTER PANEL — Configuration ── */}
-              <div className="lg:col-span-6 bg-[#070707] p-5 space-y-5">
-                <div className="text-[8px] font-mono tracking-[0.2em] text-white/20 uppercase">[OPS-01] CONFIGURATION</div>
-
-                {/* Signal Quality Filter */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Signal Quality Filter</div>
-                    <span className="text-[8px] text-white/20 font-mono italic">entry / near-miss</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
-                    {([
-                      { key: 'conservative', label: 'PRECISION', gate: 72, floor: 62, color: 'blue' },
-                      { key: 'balanced',     label: 'BALANCED',  gate: 65, floor: 55, color: 'emerald' },
-                      { key: 'aggressive',   label: 'ACTIVE',    gate: 58, floor: 48, color: 'orange' },
-                      { key: 'custom',       label: 'CUSTOM',    gate: null, floor: null, color: 'purple' },
-                    ] as const).map(({ key, label, gate, floor, color }) => {
-                      const isSelected = (config.sensitivity_preset ?? 'balanced') === key;
-                      const activeCls = {
-                        blue:    'bg-blue-500/20 text-blue-400 border-t-2 border-blue-400',
-                        emerald: 'bg-emerald-500/20 text-emerald-400 border-t-2 border-emerald-400',
-                        orange:  'bg-orange-500/20 text-orange-400 border-t-2 border-orange-400',
-                        purple:  'bg-purple-500/20 text-purple-400 border-t-2 border-purple-400',
-                      }[color];
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => setConfig({
-                            ...config,
-                            sensitivity_preset: key,
-                            min_confluence: key === 'custom' ? (config.min_confluence ?? 65) : null,
-                            confluence_soft_floor: key === 'custom' ? (config.confluence_soft_floor ?? 55) : null,
-                          })}
-                          className={cn(
-                            "py-2 flex flex-col items-center gap-0.5 text-[9px] font-mono font-black tracking-[0.1em] transition-all",
-                            isSelected ? activeCls : "bg-black/40 text-white/20 hover:text-white/50"
-                          )}
-                        >
-                          <span>{label}</span>
-                          {gate !== null && <span className="opacity-60 text-[8px]">{gate}/{floor}</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {(config.sensitivity_preset ?? 'balanced') === 'custom' && (
-                    <div className="grid grid-cols-2 gap-2 mt-1">
-                      <div className="space-y-1">
-                        <div className="text-[8px] text-purple-400/60 uppercase tracking-[0.15em] font-mono">Gate % (full size)</div>
-                        <input
-                          type="number" min="40" max="100"
-                          value={config.min_confluence ?? 65}
-                          onChange={e => setConfig({ ...config, min_confluence: Number(e.target.value) || 65 })}
-                          className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-purple-500/20 bg-black/60 px-3 font-mono text-sm text-center text-purple-400 focus:outline-none"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-[8px] text-purple-400/60 uppercase tracking-[0.15em] font-mono">Floor % (half size)</div>
-                        <input
-                          type="number" min="30" max="100"
-                          value={config.confluence_soft_floor ?? 55}
-                          onChange={e => setConfig({ ...config, confluence_soft_floor: Number(e.target.value) || 55 })}
-                          className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-purple-500/20 bg-black/60 px-3 font-mono text-sm text-center text-purple-400 focus:outline-none"
-                        />
-                      </div>
-                    </div>
-                  )}
-                  <p className="text-[8px] text-white/20 font-mono pl-0.5">
-                    {config.sensitivity_preset === 'conservative' ? 'Highest-conviction only — 2–5 top-quality signals/week' :
-                     config.sensitivity_preset === 'aggressive'   ? 'Wide net — 15–30+ signals/week (more trades, more noise)' :
-                     config.sensitivity_preset === 'custom'       ? 'Signals above threshold enter at full size · Near-misses enter at half size' :
-                     'Quality signals at full size, near-misses at half size — 5–12 trades/week'}
-                  </p>
-                </div>
-
-                {/* 2-up: Leverage | Risk Per Trade */}
-                <div className="grid grid-cols-2 gap-[1px] bg-white/[0.04]">
-                  <div className="bg-[#070707] p-3 space-y-2">
-                    <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Leverage (×)</div>
-                    <input
-                      type="number" min="1" max="100"
-                      value={config.leverage}
-                      onChange={e => setConfig({ ...config, leverage: Number(e.target.value) })}
-                      className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-emerald-400 focus:outline-none focus:border-emerald-500/30"
-                    />
-                    <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
-                      {[1, 5, 10, 20].map(v => (
-                        <button key={v} onClick={() => setConfig({ ...config, leverage: v })}
-                          className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
-                            config.leverage === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
-                        >{v}×</button>
-                      ))}
-                    </div>
-                    {(() => {
-                      const exposure = (config.leverage ?? 1) * (config.risk_per_trade ?? 2);
-                      const color = exposure >= 20 ? 'text-red-400' : exposure >= 10 ? 'text-yellow-400' : 'text-white/25';
-                      return <p className={`text-[8px] font-mono ${color}`}>Exposure: {exposure.toFixed(1)}%</p>;
-                    })()}
-                  </div>
-                  <div className="bg-[#070707] p-3 space-y-2">
-                    <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Risk / Trade (%)</div>
-                    <input
-                      type="number" min="0.1" max="10" step="0.5"
-                      value={config.risk_per_trade ?? 2}
-                      onChange={e => setConfig({ ...config, risk_per_trade: Number(e.target.value) })}
-                      className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-emerald-400 focus:outline-none focus:border-emerald-500/30"
-                    />
-                    <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
-                      {[0.5, 1, 2, 3].map(v => (
-                        <button key={v} onClick={() => setConfig({ ...config, risk_per_trade: v })}
-                          className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
-                            config.risk_per_trade === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
-                        >{v}%</button>
-                      ))}
-                    </div>
-                    <p className="text-[8px] text-white/25 font-mono">Split across 3 entry levels</p>
-                  </div>
-                </div>
-
-                {/* 2-up: Session Duration | Scan Interval */}
-                <div className="grid grid-cols-2 gap-[1px] bg-white/[0.04]">
-                  <div className="bg-[#070707] p-3 space-y-2">
-                    <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Session Duration (h)</div>
-                    <input
-                      type="number" min="1" max="720"
-                      value={config.duration_hours}
-                      onChange={e => setConfig({ ...config, duration_hours: Number(e.target.value) })}
-                      className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-white/70 focus:outline-none focus:border-white/20"
-                    />
-                    <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
-                      {[8, 24, 72, 168].map(v => (
-                        <button key={v} onClick={() => setConfig({ ...config, duration_hours: v })}
-                          className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
-                            config.duration_hours === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
-                        >{v >= 168 ? '1w' : v >= 72 ? '3d' : `${v}h`}</button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="bg-[#070707] p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Scan Every (m)</div>
-                      <span className="text-[7px] font-mono text-emerald-400/50 border border-emerald-500/20 px-1 py-0.5">REC: 2m</span>
-                    </div>
-                    <input
-                      type="number" min="1" max="60"
-                      value={config.scan_interval_minutes}
-                      onChange={e => setConfig({ ...config, scan_interval_minutes: Number(e.target.value) })}
-                      className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-white/70 focus:outline-none focus:border-white/20"
-                    />
-                    <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
-                      {[2, 5, 15, 30].map(v => (
-                        <button key={v} onClick={() => setConfig({ ...config, scan_interval_minutes: v })}
-                          className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
-                            config.scan_interval_minutes === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
-                        >{v}m</button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2-up: Max Trade Duration | Max Concurrent */}
-                <div className="grid grid-cols-2 gap-[1px] bg-white/[0.04]">
-                  <div className="bg-[#070707] p-3 space-y-2">
-                    <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Max Trade Duration (h)</div>
-                    <input
-                      type="number" min="1" max="720"
-                      value={config.max_hours_open}
-                      onChange={e => setConfig({ ...config, max_hours_open: Number(e.target.value) })}
-                      className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-white/70 focus:outline-none focus:border-white/20"
-                    />
-                    <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
-                      {[24, 48, 72, 168].map(v => (
-                        <button key={v} onClick={() => setConfig({ ...config, max_hours_open: v })}
-                          className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
-                            config.max_hours_open === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
-                        >{v}h</button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="bg-[#070707] p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Max Concurrent</div>
-                      <span className="text-[7px] font-mono text-emerald-400/50 border border-emerald-500/20 px-1 py-0.5">REC: 3</span>
-                    </div>
-                    <input
-                      type="number" min="1" max="10"
-                      value={config.max_positions}
-                      onChange={e => setConfig({ ...config, max_positions: Number(e.target.value) })}
-                      className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-white/70 focus:outline-none focus:border-white/20"
-                    />
-                    <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
-                      {[1, 3, 5, 10].map(v => (
-                        <button key={v} onClick={() => setConfig({ ...config, max_positions: v })}
-                          className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
-                            config.max_positions === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
-                        >{v}</button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Asset Buckets */}
-                <div className="space-y-2">
-                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Target Asset Buckets</div>
-                  <div className="grid grid-cols-3 gap-[1px] bg-white/[0.04]">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            onClick={() => setConfig({ ...config, majors: !config.majors })}
-                            className={cn(
-                              "flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-mono font-black tracking-[0.12em] transition-all",
-                              config.majors ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50"
-                            )}
-                          >
-                            <Trophy size={12} weight={config.majors ? "fill" : "regular"} />
-                            MAJORS
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="bg-black/90 border-border text-[10px] p-2 max-w-[200px]">
-                          BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, DOT, LINK
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    <button
-                      onClick={() => setConfig({ ...config, altcoins: !config.altcoins })}
-                      className={cn(
-                        "flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-mono font-black tracking-[0.12em] transition-all",
-                        config.altcoins ? "bg-blue-500/20 text-blue-400" : "bg-black/40 text-white/20 hover:text-white/50"
-                      )}
-                    >
-                      <ChartLine size={12} weight={config.altcoins ? "fill" : "regular"} />
-                      ALTS
-                    </button>
-                    <button
-                      onClick={() => setConfig({ ...config, meme_mode: !config.meme_mode })}
-                      className={cn(
-                        "flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-mono font-black tracking-[0.12em] transition-all",
-                        config.meme_mode ? "bg-purple-500/20 text-purple-400" : "bg-black/40 text-white/20 hover:text-white/50"
-                      )}
-                    >
-                      <Crosshair size={12} weight={config.meme_mode ? "fill" : "regular"} />
-                      MEME HUNTER
-                    </button>
-                  </div>
-                </div>
-
-                {/* Universe Size */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Universe Size</div>
-                    <span className="text-[10px] font-mono font-bold text-emerald-400">{config.universe_size ?? 20} pairs</span>
-                  </div>
-                  <input
-                    type="range" min={10} max={50} step={5}
-                    value={config.universe_size ?? 20}
-                    onChange={(e) => setConfig({ ...config, universe_size: Number(e.target.value) })}
-                    className="cockpit-range w-full"
-                  />
-                  <div className="flex justify-between">
-                    <span className="text-[8px] text-white/20 font-mono">10</span>
-                    <span className="text-[8px] text-white/20 font-mono">50</span>
-                  </div>
-                </div>
-
-                {/* Custom Symbols */}
-                <div className="space-y-2">
-                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Custom Symbols (comma separated)</div>
-                  <input
-                    type="text"
-                    placeholder="e.g. BTC/USDT, ETH/USDT, LINK/USDT"
-                    value={config.symbols?.join(', ') || ''}
-                    onChange={(e) => {
-                      const syms = e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
-                      setConfig({ ...config, symbols: syms });
-                    }}
-                    className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-xs text-white/60 placeholder:text-white/15 focus:outline-none focus:border-white/20"
-                  />
-                </div>
-              </div>
-
-              {/* ── RIGHT PANEL — Limits ── */}
-              <div className="lg:col-span-3 bg-[#050c08] border-t-2 border-emerald-500/50 p-5 space-y-5 flex flex-col">
-                <div className="text-[8px] font-mono tracking-[0.2em] text-white/20 uppercase">[SAF-01] LIMITS</div>
-
-                {/* Max Drawdown big display */}
-                <div className="text-center py-4 border border-white/[0.06] bg-black/40 space-y-1">
-                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/30 font-mono">Max Drawdown Kill</div>
-                  <div className={cn(
-                    "text-5xl font-black font-mono",
-                    config.max_drawdown_pct == null ? "text-white/15" :
-                    config.max_drawdown_pct <= 10 ? "text-emerald-400" :
-                    config.max_drawdown_pct <= 20 ? "text-yellow-400" : "text-red-400"
-                  )}>
-                    {config.max_drawdown_pct == null ? 'OFF' : `${config.max_drawdown_pct}%`}
-                  </div>
-                  <div className="text-[8px] text-white/20 font-mono">stop if balance drops by this %</div>
-                </div>
-
-                {/* Max drawdown input + quick select */}
-                <div className="space-y-2">
-                  <input
-                    type="number" min="1" max="100"
-                    value={config.max_drawdown_pct ?? ''}
-                    placeholder="NONE"
-                    onChange={e => setConfig({ ...config, max_drawdown_pct: e.target.value === '' ? null : Number(e.target.value) })}
-                    className="w-full h-9 rounded-none shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] border border-white/10 bg-black/60 px-3 font-mono text-sm text-center text-white/60 placeholder:text-white/15 focus:outline-none focus:border-white/20"
-                  />
-                  <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04]">
-                    {[{ l: 'OFF', v: null }, { l: '10%', v: 10 }, { l: '15%', v: 15 }, { l: '25%', v: 25 }].map(({ l, v }) => (
-                      <button key={l} onClick={() => setConfig({ ...config, max_drawdown_pct: v })}
-                        className={cn("py-1 text-[9px] font-mono font-black tracking-tight transition-all",
-                          config.max_drawdown_pct === v ? "bg-emerald-500/20 text-emerald-400" : "bg-black/40 text-white/20 hover:text-white/50")}
-                      >{l}</button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Mode info card */}
-                <div className={cn("p-3 border space-y-1",
-                  config.use_testnet ? "border-yellow-500/20 bg-yellow-500/5" : "border-emerald-500/20 bg-emerald-500/5"
-                )}>
-                  <div className={cn("text-[9px] font-mono font-black tracking-[0.15em]",
-                    config.use_testnet ? "text-yellow-400" : "text-emerald-400"
-                  )}>
-                    {config.use_testnet ? '⚡ TESTNET MODE' : '◎ SIMULATION MODE'}
-                  </div>
-                  <p className="text-[8px] text-white/30 font-mono leading-tight">
-                    {config.use_testnet
-                      ? 'Real Phemex order book fills on paper account. Most accurate strategy validation.'
-                      : 'Internal fill math with realistic fee & slippage. No API keys needed.'}
-                  </p>
-                </div>
-
-                <div className="flex-1" />
-
-                {/* ARM PHANTOM button */}
-                <button
-                  onClick={handleStart}
-                  disabled={isLoading}
-                  className={cn(
-                    "w-full h-14 font-black tracking-[0.2em] text-sm font-mono relative overflow-hidden transition-all duration-300 border",
-                    "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
-                    "hover:bg-emerald-500/30 hover:shadow-[0_0_30px_rgba(0,255,136,0.25)] hover:scale-[1.02]",
-                    isLoading && "opacity-50 cursor-not-allowed"
-                  )}
-                >
-                  <div className="absolute inset-0 bg-white/20 skew-x-12 -translate-x-full hover:animate-shimmer" />
-                  <div className="flex items-center justify-center gap-2">
-                    {isLoading ? (
-                      <><ArrowsClockwise size={18} className="animate-spin" /> ARMING...</>
-                    ) : (
-                      <><PlayCircle size={18} weight="fill" /> ARM PHANTOM</>
-                    )}
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {/* ── Footer Capabilities Strip ── */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-[1px] bg-white/[0.06] border border-white/[0.06]">
-              {[
-                { label: 'MARKET ADAPTIVE', value: 'Regime-aware position sizing and trade type selection — scalp in compression, swing in trending' },
-                { label: 'SMART MONEY ANALYSIS', value: '5-timeframe order block + FVG + BOS + CHoCH detection with confluence scoring' },
-                { label: 'ZERO-RISK TRAINING', value: 'Internal simulation engine or Phemex testnet fills — no real funds at risk, full AI engine active' },
-              ].map(({ label, value }) => (
-                <div key={label} className="bg-black/40 px-4 py-3 space-y-1">
-                  <div className="text-[8px] uppercase tracking-[0.2em] text-white/25 font-mono">{label}</div>
-                  <div className="text-[9px] text-white/40 font-mono leading-relaxed">{value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-        ) : (
-          <div className="space-y-6 mt-6">
-            {/* Command Center */}
-            <section
-              className="rounded-2xl relative overflow-hidden"
+        <div className="tg-card-tag mono">{m.tag}</div>
+      </div>
+      <div className="tg-card-body">{m.body}</div>
+      <div className="tg-card-stats">
+        {m.stat.map((s, i) => (
+          <div key={i}>
+            <div
+              className="mono"
               style={{
-                background: 'linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(10,20,15,0.8) 100%)',
-                border: isRunning ? '1px solid rgba(74,222,128,0.2)' : '1px solid rgba(234,179,8,0.2)',
-                boxShadow: isRunning
-                  ? '0 0 0 1px rgba(74,222,128,0.05), 0 8px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(74,222,128,0.1)'
-                  : '0 0 0 1px rgba(234,179,8,0.05), 0 8px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(234,179,8,0.1)',
+                fontSize: 9,
+                color: 'var(--fg-4)',
+                letterSpacing: '.18em',
+                textTransform: 'uppercase',
               }}
             >
-              {/* Ambient glow layer */}
-              <div
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  background: isRunning
-                    ? 'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(74,222,128,0.06) 0%, transparent 70%)'
-                    : 'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(234,179,8,0.06) 0%, transparent 70%)',
-                }}
-              />
-
-              <div className="relative z-10 p-5 space-y-5">
-
-                {/* ── Row 1: Identity + Controls ─────────────────────────── */}
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-4 min-w-0">
-                    {/* Pulsing status orb */}
-                    <div className="relative flex-shrink-0 w-10 h-10 flex items-center justify-center">
-                      <div
-                        className={cn("absolute inset-0 rounded-full animate-ping opacity-20", isRunning ? "bg-green-400" : "bg-yellow-400")}
-                        style={{ animationDuration: '2.5s' }}
-                      />
-                      <div
-                        className={cn("absolute inset-1 rounded-full opacity-30", isRunning ? "bg-green-400/30" : "bg-yellow-400/30")}
-                        style={{ filter: 'blur(4px)' }}
-                      />
-                      <div className={cn(
-                        "relative w-4 h-4 rounded-full",
-                        isRunning
-                          ? "bg-green-400 shadow-[0_0_16px_rgba(74,222,128,0.9)]"
-                          : "bg-yellow-400 shadow-[0_0_16px_rgba(234,179,8,0.9)]"
-                      )} />
-                    </div>
-
-                    {/* Title block */}
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="text-base sm:text-lg font-black font-mono tracking-tight text-white/90 uppercase">
-                          Phantom Engine
-                        </span>
-                        <span className={cn(
-                          "text-[10px] font-black font-mono tracking-[0.2em] px-2 py-0.5 rounded-full border",
-                          isRunning
-                            ? "text-green-400 border-green-500/40 bg-green-500/10"
-                            : "text-yellow-400 border-yellow-500/40 bg-yellow-500/10"
-                        )}>
-                          {isRunning ? "LIVE" : "PAUSED"}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-white/30 font-mono mt-1 flex items-center gap-2 flex-wrap">
-                        <Clock size={10} className="opacity-50" />
-                        <span>{formatDuration(status?.uptime_seconds || 0)}</span>
-                        {status?.session_id && (
-                          <>
-                            <span className="opacity-20">·</span>
-                            <span className="opacity-40 truncate max-w-[120px] sm:max-w-none">
-                              {status.session_id.slice(0, 8)}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Controls */}
-                  <div className="flex-shrink-0">
-                    {isRunning ? (
-                      <button
-                        onClick={handleStop}
-                        disabled={isLoading}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono font-black text-xs tracking-widest text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 hover:border-red-500/50 transition-all duration-200 disabled:opacity-40"
-                        style={{ boxShadow: '0 0 20px rgba(239,68,68,0.1)' }}
-                      >
-                        <StopCircle size={15} />
-                        STOP
-                      </button>
-                    ) : (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleStart}
-                          disabled={isLoading || isRunning}
-                          className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono font-black text-xs tracking-widest text-green-400 border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 transition-all duration-200 disabled:opacity-40"
-                        >
-                          <PlayCircle size={15} />
-                          START
-                        </button>
-                        <button
-                          onClick={handleReset}
-                          disabled={isLoading || isRunning}
-                          className="flex items-center justify-center w-9 h-9 rounded-lg text-white/40 border border-border/30 bg-black/20 hover:bg-black/40 transition-all duration-200 disabled:opacity-40"
-                        >
-                          <ArrowsClockwise size={15} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── Row 2: Live Metrics Grid ────────────────────────────── */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  {/* Session Uptime */}
-                  <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2.5">Running</div>
-                    <div className="text-xl sm:text-2xl font-black font-mono text-white/80 leading-none mb-1.5"
-                      style={{ letterSpacing: '-0.02em' }}>
-                      {formatDuration(status?.uptime_seconds || 0)}
-                    </div>
-                    <div className="text-[10px] font-mono text-white/30">session uptime</div>
-                  </div>
-
-                  {/* Market Regime */}
-                  <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2.5">Regime</div>
-                    {status?.regime && status.regime.composite !== 'unknown' ? (
-                      <>
-                        <div className={cn(
-                          "text-xl sm:text-2xl font-black font-mono leading-none mb-1.5",
-                          (status.regime.trend ?? '').includes('up') ? 'text-green-400' : (status.regime.trend ?? '').includes('down') ? 'text-red-400' : 'text-blue-400'
-                        )}
-                          style={{ letterSpacing: '-0.02em' }}
-                        >
-                          {status.regime.trend.replace(/_/g, ' ').toUpperCase()}
-                        </div>
-                        <div className="text-[10px] font-mono text-white/30 uppercase tracking-wide">{status.regime.volatility}</div>
-                      </>
-                    ) : (
-                      <div className="text-2xl font-black font-mono text-white/15">—</div>
-                    )}
-                  </div>
-
-                  {/* Next Scan */}
-                  <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2.5">Next Scan</div>
-                    {isRunning && status?.next_scan_in_seconds != null ? (
-                      <>
-                        <div className="text-xl sm:text-2xl font-black font-mono text-amber-400 leading-none mb-1.5"
-                          style={{ textShadow: '0 0 24px rgba(251,191,36,0.5)', letterSpacing: '-0.02em' }}>
-                          {formatDuration(Math.round(status.next_scan_in_seconds))}
-                        </div>
-                        <div className="text-[10px] font-mono text-white/30">until next scan</div>
-                      </>
-                    ) : (
-                      <div className="text-2xl font-black font-mono text-white/15">—</div>
-                    )}
-                  </div>
-
-                  {/* Confluence Gate */}
-                  <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div className="text-[9px] text-white/25 font-mono uppercase tracking-[0.18em] mb-2.5">Min Score</div>
-                    <div className="text-xl sm:text-2xl font-black font-mono text-white/70 leading-none mb-1.5"
-                      style={{ letterSpacing: '-0.02em' }}>
-                      {status?.config?.min_confluence != null ? `≥${status.config.min_confluence}` : 'AUTO'}
-                    </div>
-                    <div className="text-[10px] font-mono text-white/30">confluence</div>
-                  </div>
-                </div>
-
-                {/* ── Row 3: Session parameters ────────────────────────────── */}
-                {status?.config && (() => {
-                  const cfg = status.config;
-                  const mode = cfg.sniper_mode || 'stealth';
-                  const preset = cfg.sensitivity_preset;
-                  const pills = [
-                    mode ? { label: mode.toUpperCase() } : null,
-                    preset ? { label: preset.toUpperCase() } : null,
-                    cfg.duration_hours != null ? { label: `${cfg.duration_hours}H` } : null,
-                    cfg.max_positions != null ? { label: `${cfg.max_positions} SLOTS` } : null,
-                    cfg.risk_per_trade != null ? { label: `${cfg.risk_per_trade}% RISK` } : null,
-                    cfg.leverage != null && cfg.leverage !== 1 ? { label: `${cfg.leverage}× LEVERAGE` } : null,
-                  ].filter(Boolean) as { label: string }[];
-
-                  return (
-                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
-                      {pills.map((pill, i) => (
-                        <span
-                          key={i}
-                          className="flex-shrink-0 text-[10px] font-mono font-semibold px-2.5 py-1 rounded-md border text-white/70 border-white/20 bg-white/[0.07]"
-                        >
-                          {pill.label}
-                        </span>
-                      ))}
-                    </div>
-                  );
-                })()}
-
-                {/* ── Row 4: Scan progress (inline) ────────────────────────── */}
-                {status?.current_scan && (() => {
-                  const scan = status.current_scan;
-                  const isScanning = scan.status === 'running';
-                  return (
-                    <div className="space-y-2.5 pt-1 border-t border-white/[0.05]">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Target
-                            size={12}
-                            className={cn("flex-shrink-0", isScanning ? "text-amber-400 animate-pulse" : "text-green-400")}
-                          />
-                          <span className="text-[10px] font-mono text-white/40 uppercase tracking-widest truncate">
-                            {isScanning
-                              ? `Scanning ${scan.current_symbol || '…'}`
-                              : 'Scan complete'}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3 flex-shrink-0 text-[10px] font-mono">
-                          <span className="text-green-400 font-bold">{scan.passed} passed</span>
-                          <span className="text-white/25">{scan.rejected} filtered</span>
-                          <span className="text-white/20">{scan.completed}/{scan.total}</span>
-                        </div>
-                      </div>
-
-                      {/* Progress bar */}
-                      <div className="relative h-1 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.5)' }}>
-                        <div
-                          className="h-full rounded-full transition-all duration-700"
-                          style={{
-                            width: `${scan.progress_pct}%`,
-                            background: isScanning
-                              ? 'linear-gradient(90deg, rgba(251,191,36,0.8), rgba(251,191,36,1))'
-                              : 'linear-gradient(90deg, rgba(74,222,128,0.7), rgba(74,222,128,1))',
-                            boxShadow: isScanning
-                              ? '0 0 12px rgba(251,191,36,0.5)'
-                              : '0 0 10px rgba(74,222,128,0.4)',
-                          }}
-                        />
-                      </div>
-
-                      {/* Symbol ticker */}
-                      {scan.recent_symbols && scan.recent_symbols.length > 0 && (
-                        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-                          {scan.recent_symbols.map((item, idx) => (
-                            <span
-                              key={`${item.symbol}-${idx}`}
-                              className={cn(
-                                "flex-shrink-0 text-[9px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap",
-                                item.passed
-                                  ? "text-green-400/80 bg-green-500/10"
-                                  : "text-white/20 bg-white/[0.03]"
-                              )}
-                            >
-                              {item.symbol}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-              </div>
-            </section>
-
-            {/* Equity Curve + Stats Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* SESSION P&L Hero Card (spans 2 cols) */}
-              <div className="lg:col-span-2 glass-card p-5 rounded-2xl border-accent/30 relative group overflow-hidden">
-                <div className="absolute top-0 right-0 w-48 h-48 bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-accent/5 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none -mr-20 -mt-20" />
-                {/* Top accent bar */}
-                <div className={cn(
-                  "absolute top-0 left-0 right-0 h-0.5",
-                  (status?.balance?.pnl ?? 0) >= 0
-                    ? 'bg-gradient-to-r from-transparent via-green-400/60 to-transparent'
-                    : 'bg-gradient-to-r from-transparent via-red-400/60 to-transparent'
-                )} />
-                <div className="relative z-10">
-                  {/* Section label */}
-                  <div className="text-[9px] text-muted-foreground font-mono font-bold tracking-[0.2em] uppercase mb-2 opacity-60 flex items-center gap-2">
-                    <Wallet size={10} />
-                    SESSION P&L
-                  </div>
-
-                  {/* Hero P&L number */}
-                  {(() => {
-                    const initial = status?.balance?.initial || config.initial_balance || 10000;
-                    const equity = status?.balance?.equity || initial;
-                    // Realized-only: sum completed trades, not balance.pnl which includes unrealized
-                    const pnl = trades.reduce((s, t) => s + t.pnl, 0);
-                    const pnlPct = initial > 0 ? (pnl / initial) * 100 : 0;
-                    const wins = status?.statistics?.winning_trades ?? 0;
-                    const losses = status?.statistics?.losing_trades ?? 0;
-                    const avgWin = status?.statistics?.avg_win ?? 0;
-                    const avgLoss = status?.statistics?.avg_loss ?? 0;
-                    const grossWins = avgWin * wins;
-                    const grossLosses = Math.abs(avgLoss) * losses;
-                    const isPos = pnl >= 0;
-                    return (
-                      <>
-                        <div className="flex items-end gap-4 mb-3">
-                          <div className={cn(
-                            "text-5xl font-bold font-mono tracking-tight leading-none",
-                            isPos ? 'text-green-400' : 'text-red-400'
-                          )}
-                            style={isPos ? { textShadow: '0 0 30px rgba(74,222,128,0.35)' } : { textShadow: '0 0 30px rgba(248,113,113,0.35)' }}
-                          >
-                            {isPos ? '+' : ''}{formatCurrency(pnl)}
-                          </div>
-                          <div className="flex flex-col gap-1 pb-1">
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "font-mono text-xs border tracking-widest self-start",
-                                isPos
-                                  ? 'bg-green-500/10 text-green-400 border-green-500/30'
-                                  : 'bg-red-500/10 text-red-400 border-red-500/30'
-                              )}
-                            >
-                              {isPos ? '+' : ''}{pnlPct.toFixed(2)}%
-                            </Badge>
-                            <div className="text-[10px] text-muted-foreground/50 font-mono">
-                              realized · started {formatCurrency(initial)}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Gross wins / gross losses breakdown */}
-                        {(wins > 0 || losses > 0) && (
-                          <div className="grid grid-cols-2 gap-2 mb-3 p-2.5 rounded-lg bg-black/30 border border-border/20">
-                            <div>
-                              <div className="text-[9px] text-green-400/60 font-mono uppercase tracking-widest mb-0.5">GROSS WINS</div>
-                              <div className="text-base font-bold font-mono text-green-400">+{formatCurrency(grossWins)}</div>
-                              <div className="text-[9px] text-muted-foreground/40 font-mono">{wins} win{wins !== 1 ? 's' : ''} · avg {formatCurrency(avgWin)}</div>
-                            </div>
-                            <div>
-                              <div className="text-[9px] text-red-400/60 font-mono uppercase tracking-widest mb-0.5">GROSS LOSSES</div>
-                              <div className="text-base font-bold font-mono text-red-400">-{formatCurrency(grossLosses)}</div>
-                              <div className="text-[9px] text-muted-foreground/40 font-mono">{losses} loss{losses !== 1 ? 'es' : ''} · avg {formatCurrency(Math.abs(avgLoss))}</div>
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-
-                  {/* Equity Sparkline */}
-                  <div className="p-2 rounded-lg bg-black/30 border border-border/30">
-                    <EquitySparkline
-                      trades={trades}
-                      initialBalance={status?.balance?.initial || config.initial_balance || 10000}
-                    />
-                  </div>
-                  <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground/50 font-mono">
-                    <span>{trades.length} completed trade{trades.length !== 1 ? 's' : ''}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right column — stacked stats */}
-              <div className="flex flex-col gap-4 min-w-0">
-                {/* Performance Card */}
-                <div className="glass-card p-4 rounded-2xl border-border/50 relative group flex-1 min-w-0">
-                  <div className="relative z-10 min-w-0">
-                    <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase mb-3">PERFORMANCE</div>
-                    {/* Record row */}
-                    <div className="flex items-baseline gap-1.5 mb-2">
-                      <span className="text-green-400 font-mono font-bold text-lg">{status?.statistics?.winning_trades || 0}W</span>
-                      <span className="text-white/20 text-sm">/</span>
-                      <span className="text-yellow-400/80 font-mono font-bold text-lg">{status?.statistics?.scratch_trades || 0}S</span>
-                      <span className="text-white/20 text-sm">/</span>
-                      <span className="text-red-400 font-mono font-bold text-lg">{status?.statistics?.losing_trades || 0}L</span>
-                      <span className="text-muted-foreground text-xs ml-1">({status?.statistics?.total_trades || 0} trades)</span>
-                    </div>
-                    {/* Win rate */}
-                    <div className="text-xs text-muted-foreground font-mono mb-3">
-                      Win Rate: <span className={cn("font-bold", (status?.statistics?.win_rate ?? 0) >= 50 ? 'text-green-400' : 'text-amber-400')}>{(status?.statistics?.win_rate ?? 0).toFixed(0)}%</span>
-                    </div>
-                    {/* EV and RR row */}
-                    <div className="grid grid-cols-2 gap-2 mb-2">
-                      <div className="p-2 rounded-lg bg-black/20">
-                        <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-0.5">EV / TRADE</div>
-                        <div className={cn("text-base font-bold font-mono", (status?.statistics?.expectancy ?? 0) >= 0 ? 'text-green-400' : 'text-red-400')}>
-                          {(status?.statistics?.expectancy ?? 0) >= 0 ? '+' : ''}{formatCurrency(status?.statistics?.expectancy ?? 0)}
-                        </div>
-                      </div>
-                      <div className="p-2 rounded-lg bg-black/20">
-                        <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-0.5">AVG R:R</div>
-                        <div className="text-base font-bold font-mono">{(status?.statistics?.avg_rr || 0).toFixed(2)}</div>
-                      </div>
-                    </div>
-                    {/* Avg win / loss */}
-                    <div className="flex gap-3 text-xs font-mono">
-                      <span>Avg W: <span className="text-green-400 font-bold">{formatCurrency(status?.statistics?.avg_win || 0)}</span></span>
-                      <span className="opacity-20">|</span>
-                      <span>Avg L: <span className="text-red-400 font-bold">{formatCurrency(status?.statistics?.avg_loss || 0)}</span></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              {s.k}
             </div>
-
-            {/* Secondary Stats Row — Max Drawdown, Profit Factor, Scans, Streak */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Max Drawdown */}
-              <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
-                <div className="relative z-10 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">MAX DRAWDOWN</div>
-                      <div className={cn(
-                        "text-xl font-bold font-mono tracking-tight mt-0.5",
-                        status?.statistics?.max_drawdown ? 'text-red-400' : 'text-muted-foreground'
-                      )}>
-                        {(status?.statistics?.max_drawdown || 0).toFixed(2)}%
-                      </div>
-                    </div>
-                    <TrendDown size={24} className="text-red-400/20 transition-colors group-hover:text-red-400/50 shrink-0" />
-                  </div>
-                  <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">
-                    Peak-to-trough
-                  </div>
-                </div>
-              </div>
-
-              {/* Profit Factor */}
-              <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
-                <div className="relative z-10 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">PROFIT FACTOR</div>
-                      {(() => {
-                        const grossWin = (status?.statistics?.avg_win || 0) * (status?.statistics?.winning_trades || 0);
-                        const grossLoss = Math.abs(status?.statistics?.avg_loss || 0) * (status?.statistics?.losing_trades || 0);
-                        const pf = grossLoss > 0 ? grossWin / grossLoss : (grossWin > 0 ? 99 : 0);
-                        return (
-                          <div className={cn("text-xl font-bold font-mono tracking-tight mt-0.5", pf === 0 ? 'text-muted-foreground' : pf >= 1.5 ? 'text-green-400' : pf >= 1 ? 'text-amber-400' : 'text-red-400')}>
-                            {pf === 0 ? 'N/A' : pf >= 99 ? '∞' : `${pf.toFixed(2)}x`}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                    <TrendUp size={24} className="text-accent/20 transition-colors group-hover:text-accent/50 shrink-0" />
-                  </div>
-                  <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">Gross wins / gross losses</div>
-                </div>
-              </div>
-
-              {/* Best Trade — only when there are wins */}
-              {(status?.statistics?.winning_trades ?? 0) > 0 && (
-                <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
-                  <div className="relative z-10 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">BEST TRADE</div>
-                        <div className="text-xl font-bold font-mono tracking-tight mt-0.5 text-green-400">
-                          +{formatCurrency(status?.statistics?.best_trade ?? 0)}
-                        </div>
-                      </div>
-                      <TrendUp size={24} className="text-green-400/20 transition-colors group-hover:text-green-400/50 shrink-0" />
-                    </div>
-                    <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">Single trade max profit</div>
-                  </div>
-                </div>
-              )}
-
-              {/* Worst Trade — only when there are losses */}
-              {(status?.statistics?.losing_trades ?? 0) > 0 && (
-                <div className="glass-card p-4 rounded-2xl border-border/50 relative group min-w-0">
-                  <div className="relative z-10 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase">WORST TRADE</div>
-                        <div className="text-xl font-bold font-mono tracking-tight mt-0.5 text-red-400">
-                          {formatCurrency(status?.statistics?.worst_trade ?? 0)}
-                        </div>
-                      </div>
-                      <TrendDown size={24} className="text-red-400/20 transition-colors group-hover:text-red-400/50 shrink-0" />
-                    </div>
-                    <div className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono">Single trade max loss</div>
-                  </div>
-                </div>
-              )}
+            <div
+              className="mono"
+              style={{
+                fontSize: 13,
+                color: s.vc ?? 'var(--fg)',
+                fontWeight: 700,
+                marginTop: 2,
+              }}
+            >
+              {s.v}
             </div>
-
-            {/* Breakdown Row — By Trade Type + Exit Reasons */}
-            {status?.statistics && (
-              (Object.keys(status.statistics.by_trade_type || {}).length > 0 ||
-               Object.keys(status.statistics.exit_reasons || {}).length > 0) && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-                {/* By Trade Type */}
-                {Object.keys(status.statistics.by_trade_type || {}).length > 0 && (
-                  <div className="glass-card p-4 rounded-2xl border-border/50">
-                    <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase mb-3">BY TRADE TYPE</div>
-                    <div>
-                      {/* Header row */}
-                      <div className="grid grid-cols-[80px_1fr_48px_48px_64px] gap-2 text-[9px] text-muted-foreground/50 font-mono uppercase tracking-widest mb-2 pb-1 border-b border-border/20">
-                        <span>Type</span>
-                        <span>Win Rate</span>
-                        <span className="text-right">Win%</span>
-                        <span className="text-right">Trades</span>
-                        <span className="text-right">Net P&L</span>
-                      </div>
-                      {(['scalp', 'intraday', 'swing'] as const).filter(tt => status.statistics.by_trade_type?.[tt]).map(tt => {
-                        const b = status.statistics.by_trade_type![tt];
-                        if (!b) return null;
-                        const color = tt === 'scalp' ? 'text-purple-400' : tt === 'intraday' ? 'text-blue-400' : 'text-amber-400';
-                        const pnlColor = b.total_pnl >= 0 ? 'text-green-400' : 'text-red-400';
-                        return (
-                          <div key={tt} className="grid grid-cols-[80px_1fr_48px_48px_64px] gap-2 items-center text-xs font-mono py-1">
-                            <span className={cn("font-bold uppercase tracking-tight", color)}>{tt}</span>
-                            <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
-                              <div className={cn("h-full rounded-full", b.win_rate >= 50 ? 'bg-green-400/60' : 'bg-red-400/60')} style={{ width: `${b.win_rate}%` }} />
-                            </div>
-                            <span className="text-right text-muted-foreground">{b.win_rate.toFixed(0)}%</span>
-                            <span className="text-right text-muted-foreground/60">{b.trades}</span>
-                            <span className={cn("text-right font-bold", pnlColor)}>{b.total_pnl >= 0 ? '+' : ''}{b.total_pnl.toFixed(1)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Exit Reasons */}
-                {Object.keys(status.statistics.exit_reasons || {}).length > 0 && (
-                  <div className="glass-card p-4 rounded-2xl border-border/50">
-                    <div className="text-[10px] text-muted-foreground font-mono font-bold tracking-wider uppercase mb-3">EXIT REASONS</div>
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(status.statistics.exit_reasons || {})
-                        .sort(([, a], [, b]) => b - a)
-                        .map(([reason, count]) => {
-                          const label = reason === 'stop_loss' ? 'Stop' : reason === 'target' ? 'Target' : reason === 'stagnation' ? 'Stagnation' : reason === 'direction_flip' ? 'Flip' : reason === 'emergency' ? 'Emergency' : reason === 'session_stopped' ? 'Session End' : reason.replace(/_/g, ' ');
-                          const chipColor = reason === 'target' ? 'bg-green-400/15 border-green-400/30 text-green-400' : reason === 'stop_loss' ? 'bg-red-400/15 border-red-400/30 text-red-400' : reason === 'stagnation' ? 'bg-amber-400/15 border-amber-400/30 text-amber-400' : 'bg-white/5 border-border/40 text-muted-foreground';
-                          const reasonPnl = trades.filter(t => t.exit_reason === reason).reduce((s, t) => s + t.pnl, 0);
-                          const pnlStr = reasonPnl >= 0 ? `+${formatCurrency(reasonPnl)}` : formatCurrency(reasonPnl);
-                          return (
-                            <div key={reason} className={cn("flex flex-col gap-0.5 px-3 py-2 rounded-xl border text-[11px] font-mono font-bold", chipColor)}>
-                              <div className="flex items-center gap-1.5">
-                                <span>{label}</span>
-                                <span className="opacity-50 font-normal">×{count}</span>
-                              </div>
-                              <div className={cn("text-[10px] font-normal", reasonPnl >= 0 ? 'text-green-400/70' : 'text-red-400/70')}>
-                                {pnlStr}
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-                )}
-
-              </div>
-            ))}
-
-            {/* Positions & Activity Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Active Positions */}
-              <section className="glass-card glow-border-green p-5 rounded-2xl h-full flex flex-col relative overflow-hidden group">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-green-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-
-                <div className="flex items-center justify-between mb-6 relative z-10">
-                  <h2 className="text-xl lg:text-2xl font-semibold hud-headline hud-text-green tracking-wide flex items-center gap-3">
-                    <ChartLine size={24} className="text-accent" />
-                    ACTIVE POSITIONS
-                  </h2>
-                  <Badge variant="outline" className="bg-black/60 font-mono tracking-widest px-3 border-accent/40 text-accent glow-border-green">
-                    {status?.positions?.length || 0}
-                  </Badge>
-                </div>
-
-                <div className="relative z-10 space-y-10 mt-4">
-                  {/* Part 1: Active Positions */}
-                  {(status?.positions && status.positions.length > 0) ? (
-                    <div>
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-green-500/20 to-transparent" />
-                        <h3 className="text-[10px] font-black tracking-[0.3em] uppercase text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.3)] bg-green-500/5 px-4 py-1 rounded-full border border-green-500/20">
-                          ACTIVE POSITIONS ({status.positions.length})
-                        </h3>
-                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-green-500/20 to-transparent" />
-                      </div>
-                      <div className="space-y-4">
-                        {status.positions.map((pos) => (
-                          <PositionCard key={pos.position_id} position={pos} />
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {/* Part 2: Pending Orders */}
-                  {(status?.pending_orders && status.pending_orders.length > 0) ? (
-                    <div>
-                      <div className="flex items-center gap-3 mb-4 mt-6">
-                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-500/20 to-transparent" />
-                        <h3 className="text-[10px] font-black tracking-[0.3em] uppercase text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.3)] bg-amber-500/5 px-4 py-1 rounded-full border border-amber-500/20">
-                          PENDING LIMIT ORDERS ({status.pending_orders.length})
-                        </h3>
-                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-500/20 to-transparent" />
-                      </div>
-                      <div className="space-y-3">
-                        {status.pending_orders.map((order) => (
-                          <PendingOrderCard key={order.order_id} order={order} />
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {/* Combined Empty State */}
-                  {!(status?.positions?.length) && !(status?.pending_orders?.length) && (
-                    <div className="text-center py-20 px-4">
-                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted/5 border border-dashed border-muted/20 mb-4">
-                        <Target size={32} className="text-muted-foreground/30" />
-                      </div>
-                      <h3 className="text-lg font-medium text-muted-foreground/80">No market exposure yet</h3>
-                      <p className="text-sm text-muted-foreground/40 mt-1 max-w-xs mx-auto">
-                        Your bot is currently monitoring {config.symbols?.length ?? 0} symbols for {config.sniper_mode} setups.
-                      </p>
-                      <p className="text-xs text-muted-foreground/25 mt-2 max-w-xs mx-auto font-mono">
-                        In typical conditions, Stealth generates 1–4 entries per 24h session
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              {/* Risk & Exposure */}
-              <section className="glass-card glow-border-amber p-5 rounded-2xl h-full flex flex-col relative overflow-hidden group">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-                <div className="flex items-center justify-between mb-5 relative z-10">
-                  <h2 className="text-xl lg:text-2xl font-semibold hud-headline hud-text-amber tracking-wide flex items-center gap-3">
-                    <ShieldCheck size={24} className="text-amber-400" />
-                    RISK &amp; EXPOSURE
-                  </h2>
-                </div>
-
-                <div className="relative z-10 space-y-4 flex-1">
-                  {/* Capital deployed */}
-                  {(() => {
-                    const positions = status?.positions || [];
-                    const equity = status?.balance?.equity || config.initial_balance || 10000;
-                    const totalExposure = positions.reduce((sum, p) => sum + (p.entry_price * p.quantity), 0);
-                    const exposurePct = equity > 0 ? (totalExposure / equity) * 100 : 0;
-                    const maxPositions = status?.config?.max_positions ?? config.max_positions ?? 3;
-                    const usedPositions = positions.length;
-                    const unrealizedPnl = positions.reduce((sum, p) => sum + (p.unrealized_pnl || 0), 0);
-                    const riskPerTrade = status?.config?.risk_per_trade ?? config.risk_per_trade ?? 2;
-
-                    return (
-                      <>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="p-3 rounded-xl bg-background/40 border border-border/30">
-                            <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-1">POSITIONS</div>
-                            <div className="text-2xl font-mono font-bold text-foreground">
-                              {usedPositions}<span className="text-sm text-muted-foreground font-normal">/{maxPositions}</span>
-                            </div>
-                          </div>
-                          <div className="p-3 rounded-xl bg-background/40 border border-border/30">
-                            <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-1">RISK / TRADE</div>
-                            <div className="text-2xl font-mono font-bold text-foreground">
-                              {riskPerTrade}%
-                            </div>
-                            <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                              {formatCurrency(equity * riskPerTrade / 100)} max
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Exposure bar */}
-                        <div className="p-3 rounded-xl bg-background/40 border border-border/30">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">NOTIONAL EXPOSURE</span>
-                            <span className={cn("text-xs font-mono font-bold", exposurePct > 50 ? 'text-amber-400' : 'text-green-400')}>
-                              {exposurePct.toFixed(1)}%
-                            </span>
-                          </div>
-                          <div className="h-2 rounded-full bg-black/40 overflow-hidden">
-                            <div
-                              className={cn(
-                                "h-full rounded-full transition-all duration-500",
-                                exposurePct > 75 ? 'bg-red-500' : exposurePct > 50 ? 'bg-amber-500' : 'bg-green-500'
-                              )}
-                              style={{ width: `${Math.min(exposurePct, 100)}%` }}
-                            />
-                          </div>
-                          <div className="text-[10px] text-muted-foreground font-mono mt-1.5">
-                            {formatCurrency(totalExposure)} position size vs equity — &gt;100% is normal with leverage
-                          </div>
-                        </div>
-
-                        {/* Unrealized P&L */}
-                        <div className="p-3 rounded-xl bg-background/40 border border-border/30">
-                          <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest mb-1">TOTAL UNREALIZED P&amp;L</div>
-                          <div className={cn(
-                            "text-xl font-mono font-bold",
-                            unrealizedPnl > 0 ? 'text-green-400' : unrealizedPnl < 0 ? 'text-red-400' : 'text-muted-foreground'
-                          )}>
-                            {unrealizedPnl >= 0 ? '+' : ''}{formatCurrency(unrealizedPnl)}
-                          </div>
-                          <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                            Across {usedPositions} open position{usedPositions !== 1 ? 's' : ''}
-                          </div>
-                        </div>
-
-                        {/* Per-position heat */}
-                        {positions.length > 0 && (
-                          <div className="space-y-2 pt-1">
-                            <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">OPEN P&L BREAKDOWN</div>
-                            {positions.map((pos) => (
-                              <div key={pos.position_id} className="flex items-center gap-2 text-xs font-mono">
-                                <span className={pos.direction === 'LONG' ? 'text-green-400' : 'text-red-400'}>
-                                  {pos.direction === 'LONG' ? '↑' : '↓'}
-                                </span>
-                                <span className="text-foreground/80 w-24 truncate">{pos.symbol}</span>
-                                <div className="flex-1 h-1.5 rounded-full bg-black/40 overflow-hidden">
-                                  <div
-                                    className={cn(
-                                      "h-full rounded-full",
-                                      (pos.unrealized_pnl || 0) >= 0 ? 'bg-green-500' : 'bg-red-500'
-                                    )}
-                                    style={{ width: `${Math.min(Math.abs((pos.unrealized_pnl_pct || 0)), 100)}%` }}
-                                  />
-                                </div>
-                                <span className={cn(
-                                  "w-16 text-right",
-                                  (pos.unrealized_pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'
-                                )}>
-                                  {(pos.unrealized_pnl || 0) >= 0 ? '+' : ''}{formatCurrency(pos.unrealized_pnl || 0)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              </section>
-            </div>
-
-            {/* Trade History */}
-            <section className="glass-card glow-border-amber p-5 rounded-2xl relative overflow-hidden group">
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-
-              <div className="flex items-center justify-between mb-6 relative z-10">
-                <h2 className="text-xl lg:text-2xl font-semibold hud-headline hud-text-amber tracking-wide flex items-center gap-3">
-                  <ListBullets size={24} className="text-warning" />
-                  TRADE HISTORY
-                </h2>
-                <Badge variant="outline" className="bg-black/60 font-mono tracking-widest px-3 border-amber-500/40 text-amber-500 glow-border-amber">
-                  {trades.length} trades
-                </Badge>
-              </div>
-
-              <div className="relative z-10">
-                {trades.length > 0 ? (
-                  <div className="max-h-[480px] overflow-y-auto pr-1 space-y-2 scrollbar-thin scrollbar-thumb-border/50 scrollbar-track-transparent">
-                    {trades.map((trade) => (
-                      <TradeHistoryItem key={trade.trade_id} trade={trade} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12 border border-border border-dashed rounded-lg bg-background/50">
-                    <TrendUp size={32} className="mx-auto mb-3 opacity-20 text-warning" />
-                    <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground/50">No completed trades yet</p>
-                  </div>
-                )}
-              </div>
-            </section>
-            {/* Signal Intelligence Panel */}
-            {status?.signal_log && status.signal_log.length > 0 && (
-              <GauntletBreakdown
-                signals={status.signal_log}
-                minConfluence={status?.config?.min_confluence ?? undefined}
-                currentScan={status?.current_scan ?? null}
-              />
-            )}
           </div>
-        )}
-
-        {/* System Capabilities Panel (always visible at bottom) */}
-        <div className="mt-8">
-          <TacticalPanel>
-            <div className="p-4 md:p-6">
-              <div className="mb-6 flex justify-between items-end">
-                <div>
-                  <h3 className="heading-hud text-xl text-foreground mb-1 uppercase tracking-tight">Phantom Engine Specs</h3>
-                  <p className="text-sm text-muted-foreground">Internal logic and autonomous execution parameters</p>
-                </div>
-                {status?.status === 'running' && (
-                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/5 border border-green-500/20 mb-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.5)]" />
-                    <span className="text-[9px] font-black text-green-400/80 uppercase tracking-[0.2em] pl-1">Engine Active</span>
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Regime Adaptive */}
-                <div className="p-5 bg-background/40 hover:bg-background/60 rounded-xl border border-border/50 hover:border-purple-500/30 transition-all duration-300 group relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 blur-3xl rounded-full -mr-12 -mt-12 pointer-events-none" />
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                       <Lightning size={18} weight="fill" className={cn("text-purple-400", status?.status === 'running' && "animate-pulse")} />
-                       <div className="font-bold text-sm tracking-widest uppercase text-purple-400/90">Regime Adaptive</div>
-                    </div>
-                    {status?.regime && status.regime.composite !== 'unknown' && (
-                       <Badge variant="outline" className="text-[9px] border-purple-500/20 text-purple-400/80 bg-purple-500/5 font-mono tracking-tighter">
-                          {status.regime.composite.toUpperCase()}
-                       </Badge>
-                    )}
-                  </div>
-                  <p className="text-muted-foreground text-xs leading-relaxed mb-4">
-                    Position sizing automatically scales up in strong trends and reduces in choppy/risk-off conditions.
-                  </p>
-                  {status?.regime && status.regime.composite !== 'unknown' && (
-                    <div className="pt-3 border-t border-purple-500/10 flex items-center justify-between">
-                       <span className="text-[9px] text-muted-foreground/40 uppercase font-mono tracking-[0.2em]">Live Pulse</span>
-                       <span className="text-[10px] font-mono font-bold text-purple-400/80">{status.regime.trend.toUpperCase()}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* SMC Detection */}
-                <div className="p-5 bg-background/40 hover:bg-background/60 rounded-xl border border-border/50 hover:border-accent/30 transition-all duration-300 group relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 blur-3xl rounded-full -mr-12 -mt-12 pointer-events-none" />
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                       <Crosshair size={18} className={cn("text-accent", status?.status === 'running' && "animate-pulse")} />
-                       <div className="font-bold text-sm tracking-widest uppercase text-accent/90">SMC Detection</div>
-                    </div>
-                    {status?.status === 'running' && (
-                       <Badge variant="outline" className="text-[9px] border-accent/20 text-accent/80 bg-accent/5 font-mono animate-pulse">
-                          SCANNING
-                       </Badge>
-                    )}
-                  </div>
-                  <p className="text-muted-foreground text-xs leading-relaxed mb-4">
-                    MTF Smart Money analysis — hunting Order Blocks, FVGs, and structural breaks across D→5m.
-                  </p>
-                  {status?.status === 'running' && (
-                    <div className="pt-3 border-t border-accent/10 flex items-center justify-between">
-                       <span className="text-[9px] text-muted-foreground/40 uppercase font-mono tracking-[0.2em]">Target Depth</span>
-                       <span className="text-[10px] font-mono font-bold text-accent/80">{(config.symbols?.length || 0) + (config.majors ? 5 : 0) + (config.altcoins ? 15 : 0)} Assets</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Risk Management */}
-                <div className="p-5 bg-background/40 hover:bg-background/60 rounded-xl border border-border/50 hover:border-amber-500/30 transition-all duration-300 group relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 blur-3xl rounded-full -mr-12 -mt-12 pointer-events-none" />
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                       <ShieldCheck size={18} className={cn("text-amber-400", status?.status === 'running' && "animate-pulse")} />
-                       <div className="font-bold text-sm tracking-widest uppercase text-amber-400/90">Risk Control</div>
-                    </div>
-                    {status?.statistics && (
-                       <Badge variant="outline" className="text-[9px] border-amber-500/20 text-amber-400/80 bg-amber-500/5 font-mono">
-                          {status.statistics.total_pnl < 0 ? Math.abs(status.statistics.total_pnl_pct).toFixed(1) : '0.0'}% DD
-                       </Badge>
-                    )}
-                  </div>
-                  <p className="text-muted-foreground text-xs leading-relaxed mb-4">
-                    Scalable entry ladder (L1→L3), trailing stops, and proprietary stagnation kill-switches.
-                  </p>
-                  {status?.status === 'running' && (
-                    <div className="pt-3 border-t border-amber-500/10">
-                       <div className="flex items-center justify-between mb-2">
-                          <span className="text-[9px] text-muted-foreground/40 uppercase font-mono tracking-[0.2em]">DD Threshold</span>
-                          <span className="text-[10px] font-mono text-foreground/60">{config.max_drawdown_pct || 'OFF'}%</span>
-                       </div>
-                       <div className="h-1 w-full bg-black/40 rounded-full overflow-hidden border border-white/5">
-                          <div 
-                             className="h-full bg-gradient-to-r from-amber-500/50 to-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)] transition-all duration-700"
-                             style={{ width: `${Math.min(100, ((status.statistics?.total_pnl < 0 ? Math.abs(status.statistics.total_pnl_pct) : 0) / (config.max_drawdown_pct || 100)) * 100)}%` }}
-                          />
-                       </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </TacticalPanel>
-        </div>
+        ))}
       </div>
-
-      {/* Session Debrief Modal */}
-      {debrief && (
-        <SessionDebriefModal
-          stats={debrief.stats}
-          balance={debrief.balance}
-          config={debrief.config}
-          uptime={debrief.uptime}
-          signalLog={debrief.signalLog}
-          onClose={() => setDebrief(null)}
-        />
-      )}
-    </PageContainer>
+      <div className="tg-card-cta mono" style={{ color: m.color }}>
+        {m.cta} →
+      </div>
+      <div className="tg-card-deco" style={{ color: m.color }}>
+        <svg viewBox="-50 -50 100 100" width="100%" height="100%">
+          <circle
+            r="44"
+            fill="none"
+            stroke="currentColor"
+            strokeOpacity=".2"
+            strokeWidth=".5"
+            strokeDasharray="2 4"
+          />
+          <circle
+            r="30"
+            fill="none"
+            stroke="currentColor"
+            strokeOpacity=".15"
+            strokeWidth=".5"
+          />
+        </svg>
+      </div>
+    </a>
   );
 }
 
-// Position Card Component
-// ─── Chart Modal (positions + pending orders) ────────────────────────────────
+// ─── DrillsPanel ──────────────────────────────────────────────────────────
 
-interface PendingOrder {
-  order_id: string;
-  symbol: string;
-  direction: 'LONG' | 'SHORT';
-  limit_price: number;
-  current_price?: number;
-  stop_loss?: number;
-  tp1?: number;
-  tp2?: number;
-  tp_final?: number;
-  trade_type?: string;
-  placed_at?: string;
-  ttl_minutes?: number;
-  confluence_score?: number;
+const BASELINE_PCT = 55; // placeholder — see file header.
+
+interface DrillsPanelProps {
+  status: MLStatus | null;
+  features: FeatureImportanceItem[];
+  reload: () => Promise<void>;
 }
 
-interface ChartLevel {
-  label: string;
-  price: number;
-  color: string;       // tailwind text color class
-  bgColor: string;     // tailwind bg color class
-  marker?: string;     // emoji / symbol
-}
+function DrillsPanel({ status, features, reload }: DrillsPanelProps) {
+  const [busy, setBusy] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [flash, setFlash] = useState<{
+    type: 'ok' | 'warn' | 'err';
+    msg: string;
+  } | null>(null);
 
-function toTVSymbol(symbol: string): string {
-  let s = symbol.replace('/', '').replace(':USDT', '').replace(/\.P$/i, '').replace(/PERP$/i, '').toUpperCase();
-  if (s.startsWith('1000')) s = s.replace('1000', '');
-  return `BINANCE:${s}`;
-}
-
-interface PositionChartModalProps {
-  open: boolean;
-  onClose: () => void;
-  symbol: string;
-  direction: 'LONG' | 'SHORT';
-  levels: ChartLevel[];
-  title?: string;
-}
-
-function PositionChartModal({ open, onClose, symbol, direction, levels, title }: PositionChartModalProps) {
-  const tvSymbol = toTVSymbol(symbol);
-  const cleanSymbol = symbol.replace('/USDT', '').replace(':USDT', '');
-  const isLong = direction === 'LONG';
-
-  const sortedLevels = [...levels].filter(l => l.price > 0).sort((a, b) => b.price - a.price);
-
-  const prices = sortedLevels.map(l => l.price);
-  const minPrice = Math.min(...prices);
-  const maxPrice = Math.max(...prices);
-  const priceRange = maxPrice - minPrice || 1;
-
-  const tvUrl = `https://s.tradingview.com/widgetembed/?${new URLSearchParams({
-    symbol: tvSymbol,
-    interval: '60',
-    theme: 'dark',
-    style: '1',
-    locale: 'en',
-    toolbar_bg: '#141416',
-    enable_publishing: 'false',
-    hide_top_toolbar: 'false',
-    save_image: 'false',
-  }).toString()}`;
-
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] w-full lg:max-w-[1100px] h-[85vh] p-0 gap-0 overflow-hidden flex flex-col lg:flex-row bg-background border-zinc-700/60">
-        {/* Chart */}
-        <div className="flex-1 flex flex-col min-h-[50vh] lg:min-h-0">
-          <div className="h-12 border-b border-border/40 flex items-center gap-3 px-4 bg-muted/5 shrink-0">
-            <span className={cn('text-[10px] font-mono font-bold px-2 py-0.5 rounded border',
-              isLong ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30'
-            )}>{direction}</span>
-            <span className="font-mono font-bold text-lg">{cleanSymbol}/USDT</span>
-            {title && <span className="text-xs text-zinc-500 font-mono">{title}</span>}
-          </div>
-          <div className="flex-1 bg-[#141416] relative overflow-hidden">
-            <iframe
-              key={tvSymbol}
-              src={tvUrl}
-              className="absolute inset-0 w-full h-full border-0"
-              title={`${symbol} Chart`}
-              allow="clipboard-write"
-              allowFullScreen
-            />
-          </div>
-        </div>
-
-        {/* Levels sidebar */}
-        <div className="w-full lg:w-52 shrink-0 border-t lg:border-t-0 lg:border-l border-border/40 bg-background/80 flex flex-col">
-          <div className="px-4 py-3 border-b border-border/30">
-            <p className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Key Levels</p>
-          </div>
-
-          {/* Visual price ladder */}
-          <div className="flex-1 relative px-3 py-4 overflow-hidden">
-            <div className="relative h-full">
-              {sortedLevels.map((level, i) => {
-                const pct = priceRange > 0
-                  ? ((level.price - minPrice) / priceRange) * 100
-                  : 50;
-                const topPct = 100 - pct; // invert so high price = top
-                return (
-                  <div
-                    key={i}
-                    className="absolute left-0 right-0 flex items-center gap-1.5"
-                    style={{ top: `${Math.min(Math.max(topPct, 2), 94)}%`, transform: 'translateY(-50%)' }}
-                  >
-                    <div className={cn('w-full h-px opacity-40', level.bgColor.replace('/10', '/60').replace('bg-', 'bg-'))} />
-                    <div className={cn('shrink-0 text-right w-full absolute right-0')}>
-                      <div className="flex items-center justify-end gap-1">
-                        <span className={cn('text-[8px] font-mono font-bold uppercase tracking-widest', level.color)}>
-                          {level.label}
-                        </span>
-                      </div>
-                      <div className={cn('text-[10px] font-mono font-bold', level.color)}>
-                        ${level.price < 1 ? level.price.toFixed(5) : level.price < 100 ? level.price.toFixed(4) : level.price.toFixed(2)}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Level list */}
-          <div className="border-t border-border/30 p-3 space-y-1.5">
-            {sortedLevels.map((level, i) => (
-              <div key={i} className="flex items-center justify-between text-xs font-mono">
-                <span className={cn('text-[10px] font-bold uppercase tracking-widest', level.color)}>{level.label}</span>
-                <span className={cn('font-bold', level.color)}>
-                  ${level.price < 1 ? level.price.toFixed(5) : level.price < 100 ? level.price.toFixed(4) : level.price.toFixed(2)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function PositionCard({ position }: { position: PaperTradingPosition }) {
-  const isLong = position.direction === 'LONG';
-  const isProfitable = position.unrealized_pnl >= 0;
-  const [chartOpen, setChartOpen] = useState(false);
-
-  const chartLevels: ChartLevel[] = [
-    ...(position.tp_final && position.tp_final !== position.tp1 && position.tp_final !== position.tp2 ? [{
-      label: 'TP3', price: position.tp_final,
-      color: 'text-emerald-300', bgColor: 'bg-emerald-400/10',
-    }] : []),
-    ...(position.tp2 && position.tp2 !== position.tp1 && position.tp2 !== position.tp_final ? [{
-      label: 'TP2', price: position.tp2,
-      color: 'text-green-300', bgColor: 'bg-green-400/10',
-    }] : []),
-    ...(position.tp1 ? [{
-      label: 'TP1', price: position.tp1,
-      color: 'text-green-400', bgColor: 'bg-green-500/10',
-    }] : []),
-    { label: 'Current', price: position.current_price, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' },
-    { label: 'Entry', price: position.entry_price, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-    { label: 'SL', price: position.stop_loss, color: 'text-red-400', bgColor: 'bg-red-500/10' },
-  ].filter(l => l.price > 0);
-
-  // Flash effect logic
-  const prevPriceRef = useRef(position.current_price);
-  const [flashClass, setFlashClass] = useState('');
+  const accuracyPct = status ? status.accuracy * 100 : 0;
+  const samples = status?.n_samples ?? 0;
+  const modelVer = status?.model_type ?? '—';
+  const aboveBaseline = accuracyPct > BASELINE_PCT;
 
   useEffect(() => {
-    if (position.current_price > prevPriceRef.current) {
-      setFlashClass('animate-flash-green');
-      const timer = setTimeout(() => setFlashClass(''), 1000);
-      prevPriceRef.current = position.current_price;
-      return () => clearTimeout(timer);
-    } else if (position.current_price < prevPriceRef.current) {
-      setFlashClass('animate-flash-red');
-      const timer = setTimeout(() => setFlashClass(''), 1000);
-      prevPriceRef.current = position.current_price;
-      return () => clearTimeout(timer);
-    }
-  }, [position.current_price]);
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(null), 5000);
+    return () => clearTimeout(t);
+  }, [flash]);
 
-  // R-multiple: how many risk units of profit (or loss) the trade has
-  const initialRisk = Math.abs(position.entry_price - (position.initial_stop_loss || position.stop_loss));
-  const currentProfit = isLong
-    ? position.current_price - position.entry_price
-    : position.entry_price - position.current_price;
-  const rMultiple = initialRisk > 0 ? currentProfit / initialRisk : 0;
-
-  // Progress Calculation
-  // We want to show where we are relative to SL and TP1
-  const sl = position.stop_loss;
-  const entry = position.entry_price;
-  const tp1 = position.tp1 || (isLong ? entry * 1.01 : entry * 0.99); // Fallback
-  const current = position.current_price;
-
-  let progressPct = 50; // Default center
-  if (isLong) {
-    if (current >= entry) {
-      // Profit side: Entry -> TP1 (50% to 100%)
-      const range = tp1 - entry;
-      progressPct = range > 0 ? 50 + ((current - entry) / range) * 50 : 50;
-    } else {
-      // Loss side: SL -> Entry (0% to 50%)
-      const range = entry - sl;
-      progressPct = range > 0 ? ((current - sl) / range) * 50 : 50;
-    }
-  } else { // SHORT
-    if (current <= entry) {
-      // Profit side: Entry -> TP1 (price dropping) (50% to 100%)
-      const range = entry - tp1;
-      progressPct = range > 0 ? 50 + ((entry - current) / range) * 50 : 50;
-    } else {
-      // Loss side: SL -> Entry (price rising) (0% to 50%)
-      const range = sl - entry;
-      progressPct = range > 0 ? ((sl - current) / range) * 50 : 50;
-    }
-  }
-  progressPct = Math.max(0, Math.min(100, progressPct));
-
-  return (
-    <>
-    <PositionChartModal
-      open={chartOpen}
-      onClose={() => setChartOpen(false)}
-      symbol={position.symbol}
-      direction={position.direction}
-      levels={chartLevels}
-      title={`${position.trade_type ?? 'intraday'} · ${isProfitable ? '+' : ''}${position.unrealized_pnl_pct.toFixed(2)}%`}
-    />
-    <div
-      onClick={() => setChartOpen(true)}
-      className={cn("p-3 bg-background rounded-lg border border-border hover:border-accent/30 transition-all duration-300 relative overflow-hidden cursor-pointer group", flashClass)}
-    >
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-60 transition-opacity">
-        <ChartLine size={14} className="text-accent" />
-      </div>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            className={cn(
-              "font-mono text-[10px] tracking-widest uppercase border",
-              isLong ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30'
-            )}
-          >
-            {isLong ? <ArrowUp size={12} className="mr-1" /> : <ArrowDown size={12} className="mr-1" />}
-            {position.direction}
-          </Badge>
-          <span className="font-bold text-lg tracking-tight italic text-foreground">{position.symbol}</span>
-          {position.trade_type && (
-            <span className={cn(
-              "text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded-full border",
-              position.trade_type === 'scalp' ? 'text-yellow-400/70 border-yellow-400/20' :
-              position.trade_type === 'swing' ? 'text-purple-400/70 border-purple-400/20' :
-              'text-blue-400/70 border-blue-400/20'
-            )}>
-              {position.trade_type}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={cn(
-            "font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border",
-            rMultiple >= 0 ? 'text-green-400/80 border-green-400/20' : 'text-red-400/80 border-red-400/20'
-          )}>
-            {rMultiple >= 0 ? '+' : ''}{rMultiple.toFixed(1)}R
-          </span>
-          <span className={cn(
-            "font-mono text-sm font-bold px-2 py-0.5 rounded transition-colors",
-            isProfitable ? 'text-green-400' : 'text-red-400'
-          )}>
-            {formatPct(position.unrealized_pnl_pct)}
-          </span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-y-4 gap-x-2 text-[10px] sm:text-xs mb-4 leading-tight">
-        <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Size</div>
-          <div className="font-mono text-accent font-bold" title="Notional Position Value">{formatCurrency(position.quantity * position.entry_price)}</div>
-        </div>
-        <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Entry</div>
-          <div className="font-mono">${position.entry_price.toFixed(2)}</div>
-        </div>
-        <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Current</div>
-          <div className="font-mono font-bold">${position.current_price.toFixed(2)}</div>
-        </div>
-
-        <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Est. Profit</div>
-          <div className="font-mono text-green-400 font-bold" title="Total Realized + Potential PnL">{formatCurrency(position.target_pnl)}</div>
-        </div>
-        <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">Risk Profile</div>
-          <div className="font-mono text-red-400 font-bold" title="Total Realized + Stop Loss PnL">{formatCurrency(position.risk_pnl)}</div>
-        </div>
-        <div>
-          <div className="text-muted-foreground uppercase tracking-widest text-[9px] mb-0.5">TP / SL</div>
-          <div className="font-mono text-[10px] opacity-80" title="Target price and Stop Loss price">
-            <span className="text-green-500/80">${tp1.toFixed(2)}</span><span className="mx-1 opacity-30">/</span><span className="text-red-500/80">${position.stop_loss.toFixed(2)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Progress tracking */}
-      <div className="space-y-2 mb-2">
-        <div className="grid grid-cols-3 mt-1 text-[9px] font-mono text-muted-foreground uppercase tracking-tight">
-          <span className="text-red-400/70 text-left truncate">STOP ({formatCurrency(position.risk_pnl)})</span>
-          <span className="text-center opacity-50">ENTRY</span>
-          <span className="text-green-400/70 text-right truncate">TARGET ({formatCurrency(position.target_pnl)})</span>
-        </div>
-        <div className="hud-progress-bg">
-          <div
-            className="hud-progress-indicator transition-all duration-500 ease-out"
-            style={{ left: `${progressPct}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Phantom Scale-In Ladder */}
-      <div className="mt-2 pt-3 border-t border-border/50">
-        <div className="flex items-center justify-between text-[9px] uppercase font-bold text-muted-foreground mb-1.5 tracking-widest">
-          <span className="flex items-center gap-1"><Gear size={10} className="animate-spin-slow" /> Phantom Scale Ladder</span>
-          <span className="text-accent/80 font-mono">Fill: 100% (L1)</span>
-        </div>
-        <div className="flex gap-1.5">
-          <div className={cn("h-1.5 flex-1 rounded-sm relative overflow-hidden", isLong ? "bg-green-400/50" : "bg-red-400/50")} title="L1 (100%) Filled">
-            <div className="absolute inset-0 bg-white/20 animate-pulse" />
-          </div>
-          <div className={cn("h-1.5 flex-1 rounded-sm bg-muted/20 border border-border/30")} title="L2 (Adaptive)" />
-          <div className={cn("h-1.5 flex-1 rounded-sm bg-muted/20 border border-border/30")} title="L3 (Adaptive)" />
-        </div>
-      </div>
-
-      <div className="mt-3 flex items-center gap-2 text-xs">
-        {position.breakeven_active && (
-          <Badge variant="secondary" className="text-[9px] uppercase font-bold bg-blue-500/10 text-blue-400 border-blue-500/30">BE Active</Badge>
-        )}
-        {position.trailing_active && (
-          <Badge variant="secondary" className="text-[9px] uppercase font-bold border-accent/30 text-accent bg-accent/10">Trailing</Badge>
-        )}
-        <span className="text-muted-foreground ml-auto text-[9px] uppercase font-bold tracking-widest opacity-60">
-          Targets: {position.targets_hit}/{position.targets_hit + position.targets_remaining}
-        </span>
-      </div>
-    </div>
-    </>
-  );
-}
-
-// Pending Order Card Component
-function PendingOrderCard({ order, onCancel }: { order: PendingOrder; onCancel?: (orderId: string) => void }) {
-  const isLong = order.direction === 'LONG';
-  const [cancelling, setCancelling] = useState(false);
-  const [cancelled, setCancelled] = useState(false);
-  const [chartOpen, setChartOpen] = useState(false);
-
-  const currentPrice: number = order.current_price ?? 0;
-  const limitPrice: number = order.limit_price ?? 0;
-  const distancePct = (currentPrice > 0 && limitPrice > 0)
-    ? ((isLong ? currentPrice - limitPrice : limitPrice - currentPrice) / limitPrice) * 100
-    : null;
-
-  const chartLevels: ChartLevel[] = [
-    ...(order.tp_final && order.tp_final !== order.tp1 && order.tp_final !== order.tp2 ? [{
-      label: 'TP3', price: order.tp_final,
-      color: 'text-emerald-300', bgColor: 'bg-emerald-400/10',
-    }] : []),
-    ...(order.tp2 && order.tp2 !== order.tp1 && order.tp2 !== order.tp_final ? [{
-      label: 'TP2', price: order.tp2,
-      color: 'text-green-300', bgColor: 'bg-green-400/10',
-    }] : []),
-    ...(order.tp1 ? [{
-      label: 'TP1', price: order.tp1,
-      color: 'text-green-400', bgColor: 'bg-green-500/10',
-    }] : []),
-    ...(currentPrice > 0 ? [{ label: 'Current', price: currentPrice, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' }] : []),
-    { label: 'Limit', price: limitPrice, color: 'text-amber-400', bgColor: 'bg-amber-500/10' },
-    ...(order.stop_loss ? [{ label: 'SL', price: order.stop_loss, color: 'text-red-400', bgColor: 'bg-red-500/10' }] : []),
-  ].filter(l => l.price > 0);
-
-  const handleCancel = async () => {
-    if (cancelling || cancelled) return;
-    setCancelling(true);
+  const onTrain = async () => {
+    setBusy(true);
     try {
-      const res = await fetch(`/api/paper-trading/orders/${order.order_id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setCancelled(true);
-        onCancel?.(order.order_id);
+      const res = await mlService.train();
+      if (res.success) {
+        setFlash({
+          type: 'ok',
+          msg: `Trained ${res.model_type ?? ''} on ${res.n_samples ?? '?'} samples · accuracy ${
+            res.accuracy != null ? (res.accuracy * 100).toFixed(1) : '?'
+          }%.`,
+        });
+        await reload();
       } else {
-        const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
-        console.error('Cancel failed:', err.detail);
+        setFlash({ type: 'warn', msg: res.message || 'Training did not complete.' });
       }
     } catch (e) {
-      console.error('Cancel request failed:', e);
+      setFlash({ type: 'err', msg: `Training failed: ${(e as Error).message}` });
     } finally {
-      setCancelling(false);
+      setBusy(false);
     }
   };
 
-  if (cancelled) return null;
+  const onReset = async () => {
+    setBusy(true);
+    try {
+      const res = await mlService.resetModel();
+      setFlash({
+        type: 'warn',
+        msg: res.deleted_file
+          ? 'Model wiped. Bot reverted to factory baseline.'
+          : res.message,
+      });
+      setConfirmReset(false);
+      await reload();
+    } catch (e) {
+      setFlash({ type: 'err', msg: `Reset failed: ${(e as Error).message}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Synthetic 7-day projection ending at current accuracy.
+  const trendPoints = useMemo(() => {
+    const start = Math.max(BASELINE_PCT - 4, 50);
+    const end = Math.max(accuracyPct || start, start);
+    return Array.from({ length: 14 }, (_, i) => {
+      const x = (i / 13) * 280;
+      const t = i / 13;
+      const a = start + (end - start) * t + Math.sin(i * 0.7) * 0.6;
+      return `${x},${100 - (a - 50) * 2}`;
+    }).join(' ');
+  }, [accuracyPct]);
+
+  // Feature row coloring per direction sign — positive=purple, negative=red.
+  const featureRows = useMemo(() => {
+    if (!features.length) return [];
+    const max = Math.max(...features.map((f) => f.importance), 0.0001);
+    return features.slice(0, 12).map((f) => ({
+      name: f.name,
+      norm: f.importance / max,
+      raw: f.importance,
+      color: f.direction >= 0 ? '#c084fc' : '#f87171',
+    }));
+  }, [features]);
 
   return (
-    <>
-    <PositionChartModal
-      open={chartOpen}
-      onClose={() => setChartOpen(false)}
-      symbol={order.symbol}
-      direction={order.direction}
-      levels={chartLevels}
-      title={`Pending · ${order.confluence?.toFixed(0)}% conf`}
-    />
-    <div
-      onClick={() => setChartOpen(true)}
-      className="p-3 bg-background/40 rounded-lg border border-amber-500/20 border-dashed hover:border-amber-500/40 transition-all duration-300 group cursor-pointer"
-    >
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            className={cn(
-              "font-mono text-[9px] px-1.5 py-0 border-none",
-              isLong ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
-            )}
-          >
-            {order.direction}
-          </Badge>
-          <span className="font-bold text-sm tracking-tight">{order.symbol}</span>
-          {order.trade_type && (
-            <Badge variant="secondary" className="font-mono text-[9px] tracking-widest uppercase ml-1 opacity-80 bg-accent/10 text-accent border-accent/20">
-              {order.trade_type}
-            </Badge>
-          )}
-          <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest bg-amber-500/10 px-1 py-0 rounded">Waiting Fill</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="text-right">
-            <div className="text-xs font-bold font-mono text-amber-400/80">
-              Limit ${order.limit_price.toFixed(order.limit_price < 1 ? 5 : 4)}
-            </div>
-            {currentPrice > 0 && (
-              <div className="text-[9px] font-mono text-muted-foreground/60">
-                Now ${currentPrice.toFixed(currentPrice < 1 ? 5 : 4)}
-                {distancePct !== null && (
-                  <span className={cn('ml-1 font-bold', distancePct > 0 ? 'text-yellow-400/70' : 'text-green-400/70')}>
-                    {distancePct > 0 ? `${distancePct.toFixed(2)}% away` : 'at limit'}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={e => { e.stopPropagation(); handleCancel(); }}
-            disabled={cancelling}
-            title="Cancel order"
-            className={cn(
-              "flex items-center justify-center w-5 h-5 rounded border transition-all duration-200",
-              "opacity-0 group-hover:opacity-100",
-              cancelling
-                ? "border-muted/30 text-muted/30 cursor-not-allowed"
-                : "border-red-500/30 text-red-400/60 hover:border-red-500/70 hover:text-red-400 hover:bg-red-500/10 cursor-pointer"
-            )}
-          >
-            <X size={10} />
-          </button>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between text-[10px]">
-        <div className="flex items-center gap-3">
-          <span className="text-muted-foreground opacity-60">Qty: {order.quantity.toFixed(4)}</span>
-          <span className="text-muted-foreground opacity-60">Conf: {order.confluence.toFixed(0)}%</span>
-          <ChartLine size={11} className="text-accent/40 group-hover:text-accent/70 transition-colors" />
-        </div>
-        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/40 border border-border/30">
-          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
-          <span className="text-[9px] font-mono tracking-tighter opacity-70 uppercase">Market Monitoring Active</span>
-        </div>
-      </div>
-    </div>
-    </>
-  );
-}
-
-// Activity Item Component
-function ActivityItem({ event }: { event: PaperTradingActivity }) {
-  const getIcon = () => {
-    switch (event.event_type) {
-      case 'session_started':
-        return <PlayCircle size={16} className="text-green-400" />;
-      case 'session_stopped':
-        return <StopCircle size={16} className="text-red-400" />;
-      case 'scan_started':
-        return <Target size={16} className="text-accent" />;
-      case 'scan_completed':
-        return <CheckCircle size={16} className="text-green-400" />;
-      case 'trade_opened':
-        return <TrendUp size={16} className="text-primary" />;
-      case 'trade_closed':
-        return <TrendDown size={16} className="text-warning" />;
-      case 'signal_filtered':
-        return <XCircle size={16} className="text-yellow-400" />;
-      case 'pending_order_placed':
-      case 'pending_order_replaced':
-        return <Clock size={16} className="text-blue-400" />;
-      case 'pending_order_expired':
-        return <XCircle size={16} className="text-muted-foreground" />;
-      case 'pending_order_ttl_extended':
-        return <Clock size={16} className="text-yellow-400" />;
-      case 'scan_error':
-      case 'trade_error':
-        return <XCircle size={16} className="text-red-400" />;
-      default:
-        return <Pulse size={16} className="text-muted-foreground" />;
-    }
-  };
-
-  const getMessage = () => {
-    const d = event.data;
-    switch (event.event_type) {
-      case 'session_started':
-        return `Session ${d.session_id} started`;
-      case 'session_stopped':
-        return `Session stopped`;
-      case 'scan_started':
-        return `Scan started (${d.mode})`;
-      case 'scan_completed':
-        return `Scan: ${d.signals_found} signals from ${d.symbols_scanned} symbols`;
-      case 'signal_filtered':
-        return `${d.symbol} ${d.direction} (${d.confluence?.toFixed(0)}%) - ${d.reason}`;
-      case 'trade_opened': {
-        const typeLabel = d.trade_type ? ` [${d.trade_type}]` : '';
-        return `Opened ${d.direction} ${d.symbol}${typeLabel} @ ${d.entry_price?.toFixed(2)}`;
-      }
-      case 'trade_closed': {
-        const tradeTypeLabel = d.trade_type ? ` [${d.trade_type}]` : '';
-
-        // Use smart stop loss labels
-        let displayReason = d.exit_reason || 'unknown';
-        if (d.exit_reason === 'stop_loss') {
-          if (d.pnl > 0) displayReason = 'trailing_stop';
-          else if (Math.abs(d.pnl) < 1) displayReason = 'breakeven_stop';
+    <section className="panel panel-accent" id="drills" style={{ marginTop: 18 }}>
+      <Reticle />
+      <div className="corner-tag tl">// ML-DRILLS-ENGINE</div>
+      <div className="corner-tag tr">{busy ? '● WORKING' : '○ READY'}</div>
+      <SectionHead
+        title="Drills · ML Training"
+        right={
+          <>
+            <Chip kind="purple">MODEL · {modelVer}</Chip>
+            <Chip kind={aboveBaseline ? 'green' : 'red'}>
+              {aboveBaseline ? '▲' : '▼'}{' '}
+              {(((accuracyPct - BASELINE_PCT) / Math.max(BASELINE_PCT, 1)) * 100).toFixed(1)}% vs
+              BASELINE
+            </Chip>
+          </>
         }
-        displayReason = displayReason.replace(/_/g, ' ');
+      />
+      <div style={{ padding: '18px 22px' }}>
+        <div
+          className="mono"
+          style={{
+            fontSize: 10,
+            color: 'var(--fg-3)',
+            letterSpacing: '.18em',
+            textTransform: 'uppercase',
+            marginBottom: 14,
+            lineHeight: 1.5,
+          }}
+        >
+          // Train the bot on Ghost's closed paper trades. Promote to live when accuracy beats
+          baseline.
+        </div>
 
-        const regimeLabel = d.regime_at_close?.trend && d.exit_reason === 'stagnation'
-          ? ` | regime: ${d.regime_at_close.trend}/${d.regime_at_close.volatility}`
-          : '';
-        return `Closed ${d.symbol}${tradeTypeLabel}: ${d.pnl >= 0 ? '+' : ''}${d.pnl?.toFixed(2)} (${displayReason}${regimeLabel})`;
-      }
-      case 'pending_order_placed':
-        return `${d.symbol || ''} ${d.direction || ''} — limit placed @ ${d.limit_price != null ? d.limit_price.toFixed(4) : '?'} (${d.confluence != null ? d.confluence.toFixed(0) + '% conf' : ''})`.trim();
-      case 'pending_order_replaced':
-        return `${d.symbol || ''} ${d.direction || ''} — limit updated @ ${d.limit_price != null ? d.limit_price.toFixed(4) : '?'}`.trim();
-      case 'pending_order_expired': {
-        const limStr = d.limit_price != null ? ` @ ${d.limit_price.toFixed(4)}` : '';
-        const ageStr = d.age_minutes != null ? ` after ${d.age_minutes.toFixed(0)}min` : '';
-        const ttlStr = d.ttl_minutes != null ? `/${d.ttl_minutes.toFixed(0)}min TTL` : '';
-        return `${d.symbol || ''} ${d.direction || ''} — limit${limStr} expired unfilled${ageStr}${ttlStr}`.trim();
-      }
-      case 'pending_order_ttl_extended':
-        return `${d.symbol || ''} ${d.direction || ''} — TTL extended [${d.extension_count}/${d.max_extensions}] +${d.extension_minutes?.toFixed(0)}min (price approaching limit ${d.limit_price != null ? d.limit_price.toFixed(4) : ''})`.trim();
-      case 'scan_error':
-        return `⚠️ Scan error: ${d.error || 'Unknown error'}`;
-      case 'trade_error':
-        return `⚠️ Trade error: ${d.error || 'Unknown error'}`;
-      default:
-        return event.event_type.replace(/_/g, ' ');
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-3 text-sm py-2 px-2 rounded hover:bg-muted/30 border-b border-border/10 last:border-0 border-dashed">
-      <div className="shrink-0">{getIcon()}</div>
-      <span className="flex-1 truncate leading-relaxed">{getMessage()}</span>
-      <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0">
-        {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-      </span>
-    </div>
-  );
-}
-
-// Trade History Item Component
-function TradeHistoryItem({ trade }: { trade: CompletedPaperTrade }) {
-  const [expanded, setExpanded] = useState(false);
-  const isLong = trade.direction === 'LONG';
-  const isProfitable = trade.pnl >= 0;
-
-  const duration = useMemo(() => {
-    if (!trade.entry_time || !trade.exit_time) return null;
-    const enter = new Date(trade.entry_time);
-    const exit = new Date(trade.exit_time);
-    const ms = exit.getTime() - enter.getTime();
-    return formatDuration(Math.floor(ms / 1000));
-  }, [trade.entry_time, trade.exit_time]);
-
-  const displayReason = useMemo(() => {
-    let reason = trade.exit_reason || 'unknown';
-    if (trade.exit_reason === 'stop_loss') {
-      if (trade.pnl > 0) reason = 'trailing_stop';
-      else if (Math.abs(trade.pnl) < 1) reason = 'breakeven_stop';
-    }
-    return reason.replace(/_/g, ' ');
-  }, [trade.exit_reason, trade.pnl]);
-
-  return (
-    <div
-      className={cn(
-        "rounded-lg border transition-all cursor-pointer overflow-hidden",
-        expanded ? "bg-background/80 border-accent/40 shadow-[0_0_15px_rgba(0,255,170,0.05)]" : "bg-background border-border hover:border-border/80"
-      )}
-      onClick={() => setExpanded(!expanded)}
-    >
-      <div className="flex items-center justify-between p-3">
-        <div className="flex items-center gap-3">
-          <Badge
-            variant={isLong ? 'default' : 'destructive'}
-            className={cn(
-              "text-xs px-2 py-0.5 border-none",
-              isLong ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
-            )}
+        {flash && (
+          <div
+            style={{
+              padding: '10px 14px',
+              marginBottom: 14,
+              border:
+                flash.type === 'ok'
+                  ? '1px solid var(--green-border)'
+                  : flash.type === 'warn'
+                    ? '1px solid var(--amber-border, var(--border-soft))'
+                    : '1px solid var(--red-border)',
+              background:
+                flash.type === 'ok'
+                  ? 'rgba(34,197,94,.08)'
+                  : flash.type === 'warn'
+                    ? 'rgba(251,191,36,.08)'
+                    : 'rgba(248,113,113,.08)',
+              borderRadius: 8,
+              color:
+                flash.type === 'ok'
+                  ? 'var(--green-soft)'
+                  : flash.type === 'warn'
+                    ? 'var(--amber)'
+                    : 'var(--red-2)',
+              fontFamily: 'JetBrains Mono,monospace',
+              fontSize: 12,
+            }}
           >
-            {trade.direction}
-          </Badge>
-          <div className="flex flex-col">
-            <div className="font-bold flex items-center gap-2">
-              {trade.symbol}
-              <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-border/50">
-                {displayReason}
-              </span>
-              {trade.trade_type && (
-                <span className="text-[9px] font-mono text-blue-400/60 uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-blue-400/20">
-                  {trade.trade_type}
-                </span>
-              )}
+            ● {flash.msg}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1.2fr 1fr',
+            gap: 18,
+            marginBottom: 18,
+          }}
+        >
+          {/* training control */}
+          <div
+            style={{
+              padding: '16px 18px',
+              border: '1px solid var(--border-soft)',
+              borderRadius: 8,
+              background: 'rgba(0,0,0,.4)',
+            }}
+          >
+            <div
+              className="mono"
+              style={{
+                fontSize: 10,
+                color: '#c084fc',
+                letterSpacing: '.2em',
+                marginBottom: 10,
+              }}
+            >
+              // TRAINING RUN
             </div>
-            <div className="text-xs text-muted-foreground flex items-center gap-1.5 font-mono">
-              <span>${trade.entry_price.toFixed(4)}</span>
-              <span className={cn("text-[10px] font-bold", isLong ? 'text-green-400/60' : 'text-red-400/60')}>
-                {isLong ? '↑' : '↓'}
-              </span>
-              <span>${trade.exit_price.toFixed(4)}</span>
-            </div>
-          </div>
-        </div>
-        <div className="text-right">
-          <div className={cn("font-mono font-bold text-sm", isProfitable ? 'text-green-400' : 'text-red-400')}>
-            {formatCurrency(trade.pnl)}
-          </div>
-          <div className={cn("text-[10px] font-mono", isProfitable ? 'text-green-400/70' : 'text-red-400/70')}>
-            {formatPct(trade.pnl_pct)}
-          </div>
-        </div>
-      </div>
-
-      {expanded && (
-        <div className="px-3 pb-4 pt-2 border-t border-border/30 bg-black/20">
-          {/* ── Entry / Exit prices — hero row ── */}
-          {(() => {
-            const isLongDir = trade.direction === 'LONG';
-            // For a SHORT, price going DOWN is profitable. rawMove is always
-            // positive when the trade moved in the intended direction.
-            const rawMove = isLongDir
-              ? (trade.exit_price - trade.entry_price) / trade.entry_price * 100
-              : (trade.entry_price - trade.exit_price) / trade.entry_price * 100;
-            const movedRight = rawMove >= 0;
-            // Arrow label makes SHORT direction obvious: sell high → buy lower
-            const entryLabel = isLongDir ? 'Bought at' : 'Sold at';
-            const exitLabel  = isLongDir ? 'Sold at'   : 'Bought back at';
-            return (
-              <div className="mt-2 mb-3 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.4)' }}>
-                <div className="grid grid-cols-3 divide-x divide-white/[0.06]">
-                  {/* Entry */}
-                  <div className="p-3">
-                    <div className="text-[9px] text-white/30 font-mono uppercase tracking-widest mb-1.5">{entryLabel}</div>
-                    <div className="text-base font-black font-mono text-white/90" style={{ letterSpacing: '-0.02em' }}>
-                      ${trade.entry_price.toFixed(4)}
-                    </div>
-                    {trade.entry_time && (
-                      <div className="text-[9px] text-white/25 font-mono mt-1">
-                        {new Date(trade.entry_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Move */}
-                  <div className="p-3 flex flex-col items-center justify-center text-center gap-1">
-                    <div className={cn(
-                      "text-sm font-black font-mono",
-                      movedRight ? 'text-green-400' : 'text-red-400'
-                    )}
-                      style={{ textShadow: movedRight ? '0 0 16px rgba(74,222,128,0.5)' : '0 0 16px rgba(248,113,113,0.5)' }}
-                    >
-                      {movedRight ? '+' : ''}{rawMove.toFixed(3)}%
-                    </div>
-                    <div className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full"
-                      style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.4)' }}>
-                      {displayReason}
-                    </div>
-                  </div>
-
-                  {/* Exit */}
-                  <div className="p-3 text-right">
-                    <div className="text-[9px] text-white/30 font-mono uppercase tracking-widest mb-1.5">{exitLabel}</div>
-                    <div className={cn(
-                      "text-base font-black font-mono",
-                      isProfitable ? 'text-green-400' : 'text-red-400'
-                    )}
-                      style={{
-                        letterSpacing: '-0.02em',
-                        textShadow: isProfitable ? '0 0 16px rgba(74,222,128,0.4)' : '0 0 16px rgba(248,113,113,0.4)'
-                      }}
-                    >
-                      ${trade.exit_price.toFixed(4)}
-                    </div>
-                    {trade.exit_time && (
-                      <div className="text-[9px] text-white/25 font-mono mt-1">
-                        {new Date(trade.exit_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    )}
-                  </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr',
+                gap: 10,
+                marginBottom: 14,
+              }}
+            >
+              <div>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 9,
+                    color: 'var(--fg-4)',
+                    letterSpacing: '.16em',
+                  }}
+                >
+                  SAMPLES
+                </div>
+                <div
+                  className="mono"
+                  style={{ fontSize: 18, color: 'var(--fg)', fontWeight: 700 }}
+                >
+                  {samples.toLocaleString()}
                 </div>
               </div>
-            );
-          })()}
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Times */}
-            <div className="space-y-1">
-              <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">Timing</div>
-              <div className="text-xs font-mono text-foreground/80 flex flex-col gap-0.5">
-                <span className="flex justify-between">
-                  <span className="text-muted-foreground/50">In:</span>
-                  {new Date(trade.entry_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                </span>
-                {trade.exit_time && (
-                  <span className="flex justify-between">
-                    <span className="text-muted-foreground/50">Out:</span>
-                    {new Date(trade.exit_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                  </span>
-                )}
-                {duration && (
-                  <span className="flex justify-between text-accent/80 mt-0.5 pt-0.5 border-t border-border/30">
-                    <span className="text-muted-foreground/50">Dur:</span>
-                    {duration}
-                  </span>
-                )}
+              <div>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 9,
+                    color: 'var(--fg-4)',
+                    letterSpacing: '.16em',
+                  }}
+                >
+                  MIN REQ
+                </div>
+                <div
+                  className="mono"
+                  style={{ fontSize: 18, color: 'var(--fg)', fontWeight: 700 }}
+                >
+                  {status?.min_samples_required ?? '—'}
+                </div>
+              </div>
+              <div>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 9,
+                    color: 'var(--fg-4)',
+                    letterSpacing: '.16em',
+                  }}
+                >
+                  TRAINED
+                </div>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 14,
+                    color: status?.trained ? 'var(--green-soft)' : 'var(--fg-3)',
+                    fontWeight: 700,
+                    paddingTop: 4,
+                  }}
+                >
+                  {status?.trained ? '● YES' : '○ NO'}
+                </div>
               </div>
             </div>
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={onTrain}
+              style={{
+                width: '100%',
+                padding: '12px',
+                fontSize: 12,
+                fontWeight: 800,
+                letterSpacing: '.2em',
+                background: busy ? 'rgba(0,0,0,.4)' : '#c084fc',
+                color: busy ? 'var(--fg-3)' : '#1a1027',
+                border: 'none',
+                cursor: busy ? 'not-allowed' : 'pointer',
+                opacity: busy ? 0.6 : 1,
+              }}
+            >
+              {busy ? '■ WORKING…' : '▶ START TRAINING RUN'}
+            </button>
+          </div>
 
-            {/* Excursion */}
-            <div className="space-y-1">
-              <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">Excursion</div>
-              <div className="text-xs font-mono flex flex-col gap-0.5">
-                <span className="flex justify-between">
-                  <span className="text-muted-foreground/50">Peak:</span>
-                  <span className="text-green-400/80">+{formatPct(trade.max_favorable)}</span>
-                </span>
-                <span className="flex justify-between">
-                  <span className="text-muted-foreground/50">Dip:</span>
-                  <span className="text-red-400/80">{formatPct(trade.max_adverse)}</span>
-                </span>
-                <span className="flex justify-between mt-0.5 pt-0.5 border-t border-border/30">
-                  <span className="text-muted-foreground/50">Qty:</span>
-                  <span className="text-foreground/80">{trade.quantity.toFixed(4)}</span>
-                </span>
-              </div>
+          {/* metrics */}
+          <div
+            style={{
+              padding: '16px 18px',
+              border: '1px solid var(--border-soft)',
+              borderRadius: 8,
+              background: 'rgba(0,0,0,.4)',
+            }}
+          >
+            <div
+              className="mono"
+              style={{
+                fontSize: 10,
+                color: '#c084fc',
+                letterSpacing: '.2em',
+                marginBottom: 14,
+              }}
+            >
+              // 7-DAY ACCURACY (synthetic — pending track table)
             </div>
-
-            {/* Execution */}
-            <div className="space-y-1">
-              <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-widest">Execution</div>
-              <div className="text-xs font-mono flex flex-col gap-0.5">
-                <span className="flex justify-between">
-                  <span className="text-muted-foreground/50">Targets Hit:</span>
-                  <span className="text-amber-400/80">{trade.targets_hit?.length || 0}</span>
-                </span>
-                {trade.targets_hit && trade.targets_hit.length > 0 && (
-                  <span className="text-[9px] text-muted-foreground/50 text-right truncate">
-                    ({trade.targets_hit.map((_, i) => `TP${i + 1}`).join(', ')})
-                  </span>
-                )}
-                <span className="flex justify-between mt-0.5 pt-0.5 border-t border-border/30">
-                  <span className="text-muted-foreground/50">Type:</span>
-                  <span className="text-foreground/80">{trade.trade_type || 'Unknown'}</span>
-                </span>
+            <svg viewBox="0 0 280 100" style={{ width: '100%', height: 90 }}>
+              <line
+                x1="0"
+                y1={100 - (BASELINE_PCT - 50) * 2}
+                x2="280"
+                y2={100 - (BASELINE_PCT - 50) * 2}
+                stroke="#fbbf24"
+                strokeWidth="1"
+                strokeDasharray="3 3"
+                opacity=".7"
+              />
+              <text
+                x="2"
+                y={100 - (BASELINE_PCT - 50) * 2 - 4}
+                fill="#fbbf24"
+                fontSize="8"
+                fontFamily="Share Tech Mono"
+              >
+                BASELINE {BASELINE_PCT}% (placeholder)
+              </text>
+              <polyline
+                fill="none"
+                stroke="#c084fc"
+                strokeWidth="2"
+                points={trendPoints}
+                style={{ filter: 'drop-shadow(0 0 4px #c084fc)' }}
+              />
+              <circle cx="280" cy={100 - (accuracyPct - 50) * 2} r="4" fill="#c084fc" />
+              <text
+                x="270"
+                y={100 - (accuracyPct - 50) * 2 - 8}
+                fill="#c084fc"
+                fontSize="9"
+                fontFamily="JetBrains Mono"
+                fontWeight="700"
+                textAnchor="end"
+              >
+                {accuracyPct.toFixed(1)}%
+              </text>
+            </svg>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 8,
+                marginTop: 8,
+              }}
+            >
+              <div>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 9,
+                    color: 'var(--fg-4)',
+                    letterSpacing: '.16em',
+                  }}
+                >
+                  N SAMPLES
+                </div>
+                <div
+                  className="mono"
+                  style={{ fontSize: 14, color: 'var(--green-soft)', fontWeight: 700 }}
+                >
+                  {samples}
+                </div>
               </div>
-            </div>
-
-            {/* Results breakdown */}
-            <div className="space-y-1 flex flex-col items-end justify-center bg-background/40 p-2 rounded border border-border/50">
-              <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest mb-1">Result</div>
-              <div className={cn("text-lg font-mono font-bold tracking-tight", isProfitable ? 'text-green-400' : 'text-red-400')}>
-                {isProfitable ? '+' : ''}{formatCurrency(trade.pnl)}
-              </div>
-              <div className={cn("text-xs font-mono", isProfitable ? 'text-green-400/70' : 'text-red-400/70')}>
-                {formatPct(trade.pnl_pct)}
+              <div>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 9,
+                    color: 'var(--fg-4)',
+                    letterSpacing: '.16em',
+                  }}
+                >
+                  ACCURACY
+                </div>
+                <div
+                  className="mono"
+                  style={{ fontSize: 14, color: '#c084fc', fontWeight: 700 }}
+                >
+                  {accuracyPct.toFixed(1)}%
+                </div>
               </div>
             </div>
           </div>
         </div>
-      )}
-    </div>
-  );
-}
 
-// Signal Intelligence Panel - shows every signal's processing result
-// Individual signal log row
-// Session Debrief Modal
-function SessionDebriefModal({
-  stats,
-  balance,
-  config,
-  uptime,
-  signalLog,
-  onClose,
-}: {
-  stats: PaperTradingStats;
-  balance: PaperTradingBalance;
-  config: PaperTradingConfigRequest;
-  uptime: number;
-  signalLog: SignalLogEntry[];
-  onClose: () => void;
-}) {
-  const profitFactor = (() => {
-    const wins = stats.winning_trades;
-    const losses = stats.losing_trades;
-    const gross_profit = (stats.avg_win || 0) * wins;
-    const gross_loss = Math.abs(stats.avg_loss || 0) * losses;
-    if (gross_loss === 0) return wins > 0 ? 99 : 0;
-    return gross_profit / gross_loss;
-  })();
-
-  // Compute top filter from signal log
-  const topFilter = (() => {
-    const filtered = signalLog.filter(s => s.result === 'filtered');
-    if (!filtered.length) return null;
-    const counts: Record<string, number> = {};
-    for (const s of filtered) {
-      const key = s.reason || 'unknown';
-      counts[key] = (counts[key] || 0) + 1;
-    }
-    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-    return top ? { reason: top[0], count: top[1] } : null;
-  })();
-
-  // Readiness criteria
-  const criteria = [
-    { label: 'Trade count ≥ 5', met: stats.total_trades >= 5 },
-    { label: 'Expectancy > 0', met: (stats.expectancy ?? 0) > 0 },
-    { label: 'Profit factor ≥ 1.2', met: profitFactor >= 1.2 },
-    { label: 'Max drawdown ≤ 15%', met: stats.max_drawdown <= 15 },
-  ];
-  const metCount = criteria.filter(c => c.met).length;
-  const verdict =
-    metCount === 4 ? { label: 'READY FOR LIVE', color: 'text-accent border-accent/50 bg-accent/10' }
-    : metCount >= 2 ? { label: 'KEEP TRAINING', color: 'text-yellow-400 border-yellow-500/50 bg-yellow-500/10' }
-    : { label: 'NEEDS ADJUSTMENT', color: 'text-red-400 border-red-500/50 bg-red-500/10' };
-
-  const hours = Math.floor(uptime / 3600);
-  const minutes = Math.floor((uptime % 3600) / 60);
-  const durationLabel = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-background border border-border rounded-2xl shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Trophy size={20} className="text-accent" weight="fill" />
-            <span className="font-mono font-bold text-sm uppercase tracking-widest text-foreground">Session Debrief</span>
-          </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <XCircle size={20} />
-          </button>
+        {/* feature importance */}
+        <div
+          className="mono"
+          style={{
+            fontSize: 10,
+            color: 'var(--fg-3)',
+            letterSpacing: '.18em',
+            textTransform: 'uppercase',
+            marginBottom: 8,
+          }}
+        >
+          // FEATURE IMPORTANCE (SHAP — top 12)
         </div>
-
-        <div className="p-6 space-y-5">
-          {/* Verdict */}
-          <div className={cn("text-center py-3 rounded-xl border font-mono font-black text-lg tracking-widest", verdict.color)}>
-            {verdict.label}
+        {featureRows.length === 0 ? (
+          <div
+            className="mono"
+            style={{
+              padding: '12px 14px',
+              fontSize: 11,
+              color: 'var(--fg-4)',
+              letterSpacing: '.14em',
+              border: '1px dashed var(--border-soft)',
+              borderRadius: 6,
+              marginBottom: 18,
+            }}
+          >
+            // no feature importance — train the model to populate
           </div>
-
-          {/* Stats grid */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
-              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">P&L</div>
-              <div className={cn("text-lg font-mono font-bold", (stats.total_pnl ?? 0) >= 0 ? 'text-accent' : 'text-red-400')}>
-                {(stats.total_pnl ?? 0) >= 0 ? '+' : ''}{(stats.total_pnl ?? 0).toFixed(0)}
-              </div>
-              <div className="text-[9px] text-muted-foreground">{(stats.total_pnl_pct ?? 0) >= 0 ? '+' : ''}{(stats.total_pnl_pct ?? 0).toFixed(2)}%</div>
-            </div>
-            <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
-              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Expectancy</div>
-              <div className={cn("text-lg font-mono font-bold", (stats.expectancy ?? 0) > 0 ? 'text-green-400' : 'text-red-400')}>
-                {(stats.expectancy ?? 0) >= 0 ? '+' : ''}{(stats.expectancy ?? 0).toFixed(2)}
-              </div>
-              <div className="text-[9px] text-muted-foreground">{stats.winning_trades}W / {stats.scratch_trades ?? 0}S / {stats.losing_trades}L</div>
-            </div>
-            <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
-              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Prof. Factor</div>
-              <div className={cn("text-lg font-mono font-bold", profitFactor === 0 ? 'text-muted-foreground' : profitFactor >= 1.2 ? 'text-foreground' : 'text-red-400')}>
-                {profitFactor === 0 ? 'N/A' : profitFactor >= 99 ? '∞' : profitFactor.toFixed(2)}
-              </div>
-              <div className="text-[9px] text-muted-foreground">{stats.total_trades} trades</div>
-            </div>
-            <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
-              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Max DD</div>
-              <div className={cn("text-lg font-mono font-bold", stats.max_drawdown <= 15 ? 'text-foreground' : 'text-red-400')}>
-                {stats.max_drawdown.toFixed(1)}%
-              </div>
-              <div className="text-[9px] text-muted-foreground">from peak</div>
-            </div>
-            <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
-              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Avg R:R</div>
-              <div className="text-lg font-mono font-bold text-foreground">{stats.avg_rr.toFixed(2)}</div>
-              <div className="text-[9px] text-muted-foreground">{durationLabel} session</div>
-            </div>
-            <div className="text-center p-3 rounded-lg bg-black/40 border border-border/30">
-              <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Acceptance</div>
-              <div className="text-lg font-mono font-bold text-foreground">
-                {stats.signals_generated > 0 ? ((stats.signals_taken / stats.signals_generated) * 100).toFixed(0) : 0}%
-              </div>
-              <div className="text-[9px] text-muted-foreground">{stats.signals_taken}/{stats.signals_generated} sigs</div>
-            </div>
-          </div>
-
-          {/* Readiness checklist */}
-          <div className="space-y-1.5">
-            <div className="text-[9px] text-muted-foreground uppercase tracking-widest pl-1 mb-2">Readiness Criteria</div>
-            {criteria.map(c => (
-              <div key={c.label} className="flex items-center gap-2">
-                {c.met
-                  ? <CheckCircle size={14} className="text-accent shrink-0" weight="fill" />
-                  : <XCircle size={14} className="text-muted-foreground/40 shrink-0" />}
-                <span className={cn("text-xs font-mono", c.met ? 'text-foreground' : 'text-muted-foreground/50')}>{c.label}</span>
+        ) : (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 6,
+              marginBottom: 18,
+            }}
+          >
+            {featureRows.map((f) => (
+              <div
+                key={f.name}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '140px 1fr 50px',
+                  gap: 8,
+                  alignItems: 'center',
+                  padding: '4px 10px',
+                  background: 'rgba(0,0,0,.3)',
+                  border: '1px solid var(--border-soft)',
+                  borderRadius: 4,
+                }}
+              >
+                <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
+                  {f.name}
+                </span>
+                <div
+                  style={{
+                    height: 6,
+                    background: 'rgba(0,0,0,.6)',
+                    borderRadius: 3,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${f.norm * 100}%`,
+                      height: '100%',
+                      background: f.color,
+                      boxShadow: `0 0 6px ${f.color}`,
+                    }}
+                  />
+                </div>
+                <span
+                  className="mono"
+                  style={{
+                    fontSize: 11,
+                    color: f.color,
+                    fontWeight: 700,
+                    textAlign: 'right',
+                  }}
+                >
+                  {f.raw.toFixed(2)}
+                </span>
               </div>
             ))}
           </div>
+        )}
 
-          {/* Top filter killer */}
-          {topFilter && (
-            <div className="p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20 flex items-start gap-2">
-              <Warning size={14} className="text-yellow-400 mt-0.5 shrink-0" />
-              <p className="text-[10px] font-mono text-yellow-300/70 leading-snug">
-                Top killer: <span className="text-yellow-300 font-bold">{topFilter.reason}</span> — blocked {topFilter.count} signal{topFilter.count !== 1 ? 's' : ''}
-              </p>
+        {/* Action row: Promote (deferred) + Reset */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          {/* promote — deferred (no backend endpoint) */}
+          <div
+            style={{
+              padding: '16px 18px',
+              border: '1.5px solid var(--green-border)',
+              borderRadius: 8,
+              background: 'rgba(34,197,94,.06)',
+            }}
+          >
+            <div
+              className="mono"
+              style={{
+                fontSize: 10,
+                color: 'var(--green-soft)',
+                letterSpacing: '.2em',
+                marginBottom: 6,
+              }}
+            >
+              // PROMOTE TO LIVE BOT
             </div>
-          )}
-        </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: 'var(--fg-2)',
+                lineHeight: 1.5,
+                marginBottom: 12,
+              }}
+            >
+              Push trained model parameters to the live Bot. Existing positions stay untouched;
+              next signal uses new weights.
+            </div>
+            <button
+              className="btn btn-green"
+              disabled
+              style={{
+                width: '100%',
+                padding: '10px',
+                fontWeight: 800,
+                letterSpacing: '.18em',
+                fontSize: 11,
+                opacity: 0.5,
+                cursor: 'not-allowed',
+              }}
+            >
+              ↑ PROMOTE TO LIVE
+            </button>
+            <div
+              className="mono"
+              style={{
+                fontSize: 9,
+                color: 'var(--amber)',
+                letterSpacing: '.14em',
+                marginTop: 8,
+              }}
+            >
+              ⚠ promote endpoint pending — coming soon
+            </div>
+          </div>
 
-        <div className="px-6 py-4 border-t border-border/50">
-          <Button onClick={onClose} className="w-full font-mono text-xs tracking-widest" variant="outline">
-            CLOSE
-          </Button>
+          {/* reset */}
+          <div
+            style={{
+              padding: '16px 18px',
+              border: '1.5px solid var(--red-border)',
+              borderRadius: 8,
+              background: 'rgba(248,113,113,.06)',
+            }}
+          >
+            <div
+              className="mono"
+              style={{
+                fontSize: 10,
+                color: 'var(--red-2)',
+                letterSpacing: '.2em',
+                marginBottom: 6,
+              }}
+            >
+              // RESET ML MEMORY
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: 'var(--fg-2)',
+                lineHeight: 1.5,
+                marginBottom: 12,
+              }}
+            >
+              Wipe all trained weights. Returns the bot to factory baseline. All Ghost trade
+              history retained — only the model resets.
+            </div>
+            {!confirmReset ? (
+              <button
+                className="btn btn-red"
+                disabled={busy}
+                onClick={() => setConfirmReset(true)}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  fontWeight: 800,
+                  letterSpacing: '.18em',
+                  fontSize: 11,
+                }}
+              >
+                ↺ RESET TO FACTORY
+              </button>
+            ) : (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  className="btn"
+                  style={{ flex: 1, padding: '10px', fontSize: 11 }}
+                  onClick={() => setConfirmReset(false)}
+                  disabled={busy}
+                >
+                  CANCEL
+                </button>
+                <button
+                  className="btn btn-red"
+                  style={{ flex: 1, padding: '10px', fontSize: 11, fontWeight: 800 }}
+                  onClick={onReset}
+                  disabled={busy}
+                >
+                  ↺ CONFIRM RESET
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+    </section>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────
+
+export function TrainingGround() {
+  const [status, setStatus] = useState<MLStatus | null>(null);
+  const [features, setFeatures] = useState<FeatureImportanceItem[]>([]);
+  const readyRef = useRef(false);
+
+  const reload = async () => {
+    const [statusRes, featuresRes] = await Promise.allSettled([
+      mlService.getStatus(),
+      mlService.getFeatureImportance(),
+    ]);
+    if (statusRes.status === 'fulfilled') setStatus(statusRes.value);
+    if (featuresRes.status === 'fulfilled') setFeatures(featuresRes.value);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await reload();
+      } finally {
+        if (!cancelled && !readyRef.current) {
+          readyRef.current = true;
+          document.body.setAttribute('data-snapshot-ready', 'true');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      document.body.removeAttribute('data-snapshot-ready');
+    };
+  }, []);
+
+  // Inject DRILLS module stat values once status loads.
+  const modules = useMemo(() => {
+    return MODULES.map((m) => {
+      if (m.id !== 'drills' || !status) return m;
+      const versus = (status.accuracy * 100 - BASELINE_PCT).toFixed(1);
+      const above = status.accuracy * 100 > BASELINE_PCT;
+      return {
+        ...m,
+        stat: [
+          { k: 'Model', v: status.model_type, vc: '#c084fc' },
+          {
+            k: 'vs Baseline',
+            v: `${above ? '+' : ''}${versus}%`,
+            vc: above ? '#4ade80' : '#f87171',
+          },
+          { k: 'Samples', v: status.n_samples.toLocaleString() },
+        ],
+      };
+    });
+  }, [status]);
+
+  const modelChip = status ? `MODEL · ${status.model_type}` : 'MODEL · —';
+
+  return (
+    <div className="page">
+      <PageHead
+        icon={
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <circle
+              cx="12"
+              cy="12"
+              r="9"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              style={{ color: 'var(--accent)' }}
+            />
+            <circle
+              cx="12"
+              cy="12"
+              r="5"
+              stroke="currentColor"
+              strokeWidth="1"
+              strokeDasharray="2 2"
+              style={{ color: 'var(--accent)' }}
+            />
+            <circle
+              cx="12"
+              cy="12"
+              r="1.5"
+              fill="currentColor"
+              style={{ color: 'var(--accent)' }}
+            />
+          </svg>
+        }
+        title="Training Ground"
+        subtitle="Hub · Range · Drills · Replay · Quizzes · Lessons — practice the system, train the model"
+        badges={
+          <>
+            <Chip kind="cyan">● 5 MODULES</Chip>
+            <Chip kind="green">GHOST · ARMED</Chip>
+            <Chip kind="purple">{modelChip}</Chip>
+          </>
+        }
+      />
+
+      <div
+        className="mono"
+        style={{
+          fontSize: 10,
+          color: 'var(--fg-3)',
+          letterSpacing: '.24em',
+          textTransform: 'uppercase',
+          margin: '10px 4px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+        }}
+      >
+        <div
+          style={{
+            flex: 1,
+            height: 1,
+            background: 'linear-gradient(90deg,transparent,var(--border-soft),transparent)',
+          }}
+        />
+        <span>// SELECT A TRAINING MODULE</span>
+        <div
+          style={{
+            flex: 1,
+            height: 1,
+            background: 'linear-gradient(90deg,transparent,var(--border-soft),transparent)',
+          }}
+        />
+      </div>
+
+      <div className="tg-grid">
+        {modules.map((m) => (
+          <ModCard key={m.id} m={m} />
+        ))}
+      </div>
+
+      <DrillsPanel status={status} features={features} reload={reload} />
+
+      <FooterStatus latency={36} />
+
+      <style>{`
+        .tg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+        @media (max-width:1100px){.tg-grid{grid-template-columns:repeat(2,1fr)}}
+        @media (max-width:700px){.tg-grid{grid-template-columns:1fr}}
+        .tg-card{position:relative;display:flex;flex-direction:column;gap:10px;padding:18px 20px;border:1px solid var(--border-soft);border-radius:12px;background:linear-gradient(135deg,rgba(0,0,0,.55),oklch(0.22 0.010 125 / .55));text-decoration:none;color:inherit;overflow:hidden;transition:transform .2s,box-shadow .2s;min-height:230px}
+        .tg-card:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4)}
+        .tg-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+        .tg-card-title{font-family:'Share Tech Mono',monospace;font-size:24px;letter-spacing:.16em;text-transform:uppercase}
+        .tg-card-tag{font-size:10px;color:var(--fg-4);letter-spacing:.2em;text-transform:uppercase;text-align:right;max-width:140px;line-height:1.4}
+        .tg-card-body{font-size:13px;color:var(--fg-2);line-height:1.5;flex:1}
+        .tg-card-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 0;border-top:1px dashed var(--border-soft);border-bottom:1px dashed var(--border-soft)}
+        .tg-card-cta{font-size:11px;letter-spacing:.24em;font-weight:700;padding-top:4px}
+        .tg-card-deco{position:absolute;right:-30px;bottom:-30px;width:130px;height:130px;opacity:.5;pointer-events:none}
+      `}</style>
     </div>
   );
 }
