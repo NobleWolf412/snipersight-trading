@@ -935,6 +935,23 @@ class ApiClient {
       { silent: true },
     );
   }
+
+  /**
+   * Fetch the most recent scan cycle's heartbeat.
+   *
+   * Drives the cycle-running diagnostic step (Phase 3g.ii.f) and the
+   * Cycle Heartbeat strip (Phase 3d/3e). The orchestrator records start
+   * and end timestamps + per-stage signal counters per cycle in a small
+   * ring buffer (last 50 cycles); this endpoint returns the most recent.
+   *
+   * Wire shape: `Envelope<CycleHeartbeat>`. Cost: cheap (in-memory read).
+   */
+  async getLastCycle() {
+    return this.request<CycleHeartbeatEnvelope>(
+      `/api/cycles/last`,
+      { silent: true },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1300,6 +1317,31 @@ export interface Universe {
 }
 
 export type UniverseEnvelope = Envelope<Universe>;
+
+// ---------------------------------------------------------------------------
+// Cycle Heartbeat
+// ---------------------------------------------------------------------------
+// Mirrors `backend/shared/models/observability.py:CycleHeartbeat`.
+
+export interface CycleHeartbeat {
+  ts_start: number;
+  ts_end: number | null;
+  wall_ms: number | null;
+  run_id: string;
+  mode: string | null;
+  symbols_scanned: number;
+  plans_emitted: number;
+  total_rejected: number;
+  signals_per_stage: Record<string, number>;
+  bottleneck_stage: string | null;
+  direction_stats: Record<string, unknown>;
+  regime: Record<string, unknown> | null;
+  next_cycle_eta_ts: number | null;
+  failed: boolean;
+  exception_class: string | null;
+}
+
+export type CycleHeartbeatEnvelope = Envelope<CycleHeartbeat>;
 
 export interface PaperTradingStartResponse {
   session_id: string;

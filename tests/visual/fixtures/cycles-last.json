@@ -1,11 +1,13 @@
 {
   "data": {
-    "ts_start": 1746000000.0,
-    "ts_end": 1746000002.4,
+    "ts_start": 1746792000.0,
+    "ts_end": 1746792020.0,
     "wall_ms": 2400,
+    "run_id": "cycle_42",
+    "mode": "stealth",
     "symbols_scanned": 184,
     "plans_emitted": 12,
-    "bottleneck_stage": "low_confluence",
+    "total_rejected": 110,
     "signals_per_stage": {
       "low_confluence": 86,
       "no_data": 4,
@@ -13,14 +15,15 @@
       "regime_alignment": 11,
       "ml_gate": 7
     },
-    "next_cycle_eta_ts": 1746000060.0,
-    "mode": "stealth",
+    "bottleneck_stage": "low_confluence",
+    "direction_stats": {},
+    "regime": null,
+    "next_cycle_eta_ts": 1746792080.0,
     "failed": false,
-    "exception_class": null,
-    "scan_no": 42
+    "exception_class": null
   },
   "metadata": {
-    "ts": 1746000002.5,
+    "ts": 1746792020.5,
     "source": "cycle_heartbeat",
     "status": "OK",
     "cost_class": "cheap"

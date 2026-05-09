@@ -43,8 +43,12 @@
  * Phase 3g.ii.e landed: UniversePanel — qualified + dropped pair list
  * with click-to-open modal, sourced from /api/scanner/universe.
  *
+ * Phase 3g.ii.f landed: DiagnoseWizard — 9-step playbook modal
+ * orchestrating phemex / universe / cycles / signals_per_stage / fills
+ * checks. Failed steps surface CTAs that deep-link to the right tuning
+ * surface (Intel for regime, Scanner for confluence-mode tuning, etc.).
+ *
  * Deferred to Phase 3g.ii (with inline `◌ deferred` placeholders):
- *   - DiagnoseWizard 9-step playbook.
  *   - Mode-delta tooltip on bottleneck pill.
  *   - PositionChartModal — chart-level modal on each open position row.
  *
@@ -68,6 +72,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Chip,
   ConfluenceBreakdown,
+  DiagnoseWizard,
   FooterStatus,
   GauntletBreakdown,
   PageHead,
@@ -344,6 +349,14 @@ export function BotStatus() {
   const [tradesError, setTradesError] = useState<string | null>(null);
   // Phase 3g.ii.c — PipelineTracer drawer state. Non-null = drawer open.
   const [tracerSignalId, setTracerSignalId] = useState<string | null>(null);
+  // Phase 3g.ii.f — DiagnoseWizard modal state.
+  // `diagnoseOpenedAtMs` captures Date.now() at the instant the operator
+  // clicks RUN DIAGNOSE so stale-cycle checks use a fresh reference time
+  // every open (rather than the page-mount `now`). Snapshot tests freeze
+  // the global Date constructor before goto so this still yields the
+  // deterministic frozen ts during capture.
+  const [diagnoseOpen, setDiagnoseOpen] = useState(false);
+  const [diagnoseOpenedAtMs, setDiagnoseOpenedAtMs] = useState<number>(() => Date.now());
 
   const fetchFailCount = useRef(0);
   const fastPollRef = useRef(false);
@@ -1077,21 +1090,32 @@ export function BotStatus() {
           >
             <UniversePanel />
             <section className="panel" style={{ padding: 14 }}>
-              <SectionHead
-                title="Diagnose"
-                right={<Chip kind="amber">◌ deferred</Chip>}
-              />
-              <div
-                className="mono"
-                style={{
-                  padding: 14,
-                  textAlign: 'center',
-                  fontSize: 10,
-                  color: 'var(--fg-4)',
-                  letterSpacing: '.14em',
-                }}
-              >
-                — Phase 3g.ii — 9-step playbook wizard —
+              <SectionHead title="Diagnose" />
+              <div style={{ padding: '10px 4px 4px' }}>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 10,
+                    color: 'var(--fg-3)',
+                    letterSpacing: '.10em',
+                    marginBottom: 10,
+                  }}
+                >
+                  9-step playbook orchestrating phemex / universe / cycles /
+                  signals_per_stage / fills checks. Failed steps deep-link
+                  to the right tuning surface.
+                </div>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    setDiagnoseOpenedAtMs(Date.now());
+                    setDiagnoseOpen(true);
+                  }}
+                  style={{ width: '100%', fontSize: 10, letterSpacing: '.16em' }}
+                >
+                  RUN DIAGNOSE →
+                </button>
               </div>
             </section>
           </div>
@@ -1105,6 +1129,18 @@ export function BotStatus() {
       <PipelineTracer
         signalId={tracerSignalId}
         onClose={() => setTracerSignalId(null)}
+      />
+
+      {/* DiagnoseWizard — Phase 3g.ii.f. 9-step playbook modal. nowSec
+          is captured at modal open time (Date.now() snapshot in the click
+          handler) so stale-cycle checks use a fresh reference each time;
+          the wizard's effect re-fetches all three observability endpoints
+          each time `open` flips true. */}
+      <DiagnoseWizard
+        open={diagnoseOpen}
+        onClose={() => setDiagnoseOpen(false)}
+        status={status}
+        nowSec={diagnoseOpenedAtMs / 1000}
       />
     </div>
   );

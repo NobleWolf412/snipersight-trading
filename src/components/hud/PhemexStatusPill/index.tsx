@@ -15,7 +15,7 @@ import { liveTradingService } from '@/services/liveTradingService';
 import { Chip, type ChipKind } from '../Chip';
 import { Modal } from '../Modal';
 
-interface PhemexHealth {
+export interface PhemexHealth {
   status?: string;
   ws?: {
     enabled?: boolean;
@@ -53,20 +53,23 @@ interface PhemexHealth {
   in_memory?: { completed_trades?: number; pending_orders?: number };
 }
 
-type Severity = 'green' | 'amber' | 'red' | 'idle';
+export type PhemexSeverity = 'green' | 'amber' | 'red' | 'idle';
 
-interface ClassifyResult {
-  severity: Severity;
+export interface PhemexClassifyResult {
+  severity: PhemexSeverity;
   reasons: string[];
 }
 
-function classify(health: PhemexHealth | null, isRunning: boolean): ClassifyResult {
+export function classifyPhemexHealth(
+  health: PhemexHealth | null,
+  isRunning: boolean,
+): PhemexClassifyResult {
   if (!isRunning) return { severity: 'idle', reasons: ['session not running'] };
   if (!health) return { severity: 'idle', reasons: ['no data yet'] };
 
   const reasons: string[] = [];
-  let severity: Severity = 'green';
-  const bump = (s: Severity) => {
+  let severity: PhemexSeverity = 'green';
+  const bump = (s: PhemexSeverity) => {
     if (s === 'red') severity = 'red';
     else if (s === 'amber' && severity !== 'red') severity = 'amber';
   };
@@ -122,14 +125,14 @@ function classify(health: PhemexHealth | null, isRunning: boolean): ClassifyResu
   return { severity, reasons };
 }
 
-const SEVERITY_LABEL: Record<Severity, string> = {
+const SEVERITY_LABEL: Record<PhemexSeverity, string> = {
   green: 'PHEMEX OK',
   amber: 'PHEMEX WARN',
   red: 'PHEMEX FAIL',
   idle: 'PHEMEX IDLE',
 };
 
-const SEVERITY_TO_CHIP_KIND: Record<Severity, ChipKind | undefined> = {
+const SEVERITY_TO_CHIP_KIND: Record<PhemexSeverity, ChipKind | undefined> = {
   green: 'green',
   amber: 'amber',
   red: 'red',
@@ -211,7 +214,7 @@ export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillPr
     };
   }, [load, pollIntervalMs]);
 
-  const { severity, reasons } = classify(health, isRunning);
+  const { severity, reasons } = classifyPhemexHealth(health, isRunning);
   const tooltip = error ? `Healthz error: ${error}` : reasons.join(' · ');
   const dot = severity === 'idle' ? '○' : '●';
 

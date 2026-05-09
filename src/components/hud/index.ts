@@ -11,12 +11,19 @@ export { RiskBar } from './RiskBar';
 export { SectionHead } from './SectionHead';
 export { TacticalBgDom } from './TacticalBgDom';
 export { Topbar } from './Topbar';
-export { PhemexStatusPill } from './PhemexStatusPill';
+export {
+  PhemexStatusPill,
+  classifyPhemexHealth,
+  type PhemexHealth,
+  type PhemexSeverity,
+  type PhemexClassifyResult,
+} from './PhemexStatusPill';
 export { ScannerModePicker } from './ScannerModePicker';
 export { GauntletBreakdown, classifyStage, type GauntletStage } from './GauntletBreakdown';
 export { PipelineTracer } from './PipelineTracer';
 export { ConfluenceBreakdown } from './ConfluenceBreakdown';
 export { UniversePanel } from './UniversePanel';
+export { DiagnoseWizard } from './DiagnoseWizard';
 export {
   applyTweaks,
   SHARED_TWEAK_DEFAULTS,

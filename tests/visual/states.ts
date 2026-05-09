@@ -244,6 +244,50 @@ export const STATES: SnapshotState[] = [
       await page.locator('text=Universe — Full Pair List').waitFor({ state: 'visible' });
     },
   },
+  // DiagnoseWizard 9-step playbook modal — Phase 3g.ii.f.
+  // Direction-agnostic: the playbook orchestrates phemex / universe /
+  // cycles checks plus rejection-stage analysis that aggregates across
+  // direction by design. Single state per CLAUDE.md §10 #3 documented
+  // exception.
+  //
+  // Time-freeze: the wizard's stale-cycle check (>120s since ts_end) is
+  // sensitive to wall-clock. We freeze Date globally via addInitScript
+  // BEFORE goto/reload so React's useState(() => new Date()) initializer
+  // sees the frozen instant. Without this, captures from different days
+  // would diff against the baseline.
+  {
+    route: '/bot/status',
+    state: 'bot_diagnose_modal',
+    setup: async (page) => {
+      // Freeze Date to match the cycles-last.json ts_end (1746792020) +
+      // 54s, well within the 120s stale threshold so step 3 PASSES.
+      const FROZEN_MS = 1746792074_000;
+      await page.addInitScript((frozen: number) => {
+        const RealDate = Date;
+        const FakeDate = function (...args: unknown[]) {
+          if (args.length === 0) return new RealDate(frozen);
+          // Forward-construct without spread on tuple (TS2556 in inline ctx).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return new (RealDate as any)(...args);
+        } as unknown as DateConstructor;
+        FakeDate.now = () => frozen;
+        FakeDate.parse = RealDate.parse;
+        FakeDate.UTC = RealDate.UTC;
+        FakeDate.prototype = RealDate.prototype;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any).Date = FakeDate;
+      }, FROZEN_MS);
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      // Click the RUN DIAGNOSE button to open the wizard.
+      await page.getByRole('button', { name: /RUN DIAGNOSE/ }).click();
+      // Wait for the wizard subtitle to render so the capture is stable
+      // after all three observability fetches resolve.
+      await page.locator('text=Diagnose — 9-step Playbook').waitFor({ state: 'visible' });
+      // The wizard fetches phemex/universe/cycles in parallel; wait for
+      // STEP 9 row to appear which only renders post-fetch.
+      await page.locator('text=STEP 9').waitFor({ state: 'visible' });
+    },
+  },
 ];
 
 /**
