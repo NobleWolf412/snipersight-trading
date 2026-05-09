@@ -79,6 +79,7 @@
   "pending_orders": [],
   "signal_log": [
     {
+      "id": "ETHUSDT_84_4h_short",
       "timestamp": "2026-05-09T09:42:00Z",
       "scan_number": 84,
       "symbol": "ETHUSDT",
@@ -96,6 +97,7 @@
       "timeframe": "4h"
     },
     {
+      "id": "AVAXUSDT_86_1h_short",
       "timestamp": "2026-05-09T10:01:14Z",
       "scan_number": 86,
       "symbol": "AVAXUSDT",

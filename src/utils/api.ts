@@ -868,6 +868,37 @@ class ApiClient {
       method: 'POST',
     });
   }
+
+  // ---------------------------------------------------------------------------
+  // Observability endpoints (Phase 1 wire format).
+  //
+  // All routes return an envelope `{ data, metadata, warnings }` so callers
+  // can react to status=PARTIAL (data unavailable but id known) and
+  // status=DEGRADED (data present but audit flagged drift). The envelope is
+  // returned verbatim — unwrapping `.data` is the consumer's responsibility.
+  //
+  // Auth boundary: these endpoints are CURRENTLY UNAUTHENTICATED (dev mode
+  // only). Pre-live-capital migration will gate them behind Tailscale ACL,
+  // bearer token, or localhost-only bind. See backend/routers/observability.py
+  // module docblock for the migration plan.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Fetch the flattened ~11-stage pipeline trace for a single signal.
+   *
+   * @param id Stable per-signal id from `SignalLogEntry.id`. URL-safe form
+   *           `<symbol-with-/-replaced-by-->_<scan_no>_<tf>_<side>` is
+   *           constructed by `LiveTradingService._log_signal()`.
+   *
+   * Wire shape: `Envelope<SignalTrace>`. `data=null` is possible when the
+   * envelope status is PARTIAL.
+   */
+  async getSignalTrace(id: string) {
+    return this.request<TraceEnvelope>(
+      `/api/signals/${encodeURIComponent(id)}/trace`,
+      { silent: true },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1057,6 +1088,13 @@ export interface PaperTradingStatusResponse {
 }
 
 export interface SignalLogEntry {
+  /**
+   * Stable per-signal id assigned by `LiveTradingService._log_signal()`.
+   * Format: `<symbol-with-/-replaced-by-->_<scan_no>_<tf>_<side>` —
+   * URL-safe so it goes into `/api/signals/{id}/trace`. Optional in the
+   * type because older log entries (pre-Phase-1 backend) may lack it.
+   */
+  id?: string;
   timestamp: string;
   scan_number: number;
   symbol: string;
@@ -1089,6 +1127,69 @@ export interface SignalLogEntry {
   conflict_conditions?: string[];
   conflict_count?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Pipeline trace wire format
+// ---------------------------------------------------------------------------
+//
+// Mirrors the Pydantic models in `backend/shared/models/observability.py`.
+// Schema is `frozen=True, extra="forbid"` on the backend — adding a field is
+// a BREAKING CHANGE there, so these types must be kept in lockstep with the
+// server. JSON uses the Pydantic alias `pass` (not `pass_`).
+//
+// Envelope (`{ data, metadata, warnings }`) is shared with all other
+// observability endpoints — see backend/shared/models/envelope.py.
+
+export interface TraceStage {
+  name: string;
+  /**
+   * `true`  = stage cleared,
+   * `false` = stage rejected the signal,
+   * `null`  = stage skipped (signal already dead from earlier stage).
+   *
+   * Property is `pass` (not `pass_`) on the wire because the backend dumps
+   * with `by_alias=True`. `pass` is a valid identifier in TS object-property
+   * position (it is NOT a reserved word in that context).
+   */
+  pass: boolean | null;
+  value: string;
+  threshold?: string | null;
+  killed_at: boolean;
+}
+
+export interface GauntletSubstage {
+  name: string;
+  reason: string;
+  pass: boolean | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface SignalTrace {
+  id: string;
+  symbol: string;
+  side: string;       // "long" | "short" (lowercased on backend)
+  tf: string;
+  cycle_ts: number;
+  stages: TraceStage[];
+  gauntlet_substages: GauntletSubstage[];
+  final_state: string;  // e.g. "executed", "filtered:low_confluence", "REGIME_VETO"
+}
+
+export interface ResponseMetadata {
+  ts: number;
+  source: string;
+  status: 'OK' | 'PARTIAL' | 'DEGRADED';
+  cost_class: 'cheap' | 'moderate' | 'expensive';
+  reason?: string | null;
+}
+
+export interface Envelope<T> {
+  data: T | null;
+  metadata: ResponseMetadata;
+  warnings: string[];
+}
+
+export type TraceEnvelope = Envelope<SignalTrace>;
 
 export interface PaperTradingStartResponse {
   session_id: string;

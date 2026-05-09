@@ -14,6 +14,7 @@ export { Topbar } from './Topbar';
 export { PhemexStatusPill } from './PhemexStatusPill';
 export { ScannerModePicker } from './ScannerModePicker';
 export { GauntletBreakdown, classifyStage, type GauntletStage } from './GauntletBreakdown';
+export { PipelineTracer } from './PipelineTracer';
 export {
   applyTweaks,
   SHARED_TWEAK_DEFAULTS,

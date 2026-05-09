@@ -20,8 +20,14 @@
  *
  * Synthetic-but-disclosed: none.
  *
+ * Per-row drilldown:
+ *   - Detail rows are clickable when an `onSignalClick` callback is
+ *     supplied AND the row's `id` field is non-empty. The callback
+ *     receives the stable signal id; the parent typically opens
+ *     `<PipelineTracer />` with it. Older signal_log entries lacking the
+ *     `id` field fall back to a non-interactive row.
+ *
  * Deferred to later 3g.ii sub-steps:
- *   - Per-row click → PipelineTracer drawer (3g.ii.c).
  *   - Mode-delta tooltip on the bottleneck pill — "If you switched to
  *     STRIKE (≥68), 14 of these 18 would have passed." Lands with the
  *     mode picker integration in 3g.ii.f.
@@ -292,9 +298,15 @@ function stageBg(id: GauntletStage, count: number): string {
 
 interface Props {
   signals: SignalLogEntry[];
+  /**
+   * Called when a detail row is clicked. Receives the stable signal id.
+   * Wire to a PipelineTracer drawer to drill into the per-signal trace.
+   * If omitted, rows are non-interactive (purely informational table).
+   */
+  onSignalClick?: (id: string) => void;
 }
 
-export function GauntletBreakdown({ signals }: Props) {
+export function GauntletBreakdown({ signals, onSignalClick }: Props) {
   const [detail, setDetail] = useState(false);
   const [filterStage, setFilterStage] = useState<GauntletStage | null>(null);
 
@@ -580,10 +592,16 @@ export function GauntletBreakdown({ signals }: Props) {
                   const c = stageColor(s.stage, 1);
                   const score = Number.isFinite(s.confluence) && s.confluence > 0 ? s.confluence : null;
                   const thr = s.threshold ?? null;
+                  const clickable = Boolean(onSignalClick && s.id);
                   return (
                     <tr
                       key={`${s.symbol}-${s.timestamp}-${i}`}
-                      style={{ borderTop: '1px dashed var(--border-soft)' }}
+                      onClick={clickable && s.id ? () => onSignalClick!(s.id!) : undefined}
+                      style={{
+                        borderTop: '1px dashed var(--border-soft)',
+                        cursor: clickable ? 'pointer' : 'default',
+                      }}
+                      title={clickable ? 'Open pipeline tracer' : undefined}
                     >
                       <td style={{ padding: '6px 0', color: 'var(--fg-4)', fontSize: 10 }}>
                         {fmtTime(s.timestamp)}

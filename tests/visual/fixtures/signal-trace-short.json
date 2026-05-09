@@ -1,0 +1,52 @@
+{
+  "data": {
+    "id": "AVAXUSDT_86_1h_short",
+    "symbol": "AVAXUSDT",
+    "side": "short",
+    "tf": "1h",
+    "cycle_ts": 86.0,
+    "stages": [
+      { "name": "UNIVERSE",         "pass": true,  "value": "passed",                            "threshold": null, "killed_at": false },
+      { "name": "DATA",              "pass": true,  "value": "passed",                            "threshold": null, "killed_at": false },
+      { "name": "CRITICAL_TF",       "pass": true,  "value": "passed",                            "threshold": null, "killed_at": false },
+      { "name": "FEATURES",          "pass": true,  "value": "passed",                            "threshold": null, "killed_at": false },
+      { "name": "CONFLUENCE_SCORE",  "pass": false, "value": "low_confluence — below STEALTH 70", "threshold": null, "killed_at": true  },
+      { "name": "PLANNER",           "pass": null,  "value": "skipped",                           "threshold": null, "killed_at": false },
+      { "name": "RISK_VALIDATION",   "pass": null,  "value": "skipped",                           "threshold": null, "killed_at": false },
+      { "name": "ML_GATE",           "pass": null,  "value": "skipped",                           "threshold": null, "killed_at": false },
+      { "name": "REGIME",            "pass": null,  "value": "skipped",                           "threshold": null, "killed_at": false },
+      { "name": "POSITION_CAPS",     "pass": null,  "value": "skipped",                           "threshold": null, "killed_at": false },
+      { "name": "EXECUTION",         "pass": null,  "value": "skipped",                           "threshold": null, "killed_at": false }
+    ],
+    "gauntlet_substages": [
+      {
+        "name": "low_confluence",
+        "reason": "low_confluence — below STEALTH 70",
+        "pass": false,
+        "metadata": {
+          "id": "AVAXUSDT_86_1h_short",
+          "timestamp": "2026-05-09T10:01:14Z",
+          "scan_number": 86,
+          "confluence": 64.2,
+          "setup_type": "BOS",
+          "entry_zone": 23.9,
+          "stop_loss": 24.6,
+          "rr": 1.78,
+          "result": "filtered",
+          "timeframe": "1h",
+          "reason_type": "low_confluence",
+          "threshold": 70
+        }
+      }
+    ],
+    "final_state": "filtered:low_confluence"
+  },
+  "metadata": {
+    "ts": 1746792074.0,
+    "source": "signal_log",
+    "status": "OK",
+    "cost_class": "cheap",
+    "reason": null
+  },
+  "warnings": []
+}

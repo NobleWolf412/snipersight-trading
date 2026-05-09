@@ -37,7 +37,6 @@
  *   log empty —`, `— awaiting trades —`).
  *
  * Deferred to Phase 3g.ii (with inline `◌ deferred` placeholders):
- *   - PipelineTracer drawer (per-signal 11-stage flowchart).
  *   - ConfluenceBreakdown panel (rolling factor stacked-bar).
  *   - UniversePanel modal (qualified+dropped pair list).
  *   - DiagnoseWizard 9-step playbook.
@@ -66,6 +65,7 @@ import {
   FooterStatus,
   GauntletBreakdown,
   PageHead,
+  PipelineTracer,
   Reticle,
   SectionHead,
 } from '@/components/hud';
@@ -335,6 +335,8 @@ export function BotStatus() {
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [tradesError, setTradesError] = useState<string | null>(null);
+  // Phase 3g.ii.c — PipelineTracer drawer state. Non-null = drawer open.
+  const [tracerSignalId, setTracerSignalId] = useState<string | null>(null);
 
   const fetchFailCount = useRef(0);
   const fastPollRef = useRef(false);
@@ -1049,7 +1051,11 @@ export function BotStatus() {
           </section>
 
           {/* ── Gauntlet Breakdown — Phase 3g.ii.b ─────────────────── */}
-          <GauntletBreakdown signals={signalLog} />
+          {/* Per-row click opens the PipelineTracer drawer (3g.ii.c).   */}
+          <GauntletBreakdown
+            signals={signalLog}
+            onSignalClick={(id) => setTracerSignalId(id)}
+          />
 
           {/* ── Deferred surfaces row ────────────────────────────── */}
           <div
@@ -1118,6 +1124,13 @@ export function BotStatus() {
       )}
 
       <FooterStatus latency={32} build={`${now.toISOString().slice(0, 10)}`} />
+
+      {/* PipelineTracer drawer — Phase 3g.ii.c. Renders only when a
+          signal id is selected via Gauntlet detail row click. */}
+      <PipelineTracer
+        signalId={tracerSignalId}
+        onClose={() => setTracerSignalId(null)}
+      />
     </div>
   );
 }

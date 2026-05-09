@@ -158,6 +158,76 @@ export const STATES: SnapshotState[] = [
       await page.reload({ waitUntil: 'domcontentloaded' });
     },
   },
+  // PipelineTracer drawer — Phase 3g.ii.c. Bull/bear pair: each clicks
+  // through to the same AVAXUSDT signal that's `filtered:low_confluence`
+  // in its respective bot-status fixture. The trace fixture mirrors the
+  // backend's reconstructive 11-stage trace (UNIVERSE..FEATURES pass,
+  // CONFLUENCE_SCORE killed_at, downstream stages pass=null=skipped).
+  // Symmetry: layout, stage colors, and substage detail are identical
+  // across long/short — the only difference is the `side` chip and the
+  // entry/stop magnitudes inside the substage metadata block.
+  {
+    route: '/bot/status',
+    state: 'bot_pipeline_tracer__long',
+    setup: async (page) => {
+      const status = (await import('../visual/fixtures/bot-status-position-long.json', {
+        with: { type: 'json' },
+      })).default;
+      const trace = (await import('../visual/fixtures/signal-trace-long.json', {
+        with: { type: 'json' },
+      })).default;
+      await page.route('**/api/live-trading/status*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(status),
+        });
+      });
+      await page.route('**/api/signals/AVAXUSDT_86_1h_long/trace', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(trace),
+        });
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      // Open Gauntlet detail mode then click the AVAXUSDT (filtered) row.
+      await page.getByRole('button', { name: /DETAIL/ }).click();
+      await page.locator('tr', { hasText: 'AVAXUSDT' }).click();
+      // Wait for the drawer's stage strip (CONFLUENCE_SCORE label) to render.
+      await page.locator('text=CONFLUENCE_SCORE').first().waitFor({ state: 'visible' });
+    },
+  },
+  {
+    route: '/bot/status',
+    state: 'bot_pipeline_tracer__short',
+    setup: async (page) => {
+      const status = (await import('../visual/fixtures/bot-status-position-short.json', {
+        with: { type: 'json' },
+      })).default;
+      const trace = (await import('../visual/fixtures/signal-trace-short.json', {
+        with: { type: 'json' },
+      })).default;
+      await page.route('**/api/live-trading/status*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(status),
+        });
+      });
+      await page.route('**/api/signals/AVAXUSDT_86_1h_short/trace', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(trace),
+        });
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.getByRole('button', { name: /DETAIL/ }).click();
+      await page.locator('tr', { hasText: 'AVAXUSDT' }).click();
+      await page.locator('text=CONFLUENCE_SCORE').first().waitFor({ state: 'visible' });
+    },
+  },
 ];
 
 /**
