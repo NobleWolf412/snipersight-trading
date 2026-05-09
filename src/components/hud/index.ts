@@ -38,10 +38,3 @@ export {
   fmtDur,
   fmtNum,
 } from './formatters';
-
-// Legacy components (will be archived in Phase 6 once references are removed).
-// Kept exported so existing pages still build during migration.
-export { HudPanel } from './HudPanel';
-export { TacticalCard } from './TacticalCard';
-export { MissionBrief } from './MissionBrief';
-export { TargetReticleOverlay } from './TargetReticleOverlay';
