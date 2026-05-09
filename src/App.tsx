@@ -40,6 +40,7 @@ const HTFOpportunities = lazy(() =>
 const TradeJournal = lazy(() =>
   import('@/pages/TradeJournal').then((m) => ({ default: m.TradeJournal })),
 );
+const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.Settings })));
 
 function LoadingFallback() {
   return (
@@ -82,6 +83,7 @@ function App() {
               <Route path="/intel" element={<Intel />} />
               <Route path="/htf" element={<HTFOpportunities />} />
               <Route path="/journal" element={<TradeJournal />} />
+              <Route path="/settings" element={<Settings />} />
             </Routes>
           </Suspense>
         </main>
