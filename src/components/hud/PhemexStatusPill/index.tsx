@@ -186,7 +186,10 @@ export function PhemexStatusPill({ pollIntervalMs = 10_000 }: PhemexStatusPillPr
         liveTradingService.getStatus().catch(() => null),
       ]);
       setHealth(healthData as PhemexHealth);
-      setIsRunning(Boolean((statusData as { is_running?: boolean } | null)?.is_running));
+      // LiveTradingStatus uses `status: 'running' | 'idle' | …`; the
+      // earlier `is_running` shape was a stale fixture relic. Drive the
+      // running/idle severity off the canonical field.
+      setIsRunning(statusData?.status === 'running');
       setError(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'healthz unreachable';
