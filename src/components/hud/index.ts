@@ -13,6 +13,7 @@ export { TacticalBgDom } from './TacticalBgDom';
 export { Topbar } from './Topbar';
 export { PhemexStatusPill } from './PhemexStatusPill';
 export { ScannerModePicker } from './ScannerModePicker';
+export { GauntletBreakdown, classifyStage, type GauntletStage } from './GauntletBreakdown';
 export {
   applyTweaks,
   SHARED_TWEAK_DEFAULTS,

@@ -37,8 +37,6 @@
  *   log empty —`, `— awaiting trades —`).
  *
  * Deferred to Phase 3g.ii (with inline `◌ deferred` placeholders):
- *   - GauntletBreakdown expanded internals — currently a 1-line summary
- *     strip with the deferred chip; full per-stage table lands next.
  *   - PipelineTracer drawer (per-signal 11-stage flowchart).
  *   - ConfluenceBreakdown panel (rolling factor stacked-bar).
  *   - UniversePanel modal (qualified+dropped pair list).
@@ -66,6 +64,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Chip,
   FooterStatus,
+  GauntletBreakdown,
   PageHead,
   Reticle,
   SectionHead,
@@ -981,86 +980,20 @@ export function BotStatus() {
             )}
           </section>
 
-          {/* ── Signal Log + deferred Gauntlet ──────────────────── */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 14,
-            }}
-          >
-            <section className="panel" style={{ padding: 14 }}>
-              <SectionHead
-                title="Signal Log"
-                right={
-                  <span
-                    className="mono"
-                    style={{ fontSize: 10, color: 'var(--fg-4)' }}
-                  >
-                    {signalLog.length} entries
-                  </span>
-                }
-              />
-              {signalLog.length === 0 ? (
-                <div
+          {/* ── Signal Log ────────────────────────────────────────── */}
+          <section className="panel" style={{ padding: 14 }}>
+            <SectionHead
+              title="Signal Log"
+              right={
+                <span
                   className="mono"
-                  style={{
-                    padding: 18,
-                    textAlign: 'center',
-                    fontSize: 11,
-                    color: 'var(--fg-4)',
-                    letterSpacing: '.16em',
-                    textTransform: 'uppercase',
-                  }}
+                  style={{ fontSize: 10, color: 'var(--fg-4)' }}
                 >
-                  — signal log empty —
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gap: 6 }}>
-                  {signalLog.slice(0, 10).map((entry, i) => {
-                    const ok = entry.result === 'executed';
-                    const filtered = entry.result === 'filtered';
-                    return (
-                      <div
-                        key={`${entry.symbol}-${i}`}
-                        className="mono"
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '90px 1fr 80px',
-                          gap: 8,
-                          padding: '6px 8px',
-                          fontSize: 11,
-                          borderBottom: '1px solid var(--border-soft)',
-                        }}
-                      >
-                        <span style={{ fontWeight: 700 }}>{entry.symbol}</span>
-                        <span style={{ color: 'var(--fg-3)' }}>
-                          {entry.reason || entry.setup_type || '—'}
-                        </span>
-                        <span
-                          style={{
-                            textAlign: 'right',
-                            color: ok
-                              ? 'var(--green)'
-                              : filtered
-                                ? 'var(--red)'
-                                : 'var(--fg-4)',
-                          }}
-                        >
-                          {ok ? '✓ exec' : filtered ? '✗ filter' : '⚠ err'}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            <section className="panel" style={{ padding: 14 }}>
-              <SectionHead
-                title="Gauntlet Breakdown"
-                right={<Chip kind="amber">◌ deferred</Chip>}
-              />
+                  {signalLog.length} entries
+                </span>
+              }
+            />
+            {signalLog.length === 0 ? (
               <div
                 className="mono"
                 style={{
@@ -1068,15 +1001,55 @@ export function BotStatus() {
                   textAlign: 'center',
                   fontSize: 11,
                   color: 'var(--fg-4)',
-                  letterSpacing: '.14em',
+                  letterSpacing: '.16em',
+                  textTransform: 'uppercase',
                 }}
               >
-                — Phase 3g.ii — per-stage table, bottleneck pill,
-                <br />
-                pipeline tracer drawer, mode-delta tooltip —
+                — signal log empty —
               </div>
-            </section>
-          </div>
+            ) : (
+              <div style={{ display: 'grid', gap: 6 }}>
+                {signalLog.slice(0, 10).map((entry, i) => {
+                  const ok = entry.result === 'executed';
+                  const filtered = entry.result === 'filtered';
+                  return (
+                    <div
+                      key={`${entry.symbol}-${i}`}
+                      className="mono"
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '90px 1fr 80px',
+                        gap: 8,
+                        padding: '6px 8px',
+                        fontSize: 11,
+                        borderBottom: '1px solid var(--border-soft)',
+                      }}
+                    >
+                      <span style={{ fontWeight: 700 }}>{entry.symbol}</span>
+                      <span style={{ color: 'var(--fg-3)' }}>
+                        {entry.reason || entry.setup_type || '—'}
+                      </span>
+                      <span
+                        style={{
+                          textAlign: 'right',
+                          color: ok
+                            ? 'var(--green)'
+                            : filtered
+                              ? 'var(--red)'
+                              : 'var(--fg-4)',
+                        }}
+                      >
+                        {ok ? '✓ exec' : filtered ? '✗ filter' : '⚠ err'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* ── Gauntlet Breakdown — Phase 3g.ii.b ─────────────────── */}
+          <GauntletBreakdown signals={signalLog} />
 
           {/* ── Deferred surfaces row ────────────────────────────── */}
           <div
