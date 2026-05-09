@@ -1,6 +1,26 @@
 import { useEffect, useState, useMemo } from 'react';
 import { api } from '@/utils/api';
-import type { MarketRegimeLensProps } from '@/components/market/MarketRegimeLens';
+
+// Public shape of the regime hook's return value.
+// Inlined here after the original MarketRegimeLens component was archived in
+// Phase 6 sub-step 4.
+export type RegimeLabel = 'ALTSEASON' | 'BTC_DRIVE' | 'DEFENSIVE' | 'PANIC' | 'CHOPPY';
+export type Visibility = 'HIGH' | 'MEDIUM' | 'LOW' | 'VERY_LOW';
+export type RegimeColor = 'green' | 'blue' | 'yellow' | 'orange' | 'red';
+
+export interface MarketRegimeLensProps {
+  regimeLabel: RegimeLabel;
+  visibility: Visibility;
+  color?: RegimeColor;
+  btcDominance?: number;
+  usdtDominance?: number;
+  altDominance?: number;
+  guidanceLines?: string[];
+  mode?: 'scanner' | 'bot';
+  previousBtcDominance?: number;
+  previousUsdtDominance?: number;
+  previousAltDominance?: number;
+}
 
 export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegimeLensProps {
   const [data, setData] = useState<any | null>(null);
