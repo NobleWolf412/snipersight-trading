@@ -1,0 +1,3 @@
+# Approved visual snapshot baselines live here.
+# Each baseline is per-state, named {route}__{state}__{viewport}.png.
+# Files in this directory ARE committed to git; pending/ and __report__/ are not.

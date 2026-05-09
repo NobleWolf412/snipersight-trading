@@ -1,0 +1,29 @@
+{
+  "data": {
+    "ts_start": 1746000000.0,
+    "ts_end": 1746000002.4,
+    "wall_ms": 2400,
+    "symbols_scanned": 184,
+    "plans_emitted": 12,
+    "bottleneck_stage": "low_confluence",
+    "signals_per_stage": {
+      "low_confluence": 86,
+      "no_data": 4,
+      "missing_tf": 2,
+      "regime_alignment": 11,
+      "ml_gate": 7
+    },
+    "next_cycle_eta_ts": 1746000060.0,
+    "mode": "stealth",
+    "failed": false,
+    "exception_class": null,
+    "scan_no": 42
+  },
+  "metadata": {
+    "ts": 1746000002.5,
+    "source": "cycle_heartbeat",
+    "status": "OK",
+    "cost_class": "cheap"
+  },
+  "warnings": []
+}

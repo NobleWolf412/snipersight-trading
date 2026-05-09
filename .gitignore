@@ -76,3 +76,7 @@ backend/data/cache/
 
 *storybook.log
 storybook-static
+
+# Visual snapshot framework
+tests/visual/__pending__/
+tests/visual/__report__/

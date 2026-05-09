@@ -1,0 +1,41 @@
+{
+  "ws": {
+    "connected": true,
+    "seconds_since_last_frame": 3.2,
+    "auth_errors_total": 0,
+    "frames_in_total": 4821,
+    "disconnects_total": 0
+  },
+  "rest": {
+    "rest_429_total": 0,
+    "rest_5xx_total": 0,
+    "rest_auth_errors_total": 0,
+    "calls_total": 312,
+    "p95_latency_ms": 184
+  },
+  "executor": {
+    "balance_known": true,
+    "balance_usd": 1000.0,
+    "fills_recorded_via_ws": 0,
+    "fills_recorded_via_rest": 0,
+    "fills_recovered_via_position_check": 0,
+    "fills_backfilled_from_phemex": 0,
+    "open_positions": 0,
+    "errors_total": 0
+  },
+  "backfill": {
+    "last_run_ts": 1746000000.0,
+    "last_synced_ts": 1746000000.0,
+    "runs_total": 12,
+    "rows_new_total": 0,
+    "errors_total": 0
+  },
+  "journal": {
+    "total_rows": 0,
+    "writes_total": 0,
+    "write_errors_total": 0
+  },
+  "in_memory": {
+    "completed_trades": 0
+  }
+}
