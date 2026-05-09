@@ -108,7 +108,8 @@ export const STATES: SnapshotState[] = [
     state: 'default',
   },
 
-  // ─── Bot (10 planned, 2 shipped — current /bot/setup + /bot/status) ───
+  // ─── Bot (10 planned, 4 shipped — /bot/setup default + /bot/status default
+  //          + first directional pair: bot_position_open__long/__short) ───
   {
     route: '/bot/setup',
     state: 'default',
@@ -116,6 +117,46 @@ export const STATES: SnapshotState[] = [
   {
     route: '/bot/status',
     state: 'default',
+  },
+  // First directional snapshot pair — exercises assertSymmetricDirectionalKeys
+  // (Phase 3f sub-step 0) for the first time. Setup overlays a populated
+  // `LiveTradingStatus` fixture for each direction; everything else
+  // (entry/sl/tp values, uPnL magnitude, confluence score, regime
+  // intensity) is bull/bear-symmetric so any layout asymmetry between the
+  // two PNGs is a real bug, not data drift. Plan §3e — Phase 3g.ii.a.
+  {
+    route: '/bot/status',
+    state: 'bot_position_open__long',
+    setup: async (page) => {
+      const fixture = (await import('../visual/fixtures/bot-status-position-long.json', {
+        with: { type: 'json' },
+      })).default;
+      await page.route('**/api/live-trading/status*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(fixture),
+        });
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+    },
+  },
+  {
+    route: '/bot/status',
+    state: 'bot_position_open__short',
+    setup: async (page) => {
+      const fixture = (await import('../visual/fixtures/bot-status-position-short.json', {
+        with: { type: 'json' },
+      })).default;
+      await page.route('**/api/live-trading/status*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(fixture),
+        });
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+    },
   },
 ];
 
