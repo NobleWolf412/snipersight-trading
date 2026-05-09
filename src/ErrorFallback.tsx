@@ -1,7 +1,6 @@
-import { Alert, AlertTitle, AlertDescription } from "./components/ui/alert";
-import { Button } from "./components/ui/button";
-import { Warning, ArrowsClockwise } from "@phosphor-icons/react";
-
+// Error boundary fallback. Originally used shadcn Alert/Button primitives;
+// rewrote with vanilla HUD-themed markup in Phase 6 sub-step 4b after the
+// shadcn ui/ tree was archived.
 interface ErrorFallbackProps {
   error: Error;
   resetErrorBoundary: () => void;
@@ -9,32 +8,85 @@ interface ErrorFallbackProps {
 
 export const ErrorFallback = ({ error, resetErrorBoundary }: ErrorFallbackProps) => {
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <Alert variant="destructive" className="mb-6">
-          <Warning size={20} />
-          <AlertTitle>This spark has encountered a runtime error</AlertTitle>
-          <AlertDescription>
-            Something unexpected happened while running the application. The error details are shown below. Contact the spark author and let them know about this issue.
-          </AlertDescription>
-        </Alert>
-        
-        <div className="bg-card border rounded-lg p-4 mb-6">
-          <h3 className="font-semibold text-sm text-muted-foreground mb-2">Error Details:</h3>
-          <pre className="text-xs text-destructive bg-muted/50 p-3 rounded border overflow-auto max-h-32">
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem',
+        background: 'var(--bg, #0a0a0a)',
+        color: 'var(--fg, #e6e6e6)',
+        fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+      }}
+    >
+      <div style={{ width: '100%', maxWidth: 480 }}>
+        <div
+          className="panel"
+          style={{
+            padding: '1rem',
+            marginBottom: '1.5rem',
+            borderColor: 'var(--red, #ff5577)',
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              letterSpacing: '0.15em',
+              textTransform: 'uppercase',
+              color: 'var(--red, #ff5577)',
+              marginBottom: 6,
+            }}
+          >
+            // RUNTIME FAULT
+          </div>
+          <div style={{ fontSize: 14, lineHeight: 1.5 }}>
+            The HUD encountered a runtime error. Details below. Reload to retry.
+          </div>
+        </div>
+
+        <div
+          className="panel"
+          style={{
+            padding: '0.75rem 1rem',
+            marginBottom: '1.5rem',
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              opacity: 0.6,
+              marginBottom: 6,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+            }}
+          >
+            error.message
+          </div>
+          <pre
+            style={{
+              margin: 0,
+              fontSize: 12,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: 160,
+              overflow: 'auto',
+              color: 'var(--red, #ff5577)',
+            }}
+          >
             {error.message}
           </pre>
         </div>
-        
-        <Button 
-          onClick={resetErrorBoundary} 
-          className="w-full"
-          variant="outline"
+
+        <button
+          type="button"
+          className="btn btn-cyan"
+          onClick={resetErrorBoundary}
+          style={{ width: '100%' }}
         >
-          <ArrowsClockwise size={16} />
-          Try Again
-        </Button>
+          ↻ retry
+        </button>
       </div>
     </div>
   );
-}
+};
