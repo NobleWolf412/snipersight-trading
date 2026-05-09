@@ -84,13 +84,12 @@ const ROUTE_MOCKS: Array<{
       warnings: [],
     }),
   },
+  // Confluence distribution — populated fixture so the new
+  // ConfluenceBreakdown panel (Phase 3g.ii.d) renders the full
+  // stacked-bar + per-direction breakdown in BotStatus snapshots.
   {
     match: (u) => u.includes('/api/signals/confluence/distribution'),
-    body: () => ({
-      data: { aggregate: [], by_direction: { long: [], short: [] }, sample_count: 0 },
-      metadata: { ts: 1746000000.0, source: 'confluence_cache', status: 'OK', cost_class: 'moderate' },
-      warnings: [],
-    }),
+    body: () => loadFixture('confluence-distribution.json'),
   },
   // Generic catch-all for any other /api/* GET — returns empty object so
   // pages don't error out, but DOESN'T match unmocked POSTs (those should

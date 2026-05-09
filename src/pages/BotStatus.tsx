@@ -36,8 +36,11 @@
  *   Each panel shows its own empty-state (`— no positions —`, `— signal
  *   log empty —`, `— awaiting trades —`).
  *
+ * Phase 3g.ii.d landed: ConfluenceBreakdown panel (rolling factor
+ * stacked-bar over last N signals + by-direction breakdown, sourced
+ * from /api/signals/confluence/distribution).
+ *
  * Deferred to Phase 3g.ii (with inline `◌ deferred` placeholders):
- *   - ConfluenceBreakdown panel (rolling factor stacked-bar).
  *   - UniversePanel modal (qualified+dropped pair list).
  *   - DiagnoseWizard 9-step playbook.
  *   - Mode-delta tooltip on bottleneck pill.
@@ -62,6 +65,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Chip,
+  ConfluenceBreakdown,
   FooterStatus,
   GauntletBreakdown,
   PageHead,
@@ -1057,32 +1061,17 @@ export function BotStatus() {
             onSignalClick={(id) => setTracerSignalId(id)}
           />
 
+          {/* ── Confluence Distribution — Phase 3g.ii.d ───────────── */}
+          <ConfluenceBreakdown />
+
           {/* ── Deferred surfaces row ────────────────────────────── */}
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
+              gridTemplateColumns: 'repeat(2, 1fr)',
               gap: 14,
             }}
           >
-            <section className="panel" style={{ padding: 14 }}>
-              <SectionHead
-                title="Confluence Distribution"
-                right={<Chip kind="amber">◌ deferred</Chip>}
-              />
-              <div
-                className="mono"
-                style={{
-                  padding: 14,
-                  textAlign: 'center',
-                  fontSize: 10,
-                  color: 'var(--fg-4)',
-                  letterSpacing: '.14em',
-                }}
-              >
-                — Phase 3g.ii — rolling factor stacked-bar —
-              </div>
-            </section>
             <section className="panel" style={{ padding: 14 }}>
               <SectionHead
                 title="Universe"

@@ -899,6 +899,28 @@ class ApiClient {
       { silent: true },
     );
   }
+
+  /**
+   * Fetch the rolling confluence-factor distribution.
+   *
+   * @param n         Sample window (1..500). Backend default is 200.
+   * @param direction Scope of the `aggregate` field: 'all' | 'long' | 'short'.
+   *                  `by_direction` is ALWAYS populated with both sides
+   *                  regardless of this param (CLAUDE.md §10 #3 standing fix).
+   *
+   * Wire shape: `Envelope<ConfluenceDistribution>`. Cost: moderate
+   * (O(N×F) aggregation on the server).
+   */
+  async getConfluenceDistribution(
+    n: number = 200,
+    direction: 'all' | 'long' | 'short' = 'all',
+  ) {
+    const qs = new URLSearchParams({ n: String(n), direction }).toString();
+    return this.request<ConfluenceDistributionEnvelope>(
+      `/api/signals/confluence/distribution?${qs}`,
+      { silent: true },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1190,6 +1212,45 @@ export interface Envelope<T> {
 }
 
 export type TraceEnvelope = Envelope<SignalTrace>;
+
+// ---------------------------------------------------------------------------
+// Confluence distribution wire format
+// ---------------------------------------------------------------------------
+//
+// Mirrors `backend/shared/models/observability.py:FactorContribution /
+// DirectionDistribution / ConfluenceDistribution`. The
+// `by_direction` field ALWAYS exposes both bull and bear slices
+// regardless of the `direction` query param — that is the §10 standing-
+// fix #3 contract (callers can spot bull/bear asymmetries even when
+// scoping the aggregate to one side).
+
+export interface FactorContribution {
+  name: string;
+  avg_score: number;
+  avg_weight: number;
+  avg_weighted_score: number;
+  sample_count: number;
+}
+
+export interface DirectionDistribution {
+  direction: 'long' | 'short';
+  sample_count: number;
+  avg_total_score: number;
+  avg_synergy_bonus: number;
+  avg_conflict_penalty: number;
+  factors: FactorContribution[];
+}
+
+export interface ConfluenceDistribution {
+  sample_count: number;
+  avg_total_score: number;
+  avg_synergy_bonus: number;
+  avg_conflict_penalty: number;
+  factors: FactorContribution[];
+  by_direction: DirectionDistribution[];
+}
+
+export type ConfluenceDistributionEnvelope = Envelope<ConfluenceDistribution>;
 
 export interface PaperTradingStartResponse {
   session_id: string;

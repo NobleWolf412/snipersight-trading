@@ -1,0 +1,62 @@
+{
+  "data": {
+    "sample_count": 184,
+    "avg_total_score": 71.4,
+    "avg_synergy_bonus": 4.0,
+    "avg_conflict_penalty": -1.9,
+    "factors": [
+      { "name": "structure", "avg_score": 8.4, "avg_weight": 1.8, "avg_weighted_score": 15.1, "sample_count": 184 },
+      { "name": "smc",       "avg_score": 7.6, "avg_weight": 1.6, "avg_weighted_score": 12.2, "sample_count": 184 },
+      { "name": "momentum",  "avg_score": 7.1, "avg_weight": 1.5, "avg_weighted_score": 10.6, "sample_count": 184 },
+      { "name": "volume",    "avg_score": 6.9, "avg_weight": 1.4, "avg_weighted_score": 9.7,  "sample_count": 184 },
+      { "name": "trend",     "avg_score": 6.4, "avg_weight": 1.3, "avg_weighted_score": 8.3,  "sample_count": 184 },
+      { "name": "regime",    "avg_score": 5.8, "avg_weight": 1.2, "avg_weighted_score": 6.9,  "sample_count": 184 },
+      { "name": "liquidity", "avg_score": 5.2, "avg_weight": 1.0, "avg_weighted_score": 5.2,  "sample_count": 184 },
+      { "name": "rsi",       "avg_score": 4.6, "avg_weight": 0.8, "avg_weighted_score": 3.7,  "sample_count": 184 }
+    ],
+    "by_direction": [
+      {
+        "direction": "long",
+        "sample_count": 92,
+        "avg_total_score": 72.1,
+        "avg_synergy_bonus": 4.2,
+        "avg_conflict_penalty": -1.8,
+        "factors": [
+          { "name": "structure", "avg_score": 8.6, "avg_weight": 1.8, "avg_weighted_score": 15.5, "sample_count": 92 },
+          { "name": "smc",       "avg_score": 7.8, "avg_weight": 1.6, "avg_weighted_score": 12.5, "sample_count": 92 },
+          { "name": "momentum",  "avg_score": 7.3, "avg_weight": 1.5, "avg_weighted_score": 11.0, "sample_count": 92 },
+          { "name": "volume",    "avg_score": 7.0, "avg_weight": 1.4, "avg_weighted_score": 9.8,  "sample_count": 92 },
+          { "name": "trend",     "avg_score": 6.6, "avg_weight": 1.3, "avg_weighted_score": 8.6,  "sample_count": 92 },
+          { "name": "regime",    "avg_score": 5.9, "avg_weight": 1.2, "avg_weighted_score": 7.1,  "sample_count": 92 },
+          { "name": "liquidity", "avg_score": 5.3, "avg_weight": 1.0, "avg_weighted_score": 5.3,  "sample_count": 92 },
+          { "name": "rsi",       "avg_score": 4.7, "avg_weight": 0.8, "avg_weighted_score": 3.8,  "sample_count": 92 }
+        ]
+      },
+      {
+        "direction": "short",
+        "sample_count": 92,
+        "avg_total_score": 70.7,
+        "avg_synergy_bonus": 3.8,
+        "avg_conflict_penalty": -2.0,
+        "factors": [
+          { "name": "structure", "avg_score": 8.2, "avg_weight": 1.8, "avg_weighted_score": 14.8, "sample_count": 92 },
+          { "name": "smc",       "avg_score": 7.4, "avg_weight": 1.6, "avg_weighted_score": 11.8, "sample_count": 92 },
+          { "name": "momentum",  "avg_score": 6.9, "avg_weight": 1.5, "avg_weighted_score": 10.3, "sample_count": 92 },
+          { "name": "volume",    "avg_score": 6.8, "avg_weight": 1.4, "avg_weighted_score": 9.5,  "sample_count": 92 },
+          { "name": "trend",     "avg_score": 6.2, "avg_weight": 1.3, "avg_weighted_score": 8.0,  "sample_count": 92 },
+          { "name": "regime",    "avg_score": 5.7, "avg_weight": 1.2, "avg_weighted_score": 6.8,  "sample_count": 92 },
+          { "name": "liquidity", "avg_score": 5.1, "avg_weight": 1.0, "avg_weighted_score": 5.1,  "sample_count": 92 },
+          { "name": "rsi",       "avg_score": 4.5, "avg_weight": 0.8, "avg_weighted_score": 3.6,  "sample_count": 92 }
+        ]
+      }
+    ]
+  },
+  "metadata": {
+    "ts": 1746792074.0,
+    "source": "confluence_cache",
+    "status": "OK",
+    "cost_class": "moderate",
+    "reason": null
+  },
+  "warnings": []
+}

@@ -15,6 +15,7 @@ export { PhemexStatusPill } from './PhemexStatusPill';
 export { ScannerModePicker } from './ScannerModePicker';
 export { GauntletBreakdown, classifyStage, type GauntletStage } from './GauntletBreakdown';
 export { PipelineTracer } from './PipelineTracer';
+export { ConfluenceBreakdown } from './ConfluenceBreakdown';
 export {
   applyTweaks,
   SHARED_TWEAK_DEFAULTS,
