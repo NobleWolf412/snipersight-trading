@@ -92,7 +92,11 @@ export const STATES: SnapshotState[] = [
     state: 'default',
   },
 
-  // ─── Scanner (4 planned, 1 shipped — current ScannerSetup route) ──────
+  // ─── Scanner (4 planned, 2 shipped — new HUD /scanner + legacy /scanner/setup) ──────
+  {
+    route: '/scanner',
+    state: 'default',
+  },
   {
     route: '/scanner/setup',
     state: 'default',

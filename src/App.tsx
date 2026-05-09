@@ -16,6 +16,7 @@ import { Topbar, TacticalBgDom, PhemexStatusPill } from '@/components/hud';
 import { ActiveScanBeacon } from '@/components/ActiveScanBeacon/ActiveScanBeacon';
 
 const Landing = lazy(() => import('@/pages/Landing').then((m) => ({ default: m.Landing })));
+const Scanner = lazy(() => import('@/pages/Scanner').then((m) => ({ default: m.Scanner })));
 const ScannerSetup = lazy(() =>
   import('@/pages/ScannerSetup').then((m) => ({ default: m.ScannerSetup })),
 );
@@ -72,6 +73,7 @@ function App() {
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
               <Route path="/" element={<Landing />} />
+              <Route path="/scanner" element={<Scanner />} />
               <Route path="/scanner/setup" element={<ScannerSetup />} />
               <Route path="/scanner/status" element={<ScannerStatus />} />
               <Route path="/scan" element={<ScannerSetup />} />
