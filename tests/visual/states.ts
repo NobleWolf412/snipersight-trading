@@ -134,3 +134,86 @@ export function assertUniqueStateKeys(states: SnapshotState[]): void {
     );
   }
 }
+
+/**
+ * Symmetry standing-fix guard (CLAUDE.md §10 #3).
+ *
+ * Any state slug whose suffix is `__long` or `__short` MUST have its
+ * matching counterpart declared in the same matrix, on the same route,
+ * at the same viewport. This prevents asymmetric coverage at the visual
+ * layer — e.g. shipping a `bot_position_open__long` baseline with no
+ * `bot_position_open__short` to compare against.
+ *
+ * Asymmetry detected at config-load time = setup failure (loud). Direction-
+ * agnostic states (no `__long`/`__short` suffix) are unaffected.
+ *
+ * Lands as Phase 3f sub-step 0, before any Scanner page edits, per the
+ * peppy-sniffing-owl plan's symmetry-config-load assertion pin.
+ */
+export function assertSymmetricDirectionalKeys(states: SnapshotState[]): void {
+  const SUFFIX_LONG = '__long';
+  const SUFFIX_SHORT = '__short';
+
+  // Index all directional states by {route, viewport, base-slug-without-suffix}.
+  // Each entry tracks which directions are present.
+  type Bucket = { long?: SnapshotState; short?: SnapshotState };
+  const buckets = new Map<string, Bucket>();
+
+  const bucketKey = (s: SnapshotState, baseSlug: string) => {
+    const vp = s.viewport ?? DEFAULT_VIEWPORT;
+    return `${s.route}::${vp.width}x${vp.height}::${baseSlug}`;
+  };
+
+  for (const s of states) {
+    let baseSlug: string | null = null;
+    let dir: 'long' | 'short' | null = null;
+    if (s.state.endsWith(SUFFIX_LONG)) {
+      baseSlug = s.state.slice(0, -SUFFIX_LONG.length);
+      dir = 'long';
+    } else if (s.state.endsWith(SUFFIX_SHORT)) {
+      baseSlug = s.state.slice(0, -SUFFIX_SHORT.length);
+      dir = 'short';
+    }
+    if (dir == null) continue; // not a directional state, skip
+    if (baseSlug == null || baseSlug.length === 0) {
+      // A state whose entire slug is `__long` (or `__short`) is malformed —
+      // there's no base to pair against. Loud-fail.
+      throw new Error(
+        `[snapshot states] state slug "${s.state}" is bare directional suffix; ` +
+          `expected "<base>__long" or "<base>__short".`,
+      );
+    }
+    const k = bucketKey(s, baseSlug);
+    const b = buckets.get(k) ?? {};
+    if (b[dir]) {
+      // Two states with the same {route, viewport, base, direction} — that's
+      // a duplicate, but uniqueness is enforced separately by
+      // assertUniqueStateKeys. Don't double-report; just keep the first.
+    } else {
+      b[dir] = s;
+    }
+    buckets.set(k, b);
+  }
+
+  // Every bucket must have BOTH long AND short present.
+  const missing: string[] = [];
+  for (const [k, b] of buckets) {
+    if (!b.long) {
+      missing.push(`${k} — present: __short, missing: __long`);
+    }
+    if (!b.short) {
+      missing.push(`${k} — present: __long, missing: __short`);
+    }
+  }
+
+  if (missing.length) {
+    throw new Error(
+      `[snapshot states] asymmetric directional state matrix — ` +
+        `each __long/__short pair must be declared together.\n` +
+        missing.map((m) => `  • ${m}`).join('\n') +
+        `\n\nDocumented standing fix: CLAUDE.md §10 #3 (bull/bear symmetry). ` +
+        `Asymmetry at the visual layer defeats the symmetry guarantee. ` +
+        `Either declare the missing direction OR remove the orphan suffix.`,
+    );
+  }
+}

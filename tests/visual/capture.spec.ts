@@ -25,6 +25,7 @@ import {
   DEFAULT_THRESHOLD,
   stateKey,
   assertUniqueStateKeys,
+  assertSymmetricDirectionalKeys,
   type SnapshotState,
 } from './states';
 import { installCaptureHooks, waitForSnapshotReady } from './setup';
@@ -42,6 +43,7 @@ mkdirSync(PEND_DIR, { recursive: true });
 mkdirSync(REPORT_DIR, { recursive: true });
 
 assertUniqueStateKeys(STATES);
+assertSymmetricDirectionalKeys(STATES);
 
 type StateRecord = {
   key: string;
