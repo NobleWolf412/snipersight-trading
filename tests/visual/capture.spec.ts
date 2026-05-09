@@ -120,9 +120,16 @@ test.describe('visual snapshots', () => {
           explicitReady,
         };
         RECORDS.push(rec);
-        // Soft-fail on missing baseline: capture still happened, but the
-        // test marks itself as expected-to-be-approved.
-        test.fail(true, rec.reasons![0]);
+        // Capture succeeded; PNG is in __pending__/. The test FAILS so CI
+        // surfaces "this state needs approval" — the operator runs
+        // snapshots:approve to promote pending → baseline. Per §11
+        // discipline: fail loud, not silently. Audit script distinguishes
+        // first-run (AWAITING_APPROVAL) from real DEGRADED separately.
+        expect(
+          existsSync(baselinePath),
+          `no approved baseline for ${key}; pending captured at ${pendingPath}. ` +
+            `Run: npm run snapshots:approve ${s.route} ${s.state}`,
+        ).toBe(true);
         return;
       }
 
