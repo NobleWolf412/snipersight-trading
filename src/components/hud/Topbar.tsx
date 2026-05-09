@@ -21,7 +21,7 @@ interface NavLink {
 
 const LINKS: NavLink[] = [
   { id: 'intel', label: 'Intel', to: '/intel' },
-  { id: 'scanner', label: 'Scanner', to: '/scanner', matchPrefixes: ['/scanner', '/scan', '/results'] },
+  { id: 'scanner', label: 'Scanner', to: '/scanner', matchPrefixes: ['/scanner'] },
   { id: 'bot', label: 'Bot', to: '/bot', matchPrefixes: ['/bot'] },
   { id: 'training', label: 'Training', to: '/training' },
   { id: 'settings', label: 'Risk', to: '/settings' },

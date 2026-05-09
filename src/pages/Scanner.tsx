@@ -941,7 +941,7 @@ export function Scanner() {
                 }}
               >
                 {cardSignals.length === 0
-                  ? '// no scans yet — run a scan from /scanner/setup'
+                  ? '// no scans yet — start the scanner from the controls above'
                   : '// no signals match filters'}
               </div>
             )}

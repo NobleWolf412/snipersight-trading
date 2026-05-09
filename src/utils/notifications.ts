@@ -339,8 +339,8 @@ class BrowserNotificationManager {
     // Route based on notification type
     switch (tradingNotification.type) {
       case 'signal':
-        // Navigate to scanner results
-        window.location.hash = '/results';
+        // Navigate to scanner (Phase 6: /results legacy route dropped)
+        window.location.hash = '/scanner';
         break;
       case 'risk_alert':
         // Navigate to portfolio/risk page

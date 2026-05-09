@@ -30,7 +30,7 @@ const MODE_CONFIG: Record<string, ModeConfig> = {
   scanner: {
     label: 'RECONNAISANCE',
     shortCode: 'RCN',
-    route: '/scanner/status',
+    route: '/scanner',
     color: '#22d3ee',
     glow: '0 0 30px rgba(34,211,238,0.8), 0 0 60px rgba(34,211,238,0.4), 0 0 100px rgba(34,211,238,0.2)',
     ringColor: 'rgba(34,211,238,',

@@ -398,7 +398,7 @@ export function Landing() {
             body="BTC dominance, market regime, liquidations, funding skew, news desk and AI macro commentary — the chart-room view of where the whole market sits right now."
           />
           <FeatureCard
-            to="/scanner/setup"
+            to="/scanner"
             accent="#fbbf24"
             icon={<svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="14" cy="14" r="9" stroke="currentColor" strokeWidth="1.5" /><path d="M21 21l7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /><circle cx="14" cy="14" r="3" fill="currentColor" /></svg>}
             title="Scanner"
@@ -453,7 +453,7 @@ export function Landing() {
             <div><span className="mono" style={{ color: 'var(--accent)' }}>›</span> Backtest harness over 2y of 1m data</div>
           </div>
           <Link
-            to="/scanner/setup"
+            to="/scanner"
             className="btn btn-amber"
             style={{ textDecoration: 'none', padding: '12px 20px', fontSize: 12, fontWeight: 700, letterSpacing: '.2em', display: 'inline-block', marginTop: 18 }}
           >
