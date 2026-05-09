@@ -80,3 +80,6 @@ storybook-static
 # Visual snapshot framework
 tests/visual/__pending__/
 tests/visual/__report__/
+
+# Claude Code per-machine state
+.claude/settings.local.json
