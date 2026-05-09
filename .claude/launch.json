@@ -1,0 +1,26 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5000"],
+      "port": 5000
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "backend.api_server:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8001",
+        "--reload"
+      ],
+      "port": 8001
+    }
+  ]
+}

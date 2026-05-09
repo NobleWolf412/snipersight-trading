@@ -1,9 +1,7 @@
-// App shell — Phase 2e wiring + Phase 6 sub-step 1 archive.
+// App shell — Phase 2e wiring + Phase 6 sub-step 1 archive + Phase 7 sub-step 2 sonner eject.
 // Replaced the legacy <TopBar /> with the new HUD <Topbar />, which renders
 // the persistent <PhemexStatusPill /> in its right rail. The legacy
 // <TacticalBackground /> is replaced by <TacticalBgDom /> (CSS-driven layers).
-// The shadcn <Toaster /> is kept for now; Phase 7 will replace with a HUD
-// flash banner once shadcn primitives are removed.
 //
 // Phase 6 sub-step 1: legacy routes dropped (`/scanner/setup`, `/scanner/status`,
 // `/scan`, `/results`, `/market`, `/htf`). These pointed to the pre-rewrite
@@ -11,9 +9,14 @@
 // HTFOpportunities) which are slated for archive in sub-step 2. Their
 // functions are now subsumed by `/scanner` and `/intel` in the HUD-rebuilt
 // page set.
+//
+// Phase 7 sub-step 2: shadcn <Toaster /> removed. Sonner had zero active
+// callers in the post-Phase-6 tree (the only consumer, `use-require-wallet`,
+// was an orphan that got archived alongside use-toast and sonner.tsx).
+// In-app banner notifications will be reintroduced as a HUD `useFlash` hook
+// when a real consumer exists; no point mounting a no-op toast layer.
 
 import { Suspense, lazy } from 'react';
-import { Toaster } from '@/components/ui/sonner';
 import { Routes, Route } from 'react-router-dom';
 import { SniperReticle } from '@/components/SniperReticle';
 import { Topbar, TacticalBgDom, PhemexStatusPill, ActiveModeBadge } from '@/components/hud';
@@ -74,7 +77,6 @@ function App() {
         </main>
       </div>
       <ActiveScanBeacon />
-      <Toaster />
     </>
   );
 }
