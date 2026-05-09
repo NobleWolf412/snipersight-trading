@@ -12,6 +12,7 @@ export { SectionHead } from './SectionHead';
 export { TacticalBgDom } from './TacticalBgDom';
 export { Topbar } from './Topbar';
 export { PhemexStatusPill } from './PhemexStatusPill';
+export { ScannerModePicker } from './ScannerModePicker';
 export {
   applyTweaks,
   SHARED_TWEAK_DEFAULTS,

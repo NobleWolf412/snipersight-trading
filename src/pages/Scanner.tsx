@@ -23,8 +23,6 @@
  *   - Console log feed — empty when no scans; placeholder line otherwise.
  *
  * Deferred (with inline `◌ deferred` placeholders):
- *   - **ScannerModePicker** (plan §3d) — current selectedMode is read-only
- *     in this sub-step. Picker lands as 3f sub-step 2.
  *   - **Trade-type chips** (plan §3d P1) — backend has no `trade_type` per
  *     plan; show `—` placeholder when the tag would render.
  *   - **Convergence/conflict mini-bar** (plan §3d P1) — needs per-card
@@ -54,6 +52,7 @@ import {
   FooterStatus,
   PageHead,
   Reticle,
+  ScannerModePicker,
   SectionHead,
   fmtPrice,
 } from '@/components/hud';
@@ -797,6 +796,9 @@ export function Scanner() {
           </>
         }
       />
+
+      {/* Mode picker — drives ScannerContext.setSelectedMode ─────── */}
+      <ScannerModePicker />
 
       {/* Top SCAN-CONTROL strip ───────────────────────────────────── */}
       <section className="panel panel-accent" style={{ marginBottom: 18 }}>
