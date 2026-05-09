@@ -1,0 +1,16 @@
+{
+  "features": [
+    { "name": "confluence_score", "importance": 0.184, "direction": 1 },
+    { "name": "ema_alignment", "importance": 0.142, "direction": 1 },
+    { "name": "rsi_divergence", "importance": 0.118, "direction": 1 },
+    { "name": "bb_squeeze_pct", "importance": 0.094, "direction": -1 },
+    { "name": "atr_norm", "importance": 0.082, "direction": 1 },
+    { "name": "volume_z_score", "importance": 0.071, "direction": 1 },
+    { "name": "regime_strength", "importance": 0.064, "direction": 1 },
+    { "name": "session_phase", "importance": 0.058, "direction": -1 },
+    { "name": "spread_bps", "importance": 0.044, "direction": -1 },
+    { "name": "macd_cross_age", "importance": 0.038, "direction": -1 },
+    { "name": "vwap_distance", "importance": 0.034, "direction": 1 },
+    { "name": "structural_break", "importance": 0.028, "direction": 1 }
+  ]
+}

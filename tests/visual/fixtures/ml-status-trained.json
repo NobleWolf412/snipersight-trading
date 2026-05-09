@@ -1,0 +1,10 @@
+{
+  "trained": true,
+  "model_type": "GradientBoostingClassifier",
+  "n_samples": 142,
+  "accuracy": 0.621,
+  "trained_at": "2026-04-30T18:00:00Z",
+  "min_samples_required": 30,
+  "available_signals": 142,
+  "available_trades": 12
+}

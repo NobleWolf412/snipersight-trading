@@ -48,8 +48,25 @@ const ROUTE_MOCKS: Array<{
     match: (u) => u.includes('/api/cycles/last'),
     body: () => loadFixture('cycles-last.json'),
   },
-  // Generic empty array for trade/journal-style endpoints (snapshot doesn't
-  // need rows; only that the empty-state renders consistently).
+  // Trade journal — populated fixture so the new HUD chrome renders with
+  // realistic stats, equity curve, breakdowns. MUST match before the
+  // generic /api/trades fallback below.
+  {
+    match: (u) => /\/api\/trades\/journal/.test(u),
+    body: () => loadFixture('journal-default.json'),
+  },
+  // ML model gates — trained-model fixture so MLPanel renders accuracy
+  // strip, callouts, and SHAP feature-importance bar chart.
+  {
+    match: (u) => u.includes('/api/ml/status'),
+    body: () => loadFixture('ml-status-trained.json'),
+  },
+  {
+    match: (u) => u.includes('/api/ml/feature-importance'),
+    body: () => loadFixture('ml-feature-importance.json'),
+  },
+  // Generic empty array for other trade/journal-style endpoints (snapshot
+  // doesn't need rows; only that the empty-state renders consistently).
   {
     match: (u) =>
       u.includes('/api/trades') ||
