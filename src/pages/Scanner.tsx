@@ -29,9 +29,6 @@
  *     confluence breakdown, not in current scan-history shape.
  *   - **Cooldown timer** (plan §3d P1) — needs cooldown ttl from rejected
  *     list.
- *   - **Cycle heartbeat strip** (plan §3d P1) — needs `/api/cycles/last`
- *     wired into a real heartbeat component (fixture exists; component
- *     does not yet).
  *   - **SignalDetail modal** — opens on card click in prototype; deferred
  *     so the `default` snapshot state stays direction-agnostic.
  *
@@ -49,6 +46,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Chip,
+  CycleHeartbeat,
   FooterStatus,
   PageHead,
   Reticle,
@@ -923,6 +921,9 @@ export function Scanner() {
         }
       />
 
+      {/* Cycle heartbeat — top-of-page status strip (plan §3d) ───── */}
+      <CycleHeartbeat />
+
       {/* Mode picker — drives ScannerContext.setSelectedMode ─────── */}
       <ScannerModePicker />
 
@@ -965,40 +966,6 @@ export function Scanner() {
                   {modeName}
                 </span>
                 <span style={{ color: 'var(--fg-4)', fontSize: 10 }}>{tfRoster}</span>
-              </div>
-              <div
-                style={{
-                  position: 'relative',
-                  height: 4,
-                  marginTop: 8,
-                  borderRadius: 2,
-                  background: 'rgba(0,0,0,.5)',
-                  overflow: 'hidden',
-                }}
-              >
-                {/* Static progress placeholder — cycle heartbeat deferred. */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    width: '64%',
-                    background:
-                      'linear-gradient(90deg, rgba(251,191,36,.7), rgba(251,191,36,1))',
-                    boxShadow: '0 0 12px rgba(251,191,36,.5)',
-                  }}
-                />
-              </div>
-              <div
-                className="mono"
-                style={{
-                  fontSize: 9,
-                  color: 'var(--fg-4)',
-                  letterSpacing: '.14em',
-                  marginTop: 6,
-                }}
-              >
-                <span style={{ color: 'var(--amber)' }}>◌</span> cycle heartbeat —
-                deferred (plan §3d P1)
               </div>
             </div>
             <div className="metric-tile">

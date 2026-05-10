@@ -25,6 +25,7 @@ export { PipelineTracer } from './PipelineTracer';
 export { ConfluenceBreakdown } from './ConfluenceBreakdown';
 export { UniversePanel } from './UniversePanel';
 export { DiagnoseWizard } from './DiagnoseWizard';
+export { CycleHeartbeat } from './CycleHeartbeat';
 export {
   applyTweaks,
   SHARED_TWEAK_DEFAULTS,

@@ -76,6 +76,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Chip,
   ConfluenceBreakdown,
+  CycleHeartbeat,
   DiagnoseWizard,
   FooterStatus,
   GauntletBreakdown,
@@ -517,6 +518,9 @@ export function BotStatus() {
           </>
         }
       />
+
+      {/* Cycle heartbeat — top-of-page status strip (plan §3e) ───── */}
+      <CycleHeartbeat />
 
       {/* ── Error banners ─────────────────────────────────────────── */}
       {connectionError && (
