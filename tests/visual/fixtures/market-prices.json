@@ -1,0 +1,14 @@
+[
+  { "symbol": "BTC/USDT",  "price": 80833.0,  "timestamp": "2026-05-10T13:48:00+00:00" },
+  { "symbol": "ETH/USDT",  "price": 2323.8,   "timestamp": "2026-05-10T13:48:00+00:00" },
+  { "symbol": "SOL/USDT",  "price": 93.22,    "timestamp": "2026-05-10T13:48:00+00:00" },
+  { "symbol": "BNB/USDT",  "price": 649.69,   "timestamp": "2026-05-10T13:48:00+00:00" },
+  { "symbol": "XRP/USDT",  "price": 2.194,    "timestamp": "2026-05-10T13:48:00+00:00" },
+  { "symbol": "DOGE/USDT", "price": 0.1741,   "timestamp": "2026-05-10T13:48:00+00:00" },
+  { "symbol": "AVAX/USDT", "price": 19.84,    "timestamp": "2026-05-10T13:48:00+00:00" },
+  { "symbol": "LINK/USDT", "price": 12.42,    "timestamp": "2026-05-10T13:48:00+00:00" },
+  { "symbol": "ARB/USDT",  "price": 0.4812,   "timestamp": "2026-05-10T13:48:00+00:00" },
+  { "symbol": "SUI/USDT",  "price": 1.274,    "timestamp": "2026-05-10T13:48:00+00:00" },
+  { "symbol": "TIA/USDT",  "price": 3.481,    "timestamp": "2026-05-10T13:48:00+00:00" },
+  { "symbol": "INJ/USDT",  "price": 9.86,     "timestamp": "2026-05-10T13:48:00+00:00" }
+]

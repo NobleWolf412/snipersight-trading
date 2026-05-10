@@ -9,11 +9,10 @@
  *    (react-router) for internal routes.
  * 3. Tweaks panel + window.SS globals removed; the new chrome lives in
  *    @/components/hud/* and is wired at App level.
- * 4. TickerRail uses static prototype seed data (12 symbols, shifted by
- *    a small sin() drift each tick). Live-price wiring is deliberately
- *    deferred — Landing is the marketing surface, and a fluctuating
- *    ticker breaks snapshot determinism. Real prices land on Intel /
- *    Scanner where they matter for trading. Documented inline.
+ * 4. TickerRail polls /api/market/prices (30s interval) and overlays
+ *    24h-change% from /api/market/funding where available (10 of 12
+ *    symbols have perp data; ARB/SUI/TIA show — for change%). Stale
+ *    indicator appears if the price timestamp is > 120s old.
  * 5. body[data-snapshot-ready="true"] is set after first paint so the
  *    visual snapshot framework knows when to capture.
  */
@@ -21,22 +20,20 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
-// ─── Static seed (mirrors prototype/landing.jsx TICKERS) ──────────────
-// Real-price wiring deferred to Intel/Scanner per design note above.
-const TICKERS: Array<{ sym: string; p: number; c: number }> = [
-  { sym: 'BTCUSDT', p: 67841.20, c: +1.42 },
-  { sym: 'ETHUSDT', p: 3284.55, c: +2.18 },
-  { sym: 'SOLUSDT', p: 178.34, c: +4.62 },
-  { sym: 'BNBUSDT', p: 612.40, c: +0.88 },
-  { sym: 'XRPUSDT', p: 0.5184, c: -0.42 },
-  { sym: 'DOGEUSDT', p: 0.1622, c: +3.14 },
-  { sym: 'AVAXUSDT', p: 38.91, c: +2.04 },
-  { sym: 'LINKUSDT', p: 14.82, c: +1.66 },
-  { sym: 'ARBUSDT', p: 0.8912, c: -1.18 },
-  { sym: 'SUIUSDT', p: 1.482, c: +5.84 },
-  { sym: 'TIAUSDT', p: 5.124, c: +3.92 },
-  { sym: 'INJUSDT', p: 24.18, c: +1.04 },
+// ─── Ticker rail data ──────────────────────────────────────────────────
+const RAIL_SYMBOLS = [
+  'BTC/USDT','ETH/USDT','SOL/USDT','BNB/USDT','XRP/USDT','DOGE/USDT',
+  'AVAX/USDT','LINK/USDT','ARB/USDT','SUI/USDT','TIA/USDT','INJ/USDT',
 ];
+const RAIL_SYMBOLS_PARAM = RAIL_SYMBOLS.join(',');
+const STALE_MS = 120_000;
+const POLL_MS  = 30_000;
+
+interface TickerData {
+  sym: string;
+  price: number;
+  change: number | null; // 24h %; null when perp data unavailable
+}
 
 // ─── Animated SCOPE (the hero centerpiece) ────────────────────────────
 function Scope() {
@@ -204,37 +201,125 @@ function Scope() {
 
 // ─── Live ticker rail ─────────────────────────────────────────────────
 function TickerRail() {
-  const [t, setT] = useState(0);
+  const [items, setItems]   = useState<TickerData[] | null>(null);
+  const [stale, setStale]   = useState(false);
+  const [error, setError]   = useState<string | null>(null);
+
   useEffect(() => {
-    const id = setInterval(() => setT(x => x + 1), 1500);
-    return () => clearInterval(id);
+    let cancelled = false;
+
+    async function fetchTick() {
+      try {
+        const [pricesRes, fundingRes] = await Promise.all([
+          fetch(`/api/market/prices?symbols=${encodeURIComponent(RAIL_SYMBOLS_PARAM)}`),
+          fetch('/api/market/funding'),
+        ]);
+        if (!pricesRes.ok) throw new Error(`prices ${pricesRes.status}`);
+        const prices: Array<{ symbol: string; price: number; timestamp: string }> =
+          await pricesRes.json();
+
+        const changeMap = new Map<string, number>();
+        if (fundingRes.ok) {
+          const fd: { rows?: Array<{ symbol: string; price_change_pct: number | null }> } =
+            await fundingRes.json();
+          for (const r of fd.rows ?? []) {
+            if (r.price_change_pct != null) changeMap.set(r.symbol, r.price_change_pct);
+          }
+        }
+
+        if (cancelled) return;
+        const merged: TickerData[] = prices.map(p => ({
+          sym: p.symbol,
+          price: p.price,
+          change: changeMap.get(p.symbol) ?? null,
+        }));
+        setItems(merged);
+        setError(null);
+
+        const oldest = prices.reduce(
+          (min, p) => Math.min(min, new Date(p.timestamp).getTime()),
+          Infinity,
+        );
+        setStale(Date.now() - oldest > STALE_MS);
+      } catch (e) {
+        if (!cancelled) setError(String(e));
+      }
+    }
+
+    let tid: ReturnType<typeof setTimeout>;
+    function schedule() {
+      tid = setTimeout(async () => {
+        if (cancelled) return;
+        await fetchTick();
+        if (!cancelled) schedule();
+      }, POLL_MS);
+    }
+    fetchTick().then(() => { if (!cancelled) schedule(); });
+
+    return () => { cancelled = true; clearTimeout(tid); };
   }, []);
-  return (
-    <div className="ticker-rail">
-      <div className="ticker-track">
-        {[...TICKERS, ...TICKERS].map((tk, i) => {
-          const drift = Math.sin((t + i) * 0.4) * 0.3;
-          const c = tk.c + drift;
-          return (
+
+  // Loading state
+  if (!items && !error) {
+    return (
+      <div className="ticker-rail">
+        <div className="ticker-track">
+          {RAIL_SYMBOLS.map((sym, i) => (
             <div key={i} className="ticker-item">
               <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', letterSpacing: '.1em' }}>
-                {tk.sym.replace('USDT', '/USDT')}
+                {sym}
               </span>
-              <span className="mono" style={{ fontSize: 11, color: 'var(--fg)', fontWeight: 600 }}>
-                ${tk.p.toFixed(tk.p < 1 ? 4 : 2)}
-              </span>
-              <span
-                className="mono"
-                style={{
-                  fontSize: 10,
-                  color: c >= 0 ? 'var(--green-soft)' : 'var(--red-2)',
-                }}
-              >
-                {c >= 0 ? '▲' : '▼'} {Math.abs(c).toFixed(2)}%
-              </span>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--fg-3)' }}>$—</span>
             </div>
-          );
-        })}
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Error with no prior data
+  if (error && !items) {
+    return (
+      <div className="ticker-rail">
+        <div className="ticker-track">
+          <div className="ticker-item">
+            <span className="mono" style={{ fontSize: 10, color: 'var(--amber)' }}>◌ FEED ERR · {error}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const display = items!;
+  return (
+    <div className="ticker-rail" style={{ position: 'relative' }}>
+      {stale && (
+        <span
+          className="mono"
+          style={{ position: 'absolute', left: 4, top: '50%', transform: 'translateY(-50%)',
+                   fontSize: 9, color: 'var(--amber)', zIndex: 2, pointerEvents: 'none' }}
+        >
+          ◌ STALE
+        </span>
+      )}
+      <div className="ticker-track">
+        {[...display, ...display].map((tk, i) => (
+          <div key={i} className="ticker-item">
+            <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', letterSpacing: '.1em' }}>
+              {tk.sym}
+            </span>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--fg)', fontWeight: 600 }}>
+              ${tk.price.toFixed(tk.price < 1 ? 4 : 2)}
+            </span>
+            {tk.change != null ? (
+              <span className="mono" style={{ fontSize: 10, color: tk.change >= 0 ? 'var(--green-soft)' : 'var(--red-2)' }}>
+                {tk.change >= 0 ? '▲' : '▼'} {Math.abs(tk.change).toFixed(2)}%
+              </span>
+            ) : (
+              <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)' }}>— %</span>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

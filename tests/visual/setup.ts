@@ -120,6 +120,12 @@ const ROUTE_MOCKS: Array<{
     match: (u) => u.includes('/api/signals/confluence/distribution'),
     body: () => loadFixture('confluence-distribution.json'),
   },
+  // Market prices — populated fixture so Landing TickerRail renders real
+  // symbol prices (BTC through INJ) without stale indicator.
+  {
+    match: (u) => u.includes('/api/market/prices'),
+    body: () => loadFixture('market-prices.json'),
+  },
   // Generic catch-all for any other /api/* GET — returns empty object so
   // pages don't error out, but DOESN'T match unmocked POSTs (those should
   // never fire during capture).
