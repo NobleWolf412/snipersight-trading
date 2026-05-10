@@ -78,6 +78,8 @@ type Regime = (typeof REGIMES)[number];
 type Direction = 'LONG' | 'SHORT';
 type Confidence = 'HIGH' | 'MED' | 'LOW';
 
+type TradeType = 'SWING' | 'INTRADAY' | 'SCALP';
+
 interface CardSignal {
   id: string;
   sym: string;
@@ -95,6 +97,22 @@ interface CardSignal {
   rr: number;
   age: number;
   bias: [number, number, number, number];
+  // tradeType: backend-emitted scale classification (SWING/INTRADAY/SCALP).
+  // Sourced from the scan-history result's `classification` (already produced
+  // by convertSignalToScanResult), with `trade_type` and `setup_type` accepted
+  // as backend-format fallbacks. Undefined when history predates the field
+  // or the upstream pipeline didn't emit one.
+  tradeType?: TradeType;
+}
+
+// Normalize any of the backend-format trade-type aliases to the upper-case
+// frontend enum. Returns undefined when the input is missing/unrecognized so
+// the card can render a placeholder rather than a misleading chip.
+function normalizeTradeType(raw: unknown): TradeType | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const v = raw.trim().toUpperCase();
+  if (v === 'SWING' || v === 'INTRADAY' || v === 'SCALP') return v;
+  return undefined;
 }
 
 // Deterministic synthesizer: when scan history exists but lacks the
@@ -341,10 +359,29 @@ function SignalCard({ sig }: { sig: CardSignal }) {
         </Chip>
         {sig.bias[0] >= 7 && <Chip style={{ fontSize: 9 }}>HTF ✓</Chip>}
         {sig.bias[1] >= 7 && <Chip style={{ fontSize: 9 }}>VOL ✓</Chip>}
-        {/* Trade-type chip: deferred — backend trade_type field not in scan-history shape */}
-        <Chip kind="amber" style={{ fontSize: 9 }}>
-          ◌ —
-        </Chip>
+        {/* Trade-type chip — sourced from scan-history `classification`
+            (or `trade_type`/`setup_type` fallback). Color maps to scale:
+            SWING=blue (multi-day), INTRADAY=cyan (mid-tempo), SCALP=amber
+            (fast). Falls back to amber `◌ —` placeholder when the upstream
+            entry predates the field — preserves the prior visual width. */}
+        {sig.tradeType ? (
+          <Chip
+            kind={
+              sig.tradeType === 'SWING'
+                ? 'blue'
+                : sig.tradeType === 'INTRADAY'
+                  ? 'cyan'
+                  : 'amber'
+            }
+            style={{ fontSize: 9 }}
+          >
+            {sig.tradeType}
+          </Chip>
+        ) : (
+          <Chip kind="amber" style={{ fontSize: 9 }}>
+            ◌ —
+          </Chip>
+        )}
         <span style={{ flex: 1 }} />
         <button className="btn btn-green" style={{ padding: '4px 10px', fontSize: 10 }} disabled>
           ▶ TAKE
@@ -691,6 +728,10 @@ function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
     const rr: number = Number(r.rr ?? r.risk_reward ?? Math.abs((tp1 - entry) / Math.max(0.0001, entry - sl))) || 1.5;
     const mark: number = Number(r.mark ?? r.mark_price ?? entry);
     const id: string = String(r.id ?? `card_${i}`);
+    // Trade-type: prefer the convertSignalToScanResult-emitted `classification`
+    // (already SWING/INTRADAY/SCALP). Fall back to raw backend fields for
+    // history entries written by paths that bypass the converter.
+    const tradeType = normalizeTradeType(r.classification ?? r.trade_type ?? r.setup_type);
     return {
       id,
       sym,
@@ -708,6 +749,7 @@ function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
       rr,
       age: i * 5 + 7, // synthetic — backend doesn't expose card age in history
       bias: synth.bias,
+      tradeType,
     };
   });
 }
