@@ -1,9 +1,9 @@
 # Archived Files
 
-Generated: 2026-05-09
+Generated: 2026-05-09 (last updated end of Phase 7)
 Pre-rebuild branch tag: `pre-hud-rebuild`
 Replacement design source: `prototype/`
-Scope: Phase 6 of the HUD rebuild (peppy-sniffing-owl plan).
+Scope: Phase 6 + Phase 7 of the HUD rebuild (peppy-sniffing-owl plan).
 
 This manifest tracks every frontend file that was relocated under
 `src/_archive/` during the HUD rebuild. The `_archive/` tree is excluded
@@ -142,11 +142,17 @@ original git history via `git mv`.
 - `src/components/htf/` (1 file: `HTFOpportunityCard.tsx`)
 - `src/components/SessionIndicator/` (1 file)
 
-## shadcn `ui/` primitives (52) — Phase 6 sub-step 4b
+## shadcn `ui/` primitives (53) — Phase 6 sub-step 4b + Phase 7 sub-step 2
 
-Every file under `src/components/ui/` archived EXCEPT `sonner.tsx` (still
-mounted as `<Toaster />` in `src/App.tsx` until Phase 7 replaces it with
-the HUD `useFlash` banner).
+The shadcn primitive set was first archived en masse in 6.4b, leaving
+`sonner.tsx` mounted as `<Toaster />` in `src/App.tsx`. Phase 7 sub-step
+2 confirmed sonner had **zero active consumers** in the post-Phase-6
+tree (the only known consumer, `use-require-wallet`, was an orphan
+hook), so `sonner.tsx` was archived alongside the orphan hooks
+(`use-toast.ts`, `use-require-wallet.ts`) and the `<Toaster />` mount
+removed from `App.tsx`. The HUD `useFlash` banner mentioned in the
+plan is deferred until a real consumer appears — there is no point
+mounting a no-op toast layer.
 
 Archived: `accordion`, `alert`, `alert-dialog`, `aspect-ratio`, `avatar`,
 `badge`, `breadcrumb`, `button`, `calendar`, `card`, `carousel`, `chart`,
@@ -154,10 +160,11 @@ Archived: `accordion`, `alert`, `alert-dialog`, `aspect-ratio`, `avatar`,
 `dropdown-menu`, `form`, `hover-card`, `input`, `input-otp`, `label`,
 `menubar`, `navigation-menu`, `pagination`, `popover`, `progress`,
 `radio-group`, `resizable`, `scroll-area`, `select`, `separator`, `sheet`,
-`sidebar`, `skeleton`, `slider`, `switch`, `table`, `tabs`, `textarea`,
-`toggle`, `toggle-group`, `tooltip`, `CircularProgress`, `SystemTerminal`,
-`TacticalBackground`, `TacticalBorders`, `TacticalComponents`,
-`TacticalInputs`, `TacticalReturnButton`.
+`sidebar`, `skeleton`, `slider`, `sonner` (Phase 7), `switch`, `table`,
+`tabs`, `textarea`, `toggle`, `toggle-group`, `tooltip`,
+`CircularProgress`, `SystemTerminal`, `TacticalBackground`,
+`TacticalBorders`, `TacticalComponents`, `TacticalInputs`,
+`TacticalReturnButton`.
 
 Replaced by `src/components/hud/*` primitives: `Chip`, `Mini`, `Modal`,
 `PageHead`, `FooterStatus`, `Reticle`, `RiskBar`, `SectionHead`,
@@ -172,10 +179,72 @@ Replaced by `src/components/hud/*` primitives: `Chip`, `Mini`, `Modal`,
 - `src/lib/utils.ts` (`cn` helper) → `src/_archive/lib/utils.ts` · No active code imports it after sub-step 4b · Phase 6 sub-step 4b
 - `src/lib/queryClient.ts` is **NOT archived** — still imported by `src/main.tsx` for React Query.
 
-## Tailwind / Build (deferred to Phase 7)
-- `tailwind.config.js` · still active until Phase 7 ejects Tailwind
-- `postcss.config.js` · still active until Phase 7
-- `components.json` (shadcn config) · still on disk; will be deleted in Phase 7
+## Phase 7 — Tailwind eject
+
+Phase 7 fully removed Tailwind from CSS, build pipeline, and npm
+graph. Sub-step ordering kept the working tree bootable between
+sub-steps (CSS-side changes shipped before Vite-plugin removal,
+Vite-plugin removal shipped before npm package removal).
+
+### Hooks archived (Phase 7 sub-step 2)
+- `src/hooks/use-toast.ts` → `src/_archive/hooks/use-toast.ts` · Orphan;
+  zero active callers. Tightly coupled to `sonner.tsx`. · Phase 7 sub-step 2
+- `src/hooks/use-require-wallet.ts` → `src/_archive/hooks/use-require-wallet.ts` ·
+  Orphan; zero active callers. · Phase 7 sub-step 2
+
+### Active components restyled in place (Phase 7 sub-step 3) — NOT archived
+- `src/components/SniperReticle.tsx` — Tailwind utilities replaced with
+  inline styles using `var(--destructive)` + `color-mix` opacity blends;
+  custom classes `scope-reticle` and `scope-marker` (live in
+  `src/styles/hud-effects.css`) preserved.
+- `src/components/ActiveScanBeacon/ActiveScanBeacon.tsx` — Tailwind
+  utilities replaced with inline styles; `group-hover:` replaced with
+  local `useState(hovered)` + `onMouseEnter/Leave`; custom keyframe
+  classes (`beacon-pill-slide-in`, `beacon-glow-breathe`, `beacon-float`,
+  `beacon-sonar-ring`, `beacon-radar-sweep`, all in `src/index.css`)
+  preserved.
+
+### Orphans archived (Phase 7 sub-step 4)
+- `src/components/MissionStats.tsx` → `src/_archive/components/MissionStats.tsx` ·
+  Heavy framer-motion + Tailwind component; only consumed by archived
+  ScanResults / scanner pages. · Phase 7 sub-step 4
+- `src/components/TacticalPanel.tsx` → `src/_archive/components/TacticalPanel.tsx` ·
+  Wrapper component (`metal-panel rounded-2xl`); no active callers.
+  Replaced by `.panel` class. · Phase 7 sub-step 4
+- `src/utils/scannerValidation.ts` → `src/_archive/utils/scannerValidation.ts` ·
+  `getSeverityColor()` returns Tailwind class strings; only consumed by
+  archived `ScannerSetup.tsx`. · Phase 7 sub-step 4
+
+### CSS / build directives removed (Phase 7 sub-step 5)
+- `src/index.css` — removed `@import "tailwindcss"` directive +
+  `@theme` block (~32 lines of `--color-*` aliases). All `:root`
+  design tokens preserved.
+- `src/main.css` — removed `@config '../tailwind.config.js'` line.
+- `vite.config.ts` — removed `import tailwindcss from "@tailwindcss/vite"`
+  and the `tailwindcss()` plugin invocation.
+
+### Build configs deleted (Phase 7 sub-step 6)
+| File | Recovery |
+|---|---|
+| `tailwind.config.js` | `git show pre-hud-rebuild:tailwind.config.js` (or any pre-Phase-7 commit) |
+| `postcss.config.js` | same |
+| `components.json` (shadcn primitive generator) | same |
+| `theme.json` (only consumed by `tailwind.config.js`) | same |
+
+### npm packages removed (Phase 7 sub-step 6)
+**dependencies:** `@radix-ui/colors`, `@tailwindcss/container-queries`,
+`@tailwindcss/vite`, `clsx`, `tailwind-merge`, `tailwind-variants`,
+`tw-animate-css` (7 removed).
+
+**devDependencies:** `@tailwindcss/postcss`, `tailwindcss`,
+`tailwindcss-animate` (3 removed).
+
+`npm install` reported "removed 31 packages" — the 10 direct + 21
+transitive. `npx vite build` succeeds in ~5s post-removal.
+
+`class-variance-authority`, `cmdk`, `vaul` are intentionally retained
+for now — they are orphan but not Tailwind-specific so they were left
+out of the declared sub-step 6 scope. Future cleanup pass.
 
 ## Code edits required to archive cleanly
 
