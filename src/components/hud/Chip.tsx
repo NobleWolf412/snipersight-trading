@@ -2,7 +2,7 @@
 // Port of prototype/shared.jsx Chip.
 import type { CSSProperties, ReactNode } from 'react';
 
-export type ChipKind = 'accent' | 'green' | 'red' | 'amber' | 'blue' | 'purple';
+export type ChipKind = 'accent' | 'green' | 'red' | 'amber' | 'blue' | 'cyan' | 'purple';
 
 interface ChipProps {
   kind?: ChipKind;

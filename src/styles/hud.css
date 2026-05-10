@@ -139,6 +139,7 @@ body{min-height:100vh;overflow-x:hidden;position:relative;}
 .chip-red{color:var(--red-2);border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.08);}
 .chip-amber{color:var(--amber-2);border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.08);}
 .chip-blue{color:var(--blue);border-color:rgba(96,165,250,.30);background:rgba(96,165,250,.08);}
+.chip-cyan{color:var(--cyan);border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.08);}
 .chip-purple{color:var(--purple);border-color:rgba(192,132,252,.30);background:rgba(192,132,252,.08);}
 
 .divider{height:1px;background:linear-gradient(90deg, transparent, color-mix(in oklch, var(--accent) 30%, transparent) 50%, transparent);}
