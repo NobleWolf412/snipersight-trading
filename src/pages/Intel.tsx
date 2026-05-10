@@ -17,10 +17,6 @@
  *
  * What's intentionally DEFERRED — labelled inline so the operator can never
  * mistake a placeholder for a live signal:
- *   - **Kill-zone overlay** (plan §3c P1) — pending exposure of
- *     `backend/strategy/smc/sessions.py::get_current_kill_zone` over REST.
- *     The Session-Clock strip stays as session-presence visualisation; the
- *     kill-zone ATR-band overlay lands when the endpoint does.
  *   - **Funding & OI** — backend has no perp-funding endpoint yet. Panel
  *     renders SYNTHETIC seed data, panel header tagged
  *     "// SYNTHETIC — pending funding/OI feed".
@@ -44,6 +40,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Chip,
   FooterStatus,
+  KillZoneStrip,
   MacroScoreTile,
   PageHead,
   Reticle,
@@ -1325,18 +1322,7 @@ export function Intel() {
               // SESSION CLOCK · LIVE
             </div>
             <SessionStrip now={now} />
-            <div
-              className="mono"
-              style={{
-                marginTop: 10,
-                fontSize: 9,
-                color: 'var(--amber)',
-                letterSpacing: '.18em',
-                textTransform: 'uppercase',
-              }}
-            >
-              ◌ kill-zone overlay pending /api/sessions/kill-zone wiring
-            </div>
+            <KillZoneStrip />
           </div>
         </div>
       </section>

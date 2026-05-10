@@ -966,6 +966,21 @@ class ApiClient {
       { silent: true },
     );
   }
+
+  /**
+   * Live kill-zone status — current zone + countdown to the next.
+   *
+   * Drives the kill-zone overlay on Intel's session strip so the
+   * operator can see at a glance whether they're inside an SMC edge
+   * window and, if not, how soon the next one starts.
+   * Cost: pure time math on a 4-row table; no I/O.
+   */
+  async getKillZoneStatus() {
+    return this.request<KillZoneStatus>(
+      `/api/sessions/kill-zone`,
+      { silent: true },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1374,6 +1389,33 @@ export interface ActiveCooldownsResponse {
   active: ActiveCooldown[];
   count: number;
   next_expiry_seconds: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Kill-zone status — driven by backend/strategy/smc/sessions.py
+// ---------------------------------------------------------------------------
+export type KillZoneName =
+  | 'london_open'
+  | 'new_york_open'
+  | 'asian_open'
+  | 'london_close';
+
+export interface KillZoneWindow {
+  name: KillZoneName;
+  start_utc_hour: number;
+  start_utc_minute: number;
+  end_utc_hour: number;
+  end_utc_minute: number;
+  duration_minutes: number;
+}
+
+export interface KillZoneStatus {
+  current: KillZoneName | null;
+  current_ends_seconds: number | null;
+  next: KillZoneName | null;
+  next_starts_seconds: number | null;
+  zones: KillZoneWindow[];
+  now_utc: string;
 }
 
 export interface PaperTradingStartResponse {

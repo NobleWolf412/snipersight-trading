@@ -867,6 +867,95 @@ async def get_scanner_diagnostics():
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@app.get("/api/sessions/kill-zone")
+async def get_kill_zone_status():
+    """
+    Live kill-zone status + countdown to the next zone start.
+
+    Kill zones are the four high-probability windows the SMC scorer cares
+    about (London Open, NY Open, London Close, Asian Open). The HUD's
+    Intel page overlays them on the 24h session strip so the operator
+    can see at a glance whether they're currently inside an edge window
+    and, if not, how long until the next one begins.
+
+    All hour fields in `zones[]` are UTC so the frontend can render them
+    directly on a 0-24 UTC scale without needing to know about EST/DST.
+    The `current` / `next` fields use enum values matching
+    `backend/strategy/smc/sessions.KillZone`.
+
+    Read-only; never mutates state.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from backend.strategy.smc.sessions import (
+        KILL_ZONE_TIMES_EST,
+        KillZone,
+        get_current_kill_zone,
+    )
+
+    try:
+        # Sessions module treats EST as a fixed UTC-5 offset (no DST).
+        # Mirror that here so countdown math stays consistent with the
+        # `_time_in_range` membership tests used inside the module.
+        EST_OFFSET_HOURS = 5
+
+        now_utc = datetime.now(timezone.utc)
+        now_est = now_utc.replace(tzinfo=None) - timedelta(hours=EST_OFFSET_HOURS)
+
+        current_kz = get_current_kill_zone(now_utc)
+
+        current_ends_seconds = None
+        if current_kz is not None:
+            _sh, _sm, eh, em = KILL_ZONE_TIMES_EST[current_kz]
+            zone_end = now_est.replace(hour=eh, minute=em, second=0, microsecond=0)
+            if zone_end <= now_est:
+                # Defensive: end-of-day rollover (none of the configured
+                # zones cross midnight EST today, but the math holds).
+                zone_end += timedelta(days=1)
+            current_ends_seconds = max(0, int((zone_end - now_est).total_seconds()))
+
+        # Next kill zone: smallest positive delta from now to any zone start.
+        next_kz: Optional[KillZone] = None
+        next_starts_seconds: Optional[int] = None
+        for kz, (sh, sm, _eh, _em) in KILL_ZONE_TIMES_EST.items():
+            start = now_est.replace(hour=sh, minute=sm, second=0, microsecond=0)
+            if start <= now_est:
+                start += timedelta(days=1)
+            delta = int((start - now_est).total_seconds())
+            if next_starts_seconds is None or delta < next_starts_seconds:
+                next_starts_seconds = delta
+                next_kz = kz
+
+        # UTC-projected zone windows for direct rendering on the HUD's
+        # 24h UTC strip. Asian Open (19-22 EST) becomes 00-03 UTC, which
+        # would normally wrap; we keep both `start_utc_hour`/`end_utc_hour`
+        # raw so the frontend can detect wrap when end < start.
+        zones_payload = []
+        for kz, (sh, sm, eh, em) in KILL_ZONE_TIMES_EST.items():
+            zones_payload.append(
+                {
+                    "name": kz.value,
+                    "start_utc_hour": (sh + EST_OFFSET_HOURS) % 24,
+                    "start_utc_minute": sm,
+                    "end_utc_hour": (eh + EST_OFFSET_HOURS) % 24,
+                    "end_utc_minute": em,
+                    "duration_minutes": (eh * 60 + em) - (sh * 60 + sm),
+                }
+            )
+
+        return {
+            "current": current_kz.value if current_kz else None,
+            "current_ends_seconds": current_ends_seconds,
+            "next": next_kz.value if next_kz else None,
+            "next_starts_seconds": next_starts_seconds,
+            "zones": zones_payload,
+            "now_utc": now_utc.isoformat(),
+        }
+    except Exception as e:
+        logger.error("Error retrieving kill-zone status: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @app.get("/api/cooldowns")
 async def get_active_cooldowns():
     """

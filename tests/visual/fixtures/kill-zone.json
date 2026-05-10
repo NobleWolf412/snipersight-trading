@@ -1,0 +1,41 @@
+{
+  "current": "new_york_open",
+  "current_ends_seconds": 4320,
+  "next": "london_close",
+  "next_starts_seconds": 7920,
+  "zones": [
+    {
+      "name": "asian_open",
+      "start_utc_hour": 0,
+      "start_utc_minute": 0,
+      "end_utc_hour": 3,
+      "end_utc_minute": 0,
+      "duration_minutes": 180
+    },
+    {
+      "name": "london_open",
+      "start_utc_hour": 7,
+      "start_utc_minute": 0,
+      "end_utc_hour": 10,
+      "end_utc_minute": 0,
+      "duration_minutes": 180
+    },
+    {
+      "name": "new_york_open",
+      "start_utc_hour": 12,
+      "start_utc_minute": 0,
+      "end_utc_hour": 15,
+      "end_utc_minute": 0,
+      "duration_minutes": 180
+    },
+    {
+      "name": "london_close",
+      "start_utc_hour": 16,
+      "start_utc_minute": 0,
+      "end_utc_hour": 17,
+      "end_utc_minute": 0,
+      "duration_minutes": 60
+    }
+  ],
+  "now_utc": "2026-05-10T13:48:00+00:00"
+}

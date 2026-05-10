@@ -60,6 +60,13 @@ const ROUTE_MOCKS: Array<{
     match: (u) => u.includes('/api/cooldowns'),
     body: () => loadFixture('cooldowns.json'),
   },
+  // Kill-zone status — populated fixture so KillZoneStrip on Intel
+  // renders all four zones with NY OPEN active for deterministic
+  // overlay capture.
+  {
+    match: (u) => u.includes('/api/sessions/kill-zone'),
+    body: () => loadFixture('kill-zone.json'),
+  },
   // Trade journal — populated fixture so the new HUD chrome renders with
   // realistic stats, equity curve, breakdowns. MUST match before the
   // generic /api/trades fallback below.

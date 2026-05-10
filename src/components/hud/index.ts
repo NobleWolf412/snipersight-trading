@@ -28,6 +28,7 @@ export { DiagnoseWizard } from './DiagnoseWizard';
 export { CycleHeartbeat } from './CycleHeartbeat';
 export { MacroScoreTile } from './MacroScoreTile';
 export { CooldownsTile } from './CooldownsTile';
+export { KillZoneStrip } from './KillZoneStrip';
 export {
   applyTweaks,
   SHARED_TWEAK_DEFAULTS,
