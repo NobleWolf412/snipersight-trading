@@ -1,0 +1,22 @@
+{
+  "composite": "BTC_DRIVE",
+  "score": 64.5,
+  "dimensions": {
+    "trend": "uptrend",
+    "volatility": "normal",
+    "liquidity": "normal",
+    "risk_appetite": "neutral",
+    "derivatives": "balanced"
+  },
+  "trend_score": 70.2,
+  "volatility_score": 58.0,
+  "liquidity_score": 62.0,
+  "risk_score": 55.0,
+  "derivatives_score": 64.0,
+  "dominance": {
+    "btc_d": 54.32,
+    "alt_d": 36.18,
+    "stable_d": 9.5
+  },
+  "timestamp": "2026-05-09T14:40:20+00:00"
+}

@@ -48,6 +48,7 @@ import {
   Chip,
   CycleHeartbeat,
   FooterStatus,
+  MacroScoreTile,
   PageHead,
   Reticle,
   ScannerModePicker,
@@ -985,6 +986,7 @@ export function Scanner() {
               <div className="metric-value">≥ {minScore}</div>
               <div className="metric-sub">strict gate</div>
             </div>
+            <MacroScoreTile />
           </div>
         </div>
       </section>

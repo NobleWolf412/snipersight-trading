@@ -17,9 +17,6 @@
  *
  * What's intentionally DEFERRED — labelled inline so the operator can never
  * mistake a placeholder for a live signal:
- *   - **Macro-score widget** (plan §3c P1) — pending the macro_score field
- *     the scorer already computes; once exposed by /api/market/regime or
- *     a sibling endpoint, swap the Position·Bias placeholder tile.
  *   - **Kill-zone overlay** (plan §3c P1) — pending exposure of
  *     `backend/strategy/smc/sessions.py::get_current_kill_zone` over REST.
  *     The Session-Clock strip stays as session-presence visualisation; the
@@ -47,6 +44,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Chip,
   FooterStatus,
+  MacroScoreTile,
   PageHead,
   Reticle,
   SectionHead,
@@ -1476,11 +1474,7 @@ export function Intel() {
                 gap: 10,
               }}
             >
-              <div className="metric-tile">
-                <div className="metric-label">Macro Score</div>
-                <div className="metric-value" style={{ color: 'var(--fg-3)' }}>—</div>
-                <div className="metric-sub">◌ pending /api/market/regime macro_score</div>
-              </div>
+              <MacroScoreTile />
               <div className="metric-tile">
                 <div className="metric-label">Confluence Floor</div>
                 <div className="metric-value">≥ 70.0</div>

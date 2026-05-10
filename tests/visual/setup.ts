@@ -48,6 +48,12 @@ const ROUTE_MOCKS: Array<{
     match: (u) => u.includes('/api/cycles/last'),
     body: () => loadFixture('cycles-last.json'),
   },
+  // Macro regime — populated fixture so MacroScoreTile renders the
+  // composite score + label deterministically on Intel and Scanner.
+  {
+    match: (u) => u.includes('/api/market/regime'),
+    body: () => loadFixture('market-regime.json'),
+  },
   // Trade journal — populated fixture so the new HUD chrome renders with
   // realistic stats, equity curve, breakdowns. MUST match before the
   // generic /api/trades fallback below.
