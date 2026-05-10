@@ -103,6 +103,14 @@ interface CardSignal {
   // as backend-format fallbacks. Undefined when history predates the field
   // or the upstream pipeline didn't emit one.
   tradeType?: TradeType;
+  // Convergence/conflict (plan §3d P1) — green sliver = synergy_bonus,
+  // red sliver = conflict_penalty. Both pulled directly from the
+  // scan-history `confluence_breakdown` (already passed through by
+  // convertSignalToScanResult). Numbers, not percentages — the renderer
+  // scales to a fixed visual range so a typical score's bonus/penalty
+  // surface without burying lower-impact factors.
+  synergyBonus?: number;
+  conflictPenalty?: number;
 }
 
 // Normalize any of the backend-format trade-type aliases to the upper-case
@@ -257,6 +265,70 @@ function MiniChart({ sig }: { sig: CardSignal }) {
   );
 }
 
+// ─── Convergence/Conflict Mini-Bar (plan §3d P1) ─────────────────────────
+// Two-segment horizontal bar surfacing the additive components of the
+// confluence score: green = synergy_bonus (factor convergence), red =
+// conflict_penalty (factor opposition). Width is proportional with a
+// fixed visual scale (each unit = 1.4px, capped at 28px per side) so a
+// typical 0–20 range reads well without one side dwarfing the other.
+// Renders nothing when both values are absent — preserves card height.
+
+const CC_BAR_PX_PER_UNIT = 1.4;
+const CC_BAR_MAX_PX = 28;
+
+function ConvergenceConflictBar({
+  synergy,
+  conflict,
+}: {
+  synergy?: number;
+  conflict?: number;
+}) {
+  const hasSyn = typeof synergy === 'number' && synergy > 0;
+  const hasCon = typeof conflict === 'number' && conflict > 0;
+  if (!hasSyn && !hasCon) return null;
+  const synW = hasSyn
+    ? Math.min(CC_BAR_MAX_PX, Math.max(2, synergy! * CC_BAR_PX_PER_UNIT))
+    : 0;
+  const conW = hasCon
+    ? Math.min(CC_BAR_MAX_PX, Math.max(2, conflict! * CC_BAR_PX_PER_UNIT))
+    : 0;
+  return (
+    <div
+      title={`synergy +${(synergy ?? 0).toFixed(1)} · conflict -${(conflict ?? 0).toFixed(1)}`}
+      style={{
+        display: 'inline-flex',
+        gap: 2,
+        marginTop: 4,
+        height: 4,
+        justifyContent: 'flex-end',
+      }}
+    >
+      {hasSyn && (
+        <span
+          style={{
+            width: synW,
+            height: '100%',
+            background: 'var(--green-soft, #4ade80)',
+            borderRadius: 1,
+            opacity: 0.85,
+          }}
+        />
+      )}
+      {hasCon && (
+        <span
+          style={{
+            width: conW,
+            height: '100%',
+            background: 'var(--red-2, #f87171)',
+            borderRadius: 1,
+            opacity: 0.85,
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 // ─── Signal Card ─────────────────────────────────────────────────────────
 
 function SignalCard({ sig }: { sig: CardSignal }) {
@@ -314,6 +386,10 @@ function SignalCard({ sig }: { sig: CardSignal }) {
           <div className="mono" style={{ fontSize: 8, color: confCol, letterSpacing: '.18em' }}>
             {sig.conf}
           </div>
+          <ConvergenceConflictBar
+            synergy={sig.synergyBonus}
+            conflict={sig.conflictPenalty}
+          />
         </div>
       </div>
       <MiniChart sig={sig} />
@@ -732,6 +808,12 @@ function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
     // (already SWING/INTRADAY/SCALP). Fall back to raw backend fields for
     // history entries written by paths that bypass the converter.
     const tradeType = normalizeTradeType(r.classification ?? r.trade_type ?? r.setup_type);
+    // Convergence/conflict — the breakdown object lives in two locations
+    // depending on producer: top-level on raw backend signals, nested under
+    // `confluence_breakdown` after convertSignalToScanResult. Read either.
+    const cb = r.confluence_breakdown ?? r;
+    const synergyBonus = typeof cb?.synergy_bonus === 'number' ? cb.synergy_bonus : undefined;
+    const conflictPenalty = typeof cb?.conflict_penalty === 'number' ? cb.conflict_penalty : undefined;
     return {
       id,
       sym,
@@ -750,6 +832,8 @@ function buildCardSignals(history: ScanHistoryEntry[]): CardSignal[] {
       age: i * 5 + 7, // synthetic — backend doesn't expose card age in history
       bias: synth.bias,
       tradeType,
+      synergyBonus,
+      conflictPenalty,
     };
   });
 }
