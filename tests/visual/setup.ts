@@ -54,6 +54,12 @@ const ROUTE_MOCKS: Array<{
     match: (u) => u.includes('/api/market/regime'),
     body: () => loadFixture('market-regime.json'),
   },
+  // Active cooldowns — populated fixture so CooldownsTile shows the
+  // count + soonest-TTL on Scanner snapshots.
+  {
+    match: (u) => u.includes('/api/cooldowns'),
+    body: () => loadFixture('cooldowns.json'),
+  },
   // Trade journal — populated fixture so the new HUD chrome renders with
   // realistic stats, equity curve, breakdowns. MUST match before the
   // generic /api/trades fallback below.

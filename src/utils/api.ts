@@ -952,6 +952,20 @@ class ApiClient {
       { silent: true },
     );
   }
+
+  /**
+   * Snapshot of active trade cooldowns (read-only).
+   *
+   * Drives the Cooldowns tile on Scanner — surfaces how many symbols are
+   * silently being rejected pending lockout expiry, plus the soonest TTL.
+   * Cost: cheap in-memory read; orchestrator state.
+   */
+  async getActiveCooldowns() {
+    return this.request<ActiveCooldownsResponse>(
+      `/api/cooldowns`,
+      { silent: true },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1342,6 +1356,25 @@ export interface CycleHeartbeat {
 }
 
 export type CycleHeartbeatEnvelope = Envelope<CycleHeartbeat>;
+
+// ---------------------------------------------------------------------------
+// Cooldowns — read-only snapshot from CooldownManager
+// ---------------------------------------------------------------------------
+export interface ActiveCooldown {
+  symbol: string;
+  direction: string;
+  expires_at: string;
+  remaining_seconds: number;
+  price: number;
+  reason: string;
+  duration_hours: number;
+}
+
+export interface ActiveCooldownsResponse {
+  active: ActiveCooldown[];
+  count: number;
+  next_expiry_seconds: number | null;
+}
 
 export interface PaperTradingStartResponse {
   session_id: string;

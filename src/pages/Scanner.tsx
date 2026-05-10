@@ -27,8 +27,6 @@
  *     plan; show `—` placeholder when the tag would render.
  *   - **Convergence/conflict mini-bar** (plan §3d P1) — needs per-card
  *     confluence breakdown, not in current scan-history shape.
- *   - **Cooldown timer** (plan §3d P1) — needs cooldown ttl from rejected
- *     list.
  *   - **SignalDetail modal** — opens on card click in prototype; deferred
  *     so the `default` snapshot state stays direction-agnostic.
  *
@@ -46,6 +44,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Chip,
+  CooldownsTile,
   CycleHeartbeat,
   FooterStatus,
   MacroScoreTile,
@@ -987,6 +986,7 @@ export function Scanner() {
               <div className="metric-sub">strict gate</div>
             </div>
             <MacroScoreTile />
+            <CooldownsTile />
           </div>
         </div>
       </section>

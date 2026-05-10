@@ -1,0 +1,33 @@
+{
+  "active": [
+    {
+      "symbol": "AVAX/USDT",
+      "direction": "LONG",
+      "expires_at": "2026-05-09T16:54:34+00:00",
+      "remaining_seconds": 8054,
+      "price": 38.72,
+      "reason": "stop_loss",
+      "duration_hours": 24
+    },
+    {
+      "symbol": "SOL/USDT",
+      "direction": "SHORT",
+      "expires_at": "2026-05-10T03:21:14+00:00",
+      "remaining_seconds": 45654,
+      "price": 142.18,
+      "reason": "stop_loss",
+      "duration_hours": 24
+    },
+    {
+      "symbol": "ETH/USDT",
+      "direction": "LONG",
+      "expires_at": "2026-05-10T13:00:14+00:00",
+      "remaining_seconds": 80394,
+      "price": 2914.5,
+      "reason": "stop_loss",
+      "duration_hours": 24
+    }
+  ],
+  "count": 3,
+  "next_expiry_seconds": 8054
+}

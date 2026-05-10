@@ -867,6 +867,32 @@ async def get_scanner_diagnostics():
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@app.get("/api/cooldowns")
+async def get_active_cooldowns():
+    """
+    Read-only snapshot of currently-active trade cooldowns.
+
+    Each entry contains symbol, direction, expires_at (ISO), remaining
+    seconds, the trigger price, the reason, and the configured duration.
+    Soonest-expiring entries first. Used by the Scanner HUD to render
+    cooldown countdown chips so the operator can see why a symbol is
+    silently being rejected.
+
+    Read-only — never mutates state. Caller cannot add/clear cooldowns
+    via this endpoint.
+    """
+    try:
+        active = orchestrator.cooldown_manager.list_active()
+        return {
+            "active": active,
+            "count": len(active),
+            "next_expiry_seconds": active[0]["remaining_seconds"] if active else None,
+        }
+    except Exception as e:
+        logger.error("Error retrieving cooldowns: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 # Bot endpoints
 @app.post("/api/bot/config")
 async def create_bot_config(config: BotConfig):

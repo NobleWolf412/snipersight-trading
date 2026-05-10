@@ -173,6 +173,40 @@ class CooldownManager:
 
             self._save()
 
+    def list_active(self) -> list:
+        """
+        Return a flat list of all currently-active cooldowns.
+
+        Each entry: {symbol, direction, expires_at (ISO), remaining_seconds,
+        price, reason, duration_hours}. Expired entries are filtered.
+
+        Used by the read-only /api/cooldowns endpoint to surface cooldown
+        TTLs in the HUD without giving callers write access to internal
+        state.
+        """
+        with self._lock:
+            now = datetime.now(timezone.utc)
+            out: list = []
+            for symbol, directions in self._cooldowns.items():
+                for direction, info in directions.items():
+                    expires_at = info.get("expires_at")
+                    if not isinstance(expires_at, datetime):
+                        continue
+                    if expires_at <= now:
+                        continue
+                    out.append({
+                        "symbol": symbol,
+                        "direction": direction,
+                        "expires_at": expires_at.isoformat(),
+                        "remaining_seconds": int((expires_at - now).total_seconds()),
+                        "price": info.get("price", 0.0),
+                        "reason": info.get("reason", "stop_loss"),
+                        "duration_hours": info.get("duration_hours", 24),
+                    })
+            # Soonest-expiring first so the UI can prioritise display.
+            out.sort(key=lambda e: e["remaining_seconds"])
+            return out
+
     def clear_cooldown(self, symbol: str, direction: Optional[str] = None):
         """Manually clear a cooldown."""
         with self._lock:

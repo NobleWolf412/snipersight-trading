@@ -27,6 +27,7 @@ export { UniversePanel } from './UniversePanel';
 export { DiagnoseWizard } from './DiagnoseWizard';
 export { CycleHeartbeat } from './CycleHeartbeat';
 export { MacroScoreTile } from './MacroScoreTile';
+export { CooldownsTile } from './CooldownsTile';
 export {
   applyTweaks,
   SHARED_TWEAK_DEFAULTS,
