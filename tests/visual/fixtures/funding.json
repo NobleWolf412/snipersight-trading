@@ -1,0 +1,15 @@
+{
+  "rows": [
+    { "symbol": "BTC/USDT", "mark_price": 80833.0, "price_change_pct": 0.60, "funding_rate": 0.00006501, "next_funding_ts": "2026-05-10T16:00:00+00:00", "open_interest": 2780.66, "open_interest_usd": 2248400000, "error": null },
+    { "symbol": "ETH/USDT", "mark_price": 2323.8, "price_change_pct": 0.35, "funding_rate": 0.00006036, "next_funding_ts": "2026-05-10T16:00:00+00:00", "open_interest": 478210, "open_interest_usd": 1111500000, "error": null },
+    { "symbol": "SOL/USDT", "mark_price": 93.22, "price_change_pct": -0.06, "funding_rate": -0.00000877, "next_funding_ts": "2026-05-10T16:00:00+00:00", "open_interest": 12840000, "open_interest_usd": 1197000000, "error": null },
+    { "symbol": "BNB/USDT", "mark_price": 649.69, "price_change_pct": -0.02, "funding_rate": 0.00004585, "next_funding_ts": "2026-05-10T16:00:00+00:00", "open_interest": 298400, "open_interest_usd": 193900000, "error": null },
+    { "symbol": "XRP/USDT", "mark_price": 2.194, "price_change_pct": -0.91, "funding_rate": 0.00004200, "next_funding_ts": "2026-05-10T16:00:00+00:00", "open_interest": 642000000, "open_interest_usd": 1408900000, "error": null },
+    { "symbol": "TON/USDT", "mark_price": 2.98, "price_change_pct": 2.10, "funding_rate": 0.00018000, "next_funding_ts": "2026-05-10T16:00:00+00:00", "open_interest": 275000000, "open_interest_usd": 819500000, "error": null },
+    { "symbol": "AVAX/USDT", "mark_price": 19.84, "price_change_pct": 1.10, "funding_rate": 0.00007200, "next_funding_ts": "2026-05-10T16:00:00+00:00", "open_interest": 25700000, "open_interest_usd": 509800000, "error": null },
+    { "symbol": "LINK/USDT", "mark_price": 12.42, "price_change_pct": 0.50, "funding_rate": 0.00008500, "next_funding_ts": "2026-05-10T16:00:00+00:00", "open_interest": 37100000, "open_interest_usd": 460800000, "error": null },
+    { "symbol": "INJ/USDT", "mark_price": 9.86, "price_change_pct": 3.40, "funding_rate": 0.00030100, "next_funding_ts": "2026-05-10T16:00:00+00:00", "open_interest": 31400000, "open_interest_usd": 309600000, "error": null },
+    { "symbol": "DOGE/USDT", "mark_price": 0.1741, "price_change_pct": -0.97, "funding_rate": 0.00003500, "next_funding_ts": "2026-05-10T16:00:00+00:00", "open_interest": 3560000000, "open_interest_usd": 619800000, "error": null }
+  ],
+  "cached_at": "2026-05-10T13:48:00+00:00"
+}

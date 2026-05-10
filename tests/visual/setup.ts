@@ -67,6 +67,18 @@ const ROUTE_MOCKS: Array<{
     match: (u) => u.includes('/api/sessions/kill-zone'),
     body: () => loadFixture('kill-zone.json'),
   },
+  // Funding rates + OI — populated fixture so Intel Funding & OI table
+  // renders real-shaped rows (no ◌ SYNTHETIC chip) in snapshots.
+  {
+    match: (u) => u.includes('/api/market/funding'),
+    body: () => loadFixture('funding.json'),
+  },
+  // Fear & Greed — populated fixture so Intel gauge shows real value
+  // (64 Greed) with classification label.
+  {
+    match: (u) => u.includes('/api/market/fear-greed'),
+    body: () => loadFixture('fear-greed.json'),
+  },
   // Trade journal — populated fixture so the new HUD chrome renders with
   // realistic stats, equity curve, breakdowns. MUST match before the
   // generic /api/trades fallback below.

@@ -981,6 +981,31 @@ class ApiClient {
       { silent: true },
     );
   }
+
+  /** Perp funding rates, OI, and 24h change from Phemex (cached 60s). */
+  async getFundingRates(symbols?: string) {
+    const qs = symbols ? `?symbols=${encodeURIComponent(symbols)}` : '';
+    return this.request<FundingResponse>(`/api/market/funding${qs}`, { silent: true });
+  }
+
+  /** Crypto Fear & Greed Index from alternative.me (cached 15 min). */
+  async getFearGreed() {
+    return this.request<FearGreedResponse>(`/api/market/fear-greed`, { silent: true });
+  }
+
+  /** BTC/USDT 24hr ticker from Binance proxy. */
+  async getBtcTicker() {
+    return this.request<{
+      symbol: string;
+      lastPrice: string;
+      priceChange: string;
+      priceChangePercent: string;
+      highPrice: string;
+      lowPrice: string;
+      volume: string;
+      quoteVolume: string;
+    }>(`/api/market/btc-ticker`, { silent: true });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1416,6 +1441,38 @@ export interface KillZoneStatus {
   next_starts_seconds: number | null;
   zones: KillZoneWindow[];
   now_utc: string;
+}
+
+// ---------------------------------------------------------------------------
+// Funding rates + OI — /api/market/funding (Phemex via ccxt)
+// ---------------------------------------------------------------------------
+export interface FundingRow {
+  symbol: string;
+  mark_price: number | null;
+  price_change_pct: number | null;
+  funding_rate: number | null;
+  next_funding_ts: string | null;
+  open_interest: number | null;
+  open_interest_usd: number | null;
+  error: string | null;
+}
+
+export interface FundingResponse {
+  rows: FundingRow[];
+  cached_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Fear & Greed — /api/market/fear-greed (alternative.me)
+// ---------------------------------------------------------------------------
+export interface FearGreedResponse {
+  value: number;
+  classification: string;
+  sentiment: string;
+  bottom_line: string;
+  risk_text: string;
+  timestamp: string;
+  source: string;
 }
 
 export interface PaperTradingStartResponse {

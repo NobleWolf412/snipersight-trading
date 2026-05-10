@@ -50,11 +50,12 @@ import {
   fmtPrice,
 } from '@/components/hud';
 import { useMarketRegime } from '@/hooks/useMarketRegime';
+import { api, type FundingRow, type FearGreedResponse } from '@/utils/api';
 
 // ─── Synthetic seed data — labelled in the UI as such ────────────────────
 //
 // These constants stand in for endpoints the backend does not yet expose
-// (funding, OI, liquidations, news). Every panel that consumes them sets
+// (liquidations, news). Every panel that consumes them sets
 // a "// SYNTHETIC" header so the operator never mistakes the rendering
 // for a live signal. Replace the seed arrays with real fetches when the
 // corresponding endpoints land — no UI restructure required.
@@ -404,22 +405,20 @@ function RegimeTape({ score, label, ranges, color }: RegimeTapeProps) {
 
 // ─── FundingRow ──────────────────────────────────────────────────────────
 
-function FundingRow({ row }: { row: FundingRowSeed }) {
+function FundingRowItem({ row }: { row: FundingRow }) {
+  const fund = row.funding_rate ?? 0;
   const fundColor =
-    row.fund > 0.02
+    fund > 0.0002
       ? 'var(--red-2)'
-      : row.fund > 0.01
+      : fund > 0.0001
         ? 'var(--amber)'
-        : row.fund > 0
+        : fund > 0
           ? 'var(--green-soft)'
           : 'var(--blue)';
-  const oiColor =
-    row.oiDelta > 2
-      ? 'var(--green-soft)'
-      : row.oiDelta < -1
-        ? 'var(--red-2)'
-        : 'var(--fg-2)';
-  const fundPct = Math.max(0, Math.min(100, (row.fund / 0.04) * 100));
+  const fundPct = Math.max(0, Math.min(100, (Math.abs(fund) / 0.0004) * 100));
+  const sym = row.symbol.includes('/') ? row.symbol.split('/')[0] : row.symbol;
+  const pct = row.price_change_pct;
+  const oiUsd = row.open_interest_usd;
   return (
     <div
       style={{
@@ -429,6 +428,7 @@ function FundingRow({ row }: { row: FundingRowSeed }) {
         padding: '10px 4px',
         borderBottom: '1px solid var(--border-soft)',
         alignItems: 'center',
+        opacity: row.error && !row.mark_price ? 0.45 : 1,
       }}
     >
       <span
@@ -438,19 +438,23 @@ function FundingRow({ row }: { row: FundingRowSeed }) {
           letterSpacing: '.06em',
         }}
       >
-        {row.sym}
+        {sym}
       </span>
       <div className="mono">
-        <span style={{ fontSize: 12, color: 'var(--fg)' }}>{fmtPrice(row.mark)}</span>
-        <span
-          style={{
-            fontSize: 10,
-            color: row.change24 >= 0 ? 'var(--green-soft)' : 'var(--red-2)',
-            marginLeft: 6,
-          }}
-        >
-          {fmtPct(row.change24, 1)}
+        <span style={{ fontSize: 12, color: 'var(--fg)' }}>
+          {row.mark_price != null ? fmtPrice(row.mark_price) : '—'}
         </span>
+        {pct != null && (
+          <span
+            style={{
+              fontSize: 10,
+              color: pct >= 0 ? 'var(--green-soft)' : 'var(--red-2)',
+              marginLeft: 6,
+            }}
+          >
+            {fmtPct(pct, 1)}
+          </span>
+        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div
@@ -478,20 +482,19 @@ function FundingRow({ row }: { row: FundingRowSeed }) {
           className="mono"
           style={{
             fontSize: 11,
-            color: fundColor,
+            color: row.funding_rate != null ? fundColor : 'var(--fg-4)',
             fontWeight: 700,
             minWidth: 62,
             textAlign: 'right',
           }}
         >
-          {(row.fund * 100).toFixed(4)}%
+          {row.funding_rate != null ? `${(row.funding_rate * 100).toFixed(4)}%` : '—'}
         </span>
       </div>
       <div style={{ textAlign: 'right' }} className="mono">
         <div style={{ fontSize: 11, color: 'var(--fg-2)' }}>
-          ${fmtNum(row.oi).replace(/\$/, '')}
+          {oiUsd != null ? `$${fmtNum(oiUsd).replace(/\$/, '')}` : '—'}
         </div>
-        <div style={{ fontSize: 9, color: oiColor }}>{fmtPct(row.oiDelta, 1)}</div>
       </div>
     </div>
   );
@@ -1039,16 +1042,54 @@ export function Intel() {
   // the dial geometry intact in either branch — only the numeric value
   // and sub-caption change. `(awaiting feed)` makes the placeholder
   // unmissable.
+  // ── Real data: funding rates + OI (Phemex, 60s cache) ──────────────────
+  const [fundingRows, setFundingRows] = useState<FundingRow[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.getFundingRates().then((res) => {
+      if (!cancelled && res.data) setFundingRows(res.data.rows);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Real data: Fear & Greed (alternative.me, 15 min cache) ───────────────
+  const [fearGreedData, setFearGreedData] = useState<FearGreedResponse | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.getFearGreed().then((res) => {
+      if (!cancelled && res.data) setFearGreedData(res.data);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const btcDom = regime.btcDominance ?? 54.32;
   const usdtDom = regime.usdtDominance ?? 4.12;
   const btcDomReal = regime.btcDominance != null;
   const usdtDomReal = regime.usdtDominance != null;
-  const fearGreed = 64; // placeholder — alternative.me feed not integrated
+  const fearGreed = fearGreedData?.value ?? 64;
+  const fearGreedReal = fearGreedData != null;
 
-  const overheated = FUNDING_SEED.filter((f) => f.fund > 0.02).length;
+  // Funding table: real rows when loaded, fall back to FUNDING_SEED
+  const activeFundingRows = fundingRows ?? FUNDING_SEED.map((s) => ({
+    symbol: s.sym + '/USDT',
+    mark_price: s.mark,
+    price_change_pct: s.change24,
+    funding_rate: s.fund,
+    next_funding_ts: null,
+    open_interest: null,
+    open_interest_usd: s.oi,
+    error: null,
+  }));
+  const fundingReal = fundingRows != null;
+  const overheated = activeFundingRows.filter((r) => (r.funding_rate ?? 0) > 0.0002).length;
+
   const totalLongLiq = LIQ_SEED.reduce((a, l) => a + l.longs, 0);
   const totalShortLiq = LIQ_SEED.reduce((a, l) => a + l.shorts, 0);
   const highNews = NEWS_SEED.filter((n) => n.pri === 'HIGH').length;
+
+  // BTC + ETH live prices from funding rows
+  const btcRow = fundingRows?.find((r) => r.symbol === 'BTC/USDT');
+  const ethRow = fundingRows?.find((r) => r.symbol === 'ETH/USDT');
 
   const visibilityChipKind: 'green' | 'amber' | 'red' =
     regime.visibility === 'HIGH' ? 'green' : regime.visibility === 'MEDIUM' ? 'amber' : 'red';
@@ -1095,24 +1136,24 @@ export function Intel() {
         }
       />
 
-      {/* Macro ticker strip — 4 of 6 cells flagged synthetic until we wire
-          a market-data feed for DXY / 10Y / GOLD / VIX. */}
+      {/* Macro ticker strip — BTC/ETH real via /api/market/funding;
+          DXY/10Y/GOLD/VIX stay synthetic (no free TradFi source). */}
       <div style={{ marginBottom: 18 }}>
         <MacroTicker
           values={[
             {
               label: 'BTC',
-              value: '$65,120',
-              delta: 1.42,
+              value: btcRow?.mark_price != null ? `$${fmtPrice(btcRow.mark_price)}` : '$—',
+              delta: btcRow?.price_change_pct ?? null,
               color: 'var(--fg)',
-              synthetic: true,
+              synthetic: !fundingReal,
             },
             {
               label: 'ETH',
-              value: '$3,198',
-              delta: -0.32,
+              value: ethRow?.mark_price != null ? `$${fmtPrice(ethRow.mark_price)}` : '$—',
+              delta: ethRow?.price_change_pct ?? null,
               color: 'var(--fg)',
-              synthetic: true,
+              synthetic: !fundingReal,
             },
             {
               label: 'DXY',
@@ -1144,18 +1185,34 @@ export function Intel() {
             },
           ]}
         />
-        <div
-          className="mono"
-          style={{
-            marginTop: 6,
-            fontSize: 9,
-            color: 'var(--amber)',
-            letterSpacing: '.18em',
-            textTransform: 'uppercase',
-          }}
-        >
-          ◌ macro ticker pending market-data feed integration
-        </div>
+        {!fundingReal && (
+          <div
+            className="mono"
+            style={{
+              marginTop: 6,
+              fontSize: 9,
+              color: 'var(--amber)',
+              letterSpacing: '.18em',
+              textTransform: 'uppercase',
+            }}
+          >
+            ◌ btc/eth loading · dxy/10y/gold/vix synthetic pending tradfi feed
+          </div>
+        )}
+        {fundingReal && (
+          <div
+            className="mono"
+            style={{
+              marginTop: 6,
+              fontSize: 9,
+              color: 'var(--fg-4)',
+              letterSpacing: '.18em',
+              textTransform: 'uppercase',
+            }}
+          >
+            ● btc/eth live · ◌ dxy/10y/gold/vix synthetic pending tradfi feed
+          </div>
+        )}
       </div>
 
       {/* Regime command center */}
@@ -1224,7 +1281,11 @@ export function Intel() {
                           : '#f87171'
                   }
                   range={[0, 100]}
-                  sub="(placeholder)"
+                  sub={
+                    fearGreedReal
+                      ? (fearGreedData?.classification ?? '—').toLowerCase()
+                      : '(loading)'
+                  }
                 />
               </div>
             </div>
@@ -1335,9 +1396,9 @@ export function Intel() {
               title="Funding & Open Interest"
               right={
                 <>
-                  <Chip kind="amber">⚠ {overheated} OVERHEATED</Chip>
-                  <Chip>{FUNDING_SEED.length} PERPS</Chip>
-                  <Chip kind="amber">◌ SYNTHETIC</Chip>
+                  {overheated > 0 && <Chip kind="amber">⚠ {overheated} OVERHEATED</Chip>}
+                  <Chip>{activeFundingRows.length} PERPS</Chip>
+                  {!fundingReal && <Chip kind="amber">◌ SYNTHETIC</Chip>}
                 </>
               }
             />
@@ -1368,7 +1429,7 @@ export function Intel() {
                   className="mono"
                   style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.18em' }}
                 >
-                  FUNDING (ANNUAL)
+                  FUNDING (8H)
                 </span>
                 <span
                   className="mono"
@@ -1379,11 +1440,11 @@ export function Intel() {
                     textAlign: 'right',
                   }}
                 >
-                  OI · 24H Δ
+                  OI (USD)
                 </span>
               </div>
-              {FUNDING_SEED.map((r) => (
-                <FundingRow key={r.sym} row={r} />
+              {activeFundingRows.map((r) => (
+                <FundingRowItem key={r.symbol} row={r} />
               ))}
             </div>
           </section>

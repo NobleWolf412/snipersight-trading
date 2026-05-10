@@ -2009,6 +2009,102 @@ async def get_fear_greed_index():
         raise HTTPException(status_code=500, detail=f"Fear & Greed error: {str(e)}") from e
 
 
+@app.get("/api/market/funding")
+async def get_funding_rates(
+    symbols: str = Query(
+        default="BTC/USDT,ETH/USDT,SOL/USDT,BNB/USDT,XRP/USDT,TON/USDT,AVAX/USDT,LINK/USDT,INJ/USDT,DOGE/USDT",
+        description="Comma-separated spot symbols (e.g. BTC/USDT,ETH/USDT). Swap equivalents derived automatically.",
+    ),
+):
+    """
+    Perp funding rates, mark prices, open interest, and 24h change for
+    a list of symbols — all sourced from Phemex via ccxt.
+
+    Each row returns:
+      symbol          — base symbol (e.g. 'BTC/USDT')
+      mark_price      — current mark price (swap market)
+      price_change_pct — 24h spot percentage change
+      funding_rate    — current 8h funding rate (e.g. 0.0001 = 0.01%)
+      next_funding_ts — ISO timestamp of next funding settlement
+      open_interest   — OI in base-currency contracts
+      open_interest_usd — OI in USD (mark_price × open_interest; may be None)
+
+    Cached for 60 s to avoid hammering the exchange.
+    Symbols that fail individual fetches are returned with null numeric
+    fields and an 'error' string rather than omitted — keeps the UI
+    table stable even when one symbol is temporarily unavailable.
+    """
+    import asyncio
+
+    import ccxt
+
+    cache_key = f"funding:{symbols}"
+    cached = REGIME_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    if not symbol_list:
+        raise HTTPException(status_code=400, detail="No symbols provided")
+    if len(symbol_list) > 20:
+        raise HTTPException(status_code=400, detail="Maximum 20 symbols")
+
+    loop = asyncio.get_running_loop()
+
+    # Phemex spot (for 24h change + last price) and swap (for funding + OI)
+    phemex_spot = ccxt.phemex()
+    phemex_swap = ccxt.phemex({"options": {"defaultType": "swap"}})
+
+    async def fetch_symbol(sym: str) -> dict:
+        swap_sym = sym.split("/")[0] + "/USDT:USDT"
+        result: dict = {
+            "symbol": sym,
+            "mark_price": None,
+            "price_change_pct": None,
+            "funding_rate": None,
+            "next_funding_ts": None,
+            "open_interest": None,
+            "open_interest_usd": None,
+            "error": None,
+        }
+        try:
+            spot_ticker, fr, oi = await asyncio.gather(
+                loop.run_in_executor(None, phemex_spot.fetch_ticker, sym),
+                loop.run_in_executor(None, phemex_swap.fetch_funding_rate, swap_sym),
+                loop.run_in_executor(None, phemex_swap.fetch_open_interest, swap_sym),
+                return_exceptions=True,
+            )
+            if not isinstance(spot_ticker, Exception):
+                result["price_change_pct"] = spot_ticker.get("percentage")
+                # fall back mark price to spot last if swap mark unavailable
+                result["mark_price"] = float(spot_ticker.get("last") or 0) or None
+            if not isinstance(fr, Exception):
+                result["funding_rate"] = fr.get("fundingRate")
+                result["mark_price"] = float(fr.get("markPrice") or 0) or result["mark_price"]
+                nft = fr.get("nextFundingTimestamp")
+                if nft:
+                    from datetime import datetime, timezone as tz
+                    result["next_funding_ts"] = datetime.fromtimestamp(
+                        nft / 1000, tz=tz.utc
+                    ).isoformat()
+            if not isinstance(oi, Exception):
+                oi_amt = oi.get("openInterestAmount")
+                result["open_interest"] = float(oi_amt) if oi_amt is not None else None
+                if result["open_interest"] is not None and result["mark_price"]:
+                    result["open_interest_usd"] = result["open_interest"] * result["mark_price"]
+            errs = [str(x) for x in [spot_ticker, fr, oi] if isinstance(x, Exception)]
+            if errs:
+                result["error"] = "; ".join(errs)
+        except Exception as exc:
+            result["error"] = str(exc)
+        return result
+
+    rows = await asyncio.gather(*[fetch_symbol(s) for s in symbol_list])
+    payload = {"rows": list(rows), "cached_at": datetime.now(timezone.utc).isoformat()}
+    REGIME_CACHE.set(cache_key, payload)
+    return payload
+
+
 @app.get("/api/market/cycles")
 async def get_market_cycles(
     symbol: str = Query("BTC/USDT", description="Symbol to analyze cycles for")
