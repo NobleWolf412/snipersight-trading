@@ -81,7 +81,7 @@ const MODULES: Module[] = [
       { k: 'Win', v: '61%' },
     ],
     cta: 'ENTER RANGE',
-    href: '/bot/setup',
+    href: '/training/range',
   },
   {
     id: 'drills',

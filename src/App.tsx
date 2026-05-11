@@ -30,6 +30,9 @@ const BotStatus = lazy(() => import('@/pages/BotStatus').then((m) => ({ default:
 const TrainingGround = lazy(() =>
   import('@/pages/TrainingGround').then((m) => ({ default: m.TrainingGround })),
 );
+const RangeBot = lazy(() =>
+  import('@/pages/training/RangeBot').then((m) => ({ default: m.RangeBot })),
+);
 const Intel = lazy(() => import('@/pages/Intel').then((m) => ({ default: m.Intel })));
 const TradeJournal = lazy(() =>
   import('@/pages/TradeJournal').then((m) => ({ default: m.TradeJournal })),
@@ -71,6 +74,7 @@ function App() {
               <Route path="/bot/setup" element={<BotSetup />} />
               <Route path="/bot/status" element={<BotStatus />} />
               <Route path="/training" element={<TrainingGround />} />
+              <Route path="/training/range" element={<RangeBot />} />
               <Route path="/intel" element={<Intel />} />
               <Route path="/journal" element={<TradeJournal />} />
               <Route path="/settings" element={<Settings />} />

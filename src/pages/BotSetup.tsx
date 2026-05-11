@@ -525,6 +525,36 @@ export function BotSetup() {
         }
       />
 
+      {/* LIVE MODE banner — Phase 3 follow-up 3z.e symmetry. PAPER MODE
+          banner lives at src/pages/training/RangeBot.tsx; both are always
+          visible to prevent the §11 silent-confusion bug that 3z.e closed
+          (Training Ground RANGE card previously routed here, claiming
+          "no real funds" while landing the user on the LIVE bot interface). */}
+      <div
+        role="banner"
+        aria-label="live mode disclosure"
+        style={{
+          background: 'rgba(248, 113, 113, 0.08)',
+          border: '1px solid rgba(248, 113, 113, 0.45)',
+          borderRadius: 4,
+          padding: '10px 14px',
+          marginBottom: 14,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
+        <span
+          className="mono"
+          style={{ fontSize: 11, color: 'var(--red-2)', fontWeight: 700, letterSpacing: 1.5 }}
+        >
+          ◉ LIVE MODE
+        </span>
+        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
+          real capital · executes on Phemex · for paper trading use TRAINING / RANGE
+        </span>
+      </div>
+
       {/* Detection-mode header strip — points operator at /scanner */}
       <section
         className="panel"
