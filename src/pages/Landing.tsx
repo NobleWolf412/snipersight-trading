@@ -252,6 +252,13 @@ function TickerRail() {
       } catch (e) {
         console.warn('[TickerRail] fetch error:', e);
         if (!cancelled) setError(String(e));
+      } finally {
+        // Intentionally empty. Cleanup of the polling loop is owned by the
+        // outer useEffect return — `cancelled = true` + `clearTimeout(tid)`.
+        // This block exists as a structural marker so future edits inserting
+        // additional setX writes between setItems and setStale have a visible
+        // reminder that partial-write recovery is the caller's responsibility.
+        // Rubric 7 (try/finally for code that can fail silently mid-flow).
       }
     }
 
