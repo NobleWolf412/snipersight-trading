@@ -1,9 +1,12 @@
 /* @refresh skip */
 import { createContext, useContext, ReactNode, useEffect, useState, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import type { SniperMode } from '@/types/sniperMode';
 import { api } from '@/utils/api';
 import type { ScannerMode } from '@/utils/api';
+import { liveTradingService } from '@/services/liveTradingService';
+import { paperTradingService } from '@/services/paperTradingService';
 
 export interface ScanConfig {
   exchange: string;
@@ -41,12 +44,19 @@ interface ScannerContextType {
   setScanConfig: (config: ScanConfig) => void;
   botConfig: BotConfig;
   setBotConfig: (config: BotConfig) => void;
+  // 3z.f: isScanning is imperative — written by ScanController on
+  // scan start/complete. Backed by useState (not localStorage) so a
+  // crash or reload cannot leave a stale `true` value behind.
   isScanning: boolean;
   setIsScanning: (scanning: boolean) => void;
+  // 3z.f: isBotActive + isTrainingActive are DERIVED — no setters.
+  // Source of truth is the live-bot / paper-bot service status poll
+  // and route pathname (training case). Pre-3z.f they were
+  // useLocalStorage-backed booleans with zero non-archive setters,
+  // creating a §11 "background activity" beacon that locked into
+  // whatever localStorage said and could not be cleared by the UI.
   isBotActive: boolean;
-  setIsBotActive: (active: boolean) => void;
   isTrainingActive: boolean;
-  setIsTrainingActive: (active: boolean) => void;
   scannerModes: ScannerMode[];
   selectedMode: ScannerMode | null;
   setSelectedMode: (mode: ScannerMode) => void;
@@ -172,9 +182,88 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
 
   const [scanConfig, setScanConfig] = useLocalStorage<ScanConfig>('scan-config', defaultScanConfig);
   const [botConfig, setBotConfig] = useLocalStorage<BotConfig>('bot-config', defaultBotConfig);
-  const [isScanning, setIsScanning] = useLocalStorage<boolean>('is-scanning', false);
-  const [isBotActive, setIsBotActive] = useLocalStorage<boolean>('is-bot-active', false);
-  const [isTrainingActive, setIsTrainingActive] = useLocalStorage<boolean>('is-training-active', false);
+
+  // 3z.f: stale-localStorage migration shim. Pre-3z.f these three keys
+  // held zombie booleans: useLocalStorage<boolean> was wired but zero
+  // non-archive code paths called the setters. Whatever value
+  // localStorage carried (from old _archive/pages/ScannerSetup.tsx
+  // writes or test runs) persisted indefinitely. Clear on every mount
+  // — removeItem is idempotent so StrictMode dev double-invoke is a
+  // no-op on the second pass, and there is no failure mode for
+  // "key already gone." Wrapped in try/catch because localStorage
+  // can throw in private-window / quota scenarios per §15.
+  useEffect(() => {
+    try {
+      localStorage.removeItem('is-scanning');
+      localStorage.removeItem('is-bot-active');
+      localStorage.removeItem('is-training-active');
+    } catch (e) {
+      console.warn('[ScannerContext] stale-flag migration: localStorage unavailable', e);
+    }
+  }, []);
+
+  // 3z.f: isScanning is imperative (ScanController writes via the
+  // exposed setter). Backed by useState so a stuck/cancelled scan
+  // does not leave a `true` value persisted across reload.
+  const [isScanning, setIsScanning] = useState<boolean>(false);
+
+  // 3z.f: isBotActive + isTrainingActive are DERIVED from polling
+  // liveTradingService.getStatus() + paperTradingService.getStatus()
+  // every POLL_MS. isTrainingActive additionally fires when the
+  // pathname is under /training (gives the beacon a deterministic
+  // signal during navigation regardless of paper-bot run state).
+  // Direction-agnostic per CLAUDE.md §10 #3: the beacon doesn't
+  // distinguish long vs short — it's a presence indicator only.
+  const [liveBotRunning, setLiveBotRunning] = useState<boolean>(false);
+  const [paperBotRunning, setPaperBotRunning] = useState<boolean>(false);
+  const location = useLocation();
+  const isBotActive = liveBotRunning;
+  const isTrainingActive = paperBotRunning || location.pathname.startsWith('/training');
+
+  // 3z.f: live + paper status poll. 10-second cadence — beacon
+  // visibility doesn't need 1s granularity, the page-level pollers
+  // on /bot/status (2s/10s) and /training/range (3s/10s) still
+  // own the detailed displays. StrictMode-safe: cancelled flag +
+  // setTimeout recursion (standard pattern from CycleHeartbeat /
+  // UniversePanel / RangeBot).
+  useEffect(() => {
+    let cancelled = false;
+    let tid: number | undefined;
+
+    async function pollStatus() {
+      if (cancelled) return;
+      try {
+        const [liveRes, paperRes] = await Promise.allSettled([
+          liveTradingService.getStatus(),
+          paperTradingService.getStatus(),
+        ]);
+        if (cancelled) return;
+        const liveRunning =
+          liveRes.status === 'fulfilled' && liveRes.value?.status === 'running';
+        const paperRunning =
+          paperRes.status === 'fulfilled' && paperRes.value?.status === 'running';
+        setLiveBotRunning(liveRunning);
+        setPaperBotRunning(paperRunning);
+      } catch (e) {
+        // Promise.allSettled never throws; this branch is defensive.
+        // Per §15: log at warn, do not swallow silently.
+        if (!cancelled) {
+          console.warn('[ScannerContext] beacon status poll error:', e);
+        }
+      } finally {
+        if (!cancelled) {
+          tid = window.setTimeout(pollStatus, 10_000);
+        }
+      }
+    }
+
+    void pollStatus();
+
+    return () => {
+      cancelled = true;
+      if (tid !== undefined) window.clearTimeout(tid);
+    };
+  }, []);
 
   const [scannerModes, setScannerModes] = useState<ScannerMode[]>(fallbackModes);
   const [selectedMode, setSelectedMode] = useState<ScannerMode | null>(null);
@@ -270,12 +359,13 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
         setScanConfig,
         botConfig: botConfig || defaultBotConfig,
         setBotConfig,
-        isScanning: isScanning || false,
+        isScanning,
         setIsScanning,
-        isBotActive: isBotActive || false,
-        setIsBotActive,
-        isTrainingActive: isTrainingActive || false,
-        setIsTrainingActive,
+        // 3z.f: derived — no setters exposed. Re-introducing a setter
+        // would break the no-stale-state invariant the migration shim
+        // restored.
+        isBotActive,
+        isTrainingActive,
         scannerModes,
         selectedMode,
         setSelectedMode,

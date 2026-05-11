@@ -129,8 +129,23 @@ interface ScanControllerProps {
 }
 
 export function ScanController({ onComplete }: ScanControllerProps) {
-  const { selectedMode } = useScanner();
+  const { selectedMode, setIsScanning } = useScanner();
   const [state, setState] = useState<ProgressState>(INITIAL);
+
+  // 3z.f: mirror local `state.status` into the global `isScanning`
+  // flag on ScannerContext. The flag drives ActiveScanBeacon's
+  // RECONNAISSANCE indicator. Pre-3z.f the global flag was a
+  // useLocalStorage zombie with zero setters; this effect is the
+  // single non-archive write path.
+  useEffect(() => {
+    setIsScanning(state.status === 'starting' || state.status === 'running');
+  }, [state.status, setIsScanning]);
+
+  // 3z.f: on unmount, force-clear isScanning. Prevents a stranded
+  // ScanController (e.g., user navigated away mid-run) from leaving
+  // the beacon stuck on RECONNAISSANCE.
+  useEffect(() => () => setIsScanning(false), [setIsScanning]);
+
   const [autoScan, setAutoScan] = useState<boolean>(() => {
     try {
       return localStorage.getItem(LS_AUTO_SCAN) === '1';
