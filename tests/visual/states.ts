@@ -64,10 +64,44 @@ export function stateKey(s: SnapshotState): string {
  * present so the structure is visible.
  */
 export const STATES: SnapshotState[] = [
-  // ─── Landing (1 state) ────────────────────────────────────────────────
+  // ─── Landing (3 states) ───────────────────────────────────────────────
   {
     route: '/',
     state: 'default',
+  },
+  // TickerRail stale state: market-prices timestamps are 200s old (> 4×POLL)
+  // → amber ◌ STALE badge renders. Negative proof that badge does NOT appear
+  // on default state (fresh timestamps in market-prices.json fixture).
+  {
+    route: '/',
+    state: 'ticker-stale',
+    setup: async (page) => {
+      // Override the market-prices mock installed by installCaptureHooks.
+      // Playwright routes are LIFO — this handler fires before the global mock.
+      const staleTs = new Date(Date.now() - 200_000).toISOString();
+      const staleBody = [
+        'BTC/USDT','ETH/USDT','SOL/USDT','BNB/USDT','XRP/USDT','DOGE/USDT',
+        'AVAX/USDT','LINK/USDT','ARB/USDT','SUI/USDT','TIA/USDT','INJ/USDT',
+      ].map((symbol, i) => {
+        const prices = [80833,2323.8,93.22,649.69,2.194,0.1741,19.84,12.42,0.4812,1.274,3.481,9.86];
+        return { symbol, price: prices[i], timestamp: staleTs };
+      });
+      await page.route('**/api/market/prices**', (route) =>
+        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(staleBody) }),
+      );
+    },
+  },
+  // TickerRail error state: market-prices returns 503 → ◌ FEED ERR banner.
+  // Negative proof that stale badge does NOT appear when error branch fires.
+  {
+    route: '/',
+    state: 'ticker-error',
+    setup: async (page) => {
+      await page.route('**/api/market/prices**', (route) =>
+        route.fulfill({ status: 503, contentType: 'application/json',
+                        body: JSON.stringify({ error: 'no fixture for this endpoint' }) }),
+      );
+    },
   },
 
   // ─── Settings (5 planned, 1 shipped) ──────────────────────────────────

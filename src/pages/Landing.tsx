@@ -26,8 +26,12 @@ const RAIL_SYMBOLS = [
   'AVAX/USDT','LINK/USDT','ARB/USDT','SUI/USDT','TIA/USDT','INJ/USDT',
 ];
 const RAIL_SYMBOLS_PARAM = RAIL_SYMBOLS.join(',');
-const STALE_MS = 120_000;
 const POLL_MS  = 30_000;
+// Stale threshold: 4× the poll interval. Backend /api/market/prices uses
+// Phemex REST (no dedicated cache TTL beyond the exchange's own ~1s update
+// cadence). Four missed polls (120s) signals a connectivity issue, not
+// normal latency. Relative anchor: STALE_MS = 4 * POLL_MS.
+const STALE_MS = 4 * POLL_MS; // 120 000 ms
 
 interface TickerData {
   sym: string;
@@ -218,6 +222,10 @@ function TickerRail() {
         const prices: Array<{ symbol: string; price: number; timestamp: string }> =
           await pricesRes.json();
 
+        // Funding failure is intentionally non-fatal: if /api/market/funding
+        // returns non-2xx, changeMap stays empty and all 12 symbols render
+        // with '— %' change column. Price data (the primary surface) is
+        // unaffected. UX contract: no error banner for funding-only failure.
         const changeMap = new Map<string, number>();
         if (fundingRes.ok) {
           const fd: { rows?: Array<{ symbol: string; price_change_pct: number | null }> } =
@@ -242,6 +250,7 @@ function TickerRail() {
         );
         setStale(Date.now() - oldest > STALE_MS);
       } catch (e) {
+        console.warn('[TickerRail] fetch error:', e);
         if (!cancelled) setError(String(e));
       }
     }

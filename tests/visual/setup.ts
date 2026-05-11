@@ -141,7 +141,29 @@ const ROUTE_MOCKS: Array<{
  * convention is: install interception → goto → run state.setup → wait.
  */
 export async function installCaptureHooks(page: Page): Promise<void> {
-  // 1. Animation / transition / caret suppression.
+  // 1a. Freeze Date.now() + new Date() so clock widgets (Topbar UTC clock,
+  //     KillZoneStrip countdown, any interval-driven display) render the same
+  //     value on every capture regardless of real wall-clock time.
+  //     Frozen to 2026-05-10T13:48:00Z — matches the fixture timestamps so
+  //     stale-threshold logic in TickerRail also produces deterministic output.
+  await page.addInitScript(() => {
+    const SNAPSHOT_TS = 1778420880000; // 2026-05-10T13:48:00.000Z
+    const OrigDate = Date;
+    // @ts-ignore — intentional global override in test context
+    globalThis.Date = class FrozenDate extends OrigDate {
+      constructor(...args: ConstructorParameters<typeof OrigDate>) {
+        // @ts-ignore
+        if (args.length === 0) super(SNAPSHOT_TS);
+        // @ts-ignore
+        else super(...args);
+      }
+      static now() { return SNAPSHOT_TS; }
+      static parse(s: string) { return OrigDate.parse(s); }
+      static UTC(...args: Parameters<typeof OrigDate.UTC>) { return OrigDate.UTC(...args); }
+    };
+  });
+
+  // 1b. Animation / transition / caret suppression.
   await page.addInitScript(() => {
     const style = document.createElement('style');
     style.id = 'snapshot-freeze';
