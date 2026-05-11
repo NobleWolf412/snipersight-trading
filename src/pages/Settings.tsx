@@ -235,13 +235,28 @@ const MOCK_KEYS: Record<string, string> = {
 // ─── Page ─────────────────────────────────────────────────────────────────
 
 export function Settings() {
+  // Working copy `s` is edited live by every Row/Toggle/input. The persisted
+  // snapshot `saved` only changes when the user clicks SAVE. Dirty state is
+  // a structural comparison of the two; cheap given the flat shape.
   const [s, setS] = useState<PersistedSettings>(() => loadSettings());
+  const [saved, setSaved] = useState<PersistedSettings>(() => loadSettings());
   const [showKeys, setShowKeys] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
 
-  // Persist on every change.
+  const dirty = JSON.stringify(s) !== JSON.stringify(saved);
+
+  // Warn the user before they leave with unsaved changes. Standard
+  // beforeunload protocol — the browser shows its own dialog; we don't get
+  // to customize the message in modern browsers, but the prompt fires.
   useEffect(() => {
-    saveSettings(s);
-  }, [s]);
+    if (!dirty) return;
+    function handler(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
 
   // Snapshot-ready flag — no async work.
   useEffect(() => {
@@ -253,6 +268,18 @@ export function Settings() {
 
   const set = <K extends keyof PersistedSettings>(k: K, v: PersistedSettings[K]) =>
     setS((prev) => ({ ...prev, [k]: v }));
+
+  function handleSave() {
+    saveSettings(s);
+    setSaved(s);
+    setJustSaved(true);
+    // Brief "SAVED" pulse on the button — clears after 1.5s.
+    window.setTimeout(() => setJustSaved(false), 1500);
+  }
+
+  function handleRevert() {
+    setS(saved);
+  }
 
   return (
     <div className="page">
@@ -284,6 +311,8 @@ export function Settings() {
           <>
             <Chip kind="green">● ACCOUNT VERIFIED</Chip>
             <Chip>2FA · ON</Chip>
+            {dirty && <Chip kind="amber">◌ UNSAVED CHANGES</Chip>}
+            {justSaved && <Chip kind="green">● SAVED</Chip>}
           </>
         }
       />
@@ -484,6 +513,63 @@ export function Settings() {
             </button>
           </Row>
         </Card>
+      </div>
+
+      {/* Save bar — sticky to the bottom of the page above the footer.
+          Disabled when there are no changes; REVERT only shown when dirty.
+          z-index 10 sits above the page content but below modal layers. */}
+      <div
+        style={{
+          position: 'sticky',
+          bottom: 0,
+          marginTop: 18,
+          padding: '12px 20px',
+          background: 'rgba(8,10,12,.92)',
+          borderTop: '1px solid var(--border-soft)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          zIndex: 10,
+        }}
+      >
+        <div
+          className="mono"
+          style={{
+            fontSize: 10,
+            color: dirty ? 'var(--amber)' : 'var(--fg-4)',
+            letterSpacing: '.18em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {dirty ? '◌ unsaved changes' : '● all changes saved'}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {dirty && (
+            <button
+              className="btn"
+              onClick={handleRevert}
+              style={{ padding: '8px 18px', fontSize: 11, letterSpacing: '.18em' }}
+            >
+              REVERT
+            </button>
+          )}
+          <button
+            className="btn btn-cyan"
+            onClick={handleSave}
+            disabled={!dirty}
+            style={{
+              padding: '8px 22px',
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '.18em',
+              opacity: dirty ? 1 : 0.45,
+              cursor: dirty ? 'pointer' : 'not-allowed',
+            }}
+          >
+            {justSaved ? '✓ SAVED' : '⎙ SAVE CHANGES'}
+          </button>
+        </div>
       </div>
 
       <FooterStatus latency={36} />
