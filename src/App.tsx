@@ -24,6 +24,7 @@ import { ActiveScanBeacon } from '@/components/ActiveScanBeacon/ActiveScanBeacon
 
 const Landing = lazy(() => import('@/pages/Landing').then((m) => ({ default: m.Landing })));
 const Scanner = lazy(() => import('@/pages/Scanner').then((m) => ({ default: m.Scanner })));
+const BotIndex = lazy(() => import('@/pages/BotIndex').then((m) => ({ default: m.BotIndex })));
 const BotSetup = lazy(() => import('@/pages/BotSetup').then((m) => ({ default: m.BotSetup })));
 const BotStatus = lazy(() => import('@/pages/BotStatus').then((m) => ({ default: m.BotStatus })));
 const TrainingGround = lazy(() =>
@@ -66,6 +67,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Landing />} />
               <Route path="/scanner" element={<Scanner />} />
+              <Route path="/bot" element={<BotIndex />} />
               <Route path="/bot/setup" element={<BotSetup />} />
               <Route path="/bot/status" element={<BotStatus />} />
               <Route path="/training" element={<TrainingGround />} />
