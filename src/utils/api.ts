@@ -1005,12 +1005,20 @@ class ApiClient {
   /** Perp funding rates, OI, and 24h change from Phemex (cached 60s). */
   async getFundingRates(symbols?: string) {
     const qs = symbols ? `?symbols=${encodeURIComponent(symbols)}` : '';
-    return this.request<FundingResponse>(`/api/market/funding${qs}`, { silent: true });
+    // 3z.c: removed `/api` prefix from endpoint string. `this.request`
+    // prepends API_BASE='/api' so the previous `/api/market/funding`
+    // resolved to `/api/api/market/funding`, which fell into the
+    // backend's SPA catch-all and returned `index.html`. Calling
+    // `.json()` on HTML threw SyntaxError, surfaced in Intel as the
+    // ◌ FUNDING UNAVAILABLE state and silently empty change% column
+    // in Landing TickerRail. Same class of fix applied to
+    // getFearGreed and getBtcTicker below.
+    return this.request<FundingResponse>(`/market/funding${qs}`, { silent: true });
   }
 
   /** Crypto Fear & Greed Index from alternative.me (cached 15 min). */
   async getFearGreed() {
-    return this.request<FearGreedResponse>(`/api/market/fear-greed`, { silent: true });
+    return this.request<FearGreedResponse>(`/market/fear-greed`, { silent: true });
   }
 
   /** BTC/USDT 24hr ticker from Binance proxy. */
@@ -1024,7 +1032,7 @@ class ApiClient {
       lowPrice: string;
       volume: string;
       quoteVolume: string;
-    }>(`/api/market/btc-ticker`, { silent: true });
+    }>(`/market/btc-ticker`, { silent: true });
   }
 }
 

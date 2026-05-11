@@ -219,19 +219,38 @@ function TickerRail() {
           fetch('/api/market/funding'),
         ]);
         if (!pricesRes.ok) throw new Error(`prices ${pricesRes.status}`);
-        const prices: Array<{ symbol: string; price: number; timestamp: string }> =
-          await pricesRes.json();
 
-        // Funding failure is intentionally non-fatal: if /api/market/funding
-        // returns non-2xx, changeMap stays empty and all 12 symbols render
-        // with '— %' change column. Price data (the primary surface) is
-        // unaffected. UX contract: no error banner for funding-only failure.
+        // Backend shape: {prices: [...], total, errors, exchange}.
+        // Tolerate older shape (bare array) by checking before unwrapping —
+        // never assume one or the other; the wrong assumption is what
+        // surfaced as "prices.map is not a function" before this guard.
+        const pricesPayload = await pricesRes.json();
+        const prices: Array<{ symbol: string; price: number; timestamp: string }> =
+          Array.isArray(pricesPayload) ? pricesPayload : (pricesPayload?.prices ?? []);
+        if (!Array.isArray(prices)) {
+          throw new Error('prices response missing array field');
+        }
+
+        // Funding failure (any kind — HTTP error, content-type mismatch,
+        // HTML body from a stale backend's SPA fallback) is non-fatal.
+        // Isolated try so a JSON parse throw on funding's body cannot
+        // poison the prices render path. Net effect: changeMap stays
+        // empty and all 12 symbols render with '— %' change column.
         const changeMap = new Map<string, number>();
         if (fundingRes.ok) {
-          const fd: { rows?: Array<{ symbol: string; price_change_pct: number | null }> } =
-            await fundingRes.json();
-          for (const r of fd.rows ?? []) {
-            if (r.price_change_pct != null) changeMap.set(r.symbol, r.price_change_pct);
+          try {
+            const ct = fundingRes.headers.get('content-type') ?? '';
+            if (!ct.includes('application/json')) {
+              throw new Error(`funding content-type ${ct || 'unknown'}`);
+            }
+            const fd: { rows?: Array<{ symbol: string; price_change_pct: number | null }> } =
+              await fundingRes.json();
+            for (const r of fd.rows ?? []) {
+              if (r.price_change_pct != null) changeMap.set(r.symbol, r.price_change_pct);
+            }
+          } catch (fundingErr) {
+            // Log at warn — never swallow silently per §15.
+            console.warn('[TickerRail] funding parse failed (non-fatal):', fundingErr);
           }
         }
 
