@@ -41,15 +41,17 @@
  *   attribute, each cleanup unsets it; no ref-gate so the dev-mode
  *   double-invoke leaves the final state set.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Chip,
   CooldownsTile,
-  CycleHeartbeat,
+  CycleAuditStrip,
   FooterStatus,
   MacroScoreTile,
   PageHead,
+  RejectionPanel,
   Reticle,
+  ScanController,
   ScannerModePicker,
   SectionHead,
   fmtPrice,
@@ -479,10 +481,17 @@ function FilterRail({
   filters,
   setFilters,
   counts,
+  modeTfs,
 }: {
   filters: Filters;
   setFilters: (f: Filters) => void;
   counts: { passing: number; total: number };
+  // 3a''-A: TF set the active scanner mode actually scans. Chips for TFs
+  // not in this set render dimmed + show a tooltip explaining that
+  // selecting them does nothing because no signals at that TF will ever
+  // be emitted. Empty array means "no mode loaded yet" — chips render
+  // enabled but neutral.
+  modeTfs: readonly string[];
 }) {
   const upd = <K extends keyof Filters>(k: K, v: Filters[K]) => setFilters({ ...filters, [k]: v });
   const toggle = <K extends 'tfs' | 'setups' | 'regimes'>(k: K, v: Filters[K][number]) => {
@@ -490,8 +499,36 @@ function FilterRail({
     const next = arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
     setFilters({ ...filters, [k]: next as Filters[K] });
   };
+  // Normalize mode TFs to the casing the FilterRail buttons use (1M / 5M /
+  // 15M / 1H / 4H / 1D). Backend mode definitions emit lowercase ("1m",
+  // "5m", "15m", "1h", "4h", "1d") — we uppercase here so the includes
+  // check matches the TFS array's chip labels.
+  const modeTfSet = useMemo(
+    () => new Set(modeTfs.map((t) => t.toUpperCase())),
+    [modeTfs],
+  );
   return (
     <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* 3a''-C: filter scope label. Single line above the rail killing
+          the implicit assumption that filtering = additional scanning.
+          Sits at the top so it sets context before any control. */}
+      <div
+        className="mono"
+        style={{
+          fontSize: 9,
+          color: 'var(--fg-3)',
+          letterSpacing: '.16em',
+          textTransform: 'uppercase',
+          lineHeight: 1.5,
+          padding: '6px 8px',
+          background: 'rgba(0,0,0,.35)',
+          border: '1px solid var(--border-soft)',
+          borderRadius: 3,
+        }}
+        title="Filters narrow what's already been scanned. Scanning itself is controlled by the mode picker + ▶ run scan above."
+      >
+        // narrow displayed signals · scanning is controlled by mode above
+      </div>
       <div>
         <div
           className="mono"
@@ -503,26 +540,30 @@ function FilterRail({
             marginBottom: 8,
           }}
         >
-          // MIN SCORE · {filters.minScore.toFixed(1)}
+          {/* 3a''-B: score scale is 0–100 to match the backend
+              min_confluence_score (mode badge reads ≥ 70 etc). Pre-3a''
+              this read 0–10 and silently never gated anything because
+              backend scores arrive on a 0–100 scale. */}
+          // MIN SCORE · {Math.round(filters.minScore)}
         </div>
         <input
           type="range"
           min="0"
-          max="10"
-          step=".1"
+          max="100"
+          step="1"
           value={filters.minScore}
           onChange={(e) => upd('minScore', +e.target.value)}
           style={{ width: '100%' }}
         />
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
           <span className="mono" style={{ fontSize: 9, color: 'var(--fg-4)' }}>
-            0.0
+            0
           </span>
           <span className="mono" style={{ fontSize: 9, color: 'var(--accent)' }}>
-            ≥ {filters.minScore.toFixed(1)}
+            ≥ {Math.round(filters.minScore)}
           </span>
           <span className="mono" style={{ fontSize: 9, color: 'var(--fg-4)' }}>
-            10.0
+            100
           </span>
         </div>
       </div>
@@ -567,16 +608,32 @@ function FilterRail({
             marginBottom: 8,
           }}
         >
+          {/* 3a''-A: TF chips dim when the active scanner mode doesn't
+              scan them — the backend never emits signals at those TFs
+              so selecting them in the filter does nothing. modeTfSet is
+              built from selectedMode.timeframes at render time; empty
+              set (no mode loaded) leaves everything enabled (neutral). */}
           // TIMEFRAME
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6 }}>
           {TFS.map((tf) => {
             const active = filters.tfs.includes(tf);
+            const inMode = modeTfSet.size === 0 || modeTfSet.has(tf);
             return (
               <button
                 key={tf}
                 className={`btn ${active ? 'btn-cyan' : ''}`}
-                style={{ padding: '6px 10px', fontSize: 10 }}
+                style={{
+                  padding: '6px 10px',
+                  fontSize: 10,
+                  opacity: inMode ? 1 : 0.4,
+                  cursor: inMode ? 'pointer' : 'help',
+                }}
+                title={
+                  inMode
+                    ? undefined
+                    : `not scanned by current mode — no signals will ever appear at ${tf}`
+                }
                 onClick={() => toggle('tfs', tf)}
               >
                 {tf}
@@ -853,14 +910,38 @@ export function Scanner() {
     };
   }, []);
 
-  // Real signal source — scan history. Empty when no scans yet (snapshot
-  // capture renders the empty state).
-  const cardSignals = useMemo<CardSignal[]>(() => {
+  // Real signal source — scan history. Lifted to useState (was useMemo
+  // pre-ScanController) so the controller can call `refreshCardSignals`
+  // each time a fresh scan completes. Initial read still happens
+  // synchronously to keep the snapshot capture deterministic.
+  const [cardSignals, setCardSignals] = useState<CardSignal[]>(() => {
     try {
-      const history = scanHistoryService.getAllScans();
-      return buildCardSignals(history);
+      return buildCardSignals(scanHistoryService.getAllScans());
     } catch {
       return [];
+    }
+  });
+  // 3a': latest history entry — feeds RejectionPanel. We track it as a
+  // separate state from cardSignals so the panel can render the full
+  // per-run rejection bundle (which buildCardSignals discards) without
+  // forcing a service-layer refactor.
+  const [latestHistoryEntry, setLatestHistoryEntry] = useState(() => {
+    try {
+      const all = scanHistoryService.getAllScans();
+      return all.length > 0 ? all[0] : null;
+    } catch {
+      return null;
+    }
+  });
+  const refreshCardSignals = useCallback(() => {
+    try {
+      const all = scanHistoryService.getAllScans();
+      setCardSignals(buildCardSignals(all));
+      setLatestHistoryEntry(all.length > 0 ? all[0] : null);
+    } catch (e) {
+      // Re-read failure should not crash the page — log and keep the
+      // current cards on screen.
+      console.warn('[Scanner] refreshCardSignals failed:', e);
     }
   }, []);
 
@@ -921,11 +1002,22 @@ export function Scanner() {
         }
       />
 
-      {/* Cycle heartbeat — top-of-page status strip (plan §3d) ───── */}
-      <CycleHeartbeat />
-
       {/* Mode picker — drives ScannerContext.setSelectedMode ─────── */}
+      {/* CycleHeartbeat removed from Scanner: the new ScanController in
+          the SCAN-CONTROL panel below owns scan-progress display now.
+          CycleHeartbeat polls /api/cycles/last which only populates when
+          the bot's scan loop is running; for the standalone Scanner page
+          it permanently rendered AWAITING. Heartbeat stays on Bot Status
+          where the bot's loop is the actual cycle source.
+          3a': CycleAuditStrip below adds audit-flavored cycle info to
+          this page — bottleneck_stage, wall vs prior-5 median, OK /
+          DEGRADED status from /api/cycles/last?include_audit=true. Same
+          AWAITING-when-orchestrator-idle limitation applies but the
+          strip surfaces that state explicitly. */}
       <ScannerModePicker />
+      <div style={{ marginBottom: 14 }}>
+        <CycleAuditStrip />
+      </div>
 
       {/* Top SCAN-CONTROL strip ───────────────────────────────────── */}
       <section className="panel panel-accent" style={{ marginBottom: 18 }}>
@@ -988,8 +1080,26 @@ export function Scanner() {
             <MacroScoreTile />
             <CooldownsTile />
           </div>
+
+          {/* Scan run controls — RUN / STOP / AUTO-SCAN with progress.
+              Lifted into the SCAN-CONTROL panel so it lives adjacent to
+              the mode + min-score + macro tiles that drive its config. */}
+          <div style={{ marginTop: 14 }}>
+            <ScanController onComplete={refreshCardSignals} />
+          </div>
         </div>
       </section>
+
+      {/* 3a': RejectionPanel — §11 observability surface. 6 category
+          chips (UNIVERSE / DATA / CRITICAL_TF / FEATURES / CONFLUENCE /
+          PLANNER) with click-expand sample failure rows. Sourced from
+          the latest scan-history entry's rejectionSummary +
+          universeSnapshot (both persisted in 3a'). Placed BELOW the
+          SCAN-CONTROL panel so the cause-and-effect chain reads top-
+          down: mode + ▶ → progress → outcome / rejections. */}
+      <div style={{ marginBottom: 18 }}>
+        <RejectionPanel entry={latestHistoryEntry} />
+      </div>
 
       {/* Main 3-col ─────────────────────────────────────────────── */}
       <div className="layout-grid" style={{ gridTemplateColumns: '260px 1fr 320px' }}>
@@ -1000,6 +1110,7 @@ export function Scanner() {
             filters={filters}
             setFilters={setFilters}
             counts={{ passing: filtered.length, total: cardSignals.length }}
+            modeTfs={selectedMode?.timeframes ?? []}
           />
         </section>
 
@@ -1036,7 +1147,7 @@ export function Scanner() {
                 }}
               >
                 {cardSignals.length === 0
-                  ? '// no scans yet — start the scanner from the controls above'
+                  ? '// no scans yet — press ▶ run scan above'
                   : '// no signals match filters'}
               </div>
             )}

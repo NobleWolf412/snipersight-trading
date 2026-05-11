@@ -29,6 +29,9 @@ export { CycleHeartbeat } from './CycleHeartbeat';
 export { MacroScoreTile } from './MacroScoreTile';
 export { CooldownsTile } from './CooldownsTile';
 export { KillZoneStrip } from './KillZoneStrip';
+export { ScanController } from './ScanController';
+export { RejectionPanel } from './RejectionPanel';
+export { CycleAuditStrip } from './CycleAuditStrip';
 export {
   applyTweaks,
   SHARED_TWEAK_DEFAULTS,

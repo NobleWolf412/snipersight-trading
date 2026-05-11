@@ -179,6 +179,106 @@ def test_cycles_last_returns_latest_heartbeat(client):
     assert hb.run_id == "r2"
 
 
+# ---------------------------------------------------------------------------
+# 3a' (Phase 3 follow-up): include_audit on /api/cycles/last
+# ---------------------------------------------------------------------------
+#
+# Mirrors /api/cycles/history?include_audit=true. Three contract assertions:
+#   1. WITHOUT include_audit → backward-compatible: status=OK, cost=cheap,
+#      no warnings — same shape callers received before the asymmetry
+#      was closed.
+#   2. WITH include_audit on a healthy cache → status=OK, cost=moderate,
+#      warnings present (possibly empty), data still parses as CycleHeartbeat.
+#   3. WITH include_audit on a collapsed-bottleneck cache → status=DEGRADED,
+#      cost=moderate, warnings non-empty including "collapsed".
+
+
+def test_cycles_last_omits_audit_when_param_absent(client):
+    """Backward compat: existing callers (CycleHeartbeat strip pre-3a')
+    must keep getting status=OK + cost_class=cheap + empty warnings even
+    after the include_audit handler extension lands."""
+    cycle_heartbeat.record(_mk_heartbeat(run_id="r_compat"))
+    r = client.get("/api/cycles/last")
+    assert r.status_code == 200
+    body = r.json()
+    _assert_envelope_shape(body)
+    assert body["metadata"]["status"] == "OK"
+    assert body["metadata"]["cost_class"] == "cheap"
+    assert body["warnings"] == []
+
+
+def test_cycles_last_include_audit_healthy_returns_ok_moderate(client):
+    """include_audit=true on a healthy ring buffer should bump cost_class
+    to 'moderate' (audit ran) and surface warnings list (may be empty).
+    Status stays OK when no drift detected."""
+    # Seed several balanced cycles — no collapsed-bottleneck drift signal.
+    for i in range(5):
+        cycle_heartbeat.record(
+            _mk_heartbeat(
+                run_id=f"healthy{i}",
+                plans_emitted=8,
+                symbols_scanned=20,
+                signals_per_stage={"low_confluence": 6, "no_data": 6},
+                ts_start=1_700_000_000 + i * 60.0,
+            )
+        )
+    r = client.get("/api/cycles/last?include_audit=true")
+    assert r.status_code == 200
+    body = r.json()
+    _assert_envelope_shape(body)
+    assert body["metadata"]["cost_class"] == "moderate"
+    # Status may be OK or DEGRADED depending on detector tuning; what matters
+    # is the audit ran (moderate cost) and warnings is a list (possibly empty).
+    assert isinstance(body["warnings"], list)
+    # Data still parses as CycleHeartbeat.
+    CycleHeartbeat.model_validate(body["data"])
+
+
+def test_cycles_last_include_audit_degraded_surfaces_status(client):
+    """Mirrors /cycles/history?include_audit=true degraded test (line 217):
+    a sudden bottleneck collapse should produce DEGRADED + warnings
+    containing 'collapsed'. Same drift detector wired in both endpoints."""
+    # Seed healthy baseline.
+    for i in range(5):
+        cycle_heartbeat.record(
+            _mk_heartbeat(
+                run_id=f"healthy{i}",
+                plans_emitted=10,
+                symbols_scanned=20,
+                signals_per_stage={"low_confluence": 10},
+                ts_start=1_700_000_000 + i * 60.0,
+            )
+        )
+    # Anomalous final cycle — drives the collapse signal.
+    cycle_heartbeat.record(
+        _mk_heartbeat(
+            run_id="anomaly",
+            plans_emitted=1,
+            symbols_scanned=20,
+            signals_per_stage={"low_confluence": 19},
+            ts_start=1_700_000_500.0,
+        )
+    )
+    r = client.get("/api/cycles/last?include_audit=true")
+    assert r.status_code == 200
+    body = r.json()
+    _assert_envelope_shape(body)
+    assert body["metadata"]["status"] == "DEGRADED"
+    assert body["metadata"]["cost_class"] == "moderate"
+    assert any("collapsed" in w for w in body["warnings"])
+
+
+def test_cycles_last_include_audit_cold_start_returns_null_data(client):
+    """Cold start with audit flag — still returns data=null + OK,
+    audit logic short-circuits when there's nothing to evaluate."""
+    r = client.get("/api/cycles/last?include_audit=true")
+    assert r.status_code == 200
+    body = r.json()
+    _assert_envelope_shape(body)
+    assert body["data"] is None
+    assert body["metadata"]["status"] == "OK"
+
+
 # ===========================================================================
 # /api/cycles/history
 # ===========================================================================

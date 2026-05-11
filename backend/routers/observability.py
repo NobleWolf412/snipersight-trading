@@ -467,18 +467,54 @@ async def get_universe(
     summary="Most recent scan-cycle heartbeat",
     description=(
         "Returns the most recent cycle heartbeat from the orchestrator. "
-        "Cost: cheap (O(1) ring buffer read)."
+        "?include_audit=true mirrors the /cycles/history behavior, embedding "
+        "drift-detector status (OK / DEGRADED) and warnings via the envelope. "
+        "Cost: cheap without audit, moderate with audit."
     ),
 )
-async def get_cycles_last() -> JSONResponse:
+async def get_cycles_last(
+    include_audit: bool = Query(
+        False,
+        description="Run the cycle-heartbeat audit and embed DEGRADED status in metadata",
+    ),
+) -> JSONResponse:
+    # 3a' (Phase 3 follow-up): include_audit was previously available on
+    # /cycles/history but not /cycles/last, leaving the HUD CycleAuditStrip
+    # without a per-call drift signal on the most-recent cycle. This
+    # mirrors the /cycles/history pattern (lines 508-521) so callers can
+    # read OK / DEGRADED status from the same envelope shape they use
+    # for the history endpoint. Backward compat preserved: omitting the
+    # param produces the original "no audit, cheap cost class" envelope.
     from backend.engine import cycle_heartbeat
+    from backend.diagnostics import status_cache
 
     snap = cycle_heartbeat.get_latest()
+
     if snap is None:
+        # Empty-snapshot path. The cost class doesn't shift with the audit
+        # flag here because there's no payload to attach status to — the
+        # contract is "data: null" either way. Warnings remain empty.
         env = ok_envelope(None, source="cycle_heartbeat", cost_class="cheap")
         return JSONResponse(content=env.model_dump(by_alias=True))
+
     hb = CycleHeartbeat(**snap)
-    env = ok_envelope(hb.model_dump(), source="cycle_heartbeat", cost_class="cheap")
+
+    if not include_audit:
+        env = ok_envelope(hb.model_dump(), source="cycle_heartbeat", cost_class="cheap")
+        return JSONResponse(content=env.model_dump(by_alias=True))
+
+    audit_status, reason, warnings = status_cache.get_status("cycles")
+    if audit_status == "DEGRADED":
+        env = degraded_envelope(
+            hb.model_dump(),
+            source="cycle_heartbeat",
+            reason=reason or "audit_degraded",
+            warnings=warnings,
+            cost_class="moderate",
+        )
+    else:
+        env = ok_envelope(hb.model_dump(), source="cycle_heartbeat", cost_class="moderate")
+        env = env.model_copy(update={"warnings": list(warnings)})
     return JSONResponse(content=env.model_dump(by_alias=True))
 
 

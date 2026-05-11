@@ -929,9 +929,20 @@ class ApiClient {
    * Wire shape: `Envelope<Universe>`. Cost: cheap (cached on the
    * orchestrator and refreshed once per scan cycle).
    */
-  async getUniverse() {
+  async getUniverse(opts?: { include_audit?: boolean }) {
+    // 3a': add include_audit passthrough mirroring the backend handler.
+    // Without it the HUD can't surface DEGRADED status on the universe
+    // snapshot. Default false preserves existing CycleHeartbeat / Universe
+    // panel call shapes (no behavior change for the cheap path).
+    //
+    // Note on path: `this.request` prepends API_BASE='/api', so the
+    // endpoint here must NOT include the `/api` prefix. The previous
+    // value `/api/scanner/universe` produced `/api/api/scanner/universe`
+    // which fell into the backend SPA catch-all and returned HTML. Same
+    // class of fix as getFundingRates / getFearGreed / getBtcTicker.
+    const qs = opts?.include_audit ? '?include_audit=true' : '';
     return this.request<UniverseEnvelope>(
-      `/api/scanner/universe`,
+      `/scanner/universe${qs}`,
       { silent: true },
     );
   }
@@ -946,9 +957,18 @@ class ApiClient {
    *
    * Wire shape: `Envelope<CycleHeartbeat>`. Cost: cheap (in-memory read).
    */
-  async getLastCycle() {
+  async getLastCycle(opts?: { include_audit?: boolean }) {
+    // 3a': new include_audit param passthrough — when true, embeds the
+    // drift detector OK/DEGRADED status in the envelope metadata. Backend
+    // handler was extended to accept this param to close the asymmetry
+    // with /api/cycles/history. Default false preserves existing call
+    // shapes (CycleHeartbeat strip still gets cheap-cost OK envelopes).
+    //
+    // Note on path: same double-prefix fix as getUniverse — endpoint
+    // must NOT include `/api` since `this.request` prepends API_BASE.
+    const qs = opts?.include_audit ? '?include_audit=true' : '';
     return this.request<CycleHeartbeatEnvelope>(
-      `/api/cycles/last`,
+      `/cycles/last${qs}`,
       { silent: true },
     );
   }

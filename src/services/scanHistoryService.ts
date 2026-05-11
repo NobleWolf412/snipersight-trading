@@ -5,6 +5,55 @@
  * Provides a lightweight database for historical scan tracking.
  */
 
+// 3a' (Phase 3 follow-up): per-stage rejection sample. The shape mirrors
+// the backend orchestrator's failure record dicts loosely — fields vary
+// by stage (e.g., confluence rejections include `score`, planner
+// rejections include `reason`), so we keep this open-ended and let
+// individual chip render paths pick out what they need.
+export interface RejectionSampleRecord {
+  symbol?: string;
+  reason?: string;
+  score?: number;
+  threshold?: number;
+  [key: string]: unknown;
+}
+
+// 3a': full per-run rejection bundle persisted alongside results. By
+// keeping the raw `by_reason` + `features_breakdown` + `details` shapes
+// here we preserve the §11 observability bond — the panel can render
+// counts AND click-expand into samples for any past scan from history
+// without needing to re-poll the live diagnostics endpoint (which only
+// reflects the most-recent orchestrator state, not the run the operator
+// clicked into).
+export interface ScanRejectionSummary {
+  total_rejected: number;
+  by_reason: Record<string, number>;
+  details?: Record<string, RejectionSampleRecord[]>;
+  features_breakdown?: {
+    indicator_failures?: { count: number; samples: RejectionSampleRecord[] };
+    smc_rejections?: { count: number; samples: RejectionSampleRecord[] };
+  };
+  direction_stats?: Record<string, unknown>;
+  regime?: Record<string, unknown> | null;
+}
+
+// 3a': universe snapshot captured at scan completion. Latest-snapshot
+// semantics (per briefing acknowledgement) — the cache may have advanced
+// between scan completion and panel render, but for the diagnostic loop
+// 95% case the alignment is fine. CycleAuditStrip shows the cycle
+// timing so a stale snapshot is observable.
+export interface UniverseSnapshot {
+  // Total candidates the universe selector started with.
+  total_candidates: number;
+  // Counts per reason — keys: stable_base, non_perp, bucket_excluded,
+  // limit_exhausted.
+  drops_by_reason: Record<string, number>;
+  // Up to ~10 example symbols per reason for click-expand.
+  drops_by_reason_samples?: Record<string, string[]>;
+  // Snapshot timestamp (epoch seconds) — null if cache cold.
+  last_refresh_ts: number | null;
+}
+
 export interface ScanHistoryEntry {
   id: string;
   timestamp: string;
@@ -17,6 +66,13 @@ export interface ScanHistoryEntry {
   effectiveMinScore: number;
   // Flexible record type to accommodate backend's dynamic rejection reasons
   rejectionBreakdown?: Record<string, number>;
+  // 3a': full per-run rejection bundle — drives the RejectionPanel
+  // chips + click-expand details. Optional so older history entries
+  // (from before 3a' shipped) still parse cleanly.
+  rejectionSummary?: ScanRejectionSummary;
+  // 3a': universe snapshot at scan completion. Optional for the same
+  // backward-compat reason.
+  universeSnapshot?: UniverseSnapshot;
   results: any[]; // Actual scan results (signals)
 }
 

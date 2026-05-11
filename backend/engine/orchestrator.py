@@ -85,6 +85,71 @@ from backend.bot.telemetry.events import (
 logger = logging.getLogger(__name__)
 
 
+# Maximum samples to include per features-breakdown subcategory. Mirrors
+# the /api/scanner/diagnostics endpoint's truncation policy (top-5) so
+# the HUD can click-expand without re-fetching the live endpoint.
+_FEATURES_BREAKDOWN_SAMPLE_CAP = 5
+
+
+def build_features_breakdown(diagnostics: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the `features_breakdown` sub-field of rejection_summary.
+
+    Mass conservation: n/a — pure projection.
+        This helper does NOT split a single count across categories; it
+        produces parallel reads of two independent diagnostic lists
+        (`indicator_failures` and `smc_rejections`). There is no source
+        total that must equal the sum of subcategories, so the §16
+        rubric-3 invariant doesn't apply at this layer. The relationship
+        between this helper's output and the legacy `by_reason["features"]`
+        rollup (which sums indicator + smc + data_failures) is asserted
+        only at the consumer site if needed — keeping the projection
+        itself assertion-free preserves test isolation.
+
+    Exposes per-subcategory counts + samples (first N) for the two FEATURES
+    pipeline stages: indicator computation failures and SMC pattern detection
+    rejections. Kept as a parallel field rather than rolled into by_reason
+    because:
+
+      1. The legacy `by_reason["features"]` rollup also includes
+         data_failures, which the HUD treats as a separate DATA category.
+         Splitting the indicator / smc subset out cleanly gives the panel
+         per-subcategory chip behavior without trying to subtract DATA.
+      2. Samples are included alongside counts so the HUD can render
+         click-expand details from the same per-run snapshot, rather than
+         hitting /api/scanner/diagnostics (which is live orchestrator
+         state and may not match the run the operator clicked into).
+
+    Inputs that are absent or empty produce `{"count": 0, "samples": []}`
+    so the field shape is stable across clean and noisy scans — frontend
+    can rely on the keys always being present.
+
+    Args:
+        diagnostics: The orchestrator's `self.diagnostics` dict (lists of
+            failure record dicts keyed by stage name). Missing keys are
+            treated as empty lists.
+
+    Returns:
+        Dict with keys `indicator_failures` and `smc_rejections`, each
+        mapping to `{"count": int, "samples": list}` where samples is a
+        shallow copy of the first N failure records (no deep copy — the
+        records themselves are read-only-by-convention).
+    """
+    return {
+        "indicator_failures": {
+            "count": len(diagnostics.get("indicator_failures", [])),
+            "samples": list(diagnostics.get("indicator_failures", []))[
+                :_FEATURES_BREAKDOWN_SAMPLE_CAP
+            ],
+        },
+        "smc_rejections": {
+            "count": len(diagnostics.get("smc_rejections", [])),
+            "samples": list(diagnostics.get("smc_rejections", []))[
+                :_FEATURES_BREAKDOWN_SAMPLE_CAP
+            ],
+        },
+    }
+
+
 class Orchestrator:
     """
     Main pipeline orchestrator.
@@ -575,12 +640,52 @@ class Orchestrator:
         )
         if features_count > 0:
             by_reason["features"] = features_count
+        # 3a' (Phase 3 follow-up): parallel `features_breakdown` field.
+        # by_reason["features"] is the legacy single-count rollup (kept for
+        # backward compatibility — combines indicator + smc + data). For the
+        # HUD RejectionPanel we need a clean per-subcategory split, since:
+        #   - DATA is its own category in the panel (not under FEATURES).
+        #   - The panel's FEATURES chip needs indicator + smc only.
+        # Extracted to a module-level helper (build_features_breakdown) so
+        # the construction is unit-testable without instantiating a full
+        # Orchestrator. See backend/tests/unit/test_features_breakdown.py.
+        features_breakdown = build_features_breakdown(self.diagnostics)
+
+        # 3a' rubric-3 cross-check: the legacy `by_reason["features"]`
+        # rollup is, by construction, the sum of all three diagnostics
+        # buckets (smc + indicator + data). The new features_breakdown
+        # surfaces the indicator and smc subset; data is rendered as its
+        # own DATA category in the HUD. Asserting the invariant
+        # (indicator + smc + data == features_rollup) protects against a
+        # future bucket rename in `self.diagnostics` silently breaking
+        # either the legacy rollup or the new breakdown.
+        #
+        # Belt-and-suspenders to the docstring rationale on
+        # build_features_breakdown — projection helper says "no
+        # mass-conservation invariant applies at the helper layer"; this
+        # assertion enforces the invariant at the *consumer site* where
+        # the legacy rollup and the new breakdown both touch the same
+        # diagnostics dict. Both must agree or the bucket schema drifted.
+        _expected_features = (
+            features_breakdown["indicator_failures"]["count"]
+            + features_breakdown["smc_rejections"]["count"]
+            + len(self.diagnostics.get("data_failures", []))
+        )
+        _legacy_features = by_reason.get("features", 0)
+        assert _expected_features == _legacy_features, (
+            f"FEATURES bucket invariant breached: indicator+smc+data="
+            f"{_expected_features} but by_reason['features']={_legacy_features}. "
+            f"A diagnostics bucket was likely renamed; update either the "
+            f"build_features_breakdown reads or the features_count rollup "
+            f"above to restore parity."
+        )
         rejection_summary = {
             "run_id": run_id,
             "start_time": start_time,
             "total_rejected": rejected_count,
             "by_reason": by_reason,
             "details": rejection_stats,
+            "features_breakdown": features_breakdown,
             "direction_stats": direction_stats,
             "regime": (
                 {
