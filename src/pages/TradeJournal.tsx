@@ -237,7 +237,7 @@ function PnLCalendar({ trades }: { trades: JournalTrade[] }) {
   }
   const max = Math.max(...entries.map(([, v]) => Math.abs(v))) || 1;
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
+    <div className="journal-calendar-grid">
       {entries.map(([d, v]) => {
         const intensity = Math.abs(v) / max;
         const bg =
@@ -537,7 +537,7 @@ function MLPanel() {
           </div>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+            <div className="journal-breakdown-meta-grid">
               <StatTile
                 label="Status"
                 value={status.trained ? 'TRAINED' : 'UNTRAINED'}
@@ -740,11 +740,8 @@ function MLPanel() {
                     return (
                       <div
                         key={item.name}
+                        className="journal-breakdown-row"
                         style={{
-                          display: 'grid',
-                          gridTemplateColumns: '160px 1fr 60px',
-                          gap: 8,
-                          alignItems: 'center',
                           fontFamily: 'JetBrains Mono,monospace',
                           fontSize: 10,
                         }}
@@ -830,7 +827,12 @@ export function TradeJournal() {
       setAggregate(data.aggregate);
       setTotal(data.total);
     } catch {
-      setError('Could not load journal — is the backend running?');
+      // 3b.2: explicit copy distinguishing backend-offline from
+      // backend-online-but-no-trades. The empty-state branch below
+      // covers the latter (no error, sorted.length === 0). This
+      // catch branch fires when the fetch itself fails — service
+      // unreachable, network error, malformed response.
+      setError('no trades yet · backend offline · is the server reachable?');
     } finally {
       setLoading(false);
     }
@@ -925,7 +927,11 @@ export function TradeJournal() {
   }, [aggregate]);
 
   return (
-    <div className="shell">
+    // 3b.2: `journal-page` class is the hook for Phase 3b.2 mobile rules
+    // in hud.css. Class name remains `shell` for outer layout; we add
+    // journal-page alongside so per-page CSS scoping works without
+    // disrupting the existing shell padding cascade.
+    <div className="shell journal-page">
       <PageHead
         icon={
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
@@ -1013,14 +1019,7 @@ export function TradeJournal() {
           <div className="corner-tag tl">// PERFORMANCE-METRICS</div>
           <div className="corner-tag tr">ALL-SESSIONS WINDOW</div>
           <div style={{ padding: '22px 22px 18px' }}>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(8, minmax(0,1fr))',
-                gap: 10,
-                marginBottom: 18,
-              }}
-            >
+            <div className="journal-stat-grid">
               <StatTile
                 label="Net P&L"
                 value={
@@ -1136,16 +1135,7 @@ export function TradeJournal() {
                 </Chip>
               }
             />
-            <div
-              style={{
-                padding: '10px 18px',
-                borderBottom: '1px solid var(--border-soft)',
-                display: 'grid',
-                gridTemplateColumns: 'repeat(5, 1fr) auto auto',
-                gap: 8,
-                alignItems: 'center',
-              }}
-            >
+            <div className="journal-filter-row">
               <input
                 style={{
                   background: 'rgba(0,0,0,.4)',
@@ -1247,16 +1237,8 @@ export function TradeJournal() {
             </div>
             <div style={{ maxHeight: 520, overflowY: 'auto' }}>
               <div
+                className="journal-trade-header"
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: '90px 1fr 50px 70px 90px 70px 70px 90px',
-                  gap: 8,
-                  padding: '10px 18px',
-                  fontFamily: 'JetBrains Mono,monospace',
-                  fontSize: 9,
-                  color: 'var(--fg-4)',
-                  letterSpacing: '.18em',
-                  textTransform: 'uppercase',
                   position: 'sticky',
                   top: 0,
                   background: 'var(--card)',
@@ -1341,7 +1323,16 @@ export function TradeJournal() {
                     fontFamily: 'JetBrains Mono,monospace',
                   }}
                 >
-                  // no trades found
+                  {/* 3b.2: empty-state copy differs from the catch-branch
+                      banner above. Here the fetch succeeded but there
+                      are zero closed trades to show — operator needs
+                      to be told what's missing AND how to generate
+                      data (run paper bot or live bot to closure). */}
+                  {total === 0 ? (
+                    <>// no closed trades yet · run the paper bot to start logging</>
+                  ) : (
+                    <>// no trades match the current filters · clear or relax filter set</>
+                  )}
                 </div>
               ) : (
                 sorted.map(tr => {
@@ -1349,17 +1340,7 @@ export function TradeJournal() {
                   return (
                     <div
                       key={tr.trade_id}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns:
-                          '90px 1fr 50px 70px 90px 70px 70px 90px',
-                        gap: 8,
-                        padding: '10px 18px',
-                        borderBottom: '1px solid var(--border-soft)',
-                        alignItems: 'center',
-                        fontFamily: 'JetBrains Mono,monospace',
-                        fontSize: 11,
-                      }}
+                      className="journal-trade-row"
                     >
                       <span style={{ color: 'var(--fg-3)' }}>{fmtDate(tr.exit_time)}</span>
                       <span

@@ -320,6 +320,59 @@ body{min-height:100vh;overflow-x:hidden;position:relative;}
 .density-sparse .metric-value{font-size:30px;}
 .density-dense .metric-tile{padding:10px 12px;}
 .density-dense .metric-value{font-size:22px;}
+
+/* ─── Journal — Phase 3b.2 mobile rules ───────────────────────────────
+   These class hooks let media queries override what would otherwise be
+   inline grid-template-columns values (inline styles win specificity
+   battles, so we lift the grid declarations out of TradeJournal.tsx's
+   JSX into here). Desktop layout is byte-identical to the pre-3b.2
+   inline values — the @media blocks only fire ≤700px and ≤480px.
+   Per the 3z.g pattern: chrome breakpoints in hud.css base; per-page
+   rules attach in their own page's rewrite (here, Journal). */
+.journal-stat-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px;margin-bottom:18px;}
+.journal-filter-row{display:grid;grid-template-columns:repeat(5,1fr) auto auto;gap:8px;align-items:center;padding:10px 18px;border-bottom:1px solid var(--border-soft);}
+.journal-trade-row{display:grid;grid-template-columns:90px 1fr 50px 70px 90px 70px 70px 90px;gap:8px;padding:8px 18px;border-bottom:1px solid var(--border-soft);align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;}
+.journal-trade-header{display:grid;grid-template-columns:90px 1fr 50px 70px 90px 70px 70px 90px;gap:8px;padding:8px 18px;border-bottom:1px solid var(--border-soft);align-items:center;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--fg-4);letter-spacing:.18em;text-transform:uppercase;}
+.journal-breakdown-row{display:grid;grid-template-columns:160px 1fr 60px;gap:8px;align-items:center;}
+.journal-breakdown-meta-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.journal-calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+
+@media (max-width: 700px){
+  /* Stat tiles: 8-col → 2-col. The desktop layout is performance-density
+     metrics in a single row; tablet+ phone wraps them to a 2-col grid
+     so each tile gets readable width without horizontal scroll. */
+  .journal-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  /* Filter row: 5 input cols + 2 auto buttons → 2-col stack. */
+  .journal-filter-row{grid-template-columns:1fr 1fr;gap:6px;padding:10px 14px;}
+  /* Trade rows: 8-col → 2-col card-like (label/value pairs).
+     Card-stack at <480 below. */
+  .journal-trade-row,
+  .journal-trade-header{grid-template-columns:repeat(2,1fr);row-gap:4px;padding:10px 14px;font-size:10px;}
+  /* Breakdown bars stack vertically — label, bar, value */
+  .journal-breakdown-row{grid-template-columns:1fr;gap:4px;}
+  /* Breakdown meta grid: 4-col → 2-col */
+  .journal-breakdown-meta-grid{grid-template-columns:repeat(2,1fr);}
+  /* Calendar: gap shrinks, font scales; weekday labels condensed
+     to single letter via inline override in TradeJournal.tsx. */
+  .journal-calendar-grid{gap:3px;}
+}
+
+@media (max-width: 480px){
+  /* Phone portrait — tiles single-col card stack */
+  .journal-stat-grid{grid-template-columns:1fr;gap:8px;}
+  /* Filter row: full single-col stack */
+  .journal-filter-row{grid-template-columns:1fr;gap:6px;}
+  /* Trade rows become full single-col card-stack — each row is its own
+     card visually, fields stacked vertically. */
+  .journal-trade-row,
+  .journal-trade-header{grid-template-columns:1fr;row-gap:2px;padding:10px 12px;}
+  .journal-trade-header{display:none;}
+  /* Breakdown meta single-col */
+  .journal-breakdown-meta-grid{grid-template-columns:1fr;}
+  /* Calendar gap minimum */
+  .journal-calendar-grid{gap:2px;}
+}
+/* ─── end Journal Phase 3b.2 mobile rules ─────────────────────────── */
 .density-dense .metric-label{margin-bottom:6px;}
 
 /* Position card */
