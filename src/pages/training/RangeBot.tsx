@@ -98,8 +98,8 @@ function PaperModeBanner() {
       role="banner"
       aria-label="paper mode disclosure"
       style={{
-        background: 'rgba(34, 211, 238, 0.08)',
-        border: '1px solid rgba(34, 211, 238, 0.4)',
+        background: 'var(--amber-bg)',
+        border: '1px solid var(--amber-border)',
         borderRadius: 10,
         padding: '12px 16px',
         marginBottom: 14,
@@ -108,7 +108,7 @@ function PaperModeBanner() {
         gap: 14,
       }}
     >
-      <span className="mono" style={{ fontSize: 13, color: '#22d3ee', fontWeight: 800, letterSpacing: 2 }}>
+      <span className="mono" style={{ fontSize: 13, color: 'var(--amber)', fontWeight: 800, letterSpacing: 2 }}>
         ◉ PAPER MODE
       </span>
       <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
@@ -423,6 +423,116 @@ function PositionRow({ pos }: { pos: PaperPosition }) {
   );
 }
 
+// ─── Exit Badge ─────────────────────────────────────────────────────────
+const EXIT_BADGE_MAP: Record<string, { label: string; kind: 'green' | 'red' | 'cyan' | 'amber' }> = {
+  // Real backend strings (position_manager.py / paper_trading_service.py)
+  target:         { label: 'TARGET HIT', kind: 'green' },
+  stop_loss:      { label: 'HARD SL',    kind: 'red'   },
+  stagnation:     { label: 'STAGNATION', kind: 'amber' },
+  max_hours_open: { label: 'TIMEOUT',    kind: 'amber' },
+  manual:         { label: 'MANUAL',     kind: 'cyan'  },
+  emergency:      { label: 'EMERGENCY',  kind: 'red'   },
+  // Fixture aliases for snapshot tests
+  target_hit:     { label: 'TARGET HIT', kind: 'green' },
+  trailing_stop:  { label: 'TRAILING',   kind: 'cyan'  },
+  timeout:        { label: 'TIMEOUT',    kind: 'amber' },
+};
+function ExitBadge({ reason }: { reason: string }) {
+  const m = EXIT_BADGE_MAP[reason];
+  return m
+    ? <Chip kind={m.kind}>{m.label}</Chip>
+    : <Chip>{reason.replace(/_/g, ' ').toUpperCase()}</Chip>;
+}
+
+// ─── MAE / MFE Meters ────────────────────────────────────────────────────
+// max_favorable = MFE (positive % — how far price moved in your favour)
+// max_adverse   = MAE (negative % — how far it moved against you)
+// Scale: 10 % = full bar; values beyond pin at 100 %.
+function MaeMfeBar({ mfe, mae }: { mfe: number; mae: number }) {
+  const scale = 10;
+  const mfePct = Math.min(100, (Math.abs(mfe) / scale) * 100);
+  const maePct = Math.min(100, (Math.abs(mae) / scale) * 100);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', width: 30, textAlign: 'right', letterSpacing: '.08em' }}>MFE</span>
+        <div style={{ flex: 1, height: 4, background: 'rgba(0,0,0,.35)', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ width: `${mfePct}%`, height: '100%', background: 'var(--green)', borderRadius: 2 }} />
+        </div>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--green)', width: 44, textAlign: 'right' }}>+{mfe.toFixed(2)}%</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', width: 30, textAlign: 'right', letterSpacing: '.08em' }}>MAE</span>
+        <div style={{ flex: 1, height: 4, background: 'rgba(0,0,0,.35)', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ width: `${maePct}%`, height: '100%', background: 'var(--red)', borderRadius: 2 }} />
+        </div>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--red)', width: 44, textAlign: 'right' }}>{mae.toFixed(2)}%</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Trade History Row (expandable autopsy) ──────────────────────────────
+function TradeHistoryRow({ trade }: { trade: CompletedPaperTrade }) {
+  const [open, setOpen] = useState(false);
+  const isLong = trade.direction === 'LONG';
+  const isWin  = trade.pnl >= 0;
+  const durMin = trade.entry_time && trade.exit_time
+    ? Math.round((new Date(trade.exit_time).getTime() - new Date(trade.entry_time).getTime()) / 60000)
+    : null;
+  const fmtP = (p: number) => p < 1 ? p.toFixed(4) : p.toFixed(2);
+  return (
+    <div style={{ borderBottom: '1px solid var(--border-soft)', background: open ? 'rgba(0,0,0,.15)' : 'transparent', transition: 'background .15s' }}>
+      {/* Collapsed summary row */}
+      <div
+        onClick={() => setOpen((s) => !s)}
+        style={{ display: 'grid', gridTemplateColumns: '90px 64px 1fr 1fr auto', gap: 10, padding: '10px 12px', cursor: 'pointer', alignItems: 'center' }}
+        title="Click to expand autopsy"
+      >
+        <span className="mono" style={{ fontWeight: 700 }}>{trade.symbol}</span>
+        <Chip kind={isLong ? 'green' : 'red'}>{isLong ? 'LONG' : 'SHORT'}</Chip>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)' }}>
+            {fmtP(trade.entry_price)}<span style={{ color: 'var(--fg-4)' }}> → </span>{fmtP(trade.exit_price)}
+          </span>
+          {trade.trade_type && (
+            <span className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em' }}>{trade.trade_type.toUpperCase()}</span>
+          )}
+        </div>
+        <span className="mono" style={{ fontWeight: 700, color: isWin ? 'var(--green)' : 'var(--red)' }}>
+          {isWin ? '+' : ''}{fmtCurrency(trade.pnl)} ({fmtPct(trade.pnl_pct, true)})
+        </span>
+        <ExitBadge reason={trade.exit_reason} />
+      </div>
+
+      {/* Expanded autopsy panel */}
+      {open && (
+        <div style={{ padding: '12px 14px 14px', borderTop: '1px solid var(--border-soft)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+          <div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.14em', marginBottom: 8, textTransform: 'uppercase' }}>
+              excursion analysis
+            </div>
+            <MaeMfeBar mfe={trade.max_favorable} mae={trade.max_adverse} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[
+              { label: 'CONFIDENCE', val: trade.confidence_score != null ? `${trade.confidence_score.toFixed(1)}` : '—' },
+              { label: 'DURATION',   val: durMin != null ? `${durMin}m` : '—' },
+              { label: 'TARGETS',    val: trade.targets_hit?.length > 0 ? trade.targets_hit.map((t) => `T${t}`).join(', ') : 'none' },
+              { label: 'ENTERED',    val: trade.entry_time ? new Date(trade.entry_time).toUTCString().slice(17, 22) + 'Z' : '—' },
+            ].map(({ label, val }) => (
+              <div key={label}>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.14em', marginBottom: 3 }}>{label}</div>
+                <div className="mono" style={{ fontSize: 12, color: 'var(--fg-1)' }}>{val}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Activity row ──────────────────────────────────────────────────────
 type ActivityEntry = { timestamp: string; event_type: string; data: any };
 
@@ -657,10 +767,10 @@ function StatusTab({
 
       <div style={{ display: 'grid', gap: 14 }}>
         {/* Command Center */}
-        <section className="panel panel-accent" style={{ padding: 18, borderColor: isRunning ? 'rgba(34,211,238,.35)' : 'rgba(34,211,238,.15)' }}>
+        <section className="panel panel-accent" style={{ padding: 18, borderColor: isRunning ? 'var(--amber-border)' : 'rgba(251,191,36,.15)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-              <div style={{ width: 12, height: 12, borderRadius: '50%', background: isRunning ? '#22d3ee' : 'var(--fg-3)', boxShadow: isRunning ? '0 0 14px rgba(34,211,238,.9)' : 'none', flexShrink: 0 }} />
+              <div style={{ width: 12, height: 12, borderRadius: '50%', background: isRunning ? 'var(--amber)' : 'var(--fg-3)', boxShadow: isRunning ? '0 0 14px rgba(255,194,102,.8)' : 'none', flexShrink: 0 }} />
               <div>
                 <div className="mono" style={{ fontSize: 16, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--fg-1)' }}>
                   Ghost Range Engine
@@ -808,6 +918,20 @@ function StatusTab({
               )}
             </section>
           </div>
+        )}
+
+        {/* Trade History — per-trade rows with exit badge + expandable autopsy */}
+        {trades.length > 0 && (
+          <section className="panel" style={{ padding: 14 }}>
+            <SectionHead
+              title="Trade History"
+              right={<span className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{trades.length} closed</span>}
+            />
+            <div className="mono" style={{ display: 'grid', gridTemplateColumns: '90px 64px 1fr 1fr auto', gap: 10, padding: '6px 12px 8px', fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.18em', textTransform: 'uppercase', borderBottom: '1px solid var(--border-soft)' }}>
+              <span>Symbol</span><span>Side</span><span>Entry → Exit</span><span>PnL</span><span>Exit</span>
+            </div>
+            {trades.map((t) => <TradeHistoryRow key={t.trade_id} trade={t} />)}
+          </section>
         )}
       </div>
     </div>
@@ -973,11 +1097,11 @@ export function RangeBot() {
         icon="◉"
         title="Ghost Range"
         subtitle="TRAINING / RANGE · real signals · simulated capital"
-        accent="blue"
+        accent="amber"
         badges={
           <>
-            <Chip kind="cyan">◉ PAPER MODE</Chip>
-            <Chip kind={isRunning ? 'green' : 'default'}>
+            <Chip kind="amber">◉ PAPER MODE</Chip>
+            <Chip kind={isRunning ? 'green' : undefined}>
               {isRunning ? '● RUNNING' : '○ IDLE'}
             </Chip>
           </>
@@ -1005,8 +1129,8 @@ export function RangeBot() {
               padding: '8px 18px',
               background: 'none',
               border: 'none',
-              borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
-              color: activeTab === tab ? 'var(--accent)' : 'var(--fg-3)',
+              borderBottom: activeTab === tab ? '2px solid var(--amber)' : '2px solid transparent',
+              color: activeTab === tab ? 'var(--amber)' : 'var(--fg-3)',
               fontFamily: 'Share Tech Mono,monospace',
               fontSize: 12,
               letterSpacing: '.16em',
