@@ -198,10 +198,11 @@ function Toggle({
         alignItems: 'center',
         gap: 12,
         padding: '10px 12px',
-        border: '1px solid var(--border-soft)',
+        border: value ? '1px solid rgba(34,211,238,.5)' : '1px solid var(--border-soft)',
         borderRadius: 6,
-        background: 'rgba(0,0,0,.3)',
+        background: value ? 'rgba(34,211,238,.06)' : 'rgba(0,0,0,.3)',
         cursor: 'pointer',
+        transition: 'border-color .15s, background .15s',
       }}
     >
       <div
@@ -455,6 +456,7 @@ interface PaperConfig {
   breakeven_after_target: number;
   majors: boolean;
   altcoins: boolean;
+  meme_mode: boolean;
   universe_size: number;
   slippage_bps: number;
   fee_rate: number;
@@ -477,6 +479,7 @@ const DEFAULT_SETUP: PaperConfig = {
   breakeven_after_target: 1,
   majors: true,
   altcoins: false,
+  meme_mode: false,
   universe_size: 20,
   slippage_bps: 5,
   fee_rate: 0.1,
@@ -569,6 +572,7 @@ function SetupTab({
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
           <Toggle label="Majors (BTC/ETH/SOL…)" value={cfg.majors} onChange={(v) => set('majors', v)} hint="high-liquidity large-caps" />
           <Toggle label="Altcoins" value={cfg.altcoins} onChange={(v) => set('altcoins', v)} hint="mid-cap altcoins — wider spreads" />
+          <Toggle label="Meme Mode" value={cfg.meme_mode} onChange={(v) => set('meme_mode', v)} hint="high-volatility meme coins — highest risk" />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 12 }}>
           <Slider label="Universe Size" value={cfg.universe_size} min={5} max={100} step={5} onChange={(v) => set('universe_size', v)} hint="max symbols the scanner evaluates per sweep" />
@@ -914,6 +918,7 @@ export function RangeBot() {
         breakeven_after_target: cfg.breakeven_after_target,
         majors: cfg.majors,
         altcoins: cfg.altcoins,
+        meme_mode: cfg.meme_mode,
         universe_size: cfg.universe_size,
         slippage_bps: cfg.slippage_bps,
         fee_rate: cfg.fee_rate / 100, // slider is in %, service expects decimal
