@@ -369,7 +369,11 @@ function SectionPanel({ num, title, desc, right, children }: SectionPanelProps) 
 
 export function BotSetup() {
   const navigate = useNavigate();
-  const { selectedMode } = useScanner();
+  // 3z.h: bot mode source is `botConfig.sniperMode` per CLAUDE.md §15
+  // line 117. Scanner's `selectedMode` is for strategy inspection only
+  // and MUST NOT drive bot production behavior. `scannerModes` is read
+  // to look up the per-mode min_confluence_score for read-only display.
+  const { botConfig, scannerModes } = useScanner();
   const [config, setConfig] = useState<LiveConfig>(DEFAULT_CONFIG);
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
@@ -447,8 +451,9 @@ export function BotSetup() {
       const req: LiveTradingConfigRequest = {
         testnet: false,
         dry_run: false,
-        // Detection mode comes from Scanner — operator-selected.
-        sniper_mode: selectedMode?.name ?? 'stealth',
+        // 3z.h: bot mode comes from `botConfig.sniperMode` (production
+        // source of truth). Scanner inspection mode is independent.
+        sniper_mode: botConfig.sniperMode ?? 'stealth',
         leverage: config.leverage,
         risk_per_trade: config.risk_per_trade,
         max_positions: config.max_positions,
@@ -485,8 +490,15 @@ export function BotSetup() {
     }
   };
 
-  const modeName = (selectedMode?.name ?? 'stealth').toUpperCase();
-  const modeMinScore = selectedMode?.min_confluence_score ?? 65;
+  // 3z.h: derive display values from botConfig + scannerModes (per-mode
+  // metadata source). Falls back to defaults if mode-list fetch is still
+  // pending or the configured mode name doesn't match a known mode.
+  const botMode = botConfig.sniperMode ?? 'stealth';
+  const modeName = botMode.toUpperCase();
+  const modeMetadata = scannerModes.find(
+    (m) => m.name.toLowerCase() === botMode.toLowerCase(),
+  );
+  const modeMinScore = modeMetadata?.min_confluence_score ?? 65;
   const regimeText = recommendation?.regime?.composite
     ? recommendation.regime.composite.replace(/_/g, ' ')
     : 'adaptive';
@@ -516,7 +528,7 @@ export function BotSetup() {
         subtitle="execution config · risk · position limits · deploy"
         badges={
           <>
-            <Chip kind="blue">DETECT · {modeName}</Chip>
+            <Chip kind="amber">BOT · {modeName}</Chip>
             <Chip kind={savedFlash ? 'green' : 'amber'}>
               {savedFlash ? '✓ SAVED' : '● UNSAVED'}
             </Chip>
@@ -555,13 +567,20 @@ export function BotSetup() {
         </span>
       </div>
 
-      {/* Detection-mode header strip — points operator at /scanner */}
+      {/* 3z.h: BOT MODE read-only badge. Pre-3z.h this strip read from
+          ScannerContext.selectedMode and linked to /scanner to change it,
+          which conflated bot production behavior with scanner inspection
+          mode (§11 hidden-bug class — operator changed scanner mode for
+          strategy review and inadvertently changed bot production mode).
+          Per CLAUDE.md §15 line 117 the bot's mode is now driven by
+          botConfig.sniperMode and is read-only here. Scanner inspection
+          mode is independent. */}
       <section
         className="panel"
         style={{
           marginBottom: 14,
-          background: 'rgba(34,211,238,.05)',
-          borderColor: 'rgba(34,211,238,.25)',
+          background: 'rgba(245,158,11,.05)',
+          borderColor: 'rgba(245,158,11,.3)',
         }}
       >
         <div
@@ -577,31 +596,40 @@ export function BotSetup() {
             className="mono"
             style={{
               fontSize: 10,
-              color: 'var(--accent)',
+              color: 'var(--amber)',
               letterSpacing: '.20em',
               textTransform: 'uppercase',
+              fontWeight: 700,
             }}
           >
-            // DETECT → EXECUTE
+            ◉ BOT MODE
           </span>
-          <span style={{ fontSize: 12, color: 'var(--fg-2)', letterSpacing: '.04em' }}>
-            Detection mode is{' '}
-            <b style={{ color: 'var(--accent)' }}>{modeName}</b>{' '}
-            (≥ {modeMinScore} score · set in /scanner). This page configures
-            execution only — risk, leverage, kill-switch, position caps.
-          </span>
-          <a
-            href="/scanner"
-            className="btn"
+          <span
+            className="mono"
             style={{
-              padding: '6px 12px',
-              fontSize: 10,
-              marginLeft: 'auto',
-              textDecoration: 'none',
+              fontSize: 16,
+              color: 'var(--amber)',
+              letterSpacing: '.14em',
+              fontWeight: 700,
             }}
           >
-            → CHANGE IN /SCANNER
-          </a>
+            {modeName}
+          </span>
+          <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>
+            ≥ {modeMinScore} confluence · production · read-only
+          </span>
+          <span
+            className="mono"
+            style={{
+              fontSize: 10,
+              color: 'var(--fg-3)',
+              marginLeft: 'auto',
+              letterSpacing: '.12em',
+            }}
+            title="Bot production mode is independent of Scanner inspection mode (CLAUDE.md §15 line 117). Change in Settings (future) — Scanner picker does not affect bot."
+          >
+            ◌ INDEPENDENT OF SCANNER PICKER
+          </span>
         </div>
       </section>
 

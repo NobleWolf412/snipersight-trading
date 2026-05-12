@@ -60,6 +60,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Chip, FooterStatus, PageHead, Reticle, SectionHead } from '@/components/hud';
+import { useScanner } from '@/context/ScannerContext';
 import {
   paperTradingService,
   type CompletedPaperTrade,
@@ -68,12 +69,12 @@ import {
 } from '@/services/paperTradingService';
 
 // ─── Default paper config ───────────────────────────────────────────────
-// Phase 3g forward-track: sniper_mode should come from botConfig.sniperMode
-// read-only once that field lands. Hardcoded to 'stealth' for now per
-// CLAUDE.md §15 line 117 ("Bot production mode is STEALTH").
+// 3z.h: sniper_mode field intentionally omitted from this constant —
+// it is supplied at start() time from `botConfig.sniperMode` per
+// CLAUDE.md §15 line 117. Hardcoding here would re-introduce the
+// scanner/bot conflation that 3z.h closed.
 const DEFAULT_PAPER_CONFIG = {
   exchange: 'phemex',
-  sniper_mode: 'stealth',
   initial_balance: 10000,
   risk_per_trade: 2.0,
   max_positions: 3,
@@ -268,18 +269,28 @@ export function RangeBot() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 3z.h: pull bot production mode from ScannerContext.botConfig.
+  // Read-only consumer — RangeBot must not write to botConfig.
+  const { botConfig } = useScanner();
+
   const handleStart = useCallback(async () => {
     setWorking(true);
     setErr(null);
     try {
-      await paperTradingService.start(DEFAULT_PAPER_CONFIG);
+      await paperTradingService.start({
+        ...DEFAULT_PAPER_CONFIG,
+        // 3z.h: explicit per-call sniper_mode read from botConfig.
+        // Paper bot uses the SAME production mode as the live bot
+        // so training data matches what the live bot will trade.
+        sniper_mode: botConfig.sniperMode ?? 'stealth',
+      });
     } catch (e) {
       console.warn('[RangeBot] start error:', e);
       setErr(String((e as Error)?.message ?? e));
     } finally {
       setWorking(false);
     }
-  }, []);
+  }, [botConfig.sniperMode]);
 
   const handleStop = useCallback(async () => {
     setWorking(true);
