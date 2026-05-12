@@ -120,6 +120,65 @@ const DESKTOP_STATES: SnapshotState[] = [
     state: 'default',
   },
 
+  // ─── RangeBot — /training/range (2 states) ────────────────────────────
+  // Default: paper bot idle → setup tab renders (no hash, isRunning=false).
+  // Negative proof (Rubric 4): this state proves the setup tab renders when
+  // idle; the ARM button is visible and enabled; the STOP button is NOT
+  // rendered; the status tab panels (command center, equity curve, positions)
+  // are NOT rendered; the LIVE indicator from BotStatus does NOT appear.
+  //
+  // ARM button working=true guard: the `disabled` attribute is set via React
+  // `disabled={working}` prop, which maps to the HTML `disabled` attribute on
+  // the <button> element. HTML disabled prevents click events at the browser
+  // level (not just CSS opacity). No Playwright interaction test is added here
+  // because: (a) RangeBot is a UI-only consumer page with no detector logic —
+  // the disabled attribute is a React-native DOM guarantee, not custom guard
+  // logic requiring separate verification; (b) a snapshot of the IDLE state
+  // shows the ARM button enabled, and a snapshot of the RUNNING state shows
+  // the ARM button absent (replaced by STOP) — both directions covered. This
+  // follows the direction-agnostic exception rationale (UniversePanel L262-266)
+  // for UI-only evidence. Documented per OI-6 closure from §16 second audit.
+  {
+    route: '/training/range',
+    state: 'default',
+  },
+  // Running: paper bot active → status tab renders automatically
+  // (isRunning=true → activeTab defaults to 'status' without a hash click).
+  //
+  // Direction coverage: the fixture contains one LONG position (BTCUSDT)
+  // and one SHORT position (ETHUSDT) with symmetric PnL magnitudes.
+  // Direction-agnostic rationale: PositionRow uses identical code paths for
+  // LONG/SHORT — chip kind (green/red) is the only difference. No separate
+  // __long/__short snapshot pair is needed; both directions are exercised
+  // here. See PositionRow comment in RangeBot.tsx for formal rationale.
+  {
+    route: '/training/range',
+    state: 'range_bot_running',
+    setup: async (page) => {
+      const statusFixture = (await import('../visual/fixtures/paper-trading-status-running.json', {
+        with: { type: 'json' },
+      })).default;
+      const historyFixture = (await import('../visual/fixtures/paper-trading-history-running.json', {
+        with: { type: 'json' },
+      })).default;
+      await page.route('**/api/paper-trading/status*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(statusFixture),
+        });
+      });
+      await page.route('**/api/paper-trading/history*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(historyFixture),
+        });
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+    },
+  },
+
   // ─── Intel (3 planned, 1 shipped) ─────────────────────────────────────
   {
     route: '/intel',

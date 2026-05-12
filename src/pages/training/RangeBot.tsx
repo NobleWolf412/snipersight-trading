@@ -1,125 +1,97 @@
 /**
- * RangeBot — Phase 3 follow-up 3z.e
+ * RangeBot — full paper-trading equivalent of the live bot
  *
- * Paper-trading control surface mounted at /training/range. Closes the
- * §11 hidden-bug class identified in 3z.e: the Training Ground RANGE
- * card previously routed to /bot/setup (the LIVE bot interface) while
- * its body copy claimed "no real funds" — silent mode confusion.
+ * Operator intent: "a page just like bot but for paper trading — this is
+ * a simulated version of the bot. Including bot setup, but like for paper trading."
  *
- * Operator intent (verbatim from 3z.e briefing): "Real data, real
- * scanner, real signals, real prices — paper money for position
- * simulation. Same engine as live bot, no capital at risk. Stay
- * within the Training Ground context, not Bot Setup."
+ * Tabbed shell: #setup / #status — mirrors the live bot's /bot/setup + /bot/status
+ * split, but in one page under /training/range.
+ *
+ * Setup tab:
+ *   - Paper-specific config: initial_balance slider (not real money)
+ *   - Same execution sliders as BotSetup: risk%, leverage, max positions,
+ *     duration, scan interval, confluence threshold
+ *   - Execution toggles: trailing stop, breakeven
+ *   - Universe scope: majors/altcoins + size
+ *   - Paper-specific: slippage_bps, fee_rate (simulated fill realism)
+ *   - ARM button — starts paper bot + switches to #status tab
+ *   - No preflight check, no kill-switch acknowledgment (simulated capital)
+ *
+ * Status tab:
+ *   - PAPER MODE banner (always visible)
+ *   - CycleHeartbeat strip
+ *   - Command Center (glowing dot, uptime, STOP/RESET buttons, metric grid, config pills)
+ *   - Equity Curve + Statistics (2-column)
+ *   - Open Positions (6-column, direction-symmetric)
+ *   - Activity Log (recent_activity — paper bot logs signals, fills, exits)
+ *   - Exit Reasons + By-Trade-Type breakdown (2-column)
  *
  * §15 boundary:
- *   - All API calls dispatch through paperTradingService, which is
- *     structurally distinct from liveTradingService (no shared base,
- *     no `mode` parameter that could flip the destination). The
- *     component is incapable of dispatching to live execution.
- *   - sniper_mode hardcoded to 'stealth' below. The brief notes this
- *     value should ultimately come from `botConfig.sniperMode` (Phase
- *     3g forward-track), but that field does not yet exist in the
- *     codebase. Until Phase 3g lands, 'stealth' is the safe default
- *     (matches CLAUDE.md §15 line 117 — "Bot production mode is
- *     STEALTH").
- *   - No reads or writes to `ScannerContext.selectedMode`. Scanner
- *     mode picker is for inspection only and must not influence bot
- *     state per §15 line 117.
+ *   - ALL API calls go through paperTradingService (hits /api/paper-trading/*).
+ *   - No shared code with liveTradingService; structurally incapable of
+ *     dispatching live orders.
+ *   - sniper_mode sourced from botConfig.sniperMode (read-only consumer).
  *
- * PAPER MODE banner is always visible. Not behind a toggle. Same
- * prominence as the page title — visual prominence is the entire
- * point of the rebuild.
+ * Direction-agnostic: LONG/SHORT positions rendered by identical code paths.
+ * Chip color differs; logic is fully symmetric per CLAUDE.md §10 #3.
  *
- * Real-data wiring:
- *   - paperTradingService.getStatus() — primary state source.
- *     Adaptive polling: 3s while running OR positions are open, 10s
- *     otherwise.
- *   - paperTradingService.start(config) — armed-state trigger with a
- *     minimal default config (initial_balance 10000, sniper_mode
- *     'stealth', risk 2%, leverage 1×, max 3 positions, 2-min scan
- *     cadence, 24h duration, majors universe, balanced sensitivity).
- *     Operator can override via Bot Setup later (post-Phase-3g).
- *   - paperTradingService.stop() — graceful stop.
- *   - paperTradingService.reset() — clears history once stopped.
- *
- * Empty-state: when getStatus returns status='idle' with no session,
- * the page renders the IDLE banner + start CTA + empty equity tile
- * (initial 10k placeholder, labelled as such) + "— no paper trades
- * yet —" history empty-state. Backend-offline renders the same shape
- * plus a console.warn at §15 level.
- *
- * Direction-agnostic per CLAUDE.md §10 #3: the page renders both
- * LONG and SHORT positions identically. The PositionRow component
- * tints chip color by direction but the logic is fully symmetric.
- *
- * StrictMode-safe: cancelled flag + setTimeout recursion. Standard
- * pattern from CycleHeartbeat / UniversePanel / BotStatus.
- *
- * Snapshot-ready handshake: body[data-snapshot-ready="true"] is set
- * after the first getStatus call settles (resolved or errored).
+ * StrictMode-safe: cancelled flag + setTimeout recursion.
+ * Snapshot-ready: body[data-snapshot-ready="true"] after first poll.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Chip, FooterStatus, PageHead, Reticle, SectionHead } from '@/components/hud';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  Chip,
+  CycleHeartbeat,
+  FooterStatus,
+  PageHead,
+  Reticle,
+  SectionHead,
+} from '@/components/hud';
 import { useScanner } from '@/context/ScannerContext';
 import {
   paperTradingService,
   type CompletedPaperTrade,
   type PaperPosition,
+  type PaperTradingConfigRequest,
   type PaperTradingStatus,
 } from '@/services/paperTradingService';
 
-// ─── Default paper config ───────────────────────────────────────────────
-// 3z.h: sniper_mode field intentionally omitted from this constant —
-// it is supplied at start() time from `botConfig.sniperMode` per
-// CLAUDE.md §15 line 117. Hardcoding here would re-introduce the
-// scanner/bot conflation that 3z.h closed.
-const DEFAULT_PAPER_CONFIG = {
-  exchange: 'phemex',
-  initial_balance: 10000,
-  risk_per_trade: 2.0,
-  max_positions: 3,
-  leverage: 1,
-  duration_hours: 24,
-  scan_interval_minutes: 2,
-  trailing_stop: true,
-  trailing_activation: 1.5,
-  breakeven_after_target: 1,
-  sensitivity_preset: 'balanced' as const,
-  symbols: [],
-  exclude_symbols: [],
-  majors: true,
-  altcoins: false,
-  meme_mode: false,
-  slippage_bps: 5.0,
-  fee_rate: 0.001,
-  use_testnet: false,
-  universe_size: 20,
-};
-
-const FAST_POLL_MS = 3_000;
+// ─── Constants ─────────────────────────────────────────────────────────
+const FAST_POLL_MS = 2_000;
 const SLOW_POLL_MS = 10_000;
 
-// ─── Formatters ─────────────────────────────────────────────────────────
-function fmtMoney(n: number | null | undefined, sign = false): string {
-  if (n === null || n === undefined || !Number.isFinite(n)) return '—';
-  const sgn = sign && n > 0 ? '+' : '';
-  return `${sgn}$${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}${n < 0 ? '' : ''}`;
-}
-
-function fmtPct(n: number | null | undefined, sign = false): string {
-  if (n === null || n === undefined || !Number.isFinite(n)) return '—';
-  const sgn = sign && n > 0 ? '+' : '';
-  return `${sgn}${n.toFixed(2)}%`;
-}
-
+// ─── Formatters ────────────────────────────────────────────────────────
 function fmtDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '—';
   if (seconds < 60) return `${Math.round(seconds)}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+  if (seconds < 3600) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}m ${s}s`;
+  }
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
 }
 
-// ─── PAPER MODE banner ─────────────────────────────────────────────────
+function fmtCurrency(v: number | null | undefined, decimals = 2): string {
+  if (v == null || !Number.isFinite(v)) return '—';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(v);
+}
+
+function fmtPct(v: number | null | undefined, sign = false): string {
+  if (v == null || !Number.isFinite(v)) return '—';
+  const prefix = sign && v > 0 ? '+' : '';
+  return `${prefix}${v.toFixed(2)}%`;
+}
+
+// ─── PAPER MODE Banner ─────────────────────────────────────────────────
 function PaperModeBanner() {
   return (
     <div
@@ -128,385 +100,946 @@ function PaperModeBanner() {
       style={{
         background: 'rgba(34, 211, 238, 0.08)',
         border: '1px solid rgba(34, 211, 238, 0.4)',
-        borderRadius: 4,
-        padding: '10px 14px',
+        borderRadius: 10,
+        padding: '12px 16px',
         marginBottom: 14,
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
+        gap: 14,
       }}
     >
-      <span className="mono" style={{ fontSize: 11, color: '#22d3ee', fontWeight: 700, letterSpacing: 1.5 }}>
+      <span className="mono" style={{ fontSize: 13, color: '#22d3ee', fontWeight: 800, letterSpacing: 2 }}>
         ◉ PAPER MODE
       </span>
       <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
-        simulated capital · no real funds · same scanner/engine as live bot
+        simulated capital · no real funds · same scanner + engine as live bot
       </span>
     </div>
   );
 }
 
-// ─── Position row ──────────────────────────────────────────────────────
-function PositionRow({ pos }: { pos: PaperPosition }) {
-  const isLong = pos.direction === 'LONG';
-  const pnlColor = pos.unrealized_pnl >= 0 ? 'var(--green-soft)' : 'var(--red-2)';
+// ─── Shared setup primitives ───────────────────────────────────────────
+function Slider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+  suffix,
+  color,
+  hint,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+  suffix?: string;
+  color?: string;
+  hint?: string;
+}) {
   return (
     <div
       style={{
-        display: 'grid',
-        gridTemplateColumns: '1.2fr 0.8fr 1fr 1fr 1fr',
-        gap: 8,
-        padding: '8px 12px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        alignItems: 'center',
+        padding: '12px 14px',
+        border: '1px solid var(--border-soft)',
+        borderRadius: 6,
+        background: 'rgba(0,0,0,.3)',
       }}
     >
-      <div>
-        <div className="mono" style={{ fontSize: 12, color: 'var(--fg)' }}>{pos.symbol}</div>
-        <div className="mono" style={{ fontSize: 10, color: 'var(--fg-3)' }}>{pos.trade_type}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', letterSpacing: '.16em', textTransform: 'uppercase' }}>
+          {label}
+        </span>
+        <span className="mono" style={{ fontSize: 14, fontWeight: 800, color: color || 'var(--accent)' }}>
+          {value}{suffix || ''}
+        </span>
       </div>
-      <Chip kind={isLong ? 'green' : 'red'}>{pos.direction}</Chip>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
-        entry {pos.entry_price.toFixed(pos.entry_price < 1 ? 4 : 2)}
-        <br />
-        now {pos.current_price.toFixed(pos.current_price < 1 ? 4 : 2)}
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(+e.target.value)}
+        style={{ width: '100%' }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+        <span className="mono" style={{ fontSize: 8, color: 'var(--fg-4)' }}>{min}{suffix || ''}</span>
+        <span className="mono" style={{ fontSize: 8, color: 'var(--fg-4)' }}>{max}{suffix || ''}</span>
       </div>
-      <div className="mono" style={{ fontSize: 11, color: pnlColor }}>
-        {fmtMoney(pos.unrealized_pnl, true)}
-        <br />
-        {fmtPct(pos.unrealized_pnl_pct, true)}
+      {hint && (
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginTop: 6 }}>
+          {hint}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Toggle({
+  label,
+  value,
+  onChange,
+  hint,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+  hint?: string;
+}) {
+  return (
+    <div
+      onClick={() => onChange(!value)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 12px',
+        border: '1px solid var(--border-soft)',
+        borderRadius: 6,
+        background: 'rgba(0,0,0,.3)',
+        cursor: 'pointer',
+      }}
+    >
+      <div
+        style={{
+          width: 36,
+          height: 18,
+          borderRadius: 9,
+          background: value ? 'var(--accent)' : 'rgba(0,0,0,.6)',
+          position: 'relative',
+          flexShrink: 0,
+          border: '1px solid var(--border-soft)',
+          boxShadow: value ? '0 0 8px var(--accent)' : 'none',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            top: 1,
+            left: value ? 19 : 1,
+            width: 14,
+            height: 14,
+            borderRadius: '50%',
+            background: value ? '#0a0c0e' : 'var(--fg-3)',
+          }}
+        />
       </div>
-      <div className="mono" style={{ fontSize: 10, color: 'var(--fg-3)' }}>
-        {pos.trailing_active ? '⟫ trailing' : pos.breakeven_active ? '⊥ be' : 'sl set'}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: 'Share Tech Mono,monospace', fontSize: 12, letterSpacing: '.05em', color: 'var(--fg)' }}>
+          {label}
+        </div>
+        {hint && (
+          <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginTop: 2 }}>
+            {hint}
+          </div>
+        )}
+      </div>
+      <span className="mono" style={{ fontSize: 9, color: value ? 'var(--green-soft)' : 'var(--fg-4)', letterSpacing: '.18em' }}>
+        {value ? 'ENGAGED' : 'OFF'}
+      </span>
+    </div>
+  );
+}
+
+function SectionPanel({
+  num,
+  title,
+  desc,
+  children,
+}: {
+  num: string;
+  title: string;
+  desc?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="panel" style={{ marginBottom: 14 }}>
+      <div
+        style={{
+          padding: '14px 18px',
+          borderBottom: '1px solid var(--border-soft)',
+          background: 'rgba(0,0,0,.4)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+        }}
+      >
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 32,
+            height: 32,
+            border: '1px solid var(--accent)',
+            color: 'var(--accent)',
+            fontFamily: 'JetBrains Mono,monospace',
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: '.08em',
+            borderRadius: 3,
+            boxShadow: '0 0 8px rgba(34,211,238,.2)',
+          }}
+        >
+          {num}
+        </span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: 'Share Tech Mono,monospace', fontSize: 15, letterSpacing: '.08em', color: 'var(--fg)', textTransform: 'uppercase' }}>
+            {title}
+          </div>
+          {desc && (
+            <div className="mono" style={{ fontSize: 10, color: 'var(--fg-4)', letterSpacing: '.1em', marginTop: 2 }}>
+              {desc}
+            </div>
+          )}
+        </div>
+      </div>
+      <div style={{ padding: '14px 18px' }}>{children}</div>
+    </section>
+  );
+}
+
+// ─── Metric Tile ───────────────────────────────────────────────────────
+function MetricTile({
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: 'green' | 'red' | 'amber' | 'blue' | 'cyan';
+}) {
+  const valueColor =
+    accent === 'green' ? 'var(--green)'
+      : accent === 'red' ? 'var(--red)'
+        : accent === 'amber' ? 'var(--amber)'
+          : accent === 'blue' ? 'var(--blue)'
+            : accent === 'cyan' ? '#22d3ee'
+              : 'var(--fg-1)';
+  return (
+    <div style={{ padding: '12px 14px', border: '1px solid var(--border-soft)', borderRadius: 10, background: 'rgba(0,0,0,.35)' }}>
+      <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.18em', textTransform: 'uppercase', marginBottom: 8 }}>
+        {label}
+      </div>
+      <div className="mono" style={{ fontSize: 22, fontWeight: 800, color: valueColor, letterSpacing: '-0.01em', lineHeight: 1, marginBottom: sub ? 4 : 0 }}>
+        {value}
+      </div>
+      {sub && <div className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{sub}</div>}
+    </div>
+  );
+}
+
+// ─── Equity Sparkline ──────────────────────────────────────────────────
+function EquitySparkline({ trades, initialBalance }: { trades: CompletedPaperTrade[]; initialBalance: number }) {
+  const points = useMemo(() => {
+    if (!trades || trades.length === 0) return [];
+    const sorted = [...trades].reverse();
+    let equity = initialBalance;
+    const pts = [{ x: 0, y: equity }];
+    sorted.forEach((t, i) => {
+      equity += t.pnl;
+      pts.push({ x: i + 1, y: equity });
+    });
+    return pts;
+  }, [trades, initialBalance]);
+
+  if (points.length < 2) {
+    return (
+      <div className="mono" style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--fg-4)', letterSpacing: '.18em', textTransform: 'uppercase' }}>
+        — awaiting trades —
+      </div>
+    );
+  }
+
+  const minY = Math.min(...points.map((p) => p.y));
+  const maxY = Math.max(...points.map((p) => p.y));
+  const rangeY = maxY - minY || 1;
+  const w = 280; const h = 56; const pad = 2;
+
+  const pathD = points.map((p, i) => {
+    const x = pad + (p.x / (points.length - 1)) * (w - 2 * pad);
+    const y = h - pad - ((p.y - minY) / rangeY) * (h - 2 * pad);
+    return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ');
+
+  const lastPt = points[points.length - 1];
+  const isUp = lastPt.y >= initialBalance;
+  const strokeColor = isUp ? '#34d399' : '#f87171';
+  const fillGradId = 'rb-eq-grad';
+  const lastPtX = pad + (lastPt.x / (points.length - 1)) * (w - 2 * pad);
+  const lastPtY = h - pad - ((lastPt.y - minY) / rangeY) * (h - 2 * pad);
+  const areaD = `${pathD} L ${lastPtX.toFixed(1)} ${h} L ${pad.toFixed(1)} ${h} Z`;
+
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 64 }}>
+      <defs>
+        <linearGradient id={fillGradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={strokeColor} stopOpacity="0.18" />
+          <stop offset="100%" stopColor={strokeColor} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={areaD} fill={`url(#${fillGradId})`} />
+      <path d={pathD} fill="none" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={lastPtX} cy={lastPtY} r="3" fill={strokeColor} />
+    </svg>
+  );
+}
+
+// ─── Position Row (direction-symmetric) ───────────────────────────────
+// Direction-agnostic: LONG/SHORT handled by identical code path.
+// Chip kind (green vs red) and PnL color differ by direction, but the
+// underlying render logic is fully symmetric — no `if LONG` branches.
+// No __long/__short snapshot pair is needed; both directions are exercised
+// in the `range_bot_running` fixture which contains one LONG + one SHORT
+// position. This mirrors the UniversePanel exception pattern documented
+// in tests/visual/states.ts L262-266 — direction-agnostic per CLAUDE.md §10 #3.
+function PositionRow({ pos }: { pos: PaperPosition }) {
+  const isLong = pos.direction === 'LONG';
+  const isProfit = pos.unrealized_pnl >= 0;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '90px 70px 1fr 1fr 1fr 1fr', gap: 10, padding: '10px 12px', borderTop: '1px solid var(--border-soft)', alignItems: 'center' }}>
+      <span className="mono" style={{ fontWeight: 700 }}>{pos.symbol}</span>
+      <Chip kind={isLong ? 'green' : 'red'}>{isLong ? 'LONG' : 'SHORT'}</Chip>
+      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
+        entry {pos.entry_price < 1 ? pos.entry_price.toFixed(4) : pos.entry_price.toFixed(2)}
+      </span>
+      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
+        mark {pos.current_price < 1 ? pos.current_price.toFixed(4) : pos.current_price.toFixed(2)}
+      </span>
+      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
+        sl {pos.stop_loss < 1 ? pos.stop_loss.toFixed(4) : pos.stop_loss.toFixed(2)}
+      </span>
+      <span className="mono" style={{ fontWeight: 700, color: isProfit ? 'var(--green)' : 'var(--red)', textAlign: 'right' }}>
+        {fmtCurrency(pos.unrealized_pnl)} ({fmtPct(pos.unrealized_pnl_pct, true)})
+      </span>
+    </div>
+  );
+}
+
+// ─── Activity row ──────────────────────────────────────────────────────
+type ActivityEntry = { timestamp: string; event_type: string; data: any };
+
+function ActivityRow({ entry, idx }: { entry: ActivityEntry; idx: number }) {
+  const isExec = entry.event_type === 'trade_opened' || entry.event_type === 'signal_executed';
+  const isExit = entry.event_type === 'trade_closed' || entry.event_type === 'position_closed';
+  const isErr = entry.event_type === 'error';
+  const color = isExec ? 'var(--green)' : isExit ? 'var(--amber)' : isErr ? 'var(--red)' : 'var(--fg-4)';
+  const symbol = entry.data?.symbol ?? entry.data?.pair ?? '';
+  const detail = entry.data?.reason ?? entry.data?.setup_type ?? entry.data?.exit_reason ?? entry.data?.message ?? entry.event_type.replace(/_/g, ' ');
+  return (
+    <div key={`act-${idx}`} className="mono" style={{ display: 'grid', gridTemplateColumns: '90px 1fr 100px', gap: 8, padding: '6px 8px', fontSize: 11, borderBottom: '1px solid var(--border-soft)' }}>
+      <span style={{ fontWeight: 700 }}>{symbol || '—'}</span>
+      <span style={{ color: 'var(--fg-3)' }}>{detail}</span>
+      <span style={{ textAlign: 'right', color }}>{entry.event_type.replace(/_/g, ' ')}</span>
+    </div>
+  );
+}
+
+// ─── Setup Tab ─────────────────────────────────────────────────────────
+interface PaperConfig {
+  initial_balance: number;
+  risk_per_trade: number;
+  max_positions: number;
+  leverage: number;
+  duration_hours: number;
+  scan_interval_minutes: number;
+  min_confluence: number;
+  trailing_stop: boolean;
+  trailing_activation: number;
+  breakeven_after_target: number;
+  majors: boolean;
+  altcoins: boolean;
+  universe_size: number;
+  slippage_bps: number;
+  fee_rate: number;
+}
+
+const DEFAULT_SETUP: PaperConfig = {
+  initial_balance: 10000,
+  risk_per_trade: 2.0,
+  max_positions: 3,
+  leverage: 1,
+  duration_hours: 24,
+  scan_interval_minutes: 2,
+  // 68 chosen to match the STRIKE mode min_confluence_score (scanner_modes.py
+  // line ~45). STEALTH (live bot production mode) is 70; paper mode defaults
+  // slightly lower so training sessions see more signals and provide richer
+  // feedback data. This is a paper-only tuning choice — not a live gate change.
+  min_confluence: 68,
+  trailing_stop: true,
+  trailing_activation: 1.5,
+  breakeven_after_target: 1,
+  majors: true,
+  altcoins: false,
+  universe_size: 20,
+  slippage_bps: 5,
+  fee_rate: 0.1,
+};
+
+function SetupTab({
+  sniperMode,
+  onArm,
+  working,
+  armErr,
+}: {
+  sniperMode: string;
+  onArm: (cfg: PaperConfig) => void;
+  working: boolean;
+  armErr: string | null;
+}) {
+  const [cfg, setCfg] = useState<PaperConfig>(DEFAULT_SETUP);
+  const set = useCallback(<K extends keyof PaperConfig>(key: K, val: PaperConfig[K]) => {
+    setCfg((prev) => ({ ...prev, [key]: val }));
+  }, []);
+
+  return (
+    <div>
+      {/* Header strip: detection mode + paper-mode reminder */}
+      <div
+        style={{
+          background: 'rgba(0,0,0,.4)',
+          border: '1px solid rgba(34,211,238,.2)',
+          borderRadius: 8,
+          padding: '10px 14px',
+          marginBottom: 14,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          flexWrap: 'wrap',
+        }}
+      >
+        <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', letterSpacing: '.14em' }}>
+          ◉ BOT MODE · <span style={{ color: '#22d3ee' }}>{sniperMode.toUpperCase()}</span> · detection set in Scanner · this page configures paper execution only
+        </span>
+        <Chip kind="cyan">PAPER ONLY — NO REAL FUNDS</Chip>
+      </div>
+
+      {armErr && (
+        <div style={{ margin: '0 0 14px', padding: '10px 14px', border: '1px solid var(--red)', borderRadius: 8, background: 'rgba(239,68,68,.08)', color: 'var(--red)', fontSize: 12 }}>
+          ⚠ {armErr}
+        </div>
+      )}
+
+      {/* § 1 — Capital */}
+      <SectionPanel num="01" title="Simulated Capital" desc="initial balance for the paper session — not real money">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          <Slider label="Initial Balance" value={cfg.initial_balance} min={1000} max={100000} step={1000} onChange={(v) => set('initial_balance', v)} suffix=" USD" color="#22d3ee" hint="starting equity for the paper session" />
+          <Slider label="Risk per Trade" value={cfg.risk_per_trade} min={0.5} max={10} step={0.5} onChange={(v) => set('risk_per_trade', v)} suffix="%" hint="% of current balance risked per position" />
+        </div>
+      </SectionPanel>
+
+      {/* § 2 — Execution */}
+      <SectionPanel num="02" title="Execution" desc="position sizing, duration, leverage">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          <Slider label="Max Concurrent Positions" value={cfg.max_positions} min={1} max={10} step={1} onChange={(v) => set('max_positions', v)} hint="positions open simultaneously" />
+          <Slider label="Leverage" value={cfg.leverage} min={1} max={20} step={1} onChange={(v) => set('leverage', v)} suffix="×" hint="applied to each simulated position" />
+          <Slider label="Session Duration" value={cfg.duration_hours} min={1} max={168} step={1} onChange={(v) => set('duration_hours', v)} suffix="h" hint="auto-stop the paper bot after this duration" />
+          <Slider label="Scan Interval" value={cfg.scan_interval_minutes} min={1} max={30} step={1} onChange={(v) => set('scan_interval_minutes', v)} suffix="m" hint="minutes between scanner sweeps" />
+        </div>
+      </SectionPanel>
+
+      {/* § 3 — Confluence */}
+      <SectionPanel num="03" title="Confluence Gate" desc="minimum score for a signal to be taken">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 12 }}>
+          <Slider label="Min Confluence Score" value={cfg.min_confluence} min={50} max={95} step={1} onChange={(v) => set('min_confluence', v)} hint="signals below this score are rejected" />
+        </div>
+      </SectionPanel>
+
+      {/* § 4 — Position management toggles */}
+      <SectionPanel num="04" title="Position Management" desc="trailing stop + breakeven — applied to all simulated trades">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
+          <Toggle label="Trailing Stop" value={cfg.trailing_stop} onChange={(v) => set('trailing_stop', v)} hint="trail stop once price moves in favour" />
+          <Toggle label="Breakeven on TP1" value={cfg.breakeven_after_target >= 1} onChange={(v) => set('breakeven_after_target', v ? 1 : 0)} hint="move stop to entry after first target hit" />
+        </div>
+        {cfg.trailing_stop && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+            <Slider label="Trailing Activation" value={cfg.trailing_activation} min={0.5} max={5} step={0.5} onChange={(v) => set('trailing_activation', v)} suffix="%" hint="profit % before trailing activates" />
+          </div>
+        )}
+      </SectionPanel>
+
+      {/* § 5 — Universe */}
+      <SectionPanel num="05" title="Universe Scope" desc="which pairs the paper bot is allowed to trade">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
+          <Toggle label="Majors (BTC/ETH/SOL…)" value={cfg.majors} onChange={(v) => set('majors', v)} hint="high-liquidity large-caps" />
+          <Toggle label="Altcoins" value={cfg.altcoins} onChange={(v) => set('altcoins', v)} hint="mid-cap altcoins — wider spreads" />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 12 }}>
+          <Slider label="Universe Size" value={cfg.universe_size} min={5} max={100} step={5} onChange={(v) => set('universe_size', v)} hint="max symbols the scanner evaluates per sweep" />
+        </div>
+      </SectionPanel>
+
+      {/* § 6 — Simulated fill realism */}
+      <SectionPanel num="06" title="Simulated Fill Realism" desc="slippage + fee model applied to all paper trades">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          <Slider label="Slippage" value={cfg.slippage_bps} min={0} max={50} step={1} onChange={(v) => set('slippage_bps', v)} suffix=" bps" hint="basis points per fill — models market impact" />
+          <Slider label="Taker Fee" value={cfg.fee_rate} min={0} max={0.5} step={0.05} onChange={(v) => set('fee_rate', v)} suffix="%" hint="% fee on each simulated fill" />
+        </div>
+      </SectionPanel>
+
+      {/* ARM button */}
+      <div style={{ paddingBottom: 20 }}>
+        <button
+          type="button"
+          className="btn btn-cyan"
+          onClick={() => onArm(cfg)}
+          disabled={working}
+          style={{ width: '100%', fontSize: 13, letterSpacing: '.2em', padding: '14px 0', fontWeight: 700 }}
+        >
+          {working ? '↻ ARMING PAPER BOT…' : '▶ ARM PAPER BOT'}
+        </button>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', textAlign: 'center', marginTop: 8, letterSpacing: '.14em' }}>
+          PAPER MODE — SIMULATED CAPITAL ONLY — NO REAL ORDERS SENT
+        </div>
       </div>
     </div>
   );
 }
 
-// ─── Trade history row ─────────────────────────────────────────────────
-function TradeHistoryRow({ trade }: { trade: CompletedPaperTrade }) {
-  const isWin = trade.pnl > 0;
+// ─── Status Tab ────────────────────────────────────────────────────────
+function StatusTab({
+  status,
+  trades,
+  tradesErr,
+  connErr,
+  actionErr,
+  loading,
+  working,
+  onStop,
+  onReset,
+}: {
+  status: PaperTradingStatus | null;
+  trades: CompletedPaperTrade[];
+  tradesErr: string | null;
+  connErr: string | null;
+  actionErr: string | null;
+  loading: boolean;
+  working: boolean;
+  onStop: () => void;
+  onReset: () => void;
+}) {
+  const isRunning = status?.status === 'running';
+  const cfg = status?.config;
+  const balance = status?.balance;
+  const initialBalance = balance?.initial ?? DEFAULT_SETUP.initial_balance;
+  const positions = status?.positions ?? [];
+  const stats = status?.statistics;
+  const activity = status?.recent_activity ?? [];
+
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '1.2fr 0.8fr 1fr 1fr',
-        gap: 8,
-        padding: '6px 12px',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
-        alignItems: 'center',
-      }}
-    >
-      <div className="mono" style={{ fontSize: 11, color: 'var(--fg)' }}>{trade.symbol}</div>
-      <Chip kind={trade.direction === 'LONG' ? 'green' : 'red'}>{trade.direction}</Chip>
-      <div className="mono" style={{ fontSize: 10, color: isWin ? 'var(--green-soft)' : 'var(--red-2)' }}>
-        {fmtMoney(trade.pnl, true)} · {fmtPct(trade.pnl_pct, true)}
+    <div>
+      {connErr && (
+        <div style={{ margin: '0 0 14px', padding: '12px 14px', border: '1px solid var(--amber)', borderRadius: 10, background: 'rgba(234,179,8,.08)', color: 'var(--amber)', fontSize: 12 }}>
+          ⚠ {connErr}
+        </div>
+      )}
+      {actionErr && (
+        <div style={{ margin: '0 0 14px', padding: '12px 14px', border: '1px solid var(--red)', borderRadius: 10, background: 'rgba(239,68,68,.08)', color: 'var(--red)', fontSize: 12 }}>
+          ⚠ {actionErr}
+        </div>
+      )}
+
+      {loading && !status && (
+        <div className="panel" style={{ margin: '0 0 14px', padding: 32, textAlign: 'center', color: 'var(--fg-3)' }}>
+          <span className="mono" style={{ letterSpacing: '.2em' }}>ESTABLISHING UPLINK…</span>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gap: 14 }}>
+        {/* Command Center */}
+        <section className="panel panel-accent" style={{ padding: 18, borderColor: isRunning ? 'rgba(34,211,238,.35)' : 'rgba(34,211,238,.15)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+              <div style={{ width: 12, height: 12, borderRadius: '50%', background: isRunning ? '#22d3ee' : 'var(--fg-3)', boxShadow: isRunning ? '0 0 14px rgba(34,211,238,.9)' : 'none', flexShrink: 0 }} />
+              <div>
+                <div className="mono" style={{ fontSize: 16, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--fg-1)' }}>
+                  Ghost Range Engine
+                </div>
+                <div className="mono" style={{ fontSize: 10, color: 'var(--fg-4)', letterSpacing: '.16em', marginTop: 4, textTransform: 'uppercase' }}>
+                  uptime {fmtDuration(status?.uptime_seconds ?? 0)}
+                  {status?.session_id && <> · session {status.session_id.slice(0, 8)}</>}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {isRunning ? (
+                <button type="button" className="btn btn-red" onClick={onStop} disabled={working} style={{ fontSize: 11 }}>
+                  {working ? '↻ STOPPING' : '■ STOP'}
+                </button>
+              ) : (
+                <span className="mono" style={{ fontSize: 11, color: 'var(--fg-4)', alignSelf: 'center', letterSpacing: '.1em' }}>
+                  {status?.status?.toUpperCase() ?? 'IDLE'}
+                </span>
+              )}
+              <button type="button" className="btn" onClick={onReset} disabled={working || isRunning} title={isRunning ? 'stop the bot before resetting' : 'clear history + reset balance'} style={{ fontSize: 11, opacity: isRunning ? 0.4 : 1 }}>
+                ↺ RESET
+              </button>
+            </div>
+          </div>
+
+          {/* Metric grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginTop: 14 }}>
+            <MetricTile label="Uptime" value={fmtDuration(status?.uptime_seconds ?? 0)} sub="session running" />
+            <MetricTile label="Next Scan" value={isRunning && status?.next_scan_in_seconds != null ? fmtDuration(Math.round(status.next_scan_in_seconds)) : '—'} sub="until next sweep" accent={isRunning ? 'amber' : undefined} />
+            <MetricTile label="Min Score" value={cfg?.min_confluence != null ? `≥${cfg.min_confluence}` : 'AUTO'} sub="confluence threshold" />
+            <MetricTile label="Scans Done" value={String(stats?.scans_completed ?? 0)} sub={`${stats?.signals_generated ?? 0} signals`} accent="cyan" />
+          </div>
+
+          {/* Config pills */}
+          {cfg && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
+              {cfg.sniper_mode && <Chip>{cfg.sniper_mode.toUpperCase()}</Chip>}
+              {cfg.duration_hours != null && <Chip>{cfg.duration_hours}H</Chip>}
+              {cfg.max_positions != null && <Chip>{cfg.max_positions} SLOTS</Chip>}
+              {cfg.risk_per_trade != null && <Chip>{cfg.risk_per_trade}% RISK</Chip>}
+              {cfg.leverage != null && cfg.leverage !== 1 && <Chip>{cfg.leverage}× LEVERAGE</Chip>}
+              {cfg.initial_balance != null && <Chip>${cfg.initial_balance.toLocaleString()} SIM</Chip>}
+            </div>
+          )}
+        </section>
+
+        {/* Equity Curve + Statistics */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <section className="panel" style={{ padding: 14 }}>
+            <SectionHead title="Equity Curve" right={<span className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{trades.length} trades</span>} />
+            {tradesErr && <div style={{ color: 'var(--amber)', fontSize: 10, marginBottom: 6 }}>⚠ {tradesErr}</div>}
+            <EquitySparkline trades={trades} initialBalance={initialBalance} />
+            <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--fg-4)', marginTop: 8, textTransform: 'uppercase', letterSpacing: '.14em' }}>
+              <span>start {fmtCurrency(initialBalance)}</span>
+              <span>now {fmtCurrency(balance?.equity ?? initialBalance)}</span>
+              <span style={{ color: (balance?.pnl ?? 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {fmtCurrency(balance?.pnl ?? 0)} ({fmtPct(balance?.pnl_pct ?? 0, true)})
+              </span>
+            </div>
+          </section>
+
+          <section className="panel" style={{ padding: 14 }}>
+            <SectionHead title="Statistics" />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+              <MetricTile label="Trades" value={String(stats?.total_trades ?? 0)} sub={`${stats?.winning_trades ?? 0}W / ${stats?.losing_trades ?? 0}L`} />
+              <MetricTile label="Win Rate" value={stats?.win_rate != null ? `${(stats.win_rate * 100).toFixed(0)}%` : '—'} sub="of closed" accent={stats && stats.win_rate >= 0.5 ? 'green' : undefined} />
+              <MetricTile label="Avg R:R" value={stats?.avg_rr != null ? `${stats.avg_rr.toFixed(2)}R` : '—'} sub="realised" />
+              <MetricTile label="Best" value={fmtCurrency(stats?.best_trade ?? 0)} accent="green" />
+              <MetricTile label="Worst" value={fmtCurrency(stats?.worst_trade ?? 0)} accent="red" />
+              <MetricTile label="Max DD" value={stats?.max_drawdown != null ? fmtPct(stats.max_drawdown * 100) : '—'} accent="amber" />
+            </div>
+          </section>
+        </div>
+
+        {/* Open Positions */}
+        <section className="panel" style={{ padding: 14 }}>
+          <SectionHead title="Open Positions" right={<span className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{positions.length} active</span>} />
+          {positions.length === 0 ? (
+            <div className="mono" style={{ padding: 18, textAlign: 'center', fontSize: 11, color: 'var(--fg-4)', letterSpacing: '.16em', textTransform: 'uppercase' }}>
+              — no open positions —
+            </div>
+          ) : (
+            <div>
+              <div className="mono" style={{ display: 'grid', gridTemplateColumns: '90px 70px 1fr 1fr 1fr 1fr', gap: 10, padding: '8px 12px', fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.18em', textTransform: 'uppercase' }}>
+                <span>Symbol</span><span>Side</span><span>Entry</span><span>Mark</span><span>Stop</span><span style={{ textAlign: 'right' }}>uPnL</span>
+              </div>
+              {positions.map((p) => <PositionRow key={p.position_id} pos={p} />)}
+            </div>
+          )}
+        </section>
+
+        {/* Activity Log */}
+        <section className="panel" style={{ padding: 14 }}>
+          <SectionHead title="Activity Log" right={<span className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{activity.length} entries</span>} />
+          {activity.length === 0 ? (
+            <div className="mono" style={{ padding: 18, textAlign: 'center', fontSize: 11, color: 'var(--fg-4)', letterSpacing: '.16em', textTransform: 'uppercase' }}>
+              — activity log empty — arm the paper bot to start —
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 0 }}>
+              {activity.slice(0, 15).map((entry, i) => <ActivityRow key={`act-${i}`} entry={entry} idx={i} />)}
+            </div>
+          )}
+        </section>
+
+        {/* Exit Reasons + By-Trade-Type */}
+        {stats && stats.total_trades > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <section className="panel" style={{ padding: 14 }}>
+              <SectionHead title="Exit Reasons" />
+              {stats.exit_reasons && Object.keys(stats.exit_reasons).length > 0 ? (
+                <div style={{ display: 'grid', gap: 6, paddingTop: 8 }}>
+                  {Object.entries(stats.exit_reasons).sort((a, b) => b[1] - a[1]).map(([reason, count]) => (
+                    <div key={reason} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--border-soft)' }}>
+                      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>{reason.replace(/_/g, ' ')}</span>
+                      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-4)' }}>{count}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mono" style={{ fontSize: 11, color: 'var(--fg-4)', padding: '12px 0' }}>— no exits yet —</div>
+              )}
+            </section>
+
+            <section className="panel" style={{ padding: 14 }}>
+              <SectionHead title="By Trade Type" />
+              {stats.by_trade_type && Object.keys(stats.by_trade_type).length > 0 ? (
+                <div style={{ display: 'grid', gap: 8, paddingTop: 8 }}>
+                  {Object.entries(stats.by_trade_type).map(([type, data]) => (
+                    <div key={type} style={{ padding: '8px 10px', border: '1px solid var(--border-soft)', borderRadius: 8, background: 'rgba(0,0,0,.2)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span className="mono" style={{ fontSize: 11, fontWeight: 700 }}>{type.toUpperCase()}</span>
+                        <span className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{data.trades} trades</span>
+                      </div>
+                      <div className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', display: 'flex', gap: 10 }}>
+                        <span>WR {(data.win_rate * 100).toFixed(0)}%</span>
+                        <span style={{ color: data.total_pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmtCurrency(data.total_pnl)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mono" style={{ fontSize: 11, color: 'var(--fg-4)', padding: '12px 0' }}>— no type breakdown yet —</div>
+              )}
+            </section>
+          </div>
+        )}
       </div>
-      <div className="mono" style={{ fontSize: 10, color: 'var(--fg-3)' }}>{trade.exit_reason}</div>
     </div>
   );
 }
 
 // ─── Main component ────────────────────────────────────────────────────
 export function RangeBot() {
-  const [status, setStatus] = useState<PaperTradingStatus | null>(null);
-  const [history, setHistory] = useState<CompletedPaperTrade[]>([]);
-  const [err, setErr] = useState<string | null>(null);
-  const [working, setWorking] = useState(false);
-  const [ready, setReady] = useState(false);
-  const cancelledRef = useRef(false);
+  const { botConfig } = useScanner();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  // Snapshot-ready handshake — set after first poll resolves.
+  // Tab state — #setup or #status; default: setup when idle, status when running
+  const [status, setStatus] = useState<PaperTradingStatus | null>(null);
+  const [trades, setTrades] = useState<CompletedPaperTrade[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [armErr, setArmErr] = useState<string | null>(null);
+  const [actionErr, setActionErr] = useState<string | null>(null);
+  const [connErr, setConnErr] = useState<string | null>(null);
+  const [tradesErr, setTradesErr] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+
+  const cancelledRef = useRef(false);
+  const fastPollRef = useRef(false);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connErrRef = useRef<string | null>(null);
+  connErrRef.current = connErr;
+
+  // Compute active tab from hash; default to setup when idle, status when running
+  const isRunning = status?.status === 'running';
+  const hashTab = location.hash === '#status' ? 'status' : location.hash === '#setup' ? 'setup' : null;
+  const activeTab = hashTab ?? (isRunning ? 'status' : 'setup');
+
+  // Snapshot-ready handshake
   useEffect(() => {
     if (ready) {
       document.body.setAttribute('data-snapshot-ready', 'true');
-      return () => {
-        document.body.removeAttribute('data-snapshot-ready');
-      };
+      return () => { document.body.removeAttribute('data-snapshot-ready'); };
     }
   }, [ready]);
 
-  // Adaptive polling — 3s when running or positions open, 10s otherwise.
+  const loadStatus = useCallback(async () => {
+    try {
+      const data = await paperTradingService.getStatus();
+      setStatus(data);
+      fastPollRef.current = data.status === 'running' || (data.positions?.length ?? 0) > 0;
+      if (connErrRef.current) setConnErr(null);
+    } catch (e) {
+      setConnErr(`Backend unreachable: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+      if (!ready) setReady(true);
+    }
+  }, [ready]);
+
+  const loadTrades = useCallback(async () => {
+    try {
+      const data = await paperTradingService.getHistory(50);
+      if (data && Array.isArray(data.trades)) {
+        setTrades(data.trades);
+        setTradesErr(null);
+      } else {
+        setTradesErr('Trade history response missing trades array');
+      }
+    } catch (e) {
+      setTradesErr(e instanceof Error ? e.message : 'Could not load trade history');
+    }
+  }, []);
+
   useEffect(() => {
     cancelledRef.current = false;
-    let tid: number | undefined;
-
-    async function tick() {
+    loadStatus();
+    loadTrades();
+    const schedule = () => {
       if (cancelledRef.current) return;
-      try {
-        const [s, h] = await Promise.all([
-          paperTradingService.getStatus(),
-          paperTradingService.getHistory(20).then((r) => r.trades).catch(() => [] as CompletedPaperTrade[]),
-        ]);
+      const delay = fastPollRef.current ? FAST_POLL_MS : SLOW_POLL_MS;
+      pollTimerRef.current = setTimeout(async () => {
         if (cancelledRef.current) return;
-        setStatus(s);
-        setHistory(h);
-        setErr(null);
-      } catch (e) {
-        if (cancelledRef.current) return;
-        console.warn('[RangeBot] poll error:', e);
-        setErr(String((e as Error)?.message ?? e));
-      } finally {
-        if (!ready) setReady(true);
-        if (cancelledRef.current) return;
-        const isActive =
-          status?.status === 'running' ||
-          (status?.positions?.length ?? 0) > 0;
-        const delay = isActive ? FAST_POLL_MS : SLOW_POLL_MS;
-        tid = window.setTimeout(tick, delay);
-      }
-    }
-
-    void tick();
-
+        await Promise.all([loadStatus(), loadTrades()]);
+        schedule();
+      }, delay);
+    };
+    schedule();
     return () => {
       cancelledRef.current = true;
-      if (tid !== undefined) window.clearTimeout(tid);
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
-    // status?.status is intentionally NOT a dep — adaptive cadence is
-    // recomputed inside tick(); listing it as a dep would cause the
-    // poll loop to re-arm on every status change and double-fire.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 3z.h: pull bot production mode from ScannerContext.botConfig.
-  // Read-only consumer — RangeBot must not write to botConfig.
-  const { botConfig } = useScanner();
-
-  const handleStart = useCallback(async () => {
+  const handleArm = useCallback(async (cfg: PaperConfig) => {
     setWorking(true);
-    setErr(null);
+    setArmErr(null);
     try {
-      await paperTradingService.start({
-        ...DEFAULT_PAPER_CONFIG,
-        // 3z.h: explicit per-call sniper_mode read from botConfig.
-        // Paper bot uses the SAME production mode as the live bot
-        // so training data matches what the live bot will trade.
+      const req: PaperTradingConfigRequest = {
+        exchange: 'phemex',
         sniper_mode: botConfig.sniperMode ?? 'stealth',
-      });
+        initial_balance: cfg.initial_balance,
+        risk_per_trade: cfg.risk_per_trade,
+        max_positions: cfg.max_positions,
+        leverage: cfg.leverage,
+        duration_hours: cfg.duration_hours,
+        scan_interval_minutes: cfg.scan_interval_minutes,
+        min_confluence: cfg.min_confluence,
+        trailing_stop: cfg.trailing_stop,
+        trailing_activation: cfg.trailing_activation,
+        breakeven_after_target: cfg.breakeven_after_target,
+        majors: cfg.majors,
+        altcoins: cfg.altcoins,
+        universe_size: cfg.universe_size,
+        slippage_bps: cfg.slippage_bps,
+        fee_rate: cfg.fee_rate / 100, // slider is in %, service expects decimal
+        use_testnet: false,
+        sensitivity_preset: 'custom',
+      };
+      await paperTradingService.start(req);
+      await Promise.all([loadStatus(), loadTrades()]);
+      navigate('/training/range#status', { replace: true });
     } catch (e) {
-      console.warn('[RangeBot] start error:', e);
-      setErr(String((e as Error)?.message ?? e));
+      console.warn('[RangeBot] arm error:', e);
+      setArmErr(String((e as Error)?.message ?? e));
     } finally {
       setWorking(false);
     }
-  }, [botConfig.sniperMode]);
+  }, [botConfig.sniperMode, loadStatus, loadTrades, navigate]);
 
   const handleStop = useCallback(async () => {
     setWorking(true);
-    setErr(null);
+    setActionErr(null);
     try {
       await paperTradingService.stop();
+      await Promise.all([loadStatus(), loadTrades()]);
     } catch (e) {
       console.warn('[RangeBot] stop error:', e);
-      setErr(String((e as Error)?.message ?? e));
+      setActionErr(String((e as Error)?.message ?? e));
     } finally {
       setWorking(false);
     }
-  }, []);
+  }, [loadStatus, loadTrades]);
 
   const handleReset = useCallback(async () => {
     setWorking(true);
-    setErr(null);
+    setActionErr(null);
     try {
       await paperTradingService.reset();
+      await Promise.all([loadStatus(), loadTrades()]);
+      navigate('/training/range#setup', { replace: true });
     } catch (e) {
       console.warn('[RangeBot] reset error:', e);
-      setErr(String((e as Error)?.message ?? e));
+      setActionErr(String((e as Error)?.message ?? e));
     } finally {
       setWorking(false);
     }
-  }, []);
-
-  const isRunning = status?.status === 'running';
-  const isIdle = !status || status.status === 'idle' || status.status === 'stopped';
-  const positions = status?.positions ?? [];
-  const equity = status?.balance?.equity ?? DEFAULT_PAPER_CONFIG.initial_balance;
-  const pnl = status?.balance?.pnl ?? 0;
-  const pnlPct = status?.balance?.pnl_pct ?? 0;
-  const stats = status?.statistics;
+  }, [loadStatus, loadTrades, navigate]);
 
   return (
-    <div className="page">
+    <div className="page-shell" id="main-content">
       <Reticle />
+
       <PageHead
-        title="GHOST · paper-trading range"
+        icon="◉"
+        title="Ghost Range"
         subtitle="TRAINING / RANGE · real signals · simulated capital"
+        accent="blue"
         badges={
-          <Chip kind={isRunning ? 'green' : 'cyan'}>
-            {isRunning ? '● ARMED' : '○ IDLE'}
-          </Chip>
+          <>
+            <Chip kind="cyan">◉ PAPER MODE</Chip>
+            <Chip kind={isRunning ? 'green' : 'default'}>
+              {isRunning ? '● RUNNING' : '○ IDLE'}
+            </Chip>
+          </>
         }
       />
 
       <PaperModeBanner />
 
-      {err ? (
-        <div
-          className="panel"
-          style={{
-            borderColor: 'rgba(248, 113, 113, 0.3)',
-            background: 'rgba(248, 113, 113, 0.04)',
-            padding: '8px 12px',
-            marginBottom: 12,
-          }}
-        >
-          <span className="mono" style={{ fontSize: 11, color: 'var(--red-2)' }}>
-            ◌ {err}
-          </span>
-        </div>
-      ) : null}
-
-      {/* Control row: status + start/stop + reset */}
-      <div className="panel" style={{ marginBottom: 14 }}>
-        <SectionHead title="// CONTROL" />
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr',
-            gap: 12,
-            padding: 12,
-          }}
-        >
-          <div>
-            <div className="metric-label">STATUS</div>
-            <div className="metric-value" style={{ color: isRunning ? 'var(--green-soft)' : 'var(--fg-2)' }}>
-              {isRunning ? 'RUNNING' : isIdle ? 'IDLE' : (status?.status ?? 'unknown').toUpperCase()}
-            </div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', marginTop: 4 }}>
-              {status?.uptime_seconds ? `uptime ${fmtDuration(status.uptime_seconds)}` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="metric-label">SIM EQUITY</div>
-            <div className="metric-value">{fmtMoney(equity)}</div>
-            <div className="mono" style={{ fontSize: 10, color: pnl >= 0 ? 'var(--green-soft)' : 'var(--red-2)', marginTop: 4 }}>
-              {fmtMoney(pnl, true)} · {fmtPct(pnlPct, true)}
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
-            {isRunning ? (
-              <button
-                className="btn btn-red"
-                onClick={handleStop}
-                disabled={working}
-              >
-                {working ? '…' : '◼ STOP'}
-              </button>
-            ) : (
-              <button
-                className="btn btn-cyan"
-                onClick={handleStart}
-                disabled={working}
-              >
-                {working ? '…' : '▶ ARM PAPER BOT'}
-              </button>
-            )}
-            <button
-              className="btn"
-              onClick={handleReset}
-              disabled={working || isRunning}
-              title={isRunning ? 'stop the bot before resetting' : 'clear paper history + reset balance'}
-              style={{ fontSize: 10, opacity: isRunning ? 0.4 : 1 }}
-            >
-              ⟲ RESET
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Open positions */}
-      <div className="panel" style={{ marginBottom: 14 }}>
-        <SectionHead title="// OPEN POSITIONS" right={<Chip kind="cyan">{positions.length}</Chip>} />
-        {positions.length === 0 ? (
-          <div className="mono" style={{ padding: '14px 12px', fontSize: 11, color: 'var(--fg-3)' }}>
-            // no positions open
-          </div>
-        ) : (
-          <div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1.2fr 0.8fr 1fr 1fr 1fr',
-                gap: 8,
-                padding: '6px 12px',
-                borderBottom: '1px solid rgba(255,255,255,0.1)',
-              }}
-            >
-              <span className="metric-label">SYMBOL</span>
-              <span className="metric-label">SIDE</span>
-              <span className="metric-label">PRICE</span>
-              <span className="metric-label">P&amp;L</span>
-              <span className="metric-label">STATE</span>
-            </div>
-            {positions.map((p) => (
-              <PositionRow key={p.position_id} pos={p} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Statistics summary */}
-      {stats && stats.total_trades > 0 ? (
-        <div className="panel" style={{ marginBottom: 14 }}>
-          <SectionHead title="// STATS" />
-          <div
+      {/* Tab switcher */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 4,
+          marginBottom: 14,
+          borderBottom: '1px solid var(--border-soft)',
+          paddingBottom: 0,
+        }}
+      >
+        {(['setup', 'status'] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => navigate(`/training/range#${tab}`, { replace: true })}
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: 12,
-              padding: 12,
+              padding: '8px 18px',
+              background: 'none',
+              border: 'none',
+              borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
+              color: activeTab === tab ? 'var(--accent)' : 'var(--fg-3)',
+              fontFamily: 'Share Tech Mono,monospace',
+              fontSize: 12,
+              letterSpacing: '.16em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              transition: 'color .15s',
+              marginBottom: -1,
             }}
           >
-            <div>
-              <div className="metric-label">TOTAL</div>
-              <div className="metric-value">{stats.total_trades}</div>
-            </div>
-            <div>
-              <div className="metric-label">WIN RATE</div>
-              <div className="metric-value">{fmtPct(stats.win_rate)}</div>
-            </div>
-            <div>
-              <div className="metric-label">EXPECTANCY</div>
-              <div className="metric-value">{fmtMoney(stats.expectancy)}</div>
-            </div>
-            <div>
-              <div className="metric-label">MAX DD</div>
-              <div className="metric-value">{fmtPct(stats.max_drawdown)}</div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Recent paper trades */}
-      <div className="panel" style={{ marginBottom: 14 }}>
-        <SectionHead title="// RECENT PAPER TRADES" right={<Chip kind="cyan">{history.length}</Chip>} />
-        {history.length === 0 ? (
-          <div className="mono" style={{ padding: '14px 12px', fontSize: 11, color: 'var(--fg-3)' }}>
-            // no paper trades yet — arm the paper bot to start generating sample trades
-          </div>
-        ) : (
-          <div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1.2fr 0.8fr 1fr 1fr',
-                gap: 8,
-                padding: '6px 12px',
-                borderBottom: '1px solid rgba(255,255,255,0.1)',
-              }}
-            >
-              <span className="metric-label">SYMBOL</span>
-              <span className="metric-label">SIDE</span>
-              <span className="metric-label">P&amp;L</span>
-              <span className="metric-label">EXIT</span>
-            </div>
-            {history.map((t) => (
-              <TradeHistoryRow key={t.trade_id} trade={t} />
-            ))}
-          </div>
-        )}
+            {tab === 'setup' ? '// SETUP' : '// STATUS'}
+          </button>
+        ))}
       </div>
+
+      {/* Cycle heartbeat — both tabs */}
+      <CycleHeartbeat />
+
+      {/* Tab content */}
+      {activeTab === 'setup' ? (
+        <SetupTab
+          sniperMode={botConfig.sniperMode ?? 'stealth'}
+          onArm={handleArm}
+          working={working}
+          armErr={armErr}
+        />
+      ) : (
+        <StatusTab
+          status={status}
+          trades={trades}
+          tradesErr={tradesErr}
+          connErr={connErr}
+          actionErr={actionErr}
+          loading={loading}
+          working={working}
+          onStop={handleStop}
+          onReset={handleReset}
+        />
+      )}
 
       <FooterStatus />
     </div>

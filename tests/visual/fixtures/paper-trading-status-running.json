@@ -1,0 +1,145 @@
+{
+  "status": "running",
+  "session_id": "pt-sess-001",
+  "started_at": "2026-05-10T10:00:00Z",
+  "stopped_at": null,
+  "uptime_seconds": 13680,
+  "config": {
+    "sniper_mode": "stealth",
+    "initial_balance": 10000,
+    "risk_per_trade": 2.0,
+    "max_positions": 3,
+    "leverage": 1,
+    "duration_hours": 24,
+    "scan_interval_minutes": 2,
+    "min_confluence": 68,
+    "trailing_stop": true,
+    "majors": true,
+    "altcoins": false,
+    "universe_size": 20
+  },
+  "last_scan_at": "2026-05-10T13:42:00Z",
+  "next_scan_in_seconds": 36,
+  "positions": [
+    {
+      "position_id": "pos-btc-001",
+      "symbol": "BTCUSDT",
+      "direction": "LONG",
+      "entry_price": 80000.0,
+      "current_price": 80840.0,
+      "quantity": 0.025,
+      "stop_loss": 79200.0,
+      "initial_stop_loss": 79200.0,
+      "unrealized_pnl": 21.0,
+      "unrealized_pnl_pct": 1.05,
+      "breakeven_active": false,
+      "trailing_active": false,
+      "opened_at": "2026-05-10T11:14:00Z",
+      "trade_type": "SWING",
+      "tp1": 81600.0,
+      "tp2": 82800.0,
+      "tp_final": 84000.0,
+      "target_pnl": 100.0,
+      "risk_pnl": 20.0,
+      "targets_hit": 0,
+      "targets_remaining": 3
+    },
+    {
+      "position_id": "pos-eth-001",
+      "symbol": "ETHUSDT",
+      "direction": "SHORT",
+      "entry_price": 2500.0,
+      "current_price": 2524.0,
+      "quantity": 0.8,
+      "stop_loss": 2575.0,
+      "initial_stop_loss": 2575.0,
+      "unrealized_pnl": -19.2,
+      "unrealized_pnl_pct": -0.96,
+      "breakeven_active": false,
+      "trailing_active": false,
+      "opened_at": "2026-05-10T12:48:00Z",
+      "trade_type": "INTRADAY",
+      "tp1": 2450.0,
+      "tp2": 2400.0,
+      "tp_final": 2350.0,
+      "target_pnl": 40.0,
+      "risk_pnl": 20.0,
+      "targets_hit": 0,
+      "targets_remaining": 3
+    }
+  ],
+  "balance": {
+    "initial": 10000.0,
+    "current": 10001.8,
+    "equity": 10001.8,
+    "pnl": 1.8,
+    "pnl_pct": 0.018
+  },
+  "statistics": {
+    "total_trades": 5,
+    "winning_trades": 3,
+    "losing_trades": 2,
+    "scratch_trades": 0,
+    "win_rate": 0.6,
+    "expectancy": 12.4,
+    "total_pnl": 62.0,
+    "total_pnl_pct": 0.62,
+    "avg_win": 38.0,
+    "avg_loss": -14.0,
+    "avg_rr": 1.8,
+    "best_trade": 68.0,
+    "worst_trade": -18.0,
+    "max_drawdown": 0.02,
+    "scans_completed": 114,
+    "signals_generated": 31,
+    "signals_taken": 5,
+    "exit_reasons": {
+      "target_hit": 3,
+      "stop_loss": 2
+    },
+    "by_trade_type": {
+      "SWING": {
+        "trades": 3,
+        "win_rate": 0.67,
+        "total_pnl": 48.0,
+        "avg_win": 36.0,
+        "avg_loss": -12.0
+      },
+      "INTRADAY": {
+        "trades": 2,
+        "win_rate": 0.5,
+        "total_pnl": 14.0,
+        "avg_win": 42.0,
+        "avg_loss": -14.0
+      }
+    }
+  },
+  "recent_activity": [
+    {
+      "timestamp": "2026-05-10T12:48:00Z",
+      "event_type": "trade_opened",
+      "data": { "symbol": "ETHUSDT", "direction": "SHORT", "setup_type": "INTRADAY" }
+    },
+    {
+      "timestamp": "2026-05-10T11:14:00Z",
+      "event_type": "trade_opened",
+      "data": { "symbol": "BTCUSDT", "direction": "LONG", "setup_type": "SWING" }
+    },
+    {
+      "timestamp": "2026-05-10T10:52:00Z",
+      "event_type": "trade_closed",
+      "data": { "symbol": "SOLUSDT", "direction": "LONG", "exit_reason": "target_hit" }
+    },
+    {
+      "timestamp": "2026-05-10T10:31:00Z",
+      "event_type": "signal_generated",
+      "data": { "symbol": "AVAXUSDT", "reason": "low_confluence" }
+    },
+    {
+      "timestamp": "2026-05-10T10:14:00Z",
+      "event_type": "trade_closed",
+      "data": { "symbol": "BNBUSDT", "direction": "SHORT", "exit_reason": "stop_loss" }
+    }
+  ],
+  "pending_orders": []
+}

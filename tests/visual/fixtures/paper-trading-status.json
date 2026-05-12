@@ -1,0 +1,41 @@
+{
+  "status": "idle",
+  "session_id": null,
+  "started_at": null,
+  "stopped_at": null,
+  "uptime_seconds": 0,
+  "config": null,
+  "last_scan_at": null,
+  "next_scan_in_seconds": null,
+  "positions": [],
+  "balance": {
+    "initial": 10000.0,
+    "current": 10000.0,
+    "equity": 10000.0,
+    "pnl": 0.0,
+    "pnl_pct": 0.0
+  },
+  "statistics": {
+    "total_trades": 0,
+    "winning_trades": 0,
+    "losing_trades": 0,
+    "scratch_trades": 0,
+    "win_rate": 0.0,
+    "expectancy": 0.0,
+    "total_pnl": 0.0,
+    "total_pnl_pct": 0.0,
+    "avg_win": 0.0,
+    "avg_loss": 0.0,
+    "avg_rr": 0.0,
+    "best_trade": 0.0,
+    "worst_trade": 0.0,
+    "max_drawdown": 0.0,
+    "scans_completed": 0,
+    "signals_generated": 0,
+    "signals_taken": 0,
+    "exit_reasons": {},
+    "by_trade_type": {}
+  },
+  "recent_activity": [],
+  "pending_orders": []
+}

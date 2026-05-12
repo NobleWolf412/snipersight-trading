@@ -126,6 +126,19 @@ const ROUTE_MOCKS: Array<{
     match: (u) => u.includes('/api/market/prices'),
     body: () => loadFixture('market-prices.json'),
   },
+  // Paper trading — idle status fixture so RangeBot default (setup tab)
+  // renders deterministically. The running state overrides this per-state
+  // in states.ts setup() callback (LIFO route precedence).
+  {
+    match: (u) => u.includes('/api/paper-trading/status'),
+    body: () => loadFixture('paper-trading-status.json'),
+  },
+  // Paper trading history — empty for default/idle state. Running state
+  // overrides via per-state setup() callback in states.ts.
+  {
+    match: (u) => u.includes('/api/paper-trading/history'),
+    body: () => loadFixture('paper-trading-history.json'),
+  },
   // Generic catch-all for any other /api/* GET — returns empty object so
   // pages don't error out, but DOESN'T match unmocked POSTs (those should
   // never fire during capture).
