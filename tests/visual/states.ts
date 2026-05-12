@@ -63,7 +63,7 @@ export function stateKey(s: SnapshotState): string {
  * as each Phase 3 sub-step lands. Pending future entries are commented but
  * present so the structure is visible.
  */
-export const STATES: SnapshotState[] = [
+const DESKTOP_STATES: SnapshotState[] = [
   // ─── Landing (3 states) ───────────────────────────────────────────────
   {
     route: '/',
@@ -320,6 +320,42 @@ export const STATES: SnapshotState[] = [
     },
   },
 ];
+
+/**
+ * 3z.g — Mobile responsive viewport variants.
+ *
+ * The brief requires three viewports for every page state:
+ *   1440×900 (existing — desktop)
+ *   768×1024 (tablet — wide-tablet wrap layout, 980px breakpoint fires
+ *             but 700px chrome collapse does NOT — nav wraps to row 3)
+ *   360×640  (phone portrait — 700px + 480px breakpoints both fire,
+ *             hamburger replaces nav, brand subtitle hidden, type scales)
+ *
+ * Programmatic generation keeps setup() closures byte-identical to the
+ * desktop variants — the framework's capture.spec.ts calls
+ * page.setViewportSize() based on the state's viewport field; nothing
+ * else changes. Per the brief, per-page mobile rules attach in the
+ * page's own rewrite sub-step; this sub-step locks in the CURRENT
+ * mobile-chrome-only state so future regressions are visible.
+ *
+ * Direction-agnostic: viewport variant generation does not inspect
+ * state.state — it copies every entry (including __long/__short pairs)
+ * unchanged. Symmetry guard (assertSymmetricDirectionalKeys) still
+ * passes because the same {route, state} pair exists at every viewport.
+ */
+const MOBILE_VIEWPORTS = [
+  { width: 768, height: 1024 },
+  { width: 360, height: 640 },
+];
+
+const BASE_STATES = [...DESKTOP_STATES];
+const MOBILE_VARIANTS: SnapshotState[] = BASE_STATES.flatMap((s) =>
+  MOBILE_VIEWPORTS.map((viewport) => ({ ...s, viewport })),
+);
+
+// Re-export the combined list. Visible STATES at module load is the
+// full set used by capture.spec.ts.
+export const STATES: SnapshotState[] = [...BASE_STATES, ...MOBILE_VARIANTS];
 
 /**
  * Runtime guard: assert no duplicate keys at config-load time.
