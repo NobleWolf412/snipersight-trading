@@ -784,10 +784,10 @@ body {
   transform: translate(-50%, -50%);
   width: 10px;
   height: 10px;
-  background: white;
-  border: 2px solid #00ff88;
+  background: var(--fg);
+  border: 2px solid var(--green);
   border-radius: 50%;
-  box-shadow: 0 0 10px #00ff88;
+  box-shadow: 0 0 10px var(--green);
   z-index: 10;
 }
 

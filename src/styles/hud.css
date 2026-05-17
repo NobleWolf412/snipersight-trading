@@ -202,7 +202,7 @@ body{min-height:100vh;overflow-x:hidden;position:relative;}
 
 /* ── HUD progress bar (entry/SL/TP) ─────────────────────── */
 .hud-prog{position:relative;height:6px;border-radius:3px;background:linear-gradient(90deg,#7f1d1d 0%,#3a1212 18%,#1d1d1d 30%,#1d1d1d 70%,#0e3326 82%,#065f46 100%);overflow:visible;}
-.hud-prog .marker{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid var(--green);box-shadow:0 0 10px var(--green);transform:translate(-50%,-50%);transition:left .8s cubic-bezier(.22,.9,.3,1);}
+.hud-prog .marker{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;background:var(--fg);border:2px solid var(--green);box-shadow:0 0 10px var(--green);transform:translate(-50%,-50%);transition:left .8s cubic-bezier(.22,.9,.3,1);}
 .hud-prog .tick{position:absolute;top:-3px;width:1px;height:12px;background:rgba(255,255,255,.3);}
 
 /* ── Animations ─────────────────────────────────────────── */
