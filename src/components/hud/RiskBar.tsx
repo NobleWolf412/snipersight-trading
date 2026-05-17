@@ -44,10 +44,12 @@ export function RiskBar({ label, value, max, unit, color }: RiskBarProps) {
         <div
           style={{
             height: '100%',
-            width: pct + '%',
+            width: '100%',
+            transform: `scaleX(${pct / 100})`,
+            transformOrigin: 'left center',
             background: `linear-gradient(90deg, ${c}, color-mix(in oklch, ${c} 60%, transparent))`,
             boxShadow: `0 0 10px ${c}`,
-            transition: 'width .6s ease',
+            transition: 'transform .6s ease',
           }}
         />
       </div>

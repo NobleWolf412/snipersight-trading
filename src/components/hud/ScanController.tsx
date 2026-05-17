@@ -569,11 +569,13 @@ export function ScanController({ onComplete }: ScanControllerProps) {
           >
             <div
               style={{
-                width: `${progressPct}%`,
+                width: '100%',
                 height: '100%',
+                transform: `scaleX(${progressPct / 100})`,
+                transformOrigin: 'left center',
                 background: 'var(--accent)',
                 boxShadow: busy ? '0 0 6px var(--accent)' : 'none',
-                transition: 'width .35s ease-out',
+                transition: 'transform .35s ease-out',
               }}
             />
           </div>
@@ -693,11 +695,13 @@ function RejectionBreakdownStrip({ rejections, signalsFound }: RejectionBreakdow
               >
                 <div
                   style={{
-                    width: `${widthPct}%`,
+                    width: '100%',
                     height: '100%',
+                    transform: `scaleX(${widthPct / 100})`,
+                    transformOrigin: 'left center',
                     background: 'var(--amber, #fbbf24)',
                     opacity: 0.75,
-                    transition: 'width .35s ease-out',
+                    transition: 'transform .35s ease-out',
                   }}
                 />
               </div>
