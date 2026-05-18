@@ -98,15 +98,52 @@ Example failure output to surface unchanged:
   → Likely typo. Compare strike to overwatch.
 ```
 
+## Follow-up matrix (don't ask, just do)
+
+Each row is a verifier outcome the skill must handle without a second
+chat round trip. `run.py` already encodes these; if you find yourself
+making a new branch of this table in chat, port it back into `run.py`.
+
+| Verifier result | Class | Auto-action | Then |
+|---|---|---|---|
+| all green | success | — | report diff + done |
+| `sums to X, expected 1.000` | deterministic | run `normalize.py` | re-verify, report both steps |
+| `key parity FAILED — extra: {…}` | judgment | stop | surface the typo, ask user which key is canonical |
+| `duplicate keys: […]` | judgment | stop | ask which copy to keep |
+| `partial-factor renormalization … FAILED` | code regression | stop | scoring math changed in scorer.py — not a weight bug; flag for review |
+| apply_weight.py raised `KeyError` | input error | stop | surface that the key doesn't exist; user probably misspelled |
+
+**Rule:** auto-fix only when the resolution is unique. If two reasonable
+humans would resolve it differently, stop and ask.
+
+## How to invoke (preferred)
+
+For every request, call `run.py` once with the matching subcommand. It
+edits, verifies, auto-fixes the deterministic failures, and reports.
+You only need to handle the chat round trip when `run.py` exits 2.
+
+```
+python .claude/skills/tune-confluence-weights/run.py set    strike market_structure 0.32
+python .claude/skills/tune-confluence-weights/run.py add    vwap_reclaim 0.08
+python .claude/skills/tune-confluence-weights/run.py drop   fibonacci
+python .claude/skills/tune-confluence-weights/run.py rename htf_alignment htf_composite
+python .claude/skills/tune-confluence-weights/run.py normalize --mode overwatch
+python .claude/skills/tune-confluence-weights/run.py verify-only    # after an AI Edit
+```
+
+For judgment edits (no mechanical subcommand fits), use the `Edit` tool
+to rewrite the dict, then call `run.py verify-only`.
+
 ## File layout
 
 ```
 .claude/skills/tune-confluence-weights/
-├── SKILL.md            ← this file
-├── _weights_io.py      ← shared AST read/write (used by all 3 scripts)
+├── SKILL.md            ← this file (incl. follow-up matrix)
+├── _weights_io.py      ← shared AST read/write (used by all scripts)
 ├── apply_weight.py     ← deterministic edits: set/add/drop/rename
 ├── normalize.py        ← rewrite a mode (or all) to sum to 1.0
-└── verify_weights.py   ← all post-edit checks; exit non-zero on failure
+├── verify_weights.py   ← all post-edit checks; exit non-zero on failure
+└── run.py              ← orchestrator: edit → verify → auto-fix → report
 ```
 
 ## Tools the skill needs
