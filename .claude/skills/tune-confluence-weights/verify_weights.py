@@ -18,11 +18,9 @@ import argparse
 import ast
 import subprocess
 import sys
-from pathlib import Path
 from typing import Dict, Tuple
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCORER_PATH = REPO_ROOT / "backend" / "strategy" / "confluence" / "scorer.py"
+from _weights_io import REPO_ROOT, SCORER_PATH, load_weight_dicts
 
 CANONICAL_MODES = {
     "macro_surveillance": "overwatch",
@@ -41,27 +39,19 @@ def fail(msg: str) -> None: print(f"{RED}✗{RESET} {msg}")
 
 
 def load_weights(source: str) -> Tuple[Dict[str, Dict[str, float]], Dict[str, str]]:
-    """Parse MODE_FACTOR_WEIGHTS without importing the module (avoids deps).
+    """Resolve MODE_FACTOR_WEIGHTS mappings to their dict literals.
 
-    Returns (weights_by_canonical_mode, alias_map).
+    Returns (weights_by_mode_name, alias_map). Uses _weights_io for the
+    dict-literal parsing and then walks MODE_FACTOR_WEIGHTS to expand aliases.
     """
+    weight_dicts = load_weight_dicts(source)
     tree = ast.parse(source)
-    weight_dicts: Dict[str, Dict[str, float]] = {}
     mode_map_raw = None
-
     for node in tree.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        for target in node.targets:
-            if not isinstance(target, ast.Name):
-                continue
-            name = target.id
-            if name in {"_OVERWATCH_WEIGHTS", "_STRIKE_WEIGHTS",
-                       "_SURGICAL_WEIGHTS", "_STEALTH_WEIGHTS"}:
-                weight_dicts[name] = ast.literal_eval(node.value)
-            elif name == "MODE_FACTOR_WEIGHTS":
-                mode_map_raw = node.value
-
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "MODE_FACTOR_WEIGHTS":
+                    mode_map_raw = node.value
     if mode_map_raw is None:
         raise RuntimeError("MODE_FACTOR_WEIGHTS not found in scorer.py")
 
