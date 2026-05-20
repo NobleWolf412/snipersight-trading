@@ -953,6 +953,22 @@ class PositionManager:
         Check if any targets were hit.
 
         Returns first target hit (closest to entry).
+
+        STRUCTURAL-VALIDITY GUARD (§11 silent-bug class):
+        A "target" by definition must be on the FAVORABLE side of the actual
+        entry price. For LONG, target.level > entry_price; for SHORT,
+        target.level < entry_price. If signal-time entry-zone drift produces
+        targets on the unfavorable side of the actual fill, returning such a
+        target as "hit" books a structural loss masquerading as a win. Per
+        the May 2026 INJ/USDT_1779288485 forensics (session fcfeffd6), 45/67
+        session trades and 306/460 all-session "target wins" hit this pattern
+        — duration <1s, max_favorable=0%, exit_reason='target' + negative PnL.
+
+        Guard: filter invalid targets BEFORE matching against current_price.
+        Invalid targets are removed and logged at WARNING so the operator
+        sees the misclassification rather than the bot silently booking bad
+        PnL. The position remains OPEN; the executor's stop_loss /
+        stagnation / max_hours_open paths will close it normally.
         """
         if not position.targets:
             return None
@@ -964,11 +980,49 @@ class PositionManager:
             if seconds_open < self.SIMULATION_MIN_TARGET_HOLD_SECONDS:
                 return None
 
+        # Structural-validity guard. Iterate over a snapshot list since we
+        # may mutate position.targets inside the lock below.
+        invalid_targets = []
+        for target in position.targets:
+            if position.direction == "LONG" and target.level <= position.entry_price:
+                invalid_targets.append(target)
+            elif position.direction == "SHORT" and target.level >= position.entry_price:
+                invalid_targets.append(target)
+
+        if invalid_targets:
+            logger.warning(
+                "INVALID_TARGET_GEOMETRY: %s %s entry=%.6f — %d/%d target(s) "
+                "on the UNFAVORABLE side of entry. Removing so executor doesn't "
+                "book a structural loss as 'target hit'. Levels removed: %s. "
+                "Position remains OPEN; will close via stop_loss/stagnation/timeout.",
+                position.symbol,
+                position.direction,
+                position.entry_price,
+                len(invalid_targets),
+                len(position.targets),
+                [f"{t.level:.6f}" for t in invalid_targets],
+            )
+            with self._lock:
+                for t in invalid_targets:
+                    if t in position.targets:
+                        position.targets.remove(t)
+
+        # Mass-conservation invariant: every remaining target is structurally
+        # valid relative to entry_price. Any future target match represents a
+        # real favorable price move, not a fill-time geometry artifact.
         for target in position.targets:
             if position.direction == "LONG":
+                assert target.level > position.entry_price, (
+                    f"invalid target slipped past guard: LONG {position.symbol} "
+                    f"entry={position.entry_price} target={target.level}"
+                )
                 if current_price >= target.level:
                     return target
             else:  # SHORT
+                assert target.level < position.entry_price, (
+                    f"invalid target slipped past guard: SHORT {position.symbol} "
+                    f"entry={position.entry_price} target={target.level}"
+                )
                 if current_price <= target.level:
                     return target
 
