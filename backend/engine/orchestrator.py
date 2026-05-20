@@ -607,7 +607,32 @@ class Orchestrator:
                                len(rejection_info.get('bullish_factors', [])),
                                len(rejection_info.get('bearish_factors', [])))
                     rejection_stats[reason_type].append(rejection_info)
+                    # Parent-loop emit-of-last-resort: ensure every rejection
+                    # becomes a signal_rejected telemetry event. Idempotent via
+                    # the __telemeterized flag — per-site fast-path emits set
+                    # the flag so this call no-ops; sites without a fast-path
+                    # emit (no_data, early_cooldown, indicator errors, SMC
+                    # errors, pre-scoring gates, confluence error fallback,
+                    # direction_unresolved, no_trade_plan, worker-process
+                    # exceptions, future silent paths) get telemeterized here.
+                    self._emit_rejection_telemetry(run_id, rejection_info)
                 logger.debug("⚪ %s: No qualifying setup", symbol)
+
+        # Mass-conservation runtime check (§14 rubric 3): rejected_count is
+        # incremented for every result=None outcome, so it MUST equal the
+        # count of rejection_info dicts we just iterated. A mismatch means a
+        # silent skip happened between rejected_count++ and the append (e.g.
+        # rejection_info was None when it shouldn't be). Warn loudly so the
+        # operator sees it immediately; the external rejection_coverage_audit
+        # diagnostic catches the same class from outside but only when run.
+        _ri_count = sum(1 for _, r, ri in processed_symbol_results if r is None and ri)
+        if _ri_count != rejected_count:
+            logger.warning(
+                "Mass-conservation breach in scan loop: rejected_count=%d but "
+                "rejection_info-bearing results=%d. Coverage gap will surface "
+                "in rejection_coverage_audit. run_id=%s",
+                rejected_count, _ri_count, run_id,
+            )
 
         # Log scan completed event
         duration = time.time() - start_time
@@ -1117,6 +1142,10 @@ class Orchestrator:
                 "reason": f"Missing critical timeframes: {', '.join(missing_critical_tfs)}",
                 "missing_timeframes": missing_critical_tfs,
                 "required_timeframes": list(self.scanner_mode.critical_timeframes),
+                # Per-site emit at line 1105 already fired with the canonical
+                # gate_name="critical_timeframes". Flag prevents parent-loop
+                # _emit_rejection_telemetry from double-emitting.
+                "__telemeterized": True,
             }
 
         # Stage 2.6: Early cooldown check (Save resources if symbol is blocked)
@@ -1837,9 +1866,12 @@ class Orchestrator:
                     )
                 except Exception as log_err:
                     logger.debug(f"Failed to log rejection event: {log_err}")
-                
+
                 logger.info(f"{symbol}: Directional conflict payload ready with {len(bull_factors)} bull, {len(bear_factors)} bear factors")
-                
+
+                # Per-site emit above already fired with gate_name="confluence_tie_break".
+                # Flag prevents parent-loop double-emit.
+                payload["__telemeterized"] = True
                 return None, payload
 
             # Generic error fallback — include direction and traceback for debugging
@@ -1972,6 +2004,9 @@ class Orchestrator:
                 "reason": readable_reason,
                 "score": score,
                 "threshold": threshold,
+                # Per-site emit at line 1924 already fired with the canonical
+                # gate_name="confluence_score". Flag prevents parent-loop double-emit.
+                "__telemeterized": True,
                 "top_factors": [
                     f"{f.name}: {f.score:.1f}" for f in context.confluence_breakdown.factors[:3]
                 ],
@@ -2264,6 +2299,10 @@ class Orchestrator:
             except Exception:
                 pass
 
+            # Per-site emit at line 2243 already fired with gate_name="risk_validation".
+            # Flag the rejection_info dict so the parent-loop emit-of-last-resort
+            # doesn't double-emit when this dict reaches the scan loop.
+            rejection_info["__telemeterized"] = True
             return None, rejection_info
 
         # Log successful signal generation
@@ -2305,6 +2344,12 @@ class Orchestrator:
                 "reason": reason,
                 "reason_type": "risk_validation" if "revalidation" in reason else "no_trade_plan",
                 "details": {"context": context.metadata},
+                # If post_plan_revalidation already emitted upstream at the
+                # _post_plan_revalidate site, honor that flag so the parent-loop
+                # emit-of-last-resort doesn't double-emit. For genuine
+                # no_trade_plan rejections (planner returned None directly),
+                # the flag is False and the parent loop will emit canonically.
+                "__telemeterized": bool(context.metadata.get("__revalidation_telemeterized")),
                 # Critical factor convergence (pass-through so UI can show setup state)
                 "convergence_score": _bd_meta.get("convergence_score", 0),
                 "convergence_critical_count": _bd_meta.get("convergence_critical_count", 0),
@@ -2915,6 +2960,13 @@ class Orchestrator:
                             },
                         )
                     )
+                    # Per-site emit above fired with gate_name="post_plan_revalidation".
+                    # Flag in metadata so the downstream "no plan generated" path at
+                    # _process_symbol's tail (the unconditional rejection dict built
+                    # after context.plan is set to None) can read this flag and mark
+                    # its own rejection_info dict as already-telemeterized, preventing
+                    # the parent-loop emit-of-last-resort from double-emitting.
+                    context.metadata["__revalidation_telemeterized"] = True
                     return None
                 else:
                     # Store live price & drift metrics for downstream visibility
@@ -4061,6 +4113,75 @@ class Orchestrator:
             self.cooldown_manager.clear_cooldown(symbol, direction)
         else:
             self.cooldown_manager.clear_cooldown(symbol)
+
+    def _emit_rejection_telemetry(self, run_id: str, rejection_info: Optional[Dict[str, Any]]) -> None:
+        """Idempotent single-emit guard for signal_rejected telemetry.
+
+        Per CLAUDE.md §11 / §14 rubric 3: enforces the invariant that every
+        rejected symbol produces exactly one signal_rejected event per run.
+        Routes through `create_signal_rejected_event` + `self.telemetry.log_event`
+        and marks the dict with `__telemeterized=True` so callers that already
+        emitted at a per-site fast-path don't double-emit when this method
+        runs as the parent-loop emit-of-last-resort.
+
+        Calibrated on cycle 88e434ee (NEAR/USDT + INJ/USDT silent-drop) — the
+        pre-scoring gate branch at orchestrator.py:1663 and several other
+        rejection returns were marking symbols as rejected in `rejected_count`
+        without emitting telemetry, breaking mass conservation between
+        `scan_completed.signals_rejected` and `count(signal_rejected events)`.
+        This helper plus a parent-loop fallback call makes that invariant
+        loud rather than silent.
+
+        gate_name vocabulary note: this helper takes `gate_name` from
+        `rejection_info["reason_type"]` because at the fallback point it has
+        no access to the specific gate's canonical name. Per-site fast-path
+        emits use richer canonical gate_names (e.g. "critical_timeframes"
+        vs reason_type "missing_critical_tf"; "confluence_score" vs
+        "low_confluence"). The `__telemeterized` flag ensures the per-site
+        emit wins so the canonical vocabulary is preserved when present;
+        helper-emitted gate_names only appear for sites that had no
+        per-site emit.
+
+        try/except (not try/finally) is correct here: the only side effect
+        we care about (`__telemeterized=True`) MUST NOT be set on failure
+        — leaving it False allows the parent-loop to re-attempt on the next
+        scan loop iteration if the helper is invoked again, and lets the
+        external `rejection_coverage_audit.py` diagnostic detect the gap.
+        Cleanup-via-finally would defeat that recovery path.
+        """
+        if not rejection_info or rejection_info.get("__telemeterized"):
+            return
+        try:
+            diag_keys = (
+                "conflict_count", "conflict_conditions", "btc_impulse", "regime_trend",
+                "score", "threshold", "cooldown_hours_remaining", "stop_price",
+                "current_price", "convergence_score", "veto_blocked", "active_vetoes",
+                "setup_state", "missing_timeframes", "traceback_hint", "direction",
+                "risk_reward", "price_distance_pct",
+            )
+            diagnostics = {k: v for k, v in rejection_info.items() if k in diag_keys}
+            self.telemetry.log_event(
+                create_signal_rejected_event(
+                    run_id=run_id,
+                    symbol=rejection_info.get("symbol", "UNKNOWN"),
+                    reason=rejection_info.get("reason", "Unknown rejection"),
+                    gate_name=rejection_info.get("reason_type"),
+                    diagnostics=diagnostics or None,
+                )
+            )
+            rejection_info["__telemeterized"] = True
+        except Exception as exc:
+            # §11 prefer-loud-failures: surface emit failures at WARNING so the
+            # operator sees the gap immediately rather than discovering it via
+            # the external coverage-audit script later. The whole point of
+            # this helper is to prevent silent telemetry drops; logging its
+            # own failure at DEBUG would re-create the silent-bug class one
+            # layer up.
+            logger.warning(
+                "Rejection telemetry emit FAILED for %s (run_id=%s): %s — "
+                "coverage gap will surface in rejection_coverage_audit",
+                rejection_info.get("symbol"), run_id, exc,
+            )
 
     def _progress(self, stage: str, payload: Dict[str, Any]) -> None:
         """Emit a standardized progress snapshot for user-facing consoles and telemetry.
