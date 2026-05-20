@@ -499,6 +499,16 @@ export function BotSetup() {
     (m) => m.name.toLowerCase() === botMode.toLowerCase(),
   );
   const modeMinScore = modeMetadata?.min_confluence_score ?? 65;
+
+  // CLAUDE.md §6: "Frontend can override upward but not downward."
+  // Whenever the resolved mode floor changes (mode picker, late metadata
+  // fetch, etc.) re-clamp min_confluence upward. Leaves user-tightened
+  // values alone — only fires when below floor.
+  useEffect(() => {
+    if (config.min_confluence < modeMinScore) {
+      setConfig((prev) => ({ ...prev, min_confluence: modeMinScore }));
+    }
+  }, [modeMinScore, config.min_confluence]);
   const regimeText = recommendation?.regime?.composite
     ? recommendation.regime.composite.replace(/_/g, ' ')
     : 'adaptive';
@@ -713,11 +723,11 @@ export function BotSetup() {
               <Slider
                 label="Min Confluence"
                 value={config.min_confluence}
-                min={40}
+                min={modeMinScore}
                 max={100}
                 step={1}
                 onChange={(v) => setConfig({ ...config, min_confluence: v })}
-                hint="full-size entry threshold"
+                hint={`full-size entry threshold · floor ≥${modeMinScore} (${modeName} mode)`}
               />
               <Slider
                 label="Soft Floor"

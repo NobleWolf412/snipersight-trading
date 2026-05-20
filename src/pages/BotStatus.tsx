@@ -123,6 +123,18 @@ function fmtPct(v: number, decimals = 2): string {
   return `${v >= 0 ? '+' : ''}${v.toFixed(decimals)}%`;
 }
 
+// R-multiple = current PnL / planned risk. SMC traders think in R, not %.
+function fmtR(pnl: number, riskPnl: number | undefined): string {
+  if (!Number.isFinite(pnl) || !riskPnl || !Number.isFinite(riskPnl)) return '—';
+  const r = pnl / Math.abs(riskPnl);
+  if (!Number.isFinite(r)) return '—';
+  return `${r >= 0 ? '+' : ''}${r.toFixed(2)}R`;
+}
+
+// Shared column template — used by both header + PositionRow so widths stay locked.
+const OPEN_POS_COLS = '90px 70px 1fr 1fr 1fr 1fr 1.2fr 64px';
+const PENDING_ORDER_COLS = '90px 70px 1fr 1fr 90px';
+
 // ─── Equity Sparkline ──────────────────────────────────────────────────
 function EquitySparkline({
   trades,
@@ -229,7 +241,7 @@ function MetricTile({
           ? 'var(--amber)'
           : accent === 'blue'
             ? 'var(--blue)'
-            : 'var(--fg-1)';
+            : 'var(--fg)';
   return (
     <div
       style={{
@@ -283,11 +295,13 @@ function MetricTile({
 function PositionRow({ position }: { position: LivePosition }) {
   const isLong = position.direction === 'LONG';
   const isProfit = position.unrealized_pnl >= 0;
+  // TP display: prefer tp_final (close-everything level), fall back to tp1, then '—'.
+  const tp = position.tp_final ?? position.tp1 ?? null;
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '90px 70px 1fr 1fr 1fr 1fr',
+        gridTemplateColumns: OPEN_POS_COLS,
         gap: 10,
         padding: '10px 12px',
         borderTop: '1px solid var(--border-soft)',
@@ -299,13 +313,16 @@ function PositionRow({ position }: { position: LivePosition }) {
       </span>
       <Chip kind={isLong ? 'green' : 'red'}>{isLong ? 'LONG' : 'SHORT'}</Chip>
       <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
-        entry {position.entry_price}
+        {position.entry_price}
       </span>
       <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
-        mark {position.current_price}
+        {position.current_price}
       </span>
-      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
-        sl {position.stop_loss}
+      <span className="mono" style={{ fontSize: 11, color: 'var(--red-2)' }}>
+        {position.stop_loss}
+      </span>
+      <span className="mono" style={{ fontSize: 11, color: 'var(--green-soft)' }}>
+        {tp != null ? tp : '—'}
       </span>
       <span
         className="mono"
@@ -315,7 +332,57 @@ function PositionRow({ position }: { position: LivePosition }) {
           textAlign: 'right',
         }}
       >
-        {fmtCurrency(position.unrealized_pnl)} ({fmtPct(position.unrealized_pnl_pct)})
+        {fmtCurrency(position.unrealized_pnl)}
+      </span>
+      <span
+        className="mono"
+        style={{
+          fontWeight: 700,
+          color: isProfit ? 'var(--green)' : 'var(--red)',
+          textAlign: 'right',
+          fontSize: 11,
+        }}
+      >
+        {fmtR(position.unrealized_pnl, position.risk_pnl)}
+      </span>
+    </div>
+  );
+}
+
+// ─── Pending Order Row ─────────────────────────────────────────────────
+// Renders a single unfilled limit order from status.pending_orders.
+// Shape: { order_id, symbol, direction, limit_price, quantity, status }.
+// No timestamp on the backend payload yet, so no age column.
+function PendingOrderRow({
+  order,
+}: {
+  order: NonNullable<LiveTradingStatus['pending_orders']>[number];
+}) {
+  const isLong = order.direction === 'LONG';
+  const isPartial = order.status === 'PARTIALLY_FILLED';
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: PENDING_ORDER_COLS,
+        gap: 10,
+        padding: '10px 12px',
+        borderTop: '1px solid var(--border-soft)',
+        alignItems: 'center',
+      }}
+    >
+      <span className="mono" style={{ fontWeight: 700 }}>
+        {order.symbol}
+      </span>
+      <Chip kind={isLong ? 'green' : 'red'}>{isLong ? 'LONG' : 'SHORT'}</Chip>
+      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
+        {order.limit_price}
+      </span>
+      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
+        {order.quantity}
+      </span>
+      <span style={{ textAlign: 'right' }}>
+        <Chip kind={isPartial ? 'amber' : 'blue'}>{isPartial ? '◐ PARTIAL' : '○ OPEN'}</Chip>
       </span>
     </div>
   );
@@ -374,6 +441,14 @@ export function BotStatus() {
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectionErrorRef = useRef<string | null>(null);
   connectionErrorRef.current = connectionError;
+  // Kill-confirm focus management. When the destructive panel appears,
+  // focus lands on CANCEL (safe default per WCAG / Apple HIG). User has
+  // to deliberately tab to CONFIRM KILL SWITCH to fire.
+  const cancelKillRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (showKillConfirm) cancelKillRef.current?.focus();
+  }, [showKillConfirm]);
 
   // Static now for snapshot determinism. Footer renders this once.
   const [now] = useState(() => new Date());
@@ -491,6 +566,7 @@ export function BotStatus() {
   const balance = status?.balance;
   const initialBalance = balance?.initial ?? 0;
   const positions = status?.positions ?? [];
+  const pendingOrders = status?.pending_orders ?? [];
   const signalLog = status?.signal_log ?? [];
   const cfg = status?.config;
 
@@ -565,7 +641,7 @@ export function BotStatus() {
           }}
         >
           <span className="mono" style={{ letterSpacing: '.2em' }}>
-            ESTABLISHING UPLINK…
+            READING TELEMETRY…
           </span>
         </div>
       )}
@@ -577,11 +653,14 @@ export function BotStatus() {
             className="panel panel-accent"
             style={{
               padding: 18,
-              borderColor: isRunning
-                ? 'rgba(74,222,128,.35)'
-                : isLive
-                  ? 'rgba(239,68,68,.35)'
-                  : 'rgba(234,179,8,.25)',
+              // Priority: live > running > idle. Live mode (real money) must
+              // dominate the visual state even when the bot is happily running.
+              // CLAUDE.md tone: live red is the loudest state on the page.
+              borderColor: isLive
+                ? 'var(--red-border)'
+                : isRunning
+                  ? 'var(--green-border)'
+                  : 'var(--amber-border)',
             }}
           >
             <div
@@ -593,60 +672,50 @@ export function BotStatus() {
                 flexWrap: 'wrap',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+              {/* Session PnL hero. Single most important number on the page
+                  for a running bot. Color follows sign (green up / red down /
+                  fg-2 neutral). Sub-line carries record + active counts. */}
+              <div style={{ minWidth: 0 }}>
                 <div
+                  className="mono"
                   style={{
-                    width: 12,
-                    height: 12,
-                    borderRadius: '50%',
-                    background: isRunning
-                      ? 'var(--green)'
-                      : isLive
-                        ? 'var(--red)'
-                        : 'var(--amber)',
-                    boxShadow: isRunning
-                      ? '0 0 14px rgba(74,222,128,.9)'
-                      : isLive
-                        ? '0 0 14px rgba(239,68,68,.9)'
-                        : '0 0 14px rgba(234,179,8,.9)',
-                    flexShrink: 0,
+                    fontSize: 32,
+                    fontWeight: 800,
+                    lineHeight: 1,
+                    letterSpacing: '-0.01em',
+                    color:
+                      (balance?.pnl ?? 0) > 0
+                        ? 'var(--green)'
+                        : (balance?.pnl ?? 0) < 0
+                          ? 'var(--red)'
+                          : 'var(--fg-2)',
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: 10,
+                    flexWrap: 'wrap',
                   }}
-                />
-                <div>
-                  <div
-                    className="mono"
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 800,
-                      letterSpacing: '.04em',
-                      textTransform: 'uppercase',
-                      color: 'var(--fg-1)',
-                    }}
-                  >
-                    Phantom Engine
-                  </div>
-                  <div
-                    className="mono"
-                    style={{
-                      fontSize: 10,
-                      color: 'var(--fg-4)',
-                      letterSpacing: '.16em',
-                      marginTop: 4,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    uptime {fmtDuration(status.uptime_seconds || 0)}
-                    {status.session_id && (
-                      <>
-                        {' · '}
-                        session {status.session_id.slice(0, 8)}
-                      </>
-                    )}
-                  </div>
+                >
+                  <span>{fmtCurrency(balance?.pnl ?? 0)}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, opacity: 0.85 }}>
+                    {fmtPct(balance?.pnl_pct ?? 0)}
+                  </span>
+                </div>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 9,
+                    color: 'var(--fg-4)',
+                    letterSpacing: '.22em',
+                    textTransform: 'uppercase',
+                    marginTop: 8,
+                  }}
+                >
+                  Session PnL · {stats?.winning_trades ?? 0}W/{stats?.losing_trades ?? 0}L
+                  {' · '}{positions.length} open · {pendingOrders.length} pending
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignSelf: 'flex-start' }}>
                 {isRunning ? (
                   <>
                     <button
@@ -655,6 +724,7 @@ export function BotStatus() {
                       onClick={handleStop}
                       disabled={stopping}
                       style={{ fontSize: 11 }}
+                      aria-label={stopping ? 'Stopping bot' : 'Stop bot gracefully'}
                     >
                       {stopping ? '↻ STOPPING' : '■ STOP'}
                     </button>
@@ -663,6 +733,7 @@ export function BotStatus() {
                       className="btn btn-red"
                       onClick={() => setShowKillConfirm(true)}
                       style={{ fontSize: 11 }}
+                      aria-label="Kill switch — immediately close all positions"
                     >
                       ☠ KILL
                     </button>
@@ -674,6 +745,7 @@ export function BotStatus() {
                       className="btn btn-green"
                       onClick={() => navigate('/bot/setup')}
                       style={{ fontSize: 11 }}
+                      aria-label="Reconfigure bot — return to setup page"
                     >
                       ▶ RECONFIGURE
                     </button>
@@ -682,6 +754,7 @@ export function BotStatus() {
                       className="btn"
                       onClick={handleReset}
                       style={{ fontSize: 11 }}
+                      aria-label="Reset bot session"
                     >
                       ↺ RESET
                     </button>
@@ -693,6 +766,7 @@ export function BotStatus() {
                   onClick={handleAnalyze}
                   disabled={analyzing}
                   style={{ fontSize: 11 }}
+                  aria-label={analyzing ? 'Analyzing session' : 'Analyze current session'}
                 >
                   {analyzing ? '↻ ANALYZING' : '⊞ ANALYZE'}
                 </button>
@@ -727,10 +801,12 @@ export function BotStatus() {
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
+                    ref={cancelKillRef}
                     type="button"
                     className="btn"
                     onClick={() => setShowKillConfirm(false)}
                     style={{ fontSize: 10 }}
+                    aria-label="Cancel kill switch — keep bot running"
                   >
                     CANCEL
                   </button>
@@ -740,6 +816,7 @@ export function BotStatus() {
                     onClick={handleKillSwitch}
                     disabled={killing}
                     style={{ fontSize: 10 }}
+                    aria-label={killing ? 'Executing kill switch' : 'Confirm kill switch — close all positions immediately'}
                   >
                     {killing ? '↻ EXECUTING' : '☠ CONFIRM KILL SWITCH'}
                   </button>
@@ -764,45 +841,72 @@ export function BotStatus() {
               </div>
             )}
 
-            {/* Metric grid */}
+            {/* Telemetry strip. Replaces the prior 4-tile grid — same data,
+                ~75% less vertical real estate, no SaaS-grid anti-pattern.
+                Mono uppercase pairs (LABEL value) separated by middots. */}
             <div
+              className="mono"
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-                gap: 10,
                 marginTop: 14,
+                paddingTop: 14,
+                borderTop: '1px solid var(--border-soft)',
+                display: 'flex',
+                gap: 16,
+                flexWrap: 'wrap',
+                alignItems: 'baseline',
+                fontSize: 10,
+                letterSpacing: '.18em',
+                textTransform: 'uppercase',
+                color: 'var(--fg-4)',
               }}
             >
-              <MetricTile
-                label="Uptime"
-                value={fmtDuration(status.uptime_seconds || 0)}
-                sub="session running"
-              />
-              <MetricTile
-                label="Regime"
-                value={
-                  status.regime && status.regime.composite !== 'unknown'
-                    ? status.regime.composite.replace(/_/g, ' ').split(' ')[0].toUpperCase()
-                    : '—'
-                }
-                sub={status.regime?.composite?.replace(/_/g, ' ') ?? 'no read'}
-                accent="blue"
-              />
-              <MetricTile
-                label="Next Scan"
-                value={
-                  isRunning && status.next_scan_in_seconds != null
+              <span>
+                Uptime{' '}
+                <strong style={{ color: 'var(--fg)', fontWeight: 800 }}>
+                  {fmtDuration(status.uptime_seconds || 0)}
+                </strong>
+              </span>
+              <span style={{ opacity: 0.3 }}>·</span>
+              <span>
+                Next Scan{' '}
+                <strong
+                  style={{
+                    color: isRunning ? 'var(--amber)' : 'var(--fg-3)',
+                    fontWeight: 800,
+                  }}
+                >
+                  {isRunning && status.next_scan_in_seconds != null
                     ? fmtDuration(Math.round(status.next_scan_in_seconds))
-                    : '—'
-                }
-                sub="until next sweep"
-                accent={isRunning ? 'amber' : undefined}
-              />
-              <MetricTile
-                label="Min Score"
-                value={cfg?.min_confluence != null ? `≥${cfg.min_confluence}` : 'AUTO'}
-                sub="confluence threshold"
-              />
+                    : '—'}
+                </strong>
+              </span>
+              <span style={{ opacity: 0.3 }}>·</span>
+              <span>
+                Regime{' '}
+                <strong style={{ color: 'var(--blue)', fontWeight: 800 }}>
+                  {status.regime && status.regime.composite !== 'unknown'
+                    ? status.regime.composite.replace(/_/g, ' ').toUpperCase()
+                    : '—'}
+                </strong>
+              </span>
+              <span style={{ opacity: 0.3 }}>·</span>
+              <span>
+                Min Score{' '}
+                <strong style={{ color: 'var(--fg)', fontWeight: 800 }}>
+                  {cfg?.min_confluence != null ? `≥${cfg.min_confluence}` : 'AUTO'}
+                </strong>
+              </span>
+              {status.session_id && (
+                <>
+                  <span style={{ opacity: 0.3 }}>·</span>
+                  <span>
+                    Session{' '}
+                    <strong style={{ color: 'var(--fg-3)', fontWeight: 800 }}>
+                      {status.session_id.slice(0, 8)}
+                    </strong>
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Config pills (when present) */}
@@ -960,26 +1064,42 @@ export function BotStatus() {
             </section>
           </div>
 
-          {/* ── Open Positions ───────────────────────────────────── */}
+          {/* ── Active Positions (filled + pending limit orders) ──── */}
           <section className="panel" style={{ padding: 14 }}>
             <SectionHead
-              title="Open Positions"
+              title="Active Positions"
               right={
                 <span
                   className="mono"
                   style={{ fontSize: 10, color: 'var(--fg-4)' }}
                 >
-                  {positions.length} active
+                  {positions.length} open · {pendingOrders.length} pending
                 </span>
               }
             />
+
+            {/* Open subsection */}
+            <div
+              className="mono"
+              style={{
+                marginTop: 8,
+                padding: '4px 12px',
+                fontSize: 9,
+                color: 'var(--fg-3)',
+                letterSpacing: '.22em',
+                textTransform: 'uppercase',
+                borderBottom: '1px solid var(--border-soft)',
+              }}
+            >
+              Open
+            </div>
             {positions.length === 0 ? (
               <div
                 className="mono"
                 style={{
-                  padding: 18,
+                  padding: 14,
                   textAlign: 'center',
-                  fontSize: 11,
+                  fontSize: 10,
                   color: 'var(--fg-4)',
                   letterSpacing: '.16em',
                   textTransform: 'uppercase',
@@ -993,7 +1113,7 @@ export function BotStatus() {
                   className="mono"
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '90px 70px 1fr 1fr 1fr 1fr',
+                    gridTemplateColumns: OPEN_POS_COLS,
                     gap: 10,
                     padding: '8px 12px',
                     fontSize: 9,
@@ -1007,10 +1127,68 @@ export function BotStatus() {
                   <span>Entry</span>
                   <span>Mark</span>
                   <span>Stop</span>
+                  <span>Target</span>
                   <span style={{ textAlign: 'right' }}>uPnL</span>
+                  <span style={{ textAlign: 'right' }}>R</span>
                 </div>
                 {positions.map((p) => (
                   <PositionRow key={p.position_id} position={p} />
+                ))}
+              </div>
+            )}
+
+            {/* Pending subsection */}
+            <div
+              className="mono"
+              style={{
+                marginTop: 14,
+                padding: '4px 12px',
+                fontSize: 9,
+                color: 'var(--fg-3)',
+                letterSpacing: '.22em',
+                textTransform: 'uppercase',
+                borderBottom: '1px solid var(--border-soft)',
+              }}
+            >
+              Pending (limit, awaiting fill)
+            </div>
+            {pendingOrders.length === 0 ? (
+              <div
+                className="mono"
+                style={{
+                  padding: 14,
+                  textAlign: 'center',
+                  fontSize: 10,
+                  color: 'var(--fg-4)',
+                  letterSpacing: '.16em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                — none pending —
+              </div>
+            ) : (
+              <div>
+                <div
+                  className="mono"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: PENDING_ORDER_COLS,
+                    gap: 10,
+                    padding: '8px 12px',
+                    fontSize: 9,
+                    color: 'var(--fg-4)',
+                    letterSpacing: '.18em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  <span>Symbol</span>
+                  <span>Side</span>
+                  <span>Limit</span>
+                  <span>Qty</span>
+                  <span style={{ textAlign: 'right' }}>Status</span>
+                </div>
+                {pendingOrders.map((o) => (
+                  <PendingOrderRow key={o.order_id} order={o} />
                 ))}
               </div>
             )}
@@ -1138,7 +1316,7 @@ export function BotStatus() {
         </div>
       )}
 
-      <FooterStatus latency={32} build={`${now.toISOString().slice(0, 10)}`} />
+      <FooterStatus build={`${now.toISOString().slice(0, 10)}`} />
 
       {/* PipelineTracer drawer — Phase 3g.ii.c. Renders only when a
           signal id is selected via Gauntlet detail row click. */}

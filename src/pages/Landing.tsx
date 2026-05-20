@@ -19,6 +19,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import snipersightLogo from '../assets/images/1000016768.png';
 
 // ─── Ticker rail data ──────────────────────────────────────────────────
 const RAIL_SYMBOLS = [
@@ -440,63 +441,56 @@ export function Landing() {
       <TickerRail />
 
       {/* HERO */}
-      <section className="hero">
-        <div className="hero-left">
-          <div className="hero-eyebrow mono">
-            <span style={{ color: 'var(--accent)' }}>●</span> SYSTEM-ONLINE · v1.0 · TACTICAL TRADING TERMINAL
-          </div>
-          <h1 className="hero-title">
-            See the market<br />
-            <span className="hero-title-em">before it moves.</span>
-          </h1>
-          <p className="hero-sub">
-            SniperSight is a tactical heads-up display for crypto. Six purpose-built consoles fuse on-chain flow, derivatives positioning, and price action into one calm signal — then automate the trade end-to-end.
-          </p>
-          <div className="hero-stats">
-            <div>
-              <div className="hero-stat-v mono">61.4<span style={{ color: 'var(--accent)' }}>%</span></div>
-              <div className="hero-stat-l mono">win rate · 60d</div>
-            </div>
-            <div className="hero-stat-sep" />
-            <div>
-              <div className="hero-stat-v mono">+0.84<span style={{ color: 'var(--accent)' }}>R</span></div>
-              <div className="hero-stat-l mono">avg per trade</div>
-            </div>
-            <div className="hero-stat-sep" />
-            <div>
-              <div className="hero-stat-v mono">2.1<span style={{ color: 'var(--accent)' }}>s</span></div>
-              <div className="hero-stat-l mono">sig→entry latency</div>
-            </div>
-            <div className="hero-stat-sep" />
-            <div>
-              <div className="hero-stat-v mono">412<span style={{ color: 'var(--accent)' }}>k</span></div>
-              <div className="hero-stat-l mono">candles scanned/d</div>
-            </div>
-          </div>
-          <div className="hero-cta">
-            <Link to="/bot/status" className="btn-mega">
-              <span>▶ ENTER COMMAND HUB</span>
-              <span className="mono" style={{ fontSize: 9, letterSpacing: '.2em', opacity: 0.7, marginTop: 2 }}>
-                CONFIGURE & DEPLOY THE BOT
-              </span>
-            </Link>
-            <Link to="/training" className="btn-mega btn-mega-ghost">
-              <span>◇ TRAINING GROUND</span>
-              <span className="mono" style={{ fontSize: 9, letterSpacing: '.2em', opacity: 0.7, marginTop: 2 }}>
-                RANGE · DRILLS · REPLAY
-              </span>
-            </Link>
-          </div>
-          <div className="hero-foot mono">
-            <span>● BINANCE</span><span style={{ color: 'var(--fg-4)' }}>·</span>
-            <span>● PHEMEX</span><span style={{ color: 'var(--fg-4)' }}>·</span>
-            <span>● BYBIT</span><span style={{ color: 'var(--fg-4)' }}>·</span>
-            <span>● BINGX</span><span style={{ color: 'var(--fg-4)' }}>·</span>
-            <span style={{ color: 'var(--fg-3)' }}>4 venue execution router</span>
-          </div>
+      <style>{`
+        .hero-stack { display: flex; flex-direction: column; align-items: center; text-align: center;
+          padding: 56px 32px 60px; margin-bottom: 32px; border: 1px solid var(--accent-border); border-radius: 18px;
+          background: radial-gradient(ellipse 100% 80% at 50% 0%, color-mix(in oklch, var(--accent) 4%, transparent), transparent 60%),
+                      linear-gradient(135deg, rgba(0,0,0,.5), oklch(0.22 0.010 125 / .55));
+          position: relative; overflow: hidden; }
+        .hero-stack::before { content: ''; position: absolute; inset: 0; pointer-events: none;
+          background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(255,255,255,.012) 2px 4px); }
+        .hero-stack > * { position: relative; z-index: 2; max-width: 880px; }
+        .hero-stack-logo { display: block; max-height: 160px; width: auto; margin: 0 auto 24px;
+          filter: drop-shadow(0 0 28px color-mix(in oklch, var(--accent) 45%, transparent)); }
+        .hero-stack-tagline { font-family: 'JetBrains Mono', monospace; font-size: 10px;
+          letter-spacing: .3em; text-transform: uppercase; color: var(--fg-4); margin-bottom: 26px; }
+        .hero-stack-title { font-family: 'Share Tech Mono', monospace;
+          font-size: clamp(34px, 5vw, 56px); line-height: .98; letter-spacing: .01em; text-transform: uppercase;
+          color: var(--fg); margin: 0 auto 20px; }
+        .hero-stack-title-em { color: var(--accent);
+          text-shadow: 0 0 14px color-mix(in oklch, var(--accent) 50%, transparent), 0 0 28px color-mix(in oklch, var(--accent) 25%, transparent); }
+        .hero-stack-sub { font-size: 15px; line-height: 1.55; color: var(--fg-2); margin: 0 auto 28px; text-wrap: pretty; }
+        .hero-stack-stats { display: flex; align-items: center; gap: 20px; padding: 18px 0; margin: 0 auto 22px;
+          border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); justify-content: center; flex-wrap: wrap; }
+        .hero-stack-stat-sep { width: 1px; height: 24px; background: var(--border-soft); }
+        .hero-stack-foot { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--green-soft); letter-spacing: .18em; }
+      `}</style>
+      <section className="hero-stack">
+        <img src={snipersightLogo} alt="SniperSight" className="hero-stack-logo" />
+        <div className="hero-stack-tagline">SYSTEM-ONLINE · v1.0 · TACTICAL TRADING TERMINAL</div>
+        <h1 className="hero-stack-title">
+          See the market<br />
+          <span className="hero-stack-title-em">before it moves.</span>
+        </h1>
+        <p className="hero-stack-sub">
+          Six purpose-built consoles fuse on-chain flow, derivatives positioning, and price action into one calm signal, then automate the trade end-to-end.
+        </p>
+        <div className="hero-stack-stats">
+          <div><div className="hero-stat-v mono">61.4<span style={{ color: 'var(--accent)' }}>%</span></div><div className="hero-stat-l mono">win rate · 60d</div></div>
+          <div className="hero-stack-stat-sep" />
+          <div><div className="hero-stat-v mono">+0.84<span style={{ color: 'var(--accent)' }}>R</span></div><div className="hero-stat-l mono">avg per trade</div></div>
+          <div className="hero-stack-stat-sep" />
+          <div><div className="hero-stat-v mono">2.1<span style={{ color: 'var(--accent)' }}>s</span></div><div className="hero-stat-l mono">sig→entry latency</div></div>
+          <div className="hero-stack-stat-sep" />
+          <div><div className="hero-stat-v mono">412<span style={{ color: 'var(--accent)' }}>k</span></div><div className="hero-stat-l mono">candles scanned/d</div></div>
         </div>
-        <div className="hero-right">
-          <Scope />
+        <div className="hero-stack-foot">
+          <span>● BINANCE</span><span style={{ color: 'var(--fg-4)' }}>·</span>
+          <span>● PHEMEX</span><span style={{ color: 'var(--fg-4)' }}>·</span>
+          <span>● BYBIT</span><span style={{ color: 'var(--fg-4)' }}>·</span>
+          <span>● BINGX</span><span style={{ color: 'var(--fg-4)' }}>·</span>
+          <span style={{ color: 'var(--fg-3)' }}>4 venue execution router</span>
         </div>
       </section>
 
@@ -654,20 +648,6 @@ export function Landing() {
           </div>
           <h2 className="cta-final-h">Let the bot do the watching.</h2>
           <p className="cta-final-p">Six consoles. One network. The market on a leash.</p>
-          <div className="cta-final-btns">
-            <Link to="/bot/status" className="btn-mega">
-              <span>▶ LAUNCH HUD</span>
-              <span className="mono" style={{ fontSize: 9, letterSpacing: '.2em', opacity: 0.7, marginTop: 2 }}>
-                ENTER COMMAND CENTER
-              </span>
-            </Link>
-            <Link to="/training" className="btn-mega btn-mega-ghost">
-              <span>◇ START TRAINING</span>
-              <span className="mono" style={{ fontSize: 9, letterSpacing: '.2em', opacity: 0.7, marginTop: 2 }}>
-                SAFE SANDBOX
-              </span>
-            </Link>
-          </div>
         </div>
       </section>
     </div>
