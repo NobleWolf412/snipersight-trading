@@ -87,11 +87,17 @@ import {
   UniversePanel,
 } from '@/components/hud';
 import {
-  liveTradingService,
   type CompletedLiveTrade,
   type LivePosition,
   type LiveTradingStatus,
 } from '@/services/liveTradingService';
+import { liveTradingService } from '@/services/liveTradingService';
+import { paperTradingService } from '@/services/paperTradingService';
+import {
+  fetchActiveSession,
+  type ActiveMode,
+  type ActiveSession,
+} from '@/services/activeSession';
 import { useScanner } from '@/context/ScannerContext';
 
 // ─── Formatters ─────────────────────────────────────────────────────────
@@ -389,19 +395,36 @@ function PendingOrderRow({
 }
 
 // ─── Mode Pill ─────────────────────────────────────────────────────────
-function ModePill({ mode }: { mode: LiveTradingStatus['trading_mode'] }) {
-  if (mode === 'live') return <Chip kind="red">● LIVE — REAL MONEY</Chip>;
+// Accepts the unified ActiveMode union from activeSession.ts. Paper is a
+// distinct mode from testnet/dry_run even though all three are non-real-
+// money — paper is the operator's primary practice surface, testnet is
+// for exchange-flow validation, dry_run is for offline replay.
+function ModePill({ mode }: { mode: ActiveMode }) {
+  if (mode === 'live') return <Chip kind="red">● LIVE · REAL MONEY</Chip>;
+  if (mode === 'paper') return <Chip kind="amber">● PAPER</Chip>;
   if (mode === 'testnet') return <Chip kind="amber">● TESTNET</Chip>;
   if (mode === 'dry_run') return <Chip kind="blue">● DRY RUN</Chip>;
   return <Chip>● IDLE</Chip>;
 }
 
 // ─── Status Pill ───────────────────────────────────────────────────────
-function StatusPill({ status }: { status: LiveTradingStatus['status'] }) {
+// Status union covers both services' state machines:
+//   live: idle / running / stopped / error / kill_switched
+//   paper: idle / running / stopped / error / paused
+type SessionStatusValue =
+  | 'idle'
+  | 'running'
+  | 'stopped'
+  | 'error'
+  | 'kill_switched'
+  | 'paused';
+
+function StatusPill({ status }: { status: SessionStatusValue }) {
   if (status === 'running') return <Chip kind="green">● RUNNING</Chip>;
   if (status === 'kill_switched') return <Chip kind="red">● KILL-SWITCHED</Chip>;
   if (status === 'error') return <Chip kind="red">● ERROR</Chip>;
   if (status === 'stopped') return <Chip kind="amber">● STOPPED</Chip>;
+  if (status === 'paused') return <Chip kind="amber">● PAUSED</Chip>;
   return <Chip>● IDLE</Chip>;
 }
 
@@ -413,7 +436,11 @@ export function BotStatus() {
   // root so this is always available; if it ever isn't (test harness),
   // GauntletBreakdown gracefully no-ops the strip when modes are empty.
   const { scannerModes, selectedMode } = useScanner();
-  const [status, setStatus] = useState<LiveTradingStatus | null>(null);
+  // Active session = whichever of {live, paper} owns the running bot, or the
+  // live idle state when neither is running. See activeSession.ts. We keep
+  // `status` as a derived shorthand for downstream JSX that referenced it.
+  const [session, setSession] = useState<ActiveSession | null>(null);
+  const status = session?.status ?? null;
   const [trades, setTrades] = useState<CompletedLiveTrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [stopping, setStopping] = useState(false);
@@ -441,6 +468,16 @@ export function BotStatus() {
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectionErrorRef = useRef<string | null>(null);
   connectionErrorRef.current = connectionError;
+  // Ref-synced active service so action handlers + loadTrades don't need
+  // `session` in their dep arrays (which would cascade into the polling
+  // useEffect and create an infinite re-render loop). Updated whenever
+  // session.service flips between live and paper.
+  const activeServiceRef =
+    useRef<typeof liveTradingService | typeof paperTradingService>(liveTradingService);
+  useEffect(() => {
+    if (session?.service) activeServiceRef.current = session.service;
+  }, [session?.service]);
+
   // Kill-confirm focus management. When the destructive panel appears,
   // focus lands on CANCEL (safe default per WCAG / Apple HIG). User has
   // to deliberately tab to CONFIRM KILL SWITCH to fire.
@@ -463,10 +500,15 @@ export function BotStatus() {
 
   const loadStatus = useCallback(async () => {
     try {
-      const data = await liveTradingService.getStatus();
-      setStatus(data);
-      fastPollRef.current =
-        (data.positions?.length ?? 0) > 0 || data.current_scan?.status === 'running';
+      const next = await fetchActiveSession();
+      setSession(next);
+      // Fast-poll when there are open positions or a scan is in flight.
+      // The `current_scan` field only exists on LiveTradingStatus; paper
+      // doesn't expose it. Fall back to positions-only check for paper.
+      const data = next.status;
+      const hasCurrentScan =
+        data && 'current_scan' in data && data.current_scan?.status === 'running';
+      fastPollRef.current = (data?.positions?.length ?? 0) > 0 || !!hasCurrentScan;
       fetchFailCount.current = 0;
       if (connectionErrorRef.current) setConnectionError(null);
     } catch (e) {
@@ -479,10 +521,16 @@ export function BotStatus() {
   }, []);
 
   const loadTrades = useCallback(async () => {
+    // Dispatch against the active service via the ref (kept in sync below).
+    // Reading session from useCallback deps would re-create loadTrades on
+    // every poll, which would in turn re-schedule the polling useEffect and
+    // create an infinite re-render loop. The ref pattern matches the
+    // existing connectionErrorRef approach.
+    const svc = activeServiceRef.current;
     try {
-      const data = await liveTradingService.getHistory(50);
+      const data = await svc.getHistory(50);
       if (data && Array.isArray(data.trades)) {
-        setTrades(data.trades);
+        setTrades(data.trades as CompletedLiveTrade[]);
         setTradesError(null);
       } else {
         setTradesError('Trade history response missing trades array');
@@ -511,7 +559,7 @@ export function BotStatus() {
   const handleStop = async () => {
     setStopping(true);
     try {
-      await liveTradingService.stop();
+      await activeServiceRef.current.stop();
       await loadStatus();
       await loadTrades();
     } catch (e) {
@@ -521,7 +569,11 @@ export function BotStatus() {
     }
   };
 
+  // KillSwitch is live-only. Button is hidden when !canKillSwitch but the
+  // handler defends with an explicit type narrow in case it's wired
+  // somewhere else later. Paper has no real positions to close at market.
   const handleKillSwitch = async () => {
+    if (activeServiceRef.current !== liveTradingService) return;
     setKilling(true);
     setShowKillConfirm(false);
     try {
@@ -536,14 +588,17 @@ export function BotStatus() {
 
   const handleReset = async () => {
     try {
-      await liveTradingService.reset();
+      await activeServiceRef.current.reset();
       navigate('/bot/setup');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
 
+  // AnalyzeSession is live-only (no equivalent in paperTradingService).
+  // Button is hidden when !canAnalyzeSession; handler guards in case.
   const handleAnalyze = async () => {
+    if (activeServiceRef.current !== liveTradingService) return;
     setAnalyzing(true);
     setAnalyzeOutput(null);
     setAnalyzeError(null);
@@ -560,23 +615,47 @@ export function BotStatus() {
 
   const isRunning = status?.status === 'running';
   const isKilled = status?.status === 'kill_switched';
-  const tradingMode = status?.trading_mode ?? 'idle';
-  const isLive = tradingMode === 'live';
+  const tradingMode: ActiveMode = session?.mode ?? 'idle';
+  const isLive = session?.isLive ?? false;
+  const isPaper = session?.isPaper ?? false;
+  const canKillSwitch = session?.canKillSwitch ?? false;
+  const canAnalyzeSession = session?.canAnalyzeSession ?? false;
   const stats = status?.statistics;
   const balance = status?.balance;
   const initialBalance = balance?.initial ?? 0;
   const positions = status?.positions ?? [];
   const pendingOrders = status?.pending_orders ?? [];
-  const signalLog = status?.signal_log ?? [];
+  // signal_log only exists on LiveTradingStatus; paper service doesn't
+  // emit it. Returns empty array for paper sessions until backend parity.
+  const signalLog =
+    (status && 'signal_log' in status ? status.signal_log : null) ?? [];
+  // regime is also LiveTradingStatus-only. Returns null for paper.
+  const regime =
+    status && 'regime' in status ? (status.regime as LiveTradingStatus['regime']) : null;
+  // DiagnoseWizard is wired against live endpoints; pass null on paper so
+  // the wizard's effect short-circuits cleanly.
+  const liveStatus = !isPaper && status ? (status as LiveTradingStatus) : null;
   const cfg = status?.config;
 
-  const subtitleText = isLive
-    ? 'real money — phemex perpetuals'
-    : tradingMode === 'testnet'
-      ? 'testnet — simulated fills'
-      : tradingMode === 'dry_run'
-        ? 'dry run — no orders sent'
-        : 'idle — awaiting deployment';
+  // Subtitle reflects the active mode. Commas (not em dashes) per DESIGN.md.
+  const subtitleText = (() => {
+    switch (tradingMode) {
+      case 'live':
+        return 'real money, phemex perpetuals';
+      case 'paper':
+        return 'paper trading, phemex price feed';
+      case 'testnet':
+        return 'testnet, simulated fills';
+      case 'dry_run':
+        return 'dry run, no orders sent';
+      default:
+        return 'idle, awaiting deployment';
+    }
+  })();
+
+  // PageHead accent: live = red, everything else = amber (paper, testnet,
+  // dry_run, idle all sandbox-or-quiet).
+  const headAccent: 'red' | 'amber' = isLive ? 'red' : 'amber';
 
   return (
     <div className="page-shell" id="main-content">
@@ -584,13 +663,13 @@ export function BotStatus() {
 
       <PageHead
         icon="●"
-        title="Live Deployment"
+        title={isPaper ? 'Paper Deployment' : 'Live Deployment'}
         subtitle={subtitleText}
-        accent={isLive ? 'red' : 'amber'}
+        accent={headAccent}
         badges={
           <>
             <ModePill mode={tradingMode} />
-            <StatusPill status={status?.status ?? 'idle'} />
+            <StatusPill status={(status?.status ?? 'idle') as SessionStatusValue} />
           </>
         }
       />
@@ -653,14 +732,17 @@ export function BotStatus() {
             className="panel panel-accent"
             style={{
               padding: 18,
-              // Priority: live > running > idle. Live mode (real money) must
-              // dominate the visual state even when the bot is happily running.
-              // CLAUDE.md tone: live red is the loudest state on the page.
+              // Priority: live > paper > running > idle. Live mode (real
+              // money) is the loudest state. Paper mode running stays amber
+              // (sandbox demarcation per project memory); non-paper running
+              // gets green to signal "active state OK"; idle is amber.
               borderColor: isLive
                 ? 'var(--red-border)'
-                : isRunning
-                  ? 'var(--green-border)'
-                  : 'var(--amber-border)',
+                : isPaper
+                  ? 'var(--amber-border)'
+                  : isRunning
+                    ? 'var(--green-border)'
+                    : 'var(--amber-border)',
             }}
           >
             <div
@@ -728,15 +810,19 @@ export function BotStatus() {
                     >
                       {stopping ? '↻ STOPPING' : '■ STOP'}
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-red"
-                      onClick={() => setShowKillConfirm(true)}
-                      style={{ fontSize: 11 }}
-                      aria-label="Kill switch — immediately close all positions"
-                    >
-                      ☠ KILL
-                    </button>
+                    {/* Kill switch is live-only (no real positions to close
+                        at market in paper). Hidden when canKillSwitch=false. */}
+                    {canKillSwitch && (
+                      <button
+                        type="button"
+                        className="btn btn-red"
+                        onClick={() => setShowKillConfirm(true)}
+                        style={{ fontSize: 11 }}
+                        aria-label="Kill switch — immediately close all positions"
+                      >
+                        ☠ KILL
+                      </button>
+                    )}
                   </>
                 ) : (
                   <>
@@ -760,16 +846,20 @@ export function BotStatus() {
                     </button>
                   </>
                 )}
-                <button
-                  type="button"
-                  className="btn btn-blue"
-                  onClick={handleAnalyze}
-                  disabled={analyzing}
-                  style={{ fontSize: 11 }}
-                  aria-label={analyzing ? 'Analyzing session' : 'Analyze current session'}
-                >
-                  {analyzing ? '↻ ANALYZING' : '⊞ ANALYZE'}
-                </button>
+                {/* AnalyzeSession is live-only (paper service has no
+                    equivalent backend pipeline). Hidden for paper sessions. */}
+                {canAnalyzeSession && (
+                  <button
+                    type="button"
+                    className="btn btn-blue"
+                    onClick={handleAnalyze}
+                    disabled={analyzing}
+                    style={{ fontSize: 11 }}
+                    aria-label={analyzing ? 'Analyzing session' : 'Analyze current session'}
+                  >
+                    {analyzing ? '↻ ANALYZING' : '⊞ ANALYZE'}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -884,8 +974,8 @@ export function BotStatus() {
               <span>
                 Regime{' '}
                 <strong style={{ color: 'var(--blue)', fontWeight: 800 }}>
-                  {status.regime && status.regime.composite !== 'unknown'
-                    ? status.regime.composite.replace(/_/g, ' ').toUpperCase()
+                  {regime && regime.composite !== 'unknown'
+                    ? regime.composite.replace(/_/g, ' ').toUpperCase()
                     : '—'}
                 </strong>
               </span>
@@ -1333,7 +1423,7 @@ export function BotStatus() {
       <DiagnoseWizard
         open={diagnoseOpen}
         onClose={() => setDiagnoseOpen(false)}
-        status={status}
+        status={liveStatus}
         nowSec={diagnoseOpenedAtMs / 1000}
       />
     </div>

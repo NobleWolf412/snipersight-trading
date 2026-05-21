@@ -23,26 +23,30 @@
  */
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { liveTradingService } from '@/services/liveTradingService';
+import { fetchActiveSession } from '@/services/activeSession';
 
 export function BotIndex() {
   const navigate = useNavigate();
 
   useEffect(() => {
     let cancelled = false;
-    liveTradingService
-      .getStatus()
-      .then((s) => {
+    // Dual-probe across live + paper services. If either has a running
+    // session, route to /bot/status. The status page itself dispatches
+    // against whichever service owns the session.
+    fetchActiveSession()
+      .then((session) => {
         if (cancelled) return;
-        if (s.status === 'running') navigate('/bot/status', { replace: true });
-        else navigate('/bot/setup', { replace: true });
+        if (session.status?.status === 'running') {
+          navigate('/bot/status', { replace: true });
+        } else {
+          navigate('/bot/setup', { replace: true });
+        }
       })
       .catch((e) => {
         if (cancelled) return;
-        // Backend unreachable or transient error — default to setup.
-        // Setup's own preflight will surface the connectivity problem
-        // with proper UI; we don't try to render an error here.
-        console.warn('[BotIndex] status probe failed, routing to /bot/setup:', e);
+        // Both services unreachable. Default to setup; setup's own
+        // preflight surfaces the connectivity problem with proper UI.
+        console.warn('[BotIndex] active-session probe failed, routing to /bot/setup:', e);
         navigate('/bot/setup', { replace: true });
       });
     return () => {
