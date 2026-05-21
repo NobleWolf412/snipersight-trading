@@ -82,9 +82,11 @@ import {
   GauntletBreakdown,
   PageHead,
   PipelineTracer,
+  PositionDetailModal,
   Reticle,
   SectionHead,
   UniversePanel,
+  type DetailSelection,
 } from '@/components/hud';
 import {
   type CompletedLiveTrade,
@@ -298,13 +300,33 @@ function MetricTile({
 }
 
 // ─── Position Row ──────────────────────────────────────────────────────
-function PositionRow({ position }: { position: LivePosition }) {
+function PositionRow({
+  position,
+  onClick,
+}: {
+  position: LivePosition;
+  onClick?: () => void;
+}) {
   const isLong = position.direction === 'LONG';
   const isProfit = position.unrealized_pnl >= 0;
   // TP display: prefer tp_final (close-everything level), fall back to tp1, then '—'.
   const tp = position.tp_final ?? position.tp1 ?? null;
   return (
     <div
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      aria-label={onClick ? `Open detail for ${position.symbol}` : undefined}
       style={{
         display: 'grid',
         gridTemplateColumns: OPEN_POS_COLS,
@@ -312,7 +334,24 @@ function PositionRow({ position }: { position: LivePosition }) {
         padding: '10px 12px',
         borderTop: '1px solid var(--border-soft)',
         alignItems: 'center',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'background-color .12s ease',
       }}
+      onMouseEnter={
+        onClick
+          ? (e) => {
+              (e.currentTarget as HTMLDivElement).style.backgroundColor =
+                'rgba(255,255,255,.03)';
+            }
+          : undefined
+      }
+      onMouseLeave={
+        onClick
+          ? (e) => {
+              (e.currentTarget as HTMLDivElement).style.backgroundColor = '';
+            }
+          : undefined
+      }
     >
       <span className="mono" style={{ fontWeight: 700 }}>
         {position.symbol}
@@ -361,13 +400,29 @@ function PositionRow({ position }: { position: LivePosition }) {
 // No timestamp on the backend payload yet, so no age column.
 function PendingOrderRow({
   order,
+  onClick,
 }: {
   order: NonNullable<LiveTradingStatus['pending_orders']>[number];
+  onClick?: () => void;
 }) {
   const isLong = order.direction === 'LONG';
   const isPartial = order.status === 'PARTIALLY_FILLED';
   return (
     <div
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      aria-label={onClick ? `Open detail for pending ${order.symbol} order` : undefined}
       style={{
         display: 'grid',
         gridTemplateColumns: PENDING_ORDER_COLS,
@@ -375,7 +430,24 @@ function PendingOrderRow({
         padding: '10px 12px',
         borderTop: '1px solid var(--border-soft)',
         alignItems: 'center',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'background-color .12s ease',
       }}
+      onMouseEnter={
+        onClick
+          ? (e) => {
+              (e.currentTarget as HTMLDivElement).style.backgroundColor =
+                'rgba(255,255,255,.03)';
+            }
+          : undefined
+      }
+      onMouseLeave={
+        onClick
+          ? (e) => {
+              (e.currentTarget as HTMLDivElement).style.backgroundColor = '';
+            }
+          : undefined
+      }
     >
       <span className="mono" style={{ fontWeight: 700 }}>
         {order.symbol}
@@ -462,6 +534,9 @@ export function BotStatus() {
   // deterministic frozen ts during capture.
   const [diagnoseOpen, setDiagnoseOpen] = useState(false);
   const [diagnoseOpenedAtMs, setDiagnoseOpenedAtMs] = useState<number>(() => Date.now());
+  // Position / pending-order detail modal. Click any row in Active
+  // Positions to open. Modal carries the chart + metadata.
+  const [detailSelection, setDetailSelection] = useState<DetailSelection | null>(null);
 
   const fetchFailCount = useRef(0);
   const fastPollRef = useRef(false);
@@ -1222,7 +1297,11 @@ export function BotStatus() {
                   <span style={{ textAlign: 'right' }}>R</span>
                 </div>
                 {positions.map((p) => (
-                  <PositionRow key={p.position_id} position={p} />
+                  <PositionRow
+                    key={p.position_id}
+                    position={p}
+                    onClick={() => setDetailSelection({ kind: 'position', data: p })}
+                  />
                 ))}
               </div>
             )}
@@ -1278,7 +1357,11 @@ export function BotStatus() {
                   <span style={{ textAlign: 'right' }}>Status</span>
                 </div>
                 {pendingOrders.map((o) => (
-                  <PendingOrderRow key={o.order_id} order={o} />
+                  <PendingOrderRow
+                    key={o.order_id}
+                    order={o}
+                    onClick={() => setDetailSelection({ kind: 'pending', data: o })}
+                  />
                 ))}
               </div>
             )}
@@ -1425,6 +1508,16 @@ export function BotStatus() {
         onClose={() => setDiagnoseOpen(false)}
         status={liveStatus}
         nowSec={diagnoseOpenedAtMs / 1000}
+      />
+
+      {/* Active-trade detail modal. Renders the click-through chart +
+          metadata for either a filled position or a pending limit. Pass
+          the current regime composite as additional context when live;
+          paper sessions don't expose regime in status. */}
+      <PositionDetailModal
+        selection={detailSelection}
+        onClose={() => setDetailSelection(null)}
+        currentRegime={regime?.composite ?? null}
       />
     </div>
   );
