@@ -66,12 +66,24 @@ def detect_reversal_context(
         elif direction.upper() == "SHORT":
             return short_reversal
 
-    # Return stronger setup — flag conflict so callers can widen threshold or skip
+    # Return stronger setup — flag conflict so callers can widen threshold or skip.
+    # §10 standing-fix (C2 symmetry pass, May 2026): strict-greater for both
+    # directions; on EXACT confidence tie, return empty ReversalContext so
+    # neither direction's setup propagates. The legacy `>=` defaulted equal-
+    # confidence conflicts to LONG (symmetry-guard SYM-01).
     if long_reversal.is_reversal_setup and short_reversal.is_reversal_setup:
-        if long_reversal.confidence >= short_reversal.confidence:
+        if long_reversal.confidence > short_reversal.confidence:
             stronger, weaker = long_reversal, short_reversal
-        else:
+        elif short_reversal.confidence > long_reversal.confidence:
             stronger, weaker = short_reversal, long_reversal
+        else:
+            # Exact tie — neither direction wins. Return empty so callers
+            # see "no reversal setup" rather than an asymmetric LONG default.
+            logger.info(
+                "REVERSAL exact-tie at confidence=%.1f — returning empty (no setup)",
+                long_reversal.confidence,
+            )
+            return ReversalContext()
         stronger.conflict_detected = True
         stronger.conflict_confidence = weaker.confidence
         stronger.rationale += (

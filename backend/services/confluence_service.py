@@ -30,11 +30,51 @@ logger = logging.getLogger(__name__)
 
 class ConflictingDirectionsException(Exception):
     """Raised when bullish and bearish scores are too close to call."""
-    
+
     def __init__(self, message: str, bullish_breakdown: ConfluenceBreakdown, bearish_breakdown: ConfluenceBreakdown):
         super().__init__(message)
         self.bullish_breakdown = bullish_breakdown
         self.bearish_breakdown = bearish_breakdown
+
+
+def resolve_directional_tie(
+    bullish_breakdown: ConfluenceBreakdown,
+    bearish_breakdown: ConfluenceBreakdown,
+    context_symbol: str,
+    branch_label: str,
+):
+    """Pick higher-scoring breakdown via strict-greater. Raise on exact tie.
+
+    Returns (chosen_breakdown, chosen_direction) where direction is "LONG" / "SHORT".
+    Raises ConflictingDirectionsException on exact equality so neither side
+    asymmetrically wins.
+
+    §10 standing-fix (C2 symmetry pass, May 2026): symmetry-guard SYM-01
+    confirmed three downstream sites in score() — RANGE_REVERSION (line ~340),
+    ELITE_TIEBREAKER (line ~420), score_winner_below_gate (line ~460) — were
+    using `bullish_score >= bearish_score → LONG` which compounded the
+    orchestrator pre-direction LONG bias. This helper centralises the
+    strict-greater + raise-on-exact-tie pattern so the three sites share one
+    auditable implementation.
+
+    Args:
+        bullish_breakdown: scored LONG breakdown
+        bearish_breakdown: scored SHORT breakdown
+        context_symbol: symbol string for the exception message
+        branch_label: human label for which call-site fired the exception
+            (e.g. "RANGE_REVERSION", "ELITE_TIEBREAKER", "score_winner_below_gate")
+    """
+    if bullish_breakdown.total_score > bearish_breakdown.total_score:
+        return bullish_breakdown, "LONG"
+    if bearish_breakdown.total_score > bullish_breakdown.total_score:
+        return bearish_breakdown, "SHORT"
+    raise ConflictingDirectionsException(
+        f"{context_symbol}: {branch_label} exact-tie "
+        f"({bullish_breakdown.total_score:.2f} == {bearish_breakdown.total_score:.2f}); "
+        f"cannot symmetrically pick direction",
+        bullish_breakdown=bullish_breakdown,
+        bearish_breakdown=bearish_breakdown,
+    )
 
 
 
@@ -331,15 +371,13 @@ class ConfluenceService:
                         )
 
                         if is_scalp_mode and both_scores_high:
-                            # RANGE_REVERSION: Both directions are valid for scalping
-                            # Return the slightly higher one, but store both as valid
-                            if bullish_breakdown.total_score >= bearish_breakdown.total_score:
-                                chosen = bullish_breakdown
-                                chosen_direction = "LONG"
-                            else:
-                                chosen = bearish_breakdown
-                                chosen_direction = "SHORT"
-
+                            # RANGE_REVERSION: Both directions are valid for scalping.
+                            # §10 standing-fix — strict-greater + raise on exact tie via
+                            # the shared `resolve_directional_tie` helper.
+                            chosen, chosen_direction = resolve_directional_tie(
+                                bullish_breakdown, bearish_breakdown,
+                                context.symbol, "RANGE_REVERSION",
+                            )
                             tie_break_used = "range_reversion"
                             logger.info(
                                 "🔄 %s RANGE_REVERSION: Both directions valid (LONG=%.1f, SHORT=%.1f) - %s mode",
@@ -404,28 +442,26 @@ class ConfluenceService:
 
                                 elif both_scores_high:
                                     # NEW: Elite Score Tiebreaker (>75%)
-                                    # If both signals are incredibly strong, don't throw them away due to a tie.
-                                    # Pick the winner based on raw score, however small the margin.
-                                    if bullish_breakdown.total_score >= bearish_breakdown.total_score:
-                                        chosen = bullish_breakdown
-                                        chosen_direction = "LONG"
-                                        tie_break_used = "elite_score_long"
-                                        logger.info(
-                                            "✅ %s ELITE TIEBREAKER: LONG selected (%.1f vs %.1f) - forcing trade due to high conviction",
-                                            context.symbol,
-                                            bullish_breakdown.total_score,
-                                            bearish_breakdown.total_score,
-                                        )
-                                    else:
-                                        chosen = bearish_breakdown
-                                        chosen_direction = "SHORT"
-                                        tie_break_used = "elite_score_short"
-                                        logger.info(
-                                            "✅ %s ELITE TIEBREAKER: SHORT selected (%.1f vs %.1f) - forcing trade due to high conviction",
-                                            context.symbol,
-                                            bearish_breakdown.total_score,
-                                            bullish_breakdown.total_score,
-                                        )
+                                    # If both signals are incredibly strong, don't throw them away
+                                    # due to a near-tie. Pick the winner based on raw score, however
+                                    # small the margin.
+                                    # §10 standing-fix — strict-greater + raise on exact tie via
+                                    # the shared `resolve_directional_tie` helper.
+                                    chosen, chosen_direction = resolve_directional_tie(
+                                        bullish_breakdown, bearish_breakdown,
+                                        context.symbol, "ELITE_TIEBREAKER",
+                                    )
+                                    tie_break_used = (
+                                        "elite_score_long" if chosen_direction == "LONG"
+                                        else "elite_score_short"
+                                    )
+                                    logger.info(
+                                        "✅ %s ELITE TIEBREAKER: %s selected (%.1f vs %.1f) - forcing trade due to high conviction",
+                                        context.symbol,
+                                        chosen_direction,
+                                        bullish_breakdown.total_score if chosen_direction == "LONG" else bearish_breakdown.total_score,
+                                        bearish_breakdown.total_score if chosen_direction == "LONG" else bullish_breakdown.total_score,
+                                    )
 
                                 # NOTE: This else branch is unreachable. We are inside the
                                 # `if bullish > 70 and bearish > 70` block, so both_scores_high
@@ -437,14 +473,16 @@ class ConfluenceService:
                             else:
                                 # Scores not strong enough for structure override (<=70%).
                                 # Pick the higher-scoring direction and let the 70% CONF gate
-                                # produce a clear rejection ("Score X% below gate") instead of
-                                # the misleading "No directional edge" exception.
-                                if bullish_breakdown.total_score >= bearish_breakdown.total_score:
-                                    chosen = bullish_breakdown
-                                    chosen_direction = "LONG"
-                                else:
-                                    chosen = bearish_breakdown
-                                    chosen_direction = "SHORT"
+                                # produce a clear rejection.
+                                # §10 standing-fix — strict-greater + raise on exact tie via
+                                # the shared `resolve_directional_tie` helper. Even though the
+                                # conf gate will reject either direction here, the rejection-
+                                # payload `direction` field was inflating the LONG telemetry
+                                # counter on ties.
+                                chosen, chosen_direction = resolve_directional_tie(
+                                    bullish_breakdown, bearish_breakdown,
+                                    context.symbol, "score_winner_below_gate",
+                                )
                                 tie_break_used = "score_winner_below_gate"
                                 logger.info(
                                     "🔄 %s Both directions below gate (%.1f vs %.1f) — picking %s by score, "

@@ -582,15 +582,21 @@ class Orchestrator:
                     direction_stats["longs_generated"] += 1
                 else:
                     direction_stats["shorts_generated"] += 1
-                # Track tie-break usage from metadata
+                # Track tie-break usage from metadata.
+                # §10 standing-fix (C2 symmetry pass, May 2026): the
+                # "neutral_default_long" branch was a dead counter — no
+                # producer in confluence_service.py emitted that string
+                # (symmetry-guard OBS-02-SUSPECT). Removed to prevent
+                # masking the actual scope of LONG-default tie-breaks.
+                # Pre-direction tie-breaks live separately at
+                # context.metadata["pre_dir_tie_break"] (set by
+                # Orchestrator._derive_pre_direction in C1).
                 alt_confluence = getattr(result, "metadata", {}).get("alt_confluence", {})
                 tie_break = alt_confluence.get("tie_break_used")
                 if tie_break == "regime_bullish":
                     direction_stats["tie_breaks_long"] += 1
                 elif tie_break == "regime_bearish":
                     direction_stats["tie_breaks_short"] += 1
-                elif tie_break == "neutral_default_long":
-                    direction_stats["tie_breaks_neutral_default"] += 1
                 logger.info(
                     "✅ %s: Signal generated (%.1f%%) - %s",
                     symbol,
@@ -1817,10 +1823,20 @@ class Orchestrator:
                 
                 gap = abs(bull_score - bear_score)
                 
-                # Build the payload with all available data
+                # Build the payload with all available data.
+                # §10 standing-fix (C2 symmetry pass, May 2026): strict-greater for
+                # both directions. Exact-tie label is "UNKNOWN" — the legacy
+                # `>=` defaulted to LONG, polluting the rejection-direction
+                # telemetry counters (symmetry-guard SYM-01 finding).
+                if bull_score > bear_score:
+                    _payload_direction = "LONG"
+                elif bear_score > bull_score:
+                    _payload_direction = "SHORT"
+                else:
+                    _payload_direction = "UNKNOWN"
                 payload = {
                     "symbol": symbol,
-                    "direction": "LONG" if bull_score >= bear_score else "SHORT",
+                    "direction": _payload_direction,
                     "reason": error_msg,
                     "reason_type": "low_confluence",
                     "detail": "Bullish and bearish confluence scores too close to determine direction",
