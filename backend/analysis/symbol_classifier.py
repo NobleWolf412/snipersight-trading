@@ -9,6 +9,7 @@ Provides accurate symbol categorization (major, meme, defi, etc.) using:
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -70,6 +71,33 @@ COINGECKO_CATEGORY_MAP: dict[str, SymbolCategory] = {
     "arbitrum-ecosystem": SymbolCategory.LAYER2,
     "polygon-ecosystem": SymbolCategory.LAYER2,
 }
+
+
+# Priority order for category assignment when a coin appears in multiple CoinGecko
+# categories. Processed lowest-priority FIRST so higher-priority assignments overwrite.
+# MAJOR is set separately from market-cap rank and is locked against overwrite.
+# Rationale: MEME identity dominates the chain it lives on (BONK is a meme, not a layer-1);
+# AI/GAMING are narrower and more specific than DEFI; DEFI is more specific than L2/L1
+# infrastructure tagging.
+_CATEGORY_FETCH_PRIORITY: list[SymbolCategory] = [
+    SymbolCategory.LAYER1,
+    SymbolCategory.LAYER2,
+    SymbolCategory.DEFI,
+    SymbolCategory.GAMING,
+    SymbolCategory.AI,
+    SymbolCategory.MEME,
+]
+
+
+def _build_cg_ids_by_category() -> dict[SymbolCategory, list[str]]:
+    """Invert COINGECKO_CATEGORY_MAP to list CG category IDs per SymbolCategory."""
+    reverse: dict[SymbolCategory, list[str]] = {}
+    for cg_id, sym_cat in COINGECKO_CATEGORY_MAP.items():
+        reverse.setdefault(sym_cat, []).append(cg_id)
+    return reverse
+
+
+_CG_IDS_BY_CATEGORY: dict[SymbolCategory, list[str]] = _build_cg_ids_by_category()
 
 # Heuristic fallback data
 HEURISTIC_MAJORS: set[str] = {
@@ -327,7 +355,7 @@ class CoinGeckoCache:
 
     data: dict[str, SymbolCategory] = field(default_factory=dict)
     last_fetch: float = 0.0
-    ttl_seconds: float = 600.0  # 10 minutes
+    ttl_seconds: float = 86400.0  # 24h — category membership barely shifts
     last_error: float = 0.0
     error_backoff: float = 60.0  # 1 minute backoff on errors
     _lock: threading.Lock = field(default_factory=threading.Lock)
@@ -379,7 +407,7 @@ class SymbolClassifier:
 
     def __init__(
         self,
-        cache_ttl_seconds: float = 600.0,
+        cache_ttl_seconds: float = 86400.0,
         coingecko_timeout: float = 10.0,
         max_coins: int = 250,
         auto_fetch: bool = False,
@@ -398,6 +426,12 @@ class SymbolClassifier:
         self._max_coins = max_coins
         self._coingecko_url = "https://api.coingecko.com/api/v3"
         self._auto_fetch = auto_fetch
+        # COINGECKO_API_KEY is read LAZILY inside _fetch_coingecko_data, not here.
+        # Reason: the singleton is constructed at pair_selection.py module-import
+        # time, which can predate api_server.py's load_dotenv() call. Reading lazily
+        # makes the result depend on .env being loaded by the time a fetch runs,
+        # which is guaranteed because refresh_cache is invoked from the background
+        # thread launched in api_server.startup_event AFTER load_dotenv.
 
     def _extract_base(self, symbol: str) -> str:
         """Extract base currency from symbol (e.g., BTC/USDT -> BTC)."""
@@ -410,101 +444,180 @@ class SymbolClassifier:
         return symbol.upper()
 
     def _fetch_coingecko_data(self) -> dict[str, SymbolCategory]:
-        """Fetch category data from CoinGecko API."""
+        """Fetch category data from CoinGecko API.
+
+        Strategy: one /coins/markets call for market-cap-rank MAJOR tagging, then one
+        /coins/markets?category=<id> call per CoinGecko category. Categories are processed
+        in priority order so higher-priority assignments overwrite lower (MEME > AI >
+        GAMING > DEFI > LAYER2 > LAYER1); MAJOR is locked against overwrite.
+
+        Trade-off vs the old per-coin /coins/{id} loop: fewer total calls (24 vs 51),
+        broader coverage (250 coins per category vs 50 detail fetches total), and no
+        run-to-run drift from partial 429 cutoffs.
+
+        Rate-limit pacing (request_delay):
+          - With key (Demo plan, 100 calls/min): 60/100 = 0.60s minimum; we use 0.65s
+            to add ~8% safety margin against clock skew and network jitter.
+          - Without key (public anonymous, ~30 calls/min): 60/30 = 2.00s minimum;
+            we use 2.10s to add ~5% safety margin.
+
+        Cache TTL (24h, set in CoinGeckoCache.ttl_seconds): CoinGecko category
+        membership is structural metadata that shifts on weekly-or-slower timescales.
+        Refreshing every 10 minutes (the old default) was wasteful with no benefit;
+        24h captures any realistic membership update within one trading day.
+        """
         if requests is None:
             logger.warning("requests library not available, using heuristics only")
             return {}
 
+        # Lazy env read: defers until fetch time so the singleton can be constructed
+        # before api_server.load_dotenv() runs (see __init__ comment).
+        api_key = (os.getenv("COINGECKO_API_KEY", "") or "").strip() or None
+        request_delay = 0.65 if api_key else 2.10
+        headers = {"x-cg-demo-api-key": api_key} if api_key else {}
+        markets_url = f"{self._coingecko_url}/coins/markets"
+
         result: dict[str, SymbolCategory] = {}
+        per_category_counts: dict[str, int] = {}
+        major_snapshot: set[str] = set()
+        rate_limited = False
+        exit_reason = "ok"
 
         try:
-            # Fetch top coins by market cap
-            url = f"{self._coingecko_url}/coins/markets"
-            params = {
+            # ── Step 1: top-N markets fetch for rank-based MAJOR tagging ─────────────
+            markets_params = {
                 "vs_currency": "usd",
                 "order": "market_cap_desc",
                 "per_page": self._max_coins,
                 "page": 1,
                 "sparkline": "false",
             }
-
-            response = requests.get(url, params=params, timeout=self._timeout)
+            response = requests.get(
+                markets_url, params=markets_params, headers=headers, timeout=self._timeout
+            )
             response.raise_for_status()
             coins = response.json()
 
-            # Get coin IDs for detailed info
-            coin_ids = [coin["id"] for coin in coins[:100]]  # Limit to top 100 for detailed info
-
-            # Map symbols to coin IDs
-            symbol_to_id: dict[str, str] = {}
-            for coin in coins:
-                symbol = coin.get("symbol", "").upper()
-                coin_id = coin.get("id", "")
-                if symbol and coin_id:
-                    symbol_to_id[symbol] = coin_id
-
-            # Fetch detailed info with categories (batch request)
-            # Note: CoinGecko free tier limits this, so we use markets endpoint categories
             for coin in coins:
                 symbol = coin.get("symbol", "").upper()
                 if not symbol:
                     continue
-
-                # Use market cap rank for major classification
                 rank = coin.get("market_cap_rank", 999)
                 if rank and rank <= 20:
                     result[symbol] = SymbolCategory.MAJOR
 
-            # Fetch categories for top coins (more detailed)
-            # This uses the /coins/{id} endpoint for category data
-            # Limited calls to stay within free tier
-            for coin_id in coin_ids[:50]:  # Only fetch detailed info for top 50
-                try:
-                    detail_url = f"{self._coingecko_url}/coins/{coin_id}"
-                    detail_params = {
-                        "localization": "false",
-                        "tickers": "false",
-                        "market_data": "false",
-                        "community_data": "false",
-                        "developer_data": "false",
-                    }
-                    detail_response = requests.get(
-                        detail_url, params=detail_params, timeout=self._timeout
-                    )
+            # Snapshot the MAJOR set for the mass-conservation invariant below.
+            major_snapshot = {
+                sym for sym, cat in result.items() if cat == SymbolCategory.MAJOR
+            }
 
-                    if detail_response.status_code == 429:
-                        logger.warning("CoinGecko rate limit hit, using partial data")
-                        break
+            time.sleep(request_delay)
 
-                    detail_response.raise_for_status()
-                    detail = detail_response.json()
+            # ── Step 2: one category-filtered markets call per CG category ──────────
+            # Processed lowest-priority first; higher-priority categories overwrite
+            # lower for non-MAJOR symbols. MAJOR is locked.
+            for cat_enum in _CATEGORY_FETCH_PRIORITY:
+                if rate_limited:
+                    break
+                for cg_id in _CG_IDS_BY_CATEGORY.get(cat_enum, []):
+                    try:
+                        cat_params = {
+                            "vs_currency": "usd",
+                            "category": cg_id,
+                            "order": "market_cap_desc",
+                            "per_page": 250,
+                            "page": 1,
+                            "sparkline": "false",
+                        }
+                        cat_response = requests.get(
+                            markets_url,
+                            params=cat_params,
+                            headers=headers,
+                            timeout=self._timeout,
+                        )
 
-                    symbol = detail.get("symbol", "").upper()
-                    categories = detail.get("categories", [])
+                        if cat_response.status_code == 429:
+                            logger.warning(
+                                "CoinGecko rate limit hit on category=%s "
+                                "(processed=%d cats, total=%d classifications, key=%s) "
+                                "— using partial data",
+                                cg_id,
+                                len(per_category_counts),
+                                len(result),
+                                "demo" if api_key else "none",
+                            )
+                            rate_limited = True
+                            exit_reason = "rate_limited_partial"
+                            break
 
-                    if symbol and categories:
-                        for cat in categories:
-                            cat_lower = cat.lower().replace(" ", "-")
-                            if cat_lower in COINGECKO_CATEGORY_MAP:
-                                # Don't override MAJOR classification for top coins
-                                if symbol not in result or result[symbol] != SymbolCategory.MAJOR:
-                                    result[symbol] = COINGECKO_CATEGORY_MAP[cat_lower]
-                                break
+                        cat_response.raise_for_status()
+                        members = cat_response.json()
 
-                    # Small delay to respect rate limits
-                    time.sleep(0.1)
+                        assigned = 0
+                        for member in members:
+                            sym = member.get("symbol", "").upper()
+                            if not sym:
+                                continue
+                            # Preserve MAJOR; otherwise overwrite (priority order
+                            # guarantees higher-priority categories run later).
+                            if result.get(sym) == SymbolCategory.MAJOR:
+                                continue
+                            result[sym] = cat_enum
+                            assigned += 1
+                        per_category_counts[cg_id] = assigned
 
-                except requests.exceptions.RequestException:
-                    # Continue with other coins on individual failures
-                    continue
+                        time.sleep(request_delay)
 
-            logger.info(f"CoinGecko: fetched {len(result)} symbol classifications")
+                    except requests.exceptions.RequestException as e:
+                        # Per-category failure is non-fatal — log and continue.
+                        logger.debug(
+                            "CoinGecko category fetch failed for %s: %s", cg_id, e
+                        )
+                        continue
+
+            # ── Mass-conservation invariant: MAJOR lock must have held ──────────────
+            # Every symbol tagged MAJOR in Step 1 must still be MAJOR after Step 2.
+            # If this fails, a future refactor has corrupted the lock guard inside the
+            # category loop — discard the result rather than poison the cache.
+            corrupted = [
+                s for s in major_snapshot if result.get(s) != SymbolCategory.MAJOR
+            ]
+            if corrupted:
+                logger.error(
+                    "MAJOR-lock invariant violated for %d/%d symbols (sample=%s) — "
+                    "discarding fetch and falling back to heuristics",
+                    len(corrupted),
+                    len(major_snapshot),
+                    corrupted[:5],
+                )
+                exit_reason = "major_lock_violated"
+                result = {}
+                return result
+
             return result
 
         except requests.exceptions.RequestException as e:
             logger.warning(f"CoinGecko API error: {e}")
             self._cache.mark_error()
+            exit_reason = "request_error"
             return {}
+
+        finally:
+            # Always log fetch outcome — covers normal exit, 429-partial, request error,
+            # KeyboardInterrupt, and any unexpected exception. Without this, a mid-loop
+            # interrupt would silently discard partial state.
+            logger.info(
+                "CoinGecko fetch terminated: status=%s, %d classifications across "
+                "%d/%d categories (key=%s, rate_limited=%s, MAJOR-locked=%d)",
+                exit_reason,
+                len(result),
+                len(per_category_counts),
+                len(COINGECKO_CATEGORY_MAP),
+                "demo" if api_key else "none",
+                rate_limited,
+                len(major_snapshot),
+            )
+            logger.debug("CoinGecko per-category counts: %s", per_category_counts)
 
     def enable_auto_fetch(self) -> None:
         """Enable automatic CoinGecko fetching."""
@@ -616,7 +729,7 @@ _classifier_lock = threading.Lock()
 
 
 def get_classifier(
-    cache_ttl_seconds: float = 600.0,
+    cache_ttl_seconds: float = 86400.0,
     coingecko_timeout: float = 10.0,
     max_coins: int = 250,
     auto_fetch: bool = False,
