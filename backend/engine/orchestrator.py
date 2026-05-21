@@ -1562,21 +1562,20 @@ class Orchestrator:
                 # lightweight tally — full scoring happens in confluence service.
                 _pre_dir = context.metadata.get("chosen_direction")
                 if not _pre_dir:
-                    _b, _s = 0, 0
-                    for _ob in context.smc_snapshot.order_blocks:
-                        if _ob.invalidated or _ob.grade not in ("A", "B"):
-                            continue
-                        if _ob.direction == "bullish":
-                            _b += 1
-                        else:
-                            _s += 1
-                    for _sb in context.smc_snapshot.structural_breaks:
-                        _sb_dir = getattr(_sb, "direction", None)
-                        if _sb_dir == "bullish":
-                            _b += 1
-                        elif _sb_dir == "bearish":
-                            _s += 1
-                    _pre_dir = "SHORT" if _s > _b else "LONG"
+                    _pre_dir, _pre_dir_tie_break = self._derive_pre_direction(
+                        context.smc_snapshot.order_blocks,
+                        context.smc_snapshot.structural_breaks,
+                        _symbol_regime,
+                    )
+                    context.metadata["pre_dir_tie_break"] = _pre_dir_tie_break
+                    # Surface tie-break activations so operators can quantify the
+                    # residual neutral-default-LONG frequency. Bull/bear strict
+                    # majority cases are silent (no tie to break).
+                    if _pre_dir_tie_break in ("regime_bullish", "regime_bearish", "neutral_default_long"):
+                        logger.info(
+                            "%s: PRE_DIR tie-break — %s (chose %s)",
+                            symbol, _pre_dir_tie_break, _pre_dir,
+                        )
 
                 _gate = run_pre_scoring_gates(
                     smc_snapshot=context.smc_snapshot,
@@ -4113,6 +4112,72 @@ class Orchestrator:
             self.cooldown_manager.clear_cooldown(symbol, direction)
         else:
             self.cooldown_manager.clear_cooldown(symbol)
+
+    @staticmethod
+    def _derive_pre_direction(
+        order_blocks,
+        structural_breaks,
+        symbol_regime,
+    ):
+        """Derive preliminary direction from SMC structure with symmetric tie-break.
+
+        Returns (direction, tie_break_reason). Tie-break reason is one of:
+          "bull_majority"        — strict bullish OB+BOS majority
+          "bear_majority"        — strict bearish OB+BOS majority
+          "regime_bullish"       — counts tied; regime trend resolved LONG
+          "regime_bearish"       — counts tied; regime trend resolved SHORT
+          "neutral_default_long" — counts tied; regime also neutral; default LONG
+
+        STANDING-FIX (§10 — bull/bear symmetry, May 2026 symmetry-guard SYM-01):
+        The legacy code at this site used a single strict-greater comparison
+        (`_pre_dir = "SHORT" if _s > _b else "LONG"`), which silently defaulted
+        equal counts AND bullish-majority cases to LONG. /rejection-survey
+        showed 74L/35S generated signals (2.11:1) and 186L/69S conflict_density
+        rejections (2.70:1) — the asymmetry traced directly here. The fix uses
+        strict-greater for BOTH directions and breaks ties via regime trend,
+        mirroring the canonical pattern at confluence_service.py:296-317.
+
+        SymbolRegime.trend vocabulary (per regime_detector):
+          "strong_up" / "up" / "sideways" / "down" / "strong_down" / unknown
+
+        The neutral_default_long branch is a documented residual: when BOTH
+        structure AND regime are neutral, the bot defaults to LONG so trade
+        volume isn't lost on truly-ambiguous cases. The rationale is now
+        explicit so future diagnostic work can quantify how often it fires.
+        Per §15: do not lower min_confluence_score or pre-scoring gates to
+        compensate for this residual — that's a tuning question, not a
+        symmetry fix.
+        """
+        _b, _s = 0, 0
+        for _ob in (order_blocks or []):
+            if getattr(_ob, "invalidated", False) or getattr(_ob, "grade", None) not in ("A", "B"):
+                continue
+            if getattr(_ob, "direction", None) == "bullish":
+                _b += 1
+            else:
+                _s += 1
+        for _sb in (structural_breaks or []):
+            _sb_dir = getattr(_sb, "direction", None)
+            if _sb_dir == "bullish":
+                _b += 1
+            elif _sb_dir == "bearish":
+                _s += 1
+
+        # Strict-majority cases — no tie.
+        if _b > _s:
+            return "LONG", "bull_majority"
+        if _s > _b:
+            return "SHORT", "bear_majority"
+
+        # Tie (_b == _s, including the all-zero case). Break via regime trend.
+        regime_trend = getattr(symbol_regime, "trend", None) if symbol_regime else None
+        if regime_trend in ("up", "strong_up"):
+            return "LONG", "regime_bullish"
+        if regime_trend in ("down", "strong_down"):
+            return "SHORT", "regime_bearish"
+
+        # Both structure AND regime are neutral. Explicit observable default.
+        return "LONG", "neutral_default_long"
 
     def _emit_rejection_telemetry(self, run_id: str, rejection_info: Optional[Dict[str, Any]]) -> None:
         """Idempotent single-emit guard for signal_rejected telemetry.
