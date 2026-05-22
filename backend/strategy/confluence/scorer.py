@@ -5034,7 +5034,39 @@ def _calculate_synergy_bonus(
                     ):
                         bonus += 8.0
                         logger.debug("Distribution + Structure bonus (+8)")
-                    elif cycle_context.translation == CycleTranslation.LTR:
+
+                    # ── GATE 3 MIRROR: LTR + HTF-bearish — multiplicative, not additive ──
+                    # §10 standing-fix (C3 symmetry pass, May 2026): mirror of the
+                    # LONG RTR + htf_bullish branch at lines 5010-5019. Pre-C3,
+                    # SHORT had no multiplicative synergy — symmetry-guard
+                    # SYM-01-SUSPECT. /confluence-trace on WIF/USDT confirmed the
+                    # impact: 169 SHORT rejects vs 0 SHORT passes despite 0.84:1
+                    # SHORT-leaning structure. The asymmetric synergy was
+                    # preventing SHORT setups in LTR + HTF-bearish alignment from
+                    # clearing the 70 floor.
+                    #
+                    # The if/elif structure mirrors the LONG branch exactly:
+                    # multiplicative gate when both LTR + htf_bearish hold;
+                    # additive +5 fallback when LTR holds alone. Pre-C3 the +5
+                    # LTR fallback was chained off the Distribution+Structure
+                    # block above (elif), which produced asymmetric outcomes
+                    # vs LONG (where +5 RTR-alone is mutually exclusive with
+                    # the multiplicative). C3 moves the LTR-alone +5 into the
+                    # same if/elif as the multiplicative so LONG and SHORT
+                    # bonus structures are now byte-equivalent for the
+                    # cycle-translation gate.
+                    htf_factor = next((f for f in factors if f.name == "HTF Alignment"), None)
+                    ltr_active = cycle_context.translation == CycleTranslation.LTR
+                    htf_bearish = htf_factor and htf_factor.score >= 60
+
+                    if ltr_active and htf_bearish:
+                        # Multiplicative synergy: existing bonus * 1.25 + flat bonus
+                        mult_bonus = (bonus * 0.25) + 8.0
+                        bonus += mult_bonus
+                        logger.debug(
+                            "LTR + HTF alignment multiplicative synergy: +%.1f", mult_bonus
+                        )
+                    elif ltr_active:
                         bonus += 5.0
                         logger.debug("LTR translation bonus (+5)")
 
