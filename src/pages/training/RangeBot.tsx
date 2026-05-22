@@ -45,8 +45,10 @@ import {
   CycleHeartbeat,
   FooterStatus,
   PageHead,
+  PositionDetailModal,
   Reticle,
   SectionHead,
+  type DetailSelection,
 } from '@/components/hud';
 import { useScanner } from '@/context/ScannerContext';
 import {
@@ -400,11 +402,50 @@ function EquitySparkline({ trades, initialBalance }: { trades: CompletedPaperTra
 // in the `range_bot_running` fixture which contains one LONG + one SHORT
 // position. This mirrors the UniversePanel exception pattern documented
 // in tests/visual/states.ts L262-266 — direction-agnostic per CLAUDE.md §10 #3.
-function PositionRow({ pos }: { pos: PaperPosition }) {
+function PositionRow({ pos, onClick }: { pos: PaperPosition; onClick?: () => void }) {
   const isLong = pos.direction === 'LONG';
   const isProfit = pos.unrealized_pnl >= 0;
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '90px 70px 1fr 1fr 1fr 1fr', gap: 10, padding: '10px 12px', borderTop: '1px solid var(--border-soft)', alignItems: 'center' }}>
+    <div
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      aria-label={onClick ? `Open detail for ${pos.symbol}` : undefined}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '90px 70px 1fr 1fr 1fr 1fr',
+        gap: 10,
+        padding: '10px 12px',
+        borderTop: '1px solid var(--border-soft)',
+        alignItems: 'center',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'background-color .12s ease',
+      }}
+      onMouseEnter={
+        onClick
+          ? (e) => {
+              (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(255,255,255,.03)';
+            }
+          : undefined
+      }
+      onMouseLeave={
+        onClick
+          ? (e) => {
+              (e.currentTarget as HTMLDivElement).style.backgroundColor = '';
+            }
+          : undefined
+      }
+    >
       <span className="mono" style={{ fontWeight: 700 }}>{pos.symbol}</span>
       <Chip kind={isLong ? 'green' : 'red'}>{isLong ? 'LONG' : 'SHORT'}</Chip>
       <span className="mono" style={{ fontSize: 11, color: 'var(--fg-2)' }}>
@@ -745,6 +786,7 @@ function StatusTab({
   const positions = status?.positions ?? [];
   const stats = status?.statistics;
   const activity = status?.recent_activity ?? [];
+  const [detailSelection, setDetailSelection] = useState<DetailSelection | null>(null);
 
   return (
     <div>
@@ -858,7 +900,13 @@ function StatusTab({
               <div className="mono" style={{ display: 'grid', gridTemplateColumns: '90px 70px 1fr 1fr 1fr 1fr', gap: 10, padding: '8px 12px', fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.18em', textTransform: 'uppercase' }}>
                 <span>Symbol</span><span>Side</span><span>Entry</span><span>Mark</span><span>Stop</span><span style={{ textAlign: 'right' }}>uPnL</span>
               </div>
-              {positions.map((p) => <PositionRow key={p.position_id} pos={p} />)}
+              {positions.map((p) => (
+                <PositionRow
+                  key={p.position_id}
+                  pos={p}
+                  onClick={() => setDetailSelection({ kind: 'position', data: p })}
+                />
+              ))}
             </div>
           )}
         </section>
@@ -934,6 +982,12 @@ function StatusTab({
           </section>
         )}
       </div>
+
+      <PositionDetailModal
+        selection={detailSelection}
+        onClose={() => setDetailSelection(null)}
+        currentRegime={null}
+      />
     </div>
   );
 }

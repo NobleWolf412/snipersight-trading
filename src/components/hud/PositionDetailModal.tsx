@@ -33,6 +33,7 @@ import { Chip } from './Chip';
 import { Modal } from './Modal';
 import { api } from '@/utils/api';
 import type { LivePosition } from '@/services/liveTradingService';
+import type { PaperPosition } from '@/services/paperTradingService';
 
 /** Pending order shape — mirrors backend payload, kept local so the modal
  * works whether called with LiveTradingStatus or PaperTradingStatus. */
@@ -45,9 +46,12 @@ export interface PendingOrderShape {
   status: string;
 }
 
-/** Selection passed from BotStatus row onClick. */
+/** Selection passed from BotStatus / RangeBot row onClick.
+ * LivePosition and PaperPosition are structurally identical (same 17 fields,
+ * same domain concept). Accepting both lets the same modal serve the live bot
+ * page (/bot) and the paper-trader page (/training/range) without a cast. */
 export type DetailSelection =
-  | { kind: 'position'; data: LivePosition }
+  | { kind: 'position'; data: LivePosition | PaperPosition }
   | { kind: 'pending'; data: PendingOrderShape };
 
 interface Props {
@@ -89,7 +93,10 @@ function tradeTypeToTimeframe(tt: string | undefined | null): string {
 }
 
 /** R:R = planned reward / planned risk. Direction-aware. Returns null when
- * SL is at-or-past entry (would be a malformed plan). */
+ * the plan is malformed (SL at-or-past entry, or reward ≤ 0 because TP is on
+ * the wrong side of entry — usually a TP field serialized as 0 instead of
+ * null). Without this guard, a `tp_final: 0` payload yields a nonsensical
+ * 1:-N display. */
 function calcRR(
   direction: string,
   entry: number,
@@ -100,20 +107,34 @@ function calcRR(
     tp == null ||
     !Number.isFinite(tp) ||
     !Number.isFinite(sl) ||
-    !Number.isFinite(entry)
+    !Number.isFinite(entry) ||
+    tp <= 0
   ) {
     return null;
   }
   if (direction === 'LONG') {
     const reward = tp - entry;
     const risk = entry - sl;
-    if (risk <= 0) return null;
+    if (risk <= 0 || reward <= 0) return null;
     return reward / risk;
   }
   const reward = entry - tp;
   const risk = sl - entry;
-  if (risk <= 0) return null;
+  if (risk <= 0 || reward <= 0) return null;
   return reward / risk;
+}
+
+/** Pick the most meaningful TP for the R:R display. `tp_final ?? tp1` is
+ * insufficient because `??` only falls through on null/undefined — a
+ * serialized `0` wins over a valid `tp1`, which produced the 1:-86 display
+ * regression. Treat 0 / negative / non-finite as "unset" and fall through. */
+function selectPlanTp(
+  tp_final: number | null | undefined,
+  tp1: number | null | undefined,
+): number | null {
+  if (tp_final != null && Number.isFinite(tp_final) && tp_final > 0) return tp_final;
+  if (tp1 != null && Number.isFinite(tp1) && tp1 > 0) return tp1;
+  return null;
 }
 
 /** Current R-multiple = unrealized PnL / planned risk dollars. */
@@ -203,14 +224,25 @@ export function PositionDetailModal({ selection, onClose, currentRegime }: Props
 
     api
       .getCandles(symbol, tf, 100)
-      .then((raw: unknown) => {
+      .then((res: unknown) => {
+        // api.request returns an envelope { data?, error? }; surface the
+        // real error so the modal doesn't mask backend cache misses or
+        // fresh-fetch failures as a generic empty-candles message.
+        if (res && typeof res === 'object' && 'error' in res && (res as { error?: unknown }).error) {
+          setCandlesError(String((res as { error: unknown }).error));
+          return;
+        }
+        const body =
+          res && typeof res === 'object' && 'data' in res
+            ? (res as { data: unknown }).data
+            : res;
         // Backend candle response shape is unknown to TS here; coerce
         // defensively. Accept either { candles: [...] } or a bare array.
         const list =
-          Array.isArray(raw)
-            ? raw
-            : raw && typeof raw === 'object' && 'candles' in raw
-              ? (raw as { candles: unknown[] }).candles
+          Array.isArray(body)
+            ? body
+            : body && typeof body === 'object' && 'candles' in body
+              ? (body as { candles: unknown[] }).candles
               : [];
 
         const candles = (list as Array<Record<string, unknown>>)
@@ -348,7 +380,7 @@ export function PositionDetailModal({ selection, onClose, currentRegime }: Props
   const pos = isPosition ? (selection.data as LivePosition) : null;
   const plannedRR =
     pos != null
-      ? calcRR(direction, pos.entry_price, pos.stop_loss, pos.tp_final ?? pos.tp1 ?? null)
+      ? calcRR(direction, pos.entry_price, pos.stop_loss, selectPlanTp(pos.tp_final, pos.tp1))
       : null;
   const currentR = pos != null ? calcCurrentR(pos.unrealized_pnl, pos.risk_pnl) : null;
 
@@ -528,7 +560,7 @@ export function PositionDetailModal({ selection, onClose, currentRegime }: Props
               </strong>
             </span>
             <span style={{ opacity: 0.3 }}>·</span>
-            <span>
+            <span title="ARMED = configured & monitoring; TRIGGERED = SL has been moved to breakeven (typically after TP1 prints)">
               Breakeven{' '}
               <strong
                 style={{
@@ -536,11 +568,11 @@ export function PositionDetailModal({ selection, onClose, currentRegime }: Props
                   fontWeight: 800,
                 }}
               >
-                {pos.breakeven_active ? 'ON' : 'OFF'}
+                {pos.breakeven_active ? 'TRIGGERED' : 'ARMED'}
               </strong>
             </span>
             <span style={{ opacity: 0.3 }}>·</span>
-            <span>
+            <span title="ARMED = configured & monitoring; TRAILING = stop is actively trailing price">
               Trailing{' '}
               <strong
                 style={{
@@ -548,7 +580,7 @@ export function PositionDetailModal({ selection, onClose, currentRegime }: Props
                   fontWeight: 800,
                 }}
               >
-                {pos.trailing_active ? 'ON' : 'OFF'}
+                {pos.trailing_active ? 'TRAILING' : 'ARMED'}
               </strong>
             </span>
             {currentRegime && (

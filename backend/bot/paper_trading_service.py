@@ -848,9 +848,11 @@ class PaperTradingService:
                         "trade_type": getattr(plan, "trade_type", "intraday"),
                         "current_price": self._price_cache.get(order.symbol, 0.0),
                         "stop_loss": float(plan.stop_loss.level) if plan.stop_loss else 0.0,
-                        "tp1": float(plan.targets[0].level) if plan.targets else 0.0,
-                        "tp2": float(plan.targets[1].level) if len(plan.targets) > 1 else 0.0,
-                        "tp_final": float(plan.targets[-1].level) if plan.targets else 0.0,
+                        # Emit None (not 0.0) on missing TP — see _get_active_positions
+                        # for the full rationale (geometry guard / payload symmetry).
+                        "tp1": float(plan.targets[0].level) if plan.targets else None,
+                        "tp2": float(plan.targets[1].level) if len(plan.targets) > 1 else None,
+                        "tp_final": float(plan.targets[-1].level) if plan.targets else None,
                     })
 
         # Signal processing log (every signal with full details)
@@ -2666,9 +2668,18 @@ class PaperTradingService:
                     "breakeven_active": pos.breakeven_active,
                     "trailing_active": pos.trailing_active,
                     "opened_at": pos.created_at.isoformat(),
-                    "tp1": _all_tgts[0].level if _all_tgts else 0.0,
-                    "tp2": _all_tgts[1].level if len(_all_tgts) > 1 else 0.0,
-                    "tp_final": _all_tgts[-1].level if _all_tgts else 0.0,
+                    # Emit None (not 0.0) when targets are missing — a 0.0 in
+                    # the payload is indistinguishable from a real TP at price 0
+                    # and breaks the frontend's `??` fallback. Mirrors
+                    # live_trading_service._get_active_positions().
+                    # Empty `_all_tgts` typically means position_manager's
+                    # structural-validity guard stripped every target as
+                    # geometrically invalid (see position_manager.py
+                    # _check_target_hit ~L985). The position can still exit via
+                    # SL / stagnation / max_hours_open, but never via TP.
+                    "tp1": _all_tgts[0].level if _all_tgts else None,
+                    "tp2": _all_tgts[1].level if len(_all_tgts) > 1 else None,
+                    "tp_final": _all_tgts[-1].level if _all_tgts else None,
                     "trade_type": getattr(pos, "trade_type", "intraday"),
                     "initial_stop_loss": getattr(pos, "initial_stop_loss", pos.stop_loss),
                 }
