@@ -1,0 +1,217 @@
+{
+  "checks": {
+    "imports": {
+      "orchestrator": "ok",
+      "regime_detector": "ok",
+      "scanner_modes": "ok",
+      "scorer": "ok",
+      "sniper_context": "ok",
+      "telemetry_events": "ok"
+    },
+    "mode_inventory": {
+      "mode_count": 4,
+      "mode_names": [
+        "overwatch",
+        "stealth",
+        "strike",
+        "surgical"
+      ]
+    },
+    "mode_thresholds": {
+      "overwatch": {
+        "allowed_trade_types": [
+          "swing"
+        ],
+        "cascade_trade_types": null,
+        "critical_timeframes": [
+          "1w",
+          "1d"
+        ],
+        "expected_trade_type": "swing",
+        "min_confluence_score": 72.0,
+        "primary_planning_timeframe": "4h",
+        "profile": "macro_surveillance",
+        "timeframes": [
+          "1w",
+          "1d",
+          "4h",
+          "1h",
+          "15m",
+          "5m"
+        ]
+      },
+      "stealth": {
+        "allowed_trade_types": [
+          "swing",
+          "intraday",
+          "scalp"
+        ],
+        "cascade_trade_types": [
+          "swing",
+          "intraday",
+          "scalp"
+        ],
+        "critical_timeframes": [
+          "4h",
+          "1h"
+        ],
+        "expected_trade_type": "stealth",
+        "min_confluence_score": 70.0,
+        "primary_planning_timeframe": "1h",
+        "profile": "stealth_balanced",
+        "timeframes": [
+          "1d",
+          "4h",
+          "1h",
+          "15m",
+          "5m"
+        ]
+      },
+      "strike": {
+        "allowed_trade_types": [
+          "swing",
+          "intraday",
+          "scalp"
+        ],
+        "cascade_trade_types": null,
+        "critical_timeframes": [
+          "15m"
+        ],
+        "expected_trade_type": "strike",
+        "min_confluence_score": 68.0,
+        "primary_planning_timeframe": "15m",
+        "profile": "intraday_aggressive",
+        "timeframes": [
+          "4h",
+          "1h",
+          "15m",
+          "5m"
+        ]
+      },
+      "surgical": {
+        "allowed_trade_types": [
+          "intraday",
+          "scalp"
+        ],
+        "cascade_trade_types": null,
+        "critical_timeframes": [
+          "15m"
+        ],
+        "expected_trade_type": "precision",
+        "min_confluence_score": 70.0,
+        "primary_planning_timeframe": "15m",
+        "profile": "precision",
+        "timeframes": [
+          "4h",
+          "1h",
+          "15m",
+          "5m"
+        ]
+      }
+    },
+    "pre_scoring_gates": {
+      "GateResult_fields": [
+        "gate_name",
+        "metadata",
+        "passed",
+        "reason"
+      ],
+      "run_pre_scoring_gates_exists": true,
+      "signature_params": [
+        "btc_impulse",
+        "config",
+        "cycle_context",
+        "direction",
+        "is_btc",
+        "regime",
+        "relevant_timeframes",
+        "smc_snapshot"
+      ]
+    },
+    "regime_detector": {
+      "RegimeDetector_exists": true,
+      "RegimeDetector_methods": [
+        "analyze_timeframe_trend",
+        "detect_global_regime",
+        "detect_intermediate_regime",
+        "detect_symbol_regime",
+        "get_confirmed_regime"
+      ],
+      "get_regime_detector_exists": true
+    },
+    "relativity_map": {
+      "intraday": {
+        "context": "1h",
+        "exec": "5m",
+        "label": "Day Trading",
+        "plan": "15m",
+        "vol_profile_lookback": 72
+      },
+      "keys": [
+        "intraday",
+        "scalp",
+        "swing"
+      ],
+      "scalp": {
+        "context": "15m",
+        "exec": "1m",
+        "label": "High Frequency",
+        "plan": "5m",
+        "vol_profile_lookback": 24
+      },
+      "swing": {
+        "context": "1d",
+        "exec": "1h",
+        "label": "Structural Swing",
+        "plan": "4h",
+        "vol_profile_lookback": 240
+      }
+    },
+    "sniper_context": {
+      "field_count": 12,
+      "field_names": [
+        "confluence_breakdown",
+        "macro_context",
+        "metadata",
+        "multi_tf_data",
+        "multi_tf_indicators",
+        "plan",
+        "profile",
+        "risk_plan",
+        "run_id",
+        "smc_snapshot",
+        "symbol",
+        "timestamp"
+      ]
+    },
+    "telemetry_events": {
+      "event_type_values": [
+        "alt_stop_suggested",
+        "bot_cycle_completed",
+        "bot_started",
+        "bot_stopped",
+        "daily_loss_limit_hit",
+        "error_occurred",
+        "info_message",
+        "partial_taken",
+        "position_closed",
+        "position_opened",
+        "quality_gate_failed",
+        "quality_gate_passed",
+        "risk_limit_hit",
+        "scan_completed",
+        "scan_started",
+        "signal_generated",
+        "signal_rejected",
+        "stop_loss_hit",
+        "warning_issued"
+      ],
+      "required_events_present": {
+        "scan_completed": true,
+        "scan_started": true,
+        "signal_generated": true,
+        "signal_rejected": true
+      }
+    }
+  }
+}
