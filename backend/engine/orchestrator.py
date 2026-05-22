@@ -1106,12 +1106,30 @@ class Orchestrator:
         if not context.multi_tf_data or not context.multi_tf_data.timeframes:
             logger.debug("%s [%s]: REJECTED - No market data available", symbol, trace_id)
             self.diagnostics["data_failures"].append({"symbol": symbol, "trace_id": trace_id})
+            # Increment the stale-symbol counter — symbols that persistently
+            # fail no_data get auto-dropped from future universe selection
+            # via pair_selection.is_symbol_stale (calibrated May 2026 on
+            # FLOKI/BONK 99% failure rate). Counter resets on next success.
+            try:
+                from backend.analysis.pair_selection import record_no_data_failure
+                record_no_data_failure(symbol)
+            except Exception as _stale_exc:
+                logger.debug("record_no_data_failure failed for %s: %s", symbol, _stale_exc)
             return None, {
                 "symbol": symbol,
                 "reason_type": "no_data",
                 "reason": "No market data available",
                 "trace_id": trace_id,
             }
+
+        # Data fetch succeeded — reset the stale-symbol counter. Allows a
+        # previously-failing symbol to recover from a transient outage
+        # without operator intervention.
+        try:
+            from backend.analysis.pair_selection import record_no_data_success
+            record_no_data_success(symbol)
+        except Exception as _stale_exc:
+            logger.debug("record_no_data_success failed for %s: %s", symbol, _stale_exc)
 
         # Stage 2.5: Check critical timeframe availability
         missing_critical_tfs = self._check_critical_timeframes(context.multi_tf_data)

@@ -45,7 +45,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
-VALID_REASONS = {"stable_base", "non_perp", "bucket_excluded", "limit_exhausted"}
+VALID_REASONS = {"stale_no_data", "stable_base", "non_perp", "bucket_excluded", "limit_exhausted"}
 
 
 @dataclass

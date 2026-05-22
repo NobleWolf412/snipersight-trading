@@ -28,7 +28,7 @@ from backend.analysis.pair_selection import (
 )
 
 
-VALID_REASONS = {"stable_base", "non_perp", "bucket_excluded", "limit_exhausted"}
+VALID_REASONS = {"stale_no_data", "stable_base", "non_perp", "bucket_excluded", "limit_exhausted"}
 
 
 class DummyAdapter:

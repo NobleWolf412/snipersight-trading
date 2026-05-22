@@ -19,10 +19,11 @@ Filters run in this fixed order, and a symbol is recorded with the FIRST
 reason it fails on. Subsequent filters never see symbols already dropped
 by an earlier filter, so each symbol carries exactly ONE reason.
 
-  1. stable_base       (BASE token is a stablecoin)
-  2. non_perp          (leverage>1, non-spot, fails perp heuristic)
-  3. bucket_excluded   (in fetched list but bucket toggle is OFF)
-  4. limit_exhausted   (passed all filters, did not make the final cut)
+  1. stale_no_data     (symbol has failed no_data >= N consecutive cycles)
+  2. stable_base       (BASE token is a stablecoin)
+  3. non_perp          (leverage>1, non-spot, fails perp heuristic)
+  4. bucket_excluded   (in fetched list but bucket toggle is OFF)
+  5. limit_exhausted   (passed all filters, did not make the final cut)
 
 Implication: fixing an earlier filter never "moves" drops between
 reasons. If you tune `_is_stable_base`, the stable_base count changes
@@ -52,7 +53,7 @@ for the observability surfaces this module backs today.
 import time
 from collections import deque
 from threading import Lock
-from typing import Any, Deque, Dict, List, Optional, Protocol, Tuple
+from typing import Any, Deque, Dict, List, Optional, Protocol, Set, Tuple
 from loguru import logger
 
 from backend.analysis.symbol_classifier import (
@@ -251,6 +252,104 @@ def clear_snapshot() -> None:
         _snapshot_history.clear()
 
 
+# ---------------------------------------------------------------------------
+# Stale-symbol auto-drop (no_data persistence guard)
+# ---------------------------------------------------------------------------
+#
+# Calibrated on the May 2026 FLOKI/BONK observability finding: those two
+# symbols failed `no_data` on 186/187 (99%) of cycles in session e61102fa
+# while still appearing in every universe. The adapter consistently fails
+# to return OHLCV for them — likely delisted, illiquid, or symbol-name
+# mismatch — and the bot wastes ~9% of every cycle's gate evaluations on
+# symbols that structurally cannot pass.
+#
+# Mechanism: any time the scanner sees a no_data rejection for a symbol,
+# it calls `record_no_data_failure(symbol)`. When the counter for a
+# symbol crosses `_NO_DATA_DROP_THRESHOLD`, the symbol is excluded from
+# future universe selections (added to `dropped` with reason
+# `stale_no_data`) until either (a) `record_no_data_success(symbol)` is
+# called — meaning the data adapter finally returned OHLCV — or (b) the
+# bot process restarts (counters are in-memory only).
+#
+# Threshold rationale: 10 consecutive failures ≈ 30 minutes at the
+# observed ~3-min cycle cadence. Long enough to tolerate transient
+# adapter hiccups; short enough that a genuinely-dead symbol gets caught
+# quickly. Tune via _NO_DATA_DROP_THRESHOLD if the operator wants a
+# different tolerance.
+#
+# Per CLAUDE.md §11 (loud failures): the FIRST time a symbol crosses the
+# threshold, a single WARNING-level log emit surfaces the auto-drop so
+# the operator sees it in the bot console. Subsequent failures by the
+# same symbol stay silent — no log spam — but the snapshot keeps
+# recording `stale_no_data` rejections per cycle for the universe audit.
+_NO_DATA_DROP_THRESHOLD = 10
+
+_no_data_counter_lock = Lock()
+_consecutive_no_data_failures: Dict[str, int] = {}
+_stale_dropped_logged: Set[str] = set()
+
+
+def record_no_data_failure(symbol: str) -> int:
+    """Increment the no_data failure counter for symbol. Returns new count.
+
+    Called by the scanner when a symbol fails data fetch (reason_type
+    'no_data'). When the count reaches _NO_DATA_DROP_THRESHOLD, the
+    symbol will be auto-excluded from universe selection until success
+    (`record_no_data_success`) OR session restart.
+
+    Idempotent and thread-safe. The first time a symbol crosses the
+    threshold, emits one WARNING log; subsequent failures stay silent.
+    """
+    with _no_data_counter_lock:
+        new_count = _consecutive_no_data_failures.get(symbol, 0) + 1
+        _consecutive_no_data_failures[symbol] = new_count
+        if new_count == _NO_DATA_DROP_THRESHOLD and symbol not in _stale_dropped_logged:
+            _stale_dropped_logged.add(symbol)
+            logger.warning(
+                "STALE_SYMBOL_AUTO_DROP: %s failed no_data %d consecutive cycles; "
+                "excluded from universe selection until success OR session restart",
+                symbol, new_count,
+            )
+        return new_count
+
+
+def record_no_data_success(symbol: str) -> None:
+    """Reset the no_data counter on a successful data fetch.
+
+    Allows a symbol to recover if it transiently failed but data is back.
+    If the symbol was previously auto-dropped (counter >= threshold),
+    emits one INFO log noting the recovery.
+    """
+    with _no_data_counter_lock:
+        prior = _consecutive_no_data_failures.pop(symbol, 0)
+        if prior >= _NO_DATA_DROP_THRESHOLD:
+            _stale_dropped_logged.discard(symbol)
+            logger.info(
+                "STALE_SYMBOL_RECOVERED: %s data fetched successfully after %d failures; "
+                "re-eligible for selection",
+                symbol, prior,
+            )
+
+
+def is_symbol_stale(symbol: str) -> bool:
+    """True if the symbol has failed no_data >= threshold consecutive cycles."""
+    with _no_data_counter_lock:
+        return _consecutive_no_data_failures.get(symbol, 0) >= _NO_DATA_DROP_THRESHOLD
+
+
+def get_stale_counters_snapshot() -> Dict[str, int]:
+    """Return a shallow copy of the counter dict — for diagnostics + tests."""
+    with _no_data_counter_lock:
+        return dict(_consecutive_no_data_failures)
+
+
+def clear_stale_counters() -> None:
+    """Reset all no_data counters and the dropped-log set. Used by tests."""
+    with _no_data_counter_lock:
+        _consecutive_no_data_failures.clear()
+        _stale_dropped_logged.clear()
+
+
 def _select_symbols_impl(
     adapter: SupportsTopSymbols,
     limit: int,
@@ -294,6 +393,20 @@ def _select_symbols_impl(
     # `dropped` with a reason. Future filters that silently swallow a
     # symbol will trip this assertion in tests instead of vanishing.
     _original_fetched: List[str] = list(all_symbols)
+
+    # Stage 0: stale-symbol auto-drop (no_data persistence guard).
+    # Symbols that have failed data fetch >= _NO_DATA_DROP_THRESHOLD consecutive
+    # cycles get excluded here — see record_no_data_failure / is_symbol_stale
+    # for the counter logic. First-match precedence: a stale symbol is dropped
+    # with reason 'stale_no_data' and never seen by stable_base/non_perp/etc.
+    # downstream filters, so the rest of the waterfall reasoning is unchanged.
+    after_stale: List[str] = []
+    for s in all_symbols:
+        if is_symbol_stale(s):
+            dropped.append({"symbol": s, "reason": "stale_no_data"})
+        else:
+            after_stale.append(s)
+    all_symbols = after_stale
 
     # Stage 1: stablecoin-base exclusion (track drops)
     after_stable: List[str] = []
