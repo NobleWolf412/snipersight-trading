@@ -166,29 +166,45 @@ def _apply_regime_rr_cap(targets: List[Target], regime_label: str) -> List[Targe
 
 
 def _guard_target_direction(
-    targets: List[Target], avg_entry: float, is_bullish: bool
+    targets: List[Target], entry_ref: float, is_bullish: bool
 ) -> List[Target]:
     """
     Remove targets that ended up on the wrong side of entry (e.g. after wick-barrier
     clipping or structural filtering pushed a level past the entry price).
     Always keeps at least 1 target as a fallback.
+
+    `entry_ref` should be the WORST-CASE fill price — for limit orders that is
+    `entry_zone.near_entry` (LONG: highest possible fill; SHORT: lowest possible
+    fill). Using `avg_entry` here lets targets between the midpoint and the
+    actual fill pass the planner but get stripped by the executor's stricter
+    check in position_manager._check_target_hit, producing positions with no
+    targets — see commit message for the May 2026 SCALP geometry trace.
     """
     if not targets:
         return targets
-    correct_side = [t for t in targets if (is_bullish and t.level > avg_entry) or (not is_bullish and t.level < avg_entry)]
+    correct_side = [t for t in targets if (is_bullish and t.level > entry_ref) or (not is_bullish and t.level < entry_ref)]
+    direction = "LONG" if is_bullish else "SHORT"
     if not correct_side:
         # Sort wrong-side targets by proximity to entry so the least-wrong one
         # is kept as the fallback rather than whatever happened to be first.
-        nearest = min(targets, key=lambda t: abs(t.level - avg_entry))
+        #
+        # Residual edge case: this fallback may itself be on the wrong side of
+        # entry_ref. The executor's stricter guard (position_manager.py
+        # _check_target_hit, ~L985) will strip it post-fill and the position
+        # will exit only via SL / stagnation / max_hours_open. This is rarer
+        # under the near_entry reference than it was under avg_entry, but not
+        # eliminated — see commit message for the worked example.
+        nearest = min(targets, key=lambda t: abs(t.level - entry_ref))
         logger.warning(
-            "All %d targets ended up on wrong side of entry %.4f (%s) — keeping nearest (%.4f)",
-            len(targets), avg_entry, "LONG" if is_bullish else "SHORT", nearest.level,
+            "All %d targets on wrong side of entry %.4f (%s) — keeping nearest (%.4f); "
+            "executor may strip and position will exit via SL/stagnation",
+            len(targets), entry_ref, direction, nearest.level,
         )
         return [nearest]
     if len(correct_side) < len(targets):
         logger.info(
-            "Target direction guard: removed %d wrong-side target(s) from %d total",
-            len(targets) - len(correct_side), len(targets),
+            "Target direction guard: removed %d wrong-side target(s) from %d total (ref=%.4f, %s)",
+            len(targets) - len(correct_side), len(targets), entry_ref, direction,
         )
     return correct_side
 
@@ -2263,7 +2279,12 @@ def _calculate_targets(
             logger.info(f"Using {len(targets)} structural targets for {mode_profile} mode")
             # Filter targets blocked by opposing OB structures
             targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
-            targets = _guard_target_direction(targets, avg_entry, is_bullish)
+            # Use near_entry (worst-case fill = limit price for paper limits) as the
+            # validity reference, not avg_entry. The executor's structural-validity
+            # guard (position_manager._check_target_hit) checks against the actual
+            # fill, so a target between avg_entry and near_entry passes the planner
+            # but gets stripped at execution — leaving positions with no targets.
+            targets = _guard_target_direction(targets, entry_zone.near_entry, is_bullish)
             return _apply_regime_rr_cap(targets, regime_label)
 
         else:
@@ -2307,7 +2328,9 @@ def _calculate_targets(
             swing_targets = _filter_targets_by_opposing_structure(
                 swing_targets, smc_snapshot, is_bullish, atr
             )
-            swing_targets = _guard_target_direction(swing_targets, avg_entry, is_bullish)
+            # Use near_entry (actual fill) as reference — see structural-path
+            # comment above for full rationale.
+            swing_targets = _guard_target_direction(swing_targets, entry_zone.near_entry, is_bullish)
             return _apply_regime_rr_cap(swing_targets, regime_label)
 
     # --- DEFAULT / SCALP / INTRADAY HANDLING (R:R Multiples) ---
@@ -2367,8 +2390,12 @@ def _calculate_targets(
     targets = _adjust_targets_for_wick_barriers(targets, multi_tf_data, avg_entry, is_bullish, atr, risk_distance)
     # Filter targets blocked by opposing OB structures
     targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
-    # Final safety check: ensure all targets are on the correct side of entry
-    targets = _guard_target_direction(targets, avg_entry, is_bullish)
+    # Final safety check: ensure all targets are on the correct side of entry.
+    # Use near_entry (the worst-case fill) so this guard matches the executor's
+    # structural-validity check (position_manager._check_target_hit). Using
+    # avg_entry here lets targets between avg and near pass planner validation
+    # but fail at execution, producing positions with all targets stripped.
+    targets = _guard_target_direction(targets, entry_zone.near_entry, is_bullish)
 
     # Regime-aware R:R cap — shared with structural path via helper
     return _apply_regime_rr_cap(targets, regime_label)
