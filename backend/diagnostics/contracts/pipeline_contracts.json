@@ -1,0 +1,65 @@
+{
+  "field_count": 12,
+  "sniper_context_fields": [
+    {
+      "has_default": true,
+      "name": "confluence_breakdown",
+      "type": "typing.Optional[backend.shared.models.scoring.ConfluenceBreakdown]"
+    },
+    {
+      "has_default": true,
+      "name": "macro_context",
+      "type": "typing.Optional[backend.analysis.macro_context.MacroContext]"
+    },
+    {
+      "has_default": true,
+      "name": "metadata",
+      "type": "typing.Dict[str, typing.Any]"
+    },
+    {
+      "has_default": true,
+      "name": "multi_tf_data",
+      "type": "typing.Optional[backend.shared.models.data.MultiTimeframeData]"
+    },
+    {
+      "has_default": true,
+      "name": "multi_tf_indicators",
+      "type": "typing.Optional[backend.shared.models.indicators.IndicatorSet]"
+    },
+    {
+      "has_default": true,
+      "name": "plan",
+      "type": "typing.Optional[backend.shared.models.planner.TradePlan]"
+    },
+    {
+      "has_default": false,
+      "name": "profile",
+      "type": "<class 'str'>"
+    },
+    {
+      "has_default": true,
+      "name": "risk_plan",
+      "type": "typing.Optional[backend.contracts.risk_contract.RiskPlan]"
+    },
+    {
+      "has_default": false,
+      "name": "run_id",
+      "type": "<class 'str'>"
+    },
+    {
+      "has_default": true,
+      "name": "smc_snapshot",
+      "type": "typing.Optional[backend.shared.models.smc.SMCSnapshot]"
+    },
+    {
+      "has_default": false,
+      "name": "symbol",
+      "type": "<class 'str'>"
+    },
+    {
+      "has_default": false,
+      "name": "timestamp",
+      "type": "<class 'datetime.datetime'>"
+    }
+  ]
+}

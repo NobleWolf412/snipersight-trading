@@ -1,0 +1,781 @@
+{
+  "count": 97,
+  "routes": [
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "create_bot_config",
+      "path": "/api/bot/config",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_bot_config",
+      "path": "/api/bot/config/{config_id}",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "place_order",
+      "path": "/api/bot/order",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_positions",
+      "path": "/api/bot/positions",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_bot_status",
+      "path": "/api/bot/status",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_trade_history",
+      "path": "/api/bot/trades",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "start_bot",
+      "path": "/api/bot/{config_id}/start",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "stop_bot",
+      "path": "/api/bot/{config_id}/stop",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "DELETE"
+      ],
+      "name": "clear_cache",
+      "path": "/api/cache/clear",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "DELETE"
+      ],
+      "name": "clear_cache",
+      "path": "/api/cache/clear",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_cache_entries",
+      "path": "/api/cache/entries",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_cache_entries",
+      "path": "/api/cache/entries",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "DELETE"
+      ],
+      "name": "invalidate_symbol_cache",
+      "path": "/api/cache/invalidate",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "DELETE"
+      ],
+      "name": "invalidate_symbol_cache",
+      "path": "/api/cache/invalidate/{symbol}",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_cache_stats",
+      "path": "/api/cache/stats",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_cache_stats",
+      "path": "/api/cache/stats",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_smc_config",
+      "path": "/api/config/smc",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_smc_config",
+      "path": "/api/config/smc",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "PUT"
+      ],
+      "name": "update_smc_config",
+      "path": "/api/config/smc",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "PUT"
+      ],
+      "name": "update_smc_config",
+      "path": "/api/config/smc",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_active_cooldowns",
+      "path": "/api/cooldowns",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_cycles_history",
+      "path": "/api/cycles/history",
+      "response_model": "Envelope[List[CycleHeartbeat]]"
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_cycles_last",
+      "path": "/api/cycles/last",
+      "response_model": "Envelope[CycleHeartbeat]"
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "debug_signals_schema",
+      "path": "/api/debug/signals_schema",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "debug_smc_patterns",
+      "path": "/api/debug/smc",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "health_check",
+      "path": "/api/health",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_symbol_levels",
+      "path": "/api/htf/levels/{symbol}",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_htf_opportunities",
+      "path": "/api/htf/opportunities",
+      "response_model": "HTFOpportunitiesResponse"
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_phemex_healthz",
+      "path": "/api/integrations/phemex/healthz",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_live_trading_activity",
+      "path": "/api/live-trading/activity",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "analyze_live_session",
+      "path": "/api/live-trading/analyze-session",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_live_trading_history",
+      "path": "/api/live-trading/history",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "live_trading_kill_switch",
+      "path": "/api/live-trading/kill-switch",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_live_trading_positions",
+      "path": "/api/live-trading/positions",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "live_trading_preflight",
+      "path": "/api/live-trading/preflight",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "reset_live_trading",
+      "path": "/api/live-trading/reset",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "start_live_trading",
+      "path": "/api/live-trading/start",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_live_trading_status",
+      "path": "/api/live-trading/status",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "stop_live_trading",
+      "path": "/api/live-trading/stop",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_btc_cycle_context",
+      "path": "/api/market/btc-cycle-context",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_btc_ticker_proxy",
+      "path": "/api/market/btc-ticker",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_candles",
+      "path": "/api/market/candles/{symbol:path}",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_candles",
+      "path": "/api/market/candles/{symbol}",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_market_cycles",
+      "path": "/api/market/cycles",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_fear_greed_index",
+      "path": "/api/market/fear-greed",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_funding_rates",
+      "path": "/api/market/funding",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_price",
+      "path": "/api/market/price/{symbol}",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_price",
+      "path": "/api/market/price/{symbol}",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_prices",
+      "path": "/api/market/prices",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_prices",
+      "path": "/api/market/prices",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_market_regime",
+      "path": "/api/market/regime",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_symbol_cycles",
+      "path": "/api/market/symbol-cycles",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_ml_feature_importance",
+      "path": "/api/ml/feature-importance",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_ml_gate_recommendations",
+      "path": "/api/ml/gate-recommendations",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "DELETE"
+      ],
+      "name": "reset_ml_model",
+      "path": "/api/ml/model",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "predict_signal_edge",
+      "path": "/api/ml/predict",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "DELETE"
+      ],
+      "name": "clear_session_logs",
+      "path": "/api/ml/session-logs",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_ml_status",
+      "path": "/api/ml/status",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "train_ml_model",
+      "path": "/api/ml/train",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "list_notifications",
+      "path": "/api/notifications",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "send_notification",
+      "path": "/api/notifications/send",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_paper_trading_activity",
+      "path": "/api/paper-trading/activity",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_paper_trading_history",
+      "path": "/api/paper-trading/history",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "DELETE"
+      ],
+      "name": "cancel_paper_trading_order",
+      "path": "/api/paper-trading/orders/{order_id}",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_paper_trading_positions",
+      "path": "/api/paper-trading/positions",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "reset_paper_trading",
+      "path": "/api/paper-trading/reset",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "start_paper_trading",
+      "path": "/api/paper-trading/start",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_paper_trading_status",
+      "path": "/api/paper-trading/status",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "stop_paper_trading",
+      "path": "/api/paper-trading/stop",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_risk_summary",
+      "path": "/api/risk/summary",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "create_scanner_config",
+      "path": "/api/scanner/config",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_scanner_config",
+      "path": "/api/scanner/config/{config_id}",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_scanner_diagnostics",
+      "path": "/api/scanner/diagnostics",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_scanner_diagnostics",
+      "path": "/api/scanner/diagnostics",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_active_mode",
+      "path": "/api/scanner/mode_active",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_active_mode",
+      "path": "/api/scanner/mode_active",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_scanner_modes",
+      "path": "/api/scanner/modes",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_scanner_modes",
+      "path": "/api/scanner/modes",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_scanner_pairs",
+      "path": "/api/scanner/pairs",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_scanner_pairs",
+      "path": "/api/scanner/pairs",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_scanner_recommendation",
+      "path": "/api/scanner/recommendation",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "create_scan_run",
+      "path": "/api/scanner/runs",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "DELETE"
+      ],
+      "name": "cancel_scan_run",
+      "path": "/api/scanner/runs/{run_id}",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_scan_run",
+      "path": "/api/scanner/runs/{run_id}",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_signals",
+      "path": "/api/scanner/signals",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_universe",
+      "path": "/api/scanner/universe",
+      "response_model": "Envelope[Universe]"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "start_scanner",
+      "path": "/api/scanner/{config_id}/start",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "stop_scanner",
+      "path": "/api/scanner/{config_id}/stop",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_kill_zone_status",
+      "path": "/api/sessions/kill-zone",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_confluence_distribution",
+      "path": "/api/signals/confluence/distribution",
+      "response_model": "Envelope[ConfluenceDistribution]"
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_signal_confluence",
+      "path": "/api/signals/{id}/confluence",
+      "response_model": "Envelope[ConfluenceBreakdownDTO]"
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_signal_trace",
+      "path": "/api/signals/{id}/trace",
+      "response_model": "Envelope[SignalTrace]"
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_telemetry_analytics",
+      "path": "/api/telemetry/analytics",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_telemetry_events",
+      "path": "/api/telemetry/events",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_recent_telemetry",
+      "path": "/api/telemetry/recent",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "export_trade_journal",
+      "path": "/api/trades/export",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_trade_journal_endpoint",
+      "path": "/api/trades/journal",
+      "response_model": null
+    }
+  ]
+}

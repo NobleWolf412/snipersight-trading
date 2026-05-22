@@ -1,0 +1,97 @@
+{
+  "event_type_count": 19,
+  "event_types": [
+    "alt_stop_suggested",
+    "bot_cycle_completed",
+    "bot_started",
+    "bot_stopped",
+    "daily_loss_limit_hit",
+    "error_occurred",
+    "info_message",
+    "partial_taken",
+    "position_closed",
+    "position_opened",
+    "quality_gate_failed",
+    "quality_gate_passed",
+    "risk_limit_hit",
+    "scan_completed",
+    "scan_started",
+    "signal_generated",
+    "signal_rejected",
+    "stop_loss_hit",
+    "warning_issued"
+  ],
+  "factories": {
+    "create_alt_stop_suggested_event": [
+      "current_stop",
+      "cushion_pct",
+      "direction",
+      "leverage",
+      "recommended_buffer_atr",
+      "regime_label",
+      "risk_band",
+      "run_id",
+      "suggested_level",
+      "symbol"
+    ],
+    "create_bot_started_event": [
+      "config",
+      "mode",
+      "profile"
+    ],
+    "create_bot_stopped_event": [
+      "reason"
+    ],
+    "create_error_event": [
+      "error_message",
+      "error_type",
+      "run_id",
+      "symbol",
+      "traceback"
+    ],
+    "create_info_event": [
+      "message",
+      "payload",
+      "run_id",
+      "stage",
+      "symbol"
+    ],
+    "create_quality_gate_event": [
+      "details",
+      "gate_name",
+      "passed",
+      "run_id",
+      "symbol"
+    ],
+    "create_scan_completed_event": [
+      "duration_seconds",
+      "run_id",
+      "signals_generated",
+      "signals_rejected",
+      "symbols_scanned"
+    ],
+    "create_scan_started_event": [
+      "profile",
+      "run_id",
+      "symbols"
+    ],
+    "create_signal_generated_event": [
+      "confidence_score",
+      "direction",
+      "entry_price",
+      "risk_reward_ratio",
+      "run_id",
+      "setup_type",
+      "symbol"
+    ],
+    "create_signal_rejected_event": [
+      "diagnostics",
+      "gate_name",
+      "reason",
+      "run_id",
+      "score",
+      "symbol",
+      "threshold"
+    ]
+  }
+}
