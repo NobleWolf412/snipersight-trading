@@ -27,7 +27,9 @@
     "snapshots:approve-all": "tsx tests/visual/approve.ts --all",
     "snapshots:show": "cross-env MSYS_NO_PATHCONV=1 tsx tests/visual/show.ts",
     "snapshots:audit": "tsx tests/visual/audit.ts",
-    "snapshots:report": "tsx tests/visual/report.ts"
+    "snapshots:report": "tsx tests/visual/report.ts",
+    "gen:openapi": "python scripts/dump_openapi.py",
+    "gen:types": "npm run gen:openapi && openapi-typescript build/openapi.json --output src/types/api.ts"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
@@ -121,6 +123,7 @@
     "eslint-plugin-react-refresh": "^0.4.19",
     "eslint-plugin-storybook": "^10.1.10",
     "globals": "^16.0.0",
+    "openapi-typescript": "^7.13.0",
     "pixelmatch": "^7.2.0",
     "playwright": "^1.57.0",
     "pngjs": "^7.0.0",
