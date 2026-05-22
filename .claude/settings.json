@@ -10,6 +10,21 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/verbatim_paste_enforcer.py"
+          },
+          {
+            "type": "command",
+            "command": "python .claude/hooks/pre_commit_typecheck.py"
+          }
+        ]
+      }
     ]
   }
 }
