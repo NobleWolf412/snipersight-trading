@@ -16,7 +16,7 @@
  * No auto-promotion. Ever.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -42,6 +42,12 @@ mkdirSync(BASE_DIR, { recursive: true });
 mkdirSync(PEND_DIR, { recursive: true });
 mkdirSync(REPORT_DIR, { recursive: true });
 
+// Clear stale aggregated summary.json from pre-parallel-fix runs.
+// Workers now write per-worker `summary.<workerIndex>.json` files; report.ts
+// merges them. The legacy single-file `summary.json` is no longer produced.
+// Idempotent across workers: missing-file is the OK case.
+try { unlinkSync(resolve(REPORT_DIR, 'summary.json')); } catch { /* legacy file absent */ }
+
 assertUniqueStateKeys(STATES);
 assertSymmetricDirectionalKeys(STATES);
 
@@ -60,7 +66,11 @@ type StateRecord = {
 
 const RECORDS: StateRecord[] = [];
 
-function writeReport() {
+// Per-worker output: each worker writes `summary.<workerIndex>.json` so the
+// 4-worker parallel run produces 4 distinct files instead of overwriting one
+// shared summary.json (the pre-fix bug — only ~4 of 14 records survived).
+// report.ts merges all `summary.*.json` into a single deduped view.
+function writeReport(workerIndex: number) {
   const summary = RECORDS.map(r => ({
     key: r.key,
     status: r.status,
@@ -69,12 +79,15 @@ function writeReport() {
     reasons: r.reasons ?? [],
     explicitReady: r.explicitReady,
   }));
-  writeFileSync(resolve(REPORT_DIR, 'summary.json'), JSON.stringify(summary, null, 2));
+  writeFileSync(
+    resolve(REPORT_DIR, `summary.${workerIndex}.json`),
+    JSON.stringify(summary, null, 2),
+  );
 }
 
 test.describe('visual snapshots', () => {
-  test.afterAll(() => {
-    writeReport();
+  test.afterAll(({}, testInfo) => {
+    writeReport(testInfo.workerIndex);
   });
 
   for (const s of STATES) {

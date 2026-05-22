@@ -1,13 +1,18 @@
 /**
  * Generate the HTML failure report from the latest capture run.
  *
- *   __report__/visual.html  ← summary + thumbnail grid
- *   __report__/summary.json ← raw machine-readable
+ *   __report__/visual.html        ← summary + thumbnail grid
+ *   __report__/summary.<N>.json   ← per-worker raw records (one per Playwright worker)
  *
- * Reads __report__/summary.json (written by capture.spec.ts afterAll).
- * Same § 11 layout: short summary first, diff thumbnails second, raw last.
+ * Reads ALL `summary.*.json` files in __report__/ (written by capture.spec.ts
+ * afterAll, one per worker). Merges and deduplicates by state key — latest
+ * file mtime wins on dedup, so a re-run with fewer workers does not see stale
+ * records leak through. Pre-fix bug: a single shared summary.json was
+ * overwritten by the last worker's afterAll, surfacing only ~4 of 14 records.
+ *
+ * § 11 layout: short summary first, diff thumbnails second, raw last.
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,9 +31,41 @@ interface Row {
 }
 
 function loadSummary(): Row[] {
-  const p = resolve(REPORT_DIR, 'summary.json');
-  if (!existsSync(p)) return [];
-  return JSON.parse(readFileSync(p, 'utf8')) as Row[];
+  // Collect all per-worker summaries + any legacy single-file summary.json
+  // that may persist from pre-fix runs. Each file holds an array of Row.
+  let files: { path: string; mtimeMs: number }[];
+  try {
+    files = readdirSync(REPORT_DIR)
+      .filter(f => /^summary\.\d+\.json$/.test(f) || f === 'summary.json')
+      .map(f => {
+        const p = resolve(REPORT_DIR, f);
+        return { path: p, mtimeMs: statSync(p).mtimeMs };
+      });
+  } catch {
+    return [];
+  }
+  if (files.length === 0) return [];
+
+  // Sort ASCENDING by mtime so newer files iterate LAST. With a single Map
+  // keyed by `key`, later iterations overwrite earlier ones — latest mtime
+  // wins on dedup, which is the correct semantics when worker count or
+  // state list changes between runs.
+  files.sort((a, b) => a.mtimeMs - b.mtimeMs);
+
+  const seen = new Map<string, Row>();
+  for (const { path } of files) {
+    try {
+      const data = JSON.parse(readFileSync(path, 'utf8')) as Row[];
+      if (!Array.isArray(data)) continue;
+      for (const r of data) {
+        if (r && typeof r.key === 'string') seen.set(r.key, r);
+      }
+    } catch {
+      // Malformed per-worker file: skip without failing the whole report.
+      // Aggregation is best-effort; a single bad file does not block the rest.
+    }
+  }
+  return Array.from(seen.values()).sort((a, b) => a.key.localeCompare(b.key));
 }
 
 function statusBadge(s: Row['status']): string {
@@ -104,14 +141,14 @@ ${failureGrid}
   </tr>`).join('')}
 </table>
 
-<p class="raw">raw machine-readable: <code>__report__/summary.json</code></p>
+<p class="raw">raw machine-readable: <code>__report__/summary.&lt;workerIndex&gt;.json</code> (one per Playwright worker; merged in-memory)</p>
 </body></html>`;
 }
 
 function main() {
   const rows = loadSummary();
   if (rows.length === 0) {
-    console.error('No summary.json found. Run `npm run snapshots:capture` first.');
+    console.error('No summary.<workerIndex>.json files found in __report__/. Run `npm run snapshots:capture` first.');
     process.exit(1);
   }
   const html = buildHtml(rows);
