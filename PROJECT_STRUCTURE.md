@@ -1,3 +1,5 @@
+> **Status: Pre-implementation blueprint (partially stale).** Written when SniperSight was an architectural spec. The scanner is now built — see [README.md](README.md) for the actual repository layout (`backend/` + `src/`) and [CLAUDE.md](CLAUDE.md) for operating instructions. The package paths below described a future Python-only project; the live tree has both `backend/` (FastAPI) and `src/` (React HUD). Treat content below as historical reference.
+
 # SniperSight Project Structure Reference
 
 This document provides a comprehensive map of the SniperSight codebase with detailed descriptions of every module's purpose, responsibilities, and interfaces.

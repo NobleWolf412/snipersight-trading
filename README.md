@@ -1,307 +1,187 @@
-# SniperSight – Architecture & Project Blueprint
+# SniperSight
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
-![Status](https://img.shields.io/badge/status-blueprint-orange)
-![Type](https://img.shields.io/badge/type-documentation-green)
+**Institutional-grade crypto scanner + paper trader + autonomous bot for Smart Money Concepts strategy execution.**
 
-**An institutional-grade crypto market scanner architecture leveraging Smart-Money Concepts across multi-timeframe analysis.**
+Confluence over conviction. Precision over volume. Truth over narrative.
 
 ---
 
-## 🎯 What is SniperSight?
+## What this repo is
 
-SniperSight is a **comprehensive architectural blueprint** for building a modular, institutional-grade crypto market scanner designed to evolve into a fully automated trading bot.
+A working FastAPI backend + React HUD frontend that scans crypto markets across multiple timeframes, applies SMC (Smart Money Concepts) detection, scores confluence per-mode, and runs paper-traded + (gated) live trades through a four-mode scanner system.
 
-This repository contains:
+Not a blueprint. The scanner is built and runs.
 
-- ✅ **Complete Product Requirements Document (PRD)**
-- ✅ **Detailed System Architecture**
-- ✅ **Comprehensive Project Structure Reference**
-- ✅ **Implementation Guidelines**
-- ✅ **Interactive Documentation Viewer**
+## Stack
 
-## 📚 Documentation
+- **Backend** — Python 3.10+, FastAPI, uvicorn (port 8000), ccxt for exchange connectivity
+- **Frontend** — React 19, TypeScript, custom HUD CSS (no Tailwind — ejected in Phase 7), Vite (port 5000)
+- **Data** — Phemex (production), Bybit, OKX, Bitget adapters
+- **Storage** — SQLite (`backend/cache/telemetry.db`), JSONL (`backend/cache/trade_journal.jsonl`, `signals.jsonl`)
+- **Testing** — pytest (backend), Playwright (visual snapshots)
 
-### Core Documents
+## Scanner modes
 
-| Document | Description |
-|----------|-------------|
-| **[PRD.md](PRD.md)** | Complete product requirements, features, design specifications |
-| **[ARCHITECTURE.md](ARCHITECTURE.md)** | System architecture, data flow, core design principles |
-| **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** | Detailed module breakdown with responsibilities |
-| **[QUICKSTART.md](QUICKSTART.md)** | Quick start guide and implementation roadmap |
+Four modes, all on one orchestrator pipeline (configurations, not separate processes):
 
-### Interactive Viewer
+| Mode | Profile | Min Score | Critical TFs | Planning TF |
+|------|---------|-----------|--------------|-------------|
+| OVERWATCH | `macro_surveillance` | 72.0 | 1w, 1d | 4h |
+| STRIKE | `intraday_aggressive` | 68.0 | 15m | 15m |
+| SURGICAL | `precision` | 70.0 | 15m | 15m |
+| STEALTH | `stealth_balanced` | 70.0 | 4h, 1h | 1h |
 
-This repository includes a **Spark application** (TypeScript/React) that serves as an interactive documentation viewer. Launch it to explore the architecture in a user-friendly interface.
+Bot production mode is STEALTH. The scanner mode picker is for strategy inspection; it does not write to bot state.
 
-## 🏗️ Architecture Overview
+## Pipeline (single context object)
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         CLI / API Layer                      │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Engine Orchestrator                       │
-│     Pipeline Controller • Context Manager • Hook System      │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-         ┌───────────────┼───────────────┐
-         │               │               │
-         ▼               ▼               ▼
-   ┌─────────┐    ┌──────────┐    ┌──────────┐
-   │  Data   │    │Indicators│    │ Strategy │
-   └─────────┘    └──────────┘    └──────────┘
-         │               │               │
-         └───────────────┼───────────────┘
-                         │
-                         ▼
-                  ┌─────────────┐
-                  │    Risk     │
-                  └──────┬──────┘
-                         │
-         ┌───────────────┼───────────────┐
-         │               │               │
-         ▼               ▼               ▼
-   ┌─────────┐    ┌──────────┐    ┌──────────┐
-   │   Bot   │    │Telemetry │    │  Audit   │
-   └─────────┘    └──────────┘    └──────────┘
-```
+`SniperContext` ([backend/engine/context.py](backend/engine/context.py)) passes through every stage and gets progressively populated:
 
-## 🎨 Core Principles
+1. Data ingestion → `multi_tf_data`
+2. Indicators → `multi_tf_indicators`
+3. SMC detection → `smc_snapshot`
+4. Macro context → `macro_context`
+5. Confluence scoring → `confluence_breakdown`
+6. Trade planning → `plan`
+7. Risk validation → `risk_plan`
 
-### 1. Preserve Smart-Money Edge
-Every component honors multi-timeframe context, order blocks, FVGs, liquidity sweeps, BTC impulse gates, regime filters, and institutional heuristics.
+Entry point: `Orchestrator.scan(symbol, profile)` in [backend/engine/orchestrator.py](backend/engine/orchestrator.py).
 
-### 2. No-Null, Actionable Outputs
-All outputs complete—no missing fields, no "TBD" placeholders, no null sections. Signals include full trade plans with populated rationale.
+## Smart-Money Concepts (what's detected)
 
-### 3. Verification-Ready
-Deterministic fixtures, strong typing, schema validation, and comprehensive test coverage make backtests and validation trivial.
+- **Order Blocks (OB)** — institutional accumulation/distribution zones
+- **Fair Value Gaps (FVG)** — liquidity imbalances
+- **Break of Structure (BOS)** — trend continuation (preserves temporal ordering, not just level-cross)
+- **Change of Character (CHoCH)** — potential reversals
+- **Liquidity Sweeps** — stop-hunts before institutional moves
+- **Wyckoff cycle logic** — accumulation/distribution phase detection
+- **WCL failure** — feeds active short bias
 
-### 4. Zero Silent Failures
-Missing indicators, incomplete SMC data, or blank rationale trigger hard errors. No half-formed signals reach notifications.
+Bullish/bearish detection is symmetric — same logic, same gates, same penalties.
 
-### 5. Plugin-Friendly & ML-Ready
-Pluggable indicators, strategies, and hooks support future ML scoring without core refactoring.
+## Confluence scoring
 
-## 📦 Package Structure
+Mode-aware weighted sum with synergy bonuses, conflict penalties, and hard-failing pre-scoring gates (structural anchor, BTC impulse, regime, conflict density). HTF composite collapses correlated HTF inputs into one score. Per-mode minimum thresholds (table above). Frontend can override upward but never downward.
+
+Pre-scoring gates run before scoring; gate failure skips scoring entirely. Soft penalties cannot compensate for a failed gate.
+
+## Regime gating
+
+Enforced, not advisory. Each mode has a `RegimePolicy` in [backend/analysis/regime_policies.py](backend/analysis/regime_policies.py) with `min_regime_score`, `allow_in_risk_off`, position-size adjustments, and confluence adjustments per regime label. Regime detector uses percentage-based ATR, not absolute.
+
+## Workflow + audit discipline
+
+Operating instructions for AI-assisted development live in **[CLAUDE.md](CLAUDE.md)**:
+- §10 Standing fixes (do not regress)
+- §16 Audit discipline — 14-point rubric enforced by autonomous subagent on every commit
+- §17 Task router — declare task type + skills + agent upfront
+- §18 Pre-flight discipline — Plan agent for features, diagnostic-in-same-diff for bug fixes, symmetry-guard auto-invoke for §10 surface edits
+- §19 Decisions log at `backend/diagnostics/decisions/`
+- §20 Backend integrity — contract snapshots at `backend/diagnostics/contracts/`, pipeline_smoke at `backend/diagnostics/pipeline_smoke.py`
+
+Calibration history lives in [`backend/diagnostics/decisions/`](backend/diagnostics/decisions/). HUD rebuild Phase 0–7 archived to [`backend/diagnostics/phase_archive/`](backend/diagnostics/phase_archive/).
+
+## Repository layout (actual)
 
 ```
-snipersight/
-├── contracts/          # API boundary definitions
-├── shared/            # Cross-cutting models, configs, utilities
-├── data/              # Multi-exchange data ingestion and caching
-├── indicators/        # Technical analysis computation
-├── strategy/          # SMC detection, confluence scoring, planning
-│   ├── smc/          # Order blocks, FVGs, BOS/CHoCH, liquidity sweeps
-│   ├── confluence/   # Scoring, regime detection, plugins
-│   └── planner/      # Entry zones, stops, targets, R:R
-├── risk/              # Position sizing, exposure control, compliance
-├── bot/               # Notifications, execution, charts, telemetry
-├── engine/            # Pipeline orchestration, context, hooks, plugins
-├── ml/                # ML integration hooks (future)
-├── devtools/          # Development utilities
-├── tests/             # Fixtures, unit, integration, backtest
-├── docs/              # Documentation
-├── scripts/           # Operational scripts
-└── examples/          # Usage demonstrations
+snipersight-trading/
+├── CLAUDE.md                              # operating instructions (authoritative)
+├── DESIGN.md                              # HUD visual system
+├── PRODUCT.md                             # product framing
+├── backend/
+│   ├── api_server.py                      # FastAPI app entry
+│   ├── engine/
+│   │   ├── orchestrator.py                # pipeline controller (scan entry point)
+│   │   └── context.py                     # SniperContext dataclass
+│   ├── strategy/
+│   │   ├── confluence/scorer.py           # scoring + pre-scoring gates
+│   │   ├── planner/                       # entry zones, stops, targets
+│   │   └── smc/                           # OB / FVG / BOS / sweeps / cycles
+│   ├── analysis/
+│   │   ├── regime_detector.py             # % ATR regime classifier
+│   │   └── regime_policies.py             # per-mode regime gating
+│   ├── bot/
+│   │   ├── paper_trading_service.py       # paper trading orchestration
+│   │   ├── executor/                      # paper + live executors, position manager
+│   │   └── telemetry/                     # event emission + SQLite storage
+│   ├── services/                          # confluence / smc / indicator / scanner service layer
+│   ├── shared/config/
+│   │   └── scanner_modes.py               # the four modes + RELATIVITY_MAP
+│   ├── data/adapters/                     # Phemex / Bybit / OKX / Bitget / Binance
+│   ├── routers/                           # FastAPI routers (data, scanner, observability, htf)
+│   ├── diagnostics/
+│   │   ├── capture_contracts.py           # §20 contract snapshot driver
+│   │   ├── pipeline_smoke.py              # §20 structural smoke
+│   │   ├── contracts/                     # frozen API/telemetry/pipeline/DB baselines
+│   │   ├── decisions/                     # §19 calibration learnings
+│   │   ├── phase_archive/                 # completed phases
+│   │   └── audit_halts/                   # §16 3-round-fail halts
+│   └── tests/                             # pytest suites
+├── src/                                   # React HUD frontend
+│   ├── pages/                             # one page per route
+│   ├── components/hud/                    # HUD primitives (Chip, PageHead, Reticle, etc.)
+│   ├── services/                          # API client + scan history
+│   ├── hooks/                             # React hooks
+│   └── types/api.ts                       # generated from openapi.json
+├── tests/visual/                          # Playwright snapshot framework
+├── .claude/                               # Claude Code config
+│   ├── agents/                            # subagent definitions
+│   ├── skills/                            # invokable skills
+│   ├── hooks/                             # PreToolUse + PostToolUse enforcement
+│   └── settings.json
+└── scripts/                               # ops + codegen helpers
 ```
 
-## 🚀 Quick Start
+## Quick start
 
-### 1. Explore the Documentation
+Backend:
+```
+python -m uvicorn backend.api_server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Frontend:
+```
+npm install
+npm run dev -- --host 0.0.0.0 --port 5000
+```
+
+Combined (if `concurrently` installed):
+```
+npm run dev:all
+```
+
+Windows convenience launcher: `C:\start-sniper.bat`.
+
+## Common operations
 
 ```bash
-# Read the core documents
-cat PRD.md
-cat ARCHITECTURE.md
-cat PROJECT_STRUCTURE.md
-cat QUICKSTART.md
+# Contract integrity (§20 Rubric 14)
+python -m backend.diagnostics.capture_contracts diff
+python -m backend.diagnostics.pipeline_smoke verify
+
+# Type sync (frontend ↔ backend, see §20)
+npm run gen:types
+
+# Visual snapshots (Playwright)
+npm run snapshots:capture
+npm run snapshots:report
+npm run snapshots:approve <route> <state>
+
+# Backend tests
+pytest
+
+# TypeScript
+npx tsc --noEmit
 ```
 
-### 2. Launch the Interactive Viewer
+## Hard boundaries (CLAUDE.md §15)
 
-This repository includes a Spark application for browsing the documentation:
+- No live trading code paths touched without explicit approval
+- No `min_confluence_score` or pre-scoring gate threshold changes without baseline data + documented reason
+- No silent reformats, no scope creep
+- No mock data swapped where real data is integrated
+- Bot mode source is `botConfig.sniperMode`, never `ScannerContext.selectedMode`
 
-```bash
-# The viewer is already configured and ready to run
-# Simply open the project in your Spark environment
-```
+## License
 
-### 3. Understand the Architecture
-
-- Review the **data flow pipeline** (data → indicators → SMC → confluence → planner → risk → notify)
-- Study the **contract definitions** for API boundaries
-- Examine the **data models** in the structure reference
-- Understand the **quality gates** that ensure signal quality
-
-### 4. Implementation Roadmap
-
-The actual SniperSight scanner should be implemented in **Python** following these phases:
-
-**Phase 1: Foundation** (Week 1-2)
-- Set up Python project structure
-- Implement data models (`shared/models/`)
-- Create API contracts (`contracts/`)
-- Build configuration system
-
-**Phase 2: Data Layer** (Week 2-3)
-- Exchange adapters (Binance, Bybit)
-- Caching system
-- Ingestion pipeline
-- Test fixtures
-
-**Phase 3: Analysis Layer** (Week 3-5)
-- Indicator computation
-- SMC detection (OB, FVG, BOS/CHoCH, sweeps)
-- Confluence scoring
-- Trade planner
-
-**Phase 4: Risk & Execution** (Week 5-6)
-- Risk management
-- Notification system (Telegram)
-- Optional executor
-- Telemetry
-
-**Phase 5: Orchestration** (Week 6-7)
-- Pipeline controller
-- Context management
-- Hook system
-- CLI interface
-
-**Phase 6: Quality & Testing** (Week 7-8)
-- Quality gates
-- Backtest framework
-- Verification checklist
-- Comprehensive tests
-
-## 🎯 Smart-Money Concepts
-
-SniperSight leverages institutional trading concepts:
-
-- **Order Blocks (OB)**: Institutional accumulation/distribution zones
-- **Fair Value Gaps (FVG)**: Liquidity imbalances to be filled
-- **Break of Structure (BOS)**: Trend continuation confirmations
-- **Change of Character (CHoCH)**: Potential trend reversals
-- **Liquidity Sweeps**: Stop hunts before institutional moves
-- **Displacement**: Strong directional moves indicating conviction
-
-## 📊 Multi-Timeframe Analysis
-
-Analyzes 6 timeframes simultaneously:
-
-- **1W** (Weekly) - Major trend direction
-- **1D** (Daily) - Primary market structure
-- **4H** - Intermediate structure and alignment
-- **1H** - Entry refinement and context
-- **15m** - Precise entry zones
-- **5m** - Execution timeframe
-
-## 🛡️ Quality Gates
-
-Multi-layered filtering ensures institutional-grade signals:
-
-1. **Data Quality** - Complete, valid, recent data
-2. **Indicator Quality** - No null/NaN values in critical indicators
-3. **SMC Quality** - Fresh structures, proper displacement
-4. **Confluence Quality** - Multi-factor alignment, low conflicts
-5. **Plan Quality** - Complete plans, valid R:R ratios
-6. **Risk Quality** - Position sizing, exposure limits
-
-## 📋 Configuration Profiles
-
-### Balanced (Default)
-Moderate thresholds, multi-factor confluence, R:R ≥ 2.5, 4H primary
-
-### Trend
-Trend-following emphasis, momentum-heavy, strict HTF alignment
-
-### Range
-Mean-reversion focus, oscillator-heavy, tighter zones
-
-### Aggressive
-Lower thresholds, higher leverage, shorter timeframes
-
-### Mobile
-Reduced universe, extended cache, battery-optimized
-
-## 🔧 Technology Stack
-
-### Recommended for Python Implementation
-
-**Core**
-- Python 3.10+
-- pandas / numpy
-- TA-Lib / pandas-ta
-
-**Data**
-- ccxt (exchange connectivity)
-- requests
-- redis (optional caching)
-
-**Testing**
-- pytest
-- hypothesis
-
-**Utilities**
-- pydantic (validation)
-- typer / click (CLI)
-- python-telegram-bot
-- plotly / matplotlib
-
-### This Repository (Documentation Viewer)
-
-**Frontend**
-- React 19
-- TypeScript
-- Tailwind CSS v4
-- shadcn/ui components
-
-## 📈 Expected Outcomes
-
-### Signal Quality Targets
-- Confluence Score: ≥ 7.0/10
-- R:R Ratio: ≥ 2.0 (balanced), ≥ 2.5 (trend)
-- Freshness Score: ≥ 0.7 for order blocks
-- Displacement: ≥ 1.5 ATR
-
-### Backtest Targets
-- Win Rate: ≥ 55% (balanced), ≥ 60% (trend)
-- Average R:R: ≥ 2.5
-- Profit Factor: ≥ 2.0
-- Max Drawdown: ≤ 15%
-
-## ⚠️ Important Notes
-
-- This is a **blueprint and architectural specification**, not a working scanner
-- The actual implementation should be in **Python** following the documented architecture
-- This Spark application serves as an **interactive documentation viewer**
-- Focus on **discipline, verification, and quality gates** in your implementation
-- Every component must be **testable with deterministic fixtures**
-
-## 📖 Philosophy
-
-SniperSight embodies institutional trading discipline:
-
-✨ **Precision over Speed** - Wait for high-quality setups
-✨ **Verification over Trust** - Test everything deterministically
-✨ **Discipline over Discretion** - Follow the gates
-✨ **Completeness over Convenience** - No half-formed signals
-✨ **Clarity over Complexity** - Transparent, auditable decisions
-
-Build with the mindset of an institution protecting capital, not a gambler chasing gains.
-
-## 📄 License
-
-This architectural blueprint and documentation is provided as-is for reference and implementation purposes.
-
-## 🤝 Contributing
-
-This is an architectural specification. Contributions to improve documentation clarity, add implementation examples, or enhance the interactive viewer are welcome.
-
----
-
-**Ready to build?** Start with [QUICKSTART.md](QUICKSTART.md) and implement phase by phase with rigorous testing at every step.
+Internal. Operator: Matt (maccardi4431@gmail.com). Repo: `NobleWolf412/snipersight-trading`.

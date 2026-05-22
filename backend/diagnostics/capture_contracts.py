@@ -207,11 +207,27 @@ def capture_db_contracts() -> Dict[str, Any]:
 
     db_tables.sort(key=lambda x: (x["source"], x["table"]))
 
-    # JSONL contracts — sniff canonical key set from first line of each .jsonl
+    # JSONL contracts — sniff canonical key set from first line of each .jsonl.
+    # Exclude:
+    #   - venv / __pycache__: artifact dirs
+    #   - logs/ at repo root: runtime-emitted per-session signals.jsonl files
+    #     (gitignored under the existing `logs` + `*.log` patterns in
+    #     .gitignore; each paper-trader session creates a new path which
+    #     would drift the baseline without representing an actual schema
+    #     change). Canonical JSONLs live under backend/cache/.
+    #   The logs/ check is anchored to the FIRST path component relative to
+    #   REPO_ROOT to avoid false positives on incidental "logs" segments in
+    #   absolute paths (e.g. usernames containing "logs").
     jsonl_files: List[Dict[str, Any]] = []
     for jsonl_glob in ("**/signals.jsonl", "**/trade_journal.jsonl"):
         for path in REPO_ROOT.rglob(jsonl_glob):
             if "venv" in path.parts or "__pycache__" in path.parts:
+                continue
+            try:
+                rel_parts = path.relative_to(REPO_ROOT).parts
+            except ValueError:
+                rel_parts = path.parts
+            if rel_parts and rel_parts[0] == "logs":
                 continue
             try:
                 with path.open("r", encoding="utf-8", errors="ignore") as fh:

@@ -1,3 +1,5 @@
+> **Status: Pre-implementation blueprint (partially stale).** Written when SniperSight was an architectural spec. The scanner is now built — see [README.md](README.md) for current reality and [CLAUDE.md](CLAUDE.md) for authoritative operating instructions. Known drift items: references to "Recon" mode (the actual system has four modes: OVERWATCH / STRIKE / SURGICAL / STEALTH — CLAUDE.md §4); pipeline diagrams not reflecting the `SniperContext`-based design ([backend/engine/context.py](backend/engine/context.py)); references to PRD.md (removed — see [PRODUCT.md](PRODUCT.md)). Treat content below as historical reference; cite the code or CLAUDE.md when in doubt.
+
 # SniperSight Architecture
 
 ## System Overview

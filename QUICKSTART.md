@@ -1,6 +1,95 @@
-# SniperSight Quick Start Guide
+# SniperSight Quick Start
 
-## What is SniperSight?
+> **Note:** Earlier versions of this doc described the project as a "blueprint" / "Spark application" / "documentation viewer." That framing is stale — the scanner is built and runs. Below is the actual quick start for the working application. See [README.md](README.md) for the canonical overview, [CLAUDE.md](CLAUDE.md) for operating instructions, and the "Historical blueprint reference" section at the bottom of this file for the original pre-implementation content.
+
+## Run the application
+
+**Prerequisites:**
+- Python 3.10+ with `venv` activated
+- Node.js + npm installed
+- (Optional) Playwright browsers: `npx playwright install chromium` for visual snapshot tests
+
+**Backend (FastAPI on port 8000):**
+```bash
+python -m uvicorn backend.api_server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Frontend (Vite on port 5000):**
+```bash
+npm install
+npm run dev -- --host 0.0.0.0 --port 5000
+```
+
+**Both concurrently:**
+```bash
+npm run dev:all
+```
+
+**Windows convenience launcher:** `C:\start-sniper.bat`.
+
+## Verify the install
+
+```bash
+# Backend tests
+pytest
+
+# TypeScript type check
+npx tsc --noEmit
+
+# Backend contract baselines (§20)
+python -m backend.diagnostics.capture_contracts diff   # should print CLEAN
+python -m backend.diagnostics.pipeline_smoke verify    # should print CLEAN
+
+# Visual snapshot regression (needs vite dev server on 5000 first)
+npm run snapshots:capture
+npm run snapshots:report
+```
+
+## Scanner modes (CLAUDE.md §4)
+
+| Mode | Profile | Min Score | Critical TFs | Planning TF |
+|------|---------|-----------|--------------|-------------|
+| OVERWATCH | `macro_surveillance` | 72.0 | 1w, 1d | 4h |
+| STRIKE | `intraday_aggressive` | 68.0 | 15m | 15m |
+| SURGICAL | `precision` | 70.0 | 15m | 15m |
+| STEALTH | `stealth_balanced` | 70.0 | 4h, 1h | 1h |
+
+Bot production mode is STEALTH.
+
+## Where things live
+
+| Topic | Path |
+|-------|------|
+| Operating instructions | [CLAUDE.md](CLAUDE.md) |
+| Pipeline entry | [backend/engine/orchestrator.py](backend/engine/orchestrator.py) → `Orchestrator.scan` |
+| Scanner modes | [backend/shared/config/scanner_modes.py](backend/shared/config/scanner_modes.py) |
+| Confluence scorer | [backend/strategy/confluence/scorer.py](backend/strategy/confluence/scorer.py) |
+| Paper trader | [backend/bot/paper_trading_service.py](backend/bot/paper_trading_service.py) |
+| HUD pages | [src/pages/](src/pages/) |
+| Decisions log | [backend/diagnostics/decisions/](backend/diagnostics/decisions/) |
+| Phase archive | [backend/diagnostics/phase_archive/](backend/diagnostics/phase_archive/) |
+
+## Common diagnostics
+
+```bash
+# Why didn't <symbol> generate a signal?
+# Use the rejection-forensics agent or:
+python -c "from backend.diagnostics import logger; ..."
+
+# Last scan cycle details
+curl http://localhost:8000/api/cycles/last
+
+# Symbol cycle context
+curl http://localhost:8000/api/market/symbol-cycles?symbol=BTC/USDT
+```
+
+## Historical blueprint reference
+
+The content below was authored before the scanner was built. Kept for historical context only — do not treat as authoritative current state.
+
+---
+
+## What is SniperSight (pre-implementation framing)
 
 SniperSight is a comprehensive architectural blueprint for building an **institutional-grade crypto market scanner** that leverages Smart-Money Concepts (SMC) to identify high-probability trading setups across multiple timeframes.
 
@@ -13,7 +102,7 @@ This is a **documentation and reference implementation** that provides:
 ✅ Contract Definitions and Data Models
 ✅ Quality Gates and Verification Checklists
 
-## Understanding This Repository
+## Understanding This Repository (pre-implementation framing)
 
 ### What You're Looking At
 
@@ -23,7 +112,7 @@ The actual SniperSight scanner should be **implemented in Python** following the
 
 ### Key Documentation Files
 
-📄 **PRD.md** - Complete product requirements, features, design specifications
+📄 **PRD.md** - Complete product requirements, features, design specifications (NOTE: PRD.md has been removed from the repo; see [PRODUCT.md](PRODUCT.md) for current product framing)
 📄 **ARCHITECTURE.md** - System architecture, data flow, core principles
 📄 **PROJECT_STRUCTURE.md** - Detailed module breakdown with responsibilities
 
