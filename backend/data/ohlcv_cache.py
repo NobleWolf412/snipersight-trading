@@ -53,11 +53,21 @@ class CacheEntry:
         """
         Check if the cache entry is stale.
 
-        A cache entry expires when the current candle's period ends.
-        We add a small buffer to account for exchange data lag.
+        A cache entry expires the moment the candle AFTER the latest one in
+        the cached df has closed — i.e., when fetching now would return a
+        df with a newer "latest closed candle" than the one cached.
+
+        Anchored to the wall-clock candle boundary (using the latest
+        candle's open timestamp in the cached df), NOT to elapsed-since-
+        fetch. The previous implementation used `now - fetched_at >=
+        tf_seconds`, which produced up to ~59 minutes of staleness when a
+        candle closed mid-cache-window. That caused production Gate 3
+        false-positives in dda4d192 (May 2026) — 84 LONG rejections
+        attributed to a stale `btc_velocity_1h` reading.
 
         Args:
-            buffer_seconds: Extra seconds to wait after candle close
+            buffer_seconds: Extra seconds to wait after the new candle's
+                close to account for exchange data finalization lag.
 
         Returns:
             True if cache should be refreshed
@@ -67,16 +77,36 @@ class CacheEntry:
 
         tf_seconds = TIMEFRAME_SECONDS.get(self.timeframe, 300)  # Default 5m
 
-        # Calculate when the current candle closes
-        now = time.time()
-        time_since_fetch = now - self.fetched_at
+        # Read the latest candle's OPEN timestamp from the cached df.
+        # The candle CLOSED at latest_open + tf_seconds. The NEXT candle
+        # closes at latest_open + 2 * tf_seconds — that is when the cache
+        # is unambiguously stale (a fresh fetch would return a newer
+        # latest-closed candle). We expire when wall-clock crosses
+        # `latest_open + tf_seconds + buffer`, i.e. as soon as the next
+        # candle has just closed (the +tf_seconds covers the candle that's
+        # CURRENTLY in-progress at fetch time, which has now closed too).
+        try:
+            latest_open = self.df["timestamp"].iloc[-1]
+            ts = pd.Timestamp(latest_open)
+            if ts.tz is None:
+                # Exchange convention: candle timestamps are UTC even when naive.
+                ts = ts.tz_localize("UTC")
+            latest_open_epoch = ts.timestamp()
+        except Exception as exc:
+            # Defensive fallback: if the timestamp column is malformed,
+            # use the legacy elapsed-since-fetch formula so we never wedge.
+            logger.debug(
+                "OHLCVCache.is_expired: timestamp parse failed (%s); "
+                "falling back to elapsed-since-fetch TTL",
+                exc,
+            )
+            return (time.time() - self.fetched_at) >= tf_seconds + buffer_seconds
 
-        # If we've passed the timeframe duration since fetch, the candle has closed
-        # and a new one has started - we need fresh data
-        if time_since_fetch >= tf_seconds + buffer_seconds:
-            return True
-
-        return False
+        # Latest cached candle opened at `latest_open_epoch` and closed at
+        # `latest_open_epoch + tf_seconds`. Cache becomes stale the moment
+        # the FOLLOWING candle has closed (= latest_open + 2 * tf_seconds).
+        next_after_close_epoch = latest_open_epoch + 2 * tf_seconds
+        return time.time() >= next_after_close_epoch + buffer_seconds
 
     def is_stale_by_price(self, current_price: float, max_drift_pct: float = 3.0) -> bool:
         """
@@ -107,10 +137,35 @@ class CacheEntry:
         return time.time() - self.fetched_at
 
     def get_remaining_seconds(self) -> float:
-        """Get seconds until this cache expires."""
+        """Get seconds until this cache expires.
+
+        Mirrors `is_expired()` math so the `/api/cache/*` observability
+        endpoints don't drift from actual expiration semantics. Uses the
+        latest candle's open timestamp + 2*tf_seconds + 5s buffer, same
+        as `is_expired()`. Falls back to the legacy elapsed-since-fetch
+        formula on timestamp parse failure (matching the fallback in
+        `is_expired()`).
+        """
+        if self.df.empty:
+            return 0.0
         tf_seconds = TIMEFRAME_SECONDS.get(self.timeframe, 300)
-        remaining = tf_seconds - self.get_age_seconds()
-        return max(0, remaining)
+        try:
+            latest_open = self.df["timestamp"].iloc[-1]
+            ts = pd.Timestamp(latest_open)
+            if ts.tz is None:
+                ts = ts.tz_localize("UTC")
+            latest_open_epoch = ts.timestamp()
+            next_after_close_epoch = latest_open_epoch + 2 * tf_seconds + 5.0
+            remaining = next_after_close_epoch - time.time()
+            return max(0.0, remaining)
+        except Exception as exc:
+            logger.debug(
+                "OHLCVCache.get_remaining_seconds: timestamp parse failed (%s); "
+                "falling back to elapsed-since-fetch TTL",
+                exc,
+            )
+            remaining = tf_seconds - self.get_age_seconds()
+            return max(0.0, remaining)
 
 
 class OHLCVCache:
