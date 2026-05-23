@@ -83,3 +83,22 @@ tests/visual/__report__/
 
 # Claude Code per-machine state
 .claude/settings.local.json
+.claude/.skill-state/
+.claude/autopsy-reports/
+.claude/worktrees/
+
+# Other agent / scratch directories (generated, do not commit)
+.claire/
+.impeccable/
+
+# Runtime / live-trading state (§15 — never commit live trading data)
+.live_trading/
+data/cooldowns.json
+paper_trading.db
+telemetry.db
+*.db-journal
+
+# Patch / temp artifacts
+*.patch
+tmp_*.txt
+tmp_*.json
