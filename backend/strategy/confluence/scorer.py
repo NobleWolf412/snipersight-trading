@@ -1238,22 +1238,19 @@ def evaluate_htf_momentum_gate(
     profile = getattr(mode_config, "profile", "balanced")
     mode_name = getattr(mode_config, "name", "stealth").lower()
 
-    # Defaults
+    # Defaults — §10 standard 70/30 (NOT 75/25). Fall-through to default must
+    # never produce an asymmetric pair vs the four explicit branches below.
     momentum_tf = "4h"
-    fade_threshold_rsi = 75.0  # Standard extension
+    fade_threshold_rsi = 70.0
 
     # Configure per Mode
     if mode_name == "overwatch" or profile == "macro_surveillance":
         # SWING: Look at Daily. Hard to turn. Needs extreme evidence.
-        # FIX: was 75.0 → threshold = 25. RSI 26 wasn't recognized as oversold for fades.
-        # Changed to 70.0 → threshold = 30, aligning with industry standard.
         momentum_tf = "1d"
         fade_threshold_rsi = 70.0
 
     elif mode_name == "stealth" or profile == "stealth_balanced":
         # BALANCED: Look at 4H.
-        # FIX: was 75.0 → threshold = 100-75 = 25. RSI 26 (deep oversold) wasn't triggering climax.
-        # Changed to 70.0 → threshold = 30, matching standard oversold definition.
         momentum_tf = "4h"
         fade_threshold_rsi = 70.0
 
@@ -1261,6 +1258,17 @@ def evaluate_htf_momentum_gate(
         # SCALP: Look at 1H/4H. Quick turns allowed.
         momentum_tf = "1h"
         fade_threshold_rsi = 70.0  # RSI > 70 is enough for a scalp fade
+
+    else:
+        # Loud-failure (§11): unknown mode/profile silently using defaults is
+        # exactly the silent-bug class §11 targets. Per CLAUDE.md §10 the four
+        # modes are the only valid set — anything else is a config bug.
+        logger.warning(
+            "evaluate_htf_momentum_gate: unknown mode_name={!r} profile={!r}; "
+            "using §10 defaults (momentum_tf=4h, fade_threshold_rsi=70.0). "
+            "If a new mode was added, extend this branch chain explicitly.",
+            mode_name, profile,
+        )
 
     # 2. GET DATA
     # Elastic fallback if specific TF is missing
