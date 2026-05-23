@@ -207,6 +207,15 @@ class CompletedTrade:
     pullback_probability: float = 0.0
     kill_zone: str = "no_session"
 
+    # Diagnostics for the "stagnation-because-targets-stripped" silent-bug class.
+    # final_targets_remaining: count of structurally-valid targets still in
+    # position.targets at close time (0 means no TP exit was reachable).
+    # targets_stripped_count: how many targets the executor's geometry guard
+    # removed across the position's lifetime. Both fields let trade-autopsy
+    # answer "did this stagnation have a real TP path?" retroactively.
+    final_targets_remaining: int = 0
+    targets_stripped_count: int = 0
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API response."""
         return {
@@ -234,6 +243,8 @@ class CompletedTrade:
             "regime": self.regime,
             "pullback_probability": self.pullback_probability,
             "kill_zone": self.kill_zone,
+            "final_targets_remaining": self.final_targets_remaining,
+            "targets_stripped_count": self.targets_stripped_count,
         }
 
 
@@ -2745,6 +2756,8 @@ class PaperTradingService:
                     regime=f"{getattr(pos, 'regime_trend', 'unknown')}_{getattr(pos, 'regime_volatility', 'unknown')}",
                     pullback_probability=getattr(pos, "pullback_probability", 0.0),
                     kill_zone=getattr(pos, "kill_zone", "no_session"),
+                    final_targets_remaining=len(getattr(pos, "targets", []) or []),
+                    targets_stripped_count=getattr(pos, "targets_stripped_count", 0),
                 )
 
                 self.completed_trades.append(trade)

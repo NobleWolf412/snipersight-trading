@@ -110,6 +110,13 @@ class PositionState:
     pullback_probability: float = 0.0
     kill_zone: str = "no_session"     # active kill zone at entry time
 
+    # Diagnostics — how many targets were stripped from .targets by the
+    # _check_target_hit structural-validity guard over the position's lifetime.
+    # Surfaced on the completed-trade journal row so /trade-autopsy can
+    # distinguish "stagnation because market didn't move" from "stagnation
+    # because all targets were stripped at runtime and TP became unreachable".
+    targets_stripped_count: int = 0
+
     # Price history for progress detection (sampled every 30 minutes)
     _price_samples: List[float] = field(default_factory=list)
     _last_sample_time: Optional[datetime] = field(default=None)
@@ -990,6 +997,9 @@ class PositionManager:
                 invalid_targets.append(target)
 
         if invalid_targets:
+            _stripped_count = len(invalid_targets)
+            _total_before = len(position.targets)
+            _stripped_levels = [float(t.level) for t in invalid_targets]
             logger.warning(
                 "INVALID_TARGET_GEOMETRY: %s %s entry=%.6f — %d/%d target(s) "
                 "on the UNFAVORABLE side of entry. Removing so executor doesn't "
@@ -998,14 +1008,54 @@ class PositionManager:
                 position.symbol,
                 position.direction,
                 position.entry_price,
-                len(invalid_targets),
-                len(position.targets),
-                [f"{t.level:.6f}" for t in invalid_targets],
+                _stripped_count,
+                _total_before,
+                [f"{lv:.6f}" for lv in _stripped_levels],
             )
             with self._lock:
                 for t in invalid_targets:
                     if t in position.targets:
                         position.targets.remove(t)
+                position.targets_stripped_count += _stripped_count
+            # Structured telemetry mirrors the planner-side
+            # `target_direction_guard_fallback_wrong_side` event so the bot
+            # HUD activity log + analytics surface the runtime-strip case.
+            # Lazy import + broad except so a telemetry-storage failure in
+            # any environment (unit-test sandbox without SQLite path, etc.)
+            # never breaks the executor hot path.
+            try:
+                from datetime import datetime, timezone
+
+                from backend.bot.telemetry.events import EventType, TelemetryEvent
+                from backend.bot.telemetry.logger import get_telemetry_logger
+
+                get_telemetry_logger().log_event(
+                    TelemetryEvent(
+                        event_type=EventType.WARNING_ISSUED,
+                        timestamp=datetime.now(timezone.utc),
+                        symbol=position.symbol,
+                        data={
+                            "kind": "executor_target_strip",
+                            "direction": position.direction,
+                            "entry_price": float(position.entry_price),
+                            "stripped_count": _stripped_count,
+                            "total_before": _total_before,
+                            "remaining_after": _total_before - _stripped_count,
+                            "stripped_levels": _stripped_levels,
+                            "rationale": (
+                                "structural-validity guard removed targets on the "
+                                "wrong side of actual fill price; if remaining_after"
+                                "==0 the position can only exit via SL/stagnation/"
+                                "max_hours_open."
+                            ),
+                        },
+                    )
+                )
+            except Exception as _telem_err:
+                logger.debug(
+                    "Could not emit executor_target_strip telemetry: %s",
+                    _telem_err,
+                )
 
         # Mass-conservation invariant: every remaining target is structurally
         # valid relative to entry_price. Any future target match represents a

@@ -1837,6 +1837,8 @@ class LiveTradingService:
                 regime=getattr(pos, "regime", "unknown"),
                 pullback_probability=getattr(pos, "pullback_probability", 0.0),
                 kill_zone=getattr(pos, "kill_zone", "no_session"),
+                final_targets_remaining=len(getattr(pos, "targets", []) or []),
+                targets_stripped_count=getattr(pos, "targets_stripped_count", 0),
             )
 
             self.completed_trades.append(trade)
