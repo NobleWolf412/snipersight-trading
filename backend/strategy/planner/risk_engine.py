@@ -200,6 +200,40 @@ def _guard_target_direction(
             "executor may strip and position will exit via SL/stagnation",
             len(targets), entry_ref, direction, nearest.level,
         )
+        # Structured telemetry so the bot HUD activity log + analytics surface
+        # this "no-good-TP" case in addition to the warning above. Wrapped to
+        # ensure telemetry init failure (e.g. unit-test sandbox with no SQLite
+        # path) never breaks the planner. The kept target IS wrong-side by
+        # construction of this branch — every emission of this event indicates
+        # the executor will strip it on first _check_target_hit.
+        try:
+            from datetime import datetime, timezone
+
+            from backend.bot.telemetry.events import EventType, TelemetryEvent
+            from backend.bot.telemetry.logger import get_telemetry_logger
+
+            get_telemetry_logger().log_event(
+                TelemetryEvent(
+                    event_type=EventType.WARNING_ISSUED,
+                    timestamp=datetime.now(timezone.utc),
+                    data={
+                        "kind": "target_direction_guard_fallback_wrong_side",
+                        "direction": direction,
+                        "entry_ref": float(entry_ref),
+                        "kept_target_level": float(nearest.level),
+                        "stripped_count": len(targets) - 1,
+                        "rationale": (
+                            "all targets on wrong side of fill; executor's "
+                            "structural-validity guard will strip kept target; "
+                            "position will exit via SL/stagnation/max_hours_open"
+                        ),
+                    },
+                )
+            )
+        except Exception as _telem_err:
+            logger.debug(
+                "Could not emit fallback-wrong-side telemetry: %s", _telem_err
+            )
         return [nearest]
     if len(correct_side) < len(targets):
         logger.info(

@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -143,6 +144,86 @@ def test_empty_targets_returns_empty():
     """Mass-conservation edge: empty in, empty out — no crash on null plan."""
     assert _guard_target_direction([], entry_ref=100.0, is_bullish=True) == []
     assert _guard_target_direction([], entry_ref=100.0, is_bullish=False) == []
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Telemetry — fallback-wrong-side event must fire when residual leak hits
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_fallback_emits_wrong_side_telemetry():
+    """When the all-wrong-side fallback fires, the helper must emit a
+    structured WARNING_ISSUED telemetry event so the bot HUD activity log
+    surfaces the case (the executor will strip the fallback target, and the
+    position will exit only via SL/stagnation/max_hours_open).
+
+    Patches the lazy `get_telemetry_logger` import. Verifies log_event was
+    called with the correct event_type and key data fields. Regression catch
+    for silent loss of observability on the residual fallback re-leak path."""
+    mock_logger = MagicMock()
+    with patch(
+        "backend.bot.telemetry.logger.get_telemetry_logger",
+        return_value=mock_logger,
+    ):
+        targets = [_t(91.0), _t(97.0)]
+        out = _guard_target_direction(targets, entry_ref=100.0, is_bullish=True)
+
+    assert len(out) == 1
+    assert out[0].level == 97.0
+    assert mock_logger.log_event.called, (
+        "Fallback path should emit a WARNING_ISSUED telemetry event"
+    )
+    event = mock_logger.log_event.call_args[0][0]
+    assert event.event_type.value == "warning_issued"
+    assert event.data["kind"] == "target_direction_guard_fallback_wrong_side"
+    assert event.data["direction"] == "LONG"
+    assert event.data["entry_ref"] == 100.0
+    assert event.data["kept_target_level"] == 97.0
+    assert event.data["stripped_count"] == 1
+
+
+def test_fallback_emits_wrong_side_telemetry_short():
+    """SHORT mirror of the LONG telemetry-emit test. The telemetry block
+    inside _guard_target_direction is direction-agnostic (it derives
+    `direction` once from `is_bullish` and reuses it in both branches), so
+    this test exists to satisfy §16 rubric 12 explicit bull/bear pairing
+    for direction-aware payload fields."""
+    mock_logger = MagicMock()
+    with patch(
+        "backend.bot.telemetry.logger.get_telemetry_logger",
+        return_value=mock_logger,
+    ):
+        targets = [_t(109.0), _t(103.0)]
+        out = _guard_target_direction(targets, entry_ref=100.0, is_bullish=False)
+
+    assert len(out) == 1
+    assert out[0].level == 103.0
+    assert mock_logger.log_event.called
+    event = mock_logger.log_event.call_args[0][0]
+    assert event.event_type.value == "warning_issued"
+    assert event.data["kind"] == "target_direction_guard_fallback_wrong_side"
+    assert event.data["direction"] == "SHORT"
+    assert event.data["entry_ref"] == 100.0
+    assert event.data["kept_target_level"] == 103.0
+    assert event.data["stripped_count"] == 1
+
+
+def test_no_telemetry_when_targets_are_valid():
+    """Negative pair — when targets are correctly on the right side of entry,
+    NO telemetry event fires. The fallback-wrong-side event must be
+    diagnostic-specific, not blanket-spammy on every guard invocation."""
+    mock_logger = MagicMock()
+    with patch(
+        "backend.bot.telemetry.logger.get_telemetry_logger",
+        return_value=mock_logger,
+    ):
+        targets = [_t(105.0), _t(110.0)]
+        out = _guard_target_direction(targets, entry_ref=100.0, is_bullish=True)
+
+    assert len(out) == 2
+    assert not mock_logger.log_event.called, (
+        "Telemetry should ONLY fire on the wrong-side fallback path"
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

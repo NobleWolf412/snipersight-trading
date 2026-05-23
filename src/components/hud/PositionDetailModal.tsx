@@ -378,11 +378,18 @@ export function PositionDetailModal({ selection, onClose, currentRegime }: Props
 
   // Position-only derived values for the metadata strip.
   const pos = isPosition ? (selection.data as LivePosition) : null;
+  const usableTp = pos != null ? selectPlanTp(pos.tp_final, pos.tp1) : null;
   const plannedRR =
     pos != null
-      ? calcRR(direction, pos.entry_price, pos.stop_loss, selectPlanTp(pos.tp_final, pos.tp1))
+      ? calcRR(direction, pos.entry_price, pos.stop_loss, usableTp)
       : null;
   const currentR = pos != null ? calcCurrentR(pos.unrealized_pnl, pos.risk_pnl) : null;
+  // True when the position has no usable take-profit. Either the planner
+  // shipped a plan with no targets, or position_manager's structural-validity
+  // guard stripped every target as geometrically invalid. Either way, the
+  // position can only exit via SL / stagnation / max_hours_open — never via
+  // TP — so the operator should know before treating R:R "—" as a render bug.
+  const noUsableTp = pos != null && usableTp == null;
 
   return (
     <Modal onClose={onClose} maxWidth={820}>
@@ -411,6 +418,13 @@ export function PositionDetailModal({ selection, onClose, currentRegime }: Props
         <Chip kind={isLong ? 'green' : 'red'}>{isLong ? 'LONG' : 'SHORT'}</Chip>
         {isPosition && pos?.trade_type && (
           <Chip kind="cyan">{pos.trade_type.toUpperCase()}</Chip>
+        )}
+        {noUsableTp && (
+          <span
+            title="This position has no valid take-profit. Either the planner shipped no targets or the executor's geometry guard stripped them as wrong-side-of-fill. The position can only close via stop loss, stagnation, or max-hours timeout."
+          >
+            <Chip kind="amber">NO TP — SL/STAGNATION ONLY</Chip>
+          </span>
         )}
         {!isPosition && (
           <Chip kind="blue">
