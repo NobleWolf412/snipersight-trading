@@ -77,3 +77,9 @@ Routes that exist in the HUD, with register notes:
 - `/settings` — Local-state preferences (product, deliberately quiet)
 
 Every product surface uses the same chrome (Topbar, FooterStatus, panels, chips, metric-tiles). Landing is allowed to break the chrome to do its job.
+
+## Third-party attribution
+
+License obligations that must surface visibly in the UI:
+
+- **CoinGecko (Demo API plan)** — terms require visible attribution wherever CoinGecko data is rendered or implicitly relied on. Used by `backend/analysis/symbol_classifier.py` to categorize symbols (MAJOR/MEME/DEFI/AI/GAMING/LAYER1/LAYER2). Suggested placement: a one-line "Market category data: CoinGecko" credit in `FooterStatus` so it appears on every product route. Linked to `https://www.coingecko.com`.
