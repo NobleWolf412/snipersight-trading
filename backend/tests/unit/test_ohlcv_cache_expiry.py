@@ -28,7 +28,7 @@ is direction-agnostic, the bug it caused WAS direction-asymmetric).
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pandas as pd
 import pytest
@@ -307,23 +307,53 @@ def test_get_remaining_seconds_empty_df_returns_zero():
     assert entry.get_remaining_seconds() == 0.0
 
 
-def test_malformed_timestamp_falls_back_to_elapsed_since_fetch():
+def test_malformed_timestamp_falls_back_to_elapsed_since_fetch(caplog):
     """If the timestamp column is unparseable, is_expired must not crash
     the bot. It falls back to the OLD elapsed-since-fetch formula —
     same behavior as before, so the bot keeps running with the original
-    (broken) semantics rather than wedging."""
+    (broken) semantics rather than wedging.
+
+    POST-CA3: the fallback emits a WARNING-level log AND a structured
+    telemetry event (kind=ohlcv_cache_ttl_fallback_to_elapsed) so the
+    silent-regression-to-broken-behavior class is now LOUD per §11 +
+    §15. This test pins both: the fallback works AND the operator sees
+    it loudly."""
+    import logging
     df = pd.DataFrame(
         [{"timestamp": object(), "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]
     )
     fetched_at = datetime(2026, 5, 23, 7, 0, 0, tzinfo=timezone.utc).timestamp()
     entry = CacheEntry(df=df, fetched_at=fetched_at, timeframe="1h", symbol="BTC/USDT")
-    # 2h after fetch — even the broken formula says expired
-    now_epoch = datetime(2026, 5, 23, 9, 0, 0, tzinfo=timezone.utc).timestamp()
-    with patch("backend.data.ohlcv_cache.time.time", return_value=now_epoch):
-        assert entry.is_expired() is True
-    # 30 min after fetch — broken formula says NOT expired; fallback
-    # preserves that behavior so the bot doesn't change semantics on
-    # the error path.
-    now_epoch_short = datetime(2026, 5, 23, 7, 30, 0, tzinfo=timezone.utc).timestamp()
-    with patch("backend.data.ohlcv_cache.time.time", return_value=now_epoch_short):
-        assert entry.is_expired() is False
+
+    caplog.set_level(logging.WARNING)
+    mock_logger = MagicMock()
+    with patch(
+        "backend.bot.telemetry.logger.get_telemetry_logger",
+        return_value=mock_logger,
+    ):
+        # 2h after fetch — even the broken formula says expired
+        now_epoch = datetime(2026, 5, 23, 9, 0, 0, tzinfo=timezone.utc).timestamp()
+        with patch("backend.data.ohlcv_cache.time.time", return_value=now_epoch):
+            assert entry.is_expired() is True
+        # 30 min after fetch — broken formula says NOT expired
+        now_epoch_short = datetime(2026, 5, 23, 7, 30, 0, tzinfo=timezone.utc).timestamp()
+        with patch("backend.data.ohlcv_cache.time.time", return_value=now_epoch_short):
+            assert entry.is_expired() is False
+
+    # CA3 — WARNING must fire on the fallback path. Two is_expired calls
+    # above → at least one WARNING with the canonical "fall*back" phrasing.
+    warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("fall" in r.getMessage().lower() for r in warning_records), (
+        f"fallback path must emit a WARNING-level log, got: "
+        f"{[r.getMessage() for r in warning_records]}"
+    )
+
+    # CA3 — structured telemetry event must fire with the right kind.
+    assert mock_logger.log_event.called, (
+        "fallback path must emit a structured telemetry event so silent "
+        "regression to broken behavior is visible in the activity feed"
+    )
+    last_event = mock_logger.log_event.call_args[0][0]
+    assert last_event.event_type.value == "warning_issued"
+    assert last_event.data["kind"] == "ohlcv_cache_ttl_fallback_to_elapsed"
+    assert last_event.data["timeframe"] == "1h"

@@ -1550,17 +1550,7 @@ class Orchestrator:
             # Run structural/regime/BTC/conflict gates BEFORE scoring.
             # A gate failure skips scoring entirely — soft penalties cannot compensate.
             _symbol_regime = context.metadata.get("symbol_regime")
-            _btc_impulse = None
-            if context.macro_context and "BTC" not in symbol.upper():
-                _btc_vel = getattr(context.macro_context, "btc_velocity_1h", 0.0) or 0.0
-                # Hard-block alts only on genuinely strong BTC moves (≥1.0% in last 1H).
-                # "up"/"down" from _dir_from_pct fires at just 0.2% — typical hourly noise
-                # in a bull market. Treating that as "strong_up" blocks nearly all alt SHORTs
-                # every scan. Require ≥1.0% to classify as a meaningful BTC impulse.
-                if _btc_vel >= 1.0:
-                    _btc_impulse = "strong_up"
-                elif _btc_vel <= -1.0:
-                    _btc_impulse = "strong_down"
+            _btc_impulse = self._derive_btc_impulse(context.macro_context, symbol)
             _is_btc = "BTC" in symbol.upper()
 
             if context.smc_snapshot:
@@ -2417,6 +2407,48 @@ class Orchestrator:
         # This is a stub - real implementer is in scanner_service.py
         pass
 
+    def _derive_btc_impulse(self, macro_context, symbol: str) -> Optional[str]:
+        """Derive btc_impulse for Gate 3, gated on the broader regime trend.
+
+        Historical study (2024-06 → 2026-05 bull + 2021-11 → 2022-11 bear,
+        BTC + 7-alt cross-tab on ~27k 1h candles) showed alts MEAN-REVERT
+        after BTC 1h moves in nearly every regime. Mild dumps (-1.0 to
+        -1.5%) in `up` regime saw alts bounce +0.5 to +1.1% over the
+        following 24h (the dda4d192 context exactly); even in `strong_down`
+        regime, alts bounced +0.4 to +1.1% after a BTC dump. The original
+        unconditional fire on |btc_vel_1h| >= 1.0% was net cost on the
+        LONG side and inconclusive on the SHORT side.
+
+        The only context where alts demonstrably get squeezed instead of
+        bouncing is COUNTER-TREND: BTC dump in a `strong_up` regime
+        (relief rally fade) on the LONG-block side, and BTC pump in a
+        `strong_down` regime (dead-cat bounce) on the SHORT-block side.
+        Both are small-sample (N=35 / N=75) but represent the only
+        scenarios where the operator's macro-tide instinct survives
+        contact with the data.
+
+        Returns "strong_up" / "strong_down" / None. None means Gate 3
+        does not fire — alts may trade in either direction subject to
+        confluence / other gates.
+        """
+        if not macro_context or "BTC" in symbol.upper():
+            return None
+        btc_vel = getattr(macro_context, "btc_velocity_1h", 0.0) or 0.0
+        # Broader regime trend (not the per-symbol regime).
+        global_trend = "sideways"
+        cr = getattr(self, "current_regime", None)
+        if cr is not None:
+            dims = getattr(cr, "dimensions", None)
+            if dims is not None:
+                global_trend = getattr(dims, "trend", "sideways") or "sideways"
+        if btc_vel >= 1.0 and global_trend == "strong_down":
+            # Counter-trend pump in confirmed bear → dead-cat bounce → block SHORT alts
+            return "strong_up"
+        if btc_vel <= -1.0 and global_trend == "strong_up":
+            # Counter-trend dump in confirmed bull → relief rally fade → block LONG alts
+            return "strong_down"
+        return None
+
     def _generate_trade_plan(
         self,
         context: SniperContext,
@@ -3256,13 +3288,7 @@ class Orchestrator:
 
         # Resolve BTC impulse and regime for per-scale gate calls.
         _c_is_btc = "BTC" in context.symbol.upper()
-        _c_btc_impulse = None
-        if context.macro_context and not _c_is_btc:
-            _c_btc_vel = getattr(context.macro_context, "btc_velocity_1h", 0.0) or 0.0
-            if _c_btc_vel >= 1.0:
-                _c_btc_impulse = "strong_up"
-            elif _c_btc_vel <= -1.0:
-                _c_btc_impulse = "strong_down"
+        _c_btc_impulse = self._derive_btc_impulse(context.macro_context, context.symbol)
         _c_regime = context.metadata.get("symbol_regime")
         _session_direction = context.metadata.get("chosen_direction", "LONG")
 

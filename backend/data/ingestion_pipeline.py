@@ -434,6 +434,47 @@ class IngestionPipeline:
         # Sort by timestamp
         df = df.sort_values("timestamp").reset_index(drop=True)
 
+        # Strip in-progress candle. Exchanges (Phemex, ccxt-backed adapters) return
+        # the still-forming candle as the last row. Caching that row + reading
+        # `pct_change_last(df.tail(2))` downstream computes pct change against a
+        # partial-candle close, producing phantom "strong" moves on intrabar noise.
+        # Drop the in-progress row so the cache only holds fully-closed candles.
+        # See adversarial review of commit a61589c — this closes the Phemex
+        # finalization-race footgun the cache-TTL fix on its own can't eliminate.
+        _TF_SECONDS = {
+            "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
+            "1h": 3600, "2h": 7200, "4h": 14400, "6h": 21600, "8h": 28800,
+            "12h": 43200, "1d": 86400, "3d": 259200, "1w": 604800,
+        }
+        tf_seconds = _TF_SECONDS.get(timeframe, 0)
+        if tf_seconds and len(df):
+            try:
+                import time as _time
+                now_epoch = _time.time()
+                current_open_epoch = (now_epoch // tf_seconds) * tf_seconds
+                last_ts = df["timestamp"].iloc[-1]
+                last_ts_pd = pd.Timestamp(last_ts)
+                if last_ts_pd.tz is None:
+                    last_ts_pd = last_ts_pd.tz_localize("UTC")
+                last_ts_epoch = last_ts_pd.timestamp()
+                if last_ts_epoch >= current_open_epoch:
+                    logger.debug(
+                        "Stripped in-progress %s candle for %s "
+                        "(latest_open=%s, current_open_epoch=%s)",
+                        timeframe, symbol, last_ts, current_open_epoch,
+                    )
+                    df = df.iloc[:-1].reset_index(drop=True)
+            except Exception as _strip_err:
+                # Defensive: if anything in the strip logic raises, prefer
+                # keeping the (possibly partial) candle over wedging the
+                # ingestion pipeline. The cache-TTL fix at ohlcv_cache.py
+                # provides a backup defense.
+                logger.warning(
+                    "in-progress candle strip failed for %s %s (%s) — "
+                    "keeping last row, cache TTL is now the only defense",
+                    symbol, timeframe, _strip_err,
+                )
+
         # Set timestamp as index for SMC detection functions (keep as column too)
         # Use drop=False so downstream code can access df["timestamp"] as a column
         df = df.set_index("timestamp", drop=False)

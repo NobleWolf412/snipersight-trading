@@ -95,11 +95,33 @@ class CacheEntry:
         except Exception as exc:
             # Defensive fallback: if the timestamp column is malformed,
             # use the legacy elapsed-since-fetch formula so we never wedge.
-            logger.debug(
-                "OHLCVCache.is_expired: timestamp parse failed (%s); "
-                "falling back to elapsed-since-fetch TTL",
-                exc,
+            # WARNING-level + structured telemetry so silent regression to
+            # the pre-fix broken behavior is loud (per §11 + §15: silent
+            # fallback to known-broken semantics is worse than a halt).
+            logger.warning(
+                "OHLCVCache.is_expired: timestamp parse failed for %s %s (%s); "
+                "falling back to elapsed-since-fetch TTL — silent regression to "
+                "pre-fix broken behavior, investigate immediately",
+                self.symbol, self.timeframe, exc,
             )
+            try:
+                from datetime import datetime, timezone as _tz
+                from backend.bot.telemetry.events import EventType, TelemetryEvent
+                from backend.bot.telemetry.logger import get_telemetry_logger
+                get_telemetry_logger().log_event(
+                    TelemetryEvent(
+                        event_type=EventType.WARNING_ISSUED,
+                        timestamp=datetime.now(_tz.utc),
+                        symbol=self.symbol,
+                        data={
+                            "kind": "ohlcv_cache_ttl_fallback_to_elapsed",
+                            "timeframe": self.timeframe,
+                            "error": str(exc),
+                        },
+                    )
+                )
+            except Exception:
+                pass  # never block ingestion on telemetry failure
             return (time.time() - self.fetched_at) >= tf_seconds + buffer_seconds
 
         # Latest cached candle opened at `latest_open_epoch` and closed at
@@ -159,11 +181,31 @@ class CacheEntry:
             remaining = next_after_close_epoch - time.time()
             return max(0.0, remaining)
         except Exception as exc:
-            logger.debug(
-                "OHLCVCache.get_remaining_seconds: timestamp parse failed (%s); "
-                "falling back to elapsed-since-fetch TTL",
-                exc,
+            # See is_expired() for the WARNING-vs-DEBUG rationale.
+            logger.warning(
+                "OHLCVCache.get_remaining_seconds: timestamp parse failed for "
+                "%s %s (%s); falling back to elapsed-since-fetch TTL",
+                self.symbol, self.timeframe, exc,
             )
+            try:
+                from datetime import datetime, timezone as _tz
+                from backend.bot.telemetry.events import EventType, TelemetryEvent
+                from backend.bot.telemetry.logger import get_telemetry_logger
+                get_telemetry_logger().log_event(
+                    TelemetryEvent(
+                        event_type=EventType.WARNING_ISSUED,
+                        timestamp=datetime.now(_tz.utc),
+                        symbol=self.symbol,
+                        data={
+                            "kind": "ohlcv_cache_ttl_fallback_to_elapsed",
+                            "timeframe": self.timeframe,
+                            "source": "get_remaining_seconds",
+                            "error": str(exc),
+                        },
+                    )
+                )
+            except Exception:
+                pass
             remaining = tf_seconds - self.get_age_seconds()
             return max(0.0, remaining)
 
