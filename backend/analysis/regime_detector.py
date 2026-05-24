@@ -500,7 +500,8 @@ class RegimeDetector:
                 logger.warning(
                     f"⚠️ RAW SLOPE OVERRIDE {timeframe_label}: swing=bullish BUT raw slope={slope:.2f}% < -{RAW_SLOPE_OVERRIDE_THRESHOLD} → DOWN"
                 )
-                return "down", 30.0, "Momentum Breakdown"
+                # §10 bull/bear symmetry: down=70 mirrors up=70 (line 509).
+                return "down", 70.0, "Momentum Breakdown"
             
             if slope > RAW_SLOPE_OVERRIDE_THRESHOLD and trend == "bearish":
                 logger.warning(
@@ -512,7 +513,9 @@ class RegimeDetector:
                 logger.warning(
                     f"⚠️ MA SLOPE OVERRIDE {timeframe_label}: swing=bullish BUT norm_slope={normalized_slope:.2f} < -{MA_SLOPE_OVERRIDE_THRESHOLD} → DOWN"
                 )
-                return "down", 30.0, "Structural Fatigue"
+                # §10 bull/bear symmetry: down=70 mirrors up=70 (line 521).
+                # Trend *clarity* drives quality; *direction* doesn't.
+                return "down", 70.0, "Structural Fatigue"
             
             if normalized_slope > MA_SLOPE_OVERRIDE_THRESHOLD and trend == "bearish":
                 logger.warning(
@@ -530,10 +533,18 @@ class RegimeDetector:
 
             elif trend == "bearish":
                 desc = get_trend_desc("bearish", slope)
+                # §10 bull/bear symmetry: scores mirror the bullish branch above
+                # (strong_down 85, down 70). Standard trend-following research
+                # treats both directions as equally tradeable for a system that
+                # trades LONG and SHORT — directional clarity is the quality
+                # signal, not the direction itself. Prior asymmetric scores
+                # (15 / 30) implicitly weighted "buy-and-hold direction" and
+                # produced a structural drag on SHORT performance via the
+                # composite regime score (trend_score * 0.3 at L121).
                 if has_strong_momentum and normalized_slope < -strong_slope_threshold:
-                    return "strong_down", 15.0, desc
+                    return "strong_down", 85.0, desc
                 else:
-                    return "down", 30.0, desc
+                    return "down", 70.0, desc
 
             else:
                 # Swing structure returned neutral/sideways
@@ -598,7 +609,8 @@ class RegimeDetector:
             if slope > 3:
                 return "up", 70.0, "Momentum Divergence"
             elif slope < -3:
-                return "down", 35.0, "Momentum Breakdown"
+                # §10 bull/bear symmetry: down=70 mirrors up=70 above.
+                return "down", 70.0, "Momentum Breakdown"
             else:
                 return "sideways", 50.0, "Flat Structure"
 
