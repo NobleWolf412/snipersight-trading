@@ -2672,6 +2672,15 @@ class PaperTradingService:
                     "stop_loss": pos.stop_loss,
                     "targets_remaining": len(pos.targets),
                     "targets_hit": len(pos.targets_hit),
+                    # Tier 1.3: surface lifetime strip count + current valid TP
+                    # count on the live payload so the modal NO-TP chip fires
+                    # in-flight (was previously only on closed-trade journal
+                    # rows). When final_targets_remaining=0 OR
+                    # targets_stripped_count>0, the executor's structural-
+                    # validity guard has stripped targets and the position
+                    # can exit only via SL / stagnation / max_hours_open.
+                    "final_targets_remaining": len(getattr(pos, "targets", []) or []),
+                    "targets_stripped_count": getattr(pos, "targets_stripped_count", 0),
                     "unrealized_pnl": pos.unrealized_pnl,
                     "unrealized_pnl_pct": pos.pnl_percentage,
                     "target_pnl": pos.target_pnl,

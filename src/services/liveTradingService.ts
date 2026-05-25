@@ -57,6 +57,9 @@ export interface LivePosition {
   risk_pnl?: number;
   targets_hit?: number;
   targets_remaining?: number;
+  // Tier 1.3: in-flight strip detection (see PaperPosition for full rationale).
+  final_targets_remaining?: number;
+  targets_stripped_count?: number;
 }
 
 export interface CompletedLiveTrade {

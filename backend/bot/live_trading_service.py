@@ -1768,6 +1768,10 @@ class LiveTradingService:
                 "risk_pnl": pos.risk_pnl,
                 "targets_hit": len(pos.targets_hit),
                 "targets_remaining": len(pos.targets),
+                # Tier 1.3: surface to live payload for in-flight NO-TP chip.
+                # Mirror of paper_trading_service._get_active_positions.
+                "final_targets_remaining": len(getattr(pos, "targets", []) or []),
+                "targets_stripped_count": getattr(pos, "targets_stripped_count", 0),
             })
         return positions
 

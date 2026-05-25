@@ -389,7 +389,22 @@ export function PositionDetailModal({ selection, onClose, currentRegime }: Props
   // guard stripped every target as geometrically invalid. Either way, the
   // position can only exit via SL / stagnation / max_hours_open — never via
   // TP — so the operator should know before treating R:R "—" as a render bug.
-  const noUsableTp = pos != null && usableTp == null;
+  //
+  // Tier 1.3 additions: the live payload now carries `targets_stripped_count`
+  // and `final_targets_remaining` (PaperPosition/LivePosition). Trigger the
+  // NO-TP chip when EITHER:
+  //   - usableTp is null (no TP value in payload)
+  //   - final_targets_remaining === 0 (zero structurally-valid targets left)
+  //   - targets_stripped_count > 0 (executor has stripped at least once,
+  //     even if a fallback target is still nominally present)
+  // The strip-count condition catches the "fallback target retained but
+  // wrong-side" case where usableTp may still be non-null but the trade
+  // structurally can't TP.
+  const stripDetected =
+    pos != null &&
+    ((pos.final_targets_remaining ?? null) === 0 ||
+      (pos.targets_stripped_count ?? 0) > 0);
+  const noUsableTp = pos != null && (usableTp == null || stripDetected);
 
   return (
     <Modal onClose={onClose} maxWidth={820}>

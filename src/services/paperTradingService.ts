@@ -71,6 +71,12 @@ export interface PaperPosition {
   risk_pnl?: number;
   targets_hit?: number;
   targets_remaining?: number;
+  // Tier 1.3: in-flight strip detection. When `final_targets_remaining === 0`
+  // OR `targets_stripped_count > 0`, the executor's structural-validity guard
+  // has stripped targets — position can exit only via SL/stagnation/timeout.
+  // Drives the modal's NO-TP chip while the position is still open.
+  final_targets_remaining?: number;
+  targets_stripped_count?: number;
 }
 
 export interface CompletedPaperTrade {
