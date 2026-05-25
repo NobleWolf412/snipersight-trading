@@ -117,6 +117,23 @@ class PositionState:
     # because all targets were stripped at runtime and TP became unreachable".
     targets_stripped_count: int = 0
 
+    # Macro context snapshot at ENTRY time (Tier 2 analysis enrichment).
+    # Lets post-run autopsy answer "was BTC moving counter-macro when this
+    # trade fired?" from the journal row alone — no telemetry-join needed.
+    # Populated from plan.metadata["macro"] at open_position; defaults are
+    # safe sentinels if metadata is missing (older plans / cascade rebuilds).
+    btc_velocity_1h_at_entry: float = 0.0
+    alt_velocity_1h_at_entry: float = 0.0
+    macro_state_at_entry: str = "unknown"
+
+    # HTF + setup-archetype snapshot at ENTRY. htf_aligned read from
+    # plan.confluence_breakdown.htf_aligned at open_position. setup_qualifier
+    # parsed from setup_type — "[Soft]" / "[Strong]" / "Unknown". Lets the
+    # autopsy join trade outcomes against qualifier cohort + HTF alignment
+    # without re-parsing the setup_type string.
+    htf_aligned_at_entry: bool = False
+    setup_qualifier: str = "Unknown"
+
     # Price history for progress detection (sampled every 30 minutes)
     _price_samples: List[float] = field(default_factory=list)
     _last_sample_time: Optional[datetime] = field(default=None)
@@ -334,6 +351,37 @@ class PositionManager:
         regime_volatility = global_regime.get("volatility", "normal")
         regime_trend = global_regime.get("trend", "sideways")
 
+        # Tier 2 — macro snapshot from plan.metadata["macro"] populated by
+        # orchestrator at L2823+. Safe defaults if missing (older plans or
+        # cascade rebuilds where the metadata didn't survive).
+        _macro_meta = _meta.get("macro", {}) or {}
+        _ml_btc_vel = float(_macro_meta.get("btc_velocity_1h", 0.0) or 0.0)
+        _ml_alt_vel = float(_macro_meta.get("alt_velocity_1h", 0.0) or 0.0)
+        _ml_macro_state = str(_macro_meta.get("macro_state", "unknown") or "unknown")
+
+        # Tier 2 — HTF + setup-archetype snapshot.
+        # htf_aligned: read off the cached confluence breakdown (the plan
+        # carries this when the planner attaches it; default False if not).
+        _conf_bd = getattr(trade_plan, "confluence_breakdown", None)
+        _ml_htf_aligned = bool(getattr(_conf_bd, "htf_aligned", False)) if _conf_bd else False
+        # setup_qualifier: parse "[Strong]"/"[Moderate]"/"[Soft]"/"[Weak]" from
+        # setup_type string. Format example: "Scalp Trade [HTF Bounce ↑ [Soft]]".
+        # Vocab source: orchestrator.py:2622-2627 maps counter_htf_quality →
+        # {confirmed→Strong, partial→Moderate, soft→Soft, minimal→Weak}.
+        # All four tags must be recognized; "Unknown" reserved for older setup
+        # types that predate the qualifier system.
+        _setup_type_str = str(getattr(trade_plan, "setup_type", "") or "")
+        if "[Strong]" in _setup_type_str:
+            _ml_setup_qualifier = "Strong"
+        elif "[Moderate]" in _setup_type_str:
+            _ml_setup_qualifier = "Moderate"
+        elif "[Soft]" in _setup_type_str:
+            _ml_setup_qualifier = "Soft"
+        elif "[Weak]" in _setup_type_str:
+            _ml_setup_qualifier = "Weak"
+        else:
+            _ml_setup_qualifier = "Unknown"
+
         # Extract trade type from the planner's derivation
         trade_type = getattr(trade_plan, "trade_type", "intraday") or "intraday"
 
@@ -370,6 +418,11 @@ class PositionManager:
             regime=_ml_regime,
             pullback_probability=_ml_pb_prob,
             kill_zone=_ml_kill_zone,
+            btc_velocity_1h_at_entry=_ml_btc_vel,
+            alt_velocity_1h_at_entry=_ml_alt_vel,
+            macro_state_at_entry=_ml_macro_state,
+            htf_aligned_at_entry=_ml_htf_aligned,
+            setup_qualifier=_ml_setup_qualifier,
         )
 
         # Calculate the adaptive stagnation deadline for logging

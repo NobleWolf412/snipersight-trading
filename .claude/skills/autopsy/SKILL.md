@@ -15,36 +15,53 @@ You are the triage entry point for post-run SniperSight debugging. The user just
 2. **Fallback (scanner-only):** latest contiguous cluster of `scan_started` events in telemetry (gap ≥ 30 minutes ends a cluster). Use that cluster's `[min,max]` timestamp range.
 3. **User-specified:** if the user named a window ("last hour", "today", "since 2pm"), override and use that.
 
-```bash
-# Primary: last session_id from journal
-python -c "
-import json
-rows = [json.loads(l) for l in open('backend/cache/trade_journal.jsonl')]
-if rows:
-    sid = rows[-1]['session_id']
-    in_session = [r for r in rows if r['session_id'] == sid]
-    print('session_id:', sid)
-    print('first_entry:', in_session[0]['entry_time'])
-    print('last_exit:', in_session[-1]['exit_time'])
-    print('trade_count:', len(in_session))
-else:
-    print('no trades in journal')
-"
+**Stale-journal-but-fresh-scans (calibration 2026-05-24):** if the journal's latest `last_exit` is OLDER than the latest `scan_started` timestamp by ≥30 minutes, the journal is stale (e.g. the most recent session ran the scanner but produced no trades — happens at high min_confluence_score). In that case, PREFER the scan cluster over the journal session and report both: emit `"session_id: <journal-sid> (STALE — scans newer)"` in the window line. This was the dda4d192-vs-9558a1c8 case where 8h of scanning with threshold=95 left an empty journal.
 
-# Fallback: latest scan_started cluster
-python -c "
-import sqlite3
-c = sqlite3.connect('backend/cache/telemetry.db').cursor()
-c.execute(\"SELECT timestamp FROM telemetry_events WHERE event_type='scan_started' ORDER BY timestamp DESC LIMIT 200\")
-ts = [r[0] for r in c.fetchall()]
-# cluster: walk backwards, end on a >30min gap
+```bash
+# Resolve session window — handles the stale-journal case
+python -X utf8 -c "
+import json, sqlite3
 from datetime import datetime, timedelta
-cluster = [ts[0]]
-for t in ts[1:]:
-    if datetime.fromisoformat(cluster[-1]) - datetime.fromisoformat(t) > timedelta(minutes=30):
-        break
-    cluster.append(t)
-print('cluster:', cluster[-1], '->', cluster[0], f'({len(cluster)} scans)')
+
+journal_sid = None
+journal_last_exit = None
+try:
+    rows = [json.loads(l) for l in open('backend/cache/trade_journal.jsonl')]
+    if rows:
+        journal_sid = rows[-1]['session_id']
+        in_session = [r for r in rows if r['session_id'] == journal_sid]
+        journal_first = in_session[0]['entry_time']
+        journal_last_exit = in_session[-1]['exit_time']
+except Exception:
+    pass
+
+# Scan cluster (always compute)
+c = sqlite3.connect('backend/cache/telemetry.db').cursor()
+c.execute(\"SELECT timestamp FROM telemetry_events WHERE event_type='scan_started' ORDER BY timestamp DESC LIMIT 500\")
+ts = [r[0] for r in c.fetchall()]
+cluster_start, cluster_end = None, None
+if ts:
+    cluster = [ts[0]]
+    for t in ts[1:]:
+        if datetime.fromisoformat(cluster[-1]) - datetime.fromisoformat(t) > timedelta(minutes=30):
+            break
+        cluster.append(t)
+    cluster_end = cluster[0]
+    cluster_start = cluster[-1]
+
+# Decide which to prefer
+stale = False
+if journal_sid and journal_last_exit and cluster_end:
+    if datetime.fromisoformat(cluster_end) - datetime.fromisoformat(journal_last_exit) > timedelta(minutes=30):
+        stale = True
+
+print(f'journal_sid: {journal_sid}')
+print(f'journal_first_entry: {journal_first if journal_sid else None}')
+print(f'journal_last_exit: {journal_last_exit}')
+print(f'cluster_start: {cluster_start}')
+print(f'cluster_end: {cluster_end}')
+print(f'stale_journal: {stale}')
+print(f'PREFER: {\"scan cluster\" if stale or not journal_sid else \"journal session\"}')
 "
 ```
 
@@ -60,6 +77,66 @@ For the session window, gather:
 - **Symmetry:** count of LONG vs SHORT signals — gross asymmetry (>3:1) is a §10 standing-fix red flag
 
 Trade PnL comes from `backend/cache/trade_journal.jsonl` filtered by `session_id` (each row has it). Required fields per row: `trade_id`, `symbol`, `direction`, `entry_price`, `exit_price`, `pnl`, `pnl_pct`, `exit_reason`, `confidence_score`, `regime`.
+
+**Tier 2 journal fields (post-Tier-2 sessions only)** — surface when present:
+- `btc_velocity_1h_at_entry`, `alt_velocity_1h_at_entry`, `macro_state_at_entry`, `regime_trend_at_entry` — macro context at OPEN (not exit). Lets autopsy show "was the trade counter-macro at entry?".
+- `htf_aligned_at_entry`, `setup_qualifier` (Soft/Strong/Unknown) — joins outcomes against HTF alignment + qualifier cohort.
+- `targets_stripped_count`, `final_targets_remaining` — already in journal pre-Tier-2.
+
+These fields are ADDITIVE — old journal rows (pre-Tier-2) won't have them. Treat missing fields as `None` / skip the corresponding breakdown rather than failing.
+
+## 2a. Auto-computed analysis breakdowns (always include in output)
+
+Compute these from `signals.jsonl` (per-session file at `logs/paper_trading/session_<sid>/signals.jsonl`) + journal rows. These three breakdowns answered questions that required manual SQL in prior autopsies (calibrated 2026-05-24 dda4d192 vs 9558a1c8 session-skew investigation):
+
+**(a) Per-symbol direction tally** — for the session's `signals.jsonl`, tally LONG vs SHORT evaluations per symbol. Output top 15 by total volume with LONG% column. Reveals which symbols flipped direction between sessions and whether the global skew is regime-explained (same direction across most symbols) or a leak (mixed per-symbol with global skew).
+
+**(b) Setup-type ↑/↓ breakdown** — count occurrences of `'↑'` vs `'↓'` in `setup_type` strings across all signal rows. The bot's structure detector tags HTF Bounce setups with direction arrows; this count reflects the market's structural direction-bias for the session.
+
+**(c) Per-regime acceptance rate** — for each value of `regime` in signals.jsonl, compute `count(result==passed) / count(result in {filtered,passed})`. Reveals which regimes the bot's gates favor.
+
+```bash
+# Auto-compute breakdowns from signals.jsonl
+python -X utf8 -c "
+import json
+from collections import Counter, defaultdict
+SID = '<RESOLVED-SID>'  # filled by step 1 output
+path = f'logs/paper_trading/session_{SID}/signals.jsonl'
+try:
+    rows = [json.loads(l) for l in open(path)]
+except FileNotFoundError:
+    rows = []
+    print(f'NO signals.jsonl at {path}')
+
+by_symbol = defaultdict(Counter)
+for r in rows:
+    by_symbol[r.get('symbol','?')][r.get('direction','?')] += 1
+print('=== Per-symbol direction tally (top 15) ===')
+syms = sorted(by_symbol.keys(), key=lambda s: -sum(by_symbol[s].values()))
+print(f'{\"symbol\":14}{\"LONG\":>6}{\"SHORT\":>7}{\"LONG_pct\":>10}')
+for s in syms[:15]:
+    c = by_symbol[s]
+    L, S = c.get('LONG',0), c.get('SHORT',0)
+    pct = 100*L/(L+S) if (L+S) else 0
+    print(f'  {s:12}{L:>6}{S:>7}{pct:>9.0f}%')
+
+up_count = sum(1 for r in rows if '↑' in str(r.get('setup_type','')))
+down_count = sum(1 for r in rows if '↓' in str(r.get('setup_type','')))
+print(f'\\nSetup-type ↑/↓: ↑={up_count}  ↓={down_count}  ratio={up_count/down_count if down_count else \"inf\":.2f}')
+
+by_regime = defaultdict(Counter)
+for r in rows:
+    by_regime[r.get('regime','?')][r.get('result','?')] += 1
+print('\\n=== Per-regime pass-rate ===')
+for regime, c in sorted(by_regime.items(), key=lambda x: -sum(x[1].values())):
+    p, f = c.get('passed',0)+c.get('executed',0), c.get('filtered',0)
+    total = p + f
+    rate = 100*p/total if total else 0
+    print(f'  {regime:18s} passed={p:5d}  filtered={f:5d}  pass_rate={rate:.1f}%')
+"
+```
+
+Surface ALL THREE breakdowns in the report's `Auto Breakdowns` section (added below). If the data is missing (pre-Tier-2 session, no signals.jsonl), note it explicitly rather than omitting.
 
 ## 3. Run the anomaly checklist
 
@@ -124,6 +201,29 @@ Top Rejection Reasons (top 5)
 -----------------------------
 <reason>: <count>  (<pct>%)
 ...
+
+Auto Breakdowns
+---------------
+Per-symbol direction tally (top 15):
+  <symbol>    <LONG>  <SHORT>   <LONG_pct%>
+  ...
+Setup-type ↑/↓ ratio: ↑=<n>  ↓=<n>  (=<ratio>)
+Per-regime pass-rate:
+  <regime>: passed=<n> filtered=<n> rate=<%>
+  ...
+
+Tier 2 Cohort Splits  (only if journal rows have Tier 2 fields)
+---------------------------------------------------------------
+By setup_qualifier:
+  Strong  trades=<n>  win_rate=<%>  total_pnl=<usd>
+  Soft    trades=<n>  win_rate=<%>  total_pnl=<usd>
+  Unknown trades=<n>  win_rate=<%>  total_pnl=<usd>
+By htf_aligned:
+  aligned     trades=<n>  win_rate=<%>  total_pnl=<usd>
+  counter-HTF trades=<n>  win_rate=<%>  total_pnl=<usd>
+By macro_state_at_entry:
+  <state>     trades=<n>  win_rate=<%>  total_pnl=<usd>
+  ...
 
 Raw Evidence
 ------------

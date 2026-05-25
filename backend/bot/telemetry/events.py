@@ -128,20 +128,38 @@ def create_signal_generated_event(
     setup_type: str,
     entry_price: float,
     risk_reward_ratio: float,
+    pre_dir_tie_break: Optional[str] = None,
+    symbol_regime_trend: Optional[str] = None,
 ) -> TelemetryEvent:
-    """Create signal generated event."""
+    """Create signal generated event.
+
+    Tier 2 enrichment (analysis-quality):
+      - pre_dir_tie_break: the tie-break reason string from
+        orchestrator._derive_pre_direction (e.g. "structure_bullish",
+        "regime_bearish", "neutral_default_long"). Lets the post-run
+        autopsy answer "why was this direction picked" from a single
+        telemetry query without inferring from setup_type tallies.
+      - symbol_regime_trend: the per-symbol regime trend label (NOT the
+        global). Lets cross-tab of trade outcomes vs local trend.
+    Both fields are optional — older callers that don't pass them get None.
+    """
+    data: Dict[str, Any] = {
+        "direction": direction,
+        "confidence_score": round(confidence_score, 2),
+        "setup_type": setup_type,
+        "entry_price": entry_price,
+        "risk_reward_ratio": round(risk_reward_ratio, 2),
+    }
+    if pre_dir_tie_break is not None:
+        data["pre_dir_tie_break"] = pre_dir_tie_break
+    if symbol_regime_trend is not None:
+        data["symbol_regime_trend"] = symbol_regime_trend
     return TelemetryEvent(
         event_type=EventType.SIGNAL_GENERATED,
         timestamp=datetime.now(timezone.utc),
         run_id=run_id,
         symbol=symbol,
-        data={
-            "direction": direction,
-            "confidence_score": round(confidence_score, 2),
-            "setup_type": setup_type,
-            "entry_price": entry_price,
-            "risk_reward_ratio": round(risk_reward_ratio, 2),
-        },
+        data=data,
     )
 
 
@@ -153,9 +171,15 @@ def create_signal_rejected_event(
     score: Optional[float] = None,
     threshold: Optional[float] = None,
     diagnostics: Optional[Dict[str, Any]] = None,
+    pre_dir_tie_break: Optional[str] = None,
+    symbol_regime_trend: Optional[str] = None,
 ) -> TelemetryEvent:
-    """Create signal rejected event."""
-    data = {"reason": reason}
+    """Create signal rejected event.
+
+    Tier 2 enrichment — see create_signal_generated_event for
+    pre_dir_tie_break / symbol_regime_trend rationale. Both are optional.
+    """
+    data: Dict[str, Any] = {"reason": reason}
     if gate_name:
         data["gate_name"] = gate_name
     if score is not None:
@@ -165,6 +189,10 @@ def create_signal_rejected_event(
     if diagnostics:
         # Attach structured diagnostics for UI/console visibility
         data["diagnostics"] = diagnostics
+    if pre_dir_tie_break is not None:
+        data["pre_dir_tie_break"] = pre_dir_tie_break
+    if symbol_regime_trend is not None:
+        data["symbol_regime_trend"] = symbol_regime_trend
 
     return TelemetryEvent(
         event_type=EventType.SIGNAL_REJECTED,

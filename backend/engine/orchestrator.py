@@ -1687,6 +1687,14 @@ class Orchestrator:
                                 f" | flip {_flip_dir} blocked by [{_flip_gate.gate_name}]: "
                                 f"{_flip_gate.reason}"
                             )
+                        # Tier 2 — pre_dir_tie_break + symbol_regime_trend surfaced
+                        # on rejection info so the post-run autopsy can answer
+                        # "why was this direction picked (and then rejected)" from
+                        # a single query against the cycle's rejection_stats.
+                        _sym_regime_obj = context.metadata.get("symbol_regime")
+                        _sym_regime_trend_val = (
+                            getattr(_sym_regime_obj, "trend", None) if _sym_regime_obj else None
+                        )
                         _rejection_info: dict = {
                             "symbol": symbol,
                             "direction": context.metadata.get("chosen_direction", "LONG"),
@@ -1694,6 +1702,8 @@ class Orchestrator:
                             "reason": _gate.reason + _flip_detail,
                             "score": 0.0,
                             "threshold": self.config.min_confluence_score,
+                            "pre_dir_tie_break": context.metadata.get("pre_dir_tie_break"),
+                            "symbol_regime_trend": _sym_regime_trend_val,
                         }
                         _FORWARD_KEYS = {
                             "conflict_count", "conflict_conditions",
@@ -2334,6 +2344,11 @@ class Orchestrator:
 
         # Log successful signal generation
         if context.plan:
+            # Tier 2 enrichment — pre_dir_tie_break + symbol_regime_trend
+            # from context.metadata so the autopsy can answer
+            # "why was this direction picked" from a single telemetry query.
+            _sym_regime = context.metadata.get("symbol_regime")
+            _sym_regime_trend = getattr(_sym_regime, "trend", None) if _sym_regime else None
             self.telemetry.log_event(
                 create_signal_generated_event(
                     run_id=run_id,
@@ -2343,6 +2358,8 @@ class Orchestrator:
                     setup_type=context.plan.setup_type,
                     entry_price=context.plan.entry_zone.near_entry,
                     risk_reward_ratio=context.plan.risk_reward,
+                    pre_dir_tie_break=context.metadata.get("pre_dir_tie_break"),
+                    symbol_regime_trend=_sym_regime_trend,
                 )
             )
         try:
@@ -2836,12 +2853,35 @@ class Orchestrator:
                         "score": symbol_regime.score,
                     }
 
-            # Attach macro metadata if present from confluence stage
-            if plan and "macro" in context.metadata:
-                try:
-                    plan.metadata["macro"] = context.metadata.get("macro")
-                except Exception:
-                    pass
+            # Tier 2 (analysis enrichment): snapshot macro context numerics at
+            # entry time so the journal carries them per-trade. Lets the
+            # post-run autopsy answer "was BTC moving counter-macro when this
+            # trade fired?" from journal alone, no telemetry-join needed.
+            if plan and self.macro_context:
+                _mc = self.macro_context
+                _macro_state = getattr(_mc, "macro_state", None)
+                plan.metadata["macro"] = {
+                    "btc_velocity_1h": float(getattr(_mc, "btc_velocity_1h", 0.0) or 0.0),
+                    "alt_velocity_1h": float(getattr(_mc, "alt_velocity_1h", 0.0) or 0.0),
+                    "btc_volatility_1h": float(getattr(_mc, "btc_volatility_1h", 0.0) or 0.0),
+                    # macro_state is a MacroState enum — serialize value safely
+                    "macro_state": (
+                        _macro_state.value if hasattr(_macro_state, "value")
+                        else (str(_macro_state) if _macro_state is not None else "unknown")
+                    ),
+                    "percent_alts_up": float(getattr(_mc, "percent_alts_up", 50.0) or 50.0),
+                }
+
+            # Pre-Tier-2: this block previously attached macro metadata from
+            # confluence stage IF context.metadata["macro"] was present. Grep
+            # confirms NO producer currently writes context.metadata["macro"]
+            # — the block was effectively dead code. With the Tier 2 writer
+            # above at L2860+, leaving an unconditional overwrite here would
+            # be a silent-regression risk: if any future stage starts setting
+            # context.metadata["macro"], it'd destroy the Tier 2 enrichment.
+            # Removed; if a future stage needs to contribute, use dict merge:
+            #   plan.metadata["macro"] = {**plan.metadata.get("macro", {}),
+            #                              **context.metadata["macro"]}
 
             # Attach cycle context for rationale enrichment and UI display
             if plan and "cycle" in context.metadata:

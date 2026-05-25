@@ -1843,6 +1843,13 @@ class LiveTradingService:
                 kill_zone=getattr(pos, "kill_zone", "no_session"),
                 final_targets_remaining=len(getattr(pos, "targets", []) or []),
                 targets_stripped_count=getattr(pos, "targets_stripped_count", 0),
+                # Tier 2 macro snapshot pass-through (mirror of paper_trading_service)
+                btc_velocity_1h_at_entry=getattr(pos, "btc_velocity_1h_at_entry", 0.0),
+                alt_velocity_1h_at_entry=getattr(pos, "alt_velocity_1h_at_entry", 0.0),
+                macro_state_at_entry=getattr(pos, "macro_state_at_entry", "unknown"),
+                regime_trend_at_entry=getattr(pos, "regime_trend", "sideways"),
+                htf_aligned_at_entry=getattr(pos, "htf_aligned_at_entry", False),
+                setup_qualifier=getattr(pos, "setup_qualifier", "Unknown"),
             )
 
             self.completed_trades.append(trade)

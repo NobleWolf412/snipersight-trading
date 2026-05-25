@@ -79,18 +79,22 @@
       "confidence_score",
       "direction",
       "entry_price",
+      "pre_dir_tie_break",
       "risk_reward_ratio",
       "run_id",
       "setup_type",
-      "symbol"
+      "symbol",
+      "symbol_regime_trend"
     ],
     "create_signal_rejected_event": [
       "diagnostics",
       "gate_name",
+      "pre_dir_tie_break",
       "reason",
       "run_id",
       "score",
       "symbol",
+      "symbol_regime_trend",
       "threshold"
     ]
   }

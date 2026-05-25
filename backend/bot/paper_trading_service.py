@@ -216,6 +216,19 @@ class CompletedTrade:
     final_targets_remaining: int = 0
     targets_stripped_count: int = 0
 
+    # Tier 2 — macro snapshot at ENTRY time (not exit) so post-run autopsy
+    # can correlate trade outcomes against macro context that was visible
+    # to the bot when the decision was made.
+    btc_velocity_1h_at_entry: float = 0.0
+    alt_velocity_1h_at_entry: float = 0.0
+    macro_state_at_entry: str = "unknown"
+    regime_trend_at_entry: str = "sideways"  # global regime.dimensions.trend at open
+    # Tier 2 — HTF + setup-archetype snapshot. htf_aligned answers "was the
+    # trade counter-HTF at entry?". setup_qualifier ("Soft"/"Strong"/"Unknown")
+    # joins trade outcomes against the setup-quality cohort.
+    htf_aligned_at_entry: bool = False
+    setup_qualifier: str = "Unknown"
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API response."""
         return {
@@ -245,6 +258,12 @@ class CompletedTrade:
             "kill_zone": self.kill_zone,
             "final_targets_remaining": self.final_targets_remaining,
             "targets_stripped_count": self.targets_stripped_count,
+            "btc_velocity_1h_at_entry": self.btc_velocity_1h_at_entry,
+            "alt_velocity_1h_at_entry": self.alt_velocity_1h_at_entry,
+            "macro_state_at_entry": self.macro_state_at_entry,
+            "regime_trend_at_entry": self.regime_trend_at_entry,
+            "htf_aligned_at_entry": self.htf_aligned_at_entry,
+            "setup_qualifier": self.setup_qualifier,
         }
 
 
@@ -2767,6 +2786,14 @@ class PaperTradingService:
                     kill_zone=getattr(pos, "kill_zone", "no_session"),
                     final_targets_remaining=len(getattr(pos, "targets", []) or []),
                     targets_stripped_count=getattr(pos, "targets_stripped_count", 0),
+                    # Tier 2 macro snapshot pass-through (populated at open_position
+                    # from plan.metadata["macro"] / ["global_regime"]).
+                    btc_velocity_1h_at_entry=getattr(pos, "btc_velocity_1h_at_entry", 0.0),
+                    alt_velocity_1h_at_entry=getattr(pos, "alt_velocity_1h_at_entry", 0.0),
+                    macro_state_at_entry=getattr(pos, "macro_state_at_entry", "unknown"),
+                    regime_trend_at_entry=getattr(pos, "regime_trend", "sideways"),
+                    htf_aligned_at_entry=getattr(pos, "htf_aligned_at_entry", False),
+                    setup_qualifier=getattr(pos, "setup_qualifier", "Unknown"),
                 )
 
                 self.completed_trades.append(trade)
