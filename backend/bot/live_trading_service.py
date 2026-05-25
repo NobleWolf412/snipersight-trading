@@ -1060,6 +1060,23 @@ class LiveTradingService:
                 logger.warning(f"Pair selection failed ({e}), using default majors")
                 scan_symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]
 
+        # Apply stale-symbol drop regardless of how scan_symbols was built.
+        # The user-pinned path (config.symbols) bypasses select_symbols(), so
+        # the Stage-0 stale filter inside _select_symbols_impl never sees those
+        # symbols. Mirrors paper_trading_service for behavioral parity.
+        # See decisions log 2026-05-25__stale_symbol_drop_userpinned.md.
+        try:
+            from backend.analysis.pair_selection import filter_stale_symbols
+            scan_symbols, _stale_dropped = filter_stale_symbols(
+                scan_symbols, context="live_trading_service"
+            )
+        except Exception as _stale_exc:
+            # Loud-by-default per CLAUDE.md §11 / §15: a silent debug-level
+            # emit on this path would hide regressions in is_symbol_stale or
+            # the mass-conservation assert. Scan continues with the unfiltered
+            # list — graceful degradation, NOT silent failure.
+            logger.warning(f"filter_stale_symbols failed: {_stale_exc}")
+
         if getattr(config, "exclude_symbols", None):
             scan_symbols = [s for s in scan_symbols if s not in config.exclude_symbols]
 

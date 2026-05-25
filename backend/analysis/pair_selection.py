@@ -337,6 +337,61 @@ def is_symbol_stale(symbol: str) -> bool:
         return _consecutive_no_data_failures.get(symbol, 0) >= _NO_DATA_DROP_THRESHOLD
 
 
+def filter_stale_symbols(
+    symbols: List[str], *, context: str = ""
+) -> Tuple[List[str], List[str]]:
+    """Partition a symbol list into (kept, dropped) by staleness.
+
+    The auto-drop filter inside `_select_symbols_impl` only runs when the
+    user-pinned `config.symbols` list is empty — when symbols are explicitly
+    pinned (the common live-bot case), the orchestrator iterates the pinned
+    list directly and the Stage-0 stale filter at line 405 never executes.
+    Calibrated on session 84fd5c96 (May 2026): BONK and FLOKI failed
+    no_data on 220/220 (100%) cycles in an 11-hour user-pinned session even
+    though their counters had crossed _NO_DATA_DROP_THRESHOLD ~30 minutes in.
+
+    Both bot services (paper + live) call this helper after building
+    `scan_symbols` so the stale-drop applies regardless of which path
+    populated the list. Per CLAUDE.md §11 (loud failures): emits one INFO
+    log per scan when symbols are dropped; the per-symbol WARNING emit
+    inside `record_no_data_failure` still fires on the original cross.
+
+    Args:
+        symbols: ordered list of trading pair symbols
+        context: optional caller tag (e.g. "paper_trading_service") to make
+                 the log line greppable
+
+    Returns:
+        (kept, dropped) — both ordered, complementary, no overlap. Mass-
+        conservation: `len(kept) + len(dropped) == len(symbols)` always.
+    """
+    kept: List[str] = []
+    dropped: List[str] = []
+    for s in symbols:
+        if is_symbol_stale(s):
+            dropped.append(s)
+        else:
+            kept.append(s)
+
+    # Mass-conservation runtime assertion (CLAUDE.md §16 Rubric 3).
+    assert len(kept) + len(dropped) == len(symbols), (
+        f"filter_stale_symbols mass-conservation violated: "
+        f"kept={len(kept)} dropped={len(dropped)} input={len(symbols)}"
+    )
+
+    if dropped:
+        tag = f"[{context}] " if context else ""
+        # loguru uses {}-style formatting (NOT stdlib %s). Some other emits in
+        # this module pass %s + positional args and produce un-interpolated
+        # output under loguru; that's preexisting and out of scope for this commit.
+        logger.info(
+            "{}STALE_SYMBOL_SKIP: dropping {} symbol(s) this scan: {}",
+            tag, len(dropped), dropped,
+        )
+
+    return kept, dropped
+
+
 def get_stale_counters_snapshot() -> Dict[str, int]:
     """Return a shallow copy of the counter dict — for diagnostics + tests."""
     with _no_data_counter_lock:
