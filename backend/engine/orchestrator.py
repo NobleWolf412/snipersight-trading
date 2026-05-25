@@ -1698,6 +1698,10 @@ class Orchestrator:
                         _FORWARD_KEYS = {
                             "conflict_count", "conflict_conditions",
                             "btc_impulse", "regime_trend",
+                            # Tier 1.2: alt_local_trend surfaced from Gate 3 rejection metadata
+                            # so the rejection breakdown shows whether the divergence-bypass
+                            # was reachable. Parity with btc_impulse's surface area.
+                            "alt_local_trend",
                         }
                         for _k, _v in (_gate.metadata or {}).items():
                             if _k in _FORWARD_KEYS:

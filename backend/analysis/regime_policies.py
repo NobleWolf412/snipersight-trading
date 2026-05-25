@@ -89,11 +89,16 @@ REGIME_POLICIES: Dict[str, RegimePolicy] = {
         min_regime_score=40.0,  # Balanced — more permissive than overwatch, tighter than surgical
         allow_in_risk_off=True,  # Can trade both directions
         position_size_adjustment={
+            # §10 bull/bear symmetry (Tier 1.2 mirror fix): strong_down now mirrors
+            # strong_up at 1.2× (was 1.1×). Trend clarity drives sizing — same
+            # rationale as the trend_score symmetry fix in regime_detector
+            # (commit dc97abc). A strong trend in either direction is equally
+            # tradeable for a system that takes both LONG and SHORT.
             "strong_up": 1.2,
             "up": 1.1,
             "sideways": 0.8,  # Reduce in chop
             "down": 1.1,  # Can short, lean into it
-            "strong_down": 1.1,  # Lean into strong shorts
+            "strong_down": 1.2,  # mirrors strong_up — was 1.1× pre Tier 1.2
         },
         confluence_adjustment={
             "bullish_risk_on": 3.0,

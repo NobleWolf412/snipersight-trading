@@ -338,25 +338,36 @@ def run_pre_scoring_gates(
     if _btc_impulse_applies:
         btc_strongly_up = btc_impulse in ("strong_up", "extreme_up")
         btc_strongly_down = btc_impulse in ("strong_down", "extreme_down")
+        # Per Tier 1.2 §10 cleanup: BOTH directions now have a divergence bypass.
+        # Original SHORT-side bypass shipped 2026-04-23; the LONG-side mirror
+        # was missing. The reasoning is symmetric: a BTC dump can coexist with
+        # a locally-bullish alt (alt diverging upward = BTC.D contraction
+        # pattern); blocking such LONGs unconditionally costs trades the
+        # geometry can actually take. Mirror the SHORT case with the inverse
+        # alt-local-trend check.
+        _alt_local_trend = getattr(regime, "trend", "sideways") if regime else "sideways"
         if is_long and btc_strongly_down:
-            return GateResult(
-                passed=False,
-                gate_name="btc_impulse",
-                reason=f"LONG alt rejected: BTC in opposing strong impulse ({btc_impulse})",
-                metadata={"btc_impulse": btc_impulse},
-            )
+            # Bypass for BTC.D contraction / alt-divergence: when BTC dumps but
+            # the alt's own local trend is bullish (up/strong_up), the alt is
+            # diverging UPWARD — not correlated. Don't block.
+            if _alt_local_trend not in ("up", "strong_up"):
+                return GateResult(
+                    passed=False,
+                    gate_name="btc_impulse",
+                    reason=f"LONG alt rejected: BTC in opposing strong impulse ({btc_impulse})",
+                    metadata={"btc_impulse": btc_impulse, "alt_local_trend": _alt_local_trend},
+                )
         if not is_long and btc_strongly_up:
             # Bypass for BTC dominance expansion: when BTC pumps but the specific
             # alt has its own local bearish regime (down/strong_down), the alt is
             # diverging — not correlated. The gate was designed for correlated moves
             # (BTC pumps → alts pump); it should not block genuinely bearish alts.
-            _alt_local_trend = getattr(regime, "trend", "sideways") if regime else "sideways"
             if _alt_local_trend not in ("down", "strong_down"):
                 return GateResult(
                     passed=False,
                     gate_name="btc_impulse",
                     reason=f"SHORT alt rejected: BTC in opposing strong impulse ({btc_impulse})",
-                    metadata={"btc_impulse": btc_impulse},
+                    metadata={"btc_impulse": btc_impulse, "alt_local_trend": _alt_local_trend},
                 )
 
     # ── Gate 4: Conflict Density (ALL modes) ──────────────────────────────────
