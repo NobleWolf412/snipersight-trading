@@ -121,6 +121,64 @@ def test_record_failure_emits_warning_only_on_first_threshold_cross(caplog):
     assert pair_selection._stale_dropped_logged == {"FLOKI/USDT"}
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Log-format interpolation — loguru {}-style vs stdlib %s
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Regression catch for the May 2026 finding: the original emits used stdlib
+# %s/%d positional-arg interpolation, which loguru does NOT process. Live
+# logs emitted literal "%s failed no_data %d consecutive cycles" instead of
+# "FLOKI/USDT failed no_data 10 consecutive cycles", breaking observability
+# at the exact moment the auto-drop fires.
+
+
+@pytest.fixture
+def loguru_records():
+    """Capture loguru records into a list. caplog bypasses loguru by default."""
+    from loguru import logger as _loguru_logger
+    records: List[str] = []
+    sink_id = _loguru_logger.add(lambda msg: records.append(str(msg)), level="INFO")
+    yield records
+    _loguru_logger.remove(sink_id)
+
+
+def test_auto_drop_warning_interpolates_symbol_and_count(loguru_records):
+    """The WARNING fired on threshold cross must contain the actual symbol
+    name and cycle count — not literal '%s' / '%d' artifacts."""
+    for _ in range(_NO_DATA_DROP_THRESHOLD):
+        record_no_data_failure("FLOKI/USDT")
+
+    auto_drop_logs = [r for r in loguru_records if "STALE_SYMBOL_AUTO_DROP" in r]
+    assert len(auto_drop_logs) == 1, f"expected 1 auto-drop log, saw {len(auto_drop_logs)}"
+    msg = auto_drop_logs[0]
+    # The fix matters here: loguru must have substituted {} placeholders.
+    assert "FLOKI/USDT" in msg, f"symbol not interpolated: {msg!r}"
+    assert "10" in msg, f"cycle count not interpolated: {msg!r}"
+    # And specifically the un-interpolated markers must NOT appear.
+    assert "%s" not in msg, f"stdlib %s leaked into output: {msg!r}"
+    assert "%d" not in msg, f"stdlib %d leaked into output: {msg!r}"
+
+
+def test_recovery_info_interpolates_symbol_and_prior_count(loguru_records):
+    """The recovery INFO must contain the symbol name and prior-failure count
+    in human-readable form, not literal markers."""
+    # Push past threshold so the recovery emit fires
+    for _ in range(_NO_DATA_DROP_THRESHOLD + 2):
+        record_no_data_failure("BONK/USDT")
+    # Clear the recorder of the auto-drop noise
+    loguru_records.clear()
+
+    record_no_data_success("BONK/USDT")
+
+    recovery_logs = [r for r in loguru_records if "STALE_SYMBOL_RECOVERED" in r]
+    assert len(recovery_logs) == 1, f"expected 1 recovery log, saw {len(recovery_logs)}"
+    msg = recovery_logs[0]
+    assert "BONK/USDT" in msg, f"symbol not interpolated: {msg!r}"
+    assert "12" in msg, f"prior count not interpolated: {msg!r}"
+    assert "%s" not in msg, f"stdlib %s leaked into output: {msg!r}"
+    assert "%d" not in msg, f"stdlib %d leaked into output: {msg!r}"
+
+
 def test_record_success_resets_counter():
     """Successful data fetch zeros the counter — symbol re-eligible immediately."""
     sym = "TEST/USDT"

@@ -305,8 +305,10 @@ def record_no_data_failure(symbol: str) -> int:
         _consecutive_no_data_failures[symbol] = new_count
         if new_count == _NO_DATA_DROP_THRESHOLD and symbol not in _stale_dropped_logged:
             _stale_dropped_logged.add(symbol)
+            # loguru uses {}-style format strings; stdlib %s/%d args are NOT
+            # interpolated under loguru and would emit literal "%s" / "%d".
             logger.warning(
-                "STALE_SYMBOL_AUTO_DROP: %s failed no_data %d consecutive cycles; "
+                "STALE_SYMBOL_AUTO_DROP: {} failed no_data {} consecutive cycles; "
                 "excluded from universe selection until success OR session restart",
                 symbol, new_count,
             )
@@ -324,8 +326,9 @@ def record_no_data_success(symbol: str) -> None:
         prior = _consecutive_no_data_failures.pop(symbol, 0)
         if prior >= _NO_DATA_DROP_THRESHOLD:
             _stale_dropped_logged.discard(symbol)
+            # loguru {}-style — stdlib %s/%d args would emit literal markers.
             logger.info(
-                "STALE_SYMBOL_RECOVERED: %s data fetched successfully after %d failures; "
+                "STALE_SYMBOL_RECOVERED: {} data fetched successfully after {} failures; "
                 "re-eligible for selection",
                 symbol, prior,
             )
