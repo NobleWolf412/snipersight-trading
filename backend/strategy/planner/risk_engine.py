@@ -2148,8 +2148,20 @@ def _calculate_targets(
     """
     targets = []
 
-    avg_entry = (entry_zone.near_entry + entry_zone.far_entry) / 2
-    risk_distance = abs(avg_entry - stop_loss.level)
+    # Target-generation reference. Per Tier 1.1 (post-9558a1c8 strip evidence),
+    # generate targets relative to `near_entry` (the worst-case fill for limit
+    # orders) so the generator aligns with the executor's structural-validity
+    # guard (position_manager.py _check_target_hit) AND the planner-side
+    # _guard_target_direction (which already uses near_entry post-881d6d7).
+    # Eliminates the inter-band gap where generator placed targets at
+    # avg_entry+dist that the guard's "least-wrong fallback" preserved and
+    # the executor then stripped at runtime. Helper functions (structural
+    # candidate finders + wick-barrier adjuster) keep their legacy `avg_entry`
+    # parameter name for diff-minimization; they receive `entry_ref` value.
+    # Worked example (LONG, near=100 far=90 stop=80): pre-fix TP1@avg+2R=135,
+    # filled at near=100, realized=1.75R. Post-fix TP1@near+2R=140, realized=2.0R.
+    entry_ref = entry_zone.near_entry
+    risk_distance = abs(entry_ref - stop_loss.level)
 
     if risk_distance == 0:
         logger.warning(
@@ -2210,25 +2222,28 @@ def _calculate_targets(
 
         # HTF Swings
         # HTF Swings
+        # NOTE (Tier 1.1): all structural-candidate helpers below receive
+        # `entry_ref` (= entry_zone.near_entry) for their `avg_entry` legacy
+        # parameter. Same value, semantically-correct rename deferred.
         candidates.extend(
-            _find_htf_swing_targets(is_bullish, avg_entry, multi_tf_data, target_tfs, smc_snapshot)
+            _find_htf_swing_targets(is_bullish, entry_ref, multi_tf_data, target_tfs, smc_snapshot)
         )
 
         # BOS Levels (Strong magnets)
-        candidates.extend(_get_htf_bos_levels(is_bullish, avg_entry, smc_snapshot, target_tfs))
+        candidates.extend(_get_htf_bos_levels(is_bullish, entry_ref, smc_snapshot, target_tfs))
 
         # Liquidity Pools (Strong magnets)
-        candidates.extend(_find_eqh_eql_zones(is_bullish, avg_entry, multi_tf_data, target_tfs))
+        candidates.extend(_find_eqh_eql_zones(is_bullish, entry_ref, multi_tf_data, target_tfs))
 
         # Fib Extensions (Supporting)
         candidates.extend(
             _calculate_fib_extensions(
-                is_bullish, avg_entry, multi_tf_data, target_tfs, mode_profile
+                is_bullish, entry_ref, multi_tf_data, target_tfs, mode_profile
             )
         )
 
         # FVGs (Magnets)
-        candidates.extend(_get_unfilled_htf_fvgs(is_bullish, avg_entry, smc_snapshot, target_tfs))
+        candidates.extend(_get_unfilled_htf_fvgs(is_bullish, entry_ref, smc_snapshot, target_tfs))
 
         # Bollinger Bands (Mean Reversion - Critical for Range Setups)
         # Always check these if we are in Range Reversion or Compressed regime
@@ -2239,7 +2254,7 @@ def _calculate_targets(
         ):
             bb_targets = _get_bollinger_targets(
                 is_bullish,
-                avg_entry,
+                entry_ref,
                 indicators,
                 primary_tf=getattr(config, "primary_planning_timeframe", "1h") or "1h",
             )
@@ -2249,8 +2264,8 @@ def _calculate_targets(
                 )
                 candidates.extend(bb_targets)
 
-        # Sort by distance
-        candidates.sort(key=lambda x: abs(x[0] - avg_entry))
+        # Sort by distance (from near_entry / worst-case fill)
+        candidates.sort(key=lambda x: abs(x[0] - entry_ref))
 
         # Filter and Dedupe
         structural_targets = []
@@ -2263,7 +2278,9 @@ def _calculate_targets(
         for level, info, score in candidates:
             # Skip if too close (must meet mode's minimum R:R requirement)
             # Overwatch: 2.0R, Surgical: 1.5R, Strike: 1.2R, etc.
-            dist = abs(level - avg_entry)
+            # Distance computed from near_entry (worst-case fill) so reported
+            # R:R matches what the executor will realize on the open.
+            dist = abs(level - entry_ref)
             rr = dist / max(risk_distance, 1e-9)
             if rr < min_structural_rr:
                 logger.debug(
@@ -2327,9 +2344,11 @@ def _calculate_targets(
             logger.info(
                 f"No specific structural targets found for {mode_profile} mode - using swing fallback"
             )
+            # entry_ref (= near_entry) passed where the helper expects its legacy
+            # `avg_entry` parameter — same minimal-blast-radius pattern as above.
             swing_targets = _calculate_swing_structural_targets(
                 is_bullish,
-                avg_entry,
+                entry_ref,
                 risk_distance,
                 atr,
                 smc_snapshot,
@@ -2354,9 +2373,10 @@ def _calculate_targets(
                         f"swing targets (HVN conflicts removed)"
                     )
 
-            # Adjust targets that would land inside wick demand/supply zones
+            # Adjust targets that would land inside wick demand/supply zones.
+            # Pass entry_ref (= near_entry); see top of _calculate_targets for rationale.
             swing_targets = _adjust_targets_for_wick_barriers(
-                swing_targets, multi_tf_data, avg_entry, is_bullish, atr, risk_distance
+                swing_targets, multi_tf_data, entry_ref, is_bullish, atr, risk_distance
             )
             # Filter targets blocked by opposing OB structures
             swing_targets = _filter_targets_by_opposing_structure(
@@ -2385,14 +2405,18 @@ def _calculate_targets(
     # Minimum TP distance derived from the configured fee rate.
     # Round-trip cost = fee_rate × 2 (open + close). Floor at 2.5× round-trip so TP1
     # always covers fees with margin. At 0.1% fees: min = 0.5% round-trip × 2.5 = 0.25%.
-    _MIN_TP_DISTANCE = avg_entry * fee_rate * 2 * 2.5
+    # Fee floor referenced to entry_ref (near_entry) — matches the price scale
+    # the trade actually fills at.
+    _MIN_TP_DISTANCE = entry_ref * fee_rate * 2 * 2.5
 
     for i, rr in enumerate(adjusted_rrs):
         dist = max(risk_distance * rr, _MIN_TP_DISTANCE)
+        # Targets generated relative to entry_ref (near_entry, worst-case fill).
+        # See Tier 1.1 note at top of _calculate_targets.
         if is_bullish:
-            level = avg_entry + dist
+            level = entry_ref + dist
         else:
-            level = max(avg_entry * 0.001, avg_entry - dist)
+            level = max(entry_ref * 0.001, entry_ref - dist)
 
         targets.append(
             Target(
@@ -2420,8 +2444,11 @@ def _calculate_targets(
                 f"R:R targets (HVN conflicts removed)"
             )
 
-    # Adjust targets that would land inside wick demand/supply zones
-    targets = _adjust_targets_for_wick_barriers(targets, multi_tf_data, avg_entry, is_bullish, atr, risk_distance)
+    # Adjust targets that would land inside wick demand/supply zones.
+    # Pass entry_ref (= near_entry) so the wick-barrier "between entry and target"
+    # gate matches the executor's post-fill perspective. Helper's legacy param
+    # name `avg_entry` retained for diff-minimization.
+    targets = _adjust_targets_for_wick_barriers(targets, multi_tf_data, entry_ref, is_bullish, atr, risk_distance)
     # Filter targets blocked by opposing OB structures
     targets = _filter_targets_by_opposing_structure(targets, smc_snapshot, is_bullish, atr)
     # Final safety check: ensure all targets are on the correct side of entry.
