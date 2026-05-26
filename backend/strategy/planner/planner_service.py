@@ -36,6 +36,7 @@ from backend.strategy.planner.risk_engine import (
 )
 from backend.strategy.planner.regime_engine import get_atr_regime
 from backend.shared.utils.math_utils import round_to_tick
+from backend.shared.config.rr_matrix import classify_conviction
 
 # Re-export SetupArchetype if needed by consumers, though ideally they import from models?
 # For now, defining local type alias to match previous API surface if it was used
@@ -681,6 +682,34 @@ def generate_trade_plan(
             tick_size=tick_size,
             lot_size=lot_size,
         )
+
+        # === CLASSIFY CONVICTION (A/B/C) ===
+        # classify_conviction() lives at backend/shared/config/rr_matrix.py:87
+        # and was an orphan from inception (commit 8b9b081, 2025-11-28) — defined
+        # but never called from any production code path. Calibrated on
+        # 2026-05-26 taken_trade_forensics: 67/67 closed trades had
+        # conviction_class="B" (the planner.py:162 default) because no one
+        # ever ran the classifier. Wired in now so the conviction field
+        # carries A/B/C distribution and downstream telemetry / autopsy
+        # can partition trades by quality tier.
+        try:
+            _has_all_critical_tfs = len(missing_critical_timeframes) == 0
+            plan.conviction_class = classify_conviction(
+                plan_type=plan.plan_type,
+                risk_reward=plan.risk_reward_ratio,
+                confluence_score=plan.confidence_score,
+                has_all_critical_tfs=_has_all_critical_tfs,
+                mode_profile=getattr(config, "profile", None),
+            )
+        except Exception as _conv_exc:
+            # Loud-by-default per CLAUDE.md §11/§15: if the classifier
+            # ever raises, surface it as a WARNING so we know the field
+            # has degraded back to its default. Plan still emits with
+            # conviction_class="B" (the dataclass default).
+            logger.warning(
+                f"classify_conviction failed for {symbol}: {_conv_exc} — "
+                f"plan.conviction_class defaults to 'B'"
+            )
 
         # === GENERATE MISSION RATIONALE ===
         # Build a rich, price-detail-aware briefing readable as bullet points on the frontend
