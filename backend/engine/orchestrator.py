@@ -174,6 +174,7 @@ class Orchestrator:
         position_sizer: Optional[PositionSizer] = None,
         debug_mode: bool = False,
         concurrency_workers: int = 4,
+        replay_mode: bool = False,
     ):
         """
         Initialize orchestrator.
@@ -183,8 +184,25 @@ class Orchestrator:
             exchange_adapter: Exchange data adapter (required - pass Bybit, Phemex, OKX, or Bitget)
             risk_manager: Risk manager (creates default if None)
             position_sizer: Position sizer (creates default if None)
+            replay_mode: When True, _process_symbol skips the entry cooldown gate
+                and stashes the populated SniperContext on self._last_replay_context
+                so the Replay engine can inspect it after each step. Live scans
+                must construct the orchestrator with replay_mode=False (the
+                default) — the flag is sticky for the lifetime of the instance,
+                and replay sessions must instantiate their own dedicated
+                orchestrator so the live scan path is never contaminated.
         """
         self.config = config
+
+        # Replay-mode state (immutable per instance — enforced via @property
+        # below; symmetry-guard 2026-05-25 flagged that a plain `self.replay_mode`
+        # attribute would let an external caller silently flip the flag and
+        # re-enable the cooldown path mid-session. The underscore attr is the
+        # backing store; the property is read-only.)
+        self.__replay_mode = bool(replay_mode)
+        self._last_replay_context: Optional[SniperContext] = None
+        self._next_replay_playback_index: Optional[int] = None
+        self._next_replay_session_id: Optional[str] = None
 
         # Debug mode and diagnostics tracking
         self.debug_mode = debug_mode or os.getenv("SS_DEBUG", "0") == "1"
@@ -1125,6 +1143,27 @@ class Orchestrator:
             symbol=symbol, profile=self.config.profile, run_id=run_id, timestamp=timestamp
         )
 
+        # Replay capture: stash the context reference so process_symbol_for_replay
+        # can read it back after _process_symbol returns (which may early-return
+        # from any of ~12 rejection sites). Reference is captured BEFORE any
+        # mutation so every early-return path still sees the populated state.
+        if self.replay_mode:
+            self._last_replay_context = context
+            if self._next_replay_playback_index is not None:
+                context.metadata["playback_index"] = self._next_replay_playback_index
+            if self._next_replay_session_id is not None:
+                context.metadata["replay_session_id"] = self._next_replay_session_id
+            # Observable trace per symmetry-guard OBS-01 (2026-05-25):
+            # without this log line, replay debugging relies on operators
+            # correlating opaque run_id strings. INFO so it shows up in the
+            # same console stream as live scans.
+            logger.info(
+                "REPLAY %s [%s]: step entered | playback_index=%s session=%s",
+                symbol, trace_id,
+                self._next_replay_playback_index,
+                (self._next_replay_session_id or "?")[:8],
+            )
+
         # Inject macro context (computed once per scan)
         context.macro_context = self.macro_context
 
@@ -1226,26 +1265,34 @@ class Orchestrator:
         current_price = self._get_current_price(context.multi_tf_data)
         # Check both directions - if any are blocked, we save heavy indicator/SMC compute
         # This assumes a cooldown-blocked symbol shouldn't be processed further in either direction
-        for direction in ["LONG", "SHORT"]:
-            cooldown_rejection = self._check_cooldown(symbol, direction, current_price)
-            if cooldown_rejection:
-                logger.info(
-                    "%s [%s]: ❌ GATE FAIL (early_cooldown) | %s",
-                    symbol,
-                    trace_id,
-                    cooldown_rejection["reason"],
-                )
-                self._progress(
-                    "GATE_FAIL",
-                    {
-                        "symbol": symbol,
-                        "gate": "early_cooldown",
-                        "direction": direction,
-                        "hours_remaining": cooldown_rejection.get("cooldown_hours_remaining", 0),
-                    },
-                )
-                cooldown_rejection["trace_id"] = trace_id
-                return None, cooldown_rejection
+        #
+        # Replay mode skips the cooldown gate entirely. Cooldown is a live-trading
+        # concept (a real fill blocks the symbol for N hours); in historical replay
+        # every bar must run through scoring regardless of whether a hypothetical
+        # trade fired at a previous bar. Keeping cooldown active would silently
+        # drop signals after the first replay-fired one, breaking the calibration
+        # use case the feature exists for.
+        if not self.replay_mode:
+            for direction in ["LONG", "SHORT"]:
+                cooldown_rejection = self._check_cooldown(symbol, direction, current_price)
+                if cooldown_rejection:
+                    logger.info(
+                        "%s [%s]: ❌ GATE FAIL (early_cooldown) | %s",
+                        symbol,
+                        trace_id,
+                        cooldown_rejection["reason"],
+                    )
+                    self._progress(
+                        "GATE_FAIL",
+                        {
+                            "symbol": symbol,
+                            "gate": "early_cooldown",
+                            "direction": direction,
+                            "hours_remaining": cooldown_rejection.get("cooldown_hours_remaining", 0),
+                        },
+                    )
+                    cooldown_rejection["trace_id"] = trace_id
+                    return None, cooldown_rejection
 
         # Store missing TFs for plan metadata (even if empty)
         context.metadata["missing_critical_timeframes"] = missing_critical_tfs
@@ -2454,6 +2501,13 @@ class Orchestrator:
                 "setup_state": _bd_meta.get("setup_state", "NOISE"),
             }
 
+    @property
+    def replay_mode(self) -> bool:
+        """Read-only — set once via __init__, never mutable. Replay sessions
+        must construct their own dedicated orchestrator; live scanners must
+        never be flipped into replay mode mid-flight."""
+        return self.__replay_mode
+
     def _ingest_data(self, symbol: str) -> Optional[MultiTimeframeData]:
         """
         Ingest multi-timeframe data for symbol.
@@ -2472,6 +2526,123 @@ class Orchestrator:
             logger.error("Data ingestion failed for %s: %s", symbol, e)
             self.diagnostics["data_failures"].append({"symbol": symbol, "error": str(e)})
             return None
+
+    def process_symbol_for_replay(
+        self,
+        symbol: str,
+        prefetched_data: MultiTimeframeData,
+        timestamp: datetime,
+        run_id: str,
+        playback_index: int,
+        session_id: str,
+        prefetched_btc_data: Optional[MultiTimeframeData] = None,
+        macro_context: Optional[MacroContext] = None,
+    ) -> tuple[Optional[TradePlan], Optional[Dict[str, Any]], Optional[SniperContext]]:
+        """
+        Run a single symbol through the full pipeline using pre-sliced
+        historical data instead of live-fetched data. Returns the captured
+        SniperContext alongside the standard (plan, rejection) tuple so the
+        Replay engine can render confluence/SMC/regime state per bar.
+
+        Differs from _process_symbol in three ways (enforced by the
+        replay_mode flag set at construction):
+          1. Cooldown gate is skipped — cooldown is a live-trading concept,
+             not a historical-replay one.
+          2. SniperContext is stashed on self._last_replay_context so the
+             caller can read it after the call (handles all 12 early-return
+             rejection sites without instrumenting each one).
+          3. playback_index + replay_session_id are stamped into
+             context.metadata so telemetry events carry them.
+
+        The stale-symbol counter is untouched because _process_symbol itself
+        never mutates it — only the parent scan() loop does, and replay
+        does not go through scan(). The process pool is likewise untouched
+        because replay calls this method directly, in-process.
+
+        Args:
+            symbol: Trading pair (e.g. "BTC/USDT")
+            prefetched_data: Multi-TF data sliced to the bar-close-as-of timestamp
+            timestamp: Synthetic playback timestamp (the bar being replayed)
+            run_id: Replay session run id
+            playback_index: 0-based index into the playback bar_timestamps
+            session_id: Replay session identifier
+            prefetched_btc_data: BTC data sliced to the same timestamp, used
+                to drive the regime detector. Mandatory for correctness —
+                without it the regime is computed from live BTC and
+                contaminates the historical signal.
+            macro_context: Optional pre-computed macro context
+
+        Returns:
+            (plan, rejection_info, captured_context) — context is None only
+            if the pipeline failed before stage 1 (effectively never).
+        """
+        if not self.replay_mode:
+            raise RuntimeError(
+                "process_symbol_for_replay called on a non-replay orchestrator. "
+                "Construct with Orchestrator(replay_mode=True, ...)."
+            )
+
+        # Drive regime detector from sliced BTC data — protects historical
+        # signal accuracy against contamination by live BTC state.
+        #
+        # Keep-last-good policy (symmetry-guard FIX-02-SUSPECT 2026-05-25):
+        # if a single step's regime detection fails (e.g. too few BTC bars
+        # at very-early indices), retain the previous step's regime instead
+        # of clobbering to None. A regime flicker between None and a real
+        # label across consecutive bars would produce confluence-score
+        # noise unrelated to actual market state.
+        if prefetched_btc_data is not None:
+            try:
+                fresh_regime = self._detect_global_regime(
+                    prefetched_btc_data=prefetched_btc_data
+                )
+                if fresh_regime is not None:
+                    self.current_regime = fresh_regime
+                else:
+                    logger.debug(
+                        "Replay regime: detector returned None at step, "
+                        "keeping previous regime=%s",
+                        getattr(self.current_regime, "composite", None),
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Replay regime detection raised at step, keeping previous: %s", e
+                )
+
+        # Inject macro context if pre-computed (else _process_symbol uses None).
+        # OBS-02-SUSPECT (2026-05-25): replay does NOT auto-compute
+        # macro_context from the sliced data each step — that adds another
+        # _compute_macro_context_from_data call per bar (which is heavy:
+        # iterates every symbol in prefetched_data computing pct_change /
+        # dominance). Caller may pass macro_context= to backfill if needed;
+        # otherwise replay runs without macro overlay (functional gap vs
+        # live but predictable: the SAME bar replayed twice produces the
+        # SAME result regardless of when it was replayed).
+        if macro_context is not None:
+            self.macro_context = macro_context
+
+        # Stash replay metadata for the capture hook to write into context.metadata
+        self._last_replay_context = None
+        self._next_replay_playback_index = playback_index
+        self._next_replay_session_id = session_id
+
+        try:
+            plan, rejection_info = self._process_symbol(
+                symbol=symbol,
+                run_id=run_id,
+                timestamp=timestamp,
+                prefetched_data=prefetched_data,
+            )
+        finally:
+            # Clear the one-shot index/session id so a subsequent call without
+            # them doesn't leak the previous bar's values
+            self._next_replay_playback_index = None
+            self._next_replay_session_id = None
+
+        captured = self._last_replay_context
+        # Self-clear after read so a stale reference can't leak across calls
+        self._last_replay_context = None
+        return plan, rejection_info, captured
 
     def _progress(self, stage: str, data: Dict[str, Any]):
         """Pass progress up to orchestrator level (to be hooked by service)."""
@@ -2914,9 +3085,14 @@ class Orchestrator:
                     "btc_velocity_1h": float(getattr(_mc, "btc_velocity_1h", 0.0) or 0.0),
                     "alt_velocity_1h": float(getattr(_mc, "alt_velocity_1h", 0.0) or 0.0),
                     "btc_volatility_1h": float(getattr(_mc, "btc_volatility_1h", 0.0) or 0.0),
-                    # macro_state is a MacroState enum — serialize value safely
+                    # macro_state is a MacroState enum — serialize the .name
+                    # (human-readable label) NOT .value (auto-generated int).
+                    # Calibrated on 2026-05-26 taken_trade_forensics: all 17
+                    # Tier 2 trades wrote "6" to the journal, which is the
+                    # auto() value for STABLE_SCARE. Consumers expect
+                    # "STABLE_SCARE" / "RISK_ON" / "NEUTRAL" labels.
                     "macro_state": (
-                        _macro_state.value if hasattr(_macro_state, "value")
+                        _macro_state.name if hasattr(_macro_state, "name")
                         else (str(_macro_state) if _macro_state is not None else "unknown")
                     ),
                     "percent_alts_up": float(getattr(_mc, "percent_alts_up", 50.0) or 50.0),
@@ -4455,6 +4631,15 @@ def _parallel_process_symbol_worker(args):
             class DummyAdapter:
                 def fetch_ohlcv(self, *args, **kwargs): return None
 
+            # NEVER pass replay_mode=True here. This worker orchestrator is
+            # CACHED at module level (`_WORKER_ORCHESTRATOR`) and reused
+            # across symbols/scans inside the same worker process. Replay
+            # mode mutates instance state (_last_replay_context,
+            # _next_replay_playback_index) per call — a shared replay-mode
+            # orchestrator would race those reads across symbols. The
+            # ReplayEngine sidesteps this entirely by constructing its own
+            # dedicated orchestrator per session (replay_engine.py
+            # _build_orchestrator) and never going through the worker pool.
             _WORKER_ORCHESTRATOR = Orchestrator(
                 config=config,
                 exchange_adapter=DummyAdapter(),
