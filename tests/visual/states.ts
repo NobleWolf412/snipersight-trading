@@ -14,6 +14,15 @@
  * orphans the existing baseline (audit will flag it).
  */
 import type { Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __statesFile = fileURLToPath(import.meta.url);
+const __fixtureDir = resolve(dirname(__statesFile), 'fixtures');
+function loadFixture(name: string): unknown {
+  return JSON.parse(readFileSync(resolve(__fixtureDir, name), 'utf8'));
+}
 
 export interface SnapshotState {
   /** Route path (matches react-router). */
@@ -179,10 +188,29 @@ const DESKTOP_STATES: SnapshotState[] = [
     },
   },
 
-  // ─── Intel (3 planned, 1 shipped) ─────────────────────────────────────
+  // ─── Intel (3 planned, 2 shipped) ─────────────────────────────────────
   {
     route: '/intel',
     state: 'default',
+  },
+  // TradFi partial failure: 10Y + VIX errored at Yahoo, DXY + GOLD live.
+  // Negative proof that the per-row ◌ SYNTHETIC marker renders on the two
+  // failing cells while the two succeeding cells stay un-marked, and that
+  // the caption block shows the "tradfi partial (yahoo)" state.
+  {
+    route: '/intel',
+    state: 'tradfi-partial',
+    setup: async (page) => {
+      // Playwright routes are LIFO — this fires before the global mock.
+      const partial = loadFixture('tradfi-partial.json');
+      await page.route('**/api/market/tradfi**', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(partial),
+        }),
+      );
+    },
   },
 
   // ─── Scanner (4 planned, 1 shipped — new HUD /scanner;

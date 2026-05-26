@@ -56,6 +56,8 @@ import {
   type FearGreedResponse,
   type ScannerMode,
   type BTCCycleContextData,
+  type TradFiRow,
+  type TradFiResponse,
 } from '@/utils/api';
 
 // ─── Synthetic seed data — labelled in the UI as such ────────────────────
@@ -1092,6 +1094,16 @@ export function Intel() {
     return () => { cancelled = true; };
   }, []);
 
+  // ── Real data: TradFi quotes (Yahoo v8, 60 s cache) ─────────────────────
+  const [tradFi, setTradFi] = useState<TradFiResponse | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.getTradFi().then((res) => {
+      if (!cancelled && res.data) setTradFi(res.data);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const btcDom = regime.btcDominance ?? 54.32;
   const usdtDom = regime.usdtDominance ?? 4.12;
   const btcDomReal = regime.btcDominance != null;
@@ -1120,6 +1132,21 @@ export function Intel() {
   // BTC + ETH live prices from funding rows
   const btcRow = fundingRows?.find((r) => r.symbol === 'BTC/USDT');
   const ethRow = fundingRows?.find((r) => r.symbol === 'ETH/USDT');
+
+  // TradFi per-row lookups. A cell counts as REAL only when value != null
+  // AND error == null — per-symbol failures keep their ◌ SYNTHETIC marker
+  // while the rest of the strip renders real data.
+  const tradFiByKey = Object.fromEntries(
+    (tradFi?.rows ?? []).map((r) => [r.key, r] as const),
+  ) as Partial<Record<TradFiRow['key'], TradFiRow>>;
+  const dxy = tradFiByKey.dxy;
+  const us10y = tradFiByKey.us10y;
+  const gold = tradFiByKey.gold;
+  const vix = tradFiByKey.vix;
+  const isReal = (r?: TradFiRow): boolean =>
+    !!(r && r.value != null && !r.error);
+  const tradFiAllReal = isReal(dxy) && isReal(us10y) && isReal(gold) && isReal(vix);
+  const tradFiAnyReal = isReal(dxy) || isReal(us10y) || isReal(gold) || isReal(vix);
 
   const visibilityChipKind: 'green' | 'amber' | 'red' =
     regime.visibility === 'HIGH' ? 'green' : regime.visibility === 'MEDIUM' ? 'amber' : 'red';
@@ -1166,8 +1193,8 @@ export function Intel() {
         }
       />
 
-      {/* Macro ticker strip — BTC/ETH real via /api/market/funding;
-          DXY/10Y/GOLD/VIX stay synthetic (no free TradFi source). */}
+      {/* Macro ticker strip — BTC/ETH from /api/market/funding;
+          DXY/10Y/GOLD/VIX from /api/market/tradfi (Yahoo Finance v8). */}
       <div style={{ marginBottom: 18 }}>
         <MacroTicker
           values={[
@@ -1187,62 +1214,70 @@ export function Intel() {
             },
             {
               label: 'DXY',
-              value: '103.41',
-              delta: -0.18,
+              value: isReal(dxy) ? dxy!.value!.toFixed(2) : '103.41',
+              delta: isReal(dxy) ? dxy!.delta_pct ?? null : -0.18,
               color: 'var(--blue)',
-              synthetic: true,
+              synthetic: !isReal(dxy),
             },
             {
               label: '10Y',
-              value: '4.184%',
-              delta: -0.06,
+              value: isReal(us10y) ? `${us10y!.value!.toFixed(3)}%` : '4.184%',
+              delta: isReal(us10y) ? us10y!.delta_pct ?? null : -0.06,
               color: 'var(--blue)',
-              synthetic: true,
+              synthetic: !isReal(us10y),
             },
             {
               label: 'GOLD',
-              value: '$2,408',
-              delta: 0.22,
+              value: isReal(gold) ? `$${fmtPrice(gold!.value!)}` : '$2,408',
+              delta: isReal(gold) ? gold!.delta_pct ?? null : 0.22,
               color: 'var(--amber)',
-              synthetic: true,
+              synthetic: !isReal(gold),
             },
             {
               label: 'VIX',
-              value: '14.32',
-              delta: -0.81,
+              value: isReal(vix) ? vix!.value!.toFixed(2) : '14.32',
+              delta: isReal(vix) ? vix!.delta_pct ?? null : -0.81,
               color: 'var(--green-soft)',
-              synthetic: true,
+              synthetic: !isReal(vix),
             },
           ]}
         />
-        {!fundingReal && (
-          <div
-            className="mono"
-            style={{
-              marginTop: 6,
-              fontSize: 9,
-              color: 'var(--amber)',
-              letterSpacing: '.18em',
-              textTransform: 'uppercase',
-            }}
-          >
-            ◌ btc/eth loading · dxy/10y/gold/vix synthetic pending tradfi feed
-          </div>
-        )}
-        {fundingReal && (
-          <div
-            className="mono"
-            style={{
-              marginTop: 6,
-              fontSize: 9,
-              color: 'var(--fg-4)',
-              letterSpacing: '.18em',
-              textTransform: 'uppercase',
-            }}
-          >
-            ● btc/eth live · ◌ dxy/10y/gold/vix synthetic pending tradfi feed
-          </div>
-        )}
+        {(() => {
+          const tradFiState: 'loading' | 'live' | 'partial' | 'down' =
+            tradFi == null
+              ? 'loading'
+              : tradFiAllReal
+                ? 'live'
+                : tradFiAnyReal
+                  ? 'partial'
+                  : 'down';
+          const allLive = fundingReal && tradFiState === 'live';
+          const text = allLive
+            ? '● all macro feeds live'
+            : !fundingReal && tradFiState === 'loading'
+              ? '◌ btc/eth loading · ◌ tradfi loading'
+              : !fundingReal
+                ? `◌ btc/eth loading · ${tradFiState === 'live' ? '●' : '◌'} tradfi ${tradFiState}`
+                : tradFiState === 'loading'
+                  ? '● btc/eth live · ◌ tradfi loading'
+                  : tradFiState === 'partial'
+                    ? '● btc/eth live · ◌ tradfi partial (yahoo)'
+                    : '● btc/eth live · ◌ tradfi unavailable';
+          return (
+            <div
+              className="mono"
+              style={{
+                marginTop: 6,
+                fontSize: 9,
+                color: allLive ? 'var(--fg-4)' : 'var(--amber)',
+                letterSpacing: '.18em',
+                textTransform: 'uppercase',
+              }}
+            >
+              {text}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Regime command center */}

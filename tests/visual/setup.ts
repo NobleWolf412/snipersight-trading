@@ -79,6 +79,13 @@ const ROUTE_MOCKS: Array<{
     match: (u) => u.includes('/api/market/fear-greed'),
     body: () => loadFixture('fear-greed.json'),
   },
+  // TradFi quotes — populated fixture so Intel MacroTicker renders DXY/10Y/
+  // GOLD/VIX as real (no ◌ SYNTHETIC) in snapshots. Yahoo Finance is never
+  // hit during capture; live calls happen only in dev/prod backends.
+  {
+    match: (u) => u.includes('/api/market/tradfi'),
+    body: () => loadFixture('tradfi.json'),
+  },
   // BTC cycle context — populated fixture so Intel BTC Veto tile renders
   // the CLEAR/WATCH/ACTIVE state deterministically (fixture: BULLISH).
   {

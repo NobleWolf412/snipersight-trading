@@ -1021,6 +1021,11 @@ class ApiClient {
     return this.request<FearGreedResponse>(`/market/fear-greed`, { silent: true });
   }
 
+  /** TradFi quotes (DXY / 10Y / GOLD / VIX) from Yahoo (cached 60 s). */
+  async getTradFi() {
+    return this.request<TradFiResponse>(`/market/tradfi`, { silent: true });
+  }
+
   /** BTC/USDT 24hr ticker from Binance proxy. */
   async getBtcTicker() {
     return this.request<{
@@ -1488,6 +1493,27 @@ export interface FundingRow {
 export interface FundingResponse {
   rows: FundingRow[];
   cached_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// TradFi quotes — /api/market/tradfi (Yahoo Finance v8 chart, 60 s cache)
+// ---------------------------------------------------------------------------
+export interface TradFiRow {
+  key: 'dxy' | 'us10y' | 'gold' | 'vix';
+  label: string;
+  value: number | null;
+  previous_close: number | null;
+  delta_pct: number | null;
+  currency: 'USD' | 'PCT' | 'POINTS';
+  as_of: string | null;
+  yahoo_symbol: string;
+  error: string | null;
+}
+
+export interface TradFiResponse {
+  rows: TradFiRow[];
+  cached_at: string;
+  source: string;
 }
 
 // ---------------------------------------------------------------------------

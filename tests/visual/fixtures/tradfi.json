@@ -1,0 +1,50 @@
+{
+  "rows": [
+    {
+      "key": "dxy",
+      "label": "DXY",
+      "value": 103.41,
+      "previous_close": 103.6,
+      "delta_pct": -0.18,
+      "currency": "USD",
+      "as_of": "2026-05-10T13:48:00+00:00",
+      "yahoo_symbol": "DX-Y.NYB",
+      "error": null
+    },
+    {
+      "key": "us10y",
+      "label": "10Y",
+      "value": 4.184,
+      "previous_close": 4.187,
+      "delta_pct": -0.07,
+      "currency": "PCT",
+      "as_of": "2026-05-10T13:48:00+00:00",
+      "yahoo_symbol": "^TNX",
+      "error": null
+    },
+    {
+      "key": "gold",
+      "label": "GOLD",
+      "value": 2408.3,
+      "previous_close": 2403.0,
+      "delta_pct": 0.22,
+      "currency": "USD",
+      "as_of": "2026-05-10T13:48:00+00:00",
+      "yahoo_symbol": "GC=F",
+      "error": null
+    },
+    {
+      "key": "vix",
+      "label": "VIX",
+      "value": 14.32,
+      "previous_close": 14.44,
+      "delta_pct": -0.83,
+      "currency": "POINTS",
+      "as_of": "2026-05-10T13:48:00+00:00",
+      "yahoo_symbol": "^VIX",
+      "error": null
+    }
+  ],
+  "cached_at": "2026-05-10T13:48:00+00:00",
+  "source": "yahoo_v8_chart"
+}

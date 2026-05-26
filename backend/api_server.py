@@ -169,6 +169,20 @@ REGIME_CACHE = ThreadSafeCache(
     max_size=10, ttl=60, namespace="regime"
 )  # 1 minute TTL for regime data
 
+# Yahoo Finance v8 chart endpoint — public, no key, but the default httpx
+# User-Agent gets 401'd. Symbol map for the Intel MacroTicker TradFi cells.
+TRADFI_YAHOO_SYMBOLS = (
+    ("dxy",   "DXY",  "DX-Y.NYB", "USD"),    # ICE US Dollar Index
+    ("us10y", "10Y",  "^TNX",     "PCT"),    # CBOE 10Y T-Note Yield Index
+    ("gold",  "GOLD", "GC=F",     "USD"),    # COMEX gold front-month future
+    ("vix",   "VIX",  "^VIX",     "POINTS"), # CBOE Volatility Index
+)
+TRADFI_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
+
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -2103,6 +2117,129 @@ async def get_funding_rates(
     payload = {"rows": list(rows), "cached_at": datetime.now(timezone.utc).isoformat()}
     REGIME_CACHE.set(cache_key, payload)
     return payload
+
+
+@app.get("/api/market/tradfi")
+async def get_tradfi_quotes():
+    """
+    Live TradFi quote strip for the Intel page MacroTicker.
+
+    Returns DXY (DX-Y.NYB), US 10Y yield (^TNX), gold futures (GC=F),
+    and VIX (^VIX) — all from the public Yahoo Finance v8 chart endpoint.
+    No API key required, but Yahoo refuses default httpx User-Agents (401),
+    so the request carries a browser-like UA.
+
+    Each row carries its own ``error`` field — one symbol failing does NOT
+    fail the whole endpoint. The frontend renders real values for the rows
+    that succeeded and keeps the ◌ SYNTHETIC marker only on the failures.
+
+    ``^TNX`` returns the 10Y yield directly as a percentage (e.g.
+    ``regularMarketPrice == 4.184`` means 4.184%). No /10 conversion.
+
+    Cached for 60 s via REGIME_CACHE (TradFi indices move slowly enough
+    that 60 s is fresh; reusing REGIME_CACHE avoids adding a namespace).
+    """
+    import asyncio
+
+    import httpx
+
+    cache_key = "tradfi:global"
+    cached = REGIME_CACHE.get(cache_key)
+    if cached is not None:
+        logger.debug("Returning cached TradFi quotes")
+        return cached
+
+    headers = {"User-Agent": TRADFI_USER_AGENT}
+    url_tmpl = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+
+    async def fetch_one(
+        client: "httpx.AsyncClient", key: str, label: str, ysym: str, currency: str
+    ) -> dict:
+        row: dict = {
+            "key": key,
+            "label": label,
+            "value": None,
+            "previous_close": None,
+            "delta_pct": None,
+            "currency": currency,
+            "as_of": None,
+            "yahoo_symbol": ysym,
+            "error": None,
+        }
+        try:
+            resp = await client.get(
+                url_tmpl.format(sym=ysym), headers=headers, timeout=10.0
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            err = (data.get("chart") or {}).get("error")
+            if err:
+                row["error"] = str(err)
+                return row
+            results = (data.get("chart") or {}).get("result") or []
+            if not results:
+                row["error"] = "empty chart.result"
+                return row
+            meta = results[0].get("meta") or {}
+            value = meta.get("regularMarketPrice")
+            prev = meta.get("chartPreviousClose") or meta.get("previousClose")
+            if value is None or prev is None:
+                row["error"] = "missing regularMarketPrice/previousClose"
+                return row
+            row["value"] = float(value)
+            row["previous_close"] = float(prev)
+            row["delta_pct"] = (
+                (float(value) - float(prev)) / float(prev) * 100.0
+                if float(prev)
+                else None
+            )
+            ts = meta.get("regularMarketTime")
+            if ts:
+                row["as_of"] = datetime.fromtimestamp(
+                    int(ts), tz=timezone.utc
+                ).isoformat()
+        except Exception as exc:
+            # Per-symbol soft failure — never raise out of fetch_one.
+            row["error"] = f"{type(exc).__name__}: {exc}"
+        return row
+
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            rows = await asyncio.gather(
+                *[
+                    fetch_one(client, k, lbl, ys, cur)
+                    for (k, lbl, ys, cur) in TRADFI_YAHOO_SYMBOLS
+                ]
+            )
+        payload = {
+            "rows": list(rows),
+            "cached_at": datetime.now(timezone.utc).isoformat(),
+            "source": "yahoo_v8_chart",
+        }
+        REGIME_CACHE.set(cache_key, payload)
+        return payload
+    except Exception as exc:
+        # Catastrophic failure (client construction, etc.) — return four
+        # error rows so the frontend keeps shape. No cache write.
+        logger.error("TradFi endpoint failed catastrophically: %s", exc)
+        return {
+            "rows": [
+                {
+                    "key": k,
+                    "label": lbl,
+                    "value": None,
+                    "previous_close": None,
+                    "delta_pct": None,
+                    "currency": cur,
+                    "as_of": None,
+                    "yahoo_symbol": ys,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+                for (k, lbl, ys, cur) in TRADFI_YAHOO_SYMBOLS
+            ],
+            "cached_at": datetime.now(timezone.utc).isoformat(),
+            "source": "fallback",
+        }
 
 
 @app.get("/api/market/cycles")
