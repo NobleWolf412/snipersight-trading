@@ -513,6 +513,55 @@ class Orchestrator:
         # This bypasses the GIL for indicator and SMC math
         from concurrent.futures import ProcessPoolExecutor, as_completed
 
+        # Stale-symbol counter accounting MUST happen in the main process
+        # because the counter dict is module-level state and worker processes
+        # have their own copies that don't propagate back. The worker only
+        # reports the reason_type via rejection_info; main accumulates it.
+        #
+        # Known reason_type vocabulary — keep in sync with the dict returned
+        # by _process_symbol and the rejection_stats keys at L467-475. New
+        # reasons added upstream that aren't in this set will fall into the
+        # success-reset bucket by default; the unknown-reason DEBUG log below
+        # surfaces the drift so the operator can confirm whether the new
+        # reason is a no_data variant (failure) or downstream gate (success).
+        _KNOWN_REASONS = {
+            "no_data", "errors",
+            "low_confluence", "missing_critical_tf", "risk_validation",
+            "no_trade_plan", "cooldown_active",
+            "structural_anchor", "regime_alignment", "btc_impulse",
+            "conflict_density", "critical_anchor", "direction_unresolved",
+        }
+
+        def _update_stale_counter_from_result(sym: str, rej_info: Optional[Dict[str, Any]]) -> None:
+            try:
+                from backend.analysis.pair_selection import (
+                    record_no_data_failure, record_no_data_success,
+                )
+                reason = (rej_info or {}).get("reason_type")
+                if reason == "no_data":
+                    record_no_data_failure(sym)
+                elif reason == "errors":
+                    # Ambiguous: timeout could mean data fetch hung, OR an
+                    # indicator/SMC math exception fired after data was
+                    # fetched. Preserve current counter state.
+                    return
+                else:
+                    # Data was fetched — recovery path. Includes None (success
+                    # with TradePlan), pre-scoring gate failures, scoring
+                    # rejections. Defensive emit if the reason is novel —
+                    # alerts on upstream vocabulary drift (audit Rubric 15
+                    # protection per the 2026-05-26 decisions log).
+                    if reason is not None and reason not in _KNOWN_REASONS:
+                        logger.debug(
+                            "stale counter: unknown reason_type=%r for %s — "
+                            "bucketing as success (data fetched). Add to "
+                            "_KNOWN_REASONS if this is intentional.",
+                            reason, sym,
+                        )
+                    record_no_data_success(sym)
+            except Exception as _stale_exc:
+                logger.debug("stale counter update for %s failed: %s", sym, _stale_exc)
+
         # This list will store the results (TradePlan or None, and rejection_info)
         processed_symbol_results = []
         
@@ -530,6 +579,7 @@ class Orchestrator:
                 try:
                     result, rejection_info = future.result(timeout=120)  # 120s timeout per symbol
                     processed_symbol_results.append((sym, result, rejection_info))
+                    _update_stale_counter_from_result(sym, rejection_info)
                     completed += 1
 
                     # Call progress callback if provided
@@ -547,6 +597,7 @@ class Orchestrator:
                         "reason": "Processing timed out after 120 seconds",
                     }
                     processed_symbol_results.append((sym, result, rejection_info))
+                    _update_stale_counter_from_result(sym, rejection_info)
                     completed += 1
 
                     if progress_callback:
@@ -565,6 +616,7 @@ class Orchestrator:
                         "reason": f"Unhandled error: {type(e).__name__}: {e}",
                     }
                     processed_symbol_results.append((sym, result, rejection_info))
+                    _update_stale_counter_from_result(sym, rejection_info)
                     completed += 1
 
                     if progress_callback:
@@ -1106,15 +1158,17 @@ class Orchestrator:
         if not context.multi_tf_data or not context.multi_tf_data.timeframes:
             logger.debug("%s [%s]: REJECTED - No market data available", symbol, trace_id)
             self.diagnostics["data_failures"].append({"symbol": symbol, "trace_id": trace_id})
-            # Increment the stale-symbol counter — symbols that persistently
-            # fail no_data get auto-dropped from future universe selection
-            # via pair_selection.is_symbol_stale (calibrated May 2026 on
-            # FLOKI/BONK 99% failure rate). Counter resets on next success.
-            try:
-                from backend.analysis.pair_selection import record_no_data_failure
-                record_no_data_failure(symbol)
-            except Exception as _stale_exc:
-                logger.debug("record_no_data_failure failed for %s: %s", symbol, _stale_exc)
+            # NOTE: stale-symbol counter increments are performed in the MAIN
+            # process from rejection_info.reason_type — see
+            # _update_stale_counter_from_result() below. Calling
+            # record_no_data_failure() here would only mutate the WORKER
+            # process's counter dict (ProcessPoolExecutor at L522 forks a
+            # separate process per scan), and that state never propagates back
+            # to where filter_stale_symbols() reads it. Calibrated on sessions
+            # e5e00ebc + 561744bc (May 2026): BONK/FLOKI scanned 78/78 cycles
+            # despite the worker-side increments firing correctly inside each
+            # worker. Fix: rejection_info carries reason_type back to main,
+            # main calls the counter API from there.
             return None, {
                 "symbol": symbol,
                 "reason_type": "no_data",
@@ -1122,14 +1176,10 @@ class Orchestrator:
                 "trace_id": trace_id,
             }
 
-        # Data fetch succeeded — reset the stale-symbol counter. Allows a
-        # previously-failing symbol to recover from a transient outage
-        # without operator intervention.
-        try:
-            from backend.analysis.pair_selection import record_no_data_success
-            record_no_data_success(symbol)
-        except Exception as _stale_exc:
-            logger.debug("record_no_data_success failed for %s: %s", symbol, _stale_exc)
+        # Data fetch succeeded — reset of stale-symbol counter also happens in
+        # the MAIN process via _update_stale_counter_from_result(). Same
+        # rationale as the failure path above: worker-side mutation would not
+        # propagate back to filter_stale_symbols().
 
         # Stage 2.5: Check critical timeframe availability
         missing_critical_tfs = self._check_critical_timeframes(context.multi_tf_data)
