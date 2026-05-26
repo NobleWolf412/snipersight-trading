@@ -72,6 +72,17 @@ class SupportsTopSymbols(Protocol):
 
 # Default fallback — used only when exchange API is unreachable.
 # Ordered by approximate 2025 liquidity/volume rank across majors, trending alts, and memes.
+#
+# Phemex ticker convention notes (verified live 2026-05-26):
+#   - Most majors are listed at the base/quote name as expected
+#   - PEPE/USDT and SHIB/USDT exist as spot tickers (per-coin price tolerable
+#     enough that Phemex did not apply the 1000x convention to them)
+#   - BONK and FLOKI have NO base-name listing — only listed as 1000BONK/USDT
+#     and 1000FLOKI/USDT (memecoin "1000x" convention: per-coin prices
+#     ~$0.00000X bundled into 1000-coin contracts for sane notionals)
+#   - Using "BONK/USDT" or "FLOKI/USDT" raises BadSymbol from the adapter,
+#     which fires no_data every cycle. Calibrated on sessions e5e00ebc +
+#     561744bc (May 2026) — 100% no_data failure rate before the rename.
 DEFAULT_FALLBACK = [
     "BTC/USDT",
     "ETH/USDT",
@@ -93,8 +104,8 @@ DEFAULT_FALLBACK = [
     "SHIB/USDT",
     "PEPE/USDT",
     "WIF/USDT",
-    "BONK/USDT",
-    "FLOKI/USDT",
+    "1000BONK/USDT",
+    "1000FLOKI/USDT",
 ]
 
 # Curated crypto majors used when present in adapter list; preserves list ranking
