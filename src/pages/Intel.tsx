@@ -50,7 +50,13 @@ import {
   fmtPrice,
 } from '@/components/hud';
 import { useMarketRegime } from '@/hooks/useMarketRegime';
-import { api, type FundingRow, type FearGreedResponse } from '@/utils/api';
+import {
+  api,
+  type FundingRow,
+  type FearGreedResponse,
+  type ScannerMode,
+  type BTCCycleContextData,
+} from '@/utils/api';
 
 // ─── Synthetic seed data — labelled in the UI as such ────────────────────
 //
@@ -1062,6 +1068,30 @@ export function Intel() {
     return () => { cancelled = true; };
   }, []);
 
+  // ── Real data: scanner modes → confluence floor for STEALTH (production) ─
+  // CLAUDE.md §15 hard boundary: this is display-only. Never write back.
+  const [stealthMode, setStealthMode] = useState<ScannerMode | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.getScannerModes().then((res) => {
+      if (!cancelled && res.data) {
+        const stealth = res.data.modes.find((m) => m.name?.toLowerCase() === 'stealth');
+        if (stealth) setStealthMode(stealth);
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Real data: BTC cycle context → macro veto state ─────────────────────
+  const [btcCycle, setBtcCycle] = useState<BTCCycleContextData | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.getBTCCycleContext().then((res) => {
+      if (!cancelled && res.data?.data) setBtcCycle(res.data.data);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const btcDom = regime.btcDominance ?? 54.32;
   const usdtDom = regime.usdtDominance ?? 4.12;
   const btcDomReal = regime.btcDominance != null;
@@ -1304,9 +1334,15 @@ export function Intel() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <RegimeTape
-                  score={72}
+                  score={regime.trendScore ?? 50}
                   label="Trend Strength"
-                  color="var(--green-soft)"
+                  color={
+                    (regime.trendScore ?? 0) >= 55
+                      ? 'var(--green-soft)'
+                      : (regime.trendScore ?? 0) >= 30
+                        ? 'var(--amber)'
+                        : 'var(--red-2)'
+                  }
                   ranges={[
                     { label: 'CHOP', min: 0, max: 30, color: '#f87171' },
                     { label: 'WEAK', min: 30, max: 55, color: '#fbbf24' },
@@ -1315,9 +1351,17 @@ export function Intel() {
                   ]}
                 />
                 <RegimeTape
-                  score={48}
+                  score={regime.volatilityScore ?? 50}
                   label="Volatility (ATR%)"
-                  color="var(--amber)"
+                  color={
+                    (regime.volatilityScore ?? 0) >= 85
+                      ? 'var(--red-2)'
+                      : (regime.volatilityScore ?? 0) >= 60
+                        ? 'var(--amber)'
+                        : (regime.volatilityScore ?? 0) >= 30
+                          ? 'var(--green-soft)'
+                          : 'var(--blue)'
+                  }
                   ranges={[
                     { label: 'LOW', min: 0, max: 30, color: '#60a5fa' },
                     { label: 'NORM', min: 30, max: 60, color: '#22c55e' },
@@ -1326,9 +1370,15 @@ export function Intel() {
                   ]}
                 />
                 <RegimeTape
-                  score={68}
+                  score={regime.riskScore ?? 50}
                   label="Risk Appetite"
-                  color="var(--green-soft)"
+                  color={
+                    (regime.riskScore ?? 0) >= 55
+                      ? 'var(--green-soft)'
+                      : (regime.riskScore ?? 0) >= 35
+                        ? 'var(--amber)'
+                        : 'var(--red-2)'
+                  }
                   ranges={[
                     { label: 'OFF', min: 0, max: 35, color: '#f87171' },
                     { label: 'NEUT', min: 35, max: 55, color: '#fbbf24' },
@@ -1337,29 +1387,39 @@ export function Intel() {
                   ]}
                 />
                 <RegimeTape
-                  score={31}
-                  label="Correlation"
-                  color="var(--blue)"
+                  score={regime.derivativesScore ?? 50}
+                  label="Derivatives"
+                  color={
+                    (regime.derivativesScore ?? 0) >= 85
+                      ? 'var(--amber)'
+                      : (regime.derivativesScore ?? 0) >= 65
+                        ? 'var(--green-soft)'
+                        : (regime.derivativesScore ?? 0) >= 35
+                          ? 'var(--blue)'
+                          : 'var(--red-2)'
+                  }
                   ranges={[
-                    { label: 'DECOR', min: 0, max: 35, color: '#22c55e' },
-                    { label: 'NORM', min: 35, max: 65, color: '#60a5fa' },
-                    { label: 'HIGH', min: 65, max: 85, color: '#fbbf24' },
-                    { label: 'CRISIS', min: 85, max: 100, color: '#f87171' },
+                    { label: 'BEAR', min: 0, max: 35, color: '#f87171' },
+                    { label: 'BAL', min: 35, max: 65, color: '#60a5fa' },
+                    { label: 'BULL', min: 65, max: 85, color: '#22c55e' },
+                    { label: 'EUPH', min: 85, max: 100, color: '#fbbf24' },
                   ]}
                 />
               </div>
-              <div
-                className="mono"
-                style={{
-                  marginTop: 10,
-                  fontSize: 9,
-                  color: 'var(--amber)',
-                  letterSpacing: '.18em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                ◌ regime tape scores synthetic — pending per-dimension feed
-              </div>
+              {regime.trendScore == null && (
+                <div
+                  className="mono"
+                  style={{
+                    marginTop: 10,
+                    fontSize: 9,
+                    color: 'var(--amber)',
+                    letterSpacing: '.18em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  ◌ regime tape awaiting backend feed
+                </div>
+              )}
             </div>
           </div>
 
@@ -1524,18 +1584,65 @@ export function Intel() {
               <MacroScoreTile />
               <div className="metric-tile">
                 <div className="metric-label">Confluence Floor</div>
-                <div className="metric-value">≥ 70.0</div>
-                <div className="metric-sub">scanner mode default</div>
+                <div className="metric-value">
+                  {stealthMode != null
+                    ? `≥ ${stealthMode.min_confluence_score.toFixed(1)}`
+                    : '—'}
+                </div>
+                <div className="metric-sub">
+                  {stealthMode != null ? 'STEALTH · production mode' : '(awaiting feed)'}
+                </div>
               </div>
               <div className="metric-tile">
                 <div className="metric-label">Active Setups</div>
-                <div className="metric-value">OB · FVG · BOS</div>
-                <div className="metric-sub">priority weighted</div>
+                <div className="metric-value">OB · FVG · BOS · SWEEP</div>
+                <div className="metric-sub">SMC primitives · all modes</div>
               </div>
               <div className="metric-tile">
                 <div className="metric-label">BTC Veto</div>
-                <div className="metric-value" style={{ color: 'var(--fg-3)' }}>—</div>
-                <div className="metric-sub">◌ pending impulse-detector wiring</div>
+                {btcCycle != null ? (
+                  (() => {
+                    const bias = btcCycle.overall?.macro_bias;
+                    if (bias === 'BULLISH') {
+                      return (
+                        <>
+                          <div
+                            className="metric-value"
+                            style={{ color: 'var(--green-soft)' }}
+                          >
+                            CLEAR
+                          </div>
+                          <div className="metric-sub">macro tailwind · longs unblocked</div>
+                        </>
+                      );
+                    }
+                    if (bias === 'BEARISH') {
+                      return (
+                        <>
+                          <div className="metric-value" style={{ color: 'var(--red-2)' }}>
+                            ACTIVE
+                          </div>
+                          <div className="metric-sub">macro headwind · longs vetoed</div>
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        <div className="metric-value" style={{ color: 'var(--amber)' }}>
+                          WATCH
+                        </div>
+                        <div className="metric-sub">macro mixed · standard rules</div>
+                      </>
+                    );
+                  })()
+                ) : (
+                  <>
+                    <div className="metric-value" style={{ color: 'var(--fg-3)' }}>
+                      —
+                    </div>
+                    <div className="metric-sub">(awaiting feed)</div>
+                  </>
+                )}
               </div>
             </div>
           </section>

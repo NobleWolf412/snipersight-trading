@@ -79,6 +79,19 @@ const ROUTE_MOCKS: Array<{
     match: (u) => u.includes('/api/market/fear-greed'),
     body: () => loadFixture('fear-greed.json'),
   },
+  // BTC cycle context — populated fixture so Intel BTC Veto tile renders
+  // the CLEAR/WATCH/ACTIVE state deterministically (fixture: BULLISH).
+  {
+    match: (u) => u.includes('/api/market/btc-cycle-context'),
+    body: () => loadFixture('btc-cycle-context.json'),
+  },
+  // Scanner modes — populated fixture so Intel Confluence Floor tile
+  // reads STEALTH's min_confluence_score deterministically (70.0). MUST
+  // match before any more general /api/scanner/ patterns below.
+  {
+    match: (u) => /\/api\/scanner\/modes(\?|$)/.test(u),
+    body: () => loadFixture('scanner-modes.json'),
+  },
   // Trade journal — populated fixture so the new HUD chrome renders with
   // realistic stats, equity curve, breakdowns. MUST match before the
   // generic /api/trades fallback below.

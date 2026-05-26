@@ -15,6 +15,14 @@ export interface MarketRegimeLensProps {
   btcDominance?: number;
   usdtDominance?: number;
   altDominance?: number;
+  // Per-dimension regime scores (0-100). Backend emits all five on
+  // /api/market/regime; undefined in the loading/error fallback path.
+  trendScore?: number;
+  volatilityScore?: number;
+  liquidityScore?: number;
+  riskScore?: number;
+  derivativesScore?: number;
+  compositeScore?: number;
   guidanceLines?: string[];
   mode?: 'scanner' | 'bot';
   previousBtcDominance?: number;
@@ -43,6 +51,12 @@ export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegi
         btcDominance: undefined,
         usdtDominance: undefined,
         altDominance: undefined,
+        trendScore: undefined,
+        volatilityScore: undefined,
+        liquidityScore: undefined,
+        riskScore: undefined,
+        derivativesScore: undefined,
+        compositeScore: undefined,
         previousBtcDominance: undefined,
         previousUsdtDominance: undefined,
         previousAltDominance: undefined,
@@ -69,13 +83,29 @@ export function useMarketRegime(mode: 'scanner' | 'bot' = 'scanner'): MarketRegi
 
     const mapped = labelMap[composite] || labelMap.NEUTRAL;
 
+    // Dominance lives under `dominance` on the regime response, not
+    // `dimensions` (which is a labels object). Reading the wrong path
+    // silently discards real data and falls through to UI placeholders.
+    // See CLAUDE.md §10 standing fix #4 (real dominance data).
+    // Backend emits stablecoin dominance as `stable_d` (USDT-anchored);
+    // the hook field stays named `usdtDominance` for backward compat —
+    // dial labels read "USDT.D" since USDT is ~85% of stable mcap.
     return {
       regimeLabel: mapped.label as MarketRegimeLensProps['regimeLabel'],
       visibility,
       color: mapped.color,
-      btcDominance: data.dimensions?.dominance_btc ?? undefined,
-      usdtDominance: data.dimensions?.dominance_usdt ?? undefined,
-      altDominance: data.dimensions?.dominance_alt ?? undefined,
+      btcDominance: data.dominance?.btc_d ?? undefined,
+      usdtDominance: data.dominance?.stable_d ?? undefined,
+      altDominance: data.dominance?.alt_d ?? undefined,
+      trendScore: typeof data.trend_score === 'number' ? data.trend_score : undefined,
+      volatilityScore:
+        typeof data.volatility_score === 'number' ? data.volatility_score : undefined,
+      liquidityScore:
+        typeof data.liquidity_score === 'number' ? data.liquidity_score : undefined,
+      riskScore: typeof data.risk_score === 'number' ? data.risk_score : undefined,
+      derivativesScore:
+        typeof data.derivatives_score === 'number' ? data.derivatives_score : undefined,
+      compositeScore: typeof data.score === 'number' ? data.score : undefined,
       previousBtcDominance: undefined,
       previousUsdtDominance: undefined,
       previousAltDominance: undefined,

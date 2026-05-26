@@ -1,0 +1,62 @@
+{
+  "status": "success",
+  "data": {
+    "symbol": "BTC/USDT",
+    "dcl": {
+      "cycle_type": "DCL",
+      "bars_since_low": 18,
+      "expected_length": { "min": 35, "max": 55 },
+      "midpoint": 67200,
+      "cycle_low": { "price": 60100, "bar": 0, "timestamp": "2026-04-21T00:00:00+00:00" },
+      "cycle_high": { "price": 68420, "bar": 14, "peak_bar": 14 },
+      "translation": "right_translated",
+      "translation_pct": 78,
+      "is_failed": false,
+      "is_in_window": false,
+      "status": "healthy",
+      "bias": "LONG"
+    },
+    "wcl": {
+      "cycle_type": "WCL",
+      "bars_since_low": 9,
+      "expected_length": { "min": 16, "max": 24 },
+      "midpoint": 65800,
+      "cycle_low": { "price": 58600, "bar": 0, "timestamp": "2026-03-08T00:00:00+00:00" },
+      "cycle_high": { "price": 69100, "bar": 7, "peak_bar": 7 },
+      "translation": "right_translated",
+      "translation_pct": 82,
+      "is_failed": false,
+      "is_in_window": false,
+      "status": "healthy",
+      "bias": "LONG"
+    },
+    "four_year_cycle": {
+      "days_since_low": 612,
+      "cycle_position_pct": 41.9,
+      "phase": "MARKUP",
+      "phase_progress_pct": 38.0,
+      "translation": "RTR",
+      "macro_bias": "BULLISH",
+      "confidence": 74,
+      "last_low": { "date": "2024-09-08T00:00:00+00:00", "price": 52480 },
+      "expected_next_low": "2028-01-12T00:00:00+00:00",
+      "days_until_expected_low": 848,
+      "zones": { "is_danger_zone": false, "is_opportunity_zone": false }
+    },
+    "halving": {
+      "last_halving_date": "2024-04-20T00:00:00+00:00",
+      "next_halving_date": "2028-04-12T00:00:00+00:00",
+      "days_since_halving": 750,
+      "days_until_halving": 1054,
+      "halving_history": []
+    },
+    "overall": {
+      "dcl_bias": "LONG",
+      "wcl_bias": "LONG",
+      "macro_bias": "BULLISH",
+      "alignment": "ALL_BULLISH",
+      "warnings": []
+    },
+    "timestamp": "2026-05-10T13:48:00+00:00"
+  }
+}

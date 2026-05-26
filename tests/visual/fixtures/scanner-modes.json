@@ -1,0 +1,41 @@
+{
+  "modes": [
+    {
+      "name": "overwatch",
+      "description": "Macro surveillance — weekly/daily structural bias",
+      "timeframes": ["1w", "1d", "4h", "1h", "15m", "5m"],
+      "min_confluence_score": 72.0,
+      "profile": "macro_surveillance",
+      "primary_planning_timeframe": "4h",
+      "critical_timeframes": ["1w", "1d"]
+    },
+    {
+      "name": "strike",
+      "description": "Intraday aggressive — 15m execution",
+      "timeframes": ["4h", "1h", "15m", "5m"],
+      "min_confluence_score": 68.0,
+      "profile": "intraday_aggressive",
+      "primary_planning_timeframe": "15m",
+      "critical_timeframes": ["15m"]
+    },
+    {
+      "name": "surgical",
+      "description": "Precision scalper — 15m execution, tight stops",
+      "timeframes": ["4h", "1h", "15m", "5m"],
+      "min_confluence_score": 70.0,
+      "profile": "precision",
+      "primary_planning_timeframe": "15m",
+      "critical_timeframes": ["15m"]
+    },
+    {
+      "name": "stealth",
+      "description": "Stealth balanced — 1h/4h structural confluence",
+      "timeframes": ["1d", "4h", "1h", "15m", "5m"],
+      "min_confluence_score": 70.0,
+      "profile": "stealth_balanced",
+      "primary_planning_timeframe": "1h",
+      "critical_timeframes": ["4h", "1h"]
+    }
+  ],
+  "total": 4
+}
