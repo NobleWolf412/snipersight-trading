@@ -1,5 +1,5 @@
 {
-  "count": 97,
+  "count": 98,
   "routes": [
     {
       "methods": [
@@ -415,6 +415,14 @@
       ],
       "name": "get_symbol_cycles",
       "path": "/api/market/symbol-cycles",
+      "response_model": null
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_tradfi_quotes",
+      "path": "/api/market/tradfi",
       "response_model": null
     },
     {

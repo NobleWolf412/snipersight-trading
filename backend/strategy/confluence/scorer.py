@@ -3217,7 +3217,17 @@ def calculate_confluence_score(
         synergy_bonus=synergy_bonus,
         conflict_penalty=conflict_penalty,
         regime=_detect_regime(smc_snapshot, indicators),
-        htf_aligned=any(f.name in ("HTF Alignment", "HTF Structure Bias") and f.score > 55 for f in factors),
+        # htf_aligned looks at the SINGLE emitted HTF ConfluenceFactor —
+        # "HTF Composite" — which aggregates structure bias + proximity +
+        # momentum gate (see CRITICAL_FACTORS dict at L3237-3247). The
+        # previous check named "HTF Alignment" / "HTF Structure Bias",
+        # neither of which is emitted anywhere in scorer.py, so the field
+        # was permanently False. Calibrated on 2026-05-26 taken_trade_
+        # forensics: 17/17 Tier 2 trades showed htf_aligned=False because
+        # of this name mismatch, masking whether the setup was actually
+        # aligned or counter-HTF. Threshold 60 keeps the field "True" only
+        # when HTF Composite is near or above its critical threshold (65).
+        htf_aligned=any(f.name == "HTF Composite" and f.score > 60 for f in factors),
         btc_impulse_gate=not any(f.name == "BTC Impulse Gate" and f.score < 50 for f in factors),
         weekly_stoch_rsi_gate=True,
         weekly_stoch_rsi_bonus=next((f.score-50 for f in factors if f.name == "Weekly StochRSI Bonus"), 0.0),
