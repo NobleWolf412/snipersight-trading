@@ -1678,11 +1678,69 @@ class Orchestrator:
                         context.smc_snapshot.structural_breaks,
                         _symbol_regime,
                     )
+
+                    # ── QUALITY-AWARE DIRECTION OVERRIDE ─────────────────────────
+                    # The count-based _derive_pre_direction tallies OB/BOS counts
+                    # but cannot see grade-A bear OBs outvoting grade-C bull OBs.
+                    # When per-direction aggregate quality (OB+FVG+Sweep+MS)
+                    # decisively disagrees with count, flip to the quality side.
+                    # Calibrated on INJ 2026-05-27 (8B/2B counts → LONG; quality
+                    # 230S vs 146L → SHORT). Gated per-mode via
+                    # ScannerMode.enable_quality_override (STEALTH = True;
+                    # other modes default False until calibrated).
+                    # See decisions/2026-05-27__quality_aware_direction_selection.md
+                    _override_meta = None
+                    if (
+                        self.scanner_mode is not None
+                        and getattr(self.scanner_mode, "enable_quality_override", False)
+                    ):
+                        _pre_dir, _pre_dir_tie_break, _override_meta = (
+                            self._apply_quality_override(
+                                context.smc_snapshot,
+                                _pre_dir,
+                                _pre_dir_tie_break,
+                            )
+                        )
+                        if _override_meta is not None:
+                            logger.info(
+                                "%s: QUALITY OVERRIDE %s→%s (L=%.1f S=%.1f Δ=%+.1f)",
+                                symbol,
+                                _override_meta["from"], _override_meta["to"],
+                                _override_meta["quality_long"],
+                                _override_meta["quality_short"],
+                                _override_meta["delta"],
+                            )
+                            context.metadata["quality_override"] = _override_meta
+
                     context.metadata["pre_dir_tie_break"] = _pre_dir_tie_break
+
+                    # Mass-conservation runtime assertion (§16 rubric 3): exactly
+                    # ONE of three resolution paths must own the final tie_break.
+                    _paths_taken = sum(
+                        [
+                            _pre_dir_tie_break in ("bull_majority", "bear_majority"),
+                            _pre_dir_tie_break in (
+                                "regime_bullish",
+                                "regime_bearish",
+                                "neutral_default_long",
+                            ),
+                            _pre_dir_tie_break == "quality_override",
+                        ]
+                    )
+                    assert _paths_taken == 1, (
+                        f"direction-resolution violated mass-conservation: "
+                        f"tie_break={_pre_dir_tie_break!r} matched {_paths_taken} "
+                        f"categories (must be exactly 1)"
+                    )
+
                     # Surface tie-break activations so operators can quantify the
-                    # residual neutral-default-LONG frequency. Bull/bear strict
-                    # majority cases are silent (no tie to break).
-                    if _pre_dir_tie_break in ("regime_bullish", "regime_bearish", "neutral_default_long"):
+                    # residual neutral-default-LONG frequency + new override
+                    # activations. Bull/bear strict majority cases are silent.
+                    if _pre_dir_tie_break in (
+                        "regime_bullish",
+                        "regime_bearish",
+                        "neutral_default_long",
+                    ):
                         logger.info(
                             "%s: PRE_DIR tie-break — %s (chose %s)",
                             symbol, _pre_dir_tie_break, _pre_dir,
@@ -1703,8 +1761,18 @@ class Orchestrator:
                     # for the chosen direction.  Those same structures are ALIGNED for
                     # the opposite direction — e.g. 3 bearish OBs opposing LONG are a
                     # strong SHORT signal.  Retry with the flip before giving up.
+                    #
+                    # GUARD (2026-05-27, audit Open Item #1): when the direction came
+                    # via quality_override, do NOT flip-retry. The quality verdict
+                    # already considered BOTH directions and chose the current one;
+                    # flipping back to the count-pick that quality REJECTED is circular
+                    # reasoning. Accept the rejection. Audit found the override would
+                    # be silently undone in this exact case without this guard.
                     _flip_succeeded = False
-                    if _gate.gate_name == "conflict_density":
+                    if (
+                        _gate.gate_name == "conflict_density"
+                        and context.metadata.get("pre_dir_tie_break") != "quality_override"
+                    ):
                         _orig_dir = _pre_dir
                         _flip_dir = "SHORT" if _orig_dir == "LONG" else "LONG"
                         _conflict_count = (_gate.metadata or {}).get("conflict_count", 0)
@@ -1760,10 +1828,22 @@ class Orchestrator:
                                     _flip_dir, _flip_gate.gate_name, _flip_gate.reason,
                                 )
                     else:
-                        logger.info(
-                            "%s: ❌ GATE REJECTED [%s] — %s",
-                            symbol, _gate.gate_name, _gate.reason,
-                        )
+                        # Surface the quality_override-skip-flip-retry case so the
+                        # operator can confirm the guard fired when expected.
+                        if (
+                            _gate.gate_name == "conflict_density"
+                            and context.metadata.get("pre_dir_tie_break") == "quality_override"
+                        ):
+                            logger.info(
+                                "%s: GATE REJECTED [conflict_density] — quality_override "
+                                "stands, flip-retry SKIPPED (audit Open Item #1 guard): %s",
+                                symbol, _gate.reason,
+                            )
+                        else:
+                            logger.info(
+                                "%s: ❌ GATE REJECTED [%s] — %s",
+                                symbol, _gate.gate_name, _gate.reason,
+                            )
 
                     if not _flip_succeeded:
                         self.diagnostics["confluence_rejections"].append({
@@ -4508,6 +4588,114 @@ class Orchestrator:
 
         # Both structure AND regime are neutral. Explicit observable default.
         return "LONG", "neutral_default_long"
+
+    @staticmethod
+    def _aggregate_direction_quality(smc_snapshot, direction: str) -> float:
+        """Per-direction quality score = OB + FVG + Sweep + MS factor scores.
+
+        Mirrors the per-direction call pattern from
+        calculate_confluence_score (scorer.py:2480-2540) so the direction
+        override sees the SAME factor scores the confluence scorer would
+        compute later — including the HTF-trend sweep discount that lives
+        at scorer.py:2520-2536 (replicated inline below).
+
+        Skipping the HTF discount would let raw sweep_score(SHORT) inflate
+        against a bullish HTF, causing spurious SHORT overrides. Calibrated
+        on Plan agent risk register entry #1 (2026-05-27).
+
+        Pure function: no logger emits, no state mutation. Safe to call
+        twice per scan (LONG + SHORT) — the four helpers it delegates to
+        are verified pure (see scorer.py:3529-3730).
+        """
+        from backend.strategy.confluence.scorer import (
+            _score_order_blocks_incremental,
+            _score_fvgs_incremental,
+            _score_liquidity_sweeps_incremental,
+            _score_market_structure_incremental,
+            _normalize_direction,
+        )
+        ob = _score_order_blocks_incremental(smc_snapshot.order_blocks, direction)["score"]
+        fvg = _score_fvgs_incremental(smc_snapshot.fvgs, direction)["score"]
+        sweep = _score_liquidity_sweeps_incremental(smc_snapshot.liquidity_sweeps, direction)["score"]
+        ms = _score_market_structure_incremental(smc_snapshot, direction)["score"]
+
+        # Replicate the HTF-trend sweep discount from scorer.py:2520-2536.
+        # Without this, raw sweep_score against HTF trend would inflate the
+        # quality of the wrong-side direction.
+        if sweep > 30.0 and getattr(smc_snapshot, "swing_structure", None):
+            is_bullish_dir = _normalize_direction(direction) == "bullish"
+            htf_trend = "neutral"
+            for htf_tf in ("1d", "1D", "4h", "4H"):
+                ss = smc_snapshot.swing_structure.get(htf_tf)
+                if ss:
+                    htf_trend = (
+                        ss.get("trend", "neutral")
+                        if isinstance(ss, dict)
+                        else getattr(ss, "trend", "neutral")
+                    )
+                    if htf_trend != "neutral":
+                        break
+            if (is_bullish_dir and htf_trend == "bearish") or (
+                not is_bullish_dir and htf_trend == "bullish"
+            ):
+                sweep = min(sweep, 30.0)
+
+        return float(ob + fvg + sweep + ms)
+
+    @staticmethod
+    def _apply_quality_override(
+        smc_snapshot,
+        pre_dir: str,
+        pre_dir_tie_break: str,
+        threshold: float = 20.0,
+    ):
+        """Quality-aware direction override (DIRECTION-SHORT-CIRCUIT fix).
+
+        The count-based _derive_pre_direction sees raw OB/BOS counts. It
+        cannot distinguish 8 grade-C bullish OBs from 2 grade-A bearish
+        OBs. The override compares per-direction aggregate quality
+        (OB+FVG+Sweep+MS) and flips when quality decisively disagrees
+        with count.
+
+        Threshold = 20.0 (operator-set, 2026-05-27): single-factor noise
+        floor is ~10pt; 20pt delta means at least two factors agree on
+        the opposite direction. Strict greater-than — exact-20 defers
+        to count (boundary protected by test #4).
+
+        Returns (final_direction, final_tie_break, override_meta_or_None).
+
+        Symmetric over LONG/SHORT — the threshold and the
+        opposite-direction guard apply identically in both directions.
+        Per CLAUDE.md §10 + §16 rubric 12.
+
+        Mass-conservation (§16 rubric 3): exactly ONE of {strict-majority,
+        tie-break, quality-override} owns the returned tie_break. The
+        caller's runtime assertion enforces this.
+
+        Calibrated on session 2f35590b INJ at run_id 1fde069e: 10 OBs
+        (8B/2B raw count → LONG), per-direction scores 230 SHORT vs 146
+        LONG (delta 84 > 20 threshold) → flips to SHORT, "quality_override".
+        """
+        if pre_dir not in ("LONG", "SHORT"):
+            return pre_dir, pre_dir_tie_break, None
+
+        quality_long = Orchestrator._aggregate_direction_quality(smc_snapshot, "LONG")
+        quality_short = Orchestrator._aggregate_direction_quality(smc_snapshot, "SHORT")
+        quality_delta = quality_short - quality_long
+        quality_dir = "SHORT" if quality_delta > 0 else "LONG"
+
+        if abs(quality_delta) > threshold and quality_dir != pre_dir:
+            override_meta = {
+                "from": pre_dir,
+                "to": quality_dir,
+                "quality_long": round(quality_long, 2),
+                "quality_short": round(quality_short, 2),
+                "delta": round(quality_delta, 2),
+                "threshold": threshold,
+            }
+            return quality_dir, "quality_override", override_meta
+
+        return pre_dir, pre_dir_tie_break, None
 
     def _emit_rejection_telemetry(self, run_id: str, rejection_info: Optional[Dict[str, Any]]) -> None:
         """Idempotent single-emit guard for signal_rejected telemetry.

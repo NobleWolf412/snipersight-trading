@@ -186,6 +186,14 @@ class ScannerMode:
     # Swing is preferred when quality is comparable; a clearly superior scalp can still win.
     cascade_trade_types: Optional[Tuple[str, ...]] = None
 
+    # Quality-aware direction override (calibrated on 2026-05-27 DIRECTION-SHORT-CIRCUIT):
+    # When the count-based _derive_pre_direction picks one direction but the per-direction
+    # aggregate quality scores (OB+FVG+Sweep+MS) favor the opposite direction by more than
+    # the threshold, override to the quality-preferred direction. Default True for modes
+    # with empirical backing (STEALTH); False elsewhere until calibration data exists.
+    # See backend/diagnostics/decisions/2026-05-27__quality_aware_direction_selection.md
+    enable_quality_override: bool = False
+
     @property
     def bias_timeframes(self) -> Tuple[str, ...]:
         """Alias for timeframes (bias + indicator TFs). For clarity in code."""
@@ -362,6 +370,9 @@ MODES: Dict[str, ScannerMode] = {
         # The orchestrator attempts plan generation at each scale and picks the best-scoring plan
         # (confluence + type-preference bonus so swing is preferred when quality is comparable).
         cascade_trade_types=("swing", "intraday", "scalp"),
+        # Quality-aware direction override enabled — calibrated on session 2f35590b
+        # (DIRECTION-SHORT-CIRCUIT diagnosed on INJ/SOL; 3.89:1 universe LONG skew).
+        enable_quality_override=True,
     ),
 }
 
