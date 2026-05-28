@@ -176,18 +176,47 @@ def compute_bollinger_bands(
     if PANDAS_TA_AVAILABLE:
         bb_df = ta.bbands(df["close"], length=period, std=std_dev)
         if bb_df is not None and not bb_df.empty:
-            # pandas-ta column naming: BBL_20_2.0, BBM_20_2.0, BBU_20_2.0
-            upper_col = f"BBU_{period}_{std_dev}"
-            middle_col = f"BBM_{period}_{std_dev}"
-            lower_col = f"BBL_{period}_{std_dev}"
+            # pandas-ta column naming has drifted across versions:
+            #   - older: BBL_20_2.0 / BBM_20_2.0 / BBU_20_2.0
+            #   - newer: BBL_20_2.0_2.0 / BBM_20_2.0_2.0 / BBU_20_2.0_2.0
+            # (std arg duplicated as suffix). Match by prefix so future
+            # naming bumps don't silently re-trigger the manual fallback,
+            # which uses ddof=1 (sample std) vs pandas-ta's ddof=0
+            # (population std) and produces ~2.6% wider bands at period=20.
+            # Calibrated on 2026-05-27 operator-flagged log spam.
+            def _find_col(prefix: str):
+                # Prefer exact match; otherwise first column starting with prefix
+                exact_short = f"{prefix}_{period}_{std_dev}"
+                if exact_short in bb_df.columns:
+                    return exact_short
+                candidates = [c for c in bb_df.columns if c.startswith(f"{prefix}_{period}_")]
+                return candidates[0] if candidates else None
 
-            if all(col in bb_df.columns for col in [upper_col, middle_col, lower_col]):
+            upper_col = _find_col("BBU")
+            middle_col = _find_col("BBM")
+            lower_col = _find_col("BBL")
+
+            if upper_col and middle_col and lower_col:
                 return bb_df[upper_col], bb_df[middle_col], bb_df[lower_col]
-        logger.warning("pandas-ta Bollinger Bands failed, falling back to manual implementation")
 
-    # Fallback: Manual implementation
+            logger.warning(
+                "pandas-ta Bollinger Bands columns not found (got %s, expected "
+                "BBU/BBM/BBL prefixes for period=%d). Falling back to manual.",
+                list(bb_df.columns), period,
+            )
+        else:
+            logger.warning(
+                "pandas-ta Bollinger Bands returned empty/None (period=%d, std_dev=%s); "
+                "falling back to manual implementation",
+                period, std_dev,
+            )
+
+    # Fallback: Manual implementation.
+    # NOTE: pandas .std() uses ddof=1 (sample std); pandas-ta uses ddof=0
+    # (population std). Use ddof=0 here so the fallback matches pandas-ta
+    # output rather than producing systematically wider bands.
     middle_band = df["close"].rolling(window=period).mean()
-    std = df["close"].rolling(window=period).std()
+    std = df["close"].rolling(window=period).std(ddof=0)
     upper_band = middle_band + (std * std_dev)
     lower_band = middle_band - (std * std_dev)
 
