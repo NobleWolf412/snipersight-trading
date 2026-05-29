@@ -299,18 +299,16 @@ def test_reported_rr_matches_realized_rr_short():
 # ──────────────────────────────────────────────────────────────────────
 
 
-def test_compressed_family_maps_to_calm():
-    """All compressed-family labels (compressed / up_compressed /
-    down_compressed) must resolve to the "calm" ladder multiplier, not fall
-    through to 1.0×. Pre-fix only the bare string "compressed" matched, so the
-    live up_compressed / down_compressed labels never received the intended
-    ladder compression — confirmed contributor to the 2026-05-24 reachability
-    collapse (targets_hit 0.34→0.13)."""
+def test_compressed_family_substring_guard_present():
+    """Defensive guard: _effective_regime substring-matches "compressed" so a raw
+    composite label (up_compressed/down_compressed) would still map to "calm" if it
+    ever reached this function. NOTE: the current sole caller passes a pre-mapped
+    volatility label (calm/normal/elevated/explosive) via get_atr_regime, so this
+    is a NO-OP on the live path — it is NOT the reachability fix (that is the
+    Tier 1.1 near_entry geometry). This test only pins the defensive form."""
     body = _calculate_targets_body()
     assert '_effective_regime = "calm" if (regime_label and "compressed" in regime_label)' in body, (
-        "Expected compressed-family substring match for _effective_regime. If "
-        "this fails, up_compressed/down_compressed fall through to 1.0× and the "
-        "intended ladder compression silently does not fire."
+        "Expected compressed-family substring guard for _effective_regime."
     )
 
 

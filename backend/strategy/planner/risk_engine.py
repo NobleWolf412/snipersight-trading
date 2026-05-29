@@ -2393,18 +2393,21 @@ def _calculate_targets(
     base_rrs = planner_cfg.target_rr_ladder
 
     # 2. Adjust for Regime
-    # calm/compressed (0.9× per atr_regime_multipliers) → compress ladder so TP1
-    #   is reachable before stagnation fires
+    # calm (0.9× per atr_regime_multipliers) → compress ladder so TP1 is reachable
     # normal (1.0×) → unchanged
     # elevated (1.2×) / explosive (1.5×) → stretch ladder; price has room to travel
-    # All compressed-family labels (compressed / up_compressed / down_compressed)
-    # map to "calm" for multiplier purposes. Pre-fix only the bare "compressed"
-    # string matched, so the LIVE labels up_compressed / down_compressed fell
-    # through to 1.0× — the intended ladder compression never fired in the very
-    # regimes that produce it. Confirmed contributor to the 2026-05-24 reachability
-    # collapse (targets_hit 0.34→0.13); see decisions/2026-05-29__longbook-
-    # degradation-rootcause.md. Direction-agnostic: resolved before the is_bullish
-    # split → no bull/bear asymmetry (§10).
+    # NOTE: the sole caller (planner_service.py:403) passes regime_label =
+    # get_atr_regime(...), which ALREADY maps the volatility regime to PlannerConfig
+    # keys (compressed→calm, volatile/chaotic→explosive — see regime_engine.py).
+    # So regime_label here is one of {calm,normal,elevated,explosive}, NOT the
+    # composite scan label (up_compressed/down_compressed). The substring check is
+    # a defensive guard ONLY for the hypothetical case where a raw composite label
+    # reaches this function — it is a NO-OP for the current data path (none of the
+    # mapped keys contain "compressed"). Do not mistake this for the reachability
+    # fix: the 2026-05-24 collapse (targets_hit 0.34→0.13) is driven by the Tier 1.1
+    # near_entry anchor widening risk_distance, NOT by this mapping. See
+    # decisions/2026-05-29__longbook-degradation-rootcause.md.
+    # Direction-agnostic: resolved before the is_bullish split → no §10 asymmetry.
     _effective_regime = "calm" if (regime_label and "compressed" in regime_label) else regime_label
     regime_mult = planner_cfg.atr_regime_multipliers.get(_effective_regime, 1.0)
 

@@ -70,3 +70,31 @@ distance WITHOUT drifting beyond the move the setup typically produces. risk_eng
 → §17 Plan agent + symmetry-guard (LONG/SHORT geometry must stay mirrored) + §16 audit.
 Plan drafted same day (see session). Diagnostic to add in the fix diff: per-plan realized-R
 vs planned-R + TP1-reachability assertion, so a future reachability regression surfaces loud.
+
+## CORRECTION (2026-05-29, post-commit f159766) — regime-key "fix" was a NO-OP
+
+A first attempt (commit f159766) hypothesised a SECOND cause: that `_calculate_targets`
+received the composite scan label `up_compressed`/`down_compressed` and that the
+`_effective_regime == "compressed"` check let it fall through to 1.0× (no ladder
+compression). **This was wrong.** The sole caller (`planner_service.py:403`) passes
+`regime_label = get_atr_regime(...)`, and `get_atr_regime` (`regime_engine.py:19`) returns
+the VOLATILITY regime ALREADY MAPPED to PlannerConfig keys (`compressed→calm`,
+`volatile/chaotic→explosive`). So `regime_label` here is always one of
+{calm,normal,elevated,explosive} — never a composite label. The original `== "compressed"`
+was harmless dead code; the value was already `"calm"`, so compression fired correctly.
+The substring change shipped in f159766 is therefore a **functional no-op** (none of the
+mapped keys contain "compressed").
+
+What survives from f159766: the **TP1-reachability diagnostic** (valid, kept) and the
+substring line retained as an honest defensive guard (comment corrected in a follow-up).
+The regime-key mechanism is **struck** as a cause. The single confirmed root cause remains
+the Tier 1.1 `near_entry` anchor widening risk_distance. The real fix is still the
+reachability clamp (Plan Option B), now with the corrected admission floor `min_rr=1.0` /
+`target_min_rr_after_clip=1.2` (the Plan agent had assumed 1.5).
+
+Calibration lesson (→ separate §19 entry `2026-05-29__regime-label-premise-miss.md`):
+verify the DATA PATH (what value a parameter actually carries at the call site) before
+asserting a mechanism. symmetry-guard + backend-integrity both PASSED the change because
+they audited symmetry and blast-radius — not the truth of the premise. A premise about
+"which label flows here" is a trace-the-caller check, and it must precede the fix, not
+follow it.
