@@ -37,6 +37,7 @@ export {
   type DetailSelection,
   type PendingOrderShape,
 } from './PositionDetailModal';
+export { TradeHistoryDetailModal } from './TradeHistoryDetailModal';
 export {
   applyTweaks,
   SHARED_TWEAK_DEFAULTS,
@@ -51,3 +52,21 @@ export {
   fmtDur,
   fmtNum,
 } from './formatters';
+
+// HUD-tier lesson heroes (Phase 1 Step 3) — primary consumers are the Lessons
+// chapters, but each has a non-lesson consumer planned (Bot Setup risk dialog
+// for KellyCurve, Scanner weight tuner for WeightSliderPanel, /intel persistent
+// readout for RegimeQuadrant). Promoted to HUD tier on day 1 per BUILD_PLAN.
+export { KellyCurve, type KellyCurveProps } from './KellyCurve';
+export {
+  WeightSliderPanel,
+  type WeightSliderPanelProps,
+  type WeightFactor,
+  type WeightComparisonProfile,
+} from './WeightSliderPanel';
+export {
+  RegimeQuadrant,
+  type RegimeQuadrantProps,
+  type RegimeMetric,
+  type RegimePoint,
+} from './RegimeQuadrant';

@@ -39,3 +39,20 @@ The waiver does NOT establish a precedent for ignoring 🟡s generally. It estab
 - Rubric source: `.claude/AUDIT_RUBRIC.md`
 - Build plan: `backend/diagnostics/research/lessons/BUILD_PLAN.md`
 - Related: Phase 1 Step 1 (Master Fixture) was NOT audited — data fixture + diagnostic script; per AUDIT_RUBRIC trigger conditions, technically should have been (any sub-step done = trigger). Consider this a missed gate; future fixture/diagnostic-only sub-steps should still spawn a vacuous-clean audit per discipline.
+
+## Addendum 2026-05-28 — Step 3 component inventory carried under #1
+
+Step 3 (HUD-tier hero widgets) added three more components without isolated negative tests: `<KellyCurve />`, `<WeightSliderPanel />`, `<RegimeQuadrant />`. The deferred-test debt from open item #1 now covers 7 components:
+
+- `<ChapterShell />`, `<FlipCard />`, `<SourceList />`, `<ChartFixture />` (Step 2)
+- `<KellyCurve />`, `<WeightSliderPanel />`, `<RegimeQuadrant />` (Step 3)
+
+When chapter pages wire these in (Step 7+), the audit on that step must verify positive + negative render coverage across all 7. Specifically:
+
+- `<ChartFixture lens="killzone" />` with `ANN.kill_zone=null` renders the stub branch
+- `<FlipCard />` with no `localStorageKey` does not write to storage
+- `<KellyCurve />` with `winRate=0.5, payoffRatio=1.0` (zero edge) draws f* at 0
+- `<WeightSliderPanel />` with single factor renders correctly; with duplicate `factor.name` logs the console.warn (fixed in Step 3 per audit-round-2 open item #1)
+- `<RegimeQuadrant />` with `trendStrength=0, volatility=0` puts the dot in the Compression quadrant
+
+Until then, this carry-forward holds. No new decisions-log entry needed for the addition — Step 3's audit cleared the deferral under this same waiver pattern.
