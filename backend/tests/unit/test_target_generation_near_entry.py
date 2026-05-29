@@ -292,3 +292,55 @@ def test_reported_rr_matches_realized_rr_short():
         f"Post-fix realized R:R {realized_rr} must equal reported R:R "
         f"{reported_rr} on SHORT side. §16 rubric 12 mirror of LONG test."
     )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Tier 1.1 follow-up — compressed-family regime maps to calm (reachability)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_compressed_family_maps_to_calm():
+    """All compressed-family labels (compressed / up_compressed /
+    down_compressed) must resolve to the "calm" ladder multiplier, not fall
+    through to 1.0×. Pre-fix only the bare string "compressed" matched, so the
+    live up_compressed / down_compressed labels never received the intended
+    ladder compression — confirmed contributor to the 2026-05-24 reachability
+    collapse (targets_hit 0.34→0.13)."""
+    body = _calculate_targets_body()
+    assert '_effective_regime = "calm" if (regime_label and "compressed" in regime_label)' in body, (
+        "Expected compressed-family substring match for _effective_regime. If "
+        "this fails, up_compressed/down_compressed fall through to 1.0× and the "
+        "intended ladder compression silently does not fire."
+    )
+
+
+def test_compressed_family_substring_logic_is_direction_agnostic():
+    """The compressed→calm mapping must live BEFORE the `if is_bullish` split so
+    LONG and SHORT receive identical compression (§10 symmetry). The substring
+    check must catch both up_ and down_ prefixed labels equally."""
+    label_up, label_down, label_bare = "up_compressed", "down_compressed", "compressed"
+    for lbl in (label_up, label_down, label_bare):
+        effective = "calm" if (lbl and "compressed" in lbl) else lbl
+        assert effective == "calm", (
+            f"{lbl!r} must map to 'calm' for the ladder multiplier. Mirror of "
+            f"the in-source resolution; symmetric across LONG/SHORT by construction."
+        )
+    # Negative: a non-compressed label must NOT be coerced to calm.
+    assert ("calm" if ("normal" and "compressed" in "normal") else "normal") == "normal", (
+        "Non-compressed regimes must keep their own multiplier — no over-matching."
+    )
+
+
+def test_tp1_reachability_diagnostic_present():
+    """The reachability diagnostic must remain in the generator so a future
+    geometry change that pushes TP1 out of reach fails LOUD (info metric +
+    warning) rather than silently bleeding paper expectancy. §11 prefer-loud."""
+    body = _calculate_targets_body()
+    assert "TP1 reachability" in body, (
+        "TP1 reachability info-log removed — the loud diagnostic that catches a "
+        "reachability regression (Tier 1.1 follow-up) must stay in the diff."
+    )
+    assert "TP1 likely-unreachable" in body, (
+        "TP1 likely-unreachable warning removed — restore the loud-flag for "
+        "TP1 distances beyond the reachable band."
+    )

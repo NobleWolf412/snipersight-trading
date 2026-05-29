@@ -2393,11 +2393,19 @@ def _calculate_targets(
     base_rrs = planner_cfg.target_rr_ladder
 
     # 2. Adjust for Regime
-    # calm/compressed (0.7×) → compress ladder so TP1 is reachable before stagnation fires
+    # calm/compressed (0.9× per atr_regime_multipliers) → compress ladder so TP1
+    #   is reachable before stagnation fires
     # normal (1.0×) → unchanged
     # elevated (1.2×) / explosive (1.5×) → stretch ladder; price has room to travel
-    # "compressed" is semantically equivalent to "calm" for multiplier purposes
-    _effective_regime = "calm" if regime_label == "compressed" else regime_label
+    # All compressed-family labels (compressed / up_compressed / down_compressed)
+    # map to "calm" for multiplier purposes. Pre-fix only the bare "compressed"
+    # string matched, so the LIVE labels up_compressed / down_compressed fell
+    # through to 1.0× — the intended ladder compression never fired in the very
+    # regimes that produce it. Confirmed contributor to the 2026-05-24 reachability
+    # collapse (targets_hit 0.34→0.13); see decisions/2026-05-29__longbook-
+    # degradation-rootcause.md. Direction-agnostic: resolved before the is_bullish
+    # split → no bull/bear asymmetry (§10).
+    _effective_regime = "calm" if (regime_label and "compressed" in regime_label) else regime_label
     regime_mult = planner_cfg.atr_regime_multipliers.get(_effective_regime, 1.0)
 
     adjusted_rrs = [rr * rr_scale * regime_mult for rr in base_rrs]
@@ -2459,7 +2467,36 @@ def _calculate_targets(
     targets = _guard_target_direction(targets, entry_zone.near_entry, is_bullish)
 
     # Regime-aware R:R cap — shared with structural path via helper
-    return _apply_regime_rr_cap(targets, regime_label)
+    capped_targets = _apply_regime_rr_cap(targets, regime_label)
+
+    # --- TP1 reachability diagnostic (Tier 1.1 follow-up) ---
+    # The near_entry anchor (commit 1e0cbf8) widened risk_distance and pushed TP1
+    # beyond the move compressed regimes produce (2026-05-24: realized targets_hit
+    # 0.34→0.13, 61% favorable-then-lost). Surface TP1's reachability as an
+    # inspectable metric so a future geometry change that re-extends it out of
+    # reach fails LOUD rather than silently bleeding paper expectancy.
+    # Direction-agnostic: uses abs() distance from entry_ref, symmetric for L/S.
+    if capped_targets and atr and atr > 0:
+        tp1_dist_atr = abs(capped_targets[0].level - entry_ref) / atr
+        risk_dist_atr = risk_distance / atr
+        # Realized==planned invariant: TP1 R measured from the worst-case fill.
+        tp1_realized_rr = abs(capped_targets[0].level - entry_ref) / max(risk_distance, 1e-9)
+        logger.info(
+            f"📏 TP1 reachability [{'LONG' if is_bullish else 'SHORT'} {regime_label} "
+            f"→{_effective_regime} x{regime_mult:.2f}]: tp1_dist={tp1_dist_atr:.2f}ATR "
+            f"risk={risk_dist_atr:.2f}ATR realized_rr={tp1_realized_rr:.2f}"
+        )
+        # Loud flag: good-window TP1 was reachable around ~1.2 ATR (0.34 hit rate).
+        # Beyond ~2.0 ATR the live data shows trades stall before TP1 (stagnation).
+        # This is a DIAGNOSTIC warning, not a gate — it does not alter the plan.
+        if tp1_dist_atr > 2.0:
+            logger.warning(
+                f"⚠️ TP1 likely-unreachable: {tp1_dist_atr:.2f}ATR from fill "
+                f"({'LONG' if is_bullish else 'SHORT'} {regime_label}) — stagnation risk. "
+                f"See decisions/2026-05-29__longbook-degradation-rootcause.md"
+            )
+
+    return capped_targets
 
 
 def _adjust_targets_for_leverage(
