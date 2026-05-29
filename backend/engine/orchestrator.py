@@ -1858,12 +1858,35 @@ class Orchestrator:
                         # reason string.  Only safe scalar/list values are forwarded
                         # (no complex objects) to keep the dict JSON-serialisable.
                         # Include flip attempt result so UI/logs show WHY both dirs failed
+                        #
+                        # BUG FIX 2026-05-29 (calibrated on session 3512d5eb: 2,387
+                        # of 10,062 signal_rejected events surfaced as "errors" gate
+                        # with UnboundLocalError on _flip_dir): the prior code
+                        # unconditionally read _flip_dir / _flip_gate when
+                        # _gate.gate_name == "conflict_density", but the 2026-05-27
+                        # quality_override guard SKIPS the flip-retry block (which
+                        # is where those locals get defined). When the override
+                        # fires AND conflict_density rejects, the locals are unbound
+                        # here. Now only build flip_detail when the flip-retry
+                        # actually executed (locals(\"_flip_gate\") guards on that).
                         _flip_detail = ""
-                        if _gate.gate_name == "conflict_density":
+                        if (
+                            _gate.gate_name == "conflict_density"
+                            and "_flip_gate" in locals()
+                        ):
                             _flip_detail = (
                                 f" | flip {_flip_dir} blocked by [{_flip_gate.gate_name}]: "
                                 f"{_flip_gate.reason}"
                             )
+                        elif (
+                            _gate.gate_name == "conflict_density"
+                            and context.metadata.get("pre_dir_tie_break") == "quality_override"
+                        ):
+                            # Audit Open Item #1 from the 2026-05-27 ad60132 commit:
+                            # when quality_override fired, the flip-retry is skipped
+                            # by design — record that explicitly so the UI/autopsy
+                            # sees why no flip was attempted.
+                            _flip_detail = " | flip-retry SKIPPED (quality_override stands)"
                         # Tier 2 — pre_dir_tie_break + symbol_regime_trend surfaced
                         # on rejection info so the post-run autopsy can answer
                         # "why was this direction picked (and then rejected)" from
