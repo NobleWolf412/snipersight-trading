@@ -1500,6 +1500,33 @@ def _calculate_stop_loss(
         stop_loss = StopLoss(level=stop_level, distance_atr=distance_atr, rationale=rationale)
         stop_loss.structure_tf_used = structure_tf_used  # type: ignore
 
+    # --- Wide-stop reachability diagnostic (Tier 1.1 follow-up) ---
+    # The 2026-05-24 degradation traces to stops being WIDE relative to the TP1 ladder
+    # (live trace: 40% of stops >=1.5 ATR; structural invalidation levels up to 2.83 ATR,
+    # NOT fallbacks/caps). At a 1.5R first target, a stop of D ATR puts TP1 at ~1.5*D ATR;
+    # beyond the market's typical favorable excursion (~0.6 ATR) it stagnates / round-trips.
+    # WARN (not per-stop spam — only when the geometry threatens reachability) with the
+    # branch + distance so the structural-vs-cap-vs-fallback mix is observable in prod
+    # (info-level branch logs are dropped by the WARNING+ sink). Pure observation; does
+    # not alter the stop. Direction-agnostic (is_bullish is a label only). See
+    # decisions/2026-05-30__stop-distance-structure-collapse.md.
+    try:
+        if distance_atr and distance_atr >= 1.33:  # TP1 @1.5R would sit >= ~2.0 ATR
+            _branch = (
+                "no-structure-fallback" if "no swing/structure found" in (rationale or "")
+                else "max-stop-cap" if "capped:" in (rationale or "")
+                else "structural-wide" if used_structure
+                else "other"
+            )
+            logger.warning(
+                "📐 WIDE STOP [%s %s]: %s | dist=%.2f ATR (TP1@1.5R ~= %.2f ATR) | %s",
+                "LONG" if is_bullish else "SHORT",
+                getattr(config, "profile", "?"),
+                _branch, distance_atr, distance_atr * 1.5, (rationale or "")[:70],
+            )
+    except Exception:
+        pass  # observability must never break the stop path
+
     return stop_loss, used_structure
 
 

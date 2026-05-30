@@ -61,19 +61,41 @@ RULED OUT by the candle repro (real INJ/OP/ARB, 15m/1h/4h, 2026-05-30):
 - #6 `smc_service.py:692-693` silent liquidity-pool except — affects the `liquidity_sweep`
   CONFLUENCE factor, NOT the swing/OB/consolidation inputs the STOP uses. Not the stop cause.
 
-STILL OPEN — the actual reason the stop-builder yields wide stops despite good detection
-(NOT yet isolated; needs an instrumented trace of `_calculate_stop_loss` on real degraded inputs):
-- Stop-selection rejecting detected structural levels (e.g. validity/side/`max_stop_atr` gate,
-  swing-too-wide fallback at risk_engine.py:1041) → fixed-ATR fallback.
-- Degraded trades genuinely taking wider STRUCTURAL stops (distant swing/OB chosen), not fallbacks
-  — the "other ≥1.5" 30% bucket. `stop_buffer_by_regime` (risk_engine.py:817) is a candidate.
-- Entry-zone width / near_entry interaction inflating measured stop distance.
+## ISOLATED (2026-05-30 instrumented trace) — wide STRUCTURAL stops, not fallback/cap
 
-## Fix direction (PREMATURE — do not act until cause isolated)
+Added a branch-summary log at `_calculate_stop_loss` exit (WARNING-level so the prod sink keeps
+it; conditional on dist ≥1.33 ATR to avoid spam) and ran a live STEALTH paper session
+(ae4d1970). 10 stop-branch samples:
 
-Candidate levers once the cause is known: (a) regime/range-aware fallback stop; (b) tighten which
-structural level the builder selects in calm regimes; (c) TP1 reachability clamp as a symptom guard.
-All are §15 + live-path → design entry + baseline required. Do NOT pick one before the trace.
+| branch | n | distance (ATR) |
+|---|---|---|
+| structural (used_structure=True) | 9 | 0.35, 0.53, 0.99, 1.07, 1.16, 1.88, 2.83 … |
+| other | 1 | — |
+
+- median 1.07 ATR, mean 1.40, max 2.83. **40% of stops ≥1.5 ATR** (→ TP1@1.5R ≥2.25 ATR).
+- All wide stops were `used_structure=True` — genuine swing/OB invalidation levels, NOT the
+  no-structure fallback (1/10) and NOT the max-stop cap (0/10 in this sample).
+
+**Verified mechanism:** the stop-builder is working correctly — it places stops at real
+structural invalidation. But in this regime those levels are often FAR (up to 2.83 ATR), and the
+1.5R first-target ladder multiplies that distance → TP1 lands beyond the ~0.6-ATR favorable
+excursion → stagnation / round-trip. It is a **stop-distance × TP-ladder vs market-range
+mismatch**, not a fallback/cap/detection bug. (Caveat: 10 samples from the CURRENT regime; the
+degraded-window journal's 27× exactly-1.50 indicates caps/fallbacks fired MORE during 05-24..29.
+Both paths — wide-structural and 1.5-capped — converge on the same unreachable-TP1 outcome.)
+
+This refutes (in order, all today): Gate-3 bypass, regime-key, Tier 1.1-as-primary, structure-
+detection collapse, no-structure-fallback-dominance, max-stop-cap-dominance. The surviving,
+evidence-backed conclusion is the mismatch above.
+
+## Fix direction (now evidence-backed — design phase, §15 + live-path)
+
+The fix must handle ALL stop-derivation paths (wide-structural, capped, fallback), so a
+stop-side patch alone is insufficient. **TP1 reachability clamp (Plan Option B)** is the right
+primary lever — clamp TP1 absolute distance regardless of how the stop was derived, floored at
+the real admission R:R (`min_rr=1.0` / `target_min_rr_after_clip=1.2`, NOT the 1.5 the Plan
+assumed). Secondary: in calm regimes prefer the nearest valid structural invalidation (reduce
+wide-structural selection). Both §15 + live-path → design entry + baseline before code.
 
 ## Correction to prior attribution
 
