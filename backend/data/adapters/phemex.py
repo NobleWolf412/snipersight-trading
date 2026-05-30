@@ -215,10 +215,15 @@ class PhemexAdapter:
                 if not rows:
                     return pd.DataFrame()
 
-                # Parse
-                # Assume CCXT scaling logic (10^8 for most pairs)
-                # But since this is fallback, keep it simple
-                scale = 100000000.0 if (rows and rows[0][1] > 1000000) else 1.0
+                # Phemex returns scaled-integer ("Ep") prices whose scale is per-contract,
+                # NOT a function of magnitude. Derive it from an independent (CCXT) ticker
+                # and reject the frame if it can't be verified — a magnitude guess left
+                # sub-$0.01 coins 1e8x inflated, feeding a corrupt price into sizing/
+                # liquidation (audit bug #4). See
+                # decisions/2026-05-30__fix-design__phemex-fallback-scale.md.
+                scale = self._derive_fallback_scale(symbol, float(rows[-1][4]))
+                if scale is None:
+                    return pd.DataFrame()  # rejected — symbol dropped this cycle (loud-logged)
 
                 parsed_data = []
                 for r in rows:
@@ -273,6 +278,54 @@ class PhemexAdapter:
                 f"Exchange error fetching ticker for {symbol} ({market_type or self.default_type}): {e}"
             )
             raise
+
+    def _derive_fallback_scale(self, symbol: str, raw_close: float) -> Optional[float]:
+        """Derive the Phemex Ep price scale for ``symbol`` from an independent ticker.
+
+        The Direct-REST kline endpoint returns scaled-integer ("Ep") prices whose
+        scale is per-contract. Guessing it from magnitude left sub-$0.01 coins 1e8x
+        inflated, feeding a corrupt price into sizing/liquidation (audit bug #4). We
+        snap ``scale`` to the nearest power of 10 of ``raw_close / ticker`` and verify
+        the scaled close lands within a factor of 5 of the ticker. The ticker comes
+        from CCXT fetch_ticker (correctly scaled, independent of this broken path).
+        Returns the scale, or None if it cannot be verified — the caller MUST reject
+        the frame rather than feed an unverified price downstream.
+        See decisions/2026-05-30__fix-design__phemex-fallback-scale.md.
+        """
+        import math
+
+        if raw_close <= 0:
+            return None
+        try:
+            ticker = self.fetch_ticker(symbol)
+        except Exception as e:
+            logger.error(
+                "Fallback scale: ticker fetch failed for %s: %s — rejecting frame", symbol, e
+            )
+            return None
+        ref_price = float((ticker or {}).get("last") or (ticker or {}).get("close") or 0.0)
+        if ref_price <= 0:
+            logger.error(
+                "Fallback scale: no usable ticker price for %s — rejecting frame", symbol
+            )
+            return None
+
+        ratio = raw_close / ref_price
+        if ratio <= 0 or not math.isfinite(ratio):
+            return None
+        scale = 10.0 ** round(math.log10(ratio))
+        scaled_close = raw_close / scale
+        # Power-of-10 rounding keeps scaled_close within ~3.2x of ref by construction;
+        # the factor-5 bound additionally guards against a degenerate ticker value.
+        if not (0.2 <= scaled_close / ref_price <= 5.0):
+            logger.error(
+                "Fallback scale verify FAILED for %s: raw=%s ref=%s scale=%s scaled=%s "
+                "— rejecting frame", symbol, raw_close, ref_price, scale, scaled_close,
+            )
+            return None
+        if scale != 1.0:
+            logger.info("Fallback scale for %s derived as %s (ref=%s)", symbol, scale, ref_price)
+        return scale
 
     @retry_on_rate_limit(max_retries=3)
     def fetch_markets(self) -> list:
