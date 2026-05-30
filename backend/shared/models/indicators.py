@@ -139,11 +139,16 @@ class IndicatorSnapshot:
         if self.mfi is not None and not 0 <= self.mfi <= 100:
             raise ValueError(f"MFI must be 0-100, got {self.mfi}")
 
-        # BB upper must be > middle > lower
-        if not (self.bb_upper > self.bb_middle > self.bb_lower):
+        # BB upper >= middle >= lower. EQUAL bands are valid for a zero-variance
+        # (flat-price) window — rejecting them as invalid dropped the whole timeframe,
+        # which then let the HTF structural-proximity gate treat the absent TF as a
+        # perfect pass and inflate confluence (audit #12). Only a genuinely inverted
+        # ordering (upper < lower) is invalid. Downstream %B already guards a zero
+        # band-range (indicator_service.py:204 → 0.5), so equal bands are safe.
+        if not (self.bb_upper >= self.bb_middle >= self.bb_lower):
             raise ValueError(
-                f"Bollinger Bands must satisfy: upper ({self.bb_upper}) > "
-                f"middle ({self.bb_middle}) > lower ({self.bb_lower})"
+                f"Bollinger Bands must satisfy: upper ({self.bb_upper}) >= "
+                f"middle ({self.bb_middle}) >= lower ({self.bb_lower})"
             )
 
         # ATR must be positive
