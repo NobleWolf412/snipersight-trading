@@ -240,11 +240,17 @@ class LiveExecutor:
                 # Phemex refuses set_leverage when an open position already exists.
                 # Abort the order rather than silently placing it at the account's
                 # current leverage, which may be very different from target.
-                logger.error(
-                    f"LEVERAGE MISMATCH: Cannot set {self.target_leverage}x for {symbol}: {e}. "
-                    f"Order BLOCKED — close any existing {symbol} position first."
+                # Record the reason on the order (audit #7, CLAUDE.md "never destroy a
+                # rejection reason") — every sibling reject path sets rejection_reason;
+                # this one previously left it None, so the cause was lost on the
+                # persisted JSONL record and only lived in this transient log.
+                msg = (
+                    f"Leverage mismatch: cannot set {self.target_leverage}x for {symbol} "
+                    f"(close any existing {symbol} position first): {e}"
                 )
+                logger.error(f"LEVERAGE MISMATCH: {msg}. Order BLOCKED.")
                 order.status = OrderStatus.REJECTED
+                order.rejection_reason = msg
                 return order
 
         # Send to exchange
