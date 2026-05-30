@@ -908,34 +908,17 @@ class LiveTradingService:
                                     order_done = fill or order.status == OrderStatus.FILLED
                                     if order_done and order.order_id in self._pending_plans:
                                         plan = self._pending_plans[order.order_id]
-                                        active_count = len(self._get_active_positions())
-                                        cap = self.config.max_positions if self.config else 3
-                                        if active_count >= cap:
-                                            executor.cancel_order(order.order_id)
-                                            self._pending_plans.pop(order.order_id, None)
-                                        elif order.status == OrderStatus.FILLED:
-                                            # Wait for full fill before opening position — avoids
-                                            # opening a position with only a partial fill qty.
-                                            # On full fill, use average_fill_price + total filled qty.
+                                        if order.status == OrderStatus.FILLED:
+                                            # Wait for full fill before opening — avoids opening on a
+                                            # partial qty. On full fill, use average_fill_price + total
+                                            # filled qty. The order has ALREADY filled on the exchange,
+                                            # so _open_filled_entry adopts it even over cap rather than
+                                            # dropping it (a filled-but-unmonitored order is a stranded
+                                            # naked position); over-subscription is prevented upstream
+                                            # at the placement gate by counting pending orders.
                                             entry_px = order.average_fill_price or (fill.price if fill else 0.0) or order.price or 0.0
                                             entry_qty = order.filled_quantity or (fill.quantity if fill else 0.0) or order.quantity
-                                            pos_id = self.position_manager.open_position(
-                                                trade_plan=plan,
-                                                entry_price=entry_px,
-                                                quantity=entry_qty,
-                                                entry_order_id=order.order_id,
-                                            )
-                                            self.stats.signals_taken += 1
-                                            self._pending_plans.pop(order.order_id, None)
-                                            self._pending_placed_at.pop(order.order_id, None)
-                                            # Place exchange-native stop immediately after entry fills
-                                            await self._place_exchange_stop(pos_id, plan, entry_px, entry_qty)
-                                            self._log_activity("trade_opened", {
-                                                "position_id": pos_id,
-                                                "symbol": plan.symbol,
-                                                "direction": plan.direction,
-                                                "entry_price": entry_px,
-                                            })
+                                            await self._open_filled_entry(order.order_id, plan, entry_px, entry_qty)
                                         # Partially filled — keep in _pending_plans, wait for full fill
 
                         # Expire stale pending orders
@@ -972,31 +955,22 @@ class LiveTradingService:
                                                 f"{order_id} {plan.symbol}"
                                             )
                                         elif expired_order and expired_order.status == OrderStatus.FILLED:
+                                            # Expired order actually filled — adopt it (even over cap)
+                                            # rather than dropping a filled, unmonitored position.
                                             entry_px = expired_order.average_fill_price or expired_order.price or 0.0
                                             entry_qty = expired_order.filled_quantity or expired_order.quantity
-                                            active_count = len(self._get_active_positions())
-                                            cap = self.config.max_positions if self.config else 3
-                                            if active_count < cap and entry_px > 0:
-                                                pos_id = self.position_manager.open_position(
-                                                    trade_plan=plan,
-                                                    entry_price=entry_px,
-                                                    quantity=entry_qty,
-                                                    entry_order_id=order_id,
-                                                )
-                                                self.stats.signals_taken += 1
-                                                await self._place_exchange_stop(pos_id, plan, entry_px, entry_qty)
-                                                self._log_activity("trade_opened", {
-                                                    "position_id": pos_id,
-                                                    "symbol": plan.symbol,
-                                                    "direction": plan.direction,
-                                                    "entry_price": entry_px,
-                                                })
+                                            pos_id = await self._open_filled_entry(order_id, plan, entry_px, entry_qty)
+                                            if pos_id:
                                                 logger.info(
                                                     f"Recovered fill for expired order {order_id} {plan.symbol} "
                                                     f"@ {entry_px} — position opened"
                                                 )
-                                            self._pending_plans.pop(order_id, None)
-                                            self._pending_placed_at.pop(order_id, None)
+                                            else:
+                                                # Invalid fill price — drop to avoid an infinite
+                                                # expiry-retry loop; surfaced loudly by the helper.
+                                                self._pending_plans.pop(order_id, None)
+                                                self._pending_placed_at.pop(order_id, None)
+                                                self._pending_placed_price.pop(order_id, None)
                                         else:
                                             # Genuine cancel failure — retry next cycle.
                                             logger.warning(f"Cancel failed for expired order {order_id} {plan.symbol} — will retry")
@@ -1188,8 +1162,13 @@ class LiveTradingService:
         symbol = plan.symbol
         score = getattr(plan, "confidence_score", 0.0)
 
-        # Position cap
-        active_count = len(self._get_active_positions())
+        # Position cap — count in-flight pending entries too. Pending limit orders
+        # are committed capital but are invisible to _get_active_positions (open
+        # positions only). Without counting them, N signals can each place an order
+        # while under cap, then all fill and exceed max_positions — the later fills
+        # were previously dropped, stranding a naked live position.
+        # See decisions/2026-05-30__fix-design__overcap-filled-order-stranded.md.
+        active_count = len(self._get_active_positions()) + len(self._pending_plans)
         if active_count >= config.max_positions:
             self._log_signal(plan, "filtered", f"Max positions reached ({config.max_positions})", reason_type="max_positions")
             return
@@ -1470,6 +1449,70 @@ class LiveTradingService:
         if price and price > 0:
             return float(price)
         raise ValueError(f"Could not get price for {symbol}")
+
+    async def _open_filled_entry(
+        self, order_id: str, plan: "TradePlan", entry_px: float, entry_qty: float
+    ) -> Optional[str]:
+        """Open a PositionManager entry for a CONFIRMED fill and place its native stop.
+
+        The entry order has ALREADY filled on the exchange, so this NEVER drops it
+        on a cap breach — a filled-but-unmonitored order is a stranded naked live
+        position (audit bug #2). Over-cap fills are adopted with a loud warning;
+        over-subscription is prevented upstream by counting pending orders toward
+        the cap at the placement gate (see _process_signal). Returns the position_id,
+        or None if the fill price was invalid (caller decides whether to drop/retry).
+        See decisions/2026-05-30__fix-design__overcap-filled-order-stranded.md.
+        """
+        if not self.position_manager or entry_px <= 0:
+            logger.error(
+                "Cannot open filled entry for %s (order %s) — invalid entry price %s; "
+                "not adopting", getattr(plan, "symbol", "?"), order_id, entry_px,
+            )
+            return None
+
+        cap = self.config.max_positions if self.config else 3
+        active_count = len(self._get_active_positions())
+        if active_count >= cap:
+            logger.warning(
+                "Over-cap fill ADOPTED for %s (active=%d cap=%d) — entry already filled "
+                "on exchange; opening + stopping to avoid a stranded naked position",
+                plan.symbol, active_count, cap,
+            )
+            self._log_activity("over_cap_adopted", {
+                "symbol": plan.symbol, "active": active_count, "cap": cap,
+            })
+
+        pos_id = self.position_manager.open_position(
+            trade_plan=plan,
+            entry_price=entry_px,
+            quantity=entry_qty,
+            entry_order_id=order_id,
+        )
+        self.stats.signals_taken += 1
+        self._pending_plans.pop(order_id, None)
+        self._pending_placed_at.pop(order_id, None)
+        self._pending_placed_price.pop(order_id, None)
+        # Place exchange-native stop immediately after entry fills. If the
+        # exchange call throws, the position is STILL adopted and protected: it
+        # carries a software stop (open_position sets position.stop_loss) and
+        # _sync_exchange_stops re-places a missing native stop on the next monitor
+        # cycle. Swallow-with-a-loud-log so the throw can't escape the adoption
+        # path and skip monitor_all_positions/_sync_* for this cycle.
+        try:
+            await self._place_exchange_stop(pos_id, plan, entry_px, entry_qty)
+        except Exception as e:
+            logger.error(
+                "Native stop placement FAILED for %s (pos %s) after adopting fill: %s "
+                "— software stop active; _sync_exchange_stops will retry next cycle",
+                plan.symbol, pos_id, e,
+            )
+        self._log_activity("trade_opened", {
+            "position_id": pos_id,
+            "symbol": plan.symbol,
+            "direction": plan.direction,
+            "entry_price": entry_px,
+        })
+        return pos_id
 
     async def _execute_exit_order(self, symbol: str, side: str, quantity: float, price: float) -> bool:
         if not self.executor:
