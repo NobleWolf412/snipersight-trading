@@ -454,10 +454,14 @@ def _find_nested_entry_ob(
                 if trigger_ob.low < current_price:
                     continue  # Trigger must be above price for shorts
 
-            # Score the nested setup
-            # Prefer: higher freshness, larger zone, less mitigated
-            freshness_score = getattr(trigger_ob, "freshness_score", 0.7)
-            zone_freshness = getattr(zone_ob, "freshness_score", 0.7)
+            # Score the nested setup. Prefer: higher freshness, larger zone, less mitigated.
+            # freshness_score is on a 0-100 scale (order_blocks returns freshness*100), so
+            # normalize to 0-1 before combining — otherwise the freshness terms (0-200) swamp
+            # the zone-width (~0-5) and mitigation (0-2) terms ~100x, degenerating selection
+            # into "highest raw freshness" and ignoring mitigation/zone size (audit #11). The
+            # 0.7 default reflects the original 0-1 intent (≈70% fresh when unknown).
+            freshness_score = getattr(trigger_ob, "freshness_score", 70.0) / 100.0
+            zone_freshness = getattr(zone_ob, "freshness_score", 70.0) / 100.0
             mitigation = getattr(trigger_ob, "mitigation_level", 0.0)
 
             score = (
