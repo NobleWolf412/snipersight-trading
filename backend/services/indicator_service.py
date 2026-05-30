@@ -299,7 +299,7 @@ class IndicatorService:
         try:
             return compute_macd(df)
         except Exception as e:
-            logger.debug("MACD computation failed for %s: %s", timeframe, e)
+            logger.warning("MACD computation failed for %s: %s", timeframe, e)
             return None, None, None
 
     def _safe_compute_adx(self, df: pd.DataFrame, timeframe: str):
@@ -307,7 +307,7 @@ class IndicatorService:
         try:
             return compute_adx(df)
         except Exception as e:
-            logger.debug("ADX computation failed for %s: %s", timeframe, e)
+            logger.warning("ADX computation failed for %s: %s", timeframe, e)
             return None, None, None
 
     def _safe_compute_realized_volatility(self, df: pd.DataFrame, timeframe: str):
@@ -315,7 +315,7 @@ class IndicatorService:
         try:
             return compute_realized_volatility(df)
         except Exception as e:
-            logger.debug("Realized volatility computation failed for %s: %s", timeframe, e)
+            logger.warning("Realized volatility computation failed for %s: %s", timeframe, e)
             return None
 
     def _safe_compute_volume_ratio(self, df: pd.DataFrame, timeframe: str):
@@ -323,7 +323,7 @@ class IndicatorService:
         try:
             return compute_relative_volume(df)
         except Exception as e:
-            logger.debug("Volume ratio computation failed for %s: %s", timeframe, e)
+            logger.warning("Volume ratio computation failed for %s: %s", timeframe, e)
             return None
 
     def _safe_compute_volume_acceleration(self, df: pd.DataFrame, timeframe: str) -> Optional[Dict]:
@@ -341,7 +341,7 @@ class IndicatorService:
             )
             return vol_accel_data
         except Exception as e:
-            logger.debug("Volume acceleration computation failed for %s: %s", timeframe, e)
+            logger.warning("Volume acceleration computation failed for %s: %s", timeframe, e)
             return None
 
     def _safe_compute_stoch_rsi(self, df: pd.DataFrame, timeframe: str):
@@ -349,7 +349,7 @@ class IndicatorService:
         try:
             return compute_stoch_rsi(df)
         except Exception as e:
-            logger.debug("StochRSI skipped for %s (%d bars): %s", timeframe, len(df), e)
+            logger.warning("StochRSI skipped for %s (%d bars): %s", timeframe, len(df), e)
             return None
 
     def _safe_compute_vwap(self, df: pd.DataFrame, timeframe: str, reset_period=None):
@@ -357,7 +357,7 @@ class IndicatorService:
         try:
             return compute_vwap(df, reset_period=reset_period)
         except Exception as e:
-            logger.debug("VWAP skipped for %s: %s", timeframe, e)
+            logger.warning("VWAP skipped for %s: %s", timeframe, e)
             return None
 
     def _extract_stoch_values(self, stoch_rsi):
