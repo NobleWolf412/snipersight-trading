@@ -3517,122 +3517,6 @@ class Orchestrator:
             setattr(cfg, attr, val)
         return cfg
 
-    def _derive_cascade_direction(
-        self,
-        smc_snapshot: "SMCSnapshot",
-        structure_tfs: set,
-        fallback: str,
-        current_price: float = 0.0,
-    ) -> str:
-        """
-        Lightweight direction scoring for a cascade scale.
-
-        Counts grade A/B OBs, BOS breaks, and unswept liquidity pools on
-        the scale's structure timeframes to determine which direction the
-        scale's structure actually favours — independent of the HTF-dominant
-        session direction.
-
-        Weighting:
-          - Grade A OB               → 2 pts  (strong, institutional)
-          - Grade B OB               → 1 pt   (moderate)
-          - BOS break                → 1 pt   (trend continuation)
-          - CHoCH                    → excluded (reversal marker)
-          - Unswept equal_highs above price → bull pts  (price drawn UP)
-          - Unswept equal_lows below price  → bear pts  (price drawn DOWN)
-            Grade A pool → 3 pts, Grade B → 2 pts, Grade C → 1 pt
-            Nearest pool gets 1.5× bonus (most immediate magnet)
-
-        Liquidity pool rationale:
-          Equal highs above current price = clustered stop-losses / sell-side
-          liquidity. Institutions push price UP to sweep that liquidity before
-          reversing. The nearest unswept cluster is the strongest near-term
-          magnet and represents a high-probability directional draw.
-
-        Falls back to the session-level direction on a tie.
-        """
-        bull = 0
-        bear = 0
-
-        # ── Order Blocks ─────────────────────────────────────────────────────
-        for ob in smc_snapshot.order_blocks:
-            if ob.timeframe not in structure_tfs:
-                continue
-            if ob.invalidated or ob.grade not in ("A", "B"):
-                continue
-            weight = 2 if ob.grade == "A" else 1
-            if ob.direction == "bullish":
-                bull += weight
-            else:
-                bear += weight
-
-        # ── Structural Breaks (BOS only) ─────────────────────────────────────
-        for sb in smc_snapshot.structural_breaks:
-            if sb.timeframe not in structure_tfs:
-                continue
-            if getattr(sb, "break_type", "BOS").upper() == "CHOCH":
-                continue  # CHoCH is a reversal marker — not a directional vote
-            sb_dir = getattr(sb, "direction", "bullish")
-            if sb_dir == "bullish":
-                bull += 1
-            else:
-                bear += 1
-
-        # ── Liquidity Pool Magnet Votes ───────────────────────────────────────
-        # Unswept pools act as price magnets: equal_highs above = bull draw,
-        # equal_lows below = bear draw.  Only count pools on this scale's TFs.
-        # The nearest pool carries a 1.5× bonus — it's the most immediate target.
-        if current_price > 0:
-            pools = getattr(smc_snapshot, "liquidity_pools", [])
-            _grade_weight = {"A": 3, "B": 2, "C": 1}
-
-            bull_pools = []  # unswept equal_highs above price
-            bear_pools = []  # unswept equal_lows below price
-
-            for pool in pools:
-                if getattr(pool, "swept", False):
-                    continue  # already swept — no longer a magnet
-                tf = getattr(pool, "timeframe", None)
-                if tf and structure_tfs and tf not in structure_tfs:
-                    continue  # wrong scale
-                pool_level = getattr(pool, "level", 0.0)
-                pool_type = getattr(pool, "pool_type", "")
-                grade = getattr(pool, "grade", "C")
-                w = _grade_weight.get(str(grade).upper(), 1)
-
-                if pool_type == "equal_highs" and pool_level > current_price:
-                    bull_pools.append((abs(pool_level - current_price), w))
-                elif pool_type == "equal_lows" and pool_level < current_price:
-                    bear_pools.append((abs(pool_level - current_price), w))
-
-            # Nearest pool gets 1.5× bonus; all others count at face value
-            def _tally(pool_list: list) -> float:
-                if not pool_list:
-                    return 0.0
-                pool_list.sort(key=lambda x: x[0])  # sort by distance asc
-                total = 0.0
-                for i, (_, w) in enumerate(pool_list):
-                    total += w * (1.5 if i == 0 else 1.0)
-                return total
-
-            _bull_pool_pts = _tally(bull_pools)
-            _bear_pool_pts = _tally(bear_pools)
-            bull += _bull_pool_pts
-            bear += _bear_pool_pts
-
-            if bull_pools or bear_pools:
-                logger.debug(
-                    "_derive_cascade_direction: pool magnets — "
-                    "bull_pools=%d (%.1f pts) bear_pools=%d (%.1f pts)",
-                    len(bull_pools), _bull_pool_pts,
-                    len(bear_pools), _bear_pool_pts,
-                )
-
-        if bear > bull:
-            return "SHORT"
-        if bull > bear:
-            return "LONG"
-        return fallback  # Tie or no signals on these TFs → keep session direction
-
     def _cascade_plan_generation(
         self,
         context: "SniperContext",
@@ -3669,77 +3553,31 @@ class Orchestrator:
             try:
                 scale_cfg = self._build_cascade_config(trade_type)
 
-                # ── Per-scale direction scoring ───────────────────────────────────
-                # The session-level direction is HTF-dominated (1D/4H structure wins
-                # the bull_score vs bear_score vote).  For intraday and scalp scales,
-                # the relevant timeframes are MTF/LTF — those may favour the opposite
-                # direction.  Re-derive direction using only this scale's structure TFs
-                # so each scale trades the structure that actually matters for its
-                # geometry, rather than inheriting a swing-biased direction decision.
+                # The cascade varies the trade-type SCALE (swing/intraday/scalp) only —
+                # NOT the direction. Each scale inherits the session direction chosen by
+                # confluence scoring (context.metadata["chosen_direction"]). The former
+                # per-scale direction re-derivation (_derive_cascade_direction) ran AFTER
+                # score(), so a flipped scale emitted a plan whose geometry was the new
+                # direction but whose confluence_breakdown/score/HTF-adjustment were still
+                # the session direction's — mis-ranking candidates and persisting a
+                # wrong-direction score. The flip was also unobservable in telemetry and
+                # only ever produced sub-swing (scalp/intraday) plans, the net-losing
+                # cohort. Removed 2026-05-30 — see
+                # decisions/2026-05-30__fix-design__cascade-direction-score-mismatch.md.
                 _scale_structure_tfs = set(
                     self._CASCADE_SCALE_SETTINGS.get(trade_type, {}).get(
                         "structure_timeframes", ()
                     )
                 )
-                _scale_direction = (
-                    self._derive_cascade_direction(
-                        smc_snapshot=context.smc_snapshot,
-                        structure_tfs=_scale_structure_tfs,
-                        fallback=_session_direction,
-                        current_price=current_price,
-                    )
-                    if context.smc_snapshot and _scale_structure_tfs
-                    else _session_direction
-                )
-                if _scale_direction != _session_direction:
-                    logger.info(
-                        "🔀 %s CASCADE %s: direction %s→%s "
-                        "(scale TF structure override, session was %s)",
-                        context.symbol, trade_type,
-                        _session_direction, _scale_direction, _session_direction,
-                    )
-                # Write into context so _generate_trade_plan reads the right direction
-                context.metadata["chosen_direction"] = _scale_direction
 
-                # ── Scalp: block counter-HTF entries in strong impulse regimes ─────
-                # Gate 2 (regime_alignment) is bypassed for the "precision" (scalp)
-                # profile because LTF bounces CAN fade weak/normal trends. However,
-                # when the HTF regime shows strong_up or strong_down, institutional
-                # momentum overwrites LTF structure before scalp targets are reached —
-                # the same reason intraday counter entries are blocked in strong regimes.
-                # Normal "up"/"down" trends still allow counter-trend bounce scalps.
-                if trade_type == "scalp" and _scale_direction != _session_direction:
-                    _sc_trend = getattr(_c_regime, "trend", None)
-                    if _sc_trend is None:
-                        _sc_dims = getattr(_c_regime, "dimensions", None)
-                        _sc_trend = getattr(_sc_dims, "trend", "neutral") if _sc_dims else "neutral"
-                    if _sc_trend in ("strong_up", "strong_down"):
-                        _sc_block_reason = (
-                            f"scalp {_scale_direction} blocked: counter-HTF in strong impulse "
-                            f"(session={_session_direction}, trend={_sc_trend})"
-                        )
-                        cascade_attempts.append({
-                            "type": trade_type,
-                            "result": "gate_rejected",
-                            "gate": "htf_strong_counter",
-                            "reason": _sc_block_reason,
-                        })
-                        logger.info(
-                            "🔀 %s CASCADE scalp → HTF STRONG COUNTER BLOCK: %s",
-                            context.symbol, _sc_block_reason,
-                        )
-                        context.metadata["chosen_direction"] = _session_direction  # restore
-                        continue
-                # ── End scalp HTF counter block ───────────────────────────────────
-
-                # Re-run ALL pre-scoring gates with the scale's profile AND direction.
-                # Conflict-density must be evaluated with the scale direction because
-                # opposing OBs differ per TF slice.
+                # Re-run ALL pre-scoring gates with the scale's profile + TF slice.
+                # Direction is the session direction; conflict-density stays mode-aware
+                # and per-TF-slice (opposing OBs differ by the scale's structure TFs).
                 if context.smc_snapshot:
                     _scale_gate = run_pre_scoring_gates(
                         smc_snapshot=context.smc_snapshot,
                         config=scale_cfg,
-                        direction=_scale_direction,
+                        direction=_session_direction,
                         regime=_c_regime,
                         btc_impulse=_c_btc_impulse,
                         is_btc=_c_is_btc,
@@ -3756,7 +3594,6 @@ class Orchestrator:
                             "🔀 %s CASCADE %s → GATE [%s] rejected: %s",
                             context.symbol, trade_type, _scale_gate.gate_name, _scale_gate.reason,
                         )
-                        context.metadata["chosen_direction"] = _session_direction
                         continue
 
                 plan = self._generate_trade_plan(
@@ -3793,8 +3630,9 @@ class Orchestrator:
                     "🔀 %s CASCADE %s → exception: %s", context.symbol, trade_type, exc
                 )
 
-        # Restore session direction — the loop may have left a scale-specific
-        # direction in context.metadata that doesn't match the winning plan.
+        # Invariant: the cascade varies trade-type only and never changes direction
+        # (per-scale flip removed 2026-05-30). Re-assert the session direction
+        # defensively in case a downstream helper mutated it.
         context.metadata["chosen_direction"] = _session_direction
 
         # Store cascade results in context for downstream visibility
