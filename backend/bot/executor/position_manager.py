@@ -1352,7 +1352,15 @@ class PositionManager:
                 )
 
     async def _execute_exit(self, position: PositionState, price: float, reason: str) -> bool:
-        """Execute full position exit."""
+        """Execute full position exit.
+
+        ``order_executor`` contract: ``async (symbol, side, quantity, price) ->``
+        truthy on a CONFIRMED fill, falsy on failure. This return value is
+        load-bearing — ``_monitor_position`` only settles the PositionState when
+        it is True, so dropping a falsy result would strand a live position open
+        on the exchange (the native stop is cancelled before this fires). See
+        decisions/2026-05-29__fix-design__execute-exit-discarded-return.md.
+        """
         executor = self.order_executor
         if not executor:
             logger.warning("No order executor configured - simulating exit")
@@ -1361,12 +1369,19 @@ class PositionManager:
         try:
             # Execute market order to close
             order_side = "SELL" if position.direction == "LONG" else "BUY"
-            await executor(
+            ok = await executor(
                 symbol=position.symbol,
                 side=order_side,
                 quantity=position.remaining_quantity,
                 price=price,
             )
+            if not ok:
+                logger.error(
+                    f"Exit NOT confirmed for {position.position_id} | {reason} | "
+                    f"Qty: {position.remaining_quantity} @ {price} | "
+                    f"executor returned falsy — position left OPEN for retry next cycle"
+                )
+                return False
             logger.info(
                 f"Exit executed: {position.position_id} | {reason} | "
                 f"Qty: {position.remaining_quantity} @ {price}"
@@ -1377,7 +1392,12 @@ class PositionManager:
             return False
 
     async def _execute_partial_exit(self, position: PositionState, price: float, quantity: float) -> bool:
-        """Execute partial position exit at target."""
+        """Execute partial position exit at target.
+
+        ``order_executor`` return is load-bearing (see ``_execute_exit``): a falsy
+        result means the partial close did NOT fill, so the caller must not book
+        realized P&L or reduce remaining_quantity.
+        """
         executor = self.order_executor
         if not executor:
             logger.warning("No order executor configured - simulating partial exit")
@@ -1385,9 +1405,16 @@ class PositionManager:
 
         try:
             order_side = "SELL" if position.direction == "LONG" else "BUY"
-            await executor(
+            ok = await executor(
                 symbol=position.symbol, side=order_side, quantity=quantity, price=price
             )
+            if not ok:
+                logger.error(
+                    f"Partial exit NOT confirmed for {position.position_id} | "
+                    f"Qty: {quantity} @ {price} | executor returned falsy — "
+                    f"target stays active, P&L not booked"
+                )
+                return False
             logger.info(
                 f"Partial exit executed: {position.position_id} | " f"Qty: {quantity} @ {price}"
             )
