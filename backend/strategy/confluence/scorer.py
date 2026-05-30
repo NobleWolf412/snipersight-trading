@@ -2523,17 +2523,22 @@ def calculate_confluence_score(
     # Cap bullish sweep score at 30 when macro structure is bearish (and vice versa for shorts).
     if sweep_score > 30.0 and smc_snapshot.swing_structure:
         is_bullish_direction = _normalize_direction(direction) == "bullish"
-        htf_trend = "neutral"
+        # Use a LOCAL for the swing-structure trend — do NOT clobber the regime-derived
+        # `htf_trend` parameter, which is read later (HTF Alignment sub-score, ~L2803).
+        # The discount intentionally keys off swing structure; the bug was that it
+        # leaked into the parameter, so HTF Alignment scored against swing structure
+        # instead of the regime trend the caller passed (audit #9).
+        swing_htf_trend = "neutral"
         for htf_tf in ["1d", "1D", "4h", "4H"]:
             ss = smc_snapshot.swing_structure.get(htf_tf)
             if ss:
-                htf_trend = ss.get("trend", "neutral") if isinstance(ss, dict) else getattr(ss, "trend", "neutral")
-                if htf_trend != "neutral":
+                swing_htf_trend = ss.get("trend", "neutral") if isinstance(ss, dict) else getattr(ss, "trend", "neutral")
+                if swing_htf_trend != "neutral":
                     break
         # If sweeping against the HTF trend (e.g., LONG sweep in a bearish trend): discount
-        if (is_bullish_direction and htf_trend == "bearish") or (not is_bullish_direction and htf_trend == "bullish"):
+        if (is_bullish_direction and swing_htf_trend == "bearish") or (not is_bullish_direction and swing_htf_trend == "bullish"):
             sweep_score = min(sweep_score, 30.0)
-            sweep_result = {**sweep_result, "score": sweep_score, "rationale": sweep_result.get("rationale", "") + f" [HTF {htf_trend} discount applied]"}
+            sweep_result = {**sweep_result, "score": sweep_score, "rationale": sweep_result.get("rationale", "") + f" [HTF {swing_htf_trend} discount applied]"}
 
     factors.append(
         ConfluenceFactor(
