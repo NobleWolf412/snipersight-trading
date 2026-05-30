@@ -689,8 +689,21 @@ class SMCDetectionService:
                     ehl.get("metadata", {}).get("tolerance_used", 0) * 100,
                     ehl.get("metadata", {}).get("min_touches", 2),
                 )
-        except Exception:
-            pass  # Non-critical, continue without
+        except Exception as e:
+            # Loud-fail (audit #6, CLAUDE.md §11): a bare except/pass here silently
+            # zeroed equal-highs/lows + liquidity pools for the TF with no trace, so a
+            # real liquidity-pool setup scored as if no pool existed. Surface via the
+            # module's smc_rejections channel and degrade gracefully (empty defaults)
+            # so downstream consumers don't KeyError.
+            logger.warning(
+                "Equal-highs/lows / liquidity-pool detection failed for %s: %s", timeframe, e
+            )
+            self._diagnostics["smc_rejections"].append(
+                {"timeframe": timeframe, "error": f"equal_highs_lows: {e}"}
+            )
+            result.setdefault("equal_highs", [])
+            result.setdefault("equal_lows", [])
+            result.setdefault("liquidity_pools", [])
 
     def _detect_swing_structure(self, timeframe: str, df, result: Dict):
         """Detect swing structure (HH/HL/LH/LL) for HTF bias."""
