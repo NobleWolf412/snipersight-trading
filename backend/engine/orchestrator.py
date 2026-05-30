@@ -516,12 +516,13 @@ class Orchestrator:
                 logger.debug(f"Failed to get precision for {sym}: {e}")
 
             worker_args.append((
-                sym, 
-                run_id, 
-                timestamp, 
+                sym,
+                run_id,
+                timestamp,
                 prefetched_data.get(sym),
                 self.config,
                 self.macro_context,
+                self.current_regime,  # global regime → HTF-alignment bonus + ranging leniency (audit #8)
                 self.scanner_mode,
                 tick_size,  # Pass tick_size to worker
                 lot_size    # Pass lot_size to worker
@@ -4669,7 +4670,7 @@ def _parallel_process_symbol_worker(args):
     """
     global _WORKER_ORCHESTRATOR, _WORKER_CONFIG_ID
 
-    symbol, run_id, timestamp, prefetched_data, config, macro_context, scanner_mode, tick_size, lot_size = args
+    symbol, run_id, timestamp, prefetched_data, config, macro_context, current_regime, scanner_mode, tick_size, lot_size = args
 
     try:
         # Rebuild the orchestrator only when the worker is brand-new or the
@@ -4696,8 +4697,12 @@ def _parallel_process_symbol_worker(args):
             )
             _WORKER_CONFIG_ID = id(config)
 
-        # Sync per-scan state (lightweight attribute assignment, not re-init)
+        # Sync per-scan state (lightweight attribute assignment, not re-init).
+        # current_regime was previously NEVER synced → it stayed __init__ None in the
+        # worker, so metadata["global_regime"] was None for every symbol, the HTF-
+        # alignment bonus (+5/+2) never fired, and ranging leniency was dead (audit #8).
         _WORKER_ORCHESTRATOR.macro_context = macro_context
+        _WORKER_ORCHESTRATOR.current_regime = current_regime
         _WORKER_ORCHESTRATOR.scanner_mode = scanner_mode
 
         return _WORKER_ORCHESTRATOR._process_symbol(
