@@ -1,9 +1,10 @@
 # 2026-05-29 — Trading degradation root-cause: target geometry collapse (Tier 1.1 near_entry)
 
 > **SUPERSEDED IN PART (2026-05-30):** the primary attribution below (Tier 1.1 near_entry as
-> the root) is DEMOTED to a minor aggravator. Verified dominant driver is a **structure-finding
-> success collapse (77%→43%) → regime-blind fixed-ATR fallback stop** widening stops ~3× →
-> bigger losses AND unreachable TP1. See `2026-05-30__stop-distance-structure-collapse.md`.
+> the root) is DEMOTED to a minor aggravator. The verified MECHANISM is **wider stops (median
+> 0.53→1.50 ATR) → bigger losses AND unreachable TP1**. The single CAUSE within the stop-builder
+> is NOT yet isolated — an early "structure-detection collapse" hypothesis was REFUTED (detection
+> is healthy). See `2026-05-30__stop-distance-structure-collapse.md` for what's ruled out / open.
 
 **Type:** calibration / root-cause analysis (no code change yet — diagnosis on record before fix)
 **Trigger:** operator reported "poor trading results lately." Forensic autopsy of `trade_journal.jsonl` (149 trades, sessions 2026-05-21 → 2026-05-29).
