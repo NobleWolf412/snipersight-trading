@@ -70,10 +70,15 @@ def _filter_targets_by_opposing_structure(
         return targets
 
     opposing_dir = "bearish" if is_bullish else "bullish"
+    # freshness_score is on a 0-100 scale (order_blocks.calculate_freshness returns
+    # freshness * 100); only STRONG opposing structures (>50% fresh) should block a
+    # target. The previous `> 0.5` threshold was on the wrong scale — it admitted
+    # essentially every opposing OB (anything >0.5% fresh), over-blocking valid TPs
+    # and biasing R:R down (audit #10). Sibling checks (scorer.py:155/995) use 50.0.
     opposing_obs = [
         ob
         for ob in smc_snapshot.order_blocks
-        if ob.direction == opposing_dir and ob.freshness_score > 0.5
+        if ob.direction == opposing_dir and ob.freshness_score > 50.0
     ]
 
     if not opposing_obs:
