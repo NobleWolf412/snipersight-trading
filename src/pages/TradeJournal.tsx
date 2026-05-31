@@ -28,7 +28,15 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Chip, FooterStatus, PageHead, Reticle, SectionHead, fmtMoney } from '@/components/hud';
+import {
+  Chip,
+  FooterStatus,
+  PageHead,
+  Reticle,
+  SectionHead,
+  TradeHistoryDetailModal,
+  fmtMoney,
+} from '@/components/hud';
 import {
   tradeJournalService,
   type JournalTrade,
@@ -818,6 +826,9 @@ export function TradeJournal() {
   // Group toggle for breakdown
   const [groupBy, setGroupBy] = useState<'symbol' | 'type'>('symbol');
 
+  // Trade detail modal — set when the operator clicks a row in the log.
+  const [selectedTrade, setSelectedTrade] = useState<JournalTrade | null>(null);
+
   const load = async (f: JournalFilters) => {
     setLoading(true);
     setError(null);
@@ -1341,6 +1352,17 @@ export function TradeJournal() {
                     <div
                       key={tr.trade_id}
                       className="journal-trade-row"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedTrade(tr)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedTrade(tr);
+                        }
+                      }}
+                      aria-label={`Open chart for ${tr.symbol} ${tr.direction} ${tr.trade_type} trade`}
+                      style={{ cursor: 'pointer' }}
                     >
                       <span style={{ color: 'var(--fg-3)' }}>{fmtDate(tr.exit_time)}</span>
                       <span
@@ -1447,6 +1469,16 @@ export function TradeJournal() {
       </div>
 
       <FooterStatus latency={36} />
+
+      {/* Closed-trade post-mortem chart. Renders when a Trade Log row is
+          clicked. Shows the trade's symbol on a TF inferred from
+          trade_type with entry/exit price lines + entry/exit candle
+          markers so the operator can see why the trade went the way it
+          went. */}
+      <TradeHistoryDetailModal
+        trade={selectedTrade}
+        onClose={() => setSelectedTrade(null)}
+      />
     </div>
   );
 }

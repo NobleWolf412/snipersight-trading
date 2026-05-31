@@ -90,6 +90,7 @@ tests/visual/__report__/
 # Other agent / scratch directories (generated, do not commit)
 .claire/
 .impeccable/
+.serena/
 
 # Runtime / live-trading state (§15 — never commit live trading data)
 .live_trading/

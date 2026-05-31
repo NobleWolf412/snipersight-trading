@@ -1,5 +1,5 @@
 {
-  "count": 98,
+  "count": 103,
   "routes": [
     {
       "methods": [
@@ -560,6 +560,46 @@
       "name": "stop_paper_trading",
       "path": "/api/paper-trading/stop",
       "response_model": null
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "create_session",
+      "path": "/api/replay/sessions",
+      "response_model": "CreateSessionResponse"
+    },
+    {
+      "methods": [
+        "DELETE"
+      ],
+      "name": "delete_session",
+      "path": "/api/replay/sessions/{session_id}",
+      "response_model": "DeleteSessionResponse"
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "name": "get_session_status",
+      "path": "/api/replay/sessions/{session_id}",
+      "response_model": "SessionStatusResponse"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "jump_to_next_signal",
+      "path": "/api/replay/sessions/{session_id}/jump-to-next-signal",
+      "response_model": "JumpToSignalResponse"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "name": "step_session",
+      "path": "/api/replay/sessions/{session_id}/step",
+      "response_model": "StepResponse"
     },
     {
       "methods": [

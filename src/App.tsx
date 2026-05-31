@@ -33,6 +33,15 @@ const TrainingGround = lazy(() =>
 const RangeBot = lazy(() =>
   import('@/pages/training/RangeBot').then((m) => ({ default: m.RangeBot })),
 );
+const Drills = lazy(() =>
+  import('@/pages/training/Drills').then((m) => ({ default: m.Drills })),
+);
+const Replay = lazy(() =>
+  import('@/pages/training/Replay').then((m) => ({ default: m.Replay })),
+);
+const Lessons = lazy(() =>
+  import('@/pages/training/Lessons').then((m) => ({ default: m.Lessons })),
+);
 const Intel = lazy(() => import('@/pages/Intel').then((m) => ({ default: m.Intel })));
 const TradeJournal = lazy(() =>
   import('@/pages/TradeJournal').then((m) => ({ default: m.TradeJournal })),
@@ -75,6 +84,9 @@ function App() {
               <Route path="/bot/status" element={<BotStatus />} />
               <Route path="/training" element={<TrainingGround />} />
               <Route path="/training/range" element={<RangeBot />} />
+              <Route path="/training/drills" element={<Drills />} />
+              <Route path="/training/replay" element={<Replay />} />
+              <Route path="/training/lessons" element={<Lessons />} />
               <Route path="/intel" element={<Intel />} />
               <Route path="/journal" element={<TradeJournal />} />
               <Route path="/settings" element={<Settings />} />

@@ -1,0 +1,75 @@
+{
+  "session": {
+    "session_id": "snapshot0000000000000000000000ab",
+    "symbol": "BTC/USDT",
+    "mode": "stealth",
+    "total_bars": 48,
+    "tf_step": "1h",
+    "window_start": "2026-05-18T00:00:00+00:00",
+    "window_end": "2026-05-20T00:00:00+00:00",
+    "bar_timestamps": [
+      "2026-05-18T00:00:00+00:00",
+      "2026-05-18T01:00:00+00:00",
+      "2026-05-18T02:00:00+00:00",
+      "2026-05-18T03:00:00+00:00",
+      "2026-05-18T04:00:00+00:00",
+      "2026-05-18T05:00:00+00:00",
+      "2026-05-18T06:00:00+00:00",
+      "2026-05-18T07:00:00+00:00"
+    ]
+  },
+  "step_idx0": {
+    "session_id": "snapshot0000000000000000000000ab",
+    "index": 0,
+    "bar_open_ts": "2026-05-18T00:00:00+00:00",
+    "current_ts": "2026-05-18T01:00:00+00:00",
+    "candles_by_tf": {
+      "1h": [
+        { "time": 1747526400, "open": 68420.5, "high": 68512.0, "low": 68380.1, "close": 68490.0, "volume": 124.5 },
+        { "time": 1747530000, "open": 68490.0, "high": 68620.0, "low": 68450.0, "close": 68580.0, "volume": 138.2 },
+        { "time": 1747533600, "open": 68580.0, "high": 68640.0, "low": 68510.0, "close": 68530.0, "volume": 95.4 },
+        { "time": 1747537200, "open": 68530.0, "high": 68590.0, "low": 68470.0, "close": 68512.0, "volume": 110.7 }
+      ]
+    },
+    "confluence": {
+      "total_score": 64.2,
+      "synergy_bonus": 3.0,
+      "conflict_penalty": 4.5,
+      "regime": "trend",
+      "htf_aligned": true,
+      "btc_impulse_gate": true,
+      "direction": "bullish",
+      "factors": [
+        { "name": "htf_composite", "score": 78, "weight": 0.18, "weighted_contribution": 14.04, "rationale": "1d + 4h aligned bullish; trending up" },
+        { "name": "structure", "score": 72, "weight": 0.14, "weighted_contribution": 10.08, "rationale": "BOS bullish on 4h, HH/HL forming" },
+        { "name": "order_blocks", "score": 65, "weight": 0.12, "weighted_contribution": 7.8, "rationale": "2 unmitigated bullish OBs at 67800/67200" },
+        { "name": "momentum", "score": 58, "weight": 0.10, "weighted_contribution": 5.8, "rationale": "MACD histogram expanding, RSI 56" },
+        { "name": "volume", "score": 52, "weight": 0.08, "weighted_contribution": 4.16, "rationale": "Average volume, no accumulation spike" },
+        { "name": "fvg", "score": 40, "weight": 0.08, "weighted_contribution": 3.2, "rationale": "No fresh FVGs in range" },
+        { "name": "sweep", "score": 30, "weight": 0.06, "weighted_contribution": 1.8, "rationale": "No recent liquidity sweeps" }
+      ],
+      "metadata": { "convergence_score": 4, "setup_state": "B-tier" }
+    },
+    "plan": null,
+    "rejection": {
+      "reason_type": "low_confluence",
+      "reason": "Score 64.2 is 5.8 points below the 70 gate. Strengthen sweep and FVG factors or wait for next setup."
+    },
+    "smc_snapshot": {
+      "order_blocks": [],
+      "fvgs": [],
+      "structural_breaks": [],
+      "liquidity_sweeps": [],
+      "equal_highs": [],
+      "equal_lows": [],
+      "htf_levels": []
+    },
+    "regime": {
+      "composite": "risk_on_trend",
+      "score": 72.5,
+      "trend": "up",
+      "volatility": "normal"
+    },
+    "signal_fired": false
+  }
+}

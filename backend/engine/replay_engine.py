@@ -154,6 +154,36 @@ class ReplaySession:
         return len(self.bar_timestamps)
 
 
+def _to_jsonable(v: Any) -> Any:
+    """Coerce numpy / pandas / datetime scalars to JSON-native Python types
+    so Pydantic v2's response serializer doesn't choke on the response model.
+
+    Without this, payload fields that come straight off a pandas DataFrame
+    or numpy scalar (e.g. numpy.bool_ from a boolean column) bubble up
+    untouched and the FastAPI response serializer raises
+    PydanticSerializationError: Unable to serialize unknown type.
+    """
+    import numpy as np
+
+    if isinstance(v, (np.bool_,)):
+        return bool(v)
+    if isinstance(v, np.integer):
+        return int(v)
+    if isinstance(v, np.floating):
+        return float(v)
+    if isinstance(v, np.ndarray):
+        return [_to_jsonable(x) for x in v.tolist()]
+    if isinstance(v, datetime):
+        return v.isoformat()
+    if isinstance(v, pd.Timestamp):
+        return v.isoformat()
+    if isinstance(v, (list, tuple)):
+        return [_to_jsonable(x) for x in v]
+    if isinstance(v, dict):
+        return {str(k): _to_jsonable(x) for k, x in v.items()}
+    return v
+
+
 def _candles_to_payload(df: pd.DataFrame, max_rows: int = 1000) -> List[Dict[str, Any]]:
     """Serialize the last `max_rows` of an OHLCV DataFrame to the chart
     payload shape ({time:int, open, high, low, close, volume}). The chart
@@ -260,7 +290,9 @@ def _serialize_confluence(breakdown) -> Optional[Dict[str, Any]]:
             }
             for f in breakdown.factors
         ],
-        "metadata": dict(breakdown.metadata or {}),
+        # Metadata is a free-form dict; coerce nested numpy/datetime scalars
+        # so the Pydantic response serializer doesn't raise on them.
+        "metadata": _to_jsonable(dict(breakdown.metadata or {})),
     }
 
 
@@ -269,23 +301,30 @@ def _serialize_smc(snapshot) -> Optional[Dict[str, Any]]:
         return None
 
     def _safe_list(items):
+        """Serialize each SMC snapshot list item. Items may be either
+        dataclass-like objects (OrderBlock, FVG, StructuralBreak,
+        LiquiditySweep, HTFLevel — have __dict__) or plain price scalars
+        (equal_highs/equal_lows are float lists). Handle both shapes so
+        we don't silently drop the scalar lists (the earlier bug)."""
         out = []
         skipped = 0
         for item in items or []:
             try:
-                out.append(
-                    {
-                        k: (
-                            float(v)
-                            if isinstance(v, (int, float)) and not isinstance(v, bool)
-                            else (v.isoformat() if isinstance(v, datetime) else v)
-                        )
-                        for k, v in (
-                            item.__dict__.items() if hasattr(item, "__dict__") else item.items()
-                        )
+                if hasattr(item, "__dict__"):
+                    out.append({
+                        k: _to_jsonable(v)
+                        for k, v in item.__dict__.items()
                         if not k.startswith("_")
-                    }
-                )
+                    })
+                elif isinstance(item, dict):
+                    out.append({
+                        str(k): _to_jsonable(v)
+                        for k, v in item.items()
+                        if not str(k).startswith("_")
+                    })
+                else:
+                    # Scalar (float price level) — coerce numpy → Python
+                    out.append(_to_jsonable(item))
             except Exception as e:
                 # Skip this item but DON'T silently eat it — log the type +
                 # error so a replay payload with shape regressions surfaces

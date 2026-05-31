@@ -77,6 +77,7 @@ import {
   Chip,
   ConfluenceBreakdown,
   CycleHeartbeat,
+  MacroBand,
   DiagnoseWizard,
   FooterStatus,
   GauntletBreakdown,
@@ -100,6 +101,7 @@ import {
   type ActiveMode,
   type ActiveSession,
 } from '@/services/activeSession';
+import { tradeJournalService, type JournalAggregate } from '@/services/tradeJournalService';
 import { useScanner } from '@/context/ScannerContext';
 
 // ─── Formatters ─────────────────────────────────────────────────────────
@@ -524,6 +526,14 @@ export function BotStatus() {
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [tradesError, setTradesError] = useState<string | null>(null);
+  // Cross-session lifetime aggregate. Sourced from /api/trades/journal,
+  // which sums realized PnL across every closed trade in the journal
+  // file (all sessions, including pre-restart ones). Distinct from the
+  // hero's balance.pnl (current-session equity − initial) and from
+  // stats.total_pnl (current-session realized only). Re-fetched on the
+  // slow poll plus whenever a trade closes in this session.
+  const [lifetime, setLifetime] = useState<JournalAggregate | null>(null);
+  const [lifetimeError, setLifetimeError] = useState<string | null>(null);
   // Phase 3g.ii.c — PipelineTracer drawer state. Non-null = drawer open.
   const [tracerSignalId, setTracerSignalId] = useState<string | null>(null);
   // Phase 3g.ii.f — DiagnoseWizard modal state.
@@ -615,13 +625,30 @@ export function BotStatus() {
     }
   }, []);
 
+  const loadLifetime = useCallback(async () => {
+    try {
+      // limit=1 keeps the trades payload tiny — the aggregate envelope is
+      // always computed over the full journal regardless of limit.
+      const data = await tradeJournalService.getJournal({ limit: 1 });
+      if (data && data.aggregate) {
+        setLifetime(data.aggregate);
+        setLifetimeError(null);
+      } else {
+        setLifetimeError('Journal aggregate missing');
+      }
+    } catch (e) {
+      setLifetimeError(e instanceof Error ? e.message : 'Could not load lifetime totals');
+    }
+  }, []);
+
   useEffect(() => {
     loadStatus();
     loadTrades();
+    loadLifetime();
     const schedule = () => {
       const delay = fastPollRef.current ? 2000 : 10000;
       pollTimerRef.current = setTimeout(async () => {
-        await Promise.all([loadStatus(), loadTrades()]);
+        await Promise.all([loadStatus(), loadTrades(), loadLifetime()]);
         schedule();
       }, delay);
     };
@@ -629,7 +656,7 @@ export function BotStatus() {
     return () => {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
-  }, [loadStatus, loadTrades]);
+  }, [loadStatus, loadTrades, loadLifetime]);
 
   const handleStop = async () => {
     setStopping(true);
@@ -752,6 +779,9 @@ export function BotStatus() {
       {/* Cycle heartbeat — top-of-page status strip (plan §3e) ───── */}
       <CycleHeartbeat />
 
+      {/* Cycle Compass — macro band (read-only 4YC guide, not a signal) ── */}
+      <MacroBand />
+
       {/* ── Error banners ─────────────────────────────────────────── */}
       {connectionError && (
         <div
@@ -869,6 +899,51 @@ export function BotStatus() {
                 >
                   Session PnL · {stats?.winning_trades ?? 0}W/{stats?.losing_trades ?? 0}L
                   {' · '}{positions.length} open · {pendingOrders.length} pending
+                </div>
+                {/* Lifetime cumulative — cross-session, sourced from the
+                    journal aggregate. Distinct from the hero number, which
+                    is current-session equity − initial. Renders as a
+                    secondary strip so the operator can compare at a glance
+                    without giving up the session-level focus. */}
+                <div
+                  className="mono"
+                  title="Realized cumulative profit/loss across every closed trade in the journal — survives bot restarts and pre-dates this session."
+                  style={{
+                    fontSize: 9,
+                    color: 'var(--fg-4)',
+                    letterSpacing: '.22em',
+                    textTransform: 'uppercase',
+                    marginTop: 4,
+                  }}
+                >
+                  Cumulative P/L (all sessions){' '}
+                  <strong
+                    style={{
+                      color: lifetime
+                        ? lifetime.total_pnl > 0
+                          ? 'var(--green)'
+                          : lifetime.total_pnl < 0
+                            ? 'var(--red)'
+                            : 'var(--fg-2)'
+                        : 'var(--fg-3)',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {lifetime
+                      ? fmtCurrency(lifetime.total_pnl)
+                      : lifetimeError
+                        ? '—'
+                        : '…'}
+                  </strong>
+                  {lifetime && (
+                    <>
+                      {' · '}
+                      <span style={{ color: 'var(--fg-3)' }}>
+                        {lifetime.total_trades} trades · WR{' '}
+                        {lifetime.win_rate.toFixed(0)}%
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -1183,6 +1258,22 @@ export function BotStatus() {
                 }}
               >
                 <MetricTile
+                  label="Total PnL"
+                  value={fmtCurrency(stats?.total_pnl ?? 0)}
+                  sub={
+                    stats?.total_pnl_pct != null
+                      ? `${fmtPct(stats.total_pnl_pct)} realised`
+                      : 'realised'
+                  }
+                  accent={
+                    (stats?.total_pnl ?? 0) > 0
+                      ? 'green'
+                      : (stats?.total_pnl ?? 0) < 0
+                        ? 'red'
+                        : undefined
+                  }
+                />
+                <MetricTile
                   label="Trades"
                   value={String(stats?.total_trades ?? 0)}
                   sub={`${stats?.winning_trades ?? 0}W / ${stats?.losing_trades ?? 0}L`}
@@ -1191,12 +1282,12 @@ export function BotStatus() {
                   label="Win Rate"
                   value={
                     stats?.win_rate != null
-                      ? `${(stats.win_rate * 100).toFixed(0)}%`
+                      ? `${stats.win_rate.toFixed(0)}%`
                       : '—'
                   }
                   sub="of closed"
                   accent={
-                    stats && stats.win_rate >= 0.5 ? 'green' : undefined
+                    stats && stats.win_rate >= 50 ? 'green' : undefined
                   }
                 />
                 <MetricTile
@@ -1220,7 +1311,7 @@ export function BotStatus() {
                   label="Max DD"
                   value={
                     stats?.max_drawdown != null
-                      ? fmtPct(stats.max_drawdown * 100)
+                      ? fmtPct(stats.max_drawdown)
                       : '—'
                   }
                   accent="amber"

@@ -66,6 +66,83 @@ export interface ScannerMode {
   min_rr_ratio?: number;
 }
 
+// Replay API types — backend at backend/routers/replay.py
+export interface ReplayCandle {
+  time: number; // unix seconds
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface ReplayConfluenceFactor {
+  name: string;
+  score: number;
+  weight: number;
+  weighted_contribution: number;
+  rationale: string;
+}
+
+export interface ReplayConfluence {
+  total_score: number;
+  synergy_bonus: number;
+  conflict_penalty: number;
+  regime: string;
+  htf_aligned: boolean;
+  btc_impulse_gate: boolean;
+  direction: string;
+  factors: ReplayConfluenceFactor[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ReplayPlan {
+  direction: string;
+  setup_type?: string;
+  confidence_score: number;
+  risk_reward: number;
+  entry_zone: { near: number; far: number };
+  stop_loss?: { level: number; distance_atr: number; rationale: string };
+  targets: Array<{ level: number; label?: string }>;
+}
+
+export interface ReplaySMC {
+  order_blocks: Array<Record<string, unknown>>;
+  fvgs: Array<Record<string, unknown>>;
+  structural_breaks: Array<Record<string, unknown>>;
+  liquidity_sweeps: Array<Record<string, unknown>>;
+  equal_highs: number[];
+  equal_lows: number[];
+  htf_levels: Array<Record<string, unknown>>;
+}
+
+export interface ReplayRegime {
+  composite?: string;
+  score: number;
+  trend?: string;
+  volatility?: string;
+}
+
+export interface ReplayRejection {
+  reason_type?: string;
+  reason?: string;
+  [key: string]: unknown;
+}
+
+export interface ReplayStepResponse {
+  session_id: string;
+  index: number;
+  bar_open_ts: string;
+  current_ts: string;
+  candles_by_tf: Record<string, ReplayCandle[]>;
+  confluence: ReplayConfluence | null;
+  plan: ReplayPlan | null;
+  rejection: ReplayRejection | null;
+  smc_snapshot: ReplaySMC | null;
+  regime: ReplayRegime | null;
+  signal_fired: boolean;
+}
+
 export interface Signal {
   symbol: string;
   direction: 'LONG' | 'SHORT';
@@ -604,6 +681,71 @@ class ApiClient {
   async getCandles(symbol: string, timeframe = '1h', limit = 100) {
     return this.request(
       `/market/candles/${encodeURIComponent(symbol)}?timeframe=${timeframe}&limit=${limit}`
+    );
+  }
+
+  // ============== Replay API ==============
+  // Backend: backend/routers/replay.py
+  async createReplaySession(body: {
+    symbol: string;
+    mode: string;
+    window_start: string; // ISO 8601
+    window_end: string;
+  }) {
+    return this.request<{
+      session_id: string;
+      symbol: string;
+      mode: string;
+      total_bars: number;
+      tf_step: string;
+      window_start: string;
+      window_end: string;
+      bar_timestamps: string[];
+    }>('/replay/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async getReplaySession(sessionId: string) {
+    return this.request<{
+      session_id: string;
+      symbol: string;
+      mode: string;
+      current_index: number;
+      total_bars: number;
+      tf_step: string;
+    }>(`/replay/sessions/${encodeURIComponent(sessionId)}`);
+  }
+
+  async stepReplay(sessionId: string, n = 1) {
+    return this.request<ReplayStepResponse>(
+      `/replay/sessions/${encodeURIComponent(sessionId)}/step`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ n }),
+      }
+    );
+  }
+
+  async jumpToNextSignal(sessionId: string, maxLookahead = 100) {
+    return this.request<{
+      found: boolean;
+      bars_advanced: number;
+      step: ReplayStepResponse | null;
+    }>(`/replay/sessions/${encodeURIComponent(sessionId)}/jump-to-next-signal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ max_lookahead: maxLookahead }),
+    });
+  }
+
+  async deleteReplaySession(sessionId: string) {
+    return this.request<{ ok: boolean; session_id: string }>(
+      `/replay/sessions/${encodeURIComponent(sessionId)}`,
+      { method: 'DELETE' }
     );
   }
 

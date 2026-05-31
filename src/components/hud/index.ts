@@ -29,6 +29,7 @@ export { CycleHeartbeat } from './CycleHeartbeat';
 export { MacroScoreTile } from './MacroScoreTile';
 export { CooldownsTile } from './CooldownsTile';
 export { KillZoneStrip } from './KillZoneStrip';
+export { MacroBand } from './MacroBand';
 export { ScanController } from './ScanController';
 export { RejectionPanel } from './RejectionPanel';
 export { CycleAuditStrip } from './CycleAuditStrip';

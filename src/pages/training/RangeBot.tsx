@@ -58,6 +58,7 @@ import {
   type PaperTradingConfigRequest,
   type PaperTradingStatus,
 } from '@/services/paperTradingService';
+import { tradeJournalService, type JournalAggregate } from '@/services/tradeJournalService';
 
 // ─── Constants ─────────────────────────────────────────────────────────
 const FAST_POLL_MS = 2_000;
@@ -768,6 +769,8 @@ function StatusTab({
   working,
   onStop,
   onReset,
+  lifetime,
+  lifetimeErr,
 }: {
   status: PaperTradingStatus | null;
   trades: CompletedPaperTrade[];
@@ -776,6 +779,8 @@ function StatusTab({
   actionErr: string | null;
   loading: boolean;
   working: boolean;
+  lifetime: JournalAggregate | null;
+  lifetimeErr: string | null;
   onStop: () => void;
   onReset: () => void;
 }) {
@@ -820,6 +825,52 @@ function StatusTab({
                 <div className="mono" style={{ fontSize: 10, color: 'var(--fg-4)', letterSpacing: '.16em', marginTop: 4, textTransform: 'uppercase' }}>
                   uptime {fmtDuration(status?.uptime_seconds ?? 0)}
                   {status?.session_id && <> · session {status.session_id.slice(0, 8)}</>}
+                </div>
+                {/* Cumulative P/L — cross-session, sourced from the
+                    journal aggregate. Matches the strip on /bot/status so
+                    the bot and training surfaces show the same lifetime
+                    number. Distinct from balance.pnl (this session,
+                    realized + unrealized) and stats.total_pnl (this
+                    session, realized only). */}
+                <div
+                  className="mono"
+                  title="Realized cumulative profit/loss across every closed trade in the journal — survives bot restarts and pre-dates this session."
+                  style={{
+                    fontSize: 10,
+                    color: 'var(--fg-4)',
+                    letterSpacing: '.16em',
+                    marginTop: 4,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Cumulative P/L (all sessions){' '}
+                  <strong
+                    style={{
+                      color: lifetime
+                        ? lifetime.total_pnl > 0
+                          ? 'var(--green)'
+                          : lifetime.total_pnl < 0
+                            ? 'var(--red)'
+                            : 'var(--fg-2)'
+                        : 'var(--fg-3)',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {lifetime
+                      ? fmtCurrency(lifetime.total_pnl)
+                      : lifetimeErr
+                        ? '—'
+                        : '…'}
+                  </strong>
+                  {lifetime && (
+                    <>
+                      {' · '}
+                      <span style={{ color: 'var(--fg-3)' }}>
+                        {lifetime.total_trades} trades · WR{' '}
+                        {lifetime.win_rate.toFixed(0)}%
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -878,12 +929,18 @@ function StatusTab({
           <section className="panel" style={{ padding: 14 }}>
             <SectionHead title="Statistics" />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+              <MetricTile
+                label="Total PnL"
+                value={fmtCurrency(stats?.total_pnl ?? 0)}
+                sub={stats?.total_pnl_pct != null ? `${fmtPct(stats.total_pnl_pct, true)} realised` : 'realised'}
+                accent={(stats?.total_pnl ?? 0) > 0 ? 'green' : (stats?.total_pnl ?? 0) < 0 ? 'red' : undefined}
+              />
               <MetricTile label="Trades" value={String(stats?.total_trades ?? 0)} sub={`${stats?.winning_trades ?? 0}W / ${stats?.losing_trades ?? 0}L`} />
-              <MetricTile label="Win Rate" value={stats?.win_rate != null ? `${(stats.win_rate * 100).toFixed(0)}%` : '—'} sub="of closed" accent={stats && stats.win_rate >= 0.5 ? 'green' : undefined} />
+              <MetricTile label="Win Rate" value={stats?.win_rate != null ? `${stats.win_rate.toFixed(0)}%` : '—'} sub="of closed" accent={stats && stats.win_rate >= 50 ? 'green' : undefined} />
               <MetricTile label="Avg R:R" value={stats?.avg_rr != null ? `${stats.avg_rr.toFixed(2)}R` : '—'} sub="realised" />
               <MetricTile label="Best" value={fmtCurrency(stats?.best_trade ?? 0)} accent="green" />
               <MetricTile label="Worst" value={fmtCurrency(stats?.worst_trade ?? 0)} accent="red" />
-              <MetricTile label="Max DD" value={stats?.max_drawdown != null ? fmtPct(stats.max_drawdown * 100) : '—'} accent="amber" />
+              <MetricTile label="Max DD" value={stats?.max_drawdown != null ? fmtPct(stats.max_drawdown) : '—'} accent="amber" />
             </div>
           </section>
         </div>
@@ -955,7 +1012,7 @@ function StatusTab({
                         <span className="mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>{data.trades} trades</span>
                       </div>
                       <div className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', display: 'flex', gap: 10 }}>
-                        <span>WR {(data.win_rate * 100).toFixed(0)}%</span>
+                        <span>WR {data.win_rate.toFixed(0)}%</span>
                         <span style={{ color: data.total_pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmtCurrency(data.total_pnl)}</span>
                       </div>
                     </div>
@@ -1008,6 +1065,12 @@ export function RangeBot() {
   const [connErr, setConnErr] = useState<string | null>(null);
   const [tradesErr, setTradesErr] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  // Cross-session lifetime aggregate (matches /bot/status). Sourced from
+  // the journal so it survives bot restarts and reflects every closed
+  // trade — distinct from balance.pnl (current-session equity − initial)
+  // and stats.total_pnl (current-session realized only).
+  const [lifetime, setLifetime] = useState<JournalAggregate | null>(null);
+  const [lifetimeErr, setLifetimeErr] = useState<string | null>(null);
 
   const cancelledRef = useRef(false);
   const fastPollRef = useRef(false);
@@ -1056,16 +1119,33 @@ export function RangeBot() {
     }
   }, []);
 
+  const loadLifetime = useCallback(async () => {
+    try {
+      // limit=1 keeps the trades payload tiny — the aggregate envelope is
+      // always computed over the full journal regardless of limit.
+      const data = await tradeJournalService.getJournal({ limit: 1 });
+      if (data && data.aggregate) {
+        setLifetime(data.aggregate);
+        setLifetimeErr(null);
+      } else {
+        setLifetimeErr('Journal aggregate missing');
+      }
+    } catch (e) {
+      setLifetimeErr(e instanceof Error ? e.message : 'Could not load lifetime totals');
+    }
+  }, []);
+
   useEffect(() => {
     cancelledRef.current = false;
     loadStatus();
     loadTrades();
+    loadLifetime();
     const schedule = () => {
       if (cancelledRef.current) return;
       const delay = fastPollRef.current ? FAST_POLL_MS : SLOW_POLL_MS;
       pollTimerRef.current = setTimeout(async () => {
         if (cancelledRef.current) return;
-        await Promise.all([loadStatus(), loadTrades()]);
+        await Promise.all([loadStatus(), loadTrades(), loadLifetime()]);
         schedule();
       }, delay);
     };
@@ -1219,6 +1299,8 @@ export function RangeBot() {
           actionErr={actionErr}
           loading={loading}
           working={working}
+          lifetime={lifetime}
+          lifetimeErr={lifetimeErr}
           onStop={handleStop}
           onReset={handleReset}
         />

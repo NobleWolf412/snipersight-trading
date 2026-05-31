@@ -60,6 +60,7 @@ from backend.bot.notifications.notification_manager import (
 from backend.routers.htf_opportunities import router as htf_router
 from backend.routers.scanner import router as scanner_router, configure_scanner_router
 from backend.routers.data import router as data_router, configure_data_router
+from backend.routers.replay import router as replay_router, configure_replay_router
 from backend.shared.cache import get_cache_manager
 from backend.services.scanner_service import configure_scanner_service
 
@@ -440,6 +441,12 @@ configure_data_router(
     orchestrator=orchestrator,
 )
 
+# Replay engine — reuses the live orchestrator's adapter instance for fetches.
+# The engine constructs its OWN dedicated replay-mode orchestrator per session
+# (replay_engine._build_orchestrator), so the live orchestrator above is never
+# flipped into replay mode. See backend/engine/replay_engine.py module docstring.
+configure_replay_router(exchange_adapter=orchestrator.exchange_adapter)
+
 # Configure scanner service for background scan job management
 scanner_service = configure_scanner_service(
     orchestrator=orchestrator, exchange_adapters=EXCHANGE_ADAPTERS, log_handler=scan_job_log_handler
@@ -447,6 +454,7 @@ scanner_service = configure_scanner_service(
 
 app.include_router(scanner_router)
 app.include_router(data_router)
+app.include_router(replay_router)
 
 # Observability router — Phase 1 surfaces (trace, confluence, universe, cycles).
 # See backend/routers/observability.py for the full route table and the

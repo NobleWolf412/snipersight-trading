@@ -129,6 +129,18 @@ const DESKTOP_STATES: SnapshotState[] = [
     state: 'default',
   },
 
+  // ─── Replay — /training/replay (1 state, idle) ────────────────────────
+  // Default: page loads with the setup panel visible, no session yet (idle).
+  // No API mocking needed for this state — the chart panel + score panel
+  // are conditionally rendered only when a session exists. The setup panel
+  // renders against pure component state. A future state can mock the
+  // POST /api/replay/sessions response (see replay-default.json) to capture
+  // the playing state with score panel + chart + spectrogram visible.
+  {
+    route: '/training/replay',
+    state: 'default',
+  },
+
   // ─── RangeBot — /training/range (2 states) ────────────────────────────
   // Default: paper bot idle → setup tab renders (no hash, isRunning=false).
   // Negative proof (Rubric 4): this state proves the setup tab renders when
@@ -235,6 +247,61 @@ const DESKTOP_STATES: SnapshotState[] = [
   {
     route: '/bot/status',
     state: 'default',
+  },
+  // MacroBand (Cycle Compass) color/zone branches. Direction-agnostic: the
+  // macro band is a cycle-position readout, not a long/short signal, so there
+  // is no bull/bear pair to mirror (assertSymmetricDirectionalKeys exempt).
+  // The `default` /bot/status state already covers the BULLISH/MARKUP path via
+  // the global btc-cycle-context fixture; these two cover the load-bearing
+  // bearish/danger render and the degraded-strip error path.
+  {
+    route: '/bot/status',
+    state: 'macro_band__bearish_danger',
+    setup: async (page) => {
+      await page.route('**/api/market/btc-cycle-context*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'success',
+            data: {
+              symbol: 'BTC/USDT',
+              four_year_cycle: {
+                days_since_low: 1180,
+                cycle_position_pct: 88.0,
+                phase: 'MARKDOWN',
+                phase_progress_pct: 40.0,
+                translation: 'RTR',
+                macro_bias: 'BEARISH',
+                confidence: 71,
+                last_low: { date: '2024-09-08T00:00:00+00:00', price: 52480 },
+                expected_next_low: '2028-01-12T00:00:00+00:00',
+                days_until_expected_low: 280,
+                zones: { is_danger_zone: true, is_opportunity_zone: false },
+              },
+              halving: {
+                last_halving_date: '2024-04-20T00:00:00+00:00',
+                next_halving_date: '2028-04-12T00:00:00+00:00',
+                days_since_halving: 1180,
+                days_until_halving: 280,
+                halving_history: [],
+              },
+            },
+          }),
+        });
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+    },
+  },
+  {
+    route: '/bot/status',
+    state: 'macro_band__error',
+    setup: async (page) => {
+      await page.route('**/api/market/btc-cycle-context*', async (route) => {
+        await route.fulfill({ status: 503, contentType: 'application/json', body: '{"detail":"unavailable"}' });
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+    },
   },
   // First directional snapshot pair — exercises assertSymmetricDirectionalKeys
   // (Phase 3f sub-step 0) for the first time. Setup overlays a populated
