@@ -166,6 +166,39 @@ So wide stops are LEGITIMATE outcomes, not misplacement:
   higher tier). Tradeoff: fewer trades, higher quality. Reduces volume — §15 behavior change.
 
 Both depend on the same operator tradeoff (accept lower-R:R reachable trades vs take fewer trades).
-Pausing for that decision before code — it is genuinely the operator's risk-appetite call, not a
-coder default. Baseline supports either: the wide-stop cohort currently yields +2.40 tiny wins
-(targets unreachable), so both "make them reachable at lower R:R" and "decline them" beat status quo.
+Operator decision (2026-05-31): **BOTH — clamp if moderate, decline if extreme.**
+
+## WIDE STOP branch attribution — 2026-05-31, fresh backend (n=1113 stop calcs ≥1.33 ATR)
+
+Captured after restarting the backend onto current code (the prior baseline ran on stale
+ProcessPool workers → no WIDE STOP logs). Extractor:
+`python -m backend.diagnostics.stop_reachability_baseline`.
+
+| branch | n | % | meaning |
+|---|---|---|---|
+| max-stop-cap | 467 | 42% | structure found but > max_stop_atr → capped to min(max_stop,1.5)=1.5 ATR (L1487-1501) |
+| structural-wide | 427 | 38% | genuine far structural invalidation used as-is (to 3.98 ATR) |
+| other | 157 | 14% | — |
+| no-structure-fallback | 62 | 6% | no qualifying structure → ATR fallback (L1216-1240) |
+
+**80% of wide stops = "structure found, but far"** (cap 42% + structural-wide 38%). The
+no-structure ATR fallback is only 6% — earlier fallback-dominance hypotheses are quantitatively
+refuted. The defect is NOT detection and NOT fallback; it is the fixed 1.5R target ladder applied
+to a far (but legitimate) structural stop.
+
+## Data-derived thresholds (§15 — now evidence-backed)
+
+- **Reachable TP1 ceiling ≈ 1.3 ATR.** Good window: median stop 0.53 ATR → TP1@1.5R ≈ 0.8 ATR,
+  targets_hit 0.34 (reachable). Median favorable excursion ~0.6 ATR. 1.3 ATR is a conservative
+  (generous) ceiling above the proven-reachable 0.8.
+- **min R:R floor = 1.0** (`min_rr`); `target_min_rr_after_clip` = 1.2.
+- Therefore, with ceiling 1.3 ATR and floor 1.0R:
+  - stop ≤ ~0.87 ATR → TP1@1.5R ≤ 1.3 → reachable, NO change (the healthy ~47% structural<1.0).
+  - 0.87 < stop ≤ 1.3 ATR → CLAMP TP1 from 1.5R down to fit 1.3-ATR ceiling, R:R stays ≥ 1.0.
+  - stop > 1.3 ATR → even a 1.0R target exceeds the ceiling → DECLINE (the cap'd-1.5 + structural-wide).
+
+**Volume implication (material — flagged for operator):** in the traded sample ~27% (cap 1.5) +
+~20% (wide) ≈ **~47% of trades would be DECLINED**. That is a large volume cut, justified by the
+baseline (those wide-stop trades are the breakeven/loss cohort), but it IS a significant behavior
+change. The 1.3-ATR ceiling is the dial controlling decline aggressiveness — raise it to decline
+fewer (clamp more at lower R:R), lower it to decline more.
