@@ -202,3 +202,43 @@ to a far (but legitimate) structural stop.
 baseline (those wide-stop trades are the breakeven/loss cohort), but it IS a significant behavior
 change. The 1.3-ATR ceiling is the dial controlling decline aggressiveness — raise it to decline
 fewer (clamp more at lower R:R), lower it to decline more.
+
+Operator selected ceiling: **1.3 ATR** (balanced).
+
+## IMPLEMENTATION SPEC (mechanical — execute next)
+
+Admission-gate reality (verified, planner_service.py:772-786): rejects when TP1 R:R <
+`config.min_rr_ratio`. Per-mode: overwatch 2.0, strike 1.2, surgical 1.5, **STEALTH 1.5**. The
+"after-clip" floor `target_min_rr_after_clip` (planner_config.py:115 = 1.2; scalp = 1.0) is
+**DEAD** — only referenced in test_trade_type_aware.py, never wired into the gate. Because STEALTH
+floor (1.5) == ladder TP1 (1.5R), a naive clamp has NO admit band → pure decline. "Both" therefore
+REQUIRES wiring the after-clip floor for clamped targets.
+
+Changes (3 files + tests):
+1. **planner_config.py** — add field `tp1_reachable_ceiling_atr: float = 1.3` (NEW field — Rubric 9
+   flag). Document §15 baseline (this doc).
+2. **risk_engine.py `_calculate_targets`** — at the ladder TP1 rung (i==0), BEFORE the is_bullish
+   split (symmetry-safe, the L2413 `dist` line):
+   - `ceiling = planner_cfg.tp1_reachable_ceiling_atr * atr`
+   - if `dist > ceiling`:
+     - `clamped_rr = ceiling / max(risk_distance,1e-9)`
+     - if `clamped_rr >= planner_cfg.target_min_rr_after_clip`: `dist = ceiling`; mark
+       `targets[0]` clamped (set attr, mirror of stop_loss.structure_tf_used pattern).
+     - else: signal DECLINE (stop too wide for a reachable target at the after-clip floor) — raise
+       a dedicated `ReachabilityDecline` exception.
+   - Symmetric: clamp `dist` once before the L/S branch; no per-direction divergence (§10).
+3. **planner_service.py** —
+   - wrap `_calculate_targets` call: catch `ReachabilityDecline` → `return None` (clean skip, like
+     the entry-zone depth gate at L287-291) + `create_signal_rejected_event(reason="tp1_unreachable")`.
+   - admission gate (L772-786): if `targets[0]` is reachability-clamped, use
+     `config-resolved target_min_rr_after_clip` as the floor instead of `min_rr_ratio`. Wires the
+     dead field for its documented purpose; normal targets still gated at `min_rr_ratio`.
+4. **diagnostic/metadata:** plan.metadata additive `tp1_clamped`, `tp1_realized_rr`,
+   `tp1_reachable_ceiling_atr`. WIDE STOP diagnostic already shipped.
+5. **tests:** paired L/S clamp tests; decline test (stop > ceiling/after_clip → skip); admission
+   gate admits clamped @ after-clip floor but rejects unclamped < min_rr_ratio; healthy tight-stop
+   trade unaffected (no-op). Mass/symmetry per §16 R3/R12.
+
+Gates each step: symmetry-guard (auto, scoring/planner) + backend-integrity (§20: risk_engine,
+planner_service, telemetry event, plan.metadata) + §16 audit. Contract diff: new telemetry reason
++ metadata keys are additive (document downstream). Revert criterion in §Risks above.
