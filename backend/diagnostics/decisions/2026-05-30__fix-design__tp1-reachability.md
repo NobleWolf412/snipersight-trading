@@ -98,7 +98,43 @@ the coherence gate fires when stop ≫ tier range.
 - **Revert criterion:** if win-rate degrades >10pp or targets_hit fails to recover above ~0.20 in
   the next paper session, revert.
 
-## Next concrete step
+## Phase 1 BASELINE — recorded 2026-05-31 (session 8e698270, 13h, n=37)
 
-Phase 1: run a paper session with the shipped diagnostics, then write the baseline table here.
-Code does not start until that baseline is on record (§15).
+Extractor: `python -m backend.diagnostics.stop_reachability_baseline`.
+
+| metric | this run (8e698270) | GOOD ref (<05-24) | degraded window (05-24..29) |
+|---|---|---|---|
+| n | 37 | 44 | 105 |
+| win% | 54 | 70 | 37 |
+| **avg win** | **+2.40** | **+11.37** | +19.44 |
+| avg loss | −2.66 | −2.72 | −27.52 |
+| payoff | 0.90 | 4.19 | 0.71 |
+| expectancy/trade | **+0.08** | +7.21 | −10.08 |
+| targets_hit | 0.14 | 0.34 | 0.13 |
+| median stop ATR | **1.50** | 0.53 | 1.50 |
+
+Stop-distance buckets (this run): structural<1.0 = 41%, ~1.5 fallback/cap = 32%, wide≥1.5 = 22%.
+Exit mix: target 5, stagnation 10, direction_flip 9, stop_loss 7, session_stopped 6.
+Raw stop_distance_atr: 12 trades pinned at exactly 1.50; tail to 3.72 ATR.
+
+**Interpretation (confirms the design's mechanism):** losses are now controlled (−2.66 ≈ healthy
+−2.72) — the calm market didn't trigger the wide stops. But wins collapsed to +2.40 (vs +11.37)
+because targets are unreachable (0.14 hit; only 5/37 exited on target; 19 exited via
+stagnation/flip — drifting trades closed small before reaching the far TP). Same wide-stop root as
+the degraded window (median stop 1.50 ATR identical), different expression: breakeven-by-tiny-wins
+in calm vs big-losses in chop. The 54% win rate shows direction selection is fine — the bot just
+can't BANK a meaningful win.
+
+Caveat: WIDE STOP diagnostic logged nothing this run (bot likely on pre-5617f36 code / log
+rotated). Journal data is authoritative for this baseline regardless; ensure latest code on next run.
+
+## Data-derived threshold targets (PROPOSALS — validate in Phase 2/3)
+
+- Healthy TP1 was reachable at stop ≈0.53 ATR → TP1 @1.5R ≈ 0.8 ATR. Median favorable excursion
+  ~0.6 ATR. So a reachable TP1 ceiling is ≈ **1.0–1.3 ATR** absolute.
+- This run's TP1 @1.5R off a 1.50-ATR stop ≈ 2.25 ATR — ~2× the reachable ceiling.
+- Implies BOTH levers needed: pull stops toward the ~0.5–0.8 ATR structural band where reachable
+  (Phase 2 coherence — don't run a 1.5–3.7 ATR stop on a scalp), and clamp residual TP1 to the
+  ~1.0–1.3 ATR ceiling floored at target_min_rr_after_clip=1.2 (Phase 3).
+
+Baseline on record → Phase 2 code may proceed (with symmetry-guard + backend-integrity + §16 audit).
