@@ -816,6 +816,11 @@ def generate_trade_plan(
         # Attach metadata
         plan.metadata = {
             "archetype": archetype,
+            # Raw ATR the plan was built with. Consumed by the orchestrator's post-plan
+            # revalidation drift gate (drift_atr = drift_abs / atr). It was never set
+            # before, so atr_val defaulted to 0.0 and the `drift_atr > max_drift_atr`
+            # check was permanently dead — only the looser pct gate survived (audit #13).
+            "atr": atr,
             "atr_regime": {"label": regime_label},
             "leverage": leverage,
             "leverage_stop_adjustment": liq_meta if was_liq_adjusted else scale_meta if scale_meta else None,
