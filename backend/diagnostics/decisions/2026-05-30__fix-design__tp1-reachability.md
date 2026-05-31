@@ -138,3 +138,34 @@ rotated). Journal data is authoritative for this baseline regardless; ensure lat
   ~1.0–1.3 ATR ceiling floored at target_min_rr_after_clip=1.2 (Phase 3).
 
 Baseline on record → Phase 2 code may proceed (with symmetry-guard + backend-integrity + §16 audit).
+
+## Phase 2 design CORRECTED (2026-05-31, after reading `_calculate_stop_loss` 777-1503)
+
+The original Phase 2 ("prefer nearest valid invalidation") was based on a WRONG assumption —
+**the stop builder ALREADY picks the nearest structure**: L1085-1087 selects
+`max(valid_stops, key=low)` = the closest invalidation below entry; structure-TF ATR
+normalization (L1094-1136) already prevents HTF-ATR-mismatch rejections. A "prefer nearest"
+change would be a no-op. (Caught by reading before coding — the discipline this session lacked
+earlier.)
+
+Verified selection chain (LONG; SHORT mirrored): consolidation-stop (if passed+quality) →
+swing-mode (overwatch only) → OB/FVG below entry filtered to `allowed_tfs`, nearest chosen →
+entry-OB edge → `_find_swing_level` (primary then HTF) → ATR fallback (1.5 scalp / 2.5 STEALTH).
+
+So wide stops are LEGITIMATE outcomes, not misplacement:
+- **wide-structural:** the nearest QUALIFYING OB/FVG (on the tier's `allowed_tfs`, below entry) is
+  genuinely far — no closer invalidation exists on those TFs.
+- **1.5/2.5 fallback:** NO qualifying structure on the tier's TFs → ATR fallback.
+
+**Revised fix space (neither moves the stop → no sweep risk):**
+- **(a) Adaptive R:R / reachability clamp** (target-side, Phase 3): on wide-stop trades, lower the
+  first target's R:R toward the admission floor so it's reachable. Tradeoff: smaller R:R per trade
+  (down to ~1:1) in exchange for a higher hit rate. §15 risk-appetite decision — OPERATOR call.
+- **(b) Coherence decline gate** (planner/orchestrator): if even a min-R:R target off the computed
+  stop exceeds the reachable ceiling for the tier, decline the trade (or let the cascade try a
+  higher tier). Tradeoff: fewer trades, higher quality. Reduces volume — §15 behavior change.
+
+Both depend on the same operator tradeoff (accept lower-R:R reachable trades vs take fewer trades).
+Pausing for that decision before code — it is genuinely the operator's risk-appetite call, not a
+coder default. Baseline supports either: the wide-stop cohort currently yields +2.40 tiny wins
+(targets unreachable), so both "make them reachable at lower R:R" and "decline them" beat status quo.
