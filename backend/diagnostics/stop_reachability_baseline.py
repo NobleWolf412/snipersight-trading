@@ -28,7 +28,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 JOURNAL = REPO / "backend" / "cache" / "trade_journal.jsonl"
-DEVLOG = REPO / "logs" / "dev_servers.log"
+# WIDE STOP / planner loguru output may land in either the concurrently-managed
+# dev_servers.log OR a standalone-launched backend.err.log (stderr redirect).
+# Scan both so the diagnostic is found regardless of how the backend was started.
+DEVLOGS = [REPO / "logs" / "backend.err.log", REPO / "logs" / "dev_servers.log"]
 GOOD_CUTOFF = "2026-05-24"  # journal entries before this = healthy reference window
 
 
@@ -93,19 +96,20 @@ def _stop_buckets(rows):
 
 
 def _wide_stop_log_summary():
-    if not DEVLOG.exists():
-        return None
     branch = Counter()
     dists = []
     pat = re.compile(r"WIDE STOP \[[A-Z]+ [a-z_]+\]: ([a-z-]+) \| dist=([0-9.]+) ATR")
-    try:
-        for line in DEVLOG.open(encoding="utf-8", errors="ignore"):
-            m = pat.search(line)
-            if m:
-                branch[m.group(1)] += 1
-                dists.append(float(m.group(2)))
-    except OSError:
-        return None
+    for devlog in DEVLOGS:
+        if not devlog.exists():
+            continue
+        try:
+            for line in devlog.open(encoding="utf-8", errors="ignore"):
+                m = pat.search(line)
+                if m:
+                    branch[m.group(1)] += 1
+                    dists.append(float(m.group(2)))
+        except OSError:
+            continue
     if not dists:
         return None
     return {"branch": dict(branch.most_common()), "n": len(dists),
