@@ -3307,17 +3307,24 @@ class Orchestrator:
                 except Exception:
                     pass
 
-            # Compute simple EV estimate for ranking/prioritization
-            try:
-                # Map confluence score (0-100) to win prob (0.35-0.70)
-                score = float(context.confluence_breakdown.total_score)
-                p_win = max(0.35, min(0.70, 0.35 + (score / 100.0) * (0.70 - 0.35)))
-                R = float(plan.risk_reward)
-                ev = p_win * R - (1 - p_win) * 1.0
-                plan.metadata["ev"] = round(ev, 3)
-                plan.metadata["p_win"] = round(p_win, 3)
-            except Exception:
-                plan.metadata["ev"] = None
+            # Compute simple EV estimate for ranking/prioritization.
+            # Guard plan-is-None: the planner returns None on a legitimate decline
+            # (reachability, entry-depth gate, etc.). Without this guard, `plan.risk_reward`
+            # threw AttributeError, and the except handler's own `plan.metadata["ev"] = None`
+            # RE-THREW 'NoneType' object has no attribute 'metadata', which escaped to the
+            # outer catch and OVERWROTE the real decline reason with the generic NoneType
+            # error — masking ~half the planner rejections. See decisions log (reason-mask bug).
+            if plan is not None:
+                try:
+                    # Map confluence score (0-100) to win prob (0.35-0.70)
+                    score = float(context.confluence_breakdown.total_score)
+                    p_win = max(0.35, min(0.70, 0.35 + (score / 100.0) * (0.70 - 0.35)))
+                    R = float(plan.risk_reward)
+                    ev = p_win * R - (1 - p_win) * 1.0
+                    plan.metadata["ev"] = round(ev, 3)
+                    plan.metadata["p_win"] = round(p_win, 3)
+                except Exception:
+                    plan.metadata["ev"] = None
 
             # --- Post-plan real-time price revalidation ---
             # Fetch a fresh price (direct adapter ticker if available) to ensure the
