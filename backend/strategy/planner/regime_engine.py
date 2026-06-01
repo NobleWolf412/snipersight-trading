@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 def get_atr_regime(
     indicators,  # Accepts IndicatorSet OR IndicatorSnapshot (for backward compat)
     current_price: Optional[float] = None,
+    primary_tf: Optional[str] = None,
 ) -> str:
     """
     Get ATR regime using system-standard RegimeDetector.
@@ -31,6 +32,13 @@ def get_atr_regime(
         indicators: IndicatorSet OR IndicatorSnapshot (for backward compatibility).
                    If a single IndicatorSnapshot is passed, it's wrapped in a temp IndicatorSet.
         current_price: Optional current price (used by detector fallback)
+        primary_tf: Optional planning-TF key. When given (and present in a
+                   multi-TF IndicatorSet), the regime is computed on THAT
+                   timeframe only — pinning the planner/entry ladder to the
+                   trade's own timescale instead of the structural (highest-TF)
+                   volatility used by the global/symbol regime. This isolates the
+                   TP-ladder from the global regime-TF fix (the global/symbol
+                   regime call _detect_volatility directly and are unaffected).
 
     Returns:
         Regime label: "compressed", "normal", "elevated", "volatile", "chaotic"
@@ -54,17 +62,35 @@ def get_atr_regime(
             logger.error(f"get_atr_regime: Unknown indicator type {type(indicators).__name__}")
             return "normal"
 
+    # Planner/entry isolation: pin to the trade's planning TF when requested, so
+    # the TP-ladder regime reflects the trade's own timescale and is NOT moved by
+    # the global structural-TF fix in _detect_volatility (which now selects the
+    # highest-duration TF). Without this, fixing the global regime would also flip
+    # the planner ladder (R:R cap, ATR multipliers) — out of scope by design.
+    if primary_tf and getattr(indicators, "by_timeframe", None):
+        _snap = indicators.by_timeframe.get(primary_tf) or indicators.by_timeframe.get(
+            primary_tf.lower()
+        ) or indicators.by_timeframe.get(primary_tf.upper())
+        if _snap is not None:
+            class _PinnedIndicatorSet:
+                def __init__(self, snapshot):
+                    self.by_timeframe = {"_primary": snapshot}
+
+            indicators = _PinnedIndicatorSet(_snap)
+
     # Use the internal detector logic
     # RegimeDetector._detect_volatility returns (label, score)
     label, score = get_regime_detector()._detect_volatility(indicators)
 
-    # Mapping for backward compatibility with PlannerConfig keys
+    # Mapping for backward compatibility with PlannerConfig keys.
+    # (Band cut points live in regime_detector._detect_volatility; the label→key
+    # mapping below is independent of the numeric thresholds.)
     mapping = {
         "compressed": "calm",
         "normal": "normal",
         "elevated": "elevated",
-        "volatile": "explosive",  # > 2.5%
-        "chaotic": "explosive",  # > 4.0%
+        "volatile": "explosive",
+        "chaotic": "explosive",
     }
 
     mapped = mapping.get(label, "normal")

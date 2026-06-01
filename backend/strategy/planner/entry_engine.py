@@ -792,7 +792,7 @@ def _calculate_entry_zone(
             # Calculate regime-aware base offset
             # Calculate regime-aware base offset
             if indicators:
-                regime = get_atr_regime(indicators, current_price)
+                regime = get_atr_regime(indicators, current_price, primary_tf=primary_tf)
             else:
                 regime = "normal"
             regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
@@ -913,7 +913,7 @@ def _calculate_entry_zone(
             entry_tf_used = best_fvg.timeframe  # Track for metadata
 
             if indicators:
-                regime = get_atr_regime(indicators, current_price)
+                regime = get_atr_regime(indicators, current_price, primary_tf=primary_tf)
             else:
                 regime = "normal"
             regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
@@ -1158,7 +1158,7 @@ def _calculate_entry_zone(
             )
             # Calculate regime-aware base offset
             if indicators:
-                regime = get_atr_regime(indicators, current_price)
+                regime = get_atr_regime(indicators, current_price, primary_tf=primary_tf)
             else:
                 regime = "normal"
             regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)
@@ -1272,7 +1272,7 @@ def _calculate_entry_zone(
             entry_tf_used = best_fvg.timeframe  # Track for metadata
 
             if indicators:
-                regime = get_atr_regime(indicators, current_price)
+                regime = get_atr_regime(indicators, current_price, primary_tf=primary_tf)
             else:
                 regime = "normal"
             regime_multiplier = planner_cfg.atr_regime_multipliers.get(regime, 1.0)

@@ -400,8 +400,12 @@ def generate_trade_plan(
         )
 
     # === 4. Calculate Targets (Delegate to Risk Engine) ===
-    # Get regime label for target adjustment
-    regime_label = get_atr_regime(indicators, current_price)
+    # Get regime label for target adjustment.
+    # Pin to the planning TF (primary_tf) so the TP-ladder regime reflects the
+    # trade's own timescale and is NOT moved by the global structural-TF fix in
+    # _detect_volatility (which selects the highest-duration TF for the global/
+    # symbol regime that gates swing). Keeps the ladder's tuned behaviour.
+    regime_label = get_atr_regime(indicators, current_price, primary_tf=primary_tf)
 
     try:
         targets = _calculate_targets(

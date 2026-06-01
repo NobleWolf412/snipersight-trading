@@ -16,6 +16,36 @@ from backend.shared.models.indicators import IndicatorSet
 logger = logging.getLogger(__name__)
 
 
+# Timeframe ordering by real duration (minutes). Used to pick the genuinely
+# highest timeframe present. A naive lexicographic reverse-sort of
+# ('1W','1D','4H','1H','15m','5m') returns '5m' (because '5' > '4' > '1' as the
+# leading char) — the LOWEST timeframe — which pinned the structural volatility
+# regime to 5-minute ATR% (~0.14% → perma-"compressed"). See
+# backend/diagnostics/regime_tf_selection_diagnostic.py.
+_TF_MINUTES = {
+    "1m": 1, "3m": 3, "5m": 5, "15m": 15, "30m": 30,
+    "1h": 60, "2h": 120, "4h": 240, "6h": 360, "12h": 720,
+    "1d": 1440, "3d": 4320, "1w": 10080,
+}
+
+
+def _highest_duration_tf(keys) -> Optional[str]:
+    """Return the highest-duration timeframe key present (e.g. '1W' over '5m').
+
+    Graceful fallback: if '1W' isn't present (e.g. Phemex weekly fetch failed),
+    returns the next-longest available ('1D'). If no key has a known duration,
+    returns the lexicographic max (prior behaviour) so an unknown-key set never
+    raises.
+    """
+    present = list(keys)
+    if not present:
+        return None
+    known = [k for k in present if k.lower() in _TF_MINUTES]
+    if known:
+        return max(known, key=lambda k: _TF_MINUTES[k.lower()])
+    return max(present)
+
+
 class RegimeDetector:
     """Detects market regime across multiple dimensions"""
 
@@ -664,8 +694,12 @@ class RegimeDetector:
         if not indicators.by_timeframe:
             return "normal", 75.0
 
-        # Get highest timeframe indicator
-        primary_tf = sorted(indicators.by_timeframe.keys(), reverse=True)[0]
+        # Get highest timeframe indicator (by real DURATION, not lexicographic).
+        # The old `sorted(keys, reverse=True)[0]` returned '5m' (lowest TF),
+        # pinning structural volatility to 5-minute ATR%.
+        primary_tf = _highest_duration_tf(indicators.by_timeframe.keys())
+        if primary_tf is None:
+            return "normal", 75.0
         ind = indicators.by_timeframe[primary_tf]
 
         if ind.atr is None:
@@ -713,25 +747,31 @@ class RegimeDetector:
             if recent_avg > older_avg * 1.15:  # 15% increase
                 atr_expanding = True
 
-        # Classify based on ATR% (proper volatility-adjusted thresholds)
-        # These thresholds are for crypto - adjust if needed for other assets
+        # Classify based on ATR% — bands calibrated for the DAILY timeframe
+        # (the structural TF now selected by _highest_duration_tf). Derived from
+        # backend/diagnostics/daily_atr_baseline.py (BTC + alt basket, n~2900):
+        # BTC daily ranges ~1.8-6.7% (median 3.24%), pooled basket p10≈2.8 /
+        # p50≈5.3 / p80≈7.4 / p95≈9.8. Anchored so BTC's normal day reads
+        # "normal" and BTC's max reads "elevated" (never "chaotic"); alts at
+        # 8-10% read "volatile/chaotic". Old bands (0.8/1.5/2.5/4.0) were tuned
+        # for the wrong TF (5-minute ATR%) and mislabelled daily ranges.
 
-        if atr_pct < 0.8:
-            # Very compressed - coiling for a move
+        if atr_pct < 2.5:
+            # Compressed — genuinely dead daily range (below pooled ~p10)
             logger.info(
                 f"Volatility: compressed (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
             )
             return "compressed", 60.0
 
-        elif atr_pct < 1.5:
-            # Normal healthy volatility
+        elif atr_pct < 5.0:
+            # Normal healthy daily volatility (~p10..p50)
             logger.info(
                 f"Volatility: normal (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
             )
             return "normal", 75.0
 
-        elif atr_pct < 2.5:
-            # Elevated but manageable
+        elif atr_pct < 7.0:
+            # Elevated but manageable (~p50..p80)
             if atr_expanding:
                 logger.info(
                     f"Volatility: elevated_expanding (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
@@ -743,15 +783,15 @@ class RegimeDetector:
                 )
                 return "elevated", 60.0
 
-        elif atr_pct < 4.0:
-            # High volatility - caution
+        elif atr_pct < 9.5:
+            # High volatility - caution (~p80..p95)
             logger.info(
                 f"Volatility: volatile (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
             )
             return "volatile", 40.0
 
         else:
-            # Chaotic/crash conditions (>4% ATR)
+            # Chaotic/crash conditions (>~p95 daily ATR%)
             logger.warning(
                 f"Volatility: chaotic (ATR={ind.atr:.1f}, price={current_price:.1f}, ATR%={atr_pct:.2f}%)"
             )

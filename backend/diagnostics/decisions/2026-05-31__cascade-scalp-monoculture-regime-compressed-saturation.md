@@ -39,14 +39,42 @@ BTC volatility label is `compressed` ~98% of the time and is allowed to override
 compressed (median symbol ATR% 1.03%). It is **not a cascade-selection bug and not a one-session
 fluke** — it is systemic across the entire 37-session history.
 
-## OPEN QUESTION (instrumentation gap — unresolved)
-Is the global regime genuinely compressed (BTC truly sub-0.8% ATR% for the whole period — then
-the *design choice* "global compressed suppresses swing on every alt" is the lever), OR is the
-global volatility classifier underreporting (TF/period/stale-cache — note global_regime_cache
-TTL at `regime_detector.py:87-91`)? The signals log the *symbol* atr_percent, not the global
-regime's atr_percent/TF. To resolve: log `global_regime.volatility`, its source ATR%, and TF per
-scan. Until then, do NOT tune the 0.8% threshold or the cap — would be threshold tampering without
-a baseline (CLAUDE.md §15).
+## OPEN QUESTION — RESOLVED 2026-05-31: timeframe-selection BUG (not quiet markets)
+The classifier under-reports because it computes "structural" volatility on the WRONG timeframe.
+`RegimeDetector._detect_volatility` picks the "primary" TF with
+`sorted(by_timeframe.keys(), reverse=True)[0]` (regime_detector.py:668, comment "Get highest
+timeframe indicator"). (NOTE: only `_detect_volatility` had this bug — `_detect_trend` already
+uses an explicit `preferred_order` list and was always correct; left untouched by the fix.)
+But the keys are TF strings; lexical reverse-sort of
+('1W','1D','4H','1H','15m','5m') returns **'5m'** (because '5' > '4' > '1' as the leading char),
+i.e. the LOWEST timeframe, not the highest.
+
+Empirical (live BTC, 2026-05-31, ATR-14 %-of-price — see
+`backend/diagnostics/regime_tf_selection_diagnostic.py`):
+  5m 0.144% · 15m 0.189% · 1h 0.308% · 4h 0.787%  → all "compressed"
+  1d 2.504% → "volatile"      (1w fails to fetch on Phemex — NaN)
+So the global label is mathematically pinned to "compressed" (anything ≤4h is sub-0.8%), while the
+real structural read (1D) is "volatile". Not quiet markets — a sort bug.
+
+Blast radius of fixing the sort (duration-order the TFs): affects the MULTI-TF callers —
+global regime (→ swing-cap orchestrator.py:2347-2358, the scalp-monoculture cause), symbol regime,
+`entry_engine` get_atr_regime, AND the planner TP-ladder.
+
+CORRECTION (Plan agent, 2026-05-31): my earlier claim that the planner ladder is NOT affected was
+a WRONG, un-traced premise (the exact failure mode 2026-05-29__regime-label-premise-miss.md warns
+about). Only the STOP-LOSS buffer is out of scope — `risk_engine.py:821` (_calculate_stop_loss)
+passes a single IndicatorSnapshot wrapped as `_primary`, so the sort is a no-op there. But the
+TP-LADDER is in scope: `planner_service.py:404` (_calculate_targets) and `entry_engine.py:795`
+pass the FULL IndicatorSet, so the fix flips the regime feeding `_MAX_RR_BY_REGIME` (cap 3R→6-12R),
+`atr_regime_multipliers` (0.9×→1.0-1.5×), and the entry-zone offset. That is a ladder-wide
+behavioral change touching the recently-tuned reachability logic (2026-05-24/30) — the top risk.
+Operator decision pending: accept the wider-ladder change, OR isolate it by switching those two
+call sites to a single primary-TF snapshot so only the swing-cap consumes the multi-TF label.
+
+COUPLED DESIGN CHOICE (operator decision pending): the thresholds (0.8/1.5/2.5/4.0) were never
+meaningfully exercised on 5m (always <0.8). Re-pointing to 1D needs threshold recalibration +
+a baseline, else 1D's ~2.5% normal daily range mislabels as "volatile/chaotic". Fix = Plan-gated,
+symmetry-guard + §16 audit, baseline before/after. Do NOT tune in isolation.
 
 ## Status / next
 - No code changed. Operator chose: diagnose-deeper (done, here), FYC → UI-only, build macro-band
