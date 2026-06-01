@@ -295,6 +295,124 @@ def test_reported_rr_matches_realized_rr_short():
 
 
 # ──────────────────────────────────────────────────────────────────────
+# TP1 reachability clamp / decline (2026-05-31 fix)
+# decisions/2026-05-30__fix-design__tp1-reachability.md
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _module_src() -> str:
+    return _SRC_PATH.read_text(encoding="utf-8")
+
+
+def test_reachability_decline_class_defined():
+    """`ReachabilityDecline` exception must exist — it signals the clean-skip decline
+    path consumed by planner_service. Removing it silently reverts the decline half."""
+    assert "class ReachabilityDecline(Exception):" in _module_src(), (
+        "ReachabilityDecline exception missing — the extreme-stop decline path is gone."
+    )
+
+
+def test_tp1_clamp_block_present_and_pre_split():
+    """The TP1 clamp/decline must live in _calculate_targets and be resolved BEFORE the
+    `if is_bullish` split so LONG/SHORT are treated identically (§10). Pins the ceiling
+    lookup, the after-clip floor gate, and the raise."""
+    body = _calculate_targets_body()
+    assert "planner_cfg.tp1_reachable_ceiling_atr * atr" in body, "ceiling distance calc missing"
+    assert "if i == 0 and _ceiling_dist is not None and dist > _ceiling_dist:" in body, (
+        "TP1-only clamp guard missing or changed"
+    )
+    assert "if _clamped_rr >= planner_cfg.target_min_rr_after_clip:" in body, (
+        "after-clip floor gate missing — clamp would admit below the floor or decline always"
+    )
+    assert "raise ReachabilityDecline(" in body, "decline path (extreme stop) missing"
+    # Symmetry: the clamp mutates `dist` BEFORE the is_bullish split, so the level
+    # formulas remain the existing symmetric pair. Pin both still present & unchanged.
+    assert "level = entry_ref + dist" in body and "level = max(entry_ref * 0.001, entry_ref - dist)" in body, (
+        "is_bullish level pair changed — clamp must not introduce a direction-specific level"
+    )
+    # The clamp guard must precede the level split textually (direction-agnostic).
+    assert body.index("dist = _ceiling_dist") < body.index("level = entry_ref + dist"), (
+        "clamp must be applied before the is_bullish split (symmetry requirement)"
+    )
+
+
+def test_tp1_clamp_decision_math_direction_agnostic():
+    """Replicates the clamp/decline DECISION exactly as coded (it operates on `dist`
+    and `risk_distance` pre-split, so it is direction-agnostic by construction). Asserts
+    the three boundary regimes with ceiling=1.3 ATR, ladder TP1=1.5R, after-clip floor=1.2.
+    """
+    CEILING_ATR, LADDER_RR, AFTER_CLIP = 1.3, 1.5, 1.2
+    atr = 1.0  # work in ATR units (risk_distance expressed in ATR)
+
+    def decide(stop_atr: float):
+        risk_distance = stop_atr  # atr=1.0
+        ceiling_dist = CEILING_ATR * atr
+        dist = max(risk_distance * LADDER_RR, 0.0)
+        if dist > ceiling_dist:
+            clamped_rr = ceiling_dist / max(risk_distance, 1e-9)
+            if clamped_rr >= AFTER_CLIP:
+                return ("clamp", ceiling_dist, clamped_rr)
+            return ("decline", None, clamped_rr)
+        return ("asis", dist, LADDER_RR)
+
+    # Tight stop (0.5 ATR): TP1@1.5R = 0.75 ATR <= ceiling -> unchanged, full R:R.
+    action, dist, rr = decide(0.5)
+    assert action == "asis" and rr == LADDER_RR, f"tight stop should be untouched, got {action}"
+
+    # Moderate stop (1.0 ATR): TP1@1.5R = 1.5 > 1.3 ceiling; clamp to 1.3 ATR,
+    # clamped R:R = 1.3/1.0 = 1.3 >= 1.2 floor -> CLAMP.
+    action, dist, rr = decide(1.0)
+    assert action == "clamp" and abs(dist - 1.3) < 1e-9 and rr >= AFTER_CLIP, (
+        f"moderate stop should clamp at the ceiling with R:R>=floor, got {action} rr={rr}"
+    )
+
+    # Extreme stop (1.5 ATR): even a 1.2R target = 1.8 ATR > 1.3 ceiling
+    # (clamped R:R = 1.3/1.5 = 0.87 < 1.2 floor) -> DECLINE.
+    action, dist, rr = decide(1.5)
+    assert action == "decline", f"extreme stop should decline (unreachable), got {action} rr={rr}"
+
+    # Boundary: stop where clamped_rr == floor exactly (1.3/1.2 = 1.0833 ATR) -> still clamp.
+    action, _, rr = decide(CEILING_ATR / AFTER_CLIP)
+    assert action == "clamp" and abs(rr - AFTER_CLIP) < 1e-6, "floor boundary should clamp, not decline"
+
+
+def test_admission_gate_after_clip_floor_logic():
+    """planner_service admission gate: a reachability-clamped TP1 is admitted down to
+    target_min_rr_after_clip; a non-clamped TP1 still requires min_rr_ratio. Pins the
+    source rule and replicates its effect (STEALTH min_rr_ratio=1.5, after_clip=1.2)."""
+    ps_src = (_SRC_PATH.parent / "planner_service.py").read_text(encoding="utf-8")
+    assert 'getattr(targets[0], "reachability_clamped", False)' in ps_src, (
+        "admission gate no longer detects the clamped flag"
+    )
+    assert "min_rr = min(min_rr, planner_cfg.target_min_rr_after_clip)" in ps_src, (
+        "admission gate no longer lowers the floor for clamped targets"
+    )
+
+    # Replicate the gate decision.
+    def admitted(actual_rr, clamped, min_rr_ratio=1.5, after_clip=1.2, eps=0.001):
+        min_rr = min(min_rr_ratio, after_clip) if clamped else min_rr_ratio
+        return min_rr <= 0 or actual_rr >= (min_rr - eps)
+
+    assert admitted(1.3, clamped=True), "clamped 1.3R must be admitted (>= 1.2 after-clip floor)"
+    assert not admitted(1.3, clamped=False), "un-clamped 1.3R must be rejected (< 1.5 min_rr)"
+    assert admitted(1.5, clamped=False), "un-clamped 1.5R must be admitted at min_rr"
+    assert not admitted(1.1, clamped=True), "clamped 1.1R must be rejected (< 1.2 after-clip floor)"
+
+
+def test_planner_service_declines_cleanly_on_reachability():
+    """The decline must be a clean skip (return None + tp1_unreachable event), NOT an
+    error — mirror of the entry-zone depth-gate skip. Pins the catch + reason."""
+    ps_src = (_SRC_PATH.parent / "planner_service.py").read_text(encoding="utf-8")
+    assert "except ReachabilityDecline as e:" in ps_src, "decline not caught as a clean skip"
+    assert 'reason="tp1_unreachable"' in ps_src, "tp1_unreachable rejection event missing"
+    # The ReachabilityDecline catch must precede the generic Exception handler so it is
+    # not swallowed into a 'Target calculation failed' error.
+    assert ps_src.index("except ReachabilityDecline as e:") < ps_src.index(
+        'raise ValueError(f"Target calculation failed: {e}")'
+    ), "ReachabilityDecline must be caught before the generic Exception handler"
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Tier 1.1 follow-up — compressed-family regime maps to calm (reachability)
 # ──────────────────────────────────────────────────────────────────────
 

@@ -33,6 +33,7 @@ from backend.strategy.planner.risk_engine import (
     _adjust_stop_for_leverage,
     _scale_stop_for_leverage,
     _adjust_targets_for_leverage,
+    ReachabilityDecline,
 )
 from backend.strategy.planner.regime_engine import get_atr_regime
 from backend.shared.utils.math_utils import round_to_tick
@@ -420,6 +421,20 @@ def generate_trade_plan(
             volume_profile=volume_profile,  # NEW: For HVN/LVN target filtering
             fee_rate=fee_rate,
         )
+    except ReachabilityDecline as e:
+        # Clean skip (no plan): the structural stop is too far for a reachable target
+        # at this tier's R:R floor. NOT an error — the cascade may try a higher trade
+        # type. Mirrors the entry-zone depth-gate clean skip above.
+        logger.info("TP1 unreachable for %s — no plan generated: %s", symbol, e)
+        telemetry.log_event(
+            create_signal_rejected_event(
+                run_id=run_id,
+                symbol=symbol,
+                reason="tp1_unreachable",
+                diagnostics={"detail": str(e)},
+            )
+        )
+        return None
     except Exception as e:
         logger.error(f"Target calculation failed for {symbol}: {e}")
         raise ValueError(f"Target calculation failed: {e}") from e
@@ -770,6 +785,15 @@ def generate_trade_plan(
         # enforces a positive expectancy floor. 0.0 previously accepted sub-1R
         # setups when the config field was absent.
         min_rr = getattr(config, "min_rr_ratio", 1.5)
+        # Reachability-clamped TP1 (2026-05-31 fix): when the planner intentionally
+        # pulled TP1 to a reachable distance at a lower R:R, admit it down to the
+        # after-clip floor (target_min_rr_after_clip) instead of min_rr_ratio — which
+        # equals the un-clamped ladder R:R and would otherwise reject every clamped
+        # target, leaving no moderate-clamp band. Non-clamped targets stay gated at
+        # min_rr_ratio. See decisions/2026-05-30__fix-design__tp1-reachability.md.
+        _tp1_clamped = bool(targets and getattr(targets[0], "reachability_clamped", False))
+        if _tp1_clamped:
+            min_rr = min(min_rr, planner_cfg.target_min_rr_after_clip)
         actual_rr = plan.risk_reward_ratio
 
         # Use a small epsilon to avoid floating point false rejections.
@@ -822,6 +846,11 @@ def generate_trade_plan(
             # check was permanently dead — only the looser pct gate survived (audit #13).
             "atr": atr,
             "atr_regime": {"label": regime_label},
+            # TP1 reachability (2026-05-31 fix) — observability for the clamp/decline.
+            # tp1_clamped: planner pulled TP1 to the reachable ceiling at a lower R:R.
+            "tp1_clamped": _tp1_clamped,
+            "tp1_realized_rr": round(targets[0].rr_ratio, 3) if targets else 0.0,
+            "tp1_reachable_ceiling_atr": planner_cfg.tp1_reachable_ceiling_atr,
             "leverage": leverage,
             "leverage_stop_adjustment": liq_meta if was_liq_adjusted else scale_meta if scale_meta else None,
             "target_adjustment": target_adj_meta,

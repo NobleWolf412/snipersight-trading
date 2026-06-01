@@ -356,6 +356,10 @@ def _adjust_targets_for_wick_barriers(
                     weight=target.weight,
                     rationale=f"{target.rationale} [wick barrier → {barrier_level:.4f}]",
                     percentage=target.percentage,
+                    # Preserve the TP1 reachability-clamp flag across the rebuild, else
+                    # the admission gate re-gates a clamped target at the full
+                    # min_rr_ratio and silently rejects it (§16 audit catch 2026-05-31).
+                    reachability_clamped=target.reachability_clamped,
                 )
             )
             logger.info(
@@ -2158,6 +2162,14 @@ def _calculate_swing_structural_targets(
     return targets
 
 
+class ReachabilityDecline(Exception):
+    """Raised by `_calculate_targets` when the structural stop is so far that even a
+    minimum-R:R (`target_min_rr_after_clip`) first target would exceed the reachability
+    ceiling (`tp1_reachable_ceiling_atr`). Signals a CLEAN SKIP (no plan), not an error —
+    `planner_service` catches it and returns None + a `tp1_unreachable` rejection event.
+    See decisions/2026-05-30__fix-design__tp1-reachability.md."""
+
+
 def _calculate_targets(
     is_bullish: bool,
     entry_zone: EntryZone,
@@ -2452,8 +2464,38 @@ def _calculate_targets(
     # the trade actually fills at.
     _MIN_TP_DISTANCE = entry_ref * fee_rate * 2 * 2.5
 
+    # TP1 reachability ceiling (2026-05-31 fix). Wide structural stops (live baseline:
+    # 80% of wide stops are far-but-real structure) push TP1 at the full R:R ladder
+    # beyond the move the market produces → stagnation / round-trip. For the FIRST rung
+    # only, clamp TP1's absolute distance to the reachability ceiling if the clamped R:R
+    # still clears target_min_rr_after_clip; if even that floor is unreachable, decline
+    # the trade. Resolved BEFORE the is_bullish split → symmetric LONG/SHORT (§10).
+    # rationale doc: decisions/2026-05-30__fix-design__tp1-reachability.md.
+    _ceiling_dist = (
+        planner_cfg.tp1_reachable_ceiling_atr * atr
+        if (atr and atr > 0 and planner_cfg.tp1_reachable_ceiling_atr > 0)
+        else None
+    )
+    _tp1_clamped = False
     for i, rr in enumerate(adjusted_rrs):
         dist = max(risk_distance * rr, _MIN_TP_DISTANCE)
+
+        if i == 0 and _ceiling_dist is not None and dist > _ceiling_dist:
+            _clamped_rr = _ceiling_dist / max(risk_distance, 1e-9)
+            if _clamped_rr >= planner_cfg.target_min_rr_after_clip:
+                # Moderate: pull TP1 in to a reachable distance, R:R still acceptable.
+                dist = _ceiling_dist
+                rr = _clamped_rr
+                _tp1_clamped = True
+            else:
+                # Extreme: stop too far for any reachable target at the after-clip floor.
+                raise ReachabilityDecline(
+                    f"TP1 unreachable: stop {risk_distance / atr:.2f} ATR → a "
+                    f"{planner_cfg.target_min_rr_after_clip:.2f}R target "
+                    f"({planner_cfg.target_min_rr_after_clip * risk_distance / atr:.2f} ATR) "
+                    f"exceeds reachable ceiling {planner_cfg.tp1_reachable_ceiling_atr:.2f} ATR"
+                )
+
         # Targets generated relative to entry_ref (near_entry, worst-case fill).
         # See Tier 1.1 note at top of _calculate_targets.
         if is_bullish:
@@ -2461,13 +2503,23 @@ def _calculate_targets(
         else:
             level = max(entry_ref * 0.001, entry_ref - dist)
 
+        _label = f"TP{i+1} ({rr:.1f}R)"
+        _rationale = (
+            f"Reachability-clamped R:R target ({rr:.2f}R, ceiling "
+            f"{planner_cfg.tp1_reachable_ceiling_atr:.1f} ATR)"
+            if (i == 0 and _tp1_clamped)
+            else f"Standard R:R target ({rr:.1f}R)"
+        )
         targets.append(
             Target(
                 level=level,
-                label=f"TP{i+1} ({rr:.1f}R)",
+                label=_label,
                 rr_ratio=rr,
                 weight=1.0 - (i * 0.2),  # Decay weight for further targets
-                rationale=f"Standard R:R target ({rr:.1f}R)",
+                rationale=_rationale,
+                # Real Target field (survives pipeline rebuilds); consumed by the
+                # planner_service admission gate to apply the after-clip R:R floor.
+                reachability_clamped=(i == 0 and _tp1_clamped),
             )
         )
 
@@ -2593,6 +2645,11 @@ def _adjust_targets_for_leverage(
             weight=target.weight,
             percentage=target.percentage,  # FIXED: Copy percentage
             rationale=f"{target.rationale} [Adjusted {scale_factor:.0%} for {leverage}x leverage]",
+            # Preserve the TP1 reachability-clamp flag across the leverage rebuild — this
+            # runs BEFORE the admission gate (planner_service:444 < :794), so dropping it
+            # would re-gate a clamped target at the full min_rr_ratio (§16 audit catch
+            # round 2, 2026-05-31; mirror of the wick-barrier fix).
+            reachability_clamped=target.reachability_clamped,
         )
         adjusted_targets.append(adjusted_target)
 

@@ -80,14 +80,19 @@ def test_atr_regime_classification(
         from backend.shared.models.planner import EntryZone
 
         return (
-            EntryZone(near_entry=current_price, far_entry=current_price * 0.995, rationale="Test"),
+            EntryZone(near_entry=current_price, far_entry=current_price - 0.1 * atr, rationale="Test"),
             True,
         )
 
     def fake_stop_loss(*args, **kwargs):
         from backend.shared.models.planner import StopLoss
 
-        return StopLoss(level=current_price * 0.99, distance_atr=1.0, rationale="Test"), True
+        # Reachable ATR-proportional stop (0.5 ATR). A fixed 1%-of-price stop was
+        # 1.25-5 ATR for these small-ATR cases, which the 2026-05-31 TP1 reachability
+        # gate (decisions/2026-05-30__fix-design__tp1-reachability.md) correctly
+        # declines → no plan. These tests assert regime/alt-stop behavior, not
+        # reachability, so they need a plannable (reachable) stop.
+        return StopLoss(level=current_price - 0.5 * atr, distance_atr=0.5, rationale="Test"), True
 
     monkeypatch.setattr(ps, "_calculate_entry_zone", fake_entry_zone)
     monkeypatch.setattr(ps, "_calculate_stop_loss", fake_stop_loss)
@@ -136,7 +141,7 @@ def test_alt_stop_suggested_high_liq_risk(monkeypatch, base_config, empty_smc, c
         from backend.shared.models.planner import EntryZone
 
         return (
-            EntryZone(near_entry=current_price, far_entry=current_price * 0.995, rationale="Test"),
+            EntryZone(near_entry=current_price, far_entry=current_price - 0.1 * atr, rationale="Test"),
             True,
         )
 
@@ -203,14 +208,19 @@ def test_no_alt_stop_for_comfortable_liq(monkeypatch, base_config, empty_smc, co
         from backend.shared.models.planner import EntryZone
 
         return (
-            EntryZone(near_entry=current_price, far_entry=current_price * 0.995, rationale="Test"),
+            EntryZone(near_entry=current_price, far_entry=current_price - 0.1 * atr, rationale="Test"),
             True,
         )
 
     def fake_stop_loss(*args, **kwargs):
         from backend.shared.models.planner import StopLoss
 
-        return StopLoss(level=current_price * 0.99, distance_atr=1.0, rationale="Test"), True
+        # Reachable ATR-proportional stop (0.5 ATR). A fixed 1%-of-price stop was
+        # 1.25-5 ATR for these small-ATR cases, which the 2026-05-31 TP1 reachability
+        # gate (decisions/2026-05-30__fix-design__tp1-reachability.md) correctly
+        # declines → no plan. These tests assert regime/alt-stop behavior, not
+        # reachability, so they need a plannable (reachable) stop.
+        return StopLoss(level=current_price - 0.5 * atr, distance_atr=0.5, rationale="Test"), True
 
     monkeypatch.setattr(ps, "_calculate_entry_zone", fake_entry_zone)
     monkeypatch.setattr(ps, "_calculate_stop_loss", fake_stop_loss)

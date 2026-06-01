@@ -113,6 +113,15 @@ class PlannerConfig:
     # Structure-aware targets
     target_clip_to_structure: bool = True  # Clip targets to HTF obstacles
     target_min_rr_after_clip: float = 1.2  # Minimum R:R after clipping to structure
+    # TP1 reachability ceiling (2026-05-31 fix). When the structural stop is far,
+    # TP1 at the full R:R ladder lands beyond the move the market produces (live
+    # baseline: 80% of wide stops are far-but-real structure; targets_hit collapsed
+    # 0.34->0.13). Clamp TP1's absolute distance to this many ATR if it would exceed
+    # it AND the clamped R:R still clears target_min_rr_after_clip; otherwise the
+    # trade is declined as unreachable. Operator-selected 1.3 ATR (good-window TP1
+    # ~0.8 ATR reachable; median favorable excursion ~0.6 ATR). §15 baseline:
+    # decisions/2026-05-30__fix-design__tp1-reachability.md.
+    tp1_reachable_ceiling_atr: float = 1.3
 
     # Smart Entry Upgrade (Phase 4)
     pd_compliance_required: bool = False  # Require entry to be in Premium (Short) / Discount (Long)

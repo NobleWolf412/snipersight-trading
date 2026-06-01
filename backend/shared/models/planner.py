@@ -107,6 +107,12 @@ class Target:
     label: str = ""  # Optional display label
     rr_ratio: float = 0.0  # R:R ratio at this target
     weight: float = 1.0  # Target priority weight
+    # TP1 reachability clamp (2026-05-31): True when this target's distance was pulled
+    # in to the reachability ceiling at a lower R:R. The planner_service admission gate
+    # then admits it down to target_min_rr_after_clip instead of min_rr_ratio. A real
+    # field (not a dynamic attr) so it survives target-pipeline rebuilds such as
+    # _adjust_targets_for_wick_barriers. decisions/2026-05-30__fix-design__tp1-reachability.md.
+    reachability_clamped: bool = False
 
     def __post_init__(self):
         """Validate target data."""
