@@ -112,7 +112,15 @@ class PlannerConfig:
 
     # Structure-aware targets
     target_clip_to_structure: bool = True  # Clip targets to HTF obstacles
-    target_min_rr_after_clip: float = 1.2  # Minimum R:R after clipping to structure
+    target_min_rr_after_clip: float = 1.0  # Min R:R after clipping to structure.
+    # 2026-06-02: lowered 1.2 -> 1.0 (Stage 1 of the reachability-clamp over-decline re-tune).
+    # The TP1 decline boundary is ceiling/min_rr_after_clip; at 1.2 it declined ANY stop
+    # >1.08 ATR, killing the entire structural-stop cohort (median 1.5 ATR; 0% of taken trades
+    # were wide vs 11% in the +7.21-expectancy reference window). 1.0 moves the boundary to
+    # 1.3 ATR WITHOUT raising the reachability ceiling (preserves the anti-stagnation property).
+    # §15 baseline + reasoning: decisions/2026-06-02__fix-design__reachability-clamp-overdecline.md.
+    # VALIDATE via paper session + stop_reachability_baseline; escalate to Lever A (raise
+    # tp1_reachable_ceiling_atr) only if Stage 1 under-recovers. (Scalp tier already used 1.0.)
     # TP1 reachability ceiling (2026-05-31 fix). When the structural stop is far,
     # TP1 at the full R:R ladder lands beyond the move the market produces (live
     # baseline: 80% of wide stops are far-but-real structure; targets_hit collapsed
