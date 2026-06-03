@@ -144,7 +144,7 @@ def _scorecard(label, rows, flags):
           + f"  | median stop={med_sd:.2f} ATR | tp1_clamped={len(clamped)}/{s['n']}"
           + f" | avg targets_hit={sum(th)/len(th):.2f}")
     if med_sd >= WIDE_STOP_ATR:
-        flags.append(f"{label}: wide stops (median {med_sd:.2f} ATR ≥ {WIDE_STOP_ATR}) - TP1 reachability risk")
+        flags.append(f"{label}: wide stops (median {med_sd:.2f} ATR >= {WIDE_STOP_ATR}) - TP1 reachability risk")
     if branch.get("unrecorded", 0) == s["n"]:
         flags.append(f"{label}: stop_loss_rationale not yet journaled (pre-2026-06-02 trades or bot needs restart)")
 
@@ -204,6 +204,11 @@ def _routing(flags):
 
 
 def main():
+    # Robust against Windows cp1252 consoles — never crash on a stray non-ASCII char.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
     rows = _load_journal()
     if not rows:
         print("No trade_journal.jsonl rows.")
