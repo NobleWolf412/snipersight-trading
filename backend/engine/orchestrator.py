@@ -1898,7 +1898,7 @@ class Orchestrator:
                         )
                         _rejection_info: dict = {
                             "symbol": symbol,
-                            "direction": context.metadata.get("chosen_direction", "LONG"),
+                            "direction": context.metadata.get("chosen_direction") or "UNKNOWN",
                             "reason_type": _gate.gate_name,
                             "reason": _gate.reason + _flip_detail,
                             "score": 0.0,
@@ -2146,7 +2146,7 @@ class Orchestrator:
                 "CONFLUENCE",
                 {
                     "symbol": symbol,
-                    "direction": context.metadata.get("chosen_direction", "LONG"),
+                    "direction": context.metadata.get("chosen_direction") or "UNKNOWN",
                     "score": float(getattr(br, "total_score", 0)),
                     "min_required": float(getattr(self.config, "min_confluence_score", 0)),
                     "htf_aligned": bool(getattr(br, "htf_aligned", False)),
@@ -2237,7 +2237,7 @@ class Orchestrator:
 
             return None, {
                 "symbol": symbol,
-                "direction": context.metadata.get("chosen_direction", "LONG"),
+                "direction": context.metadata.get("chosen_direction") or "UNKNOWN",
                 "reason_type": "low_confluence",
                 "reason": readable_reason,
                 "score": score,
@@ -2297,7 +2297,7 @@ class Orchestrator:
             symbol,
             context.confluence_breakdown.total_score,
             self.config.min_confluence_score,
-            context.metadata.get("chosen_direction", "LONG"),
+            context.metadata.get("chosen_direction") or "UNKNOWN",
         )
 
 
@@ -2585,7 +2585,7 @@ class Orchestrator:
             _bd_meta = (context.confluence_breakdown.metadata or {}) if context.confluence_breakdown else {}
         return None, {
                 "symbol": symbol,
-                "direction": context.metadata.get("chosen_direction", "LONG"),
+                "direction": context.metadata.get("chosen_direction") or "UNKNOWN",
                 "reason": reason,
                 "reason_type": "risk_validation" if "revalidation" in reason else "no_trade_plan",
                 "details": {"context": context.metadata},
@@ -2824,8 +2824,19 @@ class Orchestrator:
         assert context.multi_tf_indicators is not None
         assert context.confluence_breakdown is not None
 
-        # Determine trade direction from chosen confluence evaluation
-        direction = context.metadata.get("chosen_direction", "LONG")
+        # Determine trade direction from chosen confluence evaluation.
+        # Guard locally (not only at the Stage-6 direction_unresolved gate, orch ~2313)
+        # so a future refactor that moves/removes that gate can never silently build a
+        # phantom LONG here. §11 prefer-loud-failure; symmetry: refuse to assume a side
+        # rather than defaulting bullish.
+        direction = context.metadata.get("chosen_direction")
+        if direction not in ("LONG", "SHORT"):
+            logger.error(
+                "%s: ❌ trade-plan build aborted — chosen_direction unresolved (%r); "
+                "refusing to default LONG",
+                getattr(context, "symbol", "?"), direction,
+            )
+            return None
 
         # Determine setup type based on SMC patterns
         setup_type = self._classify_setup_type(context.smc_snapshot)
@@ -2941,8 +2952,8 @@ class Orchestrator:
                     # Human-readable label: "HTF Bounce ↑ [Strong]" replaces the
                     # opaque "Counter-HTF Intraday" which merged trade type with
                     # confirmation timeframe in a confusing way.
-                    _direction = context.metadata.get("chosen_direction", "LONG")
-                    _arrow = "↑" if _direction == "LONG" else "↓"
+                    _direction = context.metadata.get("chosen_direction") or "UNKNOWN"
+                    _arrow = "↑" if _direction == "LONG" else "↓" if _direction == "SHORT" else "?"
                     _quality = context.metadata.get("counter_htf_quality", "")
                     _quality_tag = {
                         "confirmed": "Strong",
@@ -3555,7 +3566,16 @@ class Orchestrator:
         _c_is_btc = "BTC" in context.symbol.upper()
         _c_btc_impulse = self._derive_btc_impulse(context.macro_context, context.symbol)
         _c_regime = context.metadata.get("symbol_regime")
-        _session_direction = context.metadata.get("chosen_direction", "LONG")
+        # Same loud guard as _generate_trade_plan: the cascade inherits the session
+        # direction and must never fabricate a LONG when scoring failed to resolve one.
+        _session_direction = context.metadata.get("chosen_direction")
+        if _session_direction not in ("LONG", "SHORT"):
+            logger.error(
+                "%s: ❌ cascade aborted — chosen_direction unresolved (%r); "
+                "refusing to default LONG",
+                getattr(context, "symbol", "?"), _session_direction,
+            )
+            return None
 
         for trade_type in cascade_types:
             try:

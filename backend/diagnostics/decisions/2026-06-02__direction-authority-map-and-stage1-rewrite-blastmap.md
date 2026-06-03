@@ -82,3 +82,38 @@ Triage: do NOT start Path B while Step 1 is open (#2 RISKY before #3 CORRECTNESS
 
 **Likely outcome:** the data probably supports "with-trend-only + backtest," not a conviction-model
 rewrite — given no demonstrated edge and direction being the highest-risk path.
+
+## STEP-0 RESULT (2026-06-02, run; `backend/diagnostics/direction_cohort.py`) — REWRITE REFUTED
+
+Ran the Step-0 cohort backtest (join journal pnl/direction/regime ↔ telemetry
+signal_generated pre_dir_tie_break, segment by tie_break × with/counter-trend). Two windows:
+
+| Cohort | ALL data (incl. wide-stop era, n=189 matched) | POST-clamp only (--since 2026-05-31, n=89) |
+|---|---|---|
+| with-trend | −11.84/trade | +0.74/trade |
+| counter-trend | +1.43/trade | −1.04/trade |
+| clean-majority (bull/bear) | −3.70 | −0.16 (breakeven) |
+| soft tie-break + neutral_default_long | −26.61 (n=10) | n=1 (gone) |
+
+**The dramatic "counter-trend wins / with-trend bleeds" split was ENTIRELY the already-fixed
+wide-stop LONG/up era.** Remove it (post-clamp) and it FLIPS and collapses to breakeven-noise in
+both directions (with +0.74 vs counter −1.04, both within noise at n=50/39; clean-majority −0.16).
+The catastrophic soft/regime-default cohort (−26.61) barely fires post-clamp (n=1).
+
+**REVISED VERDICT — do NOT rewrite Stage 1 (neither Path A with-trend-only NOR Path B conviction).**
+Post-clamp there is **no losing-direction cohort to gate out** — direction selection is breakeven-noise
+once the wide-stop confound is removed. The "long-bias bleed" that motivated this whole thread was the
+wide-stop bug (already fixed by 99303ff), NOT direction selection. A Stage-1 rewrite would solve a
+problem that no longer exists in the data.
+
+What still stands:
+- **Step 1 (fix the 8 silent-LONG `.get(chosen_direction,"LONG")` defaults)** — still worth doing as a
+  standalone #2-RISKY correctness fix (§11), independent of any rewrite.
+- **The real question is upstream of direction: does the strategy have ANY edge after fees?** Cohorts
+  are ~breakeven GROSS post-clamp → likely net-NEGATIVE after fees. That's a strategy-design decision,
+  not a direction-code fix (matches the 2026-06-02 adversarial review).
+- Caveat: post-clamp n=89 is small; direction being "truly neutral" needs more data — but it is
+  CLEARLY not the catastrophic directional bleed the rewrite assumed.
+
+Process note: Step-0-before-code refuted a 6-stage / 4-contract rewrite. The premise (directional
+bleed) was a confound with an already-fixed bug. Backtest-before-build earned its keep.
