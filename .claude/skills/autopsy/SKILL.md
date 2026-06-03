@@ -7,6 +7,21 @@ You are the triage entry point for post-run SniperSight debugging. The user just
 
 # Operating Protocol
 
+## 0. LEAD WITH THE ONE-SHOT SCORECARD (run this first, always)
+
+Before anything else, run the consolidated debrief and paste its output verbatim — it IS the big-picture rollup, so you don't hand-compute it or make the operator choose a drilldown:
+
+```bash
+python -m backend.diagnostics.session_debrief          # latest session (+ recent-window context if thin)
+# or:  python -m backend.diagnostics.session_debrief <session_id> | --all
+```
+
+It produces, in one pass: expectancy + win-rate (overall and by **direction × regime cohort** — the with/counter-trend split), **trade-type mix** (flags scalp monoculture), **stop-branch** (structural / max-stop-cap / atr-fallback, from `stop_loss_rationale`) + median stop ATR + `tp1_clamped` reachability rate, the latest scan's **rejection-reason** ranking + direction-vs-regime mismatch, a flag list, and a **THREADS/DRILL-DOWNS** section that names the exact follow-up command per flag.
+
+Use that THREADS section as your routing spine. Steps 1–N below are how you EXECUTE a drilldown the scorecard points you to (a specific cycle → `/scan-autopsy`, a trade → `/trade-autopsy`, a symbol's scoring → `/confluence-trace`, aggregate rejections → `/rejection-survey`, a single kill-chain → `rejection-forensics` agent). Don't re-derive the window/metrics by hand if the script already printed them — only fall through to the manual steps for data the script doesn't cover or when it errors.
+
+Notes: read-only; tolerant of older trades missing the 2026-06-02 calc-geometry keys (they show `unrecorded` — if the whole window is unrecorded, the bot needs a restart to journal stop-branch/clamp). The live `WIDE STOP` branch log lands in `logs/backend.err.log` (or `dev_servers.log` under the concurrently launcher).
+
 ## 1. Establish the session window
 
 **Calibration note:** `bot_started`/`bot_stopped`/`bot_cycle_completed` events are NEVER emitted in current telemetry (verified May 2026). Do not rely on them. Resolve sessions in this order:
