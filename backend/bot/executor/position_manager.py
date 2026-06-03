@@ -90,6 +90,19 @@ class PositionState:
     lowest_price: Optional[float] = None
     initial_stop_loss: float = 0.0
     initial_entry_price: float = 0.0
+    # Original CALCULATED target levels at open, captured in __post_init__ before any
+    # target is hit/stripped from `targets`. Persisted to the journal so a trade's
+    # planned TP ladder is auditable retroactively (the live `targets` list shrinks).
+    initial_target_levels: List[float] = field(default_factory=list)
+    # Calculated stop/target plan provenance, captured at open from the TradePlan and
+    # persisted to the journal so a trade's geometry is auditable from one source:
+    #   stop_loss_rationale — encodes the stop branch (structural / OB / swing /
+    #     "no swing/structure found" ATR fallback / "[capped: …]" max-stop cap).
+    #   tp1_clamped / tp1_realized_rr — whether the TP1 reachability clamp fired and
+    #     the realized R:R it left (from plan.metadata).
+    stop_loss_rationale: str = ""
+    tp1_clamped: bool = False
+    tp1_realized_rr: float = 0.0
     entry_order_id: Optional[str] = None
     exit_reason: Optional[str] = None
     exit_price: Optional[float] = None
@@ -159,6 +172,8 @@ class PositionState:
         # risk and stagnation calculations remain based on the initial thesis.
         self.initial_stop_loss = self.stop_loss
         self.initial_entry_price = self.entry_price
+        # Snapshot the original calculated TP levels before any target is hit/stripped.
+        self.initial_target_levels = [float(t.level) for t in self.targets if t is not None]
 
     def update_unrealized_pnl(self, current_price: float):
         """Calculate unrealized P&L based on current price."""
@@ -423,6 +438,10 @@ class PositionManager:
             macro_state_at_entry=_ml_macro_state,
             htf_aligned_at_entry=_ml_htf_aligned,
             setup_qualifier=_ml_setup_qualifier,
+            # Calculated stop/target provenance for the journal (auditability).
+            stop_loss_rationale=str(getattr(trade_plan.stop_loss, "rationale", "") or ""),
+            tp1_clamped=bool((getattr(trade_plan, "metadata", None) or {}).get("tp1_clamped", False)),
+            tp1_realized_rr=float((getattr(trade_plan, "metadata", None) or {}).get("tp1_realized_rr", 0.0) or 0.0),
         )
 
         # Calculate the adaptive stagnation deadline for logging

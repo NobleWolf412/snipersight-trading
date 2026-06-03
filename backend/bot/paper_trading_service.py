@@ -229,6 +229,19 @@ class CompletedTrade:
     htf_aligned_at_entry: bool = False
     setup_qualifier: str = "Unknown"
 
+    # Calculated stop/target geometry at open (2026-06-02). Persisted so a trade's
+    # planned levels are auditable from the journal alone — previously only
+    # stop_distance_atr + risk_reward_ratio were stored, not the actual prices.
+    #   stop_loss_level — calculated SL price (initial, pre-trail).
+    #   target_levels   — calculated TP ladder prices (pre strip/hit).
+    #   stop_loss_rationale — encodes the stop branch (structural/cap/fallback).
+    #   tp1_clamped / tp1_realized_rr — TP1 reachability-clamp provenance.
+    stop_loss_level: float = 0.0
+    target_levels: List[float] = field(default_factory=list)
+    stop_loss_rationale: str = ""
+    tp1_clamped: bool = False
+    tp1_realized_rr: float = 0.0
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API response."""
         return {
@@ -264,6 +277,12 @@ class CompletedTrade:
             "regime_trend_at_entry": self.regime_trend_at_entry,
             "htf_aligned_at_entry": self.htf_aligned_at_entry,
             "setup_qualifier": self.setup_qualifier,
+            # Calculated stop/target geometry (2026-06-02) — auditable from journal alone.
+            "stop_loss_level": self.stop_loss_level,
+            "target_levels": self.target_levels,
+            "stop_loss_rationale": self.stop_loss_rationale,
+            "tp1_clamped": self.tp1_clamped,
+            "tp1_realized_rr": self.tp1_realized_rr,
         }
 
 
@@ -2812,6 +2831,14 @@ class PaperTradingService:
                     regime_trend_at_entry=getattr(pos, "regime_trend", "sideways"),
                     htf_aligned_at_entry=getattr(pos, "htf_aligned_at_entry", False),
                     setup_qualifier=getattr(pos, "setup_qualifier", "Unknown"),
+                    # Calculated stop/target geometry captured at open (2026-06-02).
+                    # initial_stop_loss = original SL (pre-trail); initial_target_levels =
+                    # original TP ladder (pre strip/hit). See PositionState.__post_init__.
+                    stop_loss_level=float(getattr(pos, "initial_stop_loss", 0.0) or 0.0),
+                    target_levels=list(getattr(pos, "initial_target_levels", []) or []),
+                    stop_loss_rationale=str(getattr(pos, "stop_loss_rationale", "") or ""),
+                    tp1_clamped=bool(getattr(pos, "tp1_clamped", False)),
+                    tp1_realized_rr=float(getattr(pos, "tp1_realized_rr", 0.0) or 0.0),
                 )
 
                 self.completed_trades.append(trade)
