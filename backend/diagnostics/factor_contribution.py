@@ -154,6 +154,119 @@ def _match_outcomes(signals, trades):
     return matched, attempted
 
 
+def _verdict(s, name, redundant):
+    """Pure factor verdict from its stats entry + the redundant-set membership."""
+    if s["r_out"] is not None and s["n_out"] >= 20 and s["r_out"] <= -0.15:
+        return "ANTI  (scores high on LOSERS)"
+    if s["fire"] < DEAD_FIRE_RATE:
+        return "RARE  (fires <10%)"
+    if s["std"] < FLAT_STD and s["fire"] > 0.5:
+        return "FLAT  (no discrimination)"
+    if name in redundant:
+        return "REDUNDANT (overlaps a stronger factor)"
+    if s["r_out"] is not None and s["n_out"] >= 20 and s["r_out"] >= 0.15:
+        return "KEEP  (predicts winners)"
+    return "weak / unproven"
+
+
+def analyze(signals, trades):
+    """Compute every per-factor metric + redundancy from signals + journal trades.
+    Returns a result dict; pure computation, no I/O. Reused by main() and the
+    session_debrief factor-edge block."""
+    order = [f["name"] for f in max(signals, key=lambda r: len(r.get("factors", [])))["factors"]]
+
+    scores = {name: [] for name in order}
+    weighted = defaultdict(list)
+    for sig in signals:
+        present = {f["name"]: f for f in sig.get("factors", [])}
+        for name in order:
+            f = present.get(name)
+            scores[name].append(_f(f["score"]) if f else 0.0)
+            if f:
+                weighted[name].append(_f(f.get("weighted")) or 0.0)
+
+    matched, attempted = _match_outcomes(signals, trades)
+    pnl_vec = [m[1] for m in matched]
+    out_scores = {name: [] for name in order}
+    for sig, _pnl in matched:
+        present = {f["name"]: f for f in sig.get("factors", [])}
+        for name in order:
+            f = present.get(name)
+            out_scores[name].append(_f(f["score"]) if f else 0.0)
+
+    n = len(signals)
+    stats = {}
+    for name in order:
+        present_vals = [v for v in scores[name] if v and v > 0]
+        fire = len(present_vals) / n if n else 0.0
+        mean_p = sum(present_vals) / len(present_vals) if present_vals else 0.0
+        std_p = (math.sqrt(sum((v - mean_p) ** 2 for v in present_vals) / len(present_vals))
+                 if present_vals else 0.0)
+        contrib = sum(weighted[name]) / n if n else 0.0
+        r_out, n_out = _pearson(out_scores[name], pnl_vec) if matched else (None, 0)
+        stats[name] = {"fire": fire, "mean": mean_p, "std": std_p,
+                       "contrib": contrib, "r_out": r_out, "n_out": n_out}
+
+    pairs = []
+    for i in range(len(order)):
+        for j in range(i + 1, len(order)):
+            a, b = order[i], order[j]
+            r, _ = _pearson(scores[a], scores[b])
+            if r is not None and abs(r) >= REDUNDANT_R:
+                pairs.append((abs(r), r, a, b))
+    pairs.sort(reverse=True)
+
+    # in each correlated cluster the WEAKER outcome predictor is the redundant one
+    redundant = set()
+    for _ar, _r, a, b in pairs:
+        ra = abs(stats[a]["r_out"]) if stats[a]["r_out"] is not None else -1
+        rb = abs(stats[b]["r_out"]) if stats[b]["r_out"] is not None else -1
+        redundant.add(b if ra >= rb else a)
+
+    for name in order:
+        stats[name]["verdict"] = _verdict(stats[name], name, redundant)
+
+    return {"n": n, "order": order, "stats": stats, "redundant": redundant,
+            "pairs": pairs, "matched": len(matched), "attempted": attempted,
+            "pnl_vec": pnl_vec}
+
+
+def load_corpus(since=None, session=None):
+    """Load all factor-bearing signals + journal trades. Returns (signals, files, trades)."""
+    signals, files = _load_signals(since, session)
+    trades = _load_journal(since)
+    return signals, files, trades
+
+
+def compact_lines(result, files_n=0, top=3):
+    """A few paste-friendly lines summarising factor edge — for embedding in
+    session_debrief. Returns list[str]. Mirrors the standalone HEADLINE."""
+    order, stats, redundant = result["order"], result["stats"], result["redundant"]
+    matched, pnl_vec = result["matched"], result["pnl_vec"]
+    dead = [nm for nm in order if stats[nm]["verdict"].startswith(("RARE", "FLAT"))]
+    anti = [nm for nm in order if stats[nm]["verdict"].startswith("ANTI")]
+    keep = [nm for nm in order if stats[nm]["verdict"].startswith("KEEP")]
+    win = sum(1 for p in pnl_vec if p > 0)
+    rated = [nm for nm in order if stats[nm]["r_out"] is not None]
+    best = max(rated, key=lambda nm: abs(stats[nm]["r_out"]), default=None)
+    noise = (1.96 / math.sqrt(matched)) if matched else None
+
+    lines = [
+        f"  corpus: {result['n']} signals / {files_n} sessions | {len(order)} factors | "
+        f"outcome-matched {matched} trades (win {100*win/len(pnl_vec) if pnl_vec else 0:.0f}%, gross)",
+        f"  edge: {len(keep)} KEEP | {len(anti)} ANTI | {len(dead)} dead(rare/flat) | "
+        f"{len(redundant)} redundant → effective ≈ {len(order)-len(redundant)-len(dead)}",
+    ]
+    if best is not None:
+        b = stats[best]
+        nf = f" (noise floor ±{noise:.2f})" if noise else ""
+        lines.append(f"  best predictor: {best} r_out={b['r_out']:+.2f}{nf}")
+    if anti:
+        lines.append("  ANTI-signals (score high on losers): "
+                     + ", ".join(f"{nm} {stats[nm]['r_out']:+.2f}" for nm in anti))
+    return lines, {"dead": dead, "anti": anti, "keep": keep, "best": best, "noise": noise}
+
+
 def main():
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -166,96 +279,29 @@ def main():
     if "--session" in sys.argv:
         session = sys.argv[sys.argv.index("--session") + 1]
 
-    signals, files = _load_signals(since, session)
+    signals, files, trades = load_corpus(since, session)
     if not signals:
         print("No signals.jsonl rows with a factors array found.")
         return 1
 
-    # factor order from the richest row (factor sets are stable across signals)
-    order = [f["name"] for f in max(signals, key=lambda r: len(r.get("factors", [])))["factors"]]
+    res = analyze(signals, trades)
+    order, stats, redundant, pairs = res["order"], res["stats"], res["redundant"], res["pairs"]
+    n, matched, attempted, pnl_vec = res["n"], res["matched"], res["attempted"], res["pnl_vec"]
 
-    # per-factor score vectors aligned by signal index (absent factor -> 0.0)
-    scores = {name: [] for name in order}
-    weighted = defaultdict(list)
-    for sig in signals:
-        present = {f["name"]: f for f in sig.get("factors", [])}
-        for name in order:
-            f = present.get(name)
-            scores[name].append(_f(f["score"]) if f else 0.0)
-            if f:
-                weighted[name].append(_f(f.get("weighted")) or 0.0)
-
-    # outcome join
-    trades = _load_journal(since)
-    matched, attempted = _match_outcomes(signals, trades)
-    pnl_vec = [m[1] for m in matched]
-    out_scores = {name: [] for name in order}
-    for sig, _pnl in matched:
-        present = {f["name"]: f for f in sig.get("factors", [])}
-        for name in order:
-            f = present.get(name)
-            out_scores[name].append(_f(f["score"]) if f else 0.0)
-
-    n = len(signals)
-
-    # per-factor metrics
-    stats = {}
-    for name in order:
-        vec = scores[name]
-        present_vals = [v for v in vec if v and v > 0]
-        fire = len(present_vals) / n if n else 0.0
-        mean_p = sum(present_vals) / len(present_vals) if present_vals else 0.0
-        std_p = (math.sqrt(sum((v - mean_p) ** 2 for v in present_vals) / len(present_vals))
-                 if present_vals else 0.0)
-        contrib = sum(weighted[name]) / n if n else 0.0
-        r_out, n_out = _pearson(out_scores[name], pnl_vec) if matched else (None, 0)
-        stats[name] = {"fire": fire, "mean": mean_p, "std": std_p,
-                       "contrib": contrib, "r_out": r_out, "n_out": n_out}
-
-    # redundancy: pairwise correlation across all signals
-    pairs = []
-    for i in range(len(order)):
-        for j in range(i + 1, len(order)):
-            a, b = order[i], order[j]
-            r, _ = _pearson(scores[a], scores[b])
-            if r is not None and abs(r) >= REDUNDANT_R:
-                pairs.append((abs(r), r, a, b))
-    pairs.sort(reverse=True)
-
-    # redundancy verdict: in each correlated cluster, the factor with the WEAKER
-    # outcome edge is the redundant one (keep the better predictor)
-    redundant = set()
-    for _ar, _r, a, b in pairs:
-        ra = abs(stats[a]["r_out"]) if stats[a]["r_out"] is not None else -1
-        rb = abs(stats[b]["r_out"]) if stats[b]["r_out"] is not None else -1
-        redundant.add(b if ra >= rb else a)
-
-    def verdict(name):
-        s = stats[name]
-        if s["r_out"] is not None and s["n_out"] >= 20 and s["r_out"] <= -0.15:
-            return "ANTI  (scores high on LOSERS)"
-        if s["fire"] < DEAD_FIRE_RATE:
-            return "RARE  (fires <10%)"
-        if s["std"] < FLAT_STD and s["fire"] > 0.5:
-            return "FLAT  (no discrimination)"
-        if name in redundant:
-            return "REDUNDANT (overlaps a stronger factor)"
-        if s["r_out"] is not None and s["n_out"] >= 20 and s["r_out"] >= 0.15:
-            return "KEEP  (predicts winners)"
-        return "weak / unproven"
-
-    # ---------------- OUTPUT ----------------
     print("=== FACTOR CONTRIBUTION ===")
     win = sum(1 for p in pnl_vec if p > 0)
     print(f"signals analysed: {n} (across {len(files)} session files)  | factors: {len(order)}")
-    print(f"outcome-matched (executed->journal): {len(matched)}/{attempted} executed "
-          f"({100*len(matched)/attempted if attempted else 0:.0f}%)  | "
+    print(f"outcome-matched (executed->journal): {matched}/{attempted} executed "
+          f"({100*matched/attempted if attempted else 0:.0f}%)  | "
           f"win {100*win/len(pnl_vec) if pnl_vec else 0:.0f}%  | fees NOT modelled")
-    if len(matched) < 30:
-        print(f"  ⚠ outcome edge is LOW-N ({len(matched)} trades) — treat r_out as directional, not proof")
+    if matched < 30:
+        print(f"  ⚠ outcome edge is LOW-N ({matched} trades) — treat r_out as directional, not proof")
+    elif matched:
+        print(f"  (noise floor for r_out at n={matched}: ±{1.96/math.sqrt(matched):.2f} — "
+              "|r| inside that is indistinguishable from random)")
 
-    dead = [nm for nm in order if verdict(nm).startswith(("RARE", "FLAT"))]
-    anti = [nm for nm in order if verdict(nm).startswith("ANTI")]
+    dead = [nm for nm in order if stats[nm]["verdict"].startswith(("RARE", "FLAT"))]
+    anti = [nm for nm in order if stats[nm]["verdict"].startswith("ANTI")]
     print(f"\nHEADLINE: {len(order)} factors | {len(redundant)} redundant (overlap a stronger one) "
           f"| {len(dead)} dead weight (rare/flat) | {len(anti)} anti-signal")
     print(f"  → effective independent factors ≈ {len(order) - len(redundant) - len(dead)}")
@@ -269,7 +315,7 @@ def main():
         s = stats[name]
         r = f"{s['r_out']:+.2f}" if s["r_out"] is not None else "  -"
         print(f"  {name[:23]:24}{100*s['fire']:5.0f}%{s['mean']:7.0f}±{s['std']:<5.0f}"
-              f"{s['contrib']:8.2f}{r:>8}{s['n_out']:>5}  {verdict(name)}")
+              f"{s['contrib']:8.2f}{r:>8}{s['n_out']:>5}  {s['verdict']}")
 
     print(f"\n--- redundancy clusters (|Pearson| >= {REDUNDANT_R}) ---")
     if not pairs:

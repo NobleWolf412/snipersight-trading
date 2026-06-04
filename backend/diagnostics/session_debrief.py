@@ -185,6 +185,40 @@ def _rejection_rollup(flags):
         flags.append(f"direction-vs-regime mismatch: {longs} LONG vs {shorts} SHORT attempts in a DOWN regime")
 
 
+def _factor_edge(flags):
+    """Corpus-wide factor-edge rollup (all sessions): does any confluence factor
+    actually predict outcomes? Surfaces the headline + flags inert/anti factors and
+    the no-edge case. Read-only; reuses factor_contribution's computation."""
+    print("\n=== FACTOR EDGE (corpus: all sessions) ===")
+    try:
+        from backend.diagnostics import factor_contribution as fc
+    except Exception as e:  # pragma: no cover - import guard
+        print(f"  (factor_contribution unavailable: {e})")
+        return
+    signals, files, trades = fc.load_corpus()
+    if not signals:
+        print("  (no factor-bearing signals.jsonl yet — run a session first)")
+        return
+    res = fc.analyze(signals, trades)
+    lines, summ = fc.compact_lines(res, files_n=len(files))
+    for ln in lines:
+        print(ln)
+    print("  full table: python -m backend.diagnostics.factor_contribution")
+
+    best, noise = summ["best"], summ["noise"]
+    if summ["anti"]:
+        flags.append("factor edge: ANTI-signal factor(s) " + ", ".join(summ["anti"])
+                     + " score high on LOSERS — likely mis-wired or inverted")
+    if best is not None and noise is not None:
+        br = abs(res["stats"][best]["r_out"])
+        if br < noise:
+            flags.append(f"factor edge: NO factor predicts outcome — best |r_out| {br:.2f} "
+                         f"below noise floor {noise:.2f}; scoring has no demonstrated edge on taken trades")
+    if len(summ["dead"]) >= 4:
+        flags.append(f"factor edge: {len(summ['dead'])} inert factors (rare/flat, no "
+                     "discrimination) — trim candidates (hygiene, not edge)")
+
+
 def _routing(flags):
     print("\n=== THREADS / DRILL-DOWNS ===")
     if not flags:
@@ -197,6 +231,7 @@ def _routing(flags):
         "not trading": "-> rejection bottleneck: /rejection-survey 50 ; /scan-autopsy last",
         "mismatch": "-> /scan-autopsy last (why longs in a down regime) ; /confluence-trace <SYM>",
         "rationale not yet journaled": "-> restart the backend so new trades record stop branch + clamp",
+        "factor edge": "-> factor analysis: python -m backend.diagnostics.factor_contribution (full per-factor table + redundancy). Trim FLAT/ANTI for hygiene; but if best |r|<noise, re-weighting won't create edge — the strategy needs a new predictive input, not tuning.",
     }
     for i, fl in enumerate(flags, 1):
         hint = next((v for k, v in routes.items() if k in fl.lower()), "-> /trade-autopsy last-loss")
@@ -239,6 +274,8 @@ def main():
 
     print("\n--- LATEST SCAN / REJECTIONS ---")
     _rejection_rollup(flags)
+
+    _factor_edge(flags)
 
     _routing(flags)
 
