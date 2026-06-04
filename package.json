@@ -10,7 +10,7 @@
     "dev:all": "concurrently \"npm run backend\" \"npm run dev:frontend\"",
     "sync": "bash scripts/auto_sync.sh",
     "sync:safe": "bash scripts/safe_sync.sh",
-    "kill": "fuser -k ${FRONTEND_PORT:-5000}/tcp || true && fuser -k ${BACKEND_PORT:-8001}/tcp || true",
+    "kill": "npx --yes kill-port 5000 8001",
     "dev:nohup": "bash scripts/start_dev.sh",
     "build:frontend": "vite build",
     "build:backend": "echo 'Backend build step placeholder'",

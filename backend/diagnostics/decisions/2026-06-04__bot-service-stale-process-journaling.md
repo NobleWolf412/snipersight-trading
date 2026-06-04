@@ -48,6 +48,26 @@ validation run — `npm run kill` then `npm run dev:all`, or restart `C:\start-s
 Confirm via a fresh `Started server process` in the log + the NEXT closed trade carrying
 `stop_loss_rationale`. Do NOT trust UI stop/start to reload code.
 
+## ROOT CAUSE CONFIRMED (process inspection) — it's a port-hold zombie + a broken kill script
+Initial framing ("long-lived process, never recycled") was right but incomplete. Live inspection:
+- **PID 19108** = `python -m uvicorn backend.api_server:app --host 0.0.0.0 --port 8001`
+  (note: **NO `--reload`**), **started 2026-06-02 18:15** — ~2h BEFORE the journaling commit
+  (20:14) — still holding port 8001 at time of autopsy (2026-06-04). It never auto-reloads
+  (no --reload) and was never killed.
+- **Why `npm run dev:all` never replaced it:** the `kill` script was
+  `fuser -k 5000/tcp || true && fuser -k 8001/tcp || true`. `fuser` is a **Linux** command that
+  does not exist on Windows → it errors, `|| true` swallows it → **the port is never freed**.
+  So each `npm run dev:all` started a new backend that collided on port 8001, lost the bind, and
+  silently died while the June-2 zombie kept serving. The operator was restarting into a brick wall.
+- Same failure class as the known "stale vite holds 5000 → taskkill" note, unfixed for the backend.
+
+**Fix applied 2026-06-04:**
+- Killed PID 19108 (`taskkill /F /PID 19108`), port 8001 freed.
+- Patched `package.json` `kill` script: `fuser -k ...` → `npx --yes kill-port 5000 8001`
+  (cross-platform, actually frees the ports on Windows). `npm run kill` now works.
+- Correct restart sequence going forward: `npm run kill` THEN `npm run dev:all` (kill-port frees
+  8001 so the fresh `--reload` backend can bind and load current code).
+
 ## VERIFY-NEXT
 After a hard restart + one paper session, `session_debrief` stop-branch column must show
 structural/max-stop-cap/atr-fallback (not `unrecorded`) and `tp1_clamped` must reflect real
