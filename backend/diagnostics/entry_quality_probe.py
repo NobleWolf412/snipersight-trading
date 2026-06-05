@@ -52,6 +52,48 @@ _RAW = [
 ]
 
 
+def _facscore(sig, name):
+    """Pull a confluence factor's score (0-100) from the signal's factors array."""
+    for f in (sig.get("factors") or []):
+        if f.get("name") == name:
+            return _f(f.get("score"))
+    return None
+
+
+def _exhaustion(sig):
+    """Dead-cat / exhaustion PROXIES (real detect_pullback_setup inputs extension_pct/
+    volume_exhausted are not logged). Direction-adjusted so HIGHER = entered deeper into
+    exhaustion AGAINST a continuation (short into oversold-swept-discount / long the mirror).
+    Hypothesis: higher exhaustion at entry -> WORSE continuation outcome (negative r_out)."""
+    is_short = sig.get("direction") == "SHORT"
+    rsi = _f(sig.get("rsi"))
+    bb = _f(sig.get("bb_percent_b"))
+    vacc = _f(sig.get("volume_acceleration"))
+    pd = _facscore(sig, "Premium/Discount Zone")
+    sweep = _facscore(sig, "Liquidity Sweep")
+    out = {}
+    # oversold-for-short / overbought-for-long extent (0..1, higher=more stretched against continuation)
+    if rsi is not None:
+        out["exh_rsi (oversold-for-short / overbought-for-long)"] = (
+            max(0.0, (50 - rsi) / 50) if is_short else max(0.0, (rsi - 50) / 50))
+    # at the band extreme against continuation (short@low band / long@high band)
+    if bb is not None:
+        out["exh_bb  (at the spent band extreme)"] = (1.0 - bb) if is_short else bb
+    # volume deceleration (selling/buying drying up) — exhaustion regardless of direction
+    if vacc is not None:
+        out["exh_vol (volume decelerating)"] = max(0.0, -vacc)
+    # raw context factors (sign unknown -> correlate raw, let data speak)
+    if pd is not None:
+        out["prem_disc_factor (raw)"] = pd
+    if sweep is not None:
+        out["liq_sweep_factor (raw)"] = sweep
+    # COMPOSITE: mean of the 3 direction-adjusted exhaustion legs (the dead-cat signal)
+    legs = [v for k, v in out.items() if k.startswith("exh_")]
+    if len(legs) >= 2:
+        out["EXH_composite (dead-cat: oversold+band+voldecel)"] = sum(legs) / len(legs)
+    return out
+
+
 def _engineered(sig):
     """Direction-adjusted ENTRY-LOCATION features (the hypothesis). Higher = entered at the
     extreme that favours the trade direction (short into a top / long into a bottom)."""
@@ -112,6 +154,17 @@ def main():
         xs, ys = _series(lambda s, L=label: _engineered(s).get(L))
         r, rn = _pearson(xs, ys)
         rows.append((label, "ENGINEERED (not scored)", r, rn, len(xs)))
+
+    # dead-cat / exhaustion proxies (task a — real detect_pullback_setup inputs not logged)
+    for label in ("exh_rsi (oversold-for-short / overbought-for-long)",
+                  "exh_bb  (at the spent band extreme)",
+                  "exh_vol (volume decelerating)",
+                  "prem_disc_factor (raw)",
+                  "liq_sweep_factor (raw)",
+                  "EXH_composite (dead-cat: oversold+band+voldecel)"):
+        xs, ys = _series(lambda s, L=label: _exhaustion(s).get(L))
+        r, rn = _pearson(xs, ys)
+        rows.append((label, "EXHAUSTION proxy", r, rn, len(xs)))
 
     rated = [row for row in rows if row[2] is not None]
     rated.sort(key=lambda row: abs(row[2]), reverse=True)
