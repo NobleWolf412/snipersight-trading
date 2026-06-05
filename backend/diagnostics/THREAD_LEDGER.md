@@ -34,9 +34,7 @@ Last updated: 2026-06-05.
 
 ## 🟠 NEEDS-TRACE — found, mechanism unconfirmed (do NOT call it a bug yet)
 
-| ID | Thread | Tier | Evidence | NEXT ACTION |
-|----|--------|------|----------|-------------|
-| T9 | **Entry fill diverges from planned entry_zone** — AVAX/XRP/APT filled 3.7–5.8% below `entry_zone`, stop kept at plan level → stop dist ~2-3× planned, RR collapsed ~9.5→~2.4. ALL same direction (lower). I prematurely called this a bug, then walked it back | 2? | Live positions vs signals.jsonl (same microsecond). Entry-resolution code at live_trading_service.py:1248-1306 (resolves near/far/mid/current + max-dist clamp + OB-blown guard) | Trace which resolver branch fires for these; confirm whether stop should recompute off actual fill, or entry rejected when zone-drift > X%. Then classify bug vs by-design. |
+_(none open)_
 
 ## 🟢 SHIPPED + VERIFIED (this session arc)
 
@@ -57,6 +55,7 @@ Last updated: 2026-06-05.
 | R2 | **"Structural swing stops too wide" = the loss** | 1000FLOKI(−22) vs APT(+7) A/B: APT's stop was WIDER and won. Differentiator was entry location, not stop width. |
 | R3 | **pullback_probability filter (−0.21)** | Collapses to −0.05 post-clamp — wide-stop-era confound (3rd instance of this trap). |
 | R4 | **Redundant/multicollinear factors (HTF/regime/BTC triple-count)** | 0 factor pairs correlate ≥0.70 in data; a-priori claim refuted by factor_contribution. |
+| R5 | **Entry-fill divergence / LIMIT SNAP is a bug or the dead-cat mechanism** (was T9) | NOT a bug: LIMIT SNAP (paper_trading_service.py:2261-2307) is by-design fill-assurance and PRESERVES risk $ (size recalc 2280-2290). snap_gap measured vs PnL on clean data (n=111) → r=+0.06 (within ±0.19 noise), big-snap trades marginally POSITIVE. Snap magnitude carries no signal; it is NOT the dead-cat mechanism (that's the band-extreme/location = T6, separable). Closed 2026-06-05. |
 
 ---
 
