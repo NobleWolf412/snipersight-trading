@@ -1010,6 +1010,16 @@ def track_pool_sweeps(df: pd.DataFrame, pools: List[LiquidityPool]) -> List[Liqu
             updated_pools.append(pool)
             continue
 
+        # Reset per-iteration sweep state. These were loop-scoped and only assigned
+        # inside `if swept_mask.any()`, which caused (a) a NameError the first time an
+        # unswept pool reached the `if swept` check, and (b) a stale-value leak where an
+        # unswept pool silently inherited a PRIOR pool's swept flag + swept_index/timestamp.
+        # Direction-agnostic: applies identically to equal_highs (bearish liquidity above)
+        # and equal_lows (bullish liquidity below).
+        swept = False
+        swept_ts = None
+        swept_idx = None
+
         # Check for sweep using vectorized operations on df segment after pool was touched
         if pool.last_touch and pool.last_touch in df.index:
             try:
@@ -1038,6 +1048,10 @@ def track_pool_sweeps(df: pd.DataFrame, pools: List[LiquidityPool]) -> List[Liqu
         else:
             updated_pools.append(pool)
 
+    # Mass conservation: sweep tracking annotates pools, never adds/drops them.
+    assert len(updated_pools) == len(pools), (
+        f"track_pool_sweeps mass leak: {len(pools)} in, {len(updated_pools)} out"
+    )
     return updated_pools
 
 
