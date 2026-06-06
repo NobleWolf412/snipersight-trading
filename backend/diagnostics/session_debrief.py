@@ -208,11 +208,11 @@ def _factor_edge(flags):
     best, noise = summ["best"], summ["noise"]
     if summ["anti"]:
         flags.append("factor edge: ANTI-signal factor(s) " + ", ".join(summ["anti"])
-                     + " score high on LOSERS — likely mis-wired or inverted")
+                     + " score high on LOSERS on CLEAN data — likely mis-wired or inverted")
     if best is not None and noise is not None:
-        br = abs(res["stats"][best]["r_out"])
+        br = abs(res["stats"][best].get("r_out_clean") or 0.0)
         if br < noise:
-            flags.append(f"factor edge: NO factor predicts outcome — best |r_out| {br:.2f} "
+            flags.append(f"factor edge: NO factor predicts outcome — best clean |r| {br:.2f} "
                          f"below noise floor {noise:.2f}; scoring has no demonstrated edge on taken trades")
     if len(summ["dead"]) >= 4:
         flags.append(f"factor edge: {len(summ['dead'])} inert factors (rare/flat, no "

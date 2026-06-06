@@ -51,6 +51,10 @@ REDUNDANT_R = 0.70          # |Pearson| at/above this = overlapping signal
 DEAD_FIRE_RATE = 0.10       # fires in <10% of signals = rarely contributes
 FLAT_STD = 8.0              # score std (when present) below this = low discrimination
 MATCH_WINDOW_S = 3600       # signal must precede the fill by <= 1h to be its decision
+CLAMP_DATE = "2026-05-31"   # reachability-clamp ship date = the wide-stop-era confound boundary
+MIN_CLEAN_N = 30            # min post-clamp matched trades before a clean verdict is trusted
+VETO_FACTORS = {"MACD Veto"}  # gate factors (mirror scorer.py VETO_FACTORS): among taken trades
+#                              the score is range-restricted by the gate, so r_out is meaningless
 
 
 def _f(x):
@@ -155,18 +159,40 @@ def _match_outcomes(signals, trades):
 
 
 def _verdict(s, name, redundant):
-    """Pure factor verdict from its stats entry + the redundant-set membership."""
-    if s["r_out"] is not None and s["n_out"] >= 20 and s["r_out"] <= -0.15:
-        return "ANTI  (scores high on LOSERS)"
+    """Factor verdict. ANTI/KEEP are judged on the CLEAN (post-clamp) window to avoid
+    wide-stop-era confounds; gate factors and confounds are labelled explicitly rather
+    than mislabelled FLAT/ANTI."""
+    # Gate/veto factors: among taken trades the score is range-restricted by the gate
+    # (the veto already filtered the other side), so r_out carries no information.
+    if name in VETO_FACTORS:
+        return "GATE  (veto — r_out range-restricted, not interpretable)"
+
+    r_full, r_clean, n_clean = s["r_out"], s.get("r_out_clean"), s.get("n_out_clean", 0)
+    clean_ok = r_clean is not None and n_clean >= MIN_CLEAN_N
+    clean_floor = (1.96 / math.sqrt(n_clean)) if n_clean else None
+
+    # Confound: a full-history signal (|r|>=0.15) that vanishes on clean data — i.e. the
+    # wide-stop-era artifact that fooled us 5x this session. Flag it, don't trust it.
+    if (r_full is not None and abs(r_full) >= 0.15 and clean_ok
+            and clean_floor is not None and abs(r_clean) < clean_floor):
+        return "CONFOUND (full-history signal gone on clean data)"
+
+    # Window-independent structural verdicts.
     if s["fire"] < DEAD_FIRE_RATE:
         return "RARE  (fires <10%)"
     if s["std"] < FLAT_STD and s["fire"] > 0.5:
         return "FLAT  (no discrimination)"
     if name in redundant:
         return "REDUNDANT (overlaps a stronger factor)"
-    if s["r_out"] is not None and s["n_out"] >= 20 and s["r_out"] >= 0.15:
-        return "KEEP  (predicts winners)"
-    return "weak / unproven"
+
+    # ANTI/KEEP — judged on the clean window only, and only above its own noise floor.
+    if clean_ok:
+        if abs(r_clean) >= clean_floor and r_clean <= -0.15:
+            return "ANTI  (scores high on LOSERS, clean data)"
+        if abs(r_clean) >= clean_floor and r_clean >= 0.15:
+            return "KEEP  (predicts winners, clean data)"
+        return "weak / unproven"
+    return "weak / unproven (insufficient clean data)"
 
 
 def analyze(signals, trades):
@@ -194,6 +220,11 @@ def analyze(signals, trades):
             f = present.get(name)
             out_scores[name].append(_f(f["score"]) if f else 0.0)
 
+    # Indices of matched trades in the CLEAN (post-clamp) window — by signal timestamp,
+    # which is within MATCH_WINDOW_S of the fill. Used to de-confound ANTI/KEEP verdicts.
+    clean_idx = [i for i, (sig, _p) in enumerate(matched)
+                 if (sig.get("timestamp", "") or "") >= CLAMP_DATE]
+
     n = len(signals)
     stats = {}
     for name in order:
@@ -204,8 +235,11 @@ def analyze(signals, trades):
                  if present_vals else 0.0)
         contrib = sum(weighted[name]) / n if n else 0.0
         r_out, n_out = _pearson(out_scores[name], pnl_vec) if matched else (None, 0)
+        r_clean, n_clean = (_pearson([out_scores[name][i] for i in clean_idx],
+                                     [pnl_vec[i] for i in clean_idx]) if clean_idx else (None, 0))
         stats[name] = {"fire": fire, "mean": mean_p, "std": std_p,
-                       "contrib": contrib, "r_out": r_out, "n_out": n_out}
+                       "contrib": contrib, "r_out": r_out, "n_out": n_out,
+                       "r_out_clean": r_clean, "n_out_clean": n_clean}
 
     pairs = []
     for i in range(len(order)):
@@ -246,25 +280,32 @@ def compact_lines(result, files_n=0, top=3):
     dead = [nm for nm in order if stats[nm]["verdict"].startswith(("RARE", "FLAT"))]
     anti = [nm for nm in order if stats[nm]["verdict"].startswith("ANTI")]
     keep = [nm for nm in order if stats[nm]["verdict"].startswith("KEEP")]
+    gate = [nm for nm in order if stats[nm]["verdict"].startswith("GATE")]
+    confound = [nm for nm in order if stats[nm]["verdict"].startswith("CONFOUND")]
     win = sum(1 for p in pnl_vec if p > 0)
-    rated = [nm for nm in order if stats[nm]["r_out"] is not None]
-    best = max(rated, key=lambda nm: abs(stats[nm]["r_out"]), default=None)
-    noise = (1.96 / math.sqrt(matched)) if matched else None
+    n_clean = max((stats[nm].get("n_out_clean", 0) for nm in order), default=0)
+    # best predictor on the CLEAN window, excluding uninterpretable gate factors
+    rated = [nm for nm in order if stats[nm].get("r_out_clean") is not None and nm not in gate]
+    best = max(rated, key=lambda nm: abs(stats[nm]["r_out_clean"]), default=None)
+    noise = (1.96 / math.sqrt(n_clean)) if n_clean else None
 
     lines = [
         f"  corpus: {result['n']} signals / {files_n} sessions | {len(order)} factors | "
-        f"outcome-matched {matched} trades (win {100*win/len(pnl_vec) if pnl_vec else 0:.0f}%, gross)",
-        f"  edge: {len(keep)} KEEP | {len(anti)} ANTI | {len(dead)} dead(rare/flat) | "
-        f"{len(redundant)} redundant → effective ≈ {len(order)-len(redundant)-len(dead)}",
+        f"matched {matched} ({n_clean} post-clamp, win {100*win/len(pnl_vec) if pnl_vec else 0:.0f}% gross)",
+        f"  edge (clean): {len(keep)} KEEP | {len(anti)} ANTI | {len(dead)} dead | {len(gate)} gate | "
+        f"{len(confound)} confound → effective ≈ {len(order)-len(redundant)-len(dead)}",
     ]
     if best is not None:
         b = stats[best]
-        nf = f" (noise floor ±{noise:.2f})" if noise else ""
-        lines.append(f"  best predictor: {best} r_out={b['r_out']:+.2f}{nf}")
+        nf = f" (clean noise floor ±{noise:.2f})" if noise else ""
+        lines.append(f"  best predictor (clean): {best} r={b['r_out_clean']:+.2f}{nf}")
     if anti:
-        lines.append("  ANTI-signals (score high on losers): "
-                     + ", ".join(f"{nm} {stats[nm]['r_out']:+.2f}" for nm in anti))
-    return lines, {"dead": dead, "anti": anti, "keep": keep, "best": best, "noise": noise}
+        lines.append("  ANTI (clean data): "
+                     + ", ".join(f"{nm} {stats[nm]['r_out_clean']:+.2f}" for nm in anti))
+    if confound:
+        lines.append("  confounds IGNORED (full-history artifacts, gone post-clamp): " + ", ".join(confound))
+    return lines, {"dead": dead, "anti": anti, "keep": keep, "gate": gate,
+                   "confound": confound, "best": best, "noise": noise}
 
 
 def main():
@@ -302,20 +343,26 @@ def main():
 
     dead = [nm for nm in order if stats[nm]["verdict"].startswith(("RARE", "FLAT"))]
     anti = [nm for nm in order if stats[nm]["verdict"].startswith("ANTI")]
-    print(f"\nHEADLINE: {len(order)} factors | {len(redundant)} redundant (overlap a stronger one) "
-          f"| {len(dead)} dead weight (rare/flat) | {len(anti)} anti-signal")
+    gate = [nm for nm in order if stats[nm]["verdict"].startswith("GATE")]
+    confound = [nm for nm in order if stats[nm]["verdict"].startswith("CONFOUND")]
+    n_clean = max((stats[nm].get("n_out_clean", 0) for nm in order), default=0)
+    print(f"\nHEADLINE: {len(order)} factors | {len(redundant)} redundant | {len(dead)} dead(rare/flat) "
+          f"| {len(anti)} ANTI(clean) | {len(gate)} gate | {len(confound)} confound(full-history artifact)")
     print(f"  → effective independent factors ≈ {len(order) - len(redundant) - len(dead)}")
+    print(f"  ANTI/KEEP judged on the CLEAN post-clamp window (since {CLAMP_DATE}, n={n_clean}); "
+          f"full-history r shown for reference only.")
 
-    print("\n--- per factor (sorted by |outcome edge|, then contribution) ---")
-    print(f"  {'factor':24}{'fire%':>6}{'score(±std)':>14}{'contrib':>8}{'r_out':>8}{'n':>5}  verdict")
-    def _sortkey(nm):
-        s = stats[nm]
-        return (abs(s["r_out"]) if s["r_out"] is not None else 0.0, s["contrib"])
-    for name in sorted(order, key=_sortkey, reverse=True):
+    print("\n--- per factor (sorted by |clean outcome edge|) ---")
+    print(f"  {'factor':24}{'fire%':>6}{'score(±std)':>13}{'r_full':>8}{'r_clean':>9}{'nC':>4}  verdict")
+    def _ck(nm):
+        rc = stats[nm].get("r_out_clean")
+        return abs(rc) if rc is not None else 0.0
+    for name in sorted(order, key=_ck, reverse=True):
         s = stats[name]
-        r = f"{s['r_out']:+.2f}" if s["r_out"] is not None else "  -"
-        print(f"  {name[:23]:24}{100*s['fire']:5.0f}%{s['mean']:7.0f}±{s['std']:<5.0f}"
-              f"{s['contrib']:8.2f}{r:>8}{s['n_out']:>5}  {s['verdict']}")
+        rf = f"{s['r_out']:+.2f}" if s["r_out"] is not None else "  -"
+        rc = f"{s['r_out_clean']:+.2f}" if s.get("r_out_clean") is not None else "  -"
+        print(f"  {name[:23]:24}{100*s['fire']:5.0f}%{s['mean']:6.0f}±{s['std']:<5.0f}"
+              f"{rf:>8}{rc:>9}{s.get('n_out_clean', 0):>4}  {s['verdict']}")
 
     print(f"\n--- redundancy clusters (|Pearson| >= {REDUNDANT_R}) ---")
     if not pairs:
@@ -324,9 +371,10 @@ def main():
         print(f"  r={r:+.2f}  {a}  <->  {b}")
 
     print("\n=== READ ===")
-    print("  KEEP = score tracks winners. ANTI = tracks losers (worse than noise).")
-    print("  REDUNDANT/RARE/FLAT = candidates to fold or drop — but confirm on more")
-    print("  outcome-matched trades before cutting; low-N r_out is a hint, not a verdict.")
+    print("  KEEP/ANTI = clean-window score tracks winners/losers above its noise floor.")
+    print("  GATE = veto factor, r_out range-restricted (not interpretable — do NOT remove on r alone).")
+    print("  CONFOUND = looked like a signal on all data but vanishes post-clamp (wide-stop artifact).")
+    print("  RARE/FLAT/REDUNDANT = trim candidates (hygiene). Confirm on more clean trades before cutting.")
     return 0
 
 
