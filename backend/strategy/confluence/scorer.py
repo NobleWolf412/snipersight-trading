@@ -221,6 +221,15 @@ def run_pre_scoring_gates(
             # DCL zones (shorter-term daily cycle lows) grant a bypass only for
             # faster modes (strike / intraday_aggressive) — overwatch should wait
             # for the stronger WCL confirmation.
+            # NOTE (T11 / §10 bull-bear symmetry): this cycle-zone bypass is LONG-ONLY *by design*,
+            # and that asymmetry is NOT a bug to mirror. CycleContext models cycle LOWS only
+            # (in_wcl_zone / in_dcl_zone, smc.py:627-628) — there is no in_wch_zone / in_dch_zone, so
+            # a symmetric SHORT-at-cycle-HIGH bypass has no data to key on (it would require building
+            # cycle-high timing detection). A mirror would also be the WRONG direction: it would admit
+            # MORE counter-trend entries (shorts into uptrends), and counter-trend is the net-losing
+            # cohort. The production STEALTH counter-trend path is otherwise symmetric (CHoCH, below,
+            # gates both sides). Open question is whether THIS bypass earns its keep at all — see
+            # ledger T11 (measure WCL/DCL-bypassed long outcomes before keeping vs removing).
             _in_wcl = cycle_context is not None and getattr(cycle_context, "in_wcl_zone", False)
             _in_dcl = cycle_context is not None and getattr(cycle_context, "in_dcl_zone", False)
             _wcl_bypass = opposing_long and _in_wcl   # WCL → long bypass for all modes
