@@ -61,13 +61,19 @@ def confluence():
     )
 
 
+# ATR% (= atr/price*100, since bb_middle=100) bands are DAILY-TF calibrated in
+# regime_detector._detect_volatility — the §10 percentage-ATR standing fix:
+#   <2.5% compressed->calm | <5% normal | <7% elevated | >=7% volatile/chaotic->explosive.
+# The old 0.8/1.5/2.5/4.0 cut points were 5-minute-TF bands, intentionally retired
+# (regime_detector.py:750-757). These expectations were stale against the new bands
+# (T13). Do NOT revert to the old values — that re-breaks the standing fix's test.
 @pytest.mark.parametrize(
     "atr,current_price,expected_label",
     [
-        (0.2, 100.0, "calm"),
-        (0.8, 100.0, "normal"),
-        (1.5, 100.0, "elevated"),
-        (3.0, 100.0, "explosive"),
+        (1.0, 100.0, "calm"),       # 1.0% < 2.5   -> compressed
+        (3.5, 100.0, "normal"),     # 3.5% in [2.5,5)
+        (6.0, 100.0, "elevated"),   # 6.0% in [5,7)
+        (9.0, 100.0, "explosive"),  # 9.0% in [7,9.5) -> volatile
     ],
 )
 def test_atr_regime_classification(
@@ -92,7 +98,8 @@ def test_atr_regime_classification(
         # gate (decisions/2026-05-30__fix-design__tp1-reachability.md) correctly
         # declines → no plan. These tests assert regime/alt-stop behavior, not
         # reachability, so they need a plannable (reachable) stop.
-        return StopLoss(level=current_price - 0.5 * atr, distance_atr=0.5, rationale="Test"), True
+        _sd = min(0.5 * atr, 0.02 * current_price)  # cap stop at 2% so high-ATR clears the 3% scalp cap
+        return StopLoss(level=current_price - _sd, distance_atr=(_sd / atr) if atr else 0.5, rationale="Test"), True
 
     monkeypatch.setattr(ps, "_calculate_entry_zone", fake_entry_zone)
     monkeypatch.setattr(ps, "_calculate_stop_loss", fake_stop_loss)
@@ -220,7 +227,8 @@ def test_no_alt_stop_for_comfortable_liq(monkeypatch, base_config, empty_smc, co
         # gate (decisions/2026-05-30__fix-design__tp1-reachability.md) correctly
         # declines → no plan. These tests assert regime/alt-stop behavior, not
         # reachability, so they need a plannable (reachable) stop.
-        return StopLoss(level=current_price - 0.5 * atr, distance_atr=0.5, rationale="Test"), True
+        _sd = min(0.5 * atr, 0.02 * current_price)  # cap stop at 2% so high-ATR clears the 3% scalp cap
+        return StopLoss(level=current_price - _sd, distance_atr=(_sd / atr) if atr else 0.5, rationale="Test"), True
 
     monkeypatch.setattr(ps, "_calculate_entry_zone", fake_entry_zone)
     monkeypatch.setattr(ps, "_calculate_stop_loss", fake_stop_loss)
