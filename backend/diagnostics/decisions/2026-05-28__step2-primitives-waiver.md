@@ -56,3 +56,24 @@ When chapter pages wire these in (Step 7+), the audit on that step must verify p
 - `<RegimeQuadrant />` with `trendStrength=0, volatility=0` puts the dot in the Compression quadrant
 
 Until then, this carry-forward holds. No new decisions-log entry needed for the addition — Step 3's audit cleared the deferral under this same waiver pattern.
+
+## Addendum 2026-06-06 — Step 4 widget inventory carried under #1
+
+Step 4 (chapter-specific hero widgets) added five more components without
+isolated negative tests. Open item #1 inventory now covers 12 components:
+
+- `<ChapterShell />`, `<FlipCard />`, `<SourceList />`, `<ChartFixture />` (Step 2)
+- `<KellyCurve />`, `<WeightSliderPanel />`, `<RegimeQuadrant />` (Step 3)
+- `<FvgBuilder />`, `<WickVsCloseDemo />`, `<SweepVsBreakoutTwin />`, `<WyckoffSchematic />`, `<KillZoneClock />` (Step 4)
+
+When chapter pages wire these in (Step 6+), the audit on that step must
+verify the following negative paths in addition to the Step 2/3 list:
+
+- `<FvgBuilder direction="bearish" />` mirrors bullish geometry across the priceToY axis flip (line 77) — both step machines reach step 5.
+- `<WickVsCloseDemo lens="sweep" />` renders zero BOS bars; `lens="bos"` renders zero sweep bars.
+- `<SweepVsBreakoutTwin />` with `scrub=0` renders only the trigger bar in each twin (no follow bars).
+- `<WyckoffSchematic phase="distribution" />` draws the DISTRIBUTION_EVENTS glossary, not ACCUMULATION_EVENTS; intent narration matches phase.
+- `<KillZoneClock volumeByHour={Array(23).fill(1)} />` (wrong-length array) falls back to brightness=1 without throwing; `volumeByHour={Array(24)}` of zeros yields the floor brightness 0.4.
+- `<KillZoneClock currentTimeUtc={fixedDate} />` does NOT start a setInterval and never ticks.
+
+Also note: Step 4's audit confirmed `capture_contracts diff` returned CLEAN — the Replay-track inheritance from open item #2 has been resolved upstream (Replay track committed between Step 3 and Step 4). No further attribution needed for subsequent sub-steps unless drift reappears.
