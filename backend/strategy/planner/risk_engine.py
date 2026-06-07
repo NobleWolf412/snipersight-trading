@@ -477,6 +477,29 @@ def _get_allowed_entry_tfs(config: ScanConfig) -> tuple:
     return getattr(config, "entry_timeframes", ())
 
 
+def _resolve_htf_swing_allowed(config, planner_cfg, mode_profile: str) -> tuple:
+    """HTF timeframes eligible for the no-SMC-structure swing-stop FALLBACK, CONSTRAINED to
+    this tier's stop_timeframes.
+
+    Audit F2 (RISKY): cascade tiers are `copy.copy(config)` and inherit STEALTH's
+    `overrides["htf_swing_allowed"]` (e.g. ("4h","1h")), so an intraday tier
+    (stop_timeframes 1h/15m/5m) would otherwise pull a 4h swing for its stop — wider than
+    its own stop allowlist (a second wide-stop pathway alongside the Tier-1.1 geometry).
+    We intersect the htf_swing_allowed list with `_get_allowed_stop_tfs(config)` so the
+    fallback can only use HTF swings whose TF is ALSO in this tier's stop allowlist. If none
+    qualify, callers find no swing and fall through to the ATR stop. Direction-agnostic
+    (same guard for the long and short fallbacks)."""
+    htf_allowed = planner_cfg.htf_swing_allowed.get(mode_profile, ("4h", "1h", "1d"))
+    overrides = getattr(config, "overrides", None) or {}
+    if "htf_swing_allowed" in overrides:
+        htf_allowed = overrides["htf_swing_allowed"]
+    allowed_stop_tfs = _get_allowed_stop_tfs(config)
+    if allowed_stop_tfs:
+        _stop_lower = {t.lower() for t in allowed_stop_tfs}
+        htf_allowed = tuple(h for h in htf_allowed if h.lower() in _stop_lower)
+    return htf_allowed
+
+
 def _find_swing_level(
     is_bullish: bool,
     reference_price: float,
@@ -1181,15 +1204,11 @@ def _calculate_stop_loss(
 
                 # Try HTF if enabled and primary failed (MODE-AWARE HTF FILTERING)
                 if swing_level is None and planner_cfg.stop_use_htf_swings and multi_tf_data:
-                    # Get mode-specific HTF allowlist from config overrides or planner_cfg
+                    # Mode-specific HTF allowlist, CONSTRAINED to this tier's stop_timeframes
+                    # (audit F2 — _resolve_htf_swing_allowed). Stops an intraday cascade tier
+                    # from pulling a 4h swing stop outside its own stop allowlist.
                     mode_profile = getattr(config, "profile", "balanced")
-                    htf_allowed = planner_cfg.htf_swing_allowed.get(
-                        mode_profile, ("4h", "1h", "1d")
-                    )
-                    # Also check config.overrides for htf_swing_allowed
-                    overrides = getattr(config, "overrides", None) or {}
-                    if "htf_swing_allowed" in overrides:
-                        htf_allowed = overrides["htf_swing_allowed"]
+                    htf_allowed = _resolve_htf_swing_allowed(config, planner_cfg, mode_profile)
 
                     htf_candidates = ["4h", "4H", "1d", "1D", "1w", "1W"]
                     for htf in htf_candidates:
@@ -1358,15 +1377,11 @@ def _calculate_stop_loss(
 
                 # Try HTF if enabled and primary failed (MODE-AWARE HTF FILTERING)
                 if swing_level is None and planner_cfg.stop_use_htf_swings and multi_tf_data:
-                    # Get mode-specific HTF allowlist from config overrides or planner_cfg
+                    # Mode-specific HTF allowlist, CONSTRAINED to this tier's stop_timeframes
+                    # (audit F2 — _resolve_htf_swing_allowed). Stops an intraday cascade tier
+                    # from pulling a 4h swing stop outside its own stop allowlist.
                     mode_profile = getattr(config, "profile", "balanced")
-                    htf_allowed = planner_cfg.htf_swing_allowed.get(
-                        mode_profile, ("4h", "1h", "1d")
-                    )
-                    # Also check config.overrides for htf_swing_allowed
-                    overrides = getattr(config, "overrides", None) or {}
-                    if "htf_swing_allowed" in overrides:
-                        htf_allowed = overrides["htf_swing_allowed"]
+                    htf_allowed = _resolve_htf_swing_allowed(config, planner_cfg, mode_profile)
 
                     htf_candidates = ["4h", "4H", "1d", "1D", "1w", "1W"]
                     for htf in htf_candidates:
