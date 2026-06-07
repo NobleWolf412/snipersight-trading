@@ -1187,6 +1187,7 @@ class PaperTradingConfigRequest(BaseModel):
     max_drawdown_pct: Optional[float] = Field(default=None, ge=0, le=100)
     max_hours_open: Optional[int] = Field(default=72, ge=1, le=720)  # Auto-close stale trades
     use_testnet: bool = False  # Route fills through Phemex testnet instead of simulation
+    execution_mode: str = "snap_taker"  # "snap_taker" (default) | "rest_maker" (maker experiment T14, paper-only)
     universe_size: int = Field(default=20, ge=5, le=100)  # How many pairs to scan per cycle
 
 
@@ -1229,6 +1230,7 @@ async def start_paper_trading(config: PaperTradingConfigRequest):
             max_drawdown_pct=config.max_drawdown_pct,
             max_hours_open=config.max_hours_open,
             use_testnet=config.use_testnet,
+            execution_mode=config.execution_mode,
             universe_size=config.universe_size,
         )
 

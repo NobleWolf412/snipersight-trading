@@ -145,6 +145,11 @@ class PaperTradingConfig:
     max_pending_scans: int = 2  # Cancel pending limit orders after this many scan cycles
     max_drawdown_pct: Optional[float] = 10.0  # Kill switch: stop session if peak-to-trough drawdown exceeds X%
     use_testnet: bool = False  # Route orders through Phemex testnet instead of simulating
+    # Execution mode (maker-execution experiment, decisions/2026-06-06__maker-execution-experiment-design.md):
+    #   "snap_taker" (default) = current behavior: snap the limit to ~market + fill immediately (taker).
+    #   "rest_maker" = rest the limit at the OB (entry_zone), no snap, fill only when price retraces (maker).
+    # PAPER ONLY: rest_maker is forced to snap_taker when use_testnet=True (live-executor bleed guard).
+    execution_mode: str = "snap_taker"
     ml_gate_threshold: float = 0.40  # Reject signals with ML win probability below this (0 = disabled)
     universe_size: int = 20  # How many pairs to scan per cycle (dynamic selection pulls top N by volume/momentum)
 
@@ -156,6 +161,14 @@ class PaperTradingConfig:
     def from_dict(cls, data: Dict[str, Any]) -> "PaperTradingConfig":
         """Create from dictionary."""
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+
+    @property
+    def rest_maker_active(self) -> bool:
+        """True iff resting-maker execution is active: execution_mode is "rest_maker" AND NOT
+        use_testnet. The maker experiment is PAPER-ONLY — under testnet the executor is a
+        LiveExecutor, so rest_maker is force-disabled (§15 live-path guard, design entry
+        2026-06-06__maker-execution-experiment-design.md). Single source of truth for the toggle."""
+        return self.execution_mode == "rest_maker" and not self.use_testnet
 
 
 @dataclass
@@ -241,6 +254,7 @@ class CompletedTrade:
     stop_loss_rationale: str = ""
     tp1_clamped: bool = False
     tp1_realized_rr: float = 0.0
+    execution_mode: str = "snap_taker"  # maker-execution experiment arm (T14): snap_taker | rest_maker
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API response."""
@@ -283,6 +297,7 @@ class CompletedTrade:
             "stop_loss_rationale": self.stop_loss_rationale,
             "tp1_clamped": self.tp1_clamped,
             "tp1_realized_rr": self.tp1_realized_rr,
+            "execution_mode": self.execution_mode,
         }
 
 
@@ -491,6 +506,11 @@ class PaperTradingService:
                 dry_run=False,
             )
             logger.info("Paper trading using PHEMEX TESTNET executor")
+            if getattr(config, "execution_mode", "snap_taker") == "rest_maker":
+                logger.warning(
+                    "execution_mode=rest_maker IGNORED → forced snap_taker because use_testnet=True "
+                    "(LiveExecutor path; the maker experiment is PAPER-ONLY per §15 design entry)."
+                )
         else:
             self.executor = PaperExecutor(
                 initial_balance=config.initial_balance,
@@ -501,6 +521,11 @@ class PaperTradingService:
                 min_fill_pct=0.3,
                 max_fill_pct=0.7,
             )
+            if getattr(config, "execution_mode", "snap_taker") == "rest_maker":
+                logger.info(
+                    "Paper executor in REST_MAKER mode — limits rest at the OB (no snap), filled only "
+                    "on retrace (maker). Expect lower fill rate (experiment T14)."
+                )
 
         # Initialize position manager
         self.position_manager = PositionManager(
@@ -1741,6 +1766,7 @@ class PaperTradingService:
             "regime": self._current_regime_composite if hasattr(self, "_current_regime_composite") else "unknown",
             "pullback_probability": float(_pb or 0),
             "kill_zone": _kz,
+            "execution_mode": getattr(self.config, "execution_mode", "snap_taker"),
         }
         # Confluence breakdown features (Tier 1 ML enrichment)
         _cb = getattr(plan, "confluence_breakdown", None)
@@ -2258,6 +2284,13 @@ class PaperTradingService:
         try:
             side = "BUY" if plan.direction == "LONG" else "SELL"
 
+            # Maker-execution experiment (decisions/2026-06-06__maker-execution-experiment-design.md):
+            # in rest_maker we DON'T snap to market and DON'T fill immediately — we rest the limit at
+            # the OB (entry_zone) and let the monitor loop fill it only when price retraces (maker).
+            # HARD GUARD: forced off when use_testnet (the executor is a LiveExecutor then — §15
+            # paper-only). The mismatch is logged loudly once at session start (see _start).
+            _rest_maker = self.config.rest_maker_active
+
             # ── Limit proximity snap ──────────────────────────────────────
             # If the OB entry zone is too far from current price, the limit
             # order will sit pending and expire without filling.  Snap the
@@ -2271,7 +2304,7 @@ class PaperTradingService:
                 _max_dist /= 2.0  # High-confluence → tighter snap → faster fill
             _gap_pct = abs(_raw_limit - current_price) / current_price * 100 if current_price else 0
 
-            if _gap_pct > _max_dist and current_price > 0:
+            if _gap_pct > _max_dist and current_price > 0 and not _rest_maker:
                 if side == "BUY":
                     limit_price = current_price * (1 - _max_dist / 100)
                 else:
@@ -2316,8 +2349,11 @@ class PaperTradingService:
             )
 
 
-            # Because the EntryEngine caps near_entry to current_price, this will immediately evaluate
-            fill = executor.execute_limit_order(order.order_id, current_price)
+            # snap_taker: fill immediately at ~market (taker). rest_maker: leave the limit RESTING at
+            # the OB → fill=None routes to the pending branch, filled later by the monitor loop only
+            # when price retraces to the level (maker). The execute_limit_order fill-gate
+            # (paper_executor passive check) means this never crosses the spread for rest_maker.
+            fill = None if _rest_maker else executor.execute_limit_order(order.order_id, current_price)
 
             if fill and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
                 # Open position in manager using the ACTUALLY filled quantity
@@ -2839,6 +2875,7 @@ class PaperTradingService:
                     stop_loss_rationale=str(getattr(pos, "stop_loss_rationale", "") or ""),
                     tp1_clamped=bool(getattr(pos, "tp1_clamped", False)),
                     tp1_realized_rr=float(getattr(pos, "tp1_realized_rr", 0.0) or 0.0),
+                    execution_mode=getattr(self.config, "execution_mode", "snap_taker"),
                 )
 
                 self.completed_trades.append(trade)
