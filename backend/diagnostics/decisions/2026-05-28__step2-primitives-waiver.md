@@ -77,3 +77,28 @@ verify the following negative paths in addition to the Step 2/3 list:
 - `<KillZoneClock currentTimeUtc={fixedDate} />` does NOT start a setInterval and never ticks.
 
 Also note: Step 4's audit confirmed `capture_contracts diff` returned CLEAN — the Replay-track inheritance from open item #2 has been resolved upstream (Replay track committed between Step 3 and Step 4). No further attribution needed for subsequent sub-steps unless drift reappears.
+
+## 2026-06-06 carry-forward — Phase 1 Step 5+6 (hook + manifest + chapter bodies)
+
+Same justification as Step 2/3/4 entries: pure-presentation lift, no decision logic.
+Inventory now spans 12 widget/primitive components + `useLessonsProgress` hook +
+`CHAPTERS` manifest + `_shared.tsx` layout helpers + 9 chapter content modules
+(`src/content/lessons/01-order-blocks.tsx` through `09-kill-zones.tsx`).
+
+Required positive/negative coverage at Step 7+ chapter-wiring audit:
+
+- **Hook**: empty-progress (`nextChapter = chapters[0]`), all-read (`nextChapter = null`), gap-read (`nextChapter = first-unread-in-order`), `reset()` clears both fields.
+- **Manifest**: `CHAPTER_BY_ID[bad-id]` returns `undefined` (must not throw at page level).
+- **Chapter bodies**: each `Body` renders without `Suspense` boundary present (negative — should error visibly) vs with boundary (positive — should render). Verifies lazy-loading failure mode is loud.
+
+## 2026-06-06 round-2 fix log — Step 5+6 audit OI #2 & #3 applied
+
+Round-1 audit returned 11 ✅ / 3 🟡 / 0 ❌ with three open items (negative tests
+carry-forward, demo-weights pedagogy clarity, hero direction captions). All three
+applied in the same commit:
+
+- OI #1 (Rubric 4) — this addendum block satisfies the paper-trail discipline.
+- OI #2 (Rubric 5) — `06-confluence.tsx` hero caption updated to explicitly disclaim "illustrative · NOT live MODE_FACTOR_WEIGHTS"; new ChapterPara added after HeroWrap noting the live model has 26 factors and is not normalized.
+- OI #3 (Rubric 12) — Chapters 1, 2, 3, 4 hero captions extended to call out the bullish/bearish mirror explicitly. Chapter 5 exempt (toggles internally via `phase` prop). Chapters 6-9 are direction-agnostic per concept.
+
+Round-2 verification expected: all 14 ✅ on re-spawn.
