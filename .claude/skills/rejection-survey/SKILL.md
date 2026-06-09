@@ -62,11 +62,14 @@ def map_to_stage(reason: str, gate_name: str | None) -> str:
     if gate_name == "confluence_score":           return "CONFLUENCE_SCORE"
     if gate_name == "risk_validation":            return "PLANNER"
     if gate_name == "post_plan_revalidation":     return "EXECUTION"
+    if gate_name == "cooldown_active":            return "POSITION_CAPS"
     if gate_name in ("structural_anchor", "btc_impulse",
                      "regime_alignment", "conflict_density"):
         return "CONFLUENCE_SCORE"
     r = (reason or "").lower()
     if "trade_type_mismatch" in r:     return "PLANNER"
+    if "tp1_unreachable" in r:         return "RISK_VALIDATION"
+    if "cooldown" in r or "stop-out" in r: return "POSITION_CAPS"
     if "insufficient_rr" in r:         return "RISK_VALIDATION"
     if "no trade plan" in r:           return "PLANNER"
     if "no_data" in r or "stale" in r: return "DATA"
