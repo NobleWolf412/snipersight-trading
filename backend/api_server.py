@@ -1189,6 +1189,7 @@ class PaperTradingConfigRequest(BaseModel):
     use_testnet: bool = False  # Route fills through Phemex testnet instead of simulation
     execution_mode: str = "snap_taker"  # "snap_taker" (default) | "rest_maker" (maker experiment T14, paper-only)
     universe_size: int = Field(default=20, ge=5, le=100)  # How many pairs to scan per cycle
+    macro_overlay_enabled: bool = True  # Macro/dominance overlay (scorer.py:3114). True = back-compat; False = pure technicals (T19)
 
 
 @app.post("/api/paper-trading/start")
@@ -1232,6 +1233,7 @@ async def start_paper_trading(config: PaperTradingConfigRequest):
             use_testnet=config.use_testnet,
             execution_mode=config.execution_mode,
             universe_size=config.universe_size,
+            macro_overlay_enabled=config.macro_overlay_enabled,
         )
 
         result = await service.start(paper_config)

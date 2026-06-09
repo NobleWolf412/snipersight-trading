@@ -612,6 +612,8 @@ interface PaperConfig {
   universe_size: number;
   slippage_bps: number;
   fee_rate: number;
+  execution_mode: 'snap_taker' | 'rest_maker';
+  macro_overlay_enabled: boolean;
 }
 
 const DEFAULT_SETUP: PaperConfig = {
@@ -635,6 +637,8 @@ const DEFAULT_SETUP: PaperConfig = {
   universe_size: 20,
   slippage_bps: 5,
   fee_rate: 0.1,
+  execution_mode: 'snap_taker',
+  macro_overlay_enabled: true,
 };
 
 function SetupTab({
@@ -737,6 +741,35 @@ function SetupTab({
           <Slider label="Slippage" value={cfg.slippage_bps} min={0} max={50} step={1} onChange={(v) => set('slippage_bps', v)} suffix=" bps" hint="basis points per fill — models market impact" />
           <Slider label="Taker Fee" value={cfg.fee_rate} min={0} max={0.5} step={0.05} onChange={(v) => set('fee_rate', v)} suffix="%" hint="% fee on each simulated fill" />
         </div>
+      </SectionPanel>
+
+      {/* § 7 — Signal & execution mode */}
+      <SectionPanel num="07" title="Signal & Execution Mode" desc="how orders fill + whether the macro/dominance overlay biases direction">
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.14em', marginBottom: 6 }}>
+          ORDER EXECUTION
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          {([['snap_taker', 'SNAP / TAKER'], ['rest_maker', 'REST / MAKER']] as const).map(([m, lbl]) => (
+            <button
+              key={m}
+              type="button"
+              className={`btn ${cfg.execution_mode === m ? 'btn-cyan' : ''}`}
+              onClick={() => set('execution_mode', m)}
+              style={{ flex: 1, fontSize: 11, letterSpacing: '.12em', padding: '10px 0' }}
+            >
+              {lbl}
+            </button>
+          ))}
+        </div>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginBottom: 14 }}>
+          snap/taker = fill at market now · rest/maker = rest the limit at the OB, fill on pullback (paper-only — ignored under testnet)
+        </div>
+        <Toggle
+          label="Macro / Dominance Overlay"
+          value={cfg.macro_overlay_enabled}
+          onChange={(v) => set('macro_overlay_enabled', v)}
+          hint="BTC.D / stable.D / alt.D bias on direction · OFF = pure technicals"
+        />
       </SectionPanel>
 
       {/* ARM button */}
@@ -1182,6 +1215,8 @@ export function RangeBot() {
         fee_rate: cfg.fee_rate / 100, // slider is in %, service expects decimal
         use_testnet: false,
         sensitivity_preset: 'custom',
+        execution_mode: cfg.execution_mode,
+        macro_overlay_enabled: cfg.macro_overlay_enabled,
       };
       await paperTradingService.start(req);
       await Promise.all([loadStatus(), loadTrades()]);

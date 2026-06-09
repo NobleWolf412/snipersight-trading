@@ -47,6 +47,8 @@ export interface PaperTradingConfigRequest {
   max_hours_open?: number | null;
   use_testnet?: boolean;
   universe_size?: number;
+  execution_mode?: 'snap_taker' | 'rest_maker';
+  macro_overlay_enabled?: boolean;
 }
 
 export interface PaperPosition {

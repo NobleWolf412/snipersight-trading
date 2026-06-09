@@ -152,6 +152,10 @@ class PaperTradingConfig:
     execution_mode: str = "snap_taker"
     ml_gate_threshold: float = 0.40  # Reject signals with ML win probability below this (0 = disabled)
     universe_size: int = 20  # How many pairs to scan per cycle (dynamic selection pulls top N by volume/momentum)
+    # Macro/dominance overlay (BTC.D / stable.D / alt.D → directional score adj, scorer.py:3114).
+    # Default True = back-compat (orchestrator default is True at defaults.py:40; surfacing the
+    # toggle does NOT change behavior). Operator can set False to run pure-technicals (see ledger T19).
+    macro_overlay_enabled: bool = True
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -601,7 +605,10 @@ class PaperTradingService:
             )
             scan_config.planner = planner_cfg
             scan_config.enable_fusion = True  # Bot uses Dynamic Logic Fusion — scanner stays on pure Stealth weights
-
+            # Macro/dominance overlay toggle (operator-controllable; scorer.py:3114 reads config.macro_overlay_enabled).
+            # Mirrors scanner_service.py:281. Default True = back-compat; False = pure technicals (ledger T19).
+            scan_config.macro_overlay_enabled = config.macro_overlay_enabled
+            logger.info(f"Macro overlay: {'ON' if config.macro_overlay_enabled else 'OFF'} (config.macro_overlay_enabled)")
 
             self.orchestrator = Orchestrator(config=scan_config, exchange_adapter=adapter)
         except Exception as e:
