@@ -81,6 +81,24 @@ correct but invisible is barely better than code that's wrong. Therefore:
 - Add telemetry (`backend/bot/telemetry/`) for any decision point that can fail silently
 - Output format: short summary first, structured detail second, raw data last
 
+## FUNDAMENTALS FIRST — DIAGNOSE TO ROOT, DON'T BANDAID
+Accuracy of fundamentals beats speed of patching. A fix on a symptom while the cause keeps
+producing it is a wet bandaid — it falls off. Before concluding or coding:
+- **Verify the fundamentals before reasoning on top of them.** Confirm the data's scale/units,
+  the threshold's calibration, and the *actual live code path* — never reason from assumed values.
+  A "sophisticated" system can be inert: e.g. a 9-state engine that emits ONE state because a
+  threshold went stale vs the real data, while an always-on default silently applies its bias.
+- **Find the ROOT before patching.** Trace upstream (what produces this?) and downstream (what
+  consumes it?) — map the full pipeline, not the local view. Ask: "if I fix this, does the cause
+  still generate it?" If yes, you're bandaging a symptom — find the cause (e.g. cap concentration
+  vs. fix the overlay that forces the concentration).
+- **Understand the scope of the workflow before concluding.** Always-on defaults, shared
+  paper/live paths, blast radius, what's a toggle vs hardcoded — know them before calling
+  something done or broken.
+- **Use the whole toolshed deliberately.** Measure-before-build (diagnostics), Plan / adversarial /
+  symmetry agents, the ledger + decisions log. A conclusion reached with the wrong tool, or half
+  the tools, is how wet bandaids get shipped. Right tool, full picture, then act.
+
 ## TRIAGE ORDER (where to focus when something's wrong)
 Top-down. Do not start a lower item while a higher one is open.
 1. **BROKEN** — wrong output, data loss, money at risk (execution, orders, persistence, risk guards)
