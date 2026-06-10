@@ -816,19 +816,13 @@ class SMCDetectionService:
                 updated_ob = replace(ob, freshness_score=new_freshness)
                 updated_obs.append(updated_ob)
 
-            # Filter out stale OBs (freshness below min threshold)
-            min_freshness = self._smc_config.ob_min_freshness
-            before_count = len(updated_obs)
-            order_blocks = [ob for ob in updated_obs if ob.freshness_score >= min_freshness]
-            filtered_count = before_count - len(order_blocks)
-
-            if filtered_count > 0:
-                logger.debug(
-                    "🔄 Filtered %d stale OBs (freshness < %.1f%%)", filtered_count, min_freshness
-                )
-            logger.debug(
-                "🔄 Recalculated freshness for %d OBs, kept %d", before_count, len(order_blocks)
-            )
+            # Gate 2 (filter_obs_by_mode) is the SINGLE freshness authority (decision #3).
+            # This aggregation step only REFRESHES freshness_score (consumed by sort /
+            # is_fresh / scoring); it no longer filters. Retired dead scale-mismatch filter:
+            # freshness_score is 0-100 while ob_min_freshness is 0-1 (0.05), so the prior
+            # `freshness_score >= min_freshness` was always true and expired nothing.
+            order_blocks = updated_obs
+            logger.debug("🔄 Recalculated freshness for %d OBs", len(order_blocks))
         except Exception as e:
             logger.debug("Freshness recalc failed: %s", e)
 

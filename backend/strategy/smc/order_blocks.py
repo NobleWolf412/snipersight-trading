@@ -376,14 +376,17 @@ def detect_order_blocks(
         # Update order block with new values
         order_blocks[i] = replace(ob, mitigation_level=mitigation, freshness_score=freshness)
 
-    # Filter out heavily mitigated or stale order blocks
+    # Filter out heavily mitigated order blocks. Freshness/staleness expiry is owned
+    # SOLELY by filter_obs_by_mode (Gate 2) per decision #3 (T2/1A). The prior
+    # `freshness_score >= ob_min_freshness` clause here was DEAD: freshness_score is on a
+    # 0-100 scale (calculate_freshness returns *100) while ob_min_freshness is 0-1 (0.05),
+    # so the comparison was always true and never expired a single OB.
     max_mitigation = smc_cfg.ob_max_mitigation
-    min_freshness = smc_cfg.ob_min_freshness
 
     order_blocks = [
         ob
         for ob in order_blocks
-        if ob.mitigation_level < max_mitigation and ob.freshness_score >= min_freshness
+        if ob.mitigation_level < max_mitigation
     ]
 
     # Sort by freshness (most recent first)
@@ -751,8 +754,15 @@ def filter_obs_by_mode(
     Returns:
         List[OrderBlock]: Filtered order blocks matching mode criteria
     """
-    if not mode_profile or not order_blocks:
-        return order_blocks  # Backward compatibility: no filtering
+    if not order_blocks:
+        return order_blocks  # nothing to filter (legitimate empty input)
+    if not mode_profile:
+        # Gate 2 is the SINGLE OB freshness authority (decision #3). A missing profile
+        # is a wiring bug, not a no-op — failing loud prevents silent bypass of expiry.
+        raise ValueError(
+            "filter_obs_by_mode: mode_profile is required (got None/empty) — "
+            "Gate-2 is the single OB freshness authority and must not be skipped"
+        )
 
     # Mode-specific filtering criteria
     MODE_CRITERIA = {
@@ -780,7 +790,11 @@ def filter_obs_by_mode(
 
     criteria = MODE_CRITERIA.get(mode_profile)
     if not criteria:
-        return order_blocks  # Unknown mode, no filtering
+        # Unknown profile must fail loud (decision #3) — never silently return unfiltered.
+        raise ValueError(
+            f"filter_obs_by_mode: unknown mode_profile {mode_profile!r} — "
+            f"expected one of {sorted(MODE_CRITERIA)}"
+        )
 
     filtered = []
     for ob in order_blocks:
