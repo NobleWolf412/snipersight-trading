@@ -8,6 +8,9 @@ Reference detail is NOT duplicated here — pull it on demand:
   source of truth that can't go stale.
 - **File / module map** → generate live: `tree -L 3 backend src`, or Serena's overview. Do not
   trust a hand-written tree.
+- **Relationship / orientation map** (what connects to what, where a symbol lives, cross-module
+  bridges, blast radius) → graphify (`graphify-out/`). A derived index — fast to orient, but
+  **can go stale**. Use it to find the right code; confirm in the code via Serena. Detail: §GRAPHIFY.
 - **Contract shapes** (API / telemetry / pipeline / DB) → `backend/diagnostics/contracts/`
 - Full 14-point audit rubric → `.claude/AUDIT_RUBRIC.md`
 - Full task-router table → `.claude/ROUTER.md`
@@ -167,3 +170,25 @@ Write a `backend/diagnostics/decisions/<utc-date>__<topic>.md` entry for: any au
 calibration near-miss (wrong tool, scope creep, slipped audit, silent contract break), any threshold
 tune (with baseline), any architectural shift, any "tried X, didn't work, here's why."
 This file stays lean; the decisions log is the authoritative history.
+
+## GRAPHIFY — ORIENTATION LAYER (not a source of truth)
+Knowledge graph at `graphify-out/` (`graph.json` + `GRAPH_REPORT.md` + `graph.html`), mapping
+relationships, god nodes, and community structure across **code AND docs**. Use it to orient
+before diving — never to decide. Division of labor with Serena is the whole point:
+- **graphify answers** *what connects to what / where does X live / what's the blast radius*:
+  `graphify query "<q>"`, `graphify path "<A>" "<B>"`, `graphify explain "<sym>"` — a scoped
+  subgraph, cheaper than grep. `GRAPH_REPORT.md` for broad architecture review only.
+- **Serena stays the source of truth** for precise symbols and ALL edits (`find_symbol`,
+  `get_symbols_overview`). Confirm anything graphify surfaces in the code before acting on it.
+- The graph is **commit-pinned and drifts stale** — a stale graph never overrides the code (§3:
+  the code is the only source of truth that can't go stale).
+- **Refresh model.** `graphify update .` is fast (~32s, AST + SHA256 cache; doc nodes survive via
+  cache) and safe to run standalone — fine for a post-commit hook. BUT it **re-clusters from scratch
+  and re-detects scope**: it wipes hand-assigned community labels and re-widens the node set past the
+  `.graphifyignore` curation (≈+1.5k nodes from `.claude/`, etc.). So treat the labeled, scoped graph
+  as a **periodic artifact of the full `/graphify` pipeline**, not something `update` preserves.
+  (Only run the full pipeline with subagents serialized — the AST process pool throws
+  `BrokenProcessPool` under heavy concurrent subagent load, which is what bit the first build.)
+  Don't trust an unrebuilt graph after a refactor — re-orient from the code.
+- **PreToolUse hooks** (`.claude/settings.json`) nudge graphify-first before grep/Read. They're a
+  prompt, not a gate; the Serena-first triage and §18 pre-flight still govern.

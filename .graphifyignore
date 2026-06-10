@@ -1,0 +1,19 @@
+# keep the graphify tool clone itself out of the SniperSight graph
+graphify/
+graphify-out/
+_sess.json
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.jsonl
+*.db
+*.log
+tests/visual/__baselines__/
+tests/visual/__pending__/
+tests/visual/__report__/
+.claude/
+logs/
+src/stories/assets/
+src/assets/images/
+public/textures/
