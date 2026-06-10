@@ -912,17 +912,18 @@ async def get_kill_zone_status():
     from backend.strategy.smc.sessions import (
         KILL_ZONE_TIMES_EST,
         KillZone,
+        _to_eastern,
         get_current_kill_zone,
     )
 
     try:
-        # Sessions module treats EST as a fixed UTC-5 offset (no DST).
-        # Mirror that here so countdown math stays consistent with the
-        # `_time_in_range` membership tests used inside the module.
-        EST_OFFSET_HOURS = 5
-
+        # Use the SAME DST-aware Eastern conversion the sessions module uses for
+        # membership, so countdown math + UTC projection stay consistent with
+        # get_current_kill_zone year-round (offset is 5 in EST, 4 in EDT).
         now_utc = datetime.now(timezone.utc)
-        now_est = now_utc.replace(tzinfo=None) - timedelta(hours=EST_OFFSET_HOURS)
+        now_eastern = _to_eastern(now_utc)
+        now_est = now_eastern.replace(tzinfo=None)  # Eastern wall-clock (DST-aware)
+        est_offset_hours = round(-now_eastern.utcoffset().total_seconds() / 3600)
 
         current_kz = get_current_kill_zone(now_utc)
 
@@ -957,9 +958,9 @@ async def get_kill_zone_status():
             zones_payload.append(
                 {
                     "name": kz.value,
-                    "start_utc_hour": (sh + EST_OFFSET_HOURS) % 24,
+                    "start_utc_hour": (sh + est_offset_hours) % 24,
                     "start_utc_minute": sm,
-                    "end_utc_hour": (eh + EST_OFFSET_HOURS) % 24,
+                    "end_utc_hour": (eh + est_offset_hours) % 24,
                     "end_utc_minute": em,
                     "duration_minutes": (eh * 60 + em) - (sh * 60 + sm),
                 }

@@ -19,7 +19,15 @@ from typing import Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime, time
 from enum import Enum
+from zoneinfo import ZoneInfo
 import pandas as pd
+
+# DST-aware reference zone. The SESSION/KILL_ZONE tables below are expressed in US
+# Eastern wall-clock; we convert each incoming timestamp to Eastern (America/New_York),
+# which tracks EST<->EDT automatically. This replaces a hardcoded UTC-5 that was correct
+# only in winter, and was skipped entirely on naive timestamps (treated as-is, ~5h off).
+_EASTERN = ZoneInfo("America/New_York")
+_UTC = ZoneInfo("UTC")
 
 
 class TradingSession(str, Enum):
@@ -41,7 +49,8 @@ class KillZone(str, Enum):
     LONDON_CLOSE = "london_close"  # 11:00-12:00 EST
 
 
-# Session times in EST (Eastern Standard Time / UTC-5)
+# Session times in US Eastern wall-clock (DST-aware via America/New_York at lookup time;
+# the "_EST" suffix is historical — values are matched against Eastern, not a fixed UTC-5).
 # Format: (start_hour, start_minute, end_hour, end_minute)
 SESSION_TIMES_EST = {
     TradingSession.ASIAN: (19, 0, 4, 0),  # 7pm-4am EST (rolls over midnight)
@@ -111,26 +120,33 @@ def _time_in_range(check_time: time, start: Tuple[int, int], end: Tuple[int, int
         return check_time >= start_time or check_time <= end_time
 
 
+def _to_eastern(timestamp: datetime) -> datetime:
+    """Convert any timestamp to US/Eastern wall-clock (DST-aware).
+
+    Naive timestamps are treated as UTC — the convention everywhere in this system:
+    the Phemex candle index is naive-UTC, and the scorer passes
+    ``datetime.now(timezone.utc)``. Returns a tz-aware Eastern datetime; callers take
+    ``.time()`` and compare against the EST-labeled SESSION/KILL_ZONE tables, which now
+    resolve to the correct wall-clock window year-round including across DST.
+    """
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=_UTC)
+    return timestamp.astimezone(_EASTERN)
+
+
 def get_current_session(timestamp: datetime) -> Optional[TradingSession]:
     """
     Get the active trading session for a timestamp.
 
     Args:
-        timestamp: Datetime (assumed EST or will be converted)
+        timestamp: Datetime — tz-aware (any zone) or naive (treated as UTC); converted
+            to DST-aware US/Eastern internally before matching against the tables.
 
     Returns:
         TradingSession or None if outside main sessions
     """
-    # Convert to EST if timezone aware
-    if timestamp.tzinfo is not None:
-        from datetime import timedelta
-
-        est_offset = timedelta(hours=-5)
-        timestamp = (
-            timestamp.replace(tzinfo=None) + (timestamp.utcoffset() or timedelta(0)) + est_offset
-        )
-
-    current_time = timestamp.time()
+    # Convert to DST-aware US/Eastern wall-clock (naive timestamps treated as UTC).
+    current_time = _to_eastern(timestamp).time()
 
     for session, (sh, sm, eh, em) in SESSION_TIMES_EST.items():
         if _time_in_range(current_time, (sh, sm), (eh, em)):
@@ -144,21 +160,14 @@ def get_current_kill_zone(timestamp: datetime) -> Optional[KillZone]:
     Get the active kill zone for a timestamp.
 
     Args:
-        timestamp: Datetime (assumed EST or will be converted)
+        timestamp: Datetime — tz-aware (any zone) or naive (treated as UTC); converted
+            to DST-aware US/Eastern internally before matching against the tables.
 
     Returns:
         KillZone or None if not in a kill zone
     """
-    # Convert to EST if timezone aware
-    if timestamp.tzinfo is not None:
-        from datetime import timedelta
-
-        est_offset = timedelta(hours=-5)
-        timestamp = (
-            timestamp.replace(tzinfo=None) + (timestamp.utcoffset() or timedelta(0)) + est_offset
-        )
-
-    current_time = timestamp.time()
+    # Convert to DST-aware US/Eastern wall-clock (naive timestamps treated as UTC).
+    current_time = _to_eastern(timestamp).time()
 
     for kz, (sh, sm, eh, em) in KILL_ZONE_TIMES_EST.items():
         if _time_in_range(current_time, (sh, sm), (eh, em)):
