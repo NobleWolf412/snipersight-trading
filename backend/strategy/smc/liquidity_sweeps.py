@@ -45,6 +45,18 @@ MODE_REVERSAL_WINDOWS = {
 }
 
 
+def _confirmed_at(sweep_ts, reversal_bars, bar_duration):
+    """Look-ahead-safe time at which a liquidity sweep becomes actionable.
+
+    `timestamp` is WHEN price penetrated the level; the sweep is only CONFIRMED once its
+    reversal completes — reversal_bar_count bars later. Replay/backtest entry simulation
+    must gate on this value, never on `timestamp`, or it acts on a reversal that had not
+    yet happened (look-ahead bias). Returns timestamp + reversal_bar_count * bar_duration
+    (== timestamp when reversal_bars == 0, i.e. confirmed at the sweep bar itself).
+    """
+    return (pd.Timestamp(sweep_ts) + bar_duration * int(reversal_bars)).to_pydatetime()
+
+
 def detect_liquidity_sweeps(
     df: pd.DataFrame,
     config: SMCConfig | dict | None = None,
@@ -109,6 +121,10 @@ def detect_liquidity_sweeps(
 
     inferred_tf = _infer_timeframe(df)
     swing_lookback = scale_lookback(smc_cfg.sweep_swing_lookback, inferred_tf)
+
+    # Bar duration (median index spacing) for look-ahead-safe sweep confirmation times.
+    _bar_deltas = df.index.to_series().diff().dropna()
+    bar_duration = _bar_deltas.median() if len(_bar_deltas) else pd.Timedelta(0)
 
     # Mode-specific reversal window for post-filtering.
     # Detection always uses the maximum window (12 bars) so reversal_bar_count is
@@ -276,7 +292,10 @@ def detect_liquidity_sweeps(
                                 grade=grade,
                                 has_reversal_pattern=has_pattern,
                                 confirmation_level=conf_level,
-                                reversal_bar_count=reversal_bars
+                                reversal_bar_count=reversal_bars,
+                                confirmed_at=_confirmed_at(
+                                    current_candle.name, reversal_bars, bar_duration
+                                ),
                             )
                             liquidity_sweeps.append(sweep)
 
@@ -363,7 +382,10 @@ def detect_liquidity_sweeps(
                                 grade=grade,
                                 has_reversal_pattern=has_pattern,
                                 confirmation_level=conf_level,
-                                reversal_bar_count=reversal_bars
+                                reversal_bar_count=reversal_bars,
+                                confirmed_at=_confirmed_at(
+                                    current_candle.name, reversal_bars, bar_duration
+                                ),
                             )
                             liquidity_sweeps.append(sweep)
 

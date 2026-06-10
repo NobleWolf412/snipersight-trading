@@ -265,6 +265,10 @@ class LiquiditySweep:
     has_reversal_pattern: bool = False  # Engulfing/hammer after sweep
     has_structure_break: bool = False  # BOS/CHoCH followed sweep
     reversal_bar_count: int = 0  # NEW: Candles taken to confirm reversal (for mode filtering)
+    confirmed_at: Optional[datetime] = None  # Look-ahead-safe time the sweep becomes actionable:
+    # timestamp + reversal_bar_count * bar_duration. `timestamp` is WHEN price penetrated the level;
+    # the sweep is only CONFIRMED once its reversal completes. Replay/backtest entry simulation must
+    # gate on confirmed_at, never timestamp, or it acts on a reversal that had not yet happened.
 
     @property
     def is_confirmed(self) -> bool:
