@@ -3045,10 +3045,13 @@ class Orchestrator:
                             and not hasattr(brk.timestamp, "dtype")
                             else None
                         ),
-                        "direction": "bullish" if brk.break_type == "BOS" else "bearish",
+                        "direction": str(getattr(brk, "direction", "bullish")),
                     }
                     for brk in context.smc_snapshot.structural_breaks
                 ]
+                assert len(plan.metadata["structural_breaks_list"]) == len(
+                    context.smc_snapshot.structural_breaks
+                ), "structural_breaks_list mass conservation violated"
                 plan.metadata["liquidity_sweeps_list"] = [
                     {
                         "level": float(sweep.level),
