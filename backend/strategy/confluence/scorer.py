@@ -574,7 +574,7 @@ _OVERWATCH_WEIGHTS = {
     "weekly_stoch_rsi":      0.12,
     "fibonacci":             0.08,
     # --- Timing ---
-    "kill_zone":             0.03,
+    "kill_zone":             0.00,  # OVERWATCH/macro: 4h swing trades ignore intraday session timing
     "premium_discount":      0.12,
     # --- Sequence ---
     "institutional_sequence": 0.15,
