@@ -37,7 +37,7 @@ from backend.strategy.planner.risk_engine import (
 )
 from backend.strategy.planner.regime_engine import get_atr_regime
 from backend.shared.utils.math_utils import round_to_tick
-from backend.shared.config.rr_matrix import classify_conviction
+from backend.shared.config.rr_matrix import classify_conviction, validate_rr
 
 # Re-export SetupArchetype if needed by consumers, though ideally they import from models?
 # For now, defining local type alias to match previous API surface if it was used
@@ -784,37 +784,44 @@ def generate_trade_plan(
         )
 
         # === MINIMUM R:R VALIDATION ===
-        # Enforce mode-specific R:R requirements (e.g., Overwatch = 2.0R minimum)
-        # Default 1.5 means every mode without an explicit min_rr_ratio still
-        # enforces a positive expectancy floor. 0.0 previously accepted sub-1R
-        # setups when the config field was absent.
-        min_rr = getattr(config, "min_rr_ratio", 1.5)
+        # Delegate to validate_rr() — the single source of truth for R:R thresholds
+        # (rr_matrix.py). Priority: mode min_rr_ratio > trade_type > plan_type base.
+        #
         # Reachability-clamped TP1 (2026-05-31 fix): when the planner intentionally
         # pulled TP1 to a reachable distance at a lower R:R, admit it down to the
-        # after-clip floor (target_min_rr_after_clip) instead of min_rr_ratio — which
-        # equals the un-clamped ladder R:R and would otherwise reject every clamped
-        # target, leaving no moderate-clamp band. Non-clamped targets stay gated at
-        # min_rr_ratio. See decisions/2026-05-30__fix-design__tp1-reachability.md.
+        # after-clip floor by capping the override. Non-clamped targets use the mode
+        # min_rr_ratio (or None → validate_rr applies trade_type/plan_type thresholds).
         _tp1_clamped = bool(targets and getattr(targets[0], "reachability_clamped", False))
+        _mode_min_rr: Optional[float] = getattr(config, "min_rr_ratio", None)
         if _tp1_clamped:
-            min_rr = min(min_rr, planner_cfg.target_min_rr_after_clip)
-        actual_rr = plan.risk_reward_ratio
+            _clip_floor = planner_cfg.target_min_rr_after_clip
+            _min_rr_override: Optional[float] = (
+                min(_mode_min_rr, _clip_floor) if _mode_min_rr is not None else _clip_floor
+            )
+        else:
+            _min_rr_override = _mode_min_rr  # None → validate_rr uses trade_type priority
 
-        # Use a small epsilon to avoid floating point false rejections.
-        # e.g. 1.80R being computed as 1.7999999... and failing a 1.8R threshold.
-        RR_EPSILON = 0.001
+        actual_rr = plan.risk_reward_ratio
+        is_rr_valid, rr_reject_reason = validate_rr(
+            plan_type=plan.plan_type,
+            risk_reward=actual_rr,
+            mode_profile=getattr(config, "profile", None),
+            confluence_score=plan.confidence_score,
+            trade_type=trade_type,
+            min_rr_override=_min_rr_override,
+        )
 
         # === DEBUG: Log R:R validation for all symbols ===
         logger.info(
             f"🔍 R:R VALIDATION | {symbol} | Actual: {actual_rr:.4f}R | "
-            f"Required: {min_rr:.1f}R | Mode: {getattr(config, 'profile', 'unknown')} | "
-            f"PASS: {actual_rr >= (min_rr - RR_EPSILON) if min_rr > 0 else True}"
+            f"Mode: {getattr(config, 'profile', 'unknown')} | "
+            f"TradeType: {trade_type} | Clamped: {_tp1_clamped} | PASS: {is_rr_valid}"
         )
 
-        if min_rr > 0 and actual_rr < (min_rr - RR_EPSILON):
+        if not is_rr_valid:
             rejection_msg = (
-                f"Insufficient R:R: {actual_rr:.2f}R < {min_rr:.1f}R minimum for "
-                f"{getattr(config, 'profile', 'unknown')} mode"
+                f"Insufficient R:R for {getattr(config, 'profile', 'unknown')} mode: "
+                f"{rr_reject_reason}"
             )
             logger.warning(f"❌ {symbol} REJECTED | {rejection_msg}")
 
@@ -825,9 +832,10 @@ def generate_trade_plan(
                     reason="insufficient_rr",
                     diagnostics={
                         "actual_rr": actual_rr,
-                        "min_rr": min_rr,
+                        "min_rr_override": _min_rr_override,
                         "mode": getattr(config, "profile", "unknown"),
                         "trade_type": trade_type,
+                        "tp1_clamped": _tp1_clamped,
                         "tp1_level": targets[0].level if targets else None,
                     },
                 )

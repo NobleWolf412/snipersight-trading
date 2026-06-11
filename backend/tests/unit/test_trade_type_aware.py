@@ -64,15 +64,15 @@ class TestValidateRRWithTradeType:
         valid, reason = validate_rr("SMC", 2.0, trade_type="swing")
         assert valid
 
-    def test_scalp_min_rr_is_1_2(self):
-        """Scalp trades allow minimum 1.2 R:R."""
-        # R:R 1.1 should fail for scalp
-        valid, reason = validate_rr("SMC", 1.1, trade_type="scalp")
+    def test_scalp_min_rr_is_2_0(self):
+        """Scalp trades require minimum 2.0 R:R (fee+slippage ~0.5% round-trip)."""
+        # R:R 1.9 should fail for scalp (below 2.0 minimum)
+        valid, reason = validate_rr("SMC", 1.9, trade_type="scalp")
         assert not valid
         assert "scalp minimum" in reason
 
-        # R:R 1.2 should pass for scalp
-        valid, reason = validate_rr("SMC", 1.2, trade_type="scalp")
+        # R:R 2.0 should pass for scalp
+        valid, reason = validate_rr("SMC", 2.0, trade_type="scalp")
         assert valid
 
     def test_intraday_min_rr_is_1_5(self):
@@ -95,20 +95,27 @@ class TestValidateRRWithTradeType:
         valid, _ = validate_rr("SMC", 1.5, trade_type=None)
         assert valid
 
-    def test_ev_override_floor_varies_by_trade_type(self):
-        """EV override floor should be 0.65 for scalp, 0.75 for others."""
-        # Scalp with EV override should allow R:R down to 0.65
+    def test_ev_override_no_scalp_scalp_excluded(self):
+        """Scalp has no EV override (fee floor is non-negotiable); swing gets 0.75 floor."""
+        # Scalp with EV+confluence should still fail — no EV override for scalps
         valid, reason = validate_rr(
             "SMC",
-            0.66,
+            1.9,
             trade_type="scalp",
-            expected_value=0.05,  # Positive EV
-            confluence_score=75.0,  # High confluence
+            expected_value=0.05,
+            confluence_score=75.0,
+        )
+        assert not valid
+        assert "scalp minimum" in reason
+
+        # Swing at 0.76R with EV+confluence passes (above 0.75 EV floor)
+        valid, reason = validate_rr(
+            "SMC", 0.76, trade_type="swing", expected_value=0.05, confluence_score=75.0
         )
         assert valid
         assert "EV override" in reason
 
-        # Swing with same parameters should NOT allow 0.66 (floor is 0.75)
+        # Swing at 0.66R fails even with EV (below 0.75 floor)
         valid, _ = validate_rr(
             "SMC", 0.66, trade_type="swing", expected_value=0.05, confluence_score=75.0
         )
@@ -125,12 +132,12 @@ class TestValidateRRWithTradeType:
         assert not valid
         assert "intraday" in reason.lower()
 
-    def test_min_rr_override_ev_floor_for_aggressive_modes(self):
-        """EV override floor should be 0.65 when min_rr_override <= 1.2 (aggressive mode)."""
-        # Aggressive mode (override=1.2) with EV should allow R:R down to 0.65
+    def test_min_rr_override_ev_floor_is_0_75(self):
+        """EV override floor is always 0.75 regardless of min_rr_override."""
+        # Aggressive override (1.2) with EV allows R:R ≥ 0.75 (not 0.65)
         valid, reason = validate_rr(
             "SMC",
-            0.66,
+            0.76,
             trade_type="intraday",
             min_rr_override=1.2,
             expected_value=0.05,
@@ -138,6 +145,17 @@ class TestValidateRRWithTradeType:
         )
         assert valid
         assert "EV override" in reason
+
+        # R:R 0.66 still fails even with override+EV (below 0.75 floor)
+        valid, _ = validate_rr(
+            "SMC",
+            0.66,
+            trade_type="intraday",
+            min_rr_override=1.2,
+            expected_value=0.05,
+            confluence_score=75.0,
+        )
+        assert not valid
 
 
 class TestPlannerConfigByTradeType:

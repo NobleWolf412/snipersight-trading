@@ -161,18 +161,19 @@ def validate_rr(
 
     Priority for min R:R (highest to lowest):
     1. min_rr_override (explicit mode override from scanner_modes.py)
-    2. trade_type threshold (swing=2.0, scalp=1.2, intraday=1.5)
+    2. trade_type threshold (swing=2.0, scalp=2.0, intraday=1.5)
     3. base plan type threshold
 
     Trade Type Minimum R:R (used if no override):
     - swing: 2.0 (wider stops require higher reward)
-    - scalp: 1.2 (tight stops allow lower R:R)
+    - scalp: 2.0 (fee+slippage ~0.5% round-trip; raised from 1.2)
     - intraday: 1.5 (balanced)
 
-    EV Override Logic:
+    EV Override Logic (reserved for future callers; not used by planner):
     - If expected_value provided and > 0.02 (positive expected value)
     - AND confluence_score >= 70 (strong confluence)
     - Allow R:R down to 0.75 (25% below standard minimum)
+    - Note: scalps are excluded from EV override regardless of confluence
 
     Args:
         plan_type: Plan classification (SMC/HYBRID/ATR_FALLBACK)
