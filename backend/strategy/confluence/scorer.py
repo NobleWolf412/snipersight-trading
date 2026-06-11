@@ -1949,7 +1949,9 @@ def evaluate_weekly_stoch_rsi_bonus(
     with Weekly StochRSI gets a meaningful score advantage.
 
     Args:
-        indicators: Technical indicators across timeframes (must contain '1W')
+        indicators: Technical indicators across timeframes. Uses '1D' (Fix 4e: was '1W').
+            Only OVERWATCH and STEALTH modes populate 1D data; STRIKE and SURGICAL will
+            always return neutral (bonus=0, aligned=True) on this path — same as old 1W.
         direction: Trade direction ("bullish" or "bearish")
         oversold_threshold: K value below this is oversold (default 20)
         overbought_threshold: K value above this is overbought (default 80)
@@ -1975,8 +1977,11 @@ def evaluate_weekly_stoch_rsi_bonus(
         "aligned": True,  # Default to aligned if no data
     }
 
-    # Get weekly indicators - explicit None checks to avoid potential truthiness errors
-    weekly_ind = _get_tf_indicators(indicators, "1W")
+    # Fix 4e: use 1D instead of 1W — 1W was often unavailable or stale.
+    # NOTE: STRIKE and SURGICAL modes do not fetch 1D data; this returns None
+    # for those modes (same as the old 1W path) — function returns neutral.
+    # Only OVERWATCH and STEALTH populate 1D indicators.
+    weekly_ind = _get_tf_indicators(indicators, "1D")
     if not weekly_ind:
         return result
 
@@ -1987,6 +1992,7 @@ def evaluate_weekly_stoch_rsi_bonus(
     k_prev = getattr(weekly_ind, "stoch_rsi_k_prev", None)
 
     if k_current is None:
+        logger.debug("weekly_stoch_rsi_bonus: 1D stoch_rsi_k missing for %s — returning neutral", direction)
         return result
 
     result["weekly_k"] = k_current
