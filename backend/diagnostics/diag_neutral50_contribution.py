@@ -272,6 +272,39 @@ def analyses_from_scan_json(path: str, default_profile: str) -> List[SignalAnaly
     return analyses
 
 
+def analyses_from_breakdown_jsonl(path: str) -> List[SignalAnalysis]:
+    """Read the JSONL file persisted by scorer.py BREAKDOWN_LOG_FILE (4B).
+
+    Each line is a JSON object with keys: ts, symbol, direction, profile,
+    total_score, synergy_bonus, conflict_penalty, regime, factors.
+    factors is a list of {name, score, weight} dicts.
+    """
+    analyses = []
+    with open(path, "r", encoding="utf-8") as fh:
+        for raw in fh:
+            raw = raw.strip()
+            if not raw:
+                continue
+            entry = json.loads(raw)
+            factor_dicts = entry.get("factors", [])
+            rows = [
+                FactorRow(
+                    name=str(d.get("name", "?")),
+                    score=float(d.get("score", 0.0)),
+                    weight_post=float(d.get("weight", 0.0)),
+                    rationale="",
+                )
+                for d in factor_dicts
+            ]
+            profile = str(entry.get("profile") or "stealth_balanced")
+            total = entry.get("total_score")
+            label = str(entry.get("symbol") or "?")
+            analyses.append(
+                analyze_signal(label, profile, rows, float(total) if total is not None else None)
+            )
+    return analyses
+
+
 # ---------------------------------------------------------------------------
 # Hook mode - wrap the live scorer, run a target module, collect breakdowns.
 # Patches BOTH binding sites: the scorer module attr and confluence_service's
@@ -428,6 +461,8 @@ def main() -> int:
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--synthetic", action="store_true", help="run built-in fixtures (self-test)")
     src.add_argument("--scan-json", metavar="FILE", help="parse a saved scan API response")
+    src.add_argument("--breakdown-jsonl", metavar="FILE",
+                     help="parse breakdown JSONL persisted by scorer (4B persistence)")
     src.add_argument("--hook", metavar="MODULE", help="wrap live scorer, then run MODULE "
                      "(args after '--' are passed through)")
     ap.add_argument("--profile", default="stealth_balanced",
@@ -440,6 +475,8 @@ def main() -> int:
         return report(synthetic_analyses())
     if args.scan_json:
         return report(analyses_from_scan_json(args.scan_json, args.profile))
+    if args.breakdown_jsonl:
+        return report(analyses_from_breakdown_jsonl(args.breakdown_jsonl))
 
     install_hook()
     sys.argv = [args.hook] + passthrough

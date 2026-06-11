@@ -2857,7 +2857,7 @@ def calculate_confluence_score(
     # --- Premium/Discount Zone (incorporates VWAP alignment, Fix 4b) ---
     # VWAP alignment merged here: no floor for absent data, only boosts when
     # price is on the correct side of VWAP and data is available.
-    pd_score, pd_rat = 50.0, "Equilibrium zone"
+    pd_score, pd_rat = 0.0, "No premium/discount data"
     try:
         p_tf = getattr(config, "primary_planning_timeframe", "4h")
         pd_z = smc_snapshot.premium_discount.get(p_tf) or smc_snapshot.premium_discount.get(p_tf.upper())
@@ -2881,7 +2881,7 @@ def calculate_confluence_score(
     factors.append(ConfluenceFactor(name="Premium/Discount Zone", score=pd_score, weight=get_w("premium_discount", 0.05), rationale=pd_rat or "Equilibrium zone"))
 
     # --- Regime Alignment ---
-    reg_score, reg_rat = 50.0, "Neutral regime"
+    reg_score, reg_rat = 0.0, "No regime data"
     if regime:
         try:
             r_res = _score_regime_alignment(regime=regime, direction=direction, scanner_profile=current_profile)
@@ -3022,47 +3022,24 @@ def calculate_confluence_score(
     except Exception as e:
         logger.warning("Liquidity draw scoring failed: %s", e)
 
-    # --- FINAL WEIGHT NORMALIZATION (FIX #1: Absent-factor weight redistribution) ---
-    # Only normalise across factors that have actual data to contribute (score > 0).
-    # Factors that score 0 because the pattern is simply absent in the market
-    # (no FVG, no Sweep, no Divergence) carry ZERO information and should not eat
-    # the weight budget. Their weight is redistributed to informative factors so the
-    # weighted average reflects what IS present, not what is absent.
-    # Exception: factors with a non-zero weight that are explicitly structural
-    # requirements (e.g. Structural Minimum gate) keep weight=0 to preserve the cap.
-    informative_w = sum(f.weight for f in factors if f.score > 0)
-    if informative_w > 0:
-        norm_factors = []
-        for f in factors:
-            if f.score > 0:
-                norm_factors.append(
-                    ConfluenceFactor(
-                        name=f.name,
-                        score=f.score,
-                        weight=f.weight / informative_w,
-                        rationale=f.rationale or "Factor details",
-                    )
-                )
-            else:
-                # Absent factor — zero weight so it doesn't dilute the pool
-                norm_factors.append(
-                    ConfluenceFactor(
-                        name=f.name,
-                        score=0.0,
-                        weight=0.0,
-                        rationale=f.rationale or "Factor not present in current market",
-                    )
-                )
-        factors = norm_factors
-    else:
-        # All factors scored 0 — normalise uniformly (edge case, score will be 0)
-        total_w = sum(f.weight for f in factors)
-        if total_w > 0:
-            factors = [
-                ConfluenceFactor(name=f.name, score=0.0, weight=f.weight / total_w,
-                                 rationale=f.rationale or "Factor details")
-                for f in factors
-            ]
+    # --- FINAL WEIGHT NORMALIZATION (4B: fixed-denominator, absent factors dilute) ---
+    # All factor weights are divided by the mode-total weight (sum of ALL factors,
+    # including absent ones). Absent factors (score=0) keep their slot in the
+    # denominator — their absence is informative (no OB/FVG/Sweep = weaker setup).
+    # No weight redistribution.
+    total_w = sum(f.weight for f in factors)
+    if total_w > 0:
+        factors = [
+            ConfluenceFactor(
+                name=f.name,
+                score=f.score,
+                weight=f.weight / total_w,
+                rationale=f.rationale or (
+                    "Factor not present in current market" if f.score == 0 else "Factor details"
+                ),
+            )
+            for f in factors
+        ]
 
 
     # --- Final Score Calculation ---
@@ -3073,8 +3050,8 @@ def calculate_confluence_score(
     # --- FIX #2: Mode-aware coverage penalty (no double-counting) ---
     # The old fixed threshold of 6 quality factors with 3pts/missing was double-penalising:
     # absent factors already score 0 (dragging weighted_score down), then the coverage
-    # penalty hit them AGAIN. With FIX #1 in place (weight redistribution) the weighted
-    # sum already reflects real signal density. Coverage penalty is now a small,
+    # penalty hit them AGAIN. With 4B fixed-denominator normalization the weighted
+    # sum already reflects real signal density (absent factors dilute). Coverage penalty is now a small,
     # mode-calibrated safety net for setups with very few quality signals, not a
     # second punch for the absence of optional patterns like FVG or Sweep.
     #
@@ -3324,6 +3301,29 @@ def calculate_confluence_score(
     # Final Logging
     _macro_tag = f" | Macro: {macro_adj:+.0f}" if macro_adj != 0.0 else ""
     logger.info(f"📊 CONFLUENCE [{symbol} {direction}]: {final_score:.1f} ({tier}) | Factors: {active_factors} | Synergy: +{synergy_bonus:.1f} | Conflict: -{conflict_penalty:.1f}{_macro_tag}")
+
+    # --- Breakdown persistence (4B) — JSONL for 4F gate recalibration ---
+    if BREAKDOWN_LOG_FILE:
+        try:
+            from datetime import datetime as _dt
+            _entry = {
+                "ts": _dt.utcnow().isoformat(),
+                "symbol": breakdown.symbol,
+                "direction": breakdown.direction,
+                "profile": breakdown.profile,
+                "total_score": round(breakdown.total_score, 2),
+                "synergy_bonus": round(breakdown.synergy_bonus, 2),
+                "conflict_penalty": round(breakdown.conflict_penalty, 2),
+                "regime": breakdown.regime,
+                "factors": [
+                    {"name": f.name, "score": round(f.score, 2), "weight": round(f.weight, 4)}
+                    for f in breakdown.factors
+                ],
+            }
+            with BREAKDOWN_LOG_LOCK:
+                BREAKDOWN_LOG_FILE.info(json.dumps(_entry))
+        except Exception as _e:
+            logger.warning("Breakdown persistence failed (non-fatal): %s", _e)
 
     return breakdown
 
