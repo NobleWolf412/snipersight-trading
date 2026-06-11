@@ -110,3 +110,5 @@ graphify/
 # local knowledge-graph artifact; auto-rebuilt by the post-commit hook
 graphify-out/
 _sess.json
+# MCP server config — machine-specific absolute paths, not portable
+.mcp.json
