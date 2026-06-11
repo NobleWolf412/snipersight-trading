@@ -498,6 +498,7 @@ MODE_PENALTY_MULTIPLIERS = {
 # FVG fill threshold — above this the gap is considered materially consumed and penalized.
 # Must stay in sync with the structural proximity filter in evaluate_htf_structural_proximity().
 _FVG_FILL_THRESHOLD = 0.7
+_FVG_VIRGIN_EPSILON = 0.02  # float guard for "completely unfilled"
 
 # ==============================================================================
 # MODE-AWARE SYNERGY CAPS
@@ -3625,7 +3626,7 @@ def _score_fvgs_incremental(
     
     Factors:
     1. Base Score by Grade (A=40, B=30, C=20)
-    2. Unfilled Bonus (+20): overlap == 0
+    2. Unfilled Bonus (+20): overlap < _FVG_VIRGIN_EPSILON (0.02) — float guard for "completely unfilled"
     3. Size Bonus (+15): size_atr > 1.0 (Large gap)
     4. Stacking Bonus (+10): Multiple aligned FVGs
     5. Penalty: Filled > 50%
@@ -3638,10 +3639,10 @@ def _score_fvgs_incremental(
     if not aligned_fvgs:
         return {"score": 0.0, "rationale": "No aligned FVGs", "components": []}
         
-    # Find best FVG (prioritize unfilled size)
+    # Find best FVG (prioritize large, fresh, unfilled gaps)
     best_fvg = max(
         aligned_fvgs,
-        key=lambda fvg: fvg.size * (1.0 - fvg.overlap_with_price)
+        key=lambda fvg: fvg.size_atr * fvg.freshness_score * (1.0 - fvg.overlap_with_price)
     )
     
     score = 0.0
@@ -3660,10 +3661,14 @@ def _score_fvgs_incremental(
         components.append(("Grade C", 20.0, "Marginal Gap"))
         
     # 2. Unfilled Bonus
-    if best_fvg.overlap_with_price == 0:
+    freshness = getattr(best_fvg, "freshness_score", 1.0)
+    if best_fvg.overlap_with_price < _FVG_VIRGIN_EPSILON:
         score += 20.0
         components.append(("Virgin FVG", 20.0, "Completely unfilled"))
-    elif best_fvg.overlap_with_price > _FVG_FILL_THRESHOLD:
+    if freshness < 0.3:  # bottom ~30% of 0-1 decay range; ≈ 70+ candles stale at 1h TF
+        score -= 10.0
+        components.append(("Stale FVG", -10.0, f"freshness={freshness:.2f}"))
+    if best_fvg.overlap_with_price > _FVG_FILL_THRESHOLD:
         score -= 15.0
         components.append(("Filled", -15.0, f">{_FVG_FILL_THRESHOLD:.0%} filled ({best_fvg.overlap_with_price:.0%})"))
         

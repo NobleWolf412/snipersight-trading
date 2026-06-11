@@ -191,12 +191,24 @@ def detect_fvgs(
         # Check for bearish FVG
         # Gap exists if candle_0.low > candle_2.high
         if candle_0["low"] > candle_2["high"]:
+            potential_bearish_gaps += 1
             gap_top = candle_0["low"]
             gap_bottom = candle_2["high"]
             gap_size = gap_top - gap_bottom
 
             # Check overlap with middle candle (should be minimal)
             overlap = _calculate_overlap_bearish(candle_1, gap_bottom, gap_top)
+
+            if overlap > max_overlap:
+                bearish_overlap_fails += 1
+                logger.debug(
+                    "⚠️ %s Bearish FVG @ %.2f-%.2f: overlap=%.1f%% > %.1f%% max",
+                    _infer_timeframe(df),
+                    gap_bottom,
+                    gap_top,
+                    overlap * 100,
+                    max_overlap * 100,
+                )
 
             if overlap <= max_overlap:
                 # Calculate gap size in ATR units
@@ -273,6 +285,18 @@ def detect_fvgs(
             from dataclasses import replace
 
             fvgs[i] = replace(fvg, overlap_with_price=overlap, freshness_score=freshness)
+
+    # Mass conservation: every candidate must end up in exactly one bucket
+    bullish_accepted = sum(1 for f in fvgs if f.direction == "bullish")
+    bearish_accepted = sum(1 for f in fvgs if f.direction == "bearish")
+    assert bullish_accepted == potential_bullish_gaps - bullish_overlap_fails - bullish_size_fails, (
+        f"FVG bull mass mismatch: {potential_bullish_gaps} - "
+        f"{bullish_overlap_fails} - {bullish_size_fails} != {bullish_accepted}"
+    )
+    assert bearish_accepted == potential_bearish_gaps - bearish_overlap_fails - bearish_size_fails, (
+        f"FVG bear mass mismatch: {potential_bearish_gaps} - "
+        f"{bearish_overlap_fails} - {bearish_size_fails} != {bearish_accepted}"
+    )
 
     # Log diagnostic summary
     if potential_bullish_gaps > 0 or potential_bearish_gaps > 0:
