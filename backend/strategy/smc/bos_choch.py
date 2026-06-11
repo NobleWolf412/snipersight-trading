@@ -137,12 +137,25 @@ def _detect_bos_choch_pattern(
     """
     Detect BOS/CHoCH using 4-swing pattern validation.
 
-    Validates proper swing sequence before confirming structure break:
-    - Bullish BOS: [-1, 1, -1, 1] pattern (Low-High-Low-High) + close > last high
-    - Bearish BOS: [1, -1, 1, -1] pattern (High-Low-High-Low) + close < last low
-    - CHoCH: Pattern exists but price breaks counter-trend
+    Swings are unpacked CHRONOLOGICALLY (oldest -> newest). Within each shape the
+    BOS and CHoCH structure preconditions are mutually exclusive:
+    - [-1, 1, -1, 1] = [L1, H1, L2, H2] (Low-High-Low-High):
+        * Bullish BOS:   ascending structure (L2 > L1, H2 > H1) + close > H2
+        * Bullish CHoCH: prior BEARISH structure (H2 < H1 lower high, L2 < L1
+          lower low) + close > H2 (break above the most recent lower high)
+    - [1, -1, 1, -1] = [H1, L1, H2, L2] (High-Low-High-Low):
+        * Bearish BOS:   descending structure (H2 < H1, L2 < L1) + close < L2
+        * Bearish CHoCH: prior BULLISH structure (H2 > H1 higher high, L2 > L1
+          higher low) + close < L2 (break below the most recent higher low)
 
-    STOLEN from smartmoneyconcepts library.
+    Fixed 2026-06-11 (Phase 3A): the old CHoCH conditions tested inverted structure
+    relationships and returned the OLDER swing's level/timestamp (index -3). Both
+    CHoCH branches now require genuine opposite-direction prior structure and break
+    the MOST RECENT swing (index -1).
+
+    KNOWN LIMITATION (flagged, not fixed): bullish CHoCH is only detectable in the
+    H-ending shape and bearish CHoCH only in the L-ending shape. A CHoCH occurring
+    before the final swing of the alternate shape confirms is not covered.
 
     Args:
         highs_lows_order: List of 1 (high) or -1 (low)
@@ -167,35 +180,33 @@ def _detect_bos_choch_pattern(
     last_4_levels = level_order[-4:]
     last_4_indices = index_order[-4:]
 
-    # === BULLISH PATTERNS ===
-    # Bullish swing sequence: Low-High-Low-High = [-1, 1, -1, 1]
+    # === L-H-L-H SHAPE: [-1, 1, -1, 1] — chronological [L1, H1, L2, H2] ===
     if last_4_types == [-1, 1, -1, 1]:
-        ll, lh, hl, hh = last_4_levels
+        l1, h1, l2, h2 = last_4_levels
 
-        # Bullish BOS: Close above last high, structure ascending (LL < HL < LH < HH)
-        if current_close > hh:
-            if ll < hl < lh < hh:
-                return "BOS", "bullish", hh, last_4_indices[-1]
+        # Bullish BOS: ascending structure (higher low, higher high, non-overlapping),
+        # close breaks the most recent higher high.
+        if current_close > h2 and l1 < l2 < h1 < h2:
+            return "BOS", "bullish", h2, last_4_indices[-1]
 
-        # Bullish CHoCH: Close above prior LH (reversal from prior bearish structure)
-        # Pattern: HH > LH > LL > HL means prior bearish, now breaking higher
-        if current_close > lh and hh > lh > ll > hl:
-            return "CHoCH", "bullish", lh, last_4_indices[-3]
+        # Bullish CHoCH: prior bearish structure (lower high AND lower low),
+        # close breaks above the most recent lower high.
+        if current_close > h2 and h2 < h1 and l2 < l1:
+            return "CHoCH", "bullish", h2, last_4_indices[-1]
 
-    # === BEARISH PATTERNS ===
-    # Bearish swing sequence: High-Low-High-Low = [1, -1, 1, -1]
+    # === H-L-H-L SHAPE: [1, -1, 1, -1] — chronological [H1, L1, H2, L2] ===
     if last_4_types == [1, -1, 1, -1]:
-        hh, hl, lh, ll = last_4_levels
+        h1, l1, h2, l2 = last_4_levels
 
-        # Bearish BOS: Close below last low, structure descending (HH > LH > HL > LL)
-        if current_close < ll:
-            if hh > lh > hl > ll:
-                return "BOS", "bearish", ll, last_4_indices[-1]
+        # Bearish BOS: descending structure (lower high, lower low, non-overlapping),
+        # close breaks the most recent lower low.
+        if current_close < l2 and h1 > h2 > l1 > l2:
+            return "BOS", "bearish", l2, last_4_indices[-1]
 
-        # Bearish CHoCH: Close below prior HL (reversal from prior bullish structure)
-        # Pattern: LL < HL < LH < HH means prior bullish, now breaking lower
-        if current_close < hl and ll < hl < lh < hh:
-            return "CHoCH", "bearish", hl, last_4_indices[-3]
+        # Bearish CHoCH: prior bullish structure (higher high AND higher low),
+        # close breaks below the most recent higher low.
+        if current_close < l2 and h2 > h1 and l2 > l1:
+            return "CHoCH", "bearish", l2, last_4_indices[-1]
 
     return None, None, 0.0, None
 
@@ -320,7 +331,13 @@ def detect_structural_breaks(
         current_low = df["low"].iloc[i]
         current_close = df["close"].iloc[i]
 
-        # Update swing points up to current position
+        # Update swing points up to current position.
+        # KNOWN LIMITATION (Phase 3B, flagged not fixed): a swing becomes usable here
+        # at its OWN index, but confirming it requires `swing_lookback` future candles
+        # (_detect_swing_highs checks both sides). Historical scans therefore see
+        # breaks ~lookback candles earlier than a live incremental scan could. Fixing
+        # this shifts every break timestamp in ALL modes and relocates every
+        # BOS-linked OB — deferred (same pattern as Phase 1B's entry_engine note).
         if current_idx in swing_highs.index:
             last_swing_high = swing_highs.loc[current_idx]
 
@@ -404,6 +421,10 @@ def detect_structural_breaks(
                 if volume_confirmed and volume_ratio >= 2.0:
                     grade = "A" if grade == "B" else ("B" if grade == "C" else grade)
                 htf_aligned = _check_bos_htf_alignment("uptrend", computed_htf_trend)
+                # Signal gate: volume gates the SIGNAL only (Phase 3C, mirrors the
+                # CHoCH skip_signal pattern). The swing-ref update below is
+                # unconditional — price broke structure regardless of the gate.
+                skip_signal = False
                 if vol_req and vol_req.get("require_volume") and "BOS" in vol_req.get("apply_to", []):
                     if volume_ratio < vol_req["min_volume_ratio"]:
                         logger.debug(
@@ -411,12 +432,15 @@ def detect_structural_breaks(
                             "No OB will be tagged to this break.",
                             "bullish", volume_ratio, vol_req["min_volume_ratio"], mode_profile,
                         )
-                        continue
-                structural_breaks.append(StructuralBreak(
-                    timeframe=_infer_timeframe(df), break_type="BOS", direction="bullish",
-                    level=_level, timestamp=current_idx.to_pydatetime(),
-                    htf_aligned=htf_aligned, grade=grade,
-                ))
+                        skip_signal = True
+                if not skip_signal:
+                    structural_breaks.append(StructuralBreak(
+                        timeframe=_infer_timeframe(df), break_type="BOS", direction="bullish",
+                        level=_level, timestamp=current_idx.to_pydatetime(),
+                        htf_aligned=htf_aligned, grade=grade,
+                    ))
+                # CRITICAL: swing ref advances regardless of signal gate — otherwise the
+                # same stale level re-fires on every subsequent candle.
                 last_swing_high = current_high
 
             # CHoCH: reversal break below prior swing low
@@ -456,6 +480,9 @@ def detect_structural_breaks(
                 if volume_confirmed and volume_ratio >= 2.0:
                     grade = "A" if grade == "B" else ("B" if grade == "C" else grade)
                 htf_aligned = _check_bos_htf_alignment("downtrend", computed_htf_trend)
+                # Signal gate: volume gates the SIGNAL only (Phase 3C, exact mirror of
+                # the bullish BOS block). Swing-ref update below is unconditional.
+                skip_signal = False
                 if vol_req and vol_req.get("require_volume") and "BOS" in vol_req.get("apply_to", []):
                     if volume_ratio < vol_req["min_volume_ratio"]:
                         logger.debug(
@@ -463,12 +490,15 @@ def detect_structural_breaks(
                             "No OB will be tagged to this break.",
                             "bearish", volume_ratio, vol_req["min_volume_ratio"], mode_profile,
                         )
-                        continue
-                structural_breaks.append(StructuralBreak(
-                    timeframe=_infer_timeframe(df), break_type="BOS", direction="bearish",
-                    level=_level, timestamp=current_idx.to_pydatetime(),
-                    htf_aligned=htf_aligned, grade=grade,
-                ))
+                        skip_signal = True
+                if not skip_signal:
+                    structural_breaks.append(StructuralBreak(
+                        timeframe=_infer_timeframe(df), break_type="BOS", direction="bearish",
+                        level=_level, timestamp=current_idx.to_pydatetime(),
+                        htf_aligned=htf_aligned, grade=grade,
+                    ))
+                # CRITICAL: swing ref advances regardless of signal gate — otherwise the
+                # same stale level re-fires on every subsequent candle.
                 last_swing_low = current_low
 
             # CHoCH: reversal break above prior swing high
@@ -510,6 +540,45 @@ def detect_structural_breaks(
                 # CRITICAL: Trend flip and swing update execute regardless of volume filter.
                 current_trend = "uptrend"
                 last_swing_high = current_high
+
+        # Resolve an initial "ranging" trend (Phase 3B). Old behavior: trend was only
+        # ever mutated inside the up/downtrend branches, so a "ranging" start silently
+        # produced ZERO breaks for the entire scan. The first decisive break now
+        # establishes the trend WITHOUT emitting a signal — there is no prior trend to
+        # classify the break as BOS (continuation) vs CHoCH (reversal), and defaulting
+        # one would be a silent directional bias.
+        elif current_trend == "ranging":
+            if use_4swing:
+                if _4swing_break_type is not None:
+                    current_trend = (
+                        "uptrend" if _4swing_direction == "bullish" else "downtrend"
+                    )
+                    if _4swing_direction == "bullish":
+                        last_swing_high = current_high
+                    else:
+                        last_swing_low = current_low
+                    logger.info(
+                        "Initial trend RANGING resolved to %s at %s (4swing %s) — "
+                        "establishing break not emitted",
+                        current_trend, current_idx, _4swing_break_type,
+                    )
+            else:
+                if current_close - last_swing_high > min_break:
+                    current_trend = "uptrend"
+                    last_swing_high = current_high
+                    logger.info(
+                        "Initial trend RANGING resolved to uptrend at %s — "
+                        "establishing break not emitted",
+                        current_idx,
+                    )
+                elif last_swing_low - current_close > min_break:
+                    current_trend = "downtrend"
+                    last_swing_low = current_low
+                    logger.info(
+                        "Initial trend RANGING resolved to downtrend at %s — "
+                        "establishing break not emitted",
+                        current_idx,
+                    )
 
     return structural_breaks
 
@@ -610,19 +679,28 @@ def _determine_initial_trend(swing_highs: pd.Series, swing_lows: pd.Series) -> s
     if len(swing_highs) < 2 and len(swing_lows) < 2:
         return "ranging"
 
-    # Check if making higher highs and higher lows
+    # Use the FIRST two swings — the initial trend seeds the scan's state machine
+    # at the START of the dataframe. Fixed 2026-06-11 (Phase 3B): old code compared
+    # values[-1] vs values[-2] (the LAST swings of the entire df), a look-ahead that
+    # seeded the initial state from the end of the data.
+    # KNOWN LIMITATION (flagged, not fixed): a bounded residual look-ahead remains —
+    # in sparse-swing dataframes the SECOND swing can form after the scan's first
+    # candle (scan starts at swing_lookback*2), so the seed may still embed
+    # information the scanner hasn't reached. A temporal guard (only swings with
+    # index <= scan start) would push more starts to "ranging", which the ranging
+    # branch now handles — candidate follow-up, deferred to keep Phase 3B minimal.
     if len(swing_highs) >= 2:
         highs_values = swing_highs.values
-        if highs_values[-1] > highs_values[-2]:
+        if highs_values[1] > highs_values[0]:
             return "uptrend"
-        elif highs_values[-1] < highs_values[-2]:
+        elif highs_values[1] < highs_values[0]:
             return "downtrend"
 
     if len(swing_lows) >= 2:
         lows_values = swing_lows.values
-        if lows_values[-1] > lows_values[-2]:
+        if lows_values[1] > lows_values[0]:
             return "uptrend"
-        elif lows_values[-1] < lows_values[-2]:
+        elif lows_values[1] < lows_values[0]:
             return "downtrend"
 
     return "ranging"
