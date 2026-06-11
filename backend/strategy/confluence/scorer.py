@@ -535,7 +535,7 @@ MODE_SYNERGY_CAPS = {
 #
 # COMPLETE FACTOR KEY REFERENCE (all keys used by get_w() in this module):
 #   SMC Core:        order_block, fvg, market_structure, liquidity_sweep
-#   OB Precision:    inside_ob, nested_ob, opposing_structure
+#   OB Precision:    ob_precision (merged: inside_ob + nested_ob boost), opposing_structure
 #   Indicators:      momentum, divergence, volume, vwap, volatility
 #   Close Quality:   close_momentum, multi_close_confirm
 #   MACD:            macd_veto
@@ -552,8 +552,7 @@ _OVERWATCH_WEIGHTS = {
     "market_structure":      0.22,  # BOS/CHoCH; directional bias
     "liquidity_sweep":       0.22,  # Sweep precedes real move; critical for swing
     # --- OB Precision ---
-    "inside_ob":             0.10,
-    "nested_ob":             0.10,
+    "ob_precision":          0.20,  # merged: inside_ob(0.10) + nested_ob(0.10) boost
     "opposing_structure":    0.06,
     # --- Indicators ---
     "momentum":              0.08,
@@ -589,8 +588,7 @@ _STRIKE_WEIGHTS = {
     "market_structure":      0.28,
     "liquidity_sweep":       0.12,
     # --- OB Precision ---
-    "inside_ob":             0.10,
-    "nested_ob":             0.08,
+    "ob_precision":          0.18,  # merged: inside_ob(0.10) + nested_ob(0.08) boost
     "opposing_structure":    0.10,
     # --- Indicators ---
     "momentum":              0.15,
@@ -626,8 +624,7 @@ _SURGICAL_WEIGHTS = {
     "market_structure":      0.28,  # was 0.30 — slight reduction to make room
     "liquidity_sweep":       0.10,
     # --- OB Precision ---
-    "inside_ob":             0.12,
-    "nested_ob":             0.10,
+    "ob_precision":          0.22,  # merged: inside_ob(0.12) + nested_ob(0.10) boost
     "opposing_structure":    0.12,
     # --- Indicators ---
     "momentum":              0.12,
@@ -663,8 +660,7 @@ _STEALTH_WEIGHTS = {
     "market_structure":      0.20,
     "liquidity_sweep":       0.12,  # was 0.10
     # --- OB Precision ---
-    "inside_ob":             0.08,
-    "nested_ob":             0.06,
+    "ob_precision":          0.14,  # merged: inside_ob(0.08) + nested_ob(0.06) boost
     "opposing_structure":    0.08,
     # --- Indicators ---
     "momentum":              0.10,
@@ -2887,33 +2883,29 @@ def calculate_confluence_score(
             logger.warning("Regime alignment scoring failed: %s", e)
     factors.append(ConfluenceFactor(name="Regime Alignment", score=reg_score, weight=get_w("regime_alignment", 0.08), rationale=reg_rat or "Regime neutral"))
 
-    # --- Inside Order Block Confirmation ---
-    in_ob_score, in_ob_rat = 50.0, "No active OB detected"
+    # --- OB Precision (merged: inside_ob base + nested_ob +20 boost, Fix 4d) ---
+    # Old inside_ob had a 50.0 floor even when not inside an OB — removed here.
+    # Nested OB detection absorbed as a +20 boost on the precision score (capped at 100).
+    ob_prec_score, ob_prec_rat = 0.0, "Not inside order block"
     try:
         if entry_price:
             for ob in smc_snapshot.order_blocks:
                 if ob.low <= entry_price <= ob.high and ((direction in ("long", "bullish") and ob.direction == "bullish") or (direction in ("short", "bearish") and ob.direction == "bearish")):
                     df_rej = getattr(_get_tf_indicators(indicators, ob.timeframe) or _get_tf_indicators(indicators, primary_tf or "4h"), "dataframe", None)
                     rej_res = _score_ob_rejection_quality(df_rej, direction) if df_rej is not None else {"score": 50, "reason": "Inside OB"}
-                    in_ob_score, in_ob_rat = rej_res["score"], rej_res["reason"]
+                    ob_prec_score, ob_prec_rat = rej_res["score"], rej_res["reason"]
                     break
+        if ob_prec_score > 0 and _detect_nested_ob(smc_snapshot, direction):
+            ob_prec_score = min(100.0, ob_prec_score + 20.0)
+            ob_prec_rat = f"{ob_prec_rat} + LTF nested OB"
     except Exception as e:
-        logger.warning("Inside order block scoring failed: %s", e)
-    factors.append(ConfluenceFactor(name="Inside Order Block", score=in_ob_score, weight=get_w("inside_ob", 0.05), rationale=in_ob_rat or "No active OB detected"))
-
-    # --- Nested Order Block Bonus ---
-    nested_score, nested_rat = 0.0, "No nested OB found"
-    try:
-        if _detect_nested_ob(smc_snapshot, direction): # Uses NESTED_OB_CONTAINMENT_MIN (50%)
-            nested_score, nested_rat = 80.0, "LTF OB nested in HTF OB"
-    except Exception as e:
-        logger.warning("Nested order block scoring failed: %s", e)
-    factors.append(ConfluenceFactor(name="Nested Order Block", score=nested_score, weight=get_w("nested_ob", 0.04), rationale=nested_rat or "No nested OB found"))
+        logger.warning("OB precision scoring failed: %s", e)
+    factors.append(ConfluenceFactor(name="OB Precision", score=ob_prec_score, weight=get_w("ob_precision", 0.09), rationale=ob_prec_rat or "Not inside order block"))
 
     # --- NEW: Opposing Structure Penalty ---
     # Penalty when opposing OB/FVG is near the entry (immediate resistance/support)
     try:
-        if in_ob_score <= 50.0:
+        if ob_prec_score <= 0.0:
             # Rejection logic if NOT inside OB
             atr = 0.0
             atr_ind = _get_tf_indicators(indicators, getattr(config, "primary_planning_timeframe", "4h"))
@@ -2961,7 +2953,7 @@ def calculate_confluence_score(
                                 )
                                 break  # Only count nearest opposing
     except Exception as e:
-        logger.debug("Opposing structure penalty failed: %s", e)
+        logger.warning("Opposing structure penalty failed: %s", e)
 
     # --- HTF Inflection Point ---
     try:
@@ -3179,9 +3171,9 @@ def calculate_confluence_score(
                                ["Order Block", "Fair Value Gap"],
                                "Kill Zone Timing"],
         # Surgical: precision scalp — nested OB entry + timing + premium/discount zone
-        "surgical":           ["Order Block", "Inside Order Block", "Momentum",
+        "surgical":           ["Order Block", "OB Precision", "Momentum",
                                "Kill Zone Timing", "Premium/Discount Zone"],
-        "precision":          ["Order Block", "Inside Order Block", "Momentum",
+        "precision":          ["Order Block", "OB Precision", "Momentum",
                                "Kill Zone Timing", "Premium/Discount Zone"],
         # Stealth: balanced swing/intraday — HTF structure + institutional footprint
         "stealth":            ["Order Block", "Market Structure",

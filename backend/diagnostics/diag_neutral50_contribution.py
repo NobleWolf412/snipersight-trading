@@ -21,7 +21,9 @@ WHAT IT MEASURES - three counterfactual policies per scored signal:
   of T3-2). Final-score estimates: X_final = shipped_total - (A - X).
 
 NEUTRAL-50 MARKERS (verified against scorer.py rationale literals - exact match):
-  Inside Order Block    score==50  rationale=="No active OB detected"   (scorer.py:2898)
+  OB Precision: no longer a neutral-50 marker after Fix 4d (2026-06-11). Old "Inside Order
+  Block" emitted score=50.0 floor even when not inside an OB. Merged "OB Precision" emits
+  score=0.0 when not inside an OB — a true zero, not inflation. No longer in NEUTRAL_MARKERS.
   Premium/Discount Zone score==50  rationale=="Equilibrium zone"        (scorer.py:2871,
                         fallback-only: real equilibrium overwrites the rationale)
   Regime Alignment      score==50  rationale=="Neutral regime"          (scorer.py:2887)
@@ -79,8 +81,7 @@ NAME_TO_WEIGHT_KEY: Dict[str, str] = {
     "Weekly StochRSI Bonus": "weekly_stoch_rsi",
     "Fibonacci Proximity": "fibonacci",
     "Premium/Discount Zone": "premium_discount",
-    "Inside Order Block": "inside_ob",
-    "Nested Order Block": "nested_ob",
+    "OB Precision": "ob_precision",  # Fix 4d: merged inside_ob + nested_ob into ob_precision
     "Opposing Structure": "opposing_structure",
     "Institutional Sequence": "institutional_sequence",
     "Liquidity Draw": "liquidity_draw",
@@ -89,7 +90,8 @@ NAME_TO_WEIGHT_KEY: Dict[str, str] = {
 GATE_ARTIFACT_NAMES = {"Structural Minimum"}  # gate echo, excluded from all policies
 
 NEUTRAL_MARKERS: List[Tuple[str, float, str]] = [
-    ("Inside Order Block", 50.0, "No active OB detected"),
+    # "OB Precision" removed from NEUTRAL_MARKERS (Fix 4d): old Inside Order Block
+    # emitted score=50.0 floor; merged OB Precision emits 0.0 — a true zero, not inflation.
     ("Premium/Discount Zone", 50.0, "Equilibrium zone"),
     ("Regime Alignment", 50.0, "Neutral regime"),
 ]
@@ -324,7 +326,7 @@ def synthetic_analyses() -> List[SignalAnalysis]:
     # Post-norm weights sum to 1.0 across score>0 factors (replicates shipped math).
     sparse = [
         F("Order Block", 85.0, 0.45, "OB (A): Grade A(+40), Fresh OB(+15)"),
-        F("Inside Order Block", 50.0, 0.18, "No active OB detected"),
+        F("OB Precision", 0.0, 0.20, "Not inside order block"),  # Fix 4d: 0.0 default, no floor
         F("Premium/Discount Zone", 50.0, 0.18, "Equilibrium zone"),
         F("Regime Alignment", 50.0, 0.19, "Neutral regime"),
         F("Fair Value Gap", 0.0, 0.0, "No fair value gaps identified"),
