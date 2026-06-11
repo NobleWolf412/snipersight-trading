@@ -539,8 +539,8 @@ MODE_SYNERGY_CAPS = {
 #   Indicators:      momentum, divergence, volume, vwap, volatility
 #   Close Quality:   close_momentum, multi_close_confirm
 #   MACD:            macd_veto
-#   HTF / Regime:    htf_alignment, htf_structure_bias, htf_proximity,
-#                    htf_momentum_gate, htf_inflection, regime_alignment
+#   HTF / Regime:    htf_composite (sub: htf_structure_bias, htf_proximity,
+#                    htf_momentum_gate, htf_inflection), regime_alignment
 #   BTC / Macro:     btc_impulse, weekly_stoch_rsi, fibonacci
 #   Timing:          kill_zone, premium_discount
 #   Sequence:        institutional_sequence, multi_tf_reversal, liquidity_draw
@@ -2813,11 +2813,10 @@ def calculate_confluence_score(
     _htf_sub_scores: Dict[str, float] = {}
     _htf_sub_rationale: Dict[str, str] = {}
 
-    # --- HTF Alignment ---
-    if htf_trend:
-        htf_align_res = _score_htf_alignment_incremental(htf_trend, direction, htf_indicators=htf_indicators, indicator_set=indicators)
-        _htf_sub_scores["htf_alignment"] = htf_align_res["score"]
-        _htf_sub_rationale["htf_alignment"] = htf_align_res["rationale"] or f"HTF {htf_trend} baseline"
+    # htf_alignment removed from htf_composite sub-scores (Fix 3: regime double-count dedup).
+    # regime_alignment is already a standalone factor that scores the same HTF trend signal;
+    # including htf_alignment here double-counts it. The 4 remaining sub-components
+    # (structure_bias, proximity, momentum_gate, inflection) capture unique HTF information.
 
     # --- BTC Impulse Gate ---
     if btc_impulse:
@@ -2991,11 +2990,11 @@ def calculate_confluence_score(
     # --- HTF Composite Factor (single aggregated factor replacing 5 correlated inputs) ---
     # Internal sub-weights are fixed — only htf_composite weight participates in normalization.
     _HTF_INTERNAL_WEIGHTS = {
-        "htf_alignment":      0.35,
-        "htf_structure_bias": 0.25,
-        "htf_proximity":      0.20,
-        "htf_momentum_gate":  0.12,
-        "htf_inflection":     0.08,
+        # htf_alignment removed — regime_alignment standalone factor covers this signal
+        "htf_structure_bias": 0.40,  # redistributed from former 0.25 (+ share of removed 0.35)
+        "htf_proximity":      0.30,  # redistributed from former 0.20
+        "htf_momentum_gate":  0.18,  # redistributed from former 0.12
+        "htf_inflection":     0.12,  # redistributed from former 0.08
     }
     _htf_total_w = sum(_HTF_INTERNAL_WEIGHTS[k] for k in _HTF_INTERNAL_WEIGHTS if k in _htf_sub_scores)
     if _htf_total_w > 0:
@@ -3005,7 +3004,7 @@ def calculate_confluence_score(
         ) / _htf_total_w
         _htf_composite = max(0.0, min(100.0, _htf_composite))
         _htf_top_rationale = next(
-            (_htf_sub_rationale[k] for k in ("htf_alignment", "htf_proximity", "htf_structure_bias") if k in _htf_sub_rationale),
+            (_htf_sub_rationale[k] for k in ("htf_structure_bias", "htf_proximity", "htf_momentum_gate") if k in _htf_sub_rationale),
             "HTF composite"
         )
         factors.append(ConfluenceFactor(
