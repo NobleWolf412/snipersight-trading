@@ -559,7 +559,7 @@ _OVERWATCH_WEIGHTS = {
     "momentum":              0.08,
     "divergence":            0.15,
     "volume":                0.10,
-    "vwap":                  0.04,
+    "vwap":                  0.00,  # merged into premium_discount (Fix 4b; no floor)
     "volatility":            0.08,
     # --- Close Quality ---
     "close_momentum":        0.06,
@@ -596,7 +596,7 @@ _STRIKE_WEIGHTS = {
     "momentum":              0.15,
     "divergence":            0.18,
     "volume":                0.10,
-    "vwap":                  0.08,
+    "vwap":                  0.00,  # merged into premium_discount (Fix 4b)
     "volatility":            0.10,
     # --- Close Quality ---
     "close_momentum":        0.08,
@@ -633,7 +633,7 @@ _SURGICAL_WEIGHTS = {
     "momentum":              0.12,
     "divergence":            0.10,
     "volume":                0.08,
-    "vwap":                  0.05,
+    "vwap":                  0.00,  # merged into premium_discount (Fix 4b)
     "volatility":            0.12,
     # --- Close Quality ---
     "close_momentum":        0.09,
@@ -670,7 +670,7 @@ _STEALTH_WEIGHTS = {
     "momentum":              0.10,
     "divergence":            0.10,
     "volume":                0.10,
-    "vwap":                  0.05,
+    "vwap":                  0.00,  # merged into premium_discount (Fix 4b)
     "volatility":            0.05,
     # --- Close Quality ---
     "close_momentum":        0.05,
@@ -2712,26 +2712,8 @@ def calculate_confluence_score(
             )
         )
 
-        # VWAP Alignment
-        vwap_score = 40.0
-        vwap_rationale = "Neutral VWAP alignment"
-        vwap = getattr(primary_indicators, "vwap", None)
-        if vwap and entry_price:
-            if (direction in ("bullish", "long") and entry_price < vwap) or (direction in ("bearish", "short") and entry_price > vwap):
-                vwap_score = 80.0
-                vwap_rationale = f"Price ({entry_price:.2f}) at premium/discount relative to VWAP"
-            elif (direction in ("bullish", "long") and entry_price < vwap * 1.01) or (direction in ("bearish", "short") and entry_price > vwap * 0.99):
-                vwap_score = 60.0
-                vwap_rationale = "Price near VWAP equilibrium"
-        
-        factors.append(
-            ConfluenceFactor(
-                name="VWAP Alignment",
-                score=vwap_score,
-                weight=get_w("vwap", 0.05),
-                rationale=vwap_rationale or "Neutral VWAP alignment",
-            )
-        )
+        # VWAP Alignment merged into Premium/Discount Zone below (Fix 4b).
+        # vwap weight is 0.00 in all mode dicts; no standalone factor appended.
 
         # Volatility
         volatility_score = _score_volatility(primary_indicators)
@@ -2866,7 +2848,9 @@ def calculate_confluence_score(
     _htf_sub_scores["htf_momentum_gate"] = m_gate_score
     _htf_sub_rationale["htf_momentum_gate"] = m_gate["reason"] or "HTF momentum allowed"
 
-    # --- Premium/Discount Zone ---
+    # --- Premium/Discount Zone (incorporates VWAP alignment, Fix 4b) ---
+    # VWAP alignment merged here: no floor for absent data, only boosts when
+    # price is on the correct side of VWAP and data is available.
     pd_score, pd_rat = 50.0, "Equilibrium zone"
     try:
         p_tf = getattr(config, "primary_planning_timeframe", "4h")
@@ -2878,6 +2862,14 @@ def calculate_confluence_score(
             else:
                 pd_score = 100.0 if (c_z == "premium" and z_p > 70) else (75.0 if c_z == "premium" else 30.0)
             pd_rat = f"{c_z.capitalize()} zone ({z_p:.0f}%)"
+        # VWAP alignment boost: only fires when VWAP data is present and price
+        # is on the correct side. No default/floor — absent VWAP contributes nothing.
+        _vwap_val = getattr(primary_indicators, "vwap", None) if primary_indicators else None
+        if _vwap_val and entry_price:
+            _long = direction in ("bullish", "long")
+            if (_long and entry_price < _vwap_val) or (not _long and entry_price > _vwap_val):
+                pd_score = min(100.0, pd_score + 10.0)
+                pd_rat = f"{pd_rat} + VWAP aligned"
     except Exception as e:
         logger.warning("Premium/discount zone scoring failed: %s", e)
     factors.append(ConfluenceFactor(name="Premium/Discount Zone", score=pd_score, weight=get_w("premium_discount", 0.05), rationale=pd_rat or "Equilibrium zone"))
