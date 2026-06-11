@@ -804,6 +804,7 @@ class SMCDetectionService:
 
         # FIXED: Recalculate freshness for ALL OBs after aggregation
         # This ensures structural OBs don't retain stale 100% freshness
+        _pre_recalc_count = len(order_blocks)
         try:
             from datetime import datetime
             from dataclasses import replace
@@ -824,7 +825,12 @@ class SMCDetectionService:
             order_blocks = updated_obs
             logger.debug("🔄 Recalculated freshness for %d OBs", len(order_blocks))
         except Exception as e:
-            logger.debug("Freshness recalc failed: %s", e)
+            logger.warning("FRESHNESS_RECALC_FAILED (stale freshness will persist): %s", e)
+
+        # Mass conservation OUTSIDE try so AssertionError propagates rather than being swallowed
+        assert len(order_blocks) == _pre_recalc_count, (
+            f"FRESHNESS_RECALC mass conservation: len={len(order_blocks)} != original={_pre_recalc_count}"
+        )
 
         return order_blocks
 
