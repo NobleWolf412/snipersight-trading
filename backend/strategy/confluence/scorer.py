@@ -3763,35 +3763,67 @@ def _score_institutional_sequence(
     smc_snapshot: SMCSnapshot, direction: str
 ) -> Tuple[float, str]:
     """
-    Score institutional sequence (Sweep -> Shift -> Return to OB).
-    
-    This is the highest probability entry pattern.
+    Score institutional sequence: Sweep → Shift → OB (temporal order required).
+
+    Temporal ordering is enforced via strict greater-than (`shift.timestamp > sweep_time`):
+    - sweep_time = confirmed_at when available (look-ahead-safe), else timestamp
+    - A shift whose timestamp EQUALS sweep_time is treated as unordered (same-bar BOS+sweep
+      = temporally ambiguous; scores 40 not 100 when OB present, 20 without)
+    - This is intentional: same-candle events have no intra-bar ordering guarantee
+
+    Scoring tiers:
+      100 — Sweep → Shift (ordered, strictly after sweep) + OB present
+       70 — Sweep → Shift (ordered), no OB
+       50 — Shift + OB present, no sweep (classic partial)
+       40 — Sweep + Shift + OB but shift.timestamp <= sweep_time (temporal order violated)
+       20 — Sweep exists, no subsequent structural shift (including same-bar shifts)
+        0 — No sequence detected
     """
-    score = 0.0
-    reason_parts = []
-    
-    # 1. Look for recent sweep in direction
     norm_dir = _normalize_direction(direction)
-    target_type = "low" if norm_dir == "bullish" else "high"
-    has_sweep = any(getattr(s, "sweep_type", "") == target_type for s in smc_snapshot.liquidity_sweeps)
-    
-    # 2. Look for recent BOS/ChoCH in direction
-    has_shift = any(getattr(b, "direction", "") == norm_dir for b in smc_snapshot.structural_breaks)
-    
-    # 3. Look for recent OB in direction
+    target_sweep_type = "low" if norm_dir == "bullish" else "high"
+
+    # 1. Most recent aligned sweep (use confirmed_at when available — look-ahead-safe time)
+    aligned_sweeps = [
+        s for s in smc_snapshot.liquidity_sweeps
+        if getattr(s, "sweep_type", "") == target_sweep_type
+    ]
+    latest_sweep = max(aligned_sweeps, key=lambda s: s.timestamp) if aligned_sweeps else None
+    sweep_time = (
+        (getattr(latest_sweep, "confirmed_at", None) or latest_sweep.timestamp)
+        if latest_sweep is not None
+        else None
+    )
+
+    # 2. Structural shifts in direction — prefer those that are AFTER the sweep
+    aligned_shifts = [
+        b for b in smc_snapshot.structural_breaks
+        if getattr(b, "direction", "") == norm_dir
+    ]
+    ordered_shifts = (
+        [b for b in aligned_shifts if b.timestamp > sweep_time]
+        if sweep_time is not None
+        else []
+    )
+    has_ordered_shift = bool(ordered_shifts)
+    has_any_shift = bool(aligned_shifts)
+
+    # 3. Aligned OB present in snapshot (active = passed filter_obs_by_mode)
     has_ob = any(ob.direction == norm_dir for ob in smc_snapshot.order_blocks)
-    
-    if has_sweep and has_shift and has_ob:
-        score = 100.0
-        reason_parts.append("Institutional Sequence confirmed (Sweep + Shift + OB)")
-    elif has_sweep and has_shift:
-        score = 70.0
-        reason_parts.append("Incomplete sequence (Sweep + Shift, missing OB confirmation)")
-    elif has_shift and has_ob:
-        score = 50.0
-        reason_parts.append("Partial sequence (Shift + OB, no preceding sweep)")
-        
-    return score, " | ".join(reason_parts) if reason_parts else "No institutional sequence detected"
+
+    if latest_sweep is not None and has_ordered_shift and has_ob:
+        return 100.0, "Institutional Sequence confirmed (Sweep → Shift → OB)"
+    elif latest_sweep is not None and has_ordered_shift:
+        return 70.0, "Incomplete sequence (Sweep → Shift confirmed, no OB)"
+    elif latest_sweep is not None and has_any_shift and has_ob:
+        # Sweep + Shift + OB exist but shift predates the sweep — wrong temporal order
+        return 40.0, "Out-of-order sequence (Sweep + Shift + OB, temporal order violated)"
+    elif has_any_shift and has_ob:
+        # No sweep at all — classic partial sequence
+        return 50.0, "Partial sequence (Shift + OB, no preceding sweep)"
+    elif latest_sweep is not None:
+        return 20.0, "Sweep detected, no subsequent structural shift"
+    else:
+        return 0.0, "No institutional sequence detected"
 
 
 def _detect_nested_ob(smc: SMCSnapshot, direction: str) -> bool:
