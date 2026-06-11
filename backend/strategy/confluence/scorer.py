@@ -2805,10 +2805,13 @@ def calculate_confluence_score(
         btc_score = 100.0 if (btc_impulse == direction or btc_impulse == "neutral") else 40.0
         factors.append(ConfluenceFactor(name="BTC Impulse Gate", score=btc_score, weight=get_w("btc_impulse", 0.05), rationale=f"BTC trend: {btc_impulse}"))
 
-    # --- Fibonacci Proximity ---
+    # --- Fibonacci Proximity (binary gate: within 0.5 ATR = 100, else 0) ---
     if current_price and smc_snapshot.swing_structure:
         try:
-            fib_res = _score_fibonacci_incremental(current_price, smc_snapshot.swing_structure, direction)
+            _fib_atr = getattr(primary_indicators, "atr", None) if primary_indicators else None
+            fib_res = _score_fibonacci_incremental(
+                current_price, smc_snapshot.swing_structure, direction, atr=_fib_atr
+            )
             if fib_res["score"] > 0 or get_w("fibonacci", 0) > 0:
                 factors.append(ConfluenceFactor(name="Fibonacci Proximity", score=fib_res["score"], weight=get_w("fibonacci", 0.05), rationale=fib_res["rationale"] or "Near Fibonacci levels"))
         except Exception as e:
@@ -3886,97 +3889,46 @@ def _score_divergences_incremental(
 def _score_fibonacci_incremental(
     current_price: float,
     swing_structure: Dict[str, Any],
-    direction: str
+    direction: str,
+    atr: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
-    Score Fibonacci confluence with incremental logic.
-    
-    Factors:
-    1. Proximity: Closer = higher score (<0.5% = 100pts)
-    2. Key Level: 61.8% (Golden) > 50%
-    3. Timeframe: HTF (1D/4H) > LTF
-    
-    Returns detailed score dict.
-    """
-    if not current_price or not swing_structure:
-         return {"score": 0.0, "rationale": "", "components": []}
+    Score Fibonacci confluence: binary gate.
 
-    score = 0.0
-    components = []
-    
+    Within 0.5 ATR of any HTF Fibonacci level → 100.0, else 0.0.
+    If ATR unavailable, returns 0.0 (conservative — can't confirm proximity).
+    """
+    if not current_price or not swing_structure or not atr or atr <= 0:
+        return {"score": 0.0, "rationale": "", "components": []}
+
+    threshold = 0.5 * atr
     fib_timeframes = ["1d", "1D", "4h", "4H"]
-    best_proximity = float("inf")
-    
-    # Check HTF Fibs
+
     for tf in fib_timeframes:
         ss = swing_structure.get(tf) or swing_structure.get(tf.lower())
         if not ss:
             continue
-            
-        # Extract swings (handle dict or object)
+
         swing_high = ss.get("last_hh") or ss.get("last_lh") if isinstance(ss, dict) else getattr(ss, "last_hh", None) or getattr(ss, "last_lh", None)
         swing_low = ss.get("last_ll") or ss.get("last_hl") if isinstance(ss, dict) else getattr(ss, "last_ll", None) or getattr(ss, "last_hl", None)
-        
+
         if not (swing_high and swing_low and swing_high > swing_low):
             continue
-            
-        # Determine trend for Fib calc
-        midpoint = (swing_high + swing_low) / 2
-        # If trading bullish, we want price at a discount (low), retracing from a high
-        # So trend direction for fib tool is UP (Low -> High)
-        # Wait, calculate_fib_levels expects the trend direction
-        # If trend is bullish (Up), levels are below price (retracement targets)
-        # If we are looking for LONGs (bullish), we want to buy at a support level below current price? 
-        # No, current price IS at the level.
-        # If we are LONGING, we expect price to bounce UP from a level.
-        # So the prior move was likely UP (Bullish), and we are retracing DOWN.
-        # So trend_direction = "bullish"
-        
+
         fib_trend = "bullish" if direction.lower() in ["bullish", "long"] else "bearish"
-        
         levels = calculate_fib_levels(swing_high, swing_low, fib_trend, tf)
         nearest = find_nearest_fib(current_price, levels)
-        
-        if nearest:
-            prox = get_fib_proximity_pct(current_price, nearest)
-            best_proximity = min(best_proximity, prox)
-            
-            # Score this level
-            level_score = 0.0
-            
-            # 1. Proximity Score
-            if prox <= 0.3:
-                level_score += 60.0
-            elif prox <= 0.6:
-                level_score += 40.0
-            elif prox <= 1.2:
-                level_score += 20.0
-            else:
-                continue # Too far
-                
-            # 2. Key Level Bonus (Golden Pocket)
-            if 0.61 <= nearest.ratio <= 0.66:
-                level_score += 25.0
-                level_name = "Golden Pocket"
-            elif 0.5 <= nearest.ratio <= 0.61:
-                 level_score += 15.0
-                 level_name = f"{nearest.ratio:.3f} Fib"
-            else:
-                 level_name = f"{nearest.ratio:.3f} Fib"
-                 
-            # 3. TF Weight
-            if tf.lower() == "1d":
-                level_score *= 1.2
-            
-            if level_score > score:
-                score = level_score
-                components = [(f"{tf} {level_name}", level_score, f"{prox:.2f}% away")]
 
-    return {
-        "score": max(0.0, min(100.0, score)),
-        "rationale": f"Fibonacci: {components[0][0]} ({components[0][2]})" if components else "",
-        "components": components
-    }
+        if nearest and abs(current_price - nearest.price) <= threshold:
+            level_name = "Golden Pocket" if 0.61 <= nearest.ratio <= 0.66 else f"{nearest.ratio:.3f} Fib"
+            dist = abs(current_price - nearest.price)
+            return {
+                "score": 100.0,
+                "rationale": f"Fibonacci: {tf} {level_name} within 0.5 ATR",
+                "components": [(f"{tf} {level_name}", 100.0, f"{dist:.4f} dist / {threshold:.4f} gate")],
+            }
+
+    return {"score": 0.0, "rationale": "", "components": []}
 
 
 def _score_structural_breaks(breaks: List[StructuralBreak], direction: str) -> float:
