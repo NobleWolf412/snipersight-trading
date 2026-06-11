@@ -800,7 +800,16 @@ class PositionManager:
                     position.realized_pnl += position.unrealized_pnl
                     position.unrealized_pnl = 0.0
                     position.status = PositionStatus.CLOSED
-                    position.exit_reason = "stagnation"
+                    # If ALL targets were stripped (none ever hit, none remain),
+                    # the real cause is entry-price geometry failure, not slow-bleed
+                    # stagnation. Preserve the distinction so autopsies classify correctly.
+                    position.exit_reason = (
+                        "target_strip"
+                        if position.targets_stripped_count > 0
+                        and not position.targets
+                        and not position.targets_hit
+                        else "stagnation"
+                    )
                     position.exit_price = current_price
                     position.remaining_quantity = 0.0
                 return

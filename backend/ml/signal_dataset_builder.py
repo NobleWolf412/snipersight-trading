@@ -213,6 +213,11 @@ def build_signal_dataset(
                 label, weight = (1 if pnl > 0 else 0), 0.3
             elif exit_reason == "manual":
                 label, weight = (1 if pnl > 0 else 0), 0.5
+            elif exit_reason == "target_strip":
+                # Entry-geometry failure: all targets were on the wrong side of the
+                # actual fill price. This reflects a planner/fill-drift issue, not
+                # signal quality. Exclude from training — it would add label noise.
+                continue
             else:
                 continue
 

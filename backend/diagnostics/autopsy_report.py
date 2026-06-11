@@ -325,10 +325,10 @@ def _build_threads(report: AutopsyReport, trades: List[Dict[str, Any]]) -> List[
             delegate=f"run /trade-autopsy {t.get('trade_id')}",
         ))
 
-    # Weird exits — orphan / stagnation / EMERGENCY
+    # Weird exits — orphan / stagnation / target_strip / EMERGENCY
     weird = [
         t for t in trades
-        if t.get("exit_reason") in ("orphan_price_feed_failure", "stagnation")
+        if t.get("exit_reason") in ("orphan_price_feed_failure", "stagnation", "target_strip")
         or str(t.get("exit_reason", "")).startswith("EMERGENCY")
     ]
     for t in weird:

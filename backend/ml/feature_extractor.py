@@ -169,6 +169,7 @@ def build_dataset(
       - stagnation /
         max_hours       → label from sign(pnl), weight 0.3
       - manual          → label from sign(pnl), weight 0.5
+      - target_strip    → excluded (entry-geometry failure, not signal quality)
 
     Returns:
         X:              shape (n_samples, n_features)
@@ -185,6 +186,11 @@ def build_dataset(
 
         exit_reason = str(rec.get("exit_reason") or "").lower()
         pnl = float(rec.get("pnl") or 0)
+
+        if exit_reason == "target_strip":
+            # Entry-geometry failure: all targets on wrong side of actual fill.
+            # Reflects planner/fill-drift, not signal quality — exclude from training.
+            continue
 
         label, weight = _barrier_label(exit_reason, pnl)
 

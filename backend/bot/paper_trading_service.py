@@ -2945,7 +2945,7 @@ class PaperTradingService:
                         logger.warning(
                             f"Failed to register stop-out cooldown for {pos.symbol}: {_e}"
                         )
-                elif exit_reason in ("target", "stagnation") and self.orchestrator:
+                elif exit_reason in ("target", "stagnation", "target_strip") and self.orchestrator:
                     # Short cooldown after target/stagnation exit — prevents the bot from
                     # immediately re-entering the same level and churning. Shorter than
                     # stop-out cooldown; the level isn't invalidated, just recently resolved.
