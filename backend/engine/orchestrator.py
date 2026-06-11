@@ -3012,6 +3012,8 @@ class Orchestrator:
                             )
                         ),
                         "grade": str(getattr(ob, "grade", "B")),
+                        "source": str(getattr(ob, "source", "unknown")),
+                        "wick_agreement": bool(getattr(ob, "wick_agreement", False)),
                         # Ensure no numpy bools leak
                         "active": bool(getattr(ob, "active", True)),
                     }

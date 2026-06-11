@@ -100,6 +100,9 @@ class OrderBlock:
     # NEW: Breaker lifecycle fields (Phase 2.1)
     breaker: bool = False  # OB was broken through, now acts as opposite S/R
     invalidated: bool = False  # Breaker failed (price broke back through)
+    # 4C: source classification + wick confluence signal
+    source: str = "unknown"  # "bos" | "structural" | "rejection_wick" | "unknown"
+    wick_agreement: bool = False  # a same-direction rejection_wick OB sat ≥50% inside this OB
 
     def __post_init__(self):
         """Validate order block data."""

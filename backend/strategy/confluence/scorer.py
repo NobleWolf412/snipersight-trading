@@ -3538,7 +3538,7 @@ def _score_order_blocks_incremental(
 ) -> Dict[str, Any]:
     """
     Score order blocks with detailed incremental factors.
-    
+
     Factors:
     1. Base Score by Grade (A=40, B=30, C=20)
     2. Mitigation Bonus (+15): <10% mitigated (Fresh)
@@ -3546,28 +3546,35 @@ def _score_order_blocks_incremental(
     4. HTF Bonus (+15): 4H or 1D Order Block
     5. Recency/Freshness (+15): freshness_score > 80
     6. Penalty: Heavily mitigated (>50%) or old (<50 freshness)
-    
+    7. Wick agreement bonus (+10): anchor OB confirmed by overlapping wick OB
+    8. Wick-only cap (35): wick pool used only because no anchor OBs present
+
     Returns detailed score dict.
     """
     normalized_dir = _normalize_direction(direction)
     aligned_obs = [ob for ob in order_blocks if ob.direction == normalized_dir]
-    
+
     if not aligned_obs:
         return {"score": 0.0, "rationale": "No aligned Order Blocks", "components": []}
-        
-    # Find best OB based on raw quality metrics
+
+    # Prefer anchor (structural/bos) OBs; fall back to wick pool when none present
+    anchor_obs = [ob for ob in aligned_obs if getattr(ob, "source", "unknown") != "rejection_wick"]
+    wick_obs = [ob for ob in aligned_obs if getattr(ob, "source", "unknown") == "rejection_wick"]
+    wick_only = not anchor_obs
+    pool = anchor_obs if anchor_obs else wick_obs
+
     best_ob = max(
-        aligned_obs,
+        pool,
         key=lambda ob: (
             ob.freshness_score * 0.3
             + ob.displacement_strength * 0.3
             + (1.0 - ob.mitigation_level) * 0.4
-        )
+        ),
     )
-    
+
     score = 0.0
     components = []
-    
+
     # 1. Base Score by Grade
     grade = getattr(best_ob, "grade", "B")
     if grade == "A":
@@ -3579,7 +3586,7 @@ def _score_order_blocks_incremental(
     else:
         score += 20.0
         components.append(("Grade C", 20.0, "Marginal structure"))
-        
+
     # 2. Mitigation Bonus (Freshness)
     if best_ob.mitigation_level < 0.1:
         score += 15.0
@@ -3587,7 +3594,7 @@ def _score_order_blocks_incremental(
     elif best_ob.mitigation_level > 0.5:
         score -= 10.0
         components.append(("Mitigated", -10.0, f"Heavily mitigated ({best_ob.mitigation_level:.0%})"))
-        
+
     # 3. Displacement Bonus
     if best_ob.displacement_strength > 80:
         score += 15.0
@@ -3595,13 +3602,13 @@ def _score_order_blocks_incremental(
     elif best_ob.displacement_strength < 40:
         score -= 5.0
         components.append(("Weak Move", -5.0, "Low displacement"))
-        
+
     # 4. HTF Bonus
     tf = best_ob.timeframe.lower()
     if tf in ["4h", "1d", "1w"]:
         score += 15.0
         components.append(("HTF OB", 15.0, f"{best_ob.timeframe} timeframe"))
-        
+
     # 5. Recency
     if best_ob.freshness_score > 80:
         score += 15.0
@@ -3610,11 +3617,22 @@ def _score_order_blocks_incremental(
         score -= 10.0
         components.append(("Stale", -10.0, "Old/stale zone"))
 
+    # 6. Wick agreement bonus: anchor OB confirmed by a wick OB at the same zone
+    if getattr(best_ob, "wick_agreement", False):
+        score += 10.0
+        components.append(("Wick Agreement", 10.0, "Rejection wick OB confirms this zone"))
+
+    # 7. Wick-only cap: no structural anchor present — conservative ceiling
+    if wick_only and score > 35.0:
+        cap_delta = 35.0 - score
+        components.append(("Wick-Only Cap", cap_delta, "No structural anchor; wick-only OB pool"))
+        score = 35.0
+
     return {
         "score": max(0.0, min(100.0, score)),
         "rationale": f"OB ({grade}): " + ", ".join([f"{c[0]}({c[1]:+.0f})" for c in components]),
         "components": components,
-        "best_ob": best_ob
+        "best_ob": best_ob,
     }
 
 

@@ -210,7 +210,9 @@ def detect_order_blocks(
         # Check for bullish order block (strong rejection from support OR strong engulfing)
         is_engulfing = body > (atr.iloc[i] * 1.2)
 
-        if (lower_wick / body >= min_wick_ratio) or (is_engulfing and body > min_body):
+        # Wick branch requires bearish (red) candle — wrong-color wick OBs were 64% of detections
+        is_wick_rejection = (lower_wick / body >= min_wick_ratio) and candle["close"] < candle["open"]
+        if is_wick_rejection or (is_engulfing and body > min_body):
             # Verify displacement: price should move up strongly after this candle
             displacement = _calculate_displacement_bullish(df, i, lookback_candles)
             displacement_atr = displacement / atr.iloc[i] if atr.iloc[i] > 0 else 0
@@ -283,6 +285,7 @@ def detect_order_blocks(
                 freshness_score=1.0,
                 grade=grade,
                 displacement_atr=displacement_atr,
+                source="rejection_wick" if is_wick_rejection else "engulfing",
             )
             order_blocks.append(ob)
 
@@ -290,7 +293,9 @@ def detect_order_blocks(
         # Engulfing check: Large body relative to ATR
         is_engulfing = body > (atr.iloc[i] * 1.2)
 
-        if (upper_wick / body >= min_wick_ratio) or (is_engulfing and body > min_body):
+        # Wick branch requires bullish (green) candle — mirrors bullish color gate above
+        is_wick_rejection = (upper_wick / body >= min_wick_ratio) and candle["close"] > candle["open"]
+        if is_wick_rejection or (is_engulfing and body > min_body):
             # Verify displacement: price should move down strongly after this candle
             displacement = _calculate_displacement_bearish(df, i, lookback_candles)
             displacement_atr = displacement / atr.iloc[i] if atr.iloc[i] > 0 else 0
@@ -362,6 +367,7 @@ def detect_order_blocks(
                 freshness_score=1.0,
                 grade=grade,
                 displacement_atr=displacement_atr,
+                source="rejection_wick" if is_wick_rejection else "engulfing",
             )
             order_blocks.append(ob)
 
@@ -700,20 +706,22 @@ def filter_overlapping_order_blocks(
     if len(order_blocks) <= 1:
         return order_blocks
 
-    # Sort by displacement strength (strongest first)
-    sorted_obs = sorted(order_blocks, key=lambda ob: ob.displacement_strength, reverse=True)
+    # Anchor OBs (structural/bos) always beat wick OBs at same zone; secondary sort by strength
+    def _sort_key(ob: OrderBlock):
+        is_wick = getattr(ob, "source", "unknown") == "rejection_wick"
+        return (1 if is_wick else 0, -ob.displacement_strength)
+
+    sorted_obs = sorted(order_blocks, key=_sort_key)
 
     filtered = []
 
     for ob in sorted_obs:
-        # Check if this OB significantly overlaps with any already selected
-        overlaps = False
+        overlapping_anchor = None
 
         for selected_ob in filtered:
             if ob.direction != selected_ob.direction:
-                continue  # Different directions don't conflict
+                continue
 
-            # Calculate overlap
             overlap_high = min(ob.high, selected_ob.high)
             overlap_low = max(ob.low, selected_ob.low)
 
@@ -723,10 +731,16 @@ def filter_overlapping_order_blocks(
                 overlap_ratio = overlap_range / ob_range if ob_range > 0 else 0
 
                 if overlap_ratio > max_overlap:
-                    overlaps = True
+                    overlapping_anchor = selected_ob
                     break
 
-        if not overlaps:
+        if overlapping_anchor is not None:
+            # Wick OB displaced by anchor → mark anchor as having wick confirmation
+            ob_source = getattr(ob, "source", "unknown")
+            anchor_source = getattr(overlapping_anchor, "source", "unknown")
+            if ob_source == "rejection_wick" and anchor_source != "rejection_wick":
+                overlapping_anchor.wick_agreement = True
+        else:
             filtered.append(ob)
 
     return filtered
@@ -811,6 +825,7 @@ def filter_obs_by_mode(
             freshness = calculate_freshness(ob, current_time)
             if freshness < criteria["min_freshness"]:
                 continue
+            ob.freshness_score = freshness  # write back so downstream scorer sees live value
         elif ob.freshness_score < criteria["min_freshness"]:
             continue
 
@@ -947,6 +962,7 @@ def detect_obs_from_bos(
             freshness_score=100.0,  # Will be recalculated later
             grade=grade,
             displacement_atr=disp_atr,
+            source="bos",
         )
         order_blocks.append(ob)
 
@@ -1074,6 +1090,7 @@ def detect_order_blocks_structural(
                 freshness_score=100.0,
                 grade=grade,
                 displacement_atr=disp_atr,
+                source="structural",
             )
             order_blocks.append(ob)
 
@@ -1143,6 +1160,7 @@ def detect_order_blocks_structural(
                 freshness_score=100.0,
                 grade=grade,
                 displacement_atr=disp_atr,
+                source="structural",
             )
             order_blocks.append(ob)
 
