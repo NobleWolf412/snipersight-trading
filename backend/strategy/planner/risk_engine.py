@@ -9,7 +9,7 @@ Handles risk management calculations for the Trade Planner, including:
 """
 
 import logging
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 import pandas as pd
 
 from backend.shared.models.planner import Target, StopLoss, EntryZone
@@ -1894,6 +1894,86 @@ def _find_eqh_eql_zones(
 
     unique.sort(key=lambda x: abs(x[0] - avg_entry))
     return unique[:5]
+
+
+def _buffer_stop_from_liquidity(
+    stop_level: float,
+    entry_ref: float,
+    is_bullish: bool,
+    atr: float,
+    multi_tf_data: Optional["MultiTimeframeData"],
+    key_levels: Optional[Any],
+    allowed_tfs: Optional[tuple] = None,
+) -> tuple:
+    """
+    Fix 2: Liquidity-aware stop buffering. If stop_level is within 0.3 ATR of
+    an EQL/EQH/PWL/PDH pool, push it 0.3 ATR beyond the pool (away from entry)
+    to avoid being swept by liquidity-hunt moves.
+
+    Returns (adjusted_stop_level, rationale_note). When no adjustment is needed,
+    returns (stop_level, "") — caller checks result[0] != stop_level to detect change.
+    """
+    if not atr or atr <= 0:
+        return stop_level, ""
+
+    buffer = 0.3 * atr
+    _tfs = allowed_tfs or ("4h", "4H", "1h", "1H", "1d", "1D", "15m", "15M")
+
+    pool_levels: List[float] = []
+
+    # Equal-low clusters near the stop (LONG: lows below stop; SHORT: highs above stop)
+    try:
+        eqh_eql = _find_eqh_eql_zones(
+            is_bullish=not is_bullish,
+            avg_entry=stop_level,
+            multi_tf_data=multi_tf_data,
+            allowed_tfs=_tfs,
+        )
+        pool_levels.extend(lvl for lvl, _, _ in eqh_eql)
+    except Exception as _eqh_err:
+        logging.getLogger(__name__).warning(
+            "_buffer_stop_from_liquidity: EQL/EQH scan failed (%s) — key-level fallback only",
+            _eqh_err,
+        )
+
+    # Static key-level pools from SMC snapshot
+    if key_levels is not None:
+        if is_bullish:
+            for attr in ("pwl", "pdl"):
+                lvl = getattr(key_levels, attr, None)
+                if lvl and isinstance(lvl, (int, float)) and 0 < lvl < entry_ref:
+                    pool_levels.append(float(lvl))
+        else:
+            for attr in ("pwh", "pdh"):
+                lvl = getattr(key_levels, attr, None)
+                if lvl and isinstance(lvl, (int, float)) and lvl > entry_ref:
+                    pool_levels.append(float(lvl))
+
+    if not pool_levels:
+        return stop_level, ""
+
+    adjusted = stop_level
+    triggered_pool: Optional[float] = None
+
+    for pool in pool_levels:
+        if abs(adjusted - pool) <= buffer:
+            if is_bullish:
+                # Long stop: push below pool (wider = further below entry)
+                candidate = pool - buffer
+                if candidate < adjusted:
+                    adjusted = candidate
+                    triggered_pool = pool
+            else:
+                # Short stop: push above pool (wider = further above entry)
+                candidate = pool + buffer
+                if candidate > adjusted:
+                    adjusted = candidate
+                    triggered_pool = pool
+
+    if triggered_pool is None:
+        return stop_level, ""
+
+    return adjusted, f"Buffered 0.3 ATR from liquidity pool @ {triggered_pool:.4f}"
 
 
 def _calculate_fib_extensions(

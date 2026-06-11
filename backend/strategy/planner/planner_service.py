@@ -28,6 +28,7 @@ from backend.bot.telemetry.events import create_signal_rejected_event, create_al
 from backend.strategy.planner.entry_engine import _calculate_entry_zone, _map_setup_to_archetype
 from backend.strategy.planner.risk_engine import (
     _calculate_stop_loss,
+    _buffer_stop_from_liquidity,
     _calculate_targets,
     _derive_trade_type,
     _adjust_stop_for_leverage,
@@ -321,6 +322,40 @@ def generate_trade_plan(
             )
         )
         raise
+
+    # Fix 2: Buffer stop from liquidity pools (EQL/EQH/PWL/PDH).
+    # Applied BEFORE the pct-stop gate so a pool-buffered stop that exceeds the cap
+    # is still correctly rejected rather than silently accepted.
+    try:
+        _kl = getattr(smc_snapshot, "key_levels", None) if smc_snapshot else None
+        _buffered_stop, _buffer_rat = _buffer_stop_from_liquidity(
+            stop_level=stop_loss.level,
+            entry_ref=entry_zone.near_entry,
+            is_bullish=is_bullish,
+            atr=atr,
+            multi_tf_data=multi_tf_data,
+            key_levels=_kl,
+        )
+        if _buffered_stop != stop_loss.level:
+            _buf_dist_atr = abs(entry_zone.near_entry - _buffered_stop) / atr
+            if _buf_dist_atr <= 0:
+                raise ValueError(
+                    f"Stop buffer produced degenerate stop: buffered_stop={_buffered_stop:.4f} "
+                    f"== near_entry={entry_zone.near_entry:.4f} (distance_atr=0)"
+                )
+            logger.info(
+                "STOP BUFFERED: %.4f -> %.4f (%s)", stop_loss.level, _buffered_stop, _buffer_rat
+            )
+            stop_loss = StopLoss(
+                level=_buffered_stop,
+                distance_atr=_buf_dist_atr,
+                rationale=f"{stop_loss.rationale} | {_buffer_rat}",
+                structure_tf_used=stop_loss.structure_tf_used,
+            )
+        else:
+            logger.debug("STOP BUFFER: no pool within 0.3 ATR of %.4f — stop unchanged", stop_loss.level)
+    except Exception as _buf_e:
+        logger.warning("Stop liquidity buffer failed: %s — using original stop", _buf_e)
 
     # DEBUG: Log entry and stop values BEFORE leverage adjustment
     logger.info(
