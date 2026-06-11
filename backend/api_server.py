@@ -390,7 +390,7 @@ risk_manager = RiskManager(
     max_open_positions=5,
     max_asset_exposure_pct=50.0,  # Increased for intraday tight-stop strategies
 )
-paper_executor = PaperExecutor(initial_balance=10000, fee_rate=0.001)
+paper_executor = PaperExecutor(initial_balance=10000, fee_rate=0.0006)
 
 # Exchange adapters factory - Tier 1 exchanges only
 EXCHANGE_ADAPTERS = {

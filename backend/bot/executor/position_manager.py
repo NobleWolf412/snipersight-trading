@@ -260,13 +260,11 @@ class PositionManager:
         "swing": 48.0,      # unchanged
     }
 
-    # Minimum seconds before target exits are checked in simulation mode only.
-    # In paper trading, the current market price may already be past TP1 at the moment
-    # the position opens (the entry candle's range covers both entry zone and target).
-    # Without this guard, trades enter and exit on the same price tick.
-    # In live trading this is 0 — exchange limit orders execute the moment price touches
-    # the level; the monitor is reconciliation only and must never delay real exits.
-    SIMULATION_MIN_TARGET_HOLD_SECONDS: int = 90
+    # Minimum seconds before target exits are checked in simulation mode.
+    # Set to 0 to match live behavior: exchange limit orders at TP fill immediately when
+    # price touches the level. An artificial hold distorts paper economics vs live.
+    # (Was 90 — removed 2026-06-11 as part of paper-fidelity fix.)
+    SIMULATION_MIN_TARGET_HOLD_SECONDS: int = 0
     # Minimum P&L threshold (%) before stagnation exit is considered.
     # Below this AND past the time limit = stagnation exit.
     TRADE_TYPE_STAGNATION_PNL = {

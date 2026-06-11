@@ -134,11 +134,15 @@ class PaperExecutor:
     - Order book simulation
     """
 
+    # Symbols treated as "major" for slippage (tighter spread ~10 bps vs alt ~35 bps).
+    _MAJOR_SYMBOLS = frozenset({"BTC/USDT", "ETH/USDT", "BTCUSDT", "ETHUSDT"})
+
     def __init__(
         self,
         initial_balance: float,
-        fee_rate: float = 0.001,  # 0.1% default fee
-        slippage_bps: float = 5.0,  # 5 basis points default slippage
+        fee_rate: float = 0.0006,  # Phemex taker 0.06% (pass maker_fee=0.0001 for rest_maker sessions)
+        slippage_bps: float = 35.0,  # Alt-coin slippage; BTC/ETH use major_slippage_bps
+        major_slippage_bps: float = 10.0,  # BTC/ETH slippage (tighter spread)
         enable_partial_fills: bool = True,
         partial_fill_prob: float = 0.5,  # 50% chance of a partial fill if enabled
         min_fill_pct: float = 0.3,       # Min 30% fill
@@ -149,8 +153,9 @@ class PaperExecutor:
 
         Args:
             initial_balance: Starting balance in quote currency
-            fee_rate: Trading fee as decimal (0.001 = 0.1%)
-            slippage_bps: Slippage in basis points (1 bp = 0.01%)
+            fee_rate: Session fee rate. Pass taker (0.0006) for snap_taker or maker (0.0001) for rest_maker.
+            slippage_bps: Slippage for alt-coins in basis points (1 bp = 0.01%)
+            major_slippage_bps: Slippage for BTC/ETH in basis points (tighter spread)
             enable_partial_fills: Whether to simulate partial fills
             max_fill_pct: Maximum percentage of order to fill per tick
 
@@ -170,6 +175,7 @@ class PaperExecutor:
         self.initial_balance = initial_balance
         self.fee_rate = fee_rate
         self.slippage_bps = slippage_bps
+        self.major_slippage_bps = major_slippage_bps
         self.enable_partial_fills = enable_partial_fills
         self.partial_fill_prob = partial_fill_prob
         self.min_fill_pct = min_fill_pct
@@ -188,18 +194,24 @@ class PaperExecutor:
         self.order_counter += 1
         return f"PAPER_{self.order_counter:08d}"
 
-    def _calculate_slippage(self, price: float, side: OrderSide) -> float:
+    def _calculate_slippage(self, price: float, side: OrderSide, symbol: str = "") -> float:
         """
         Calculate slippage for order.
 
         Args:
             price: Base price
             side: Order side (BUY or SELL)
+            symbol: Trading pair — used to select major vs alt slippage tier
 
         Returns:
             Price after slippage
         """
-        slippage = price * (self.slippage_bps / 10000)
+        bps = (
+            self.major_slippage_bps
+            if symbol.upper() in self._MAJOR_SYMBOLS
+            else self.slippage_bps
+        )
+        slippage = price * (bps / 10000)
 
         # Slippage works against the trader
         if side == OrderSide.BUY:
@@ -295,14 +307,14 @@ class PaperExecutor:
                 fill_pct = random.uniform(self.min_fill_pct, self.max_fill_pct)
                 fill_qty = order.remaining_quantity * fill_pct
 
-        fill_price = self._calculate_slippage(current_price, order.side)
+        fill_price = self._calculate_slippage(current_price, order.side, order.symbol)
         fee = self._calculate_fee(fill_qty, fill_price)
-        
-        self.balance -= fee
 
-        # Create fill record
+        # Create fill record before debiting balance — fill is always recorded before
+        # the balance changes so no accounting gap if an exception fires between them.
         fill = Fill(order_id=order_id, quantity=fill_qty, price=fill_price, fee=fee)
         self.fills.append(fill)
+        self.balance -= fee
 
         order.filled_quantity += fill_qty
         # Update average fill price using weighted average
@@ -403,12 +415,10 @@ class PaperExecutor:
 
         fill_price = limit_price  # Limit orders execute exactly at the limit price
         fee = self._calculate_fee(fill_qty, fill_price)
-        
-        self.balance -= fee
-        
-        # Create fill record
+
         fill = Fill(order_id=order_id, quantity=fill_qty, price=fill_price, fee=fee)
         self.fills.append(fill)
+        self.balance -= fee
 
         # Update order state
         total_filled = order.filled_quantity + fill_qty

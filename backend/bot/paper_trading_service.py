@@ -116,8 +116,13 @@ class PaperTradingConfig:
             "aggressive", or "custom". Drives gate/floor defaults and appears in logs.
         symbols: Specific pairs to trade (empty = use scanner defaults)
         exclude_symbols: Pairs to exclude
-        slippage_bps: Simulated slippage (basis points)
-        fee_rate: Simulated trading fee (decimal, e.g., 0.001 = 0.1%)
+        slippage_bps: Flat slippage fallback (basis points). Prefer major_slippage_bps /
+            alt_slippage_bps for per-class accuracy; this field kept for testnet path compat.
+        fee_rate: Legacy flat fee rate. Use taker_fee_rate / maker_fee_rate for paper sessions.
+        taker_fee_rate: Phemex taker fee (0.06%) — used for snap_taker paper sessions.
+        maker_fee_rate: Phemex maker fee (0.01%) — used for rest_maker paper sessions.
+        major_slippage_bps: Slippage for BTC/ETH (tighter spread, ~10 bps).
+        alt_slippage_bps: Slippage for all other alts (wider spread, ~35 bps).
     """
 
     exchange: str = "phemex"
@@ -139,8 +144,12 @@ class PaperTradingConfig:
     majors: bool = True
     altcoins: bool = False
     meme_mode: bool = False
-    slippage_bps: float = 15.0  # Realistic for alt-crypto limit fills (was 5.0)
-    fee_rate: float = 0.001
+    slippage_bps: float = 15.0  # Fallback / testnet-path compat (was 5.0 → bumped 2026)
+    fee_rate: float = 0.001  # Legacy flat rate (testnet/LiveExecutor path); paper uses taker/maker below
+    taker_fee_rate: float = 0.0006  # Phemex taker 0.06% — snap_taker paper sessions
+    maker_fee_rate: float = 0.0001  # Phemex maker 0.01% — rest_maker paper sessions
+    major_slippage_bps: float = 10.0  # BTC/ETH (tight spread)
+    alt_slippage_bps: float = 35.0   # All other alts (wider spread)
     max_hours_open: float = 72.0
     max_pending_scans: int = 2  # Cancel pending limit orders after this many scan cycles
     max_drawdown_pct: Optional[float] = 10.0  # Kill switch: stop session if peak-to-trough drawdown exceeds X%
@@ -516,10 +525,14 @@ class PaperTradingService:
                     "(LiveExecutor path; the maker experiment is PAPER-ONLY per §15 design entry)."
                 )
         else:
+            # Select fee rate based on execution mode:
+            # rest_maker → maker rate (0.01%); snap_taker → taker rate (0.06%).
+            _active_fee = config.maker_fee_rate if config.rest_maker_active else config.taker_fee_rate
             self.executor = PaperExecutor(
                 initial_balance=config.initial_balance,
-                fee_rate=config.fee_rate,
-                slippage_bps=config.slippage_bps,
+                fee_rate=_active_fee,
+                slippage_bps=config.alt_slippage_bps,  # conservative base; per-symbol lookup inside executor
+                major_slippage_bps=config.major_slippage_bps,
                 enable_partial_fills=True,
                 partial_fill_prob=0.3,
                 min_fill_pct=0.3,
