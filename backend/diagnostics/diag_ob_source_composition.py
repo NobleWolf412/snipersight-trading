@@ -149,13 +149,22 @@ def analyze(
     wick = [ob for src, ob in tagged if src == "rejection_wick"]
     confirmed = [ob for src, ob in tagged if src in ("bos", "structural")]
 
-    # Wrong-color and dual-tag on the wick population
+    # Wrong-color and dual-tag on the wick population.
+    # Split by 4C production source field (rejection_wick vs engulfing): the color
+    # gate added in 4C only applies to the rejection_wick branch; engulfing OBs
+    # deliberately bypass it (different pattern, different color doctrine). The
+    # blended rate therefore UNDERSTATES the gate's effect — per-source isolates
+    # whether the color gate is actually firing (rejection_wick should be ~0%).
     wrong = total_colored = 0
+    wrong_by_source: Dict[str, List[int]] = defaultdict(lambda: [0, 0])  # src -> [wrong, colored]
     for ob in wick:
         wc = is_wrong_color(ob.direction, candle_color(df, pd.Timestamp(ob.timestamp)))
         if wc is not None:
             total_colored += 1
             wrong += int(wc)
+            src_field = str(getattr(ob, "source", "?"))
+            wrong_by_source[src_field][1] += 1
+            wrong_by_source[src_field][0] += int(wc)
     by_ts = defaultdict(set)
     for ob in wick:
         by_ts[ob.timestamp].add(ob.direction)
@@ -188,6 +197,7 @@ def analyze(
         "wick_wrong_color": wrong,
         "wick_dual_tag_ts": dual,
         "wick_agreeing": agree,
+        "wick_wrong_by_source": dict(wrong_by_source),
         "survivors": surv_counts,
         "gate2_profile": profile,
     }
@@ -260,6 +270,7 @@ def report(results: List[Dict]) -> int:
     agg = Counter()
     agg_wick = agg_colored = agg_wrong = agg_dual = agg_agree = 0
     surv_agg = Counter()
+    wrong_by_source_agg: Dict[str, List[int]] = defaultdict(lambda: [0, 0])  # src -> [wrong, colored]
     for r in results:
         cnt, sv = r["counts"], r["survivors"]
         wcp = (f"{100.0 * r['wick_wrong_color'] / r['wick_colored']:.0f}%"
@@ -274,6 +285,9 @@ def report(results: List[Dict]) -> int:
         agg_wrong += r["wick_wrong_color"]; agg_dual += r["wick_dual_tag_ts"]
         agg_agree += r["wick_agreeing"]
         surv_agg.update(sv)
+        for src_field, (w, c) in r.get("wick_wrong_by_source", {}).items():
+            wrong_by_source_agg[src_field][0] += w
+            wrong_by_source_agg[src_field][1] += c
 
     tot = sum(agg.values()) or 1
     print("-" * 92)
@@ -282,7 +296,15 @@ def report(results: List[Dict]) -> int:
           f"rejection_wick {agg.get('rejection_wick',0)} ({100*agg.get('rejection_wick',0)/tot:.0f}%)")
     if agg_colored:
         print(f"wick wrong-color rate:   {agg_wrong}/{agg_colored} "
-              f"({100*agg_wrong/agg_colored:.0f}%)   <-- audit claim magnitude")
+              f"({100*agg_wrong/agg_colored:.0f}%)   <-- blended (rejection_wick + engulfing)")
+    if wrong_by_source_agg:
+        parts = []
+        for src_field in sorted(wrong_by_source_agg):
+            w, c = wrong_by_source_agg[src_field]
+            parts.append(f"{src_field} {w}/{c} ({100*w/c:.0f}%)" if c else f"{src_field} 0/0 (n/a)")
+        print(f"  by 4C source:          " + "   ".join(parts))
+        print(f"                         ^ rejection_wick ~0% = 4C color gate firing; "
+              f"engulfing bypasses gate by design")
     print(f"wick dual-tag candles:   {agg_dual}")
     if agg_wick:
         print(f"wick agreement rate:     {agg_agree}/{agg_wick} ({100*agg_agree/agg_wick:.0f}%)"
