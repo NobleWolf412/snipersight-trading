@@ -9,9 +9,12 @@ Identifies where price is relative to the current range:
 Institutional traders look to buy in discount and sell in premium.
 """
 
+import logging
 from dataclasses import dataclass
-from typing import Optional, Literal
+from typing import Optional, Literal, Tuple
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 ZoneType = Literal["premium", "discount", "equilibrium"]
 
@@ -34,6 +37,12 @@ class PremiumDiscountZone:
     current_zone: Optional[ZoneType] = None
     zone_percentage: Optional[float] = None  # 0-100, where in the range
 
+    # Phase 5: dealing-range anchor provenance (additive; window-compatible defaults)
+    range_anchor: str = "window"  # "structure" | "window" | "window_fallback"
+    anchor_swing_high_ts: Optional[str] = None
+    anchor_swing_low_ts: Optional[str] = None
+    swing_lookback_used: Optional[int] = None
+
     def to_dict(self):
         return {
             "range_high": self.range_high,
@@ -43,39 +52,144 @@ class PremiumDiscountZone:
             "extreme_discount": self.extreme_discount,
             "current_zone": self.current_zone,
             "zone_percentage": self.zone_percentage,
+            "range_anchor": self.range_anchor,
+            "anchor_swing_high_ts": self.anchor_swing_high_ts,
+            "anchor_swing_low_ts": self.anchor_swing_low_ts,
+            "swing_lookback_used": self.swing_lookback_used,
         }
 
 
+def _window_range(df: pd.DataFrame, lookback: int) -> Tuple[float, float]:
+    """Legacy window range: high/low of the last `lookback` candles."""
+    if len(df) < lookback:
+        lookback = len(df)
+    recent = df.tail(lookback)
+    return float(recent["high"].max()), float(recent["low"].min())
+
+
+def _compute_structural_dealing_range(
+    df: pd.DataFrame, swing_lookback: int
+) -> Optional[Tuple[float, float, object, object]]:
+    """
+    Structure-anchored dealing range (Phase 5, algorithm a*).
+
+    The operative leg: most recent confirmed swing pair (raw bos_choch fractals,
+    deduped to an alternating sequence) extended by running extremes —
+        range_high = max(SH*, highest high AFTER SH*)
+        range_low  = min(SL*, lowest low  AFTER SL*)
+    The running-extreme extension is ICT current-leg semantics and preserves the
+    "last candle inside range" invariant (no zone_percentage > 100 mid-expansion).
+
+    Returns (range_high, range_low, sh_ts, sl_ts) or None when structure is too
+    sparse / degenerate -> caller falls back to the window range (loudly).
+    """
+    from backend.strategy.smc.bos_choch import (
+        _build_swing_sequence,
+        _detect_swing_highs,
+        _detect_swing_lows,
+    )
+
+    if swing_lookback < 1 or len(df) < swing_lookback * 2 + 1:
+        return None
+
+    swing_highs = _detect_swing_highs(df, swing_lookback)
+    swing_lows = _detect_swing_lows(df, swing_lookback)
+    if swing_highs.empty or swing_lows.empty:
+        return None
+
+    hl_order, level_order, idx_order = _build_swing_sequence(swing_highs, swing_lows)
+    sh_px = sh_ts = sl_px = sl_ts = None
+    for typ, level, ts in zip(hl_order, level_order, idx_order):
+        if typ == 1:  # swing high
+            sh_px, sh_ts = level, ts
+        else:  # swing low
+            sl_px, sl_ts = level, ts
+    if sh_ts is None or sl_ts is None:
+        return None
+
+    after_sh = df[df.index > sh_ts]
+    after_sl = df[df.index > sl_ts]
+    range_high = max(float(sh_px), float(after_sh["high"].max()) if len(after_sh) else float(sh_px))
+    range_low = min(float(sl_px), float(after_sl["low"].min()) if len(after_sl) else float(sl_px))
+
+    if not (range_low <= range_high):  # degenerate geometry
+        return None
+    return range_high, range_low, sh_ts, sl_ts
+
+
 def detect_premium_discount(
-    df: pd.DataFrame, lookback: int = 50, current_price: Optional[float] = None
+    df: pd.DataFrame,
+    lookback: int = 50,
+    current_price: Optional[float] = None,
+    *,
+    anchor: str = "window",
+    swing_lookback: Optional[int] = None,
+    timeframe: Optional[str] = None,
 ) -> PremiumDiscountZone:
     """
-    Detect premium/discount zones from recent price range.
+    Detect premium/discount zones from the current dealing range.
 
-    Uses the swing high and swing low from the lookback period
-    to define the trading range, then calculates zones.
+    anchor="window" (default): range = high/low of the last `lookback` candles.
+        Byte-identical to pre-Phase-5 behavior — existing callers are unaffected.
+    anchor="structure" (Phase 5): range = last confirmed swing pair extended by
+        running extremes (see _compute_structural_dealing_range). Falls back to the
+        window range — LOUDLY, stamped range_anchor="window_fallback" — when
+        structure is too sparse.
+
+    Zone levels (equilibrium/75%/25%) and classification use IDENTICAL formulas for
+    both anchors; only the range endpoints differ.
 
     Args:
         df: OHLCV DataFrame
-        lookback: Number of candles to consider for range
-        current_price: Current price for zone classification
+        lookback: window size for anchor="window" and the structure fallback
+        current_price: price for zone classification (premium >= equilibrium)
+        anchor: "window" | "structure"
+        swing_lookback: fractal lookback for anchor="structure" (required for it;
+            ignored for "window")
+        timeframe: optional label for fallback diagnostics
 
     Returns:
-        PremiumDiscountZone with all levels
+        PremiumDiscountZone with all levels + anchor provenance fields
     """
-    if len(df) < lookback:
-        lookback = len(df)
+    range_anchor = "window"
+    sh_ts = sl_ts = None
+    lb_used: Optional[int] = None
 
-    recent = df.tail(lookback)
+    if anchor == "structure":
+        if swing_lookback is None:
+            raise ValueError(
+                "detect_premium_discount(anchor='structure') requires swing_lookback"
+            )
+        lb_used = swing_lookback
+        structural = _compute_structural_dealing_range(df, swing_lookback)
+        if structural is not None:
+            range_high, range_low, sh_ts, sl_ts = structural
+            range_anchor = "structure"
+        else:
+            # Never silent (CLAUDE.md §LOOP + design fallback clause).
+            logger.warning(
+                "P/D structure anchor fell back to window range (sparse structure): "
+                "tf=%s swing_lookback=%s df_len=%s",
+                timeframe, swing_lookback, len(df),
+            )
+            range_high, range_low = _window_range(df, lookback)
+            range_anchor = "window_fallback"
+    else:
+        range_high, range_low = _window_range(df, lookback)
 
-    range_high = float(recent["high"].max())
-    range_low = float(recent["low"].min())
-
-    # Calculate zone levels
+    # Calculate zone levels (identical for both anchors)
     range_size = range_high - range_low
     equilibrium = range_low + (range_size * 0.5)
     extreme_premium = range_low + (range_size * 0.75)
     extreme_discount = range_low + (range_size * 0.25)
+
+    # Geometry-conservation invariant (§16 rubric 3). True by construction for any
+    # finite range_high >= range_low; guards a future refactor that breaks the
+    # 0.25/0.5/0.75 interpolation. Never fires on validated OHLCV (high >= low).
+    assert range_low <= extreme_discount <= equilibrium <= extreme_premium <= range_high, (
+        f"P/D geometry violated: low={range_low} ed={extreme_discount} eq={equilibrium} "
+        f"ep={extreme_premium} high={range_high} anchor={range_anchor}"
+    )
 
     zone = PremiumDiscountZone(
         range_high=range_high,
@@ -85,6 +199,10 @@ def detect_premium_discount(
         discount_end=equilibrium,
         extreme_premium=extreme_premium,
         extreme_discount=extreme_discount,
+        range_anchor=range_anchor,
+        anchor_swing_high_ts=str(sh_ts) if sh_ts is not None else None,
+        anchor_swing_low_ts=str(sl_ts) if sl_ts is not None else None,
+        swing_lookback_used=lb_used,
     )
 
     # Classify current price if provided
