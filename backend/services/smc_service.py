@@ -741,15 +741,32 @@ class SMCDetectionService:
             logger.debug("Swing structure detection failed for %s: %s", timeframe, e)
 
     def _detect_premium_discount(self, timeframe: str, df, current_price: float, result: Dict):
-        """Detect premium/discount zones."""
+        """Detect premium/discount zones (Phase 5B: structure-anchored dealing range)."""
         try:
-            pd_zone = detect_premium_discount(df, lookback=50, current_price=current_price)
+            from backend.shared.config.smc_config import scale_lookback
+
+            # Anchor the dealing range on the SAME structure the BOS/CHoCH engine
+            # sees — TF-scaled structure_swing_lookback (identical to the lookback
+            # detect_structural_breaks uses and to the phase5-pre baseline). The
+            # detector falls back to the window range LOUDLY on sparse structure,
+            # stamping range_anchor="window_fallback" (visible per-TF in the snapshot).
+            tf_cfg = get_tf_smc_config(timeframe, self._mode)
+            swing_lb = scale_lookback(tf_cfg.get("structure_swing_lookback", 10), timeframe)
+            pd_zone = detect_premium_discount(
+                df,
+                lookback=50,
+                current_price=current_price,
+                anchor="structure",
+                swing_lookback=swing_lb,
+                timeframe=timeframe,
+            )
             result["premium_discount"] = pd_zone.to_dict()
             logger.debug(
-                "📊 %s P/D Zone: %s (%.1f%%)",
+                "📊 %s P/D Zone: %s (%.1f%%) [%s]",
                 timeframe,
                 pd_zone.current_zone,
                 pd_zone.zone_percentage or 50,
+                pd_zone.range_anchor,
             )
         except Exception as e:
             logger.debug("Premium/Discount detection failed for %s: %s", timeframe, e)

@@ -2868,6 +2868,13 @@ def calculate_confluence_score(
             else:
                 pd_score = 100.0 if (c_z == "premium" and z_p > 70) else (75.0 if c_z == "premium" else 30.0)
             pd_rat = f"{c_z.capitalize()} zone ({z_p:.0f}%)"
+            # Phase 5B (Q2): tag dealing-range provenance for post-deploy cohort
+            # detection (4F-style code signature). Direction-agnostic; score unchanged.
+            _anchor = pd_z.get("range_anchor", "window")
+            if _anchor == "structure":
+                pd_rat = f"{pd_rat} [struct]"
+            elif _anchor == "window_fallback":
+                pd_rat = f"{pd_rat} [fallback]"
         # VWAP alignment boost: only fires when VWAP data is present and price
         # is on the correct side. No default/floor — absent VWAP contributes nothing.
         _vwap_val = getattr(primary_indicators, "vwap", None) if primary_indicators else None
