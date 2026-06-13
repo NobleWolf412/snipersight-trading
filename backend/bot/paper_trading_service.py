@@ -61,6 +61,30 @@ _MAX_LIMIT_DISTANCE_PCT: Dict[str, float] = {
     "swing": 1.00,     # wider — retests can take hours
 }
 
+
+def _entry_realized_rr(entry: float, stop: float, targets: List[float]) -> float:
+    """Realized risk:reward at the ACTUAL fill — reward to the nearest target vs risk
+    to the stop, both measured from ``entry``.
+
+    Differs from the plan's ``risk_reward_ratio`` (computed off ``entry_zone.midpoint``
+    in the planner) whenever the fill deviates from plan — e.g. a snap_taker entry that
+    chased the tape and collapsed reward-to-TP1 while widening risk-to-stop. Single
+    source of truth for both the entry RR-floor gate and the journal ``realized_rr``
+    key so the two cannot drift. Symmetric: abs() handles LONG (risk=entry-stop,
+    reward=tp-entry) and SHORT (risk=stop-entry, reward=entry-tp) identically.
+
+    Returns 0.0 when geometry is unavailable (missing entry/stop/targets or zero risk).
+    See decisions/2026-06-13__fill-geometry-distortion.md.
+    """
+    if not entry or not stop or not targets:
+        return 0.0
+    risk = abs(entry - stop)
+    if risk <= 0:
+        return 0.0
+    nearest_tp = min(targets, key=lambda t: abs(t - entry))
+    reward = abs(nearest_tp - entry)
+    return reward / risk
+
 # Signal Sensitivity preset definitions.
 # gate  = minimum score for full-size entry
 # floor = minimum score for near-miss half-size entry; below floor = skipped
@@ -165,6 +189,13 @@ class PaperTradingConfig:
     # Default True = back-compat (orchestrator default is True at defaults.py:40; surfacing the
     # toggle does NOT change behavior). Operator can set False to run pure-technicals (see ledger T19).
     macro_overlay_enabled: bool = True
+    # Realized-RR floor at entry (fill-geometry guard, decisions/2026-06-13__fill-geometry-distortion.md).
+    # Reject an entry whose realized reward-to-TP1 / risk-to-stop at the ACTUAL fill (snapped
+    # limit_price) falls below this floor — catches snap_taker chasing that inverts the planned
+    # geometry (the snap recomputes size for risk but never re-checks reward). 1.0 = empirical
+    # breakpoint where the historical cohort flips net-negative (baseline n=101: <1.0 avg -1.27,
+    # >=1.0 avg +5.02). 0 disables the gate.
+    rr_floor_at_entry: float = 1.0
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -291,6 +322,13 @@ class CompletedTrade:
             "conviction_class": self.conviction_class,
             "plan_type": self.plan_type,
             "risk_reward_ratio": self.risk_reward_ratio,
+            # Realized RR at the ACTUAL fill (reward-to-TP1 / risk-to-stop). Differs from
+            # risk_reward_ratio (planned, off entry_zone.midpoint) when the fill deviated
+            # from plan — makes fill-geometry distortion auditable from the journal alone.
+            # decisions/2026-06-13__fill-geometry-distortion.md
+            "realized_rr": _entry_realized_rr(
+                self.entry_price, self.stop_loss_level, list(self.target_levels or [])
+            ),
             "stop_distance_atr": self.stop_distance_atr,
             "timeframe": self.timeframe,
             "regime": self.regime,
@@ -2358,6 +2396,65 @@ class PaperTradingService:
                     )
             else:
                 limit_price = _raw_limit
+
+            # ── Realized-RR floor (fill-geometry guard) ───────────────────────
+            # The limit snap above keeps $-risk constant (it recomputes position
+            # size for the wider stop) but does NOT protect the reward side: if the
+            # snap pushed the entry toward a nearby TP1, reward-to-target collapses
+            # while risk-to-stop widens, inverting the trade's geometry (planned RR
+            # 2.1 → realized 0.3). The signal was approved on its planned edge; once
+            # execution inverts the geometry that edge is gone. The gate measures the
+            # TRUE post-fill RR off limit_price — which IS the actual fill price in
+            # every mode (snap_taker snaps it toward market; rest_maker/no-snap rests
+            # it at near_entry) — so it is correct regardless of execution_mode. NOTE:
+            # this is deliberately measured off the fill, NOT entry_zone.midpoint (the
+            # planner's RR reference). A rest_maker fill at near_entry — the OB edge
+            # nearest target / farthest from stop — therefore reads structurally lower
+            # than the midpoint-based planned RR, so the gate CAN fire on a rest_maker
+            # entry (by design: near_entry IS its real geometry, not a false reject).
+            # Baseline (2026-06-13, n=101, off actual journal fills — same basis as
+            # this gate): 33% opened at realized RR <1.0, that cohort averaged -1.27
+            # PnL vs +5.02 for >=1.0.
+            # decisions/2026-06-13__fill-geometry-distortion.md
+            _rr_floor = float(getattr(self.config, "rr_floor_at_entry", 1.0) or 0.0)
+            if _rr_floor > 0:
+                try:
+                    _tgt_levels = [float(t.level) for t in (plan.targets or [])]
+                    _realized_rr = _entry_realized_rr(
+                        limit_price, float(plan.stop_loss.level), _tgt_levels
+                    )
+                    if _tgt_levels and _realized_rr > 0 and _realized_rr < _rr_floor:
+                        _planned_rr = float(getattr(plan, "risk_reward_ratio", 0.0) or 0.0)
+                        reason = (
+                            f"Realized RR {_realized_rr:.2f} < floor {_rr_floor:.2f} at fill "
+                            f"{limit_price:.6g} (planned RR {_planned_rr:.2f}) — entry geometry "
+                            f"collapsed: reward-to-TP1 too small vs risk-to-stop"
+                        )
+                        logger.warning(
+                            "ENTRY RR-FLOOR REJECT: %s %s | %s",
+                            plan.symbol, plan.direction, reason,
+                        )
+                        self._log_signal(
+                            plan, "filtered", reason,
+                            reason_type="rr_collapsed_at_entry",
+                            realized_rr=round(_realized_rr, 3),
+                        )
+                        self._log_activity("signal_filtered", {
+                            "symbol": plan.symbol,
+                            "direction": plan.direction,
+                            "reason": "rr_collapsed_at_entry",
+                            "realized_rr": round(_realized_rr, 3),
+                            "planned_rr": round(_planned_rr, 3),
+                            "fill_price": limit_price,
+                        })
+                        return
+                except Exception as _rr_e:
+                    # Never let the guard's own failure block execution silently — log loud,
+                    # fall through to the original behavior (matches the heuristics convention).
+                    logger.warning(
+                        "RR-floor check errored for %s (allowing entry): %s",
+                        getattr(plan, "symbol", "?"), _rr_e,
+                    )
 
             # Use LIMIT to allow the executor to simulate realistic partial fills
             order = executor.place_order(
