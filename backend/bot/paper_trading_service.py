@@ -1723,10 +1723,25 @@ class PaperTradingService:
                         risk_reward=0.0
                     )
                     
+                    # Sub-gate scored signals (low_confluence) carry the scorer's
+                    # full per-factor breakdown as `all_factors`; thread it so the
+                    # 40–69 band lands in signals.jsonl WITH factors. gate_cleared
+                    # is False for every rejection-funnel row (no plan was built).
+                    _all_factors = item.get('all_factors')
+                    if reason_type == 'low_confluence' and not _all_factors:
+                        # §THE LOOP loud-failure: a SCORED signal reached the funnel
+                        # without its breakdown — surface it, never silently drop.
+                        logger.warning(
+                            "SIGNAL_LOG: low_confluence reject %s (%.1f) missing "
+                            "all_factors — breakdown absent from rejection funnel",
+                            item.get('symbol'), item.get('score', 0.0) or 0.0,
+                        )
                     self._log_signal(
                         mock_plan,
                         result="filtered",
                         reason=item.get('reason', f"Scanner Filter: {reason_type}"),
+                        gate_cleared=False,  # rejection-funnel row → never cleared the gate
+                        sub_gate_factors=_all_factors,  # scorer breakdown for the 40–69 band
                         gate_name=reason_type,  # machine-readable gate label for shutdown report analysis
                         # Gate category — surfaces as badge in Signal Intelligence panel
                         reason_type=reason_type,
@@ -1847,6 +1862,32 @@ class PaperTradingService:
                     }
                     for f in _factors
                 ]
+        # Gate-cleared flag + sub-gate factor fallback (OBSERVABILITY ONLY — does
+        # NOT touch scoring/gating). A real TradePlan exists only AFTER the
+        # confluence gate passes, so a plan-attached breakdown == gate cleared.
+        # Sub-gate rejects arrive via the rejection-funnel caller as a mock_plan
+        # (no plan, no breakdown); that caller threads the scorer-computed
+        # breakdown in as `sub_gate_factors` so the 40–69 band is logged WITH
+        # factors and calibration (phase4f / pd_direction_efficacy, which filter
+        # on `factors` presence) gets 3–5× the sample instead of gate-clearers only.
+        entry["gate_cleared"] = bool(extra.pop("gate_cleared", True))
+        _sub_factors = extra.pop("sub_gate_factors", None)
+        if _cb is None and _sub_factors and "factors" not in entry:
+            # Normalize to the SAME shape gate-clearers emit above (name/score/
+            # weight/weighted/rationale) so downstream parsers are key-identical.
+            # Orchestrator's all_factors uses `weighted_contribution`; map it.
+            entry["factors"] = [
+                {
+                    "name": _f.get("name"),
+                    "score": round(float(_f.get("score", 0) or 0), 1),
+                    "weight": round(float(_f.get("weight", 0) or 0), 4),
+                    "weighted": round(
+                        float(_f.get("weighted", _f.get("weighted_contribution", 0)) or 0), 2
+                    ),
+                    "rationale": _f.get("rationale", ""),
+                }
+                for _f in _sub_factors
+            ]
         # Indicator snapshot features attached by orchestrator
         _ml_inds = (_meta.get("ml_indicators") or {}) if isinstance(_meta, dict) else {}
         if _ml_inds:
