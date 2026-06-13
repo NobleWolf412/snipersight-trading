@@ -1129,7 +1129,23 @@ def evaluate_htf_structural_proximity(
     if htf_ind and hasattr(htf_ind, "dataframe"):
         try:
             df = htf_ind.dataframe
-            pd_zone = detect_premium_discount(df, lookback=50, current_price=entry_price)
+            # Phase 5C: structure-anchored dealing range (Q5 sign-off, parity with the
+            # 5B snapshot producer). structure_swing_lookback is mode-independent
+            # (TIMEFRAME_SMC_CONFIGS only; MODE_SMC_OVERRIDES never overrides it), so the
+            # htf base lookback equals what smc_service used for this TF. Detector falls
+            # back to the window range LOUDLY on sparse structure (range_anchor stamped).
+            from backend.shared.config.smc_config import get_tf_smc_config, scale_lookback
+            _pd_swing_lb = scale_lookback(
+                get_tf_smc_config(htf).get("structure_swing_lookback", 10), htf
+            )
+            pd_zone = detect_premium_discount(
+                df,
+                lookback=50,
+                current_price=entry_price,
+                anchor="structure",
+                swing_lookback=_pd_swing_lb,
+                timeframe=htf,
+            )
 
             eq_distance = abs(entry_price - pd_zone.equilibrium)
             eq_distance_atr = eq_distance / atr
