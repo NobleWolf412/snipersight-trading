@@ -893,6 +893,19 @@ def generate_trade_plan(
             # check was permanently dead — only the looser pct gate survived (audit #13).
             "atr": atr,
             "atr_regime": {"label": regime_label},
+            # Observability-only (2026-06-13): expose the SMC static liquidity-pool dict
+            # (SMCSnapshot.key_levels = KeyLevels.to_dict(), shape
+            # {pwl/pwh/pdh/pdl: {"price","swept"} | None}) so the bot/journal layer can
+            # persist the entry-time pool context for post-hoc stop-in-pool analysis
+            # (stop_in_pool_audit.py). The orchestrator's scan return only carries
+            # (plans, rejection_summary), so key_levels reaches no other consumer
+            # otherwise. `_kl` is already fetched above for the _buffer_stop_from_liquidity
+            # call; we only ALSO expose it here — no scoring/stop/execution change. NOTE:
+            # EQH/EQL pools are NOT in this dict (they come from the separate
+            # _find_eqh_eql_zones multi_tf scan inside the buffer); the buffer-fire
+            # rationale string still records those.
+            # decisions/2026-06-13__journal-entry-pool-instrumentation.md
+            "entry_key_levels": _kl if isinstance(_kl, dict) else None,
             # TP1 reachability (2026-05-31 fix) — observability for the clamp/decline.
             # tp1_clamped: planner pulled TP1 to the reachable ceiling at a lower R:R.
             "tp1_clamped": _tp1_clamped,

@@ -85,6 +85,85 @@ def _entry_realized_rr(entry: float, stop: float, targets: List[float]) -> float
     reward = abs(nearest_tp - entry)
     return reward / risk
 
+
+def _pool_price_swept(node: Any) -> "tuple[Optional[float], Optional[bool]]":
+    """Resolve (price, swept) from a single KeyLevels.to_dict() pool node.
+
+    Mirrors risk_engine._pool_price's robustness (dict {"price","swept"} | flat float |
+    KeyLevel-like .price) but ALSO surfaces the ``swept`` flag so the journal can record
+    whether the nearest pool was already swept liquidity at entry (the adversarial review
+    flagged that discarding ``swept`` would let the audit attribute a stop-out to a pool
+    that no longer held liquidity). Returns (None, None) on anything malformed — never raises.
+    """
+    if node is None:
+        return None, None
+    if isinstance(node, dict):
+        price = node.get("price")
+        swept = node.get("swept")
+    else:
+        price = getattr(node, "price", node)
+        swept = getattr(node, "swept", None)
+    if isinstance(price, (int, float)) and price > 0:
+        return float(price), (bool(swept) if swept is not None else None)
+    return None, None
+
+
+def _nearest_same_side_pool(
+    key_levels: Any, entry_ref: float, direction: str, atr: float
+) -> "tuple[Optional[str], Optional[float], Optional[float], Optional[bool]]":
+    """Find the nearest STATIC liquidity pool on the side the STOP sits, in ATR units.
+
+    Direction-aware and MIRROR-SYMMETRIC (standing fix — bull/bear symmetry):
+      - LONG  -> stop sits BELOW entry -> consider pools below entry_ref: pwl, pdl
+      - SHORT -> stop sits ABOVE entry -> consider pools above entry_ref: pwh, pdh
+    This matches risk_engine._buffer_stop_from_liquidity's ``_attrs`` and side guards
+    exactly (pwl/pdl for bullish, pwh/pdh for bearish), so the journal's distance is on
+    the same basis the buffer measures. Pool universe is the SMCSnapshot.key_levels dict
+    (pwl/pwh/pdh/pdl only) — EQH/EQL pools are NOT here (separate multi_tf scan), so this
+    distance is "nearest static prior-week/day pool", not "nearest of ALL pools".
+
+    Returns (label, price, dist_atr, swept) for the nearest qualifying pool, or
+    (None, None, None, None) if key_levels is missing/malformed, atr<=0, or no pool sits
+    on the stop side. NEVER raises (loud WARNING on malformed input is the caller's job).
+    Distance is computed regardless of the ``swept`` status (swept is reported, not filtered).
+    """
+    if not key_levels or not isinstance(key_levels, dict):
+        return None, None, None, None
+    if not atr or atr <= 0 or not entry_ref:
+        return None, None, None, None
+
+    _dir = str(direction).upper()
+    if _dir not in ("LONG", "SHORT"):
+        # Loud-failure guard: the helper accepts only the two canonical directions the
+        # callers emit. An unexpected token must NOT silently default to one side
+        # (would break mirror symmetry). Return all-None rather than guess.
+        logger.warning(
+            "_nearest_same_side_pool: unexpected direction %r — returning null pool context",
+            direction,
+        )
+        return None, None, None, None
+    is_long = _dir == "LONG"
+    attrs = ("pwl", "pdl") if is_long else ("pwh", "pdh")
+
+    best_label: Optional[str] = None
+    best_price: Optional[float] = None
+    best_dist: Optional[float] = None
+    best_swept: Optional[bool] = None
+    for attr in attrs:
+        price, swept = _pool_price_swept(key_levels.get(attr))
+        if price is None:
+            continue
+        # Side guard: LONG keeps pools below entry; SHORT keeps pools above entry.
+        on_stop_side = (price < entry_ref) if is_long else (price > entry_ref)
+        if not on_stop_side:
+            continue
+        dist_atr = abs(entry_ref - price) / atr
+        if best_dist is None or dist_atr < best_dist:
+            best_label, best_price, best_dist, best_swept = attr.upper(), price, dist_atr, swept
+
+    return best_label, best_price, best_dist, best_swept
+
+
 # Signal Sensitivity preset definitions.
 # gate  = minimum score for full-size entry
 # floor = minimum score for near-miss half-size entry; below floor = skipped
@@ -300,6 +379,23 @@ class CompletedTrade:
     tp1_realized_rr: float = 0.0
     execution_mode: str = "snap_taker"  # maker-execution experiment arm (T14): snap_taker | rest_maker
 
+    # Entry-time SMC liquidity-pool context (2026-06-13, observability-only) — closes the
+    # stop_in_pool_audit data wall: the full static pool set at entry was persisted nowhere.
+    #   entry_key_levels — the SMCSnapshot.key_levels dict at entry
+    #     {pwl/pwh/pdh/pdl: {"price","swept"} | None} (pwl/pwh/pdh/pdl ONLY; EQH/EQL are
+    #     from a separate risk_engine multi_tf scan and are NOT in this dict — the
+    #     buffer-fire rationale string still records those).
+    #   nearest_same_side_pool_* — the nearest static pool on the STOP side (LONG→below,
+    #     SHORT→above), the field that lets the audit ask "was the stop near/inside a pool".
+    #     dist measured in ATR on the same basis as risk_engine's buffer. swept flag
+    #     reported (NOT filtered) so a spent-liquidity pool is distinguishable post-hoc.
+    # decisions/2026-06-13__journal-entry-pool-instrumentation.md
+    entry_key_levels: Optional[Dict[str, Any]] = None
+    nearest_same_side_pool_dist_atr: Optional[float] = None
+    nearest_same_side_pool_label: Optional[str] = None
+    nearest_same_side_pool_price: Optional[float] = None
+    nearest_same_side_pool_swept: Optional[bool] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API response."""
         return {
@@ -349,6 +445,13 @@ class CompletedTrade:
             "tp1_clamped": self.tp1_clamped,
             "tp1_realized_rr": self.tp1_realized_rr,
             "execution_mode": self.execution_mode,
+            # Entry-time SMC liquidity-pool context (2026-06-13) — see field docstring above
+            # and decisions/2026-06-13__journal-entry-pool-instrumentation.md.
+            "entry_key_levels": self.entry_key_levels,
+            "nearest_same_side_pool_dist_atr": self.nearest_same_side_pool_dist_atr,
+            "nearest_same_side_pool_label": self.nearest_same_side_pool_label,
+            "nearest_same_side_pool_price": self.nearest_same_side_pool_price,
+            "nearest_same_side_pool_swept": self.nearest_same_side_pool_swept,
         }
 
 
@@ -2516,12 +2619,57 @@ class PaperTradingService:
             if fill and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
                 # Open position in manager using the ACTUALLY filled quantity
                 position_id = position_manager.open_position(
-                    trade_plan=plan, 
-                    entry_price=fill.price, 
+                    trade_plan=plan,
+                    entry_price=fill.price,
                     quantity=fill.quantity,
                     entry_order_id=order.order_id
                 )
 
+                # ── Entry-time liquidity-pool snapshot (2026-06-13, observability-only) ──
+                # Capture the SMC static pool context at entry and stash it on the live
+                # PositionState so _sync_closed_positions can persist it into the journal
+                # (closes the stop_in_pool_audit data wall). Read-only: NO stop/scoring/
+                # execution change. Stashed via setattr because PositionState lives in the
+                # out-of-bounds executor/position_manager.py — the close path reads it back
+                # off the same long-lived object. NOTE (asdict caveat): _save_state's
+                # asdict(pos) crash-recovery checkpoint enumerates only DECLARED dataclass
+                # fields, so these setattr attrs are absent from state.json — acceptable for
+                # a close-path observability field (recomputable at open), documented in the
+                # decisions entry. Loud WARNING (never silent) if key_levels is missing.
+                try:
+                    _pos = position_manager.positions.get(position_id)
+                    _meta_kl = (getattr(plan, "metadata", None) or {})
+                    _entry_kl = _meta_kl.get("entry_key_levels")
+                    _entry_atr = float(_meta_kl.get("atr", 0.0) or 0.0)
+                    if _pos is not None:
+                        if isinstance(_entry_kl, dict):
+                            _np_label, _np_price, _np_dist, _np_swept = _nearest_same_side_pool(
+                                _entry_kl, fill.price, plan.direction, _entry_atr
+                            )
+                            setattr(_pos, "entry_key_levels", _entry_kl)
+                            setattr(_pos, "nearest_same_side_pool_dist_atr", _np_dist)
+                            setattr(_pos, "nearest_same_side_pool_label", _np_label)
+                            setattr(_pos, "nearest_same_side_pool_price", _np_price)
+                            setattr(_pos, "nearest_same_side_pool_swept", _np_swept)
+                        else:
+                            # Absent/malformed key_levels — persist null, log loud (never skip).
+                            logger.warning(
+                                "ENTRY-POOL SNAPSHOT MISSING: %s %s pos=%s | plan.metadata "
+                                "carried no usable entry_key_levels dict (got %s) — journal pool "
+                                "context will be null for this trade",
+                                plan.symbol, plan.direction, position_id, type(_entry_kl).__name__,
+                            )
+                            setattr(_pos, "entry_key_levels", None)
+                            setattr(_pos, "nearest_same_side_pool_dist_atr", None)
+                            setattr(_pos, "nearest_same_side_pool_label", None)
+                            setattr(_pos, "nearest_same_side_pool_price", None)
+                            setattr(_pos, "nearest_same_side_pool_swept", None)
+                except Exception as _pool_e:
+                    # Never let observability capture block or crash the trade.
+                    logger.warning(
+                        "Entry-pool snapshot capture failed for %s (trade proceeds): %s",
+                        getattr(plan, "symbol", "?"), _pool_e,
+                    )
 
                 self.stats.signals_taken += 1
                 
@@ -3034,6 +3182,14 @@ class PaperTradingService:
                     tp1_clamped=bool(getattr(pos, "tp1_clamped", False)),
                     tp1_realized_rr=float(getattr(pos, "tp1_realized_rr", 0.0) or 0.0),
                     execution_mode=getattr(self.config, "execution_mode", "snap_taker"),
+                    # Entry-time liquidity-pool context, stashed on the position at open
+                    # (2026-06-13 observability). getattr defaults keep older/recovered
+                    # positions (whose state.json lacked these setattr attrs) null-safe.
+                    entry_key_levels=getattr(pos, "entry_key_levels", None),
+                    nearest_same_side_pool_dist_atr=getattr(pos, "nearest_same_side_pool_dist_atr", None),
+                    nearest_same_side_pool_label=getattr(pos, "nearest_same_side_pool_label", None),
+                    nearest_same_side_pool_price=getattr(pos, "nearest_same_side_pool_price", None),
+                    nearest_same_side_pool_swept=getattr(pos, "nearest_same_side_pool_swept", None),
                 )
 
                 self.completed_trades.append(trade)
