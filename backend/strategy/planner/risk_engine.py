@@ -1896,6 +1896,37 @@ def _find_eqh_eql_zones(
     return unique[:5]
 
 
+def _pool_price(key_levels: Any, attr: str) -> Optional[float]:
+    """
+    Resolve a static liquidity-pool price (pwl/pwh/pdl/pdh) from `key_levels`,
+    robust to BOTH representations the codebase uses:
+      - dict form (production): SMCSnapshot.key_levels = KeyLevels.to_dict(),
+        shape {"pwl": {"price": float, "swept": bool} | None, ...}. Also tolerates
+        a flat {"pwl": float}.
+      - object form: a KeyLevels dataclass whose `.pwl` is a KeyLevel (with `.price`)
+        or a raw float.
+    Returns None on anything missing/malformed (never raises) so the buffer's static
+    branch cannot silently die on a representation change again (see decisions
+    2026-06-13__stop-pool-phase2-deadbranch-fix-design.md).
+    """
+    if key_levels is None:
+        return None
+    if isinstance(key_levels, dict):
+        node = key_levels.get(attr)
+    else:
+        node = getattr(key_levels, attr, None)
+    if node is None:
+        return None
+    # node may be a {"price":...} dict, a KeyLevel object (.price), or a raw number
+    if isinstance(node, dict):
+        price = node.get("price")
+    else:
+        price = getattr(node, "price", node)
+    if isinstance(price, (int, float)) and price > 0:
+        return float(price)
+    return None
+
+
 def _buffer_stop_from_liquidity(
     stop_level: float,
     entry_ref: float,
@@ -1936,18 +1967,29 @@ def _buffer_stop_from_liquidity(
             _eqh_err,
         )
 
-    # Static key-level pools from SMC snapshot
+    # Static key-level pools from SMC snapshot.
+    # NOTE: key_levels is production-shaped as a dict (SMCSnapshot.key_levels =
+    # KeyLevels.to_dict()); _pool_price resolves both the dict and dataclass forms so
+    # this branch is no longer dead (was: getattr on a dict -> None for every trade,
+    # see decisions 2026-06-13__stop-in-liquidity-pool-baseline.md).
     if key_levels is not None:
-        if is_bullish:
-            for attr in ("pwl", "pdl"):
-                lvl = getattr(key_levels, attr, None)
-                if lvl and isinstance(lvl, (int, float)) and 0 < lvl < entry_ref:
-                    pool_levels.append(float(lvl))
-        else:
-            for attr in ("pwh", "pdh"):
-                lvl = getattr(key_levels, attr, None)
-                if lvl and isinstance(lvl, (int, float)) and lvl > entry_ref:
-                    pool_levels.append(float(lvl))
+        _attrs = ("pwl", "pdl") if is_bullish else ("pwh", "pdh")
+        _found_any = False
+        for attr in _attrs:
+            lvl = _pool_price(key_levels, attr)
+            if lvl is None:
+                continue
+            _found_any = True
+            # LONG: pools below entry; SHORT: pools above entry.
+            if (is_bullish and lvl < entry_ref) or (not is_bullish and lvl > entry_ref):
+                pool_levels.append(lvl)
+        if not _found_any:
+            logging.getLogger(__name__).warning(
+                "_buffer_stop_from_liquidity: key_levels present but no parseable "
+                "%s pool (type=%s) — static branch contributed nothing",
+                "/".join(_attrs),
+                type(key_levels).__name__,
+            )
 
     if not pool_levels:
         return stop_level, ""
