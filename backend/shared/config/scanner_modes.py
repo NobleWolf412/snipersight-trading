@@ -366,10 +366,13 @@ MODES: Dict[str, ScannerMode] = {
         # NEW: Nested OB entry hierarchy
         zone_timeframes=("4h", "1h", "15m"),  # Entry zone OBs (balanced)
         entry_trigger_timeframes=("5m",),  # Refined entry OBs
-        # Cascade: try swing first (highest quality), then intraday, then scalp.
-        # The orchestrator attempts plan generation at each scale and picks the best-scoring plan
-        # (confluence + type-preference bonus so swing is preferred when quality is comparable).
-        cascade_trade_types=("swing", "intraday", "scalp"),
+        # Cascade: intraday then scalp. SWING CUT 2026-06-14 (decisions/2026-06-14__cut-swing-
+        # tier-from-stealth-cascade.md): post-clamp swing was -8.32/trade net (-383 total, n=46),
+        # shorting the BOTTOM of the macro range 100% of the time (0/44 at the correct extreme) —
+        # a structural loser that cancelled the profitable scalp pocket. intraday + scalp are the
+        # two net-positive tiers. A confirmation-gated reversal-at-HTF-S/R swing is a separate,
+        # backtest-gated future build, NOT re-enabled here.
+        cascade_trade_types=("intraday", "scalp"),
         # Quality-aware direction override enabled — calibrated on session 2f35590b
         # (DIRECTION-SHORT-CIRCUIT diagnosed on INJ/SOL; 3.89:1 universe LONG skew).
         enable_quality_override=True,
