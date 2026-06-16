@@ -12,6 +12,14 @@ as-of-investigation and may drift — confirm in code (Serena) before editing.
 **Status:** DESIGN ONLY. No code changed. This entry is the authoritative capture so the work
 survives context reset. Build order deferred to operator (see §9).
 
+> ⚠️ **PARTIALLY SUPERSEDED — see §11 AUDIT (appended 2026-06-16).** A four-agent audit found a
+> CONFIRMED measurement bug (regime is labeled at trade CLOSE, not entry) that poisons every
+> per-regime cell, plus engine correctness bugs (P/D inversion, FVG under-grading). The §2 edge
+> matrix is bug-contaminated and must be RE-MEASURED after the §11 bug-fix backlog clears. Verdicts
+> in §0.2 / §0.4 / §0.5 are downgraded. Only the bug-independent claims (blended no-edge after fees;
+> scorer demote-able at ~4 sites; no liquidity filter; regime-switching lag tax) still stand as
+> written. Read §11 before acting on §0–§9.
+
 ---
 
 ## 0. TL;DR / VERDICTS
@@ -274,3 +282,131 @@ contract rebaseline. Live STEALTH decision changes need explicit operator approv
 `2026-06-14__cut-swing-tier-from-stealth-cascade.md`,
 `2026-05-31__cascade-scalp-monoculture-regime-compressed-saturation.md`,
 `2026-06-13__pd-factor-inverted-in-trends-finding.md`.
+
+---
+
+## 11. AUDIT (2026-06-16) — four-agent review: the lens was dirty
+
+Operator challenge: "incomplete logs/testing are not law; coding bugs may have caused false
+readings; nail the fundamentals bug-free, THEN test." Four read-only agents audited this doc:
+(1) trader-lens strategy, (2) measurement-integrity bug hunt, (3) engine-fundamentals correctness,
+(4) document claim-by-claim validity. The challenge was correct. Findings below SUPERSEDE the
+overclaimed parts of §0–§9.
+
+### 11.1 SMOKING GUN — regime is labeled at trade CLOSE, not entry (CONFIRMED)
+The journal `regime` field — the bucketing key for the entire §2 matrix — is written from fields
+that are OVERWRITTEN every scan with the live regime:
+- entry regime captured correctly at `position_manager.py:423-424`, then
+- clobbered each cycle by `paper_trading_service.py:2770-2771` (`_update_position_regimes`), then
+- persisted at close as the trade's `regime` (`:3163`) and `regime_trend_at_entry` (`:3173` — the
+  "at_entry" name is a lie; it reads the clobbered field).
+
+So every cohort is bucketed by the regime present when the position CLOSED, not at entry/held-through.
+The `down_normal` vs `down_compressed` split (the exact `normal`↔`compressed` band separating the
++6.42 winner from the −1.06 loser) is precisely what this bug scrambles; the two scalp cells leak
+into each other. **This invalidates the regime axis of §2.**
+
+### 11.2 Per-number trust verdicts (measurement-integrity audit)
+| Number | Verdict | Defect |
+|---|---|---|
+| +6.42 down_normal scalp | **LIKELY-ARTIFACT** | regime mis-bucketing (§11.1) + uncorrected multiple-comparisons + n=58 |
+| −1.06 down_compressed scalp | **SUSPECT** | other side of the same scrambled band; cells leak |
+| −8.32 down_normal swing | **SUSPECT magnitude / safe direction** | 48h holds → worst mis-bucketing; funding-omission keeps "swing loses" robust |
+| "1 of 26 factors predict" | **SUSPECT** | `factor_contribution` can't separate a DEAD factor from a wired-BACKWARDS one (P/D proven inverted) |
+| "no edge after fees, BLENDED" | **TRUSTWORTHY** | independent of the regime label; P(edge>0)=1% full history; stands regardless of all other bugs |
+
+**Clean (trustworthy):** fee/PnL plumbing (journal pnl is gross, fee modeled once, slippage in
+prices, no double-count); dedup (only `result=="executed"` matched; journal deduped); no look-ahead.
+**Correction to §3:** V1 has NO `net=max(net,-0.999)` liquidation clamp — that was V2's backtester
+(`EDGE_AUDIT.md` C2). V1's "clamp" is only the 2026-05-31 ship-date era boundary (a survivorship/era
+split, real confound but not a per-trade distortion).
+
+### 11.3 Engine correctness bugs (independent of the data — fundamentals not yet bug-free)
+- **P/D inverted in trends (CONFIRMED, known):** `scorer.py:2870-2905` — mean-reversion logic applied
+  in trends penalizes valid continuation; no arbitration with the BOS/structure factor.
+- **FVG under-grading (CONFIRMED, new):** `scorer.py:1023-1043` — grade computed with entry-TF ATR
+  before the FVG's own-TF ATR lookup; HTF FVGs graded too low → the FVG factor LOOKS like noise.
+- **Regime ATR% TF-calibration (LIKELY):** `regime_detector.py:751-758` — daily-calibrated bands may
+  apply to a weekly TF if that's the highest present → regime mislabel.
+- **Cycle-bypass LONG-only (CONFIRMED, intentional):** longs get two counter-trend pathways
+  (WCL/DCL + CHoCH), shorts one (CHoCH). Documented asymmetry, not silent, but a real directional bias.
+- Lower-confidence flags (RSI gradient symmetry, MACD profile-sync, conflict-density staleness):
+  largely self-resolved as "appears OK / needs a look." This bug list itself needs code confirmation
+  before any fix lands.
+
+### 11.4 Claims DOWNGRADED (document-validity audit)
+- §0.2 / §2 "scorer is noise; only 1/26 predicts" → **WEAKEN→RETRACT.** Cannot distinguish "noise"
+  from "buggy" while P/D is inverted and FVG is under-graded, on n≈190 single-regime data. The
+  demote-scoring ACTION may still be right; the JUSTIFICATION is premature.
+- §0.4 / §8 "validated edge in 1 cell; cells tagged PROVEN/NEGATIVE" → **WEAKEN.** §3 of this same
+  doc calls that cell "likely a multiple-comparisons artifact." Re-tag every cell **MUST-EARN** until
+  re-measured. No cell is PROVEN.
+- §0.5 "sideways=scalp REFUTED by our data" → **RETRACT.** `down_compressed` is a trend×vol composite
+  on a ~98%-bug-driven label — NOT sideways; the doc itself says zero true-sideways data exists.
+  Category error. "Sideways → mean-reversion" stays a *literature-led hypothesis*, not a data verdict.
+- §3 / §9B "swing is the proven loser; cascade prefers the loser" → **WEAKEN.** Right ACTION (don't
+  let score pick type; edge-independent), bug-confounded REASON (−8.32 produced under live P/D bug).
+- §5 "regime bug already fixed" → **WEAKEN.** Fix-in-code ≠ clean-data: the journal §2 partitions
+  was logged under the buggy labeler; history must be re-labeled or discarded.
+- Internal-consistency note: "n=349" is total journal rows; actual tests ran on n=142/199/190/123,
+  per-cell n=10–73. Report the n entering each statistic.
+
+### 11.5 Strategy-fundamentals revisions (trader-lens audit — separate from bugs)
+Even bug-free, the strategy REPRESENTATION is wrong:
+1. **SMC edge is a SEQUENCE, not a scored bag.** sweep → CHoCH/BOS shift → return to OB/FVG origin at
+   discount → retest+displacement. A confluence score (even demoted to binary gates in arbitrary
+   order) destroys the temporal/causal ordering that IS the edge. Build a **per-setup state machine**,
+   not a confluence counter. There is no first-class "setup" object today.
+2. **"With-trend only, flat in chop" (§4) is WRONG as a hard rule** — it bans the two highest-EV SMC
+   setups (sweep-reversal, HTF-extreme reclaim). `liquidity_sweeps.py` is literally a reversal engine.
+   Replace with: with-trend continuation in the pullback zone, OR confirmed-reversal at an HTF
+   liquidity extreme, FLAT in the middle. The "41/44 shorts in the bottom 20%" is the bill for the
+   missing **position-in-range / exhaustion** sub-state (not primarily detector lag).
+3. **Confirmation must be per-SETUP, not per-mode.** Same volume/engulfing bar = continuation in a
+   trend, breakout-risk at a range boundary. Regime-blind confirmation green-lights a fade on the bar
+   the range is breaking.
+4. **Trade management is the biggest silent gap.** Stops = setup-geometry (beyond the sweep wick / OB
+   invalidation), NOT ATR multiples. Targets = opposing liquidity pool (`detect_equal_highs_lows`),
+   NOT fixed R. Add partials. Restructure around the fee floor (maker + liquidity-pool targets so the
+   average winner clears taker).
+5. **Reconcile "flat at transitions" (§6) with reversals:** flat for *continuation*, ARMED for
+   *confirmed sweep-reversal* — reversals happen AT transitions; don't cede turning points twice.
+6. Prefer BOS-linked OBs (`detect_obs_from_bos`) as triggers; treat generic wick-OBs as context.
+
+### 11.6 BUG-FIX-FIRST BACKLOG (hard gate — nothing about edge is testable until these clear)
+Ordered. Each fix lands with a diagnostic that proves it (CLAUDE.md §13). Touches scoring/regime/
+execution → symmetry-guard + audit + blast-radius before any commit; touches paper path → operator
+review.
+1. **[BROKEN] Entry-regime snapshot.** Stop clobbering the entry regime; write immutable entry fields
+   at `open_position`, journal reads those (`paper_trading_service.py:2770-2771`, `:3163`, `:3173`).
+   THE fix that decides whether the regime router has any trustworthy data.
+2. **[CORRECTNESS] P/D trend/range conditioning + BOS arbitration** (`scorer.py:2870-2905`).
+3. **[CORRECTNESS] FVG grade after TF-aware ATR** (`scorer.py:1023-1043`).
+4. **[FRICTION] Restore regime telemetry** — `regime_label` into `create_scan_completed_event`
+   (`orchestrator.py` ~716) — needed to VERIFY fix #1 live.
+5. **[CORRECTNESS] Re-rank factors after sign-fixes** (signed/conditional efficacy mode in
+   `factor_contribution.py`), then re-judge "which factors predict."
+6. **[VERIFY] Confirm regime ATR% bands match the TF actually used** (`regime_detector.py:751-758`).
+7. **THEN, not before:** re-label/re-bucket the journal, re-run `edge_by_regime` + `edge_significance`
+   with per-cell bootstrap CIs + a multiple-comparisons (Deflated-Sharpe/FDR) correction. Only now are
+   any regime-conditional edge claims believable.
+
+### 11.7 Revised "what we KNOW vs ASSUMED"
+**KNOW (bug-independent, survives the audit):** the strategy has **no edge after fees, blended**
+(P(edge>0)=1% full history — TRUSTWORTHY). The confluence scorer is structurally **demote-able** at
+~4 code sites; the planner reads geometry not score. There is **no liquidity filter** (real capital
+gap). The regime-switching **lag tax / Deflated-Sharpe discipline** holds (external peer-reviewed).
+The entire record is **one bearish tape** → no cross-regime claim is possible. SMC edge is a
+**sequence**, and the current representation (and "with-trend only" rule) is wrong even bug-free.
+
+**ASSUMED (now retracted/suspended pending §11.6):** that any specific regime cell is proven
+(+6.42 LIKELY-ARTIFACT; −1.06/−8.32 SUSPECT — bucketed by the wrong clock). That the factors are
+"noise" (≥2 are provably mis-scored). That "sideways=scalp" is refuted by data (no sideways data
+exists; down_compressed isn't sideways).
+
+**One line:** we have ONE bug-contaminated bearish-tape sample — enough to justify reversible,
+edge-independent moves (liquidity floor; demote score from gate to context; kill the score-driven
+type bonus; scaffold the router off; fix the bugs in §11.6) — but NOT enough to assert any regime
+cell as proven or refuted until the entry-regime + P/D + FVG bugs are fixed and every cohort is
+re-measured net-of-fees with per-cell CIs and a multiple-comparisons correction. **Fundamentals
+bug-free FIRST, then test — the operator was right.**
