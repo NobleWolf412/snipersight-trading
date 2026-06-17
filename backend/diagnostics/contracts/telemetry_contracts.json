@@ -65,6 +65,8 @@
     ],
     "create_scan_completed_event": [
       "duration_seconds",
+      "regime_label",
+      "regime_score",
       "run_id",
       "signals_generated",
       "signals_rejected",

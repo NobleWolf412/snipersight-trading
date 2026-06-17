@@ -720,6 +720,10 @@ class Orchestrator:
                 signals_generated=len(signals),
                 signals_rejected=rejected_count,
                 duration_seconds=duration,
+                # Restore the global regime to the scan stream (None since 2026-06-13).
+                # decisions/2026-06-16 §11.6 bug #4. None-safe: detection can fail.
+                regime_label=self.current_regime.composite if self.current_regime else None,
+                regime_score=self.current_regime.score if self.current_regime else None,
             )
         )
 

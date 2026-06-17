@@ -105,18 +105,33 @@ def create_scan_completed_event(
     signals_generated: int,
     signals_rejected: int,
     duration_seconds: float,
+    regime_label: Optional[str] = None,
+    regime_score: Optional[float] = None,
 ) -> TelemetryEvent:
-    """Create scan completed event."""
+    """Create scan completed event.
+
+    regime_label / regime_score: the GLOBAL market-regime composite + score at scan
+    time (e.g. "down_normal", 71.4). Restores the scan-level regime to the telemetry
+    stream — it logged None since 2026-06-13 because the orchestrator computed the regime
+    but never passed it here, leaving no independent stream to validate the journal's
+    entry-regime stamp (bug #1) against. Both optional; absence is meaningful (regime
+    detection failed). decisions/2026-06-16 §11.6 bug #4.
+    """
+    data: Dict[str, Any] = {
+        "symbols_scanned": symbols_scanned,
+        "signals_generated": signals_generated,
+        "signals_rejected": signals_rejected,
+        "duration_seconds": round(duration_seconds, 2),
+    }
+    if regime_label is not None:
+        data["regime_label"] = regime_label
+    if regime_score is not None:
+        data["regime_score"] = round(regime_score, 1)
     return TelemetryEvent(
         event_type=EventType.SCAN_COMPLETED,
         timestamp=datetime.now(timezone.utc),
         run_id=run_id,
-        data={
-            "symbols_scanned": symbols_scanned,
-            "signals_generated": signals_generated,
-            "signals_rejected": signals_rejected,
-            "duration_seconds": round(duration_seconds, 2),
-        },
+        data=data,
     )
 
 
