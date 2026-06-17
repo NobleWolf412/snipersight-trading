@@ -1907,7 +1907,8 @@ class LiveTradingService:
                 btc_velocity_1h_at_entry=getattr(pos, "btc_velocity_1h_at_entry", 0.0),
                 alt_velocity_1h_at_entry=getattr(pos, "alt_velocity_1h_at_entry", 0.0),
                 macro_state_at_entry=getattr(pos, "macro_state_at_entry", "unknown"),
-                regime_trend_at_entry=getattr(pos, "regime_trend", "sideways"),
+                regime_trend_at_entry=getattr(pos, "entry_regime_trend", "sideways"),
+                regime_labeled_at=getattr(pos, "regime_labeled_at", "entry"),
                 htf_aligned_at_entry=getattr(pos, "htf_aligned_at_entry", False),
                 setup_qualifier=getattr(pos, "setup_qualifier", "Unknown"),
             )

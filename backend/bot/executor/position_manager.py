@@ -112,6 +112,15 @@ class PositionState:
     regime_volatility: str = "normal"  # "compressed", "normal", "elevated", "chaotic"
     regime_trend: str = "sideways"  # "strong_up", "up", "sideways", "down", "strong_down"
 
+    # Immutable ENTRY-time regime snapshot (decisions/2026-06-16 §11.6 bug #1).
+    # regime_volatility / regime_trend ABOVE are intentionally overwritten every scan by
+    # PaperTradingService._update_position_regimes so adaptive stagnation sees CURRENT
+    # conditions. These two preserve the regime AT ENTRY so the journal — and the
+    # edge_by_regime cohort tables it feeds — bucket trades by where they were ENTERED,
+    # not where they happened to close. Set once at open_position; never mutate after.
+    entry_regime_volatility: str = "normal"
+    entry_regime_trend: str = "sideways"
+
     # ML feature snapshot — captured at open time from TradePlan, used for model training
     confidence_score: float = 0.0
     conviction_class: str = "B"       # "A", "B", "C"
@@ -422,6 +431,10 @@ class PositionManager:
             trade_type=trade_type,
             regime_volatility=regime_volatility,
             regime_trend=regime_trend,
+            # Immutable entry snapshot for the journal/edge tools (the two above are
+            # clobbered every scan for stagnation). decisions/2026-06-16 §11.6 bug #1.
+            entry_regime_volatility=regime_volatility,
+            entry_regime_trend=regime_trend,
             confidence_score=float(getattr(trade_plan, "confidence_score", 0.0) or 0.0),
             conviction_class=str(getattr(trade_plan, "conviction_class", "B") or "B"),
             plan_type=str(getattr(trade_plan, "plan_type", "SMC") or "SMC"),

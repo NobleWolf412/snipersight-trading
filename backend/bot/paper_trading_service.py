@@ -359,6 +359,12 @@ class CompletedTrade:
     alt_velocity_1h_at_entry: float = 0.0
     macro_state_at_entry: str = "unknown"
     regime_trend_at_entry: str = "sideways"  # global regime.dimensions.trend at open
+    # Provenance marker (decisions/2026-06-16 §11.6 bug #1): "entry" = `regime` and
+    # `regime_trend_at_entry` were captured at OPEN (correct). Journal rows written
+    # BEFORE the fix lack this key — edge_by_regime must treat a missing value as
+    # CLOSE-labeled (regime bucketing untrustworthy) and exclude such rows from clean
+    # regime-conditional cohorts.
+    regime_labeled_at: str = "entry"
     # Tier 2 — HTF + setup-archetype snapshot. htf_aligned answers "was the
     # trade counter-HTF at entry?". setup_qualifier ("Soft"/"Strong"/"Unknown")
     # joins trade outcomes against the setup-quality cohort.
@@ -436,6 +442,7 @@ class CompletedTrade:
             "alt_velocity_1h_at_entry": self.alt_velocity_1h_at_entry,
             "macro_state_at_entry": self.macro_state_at_entry,
             "regime_trend_at_entry": self.regime_trend_at_entry,
+            "regime_labeled_at": self.regime_labeled_at,
             "htf_aligned_at_entry": self.htf_aligned_at_entry,
             "setup_qualifier": self.setup_qualifier,
             # Calculated stop/target geometry (2026-06-02) — auditable from journal alone.
@@ -3160,7 +3167,10 @@ class PaperTradingService:
                     risk_reward_ratio=getattr(pos, "risk_reward_ratio", 0.0),
                     stop_distance_atr=getattr(pos, "stop_distance_atr", 0.0),
                     timeframe=getattr(pos, "timeframe", "1h"),
-                    regime=f"{getattr(pos, 'regime_trend', 'unknown')}_{getattr(pos, 'regime_volatility', 'unknown')}",
+                    # Bucket by ENTRY regime, not the close-time value the stagnation
+                    # updater clobbers into regime_trend/regime_volatility every scan.
+                    # decisions/2026-06-16 §11.6 bug #1.
+                    regime=f"{getattr(pos, 'entry_regime_trend', 'unknown')}_{getattr(pos, 'entry_regime_volatility', 'unknown')}",
                     pullback_probability=getattr(pos, "pullback_probability", 0.0),
                     kill_zone=getattr(pos, "kill_zone", "no_session"),
                     final_targets_remaining=len(getattr(pos, "targets", []) or []),
@@ -3170,7 +3180,8 @@ class PaperTradingService:
                     btc_velocity_1h_at_entry=getattr(pos, "btc_velocity_1h_at_entry", 0.0),
                     alt_velocity_1h_at_entry=getattr(pos, "alt_velocity_1h_at_entry", 0.0),
                     macro_state_at_entry=getattr(pos, "macro_state_at_entry", "unknown"),
-                    regime_trend_at_entry=getattr(pos, "regime_trend", "sideways"),
+                    regime_trend_at_entry=getattr(pos, "entry_regime_trend", "sideways"),
+                    regime_labeled_at=getattr(pos, "regime_labeled_at", "entry"),
                     htf_aligned_at_entry=getattr(pos, "htf_aligned_at_entry", False),
                     setup_qualifier=getattr(pos, "setup_qualifier", "Unknown"),
                     # Calculated stop/target geometry captured at open (2026-06-02).
