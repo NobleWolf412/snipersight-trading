@@ -2,8 +2,9 @@
 
 **Trigger:** §11.6 bug-fix backlog (decisions/2026-06-16__regime-strategy-router-design.md). The
 global market regime (`orchestrator.self.current_regime`, computed at orchestrator.py:443) was never
-passed to `create_scan_completed_event`, so the scan-level `regime_label` telemetry logged **None
-since 2026-06-13**. That left no independent stream to validate the journal's entry-regime stamp
+passed to `create_scan_completed_event` — the factory had no `regime_label` field at all, so the
+scan-level regime was **never emitted** to telemetry (absent, never a present-then-nulled value).
+That left no independent stream to validate the journal's entry-regime stamp
 (bug #1, fixed in commit 7c9a7ad) against — i.e. after fixing how the journal labels regime, we had
 no second source to confirm the labels are now correct. This closes that gap.
 

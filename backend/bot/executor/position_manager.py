@@ -120,6 +120,10 @@ class PositionState:
     # not where they happened to close. Set once at open_position; never mutate after.
     entry_regime_volatility: str = "normal"
     entry_regime_trend: str = "sideways"
+    # Provenance marker (decisions/2026-06-16 §11.6 bug #1): post-fix rows carry "entry";
+    # pre-fix journal rows lack the key entirely, so edge_by_regime can exclude dirty history.
+    # The journal writes read this via getattr — make it a real field, not a phantom default.
+    regime_labeled_at: str = "entry"
 
     # ML feature snapshot — captured at open time from TradePlan, used for model training
     confidence_score: float = 0.0

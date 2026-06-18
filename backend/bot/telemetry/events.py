@@ -111,10 +111,10 @@ def create_scan_completed_event(
     """Create scan completed event.
 
     regime_label / regime_score: the GLOBAL market-regime composite + score at scan
-    time (e.g. "down_normal", 71.4). Restores the scan-level regime to the telemetry
-    stream — it logged None since 2026-06-13 because the orchestrator computed the regime
-    but never passed it here, leaving no independent stream to validate the journal's
-    entry-regime stamp (bug #1) against. Both optional; absence is meaningful (regime
+    time (e.g. "down_normal", 71.4). Adds the scan-level regime to the telemetry
+    stream — this factory carried no regime field before, so the orchestrator computed the
+    regime (orchestrator.py:443) but never surfaced it here, leaving no independent stream
+    to validate the journal's entry-regime stamp (bug #1) against. Both optional; absence is meaningful (regime
     detection failed). decisions/2026-06-16 §11.6 bug #4.
     """
     data: Dict[str, Any] = {
