@@ -1051,6 +1051,30 @@ class LiveTradingService:
             # list — graceful degradation, NOT silent failure.
             logger.warning(f"filter_stale_symbols failed: {_stale_exc}")
 
+        # Apply the LIQUIDITY floor regardless of how scan_symbols was built — covers user-pinned
+        # AND auto-selected (operator decision 2026-06-18: pinned symbols ARE liquidity-filtered;
+        # an illiquid pinned pair blows through stops on exit). Mirrors paper for parity.
+        # regime-strategy-router §9-A "don't trade illiquid pairs". Loud per CLAUDE.md §11.
+        try:
+            from backend.analysis.pair_selection import filter_illiquid_symbols
+            from backend.shared.config.scanner_modes import get_mode
+            _lmode = get_mode(getattr(config, "sniper_mode", "stealth")) or get_mode("stealth")
+            _liq_floor = getattr(_lmode, "min_24h_volume_usdt", 5_000_000.0)
+            _vols = self.orchestrator.exchange_adapter.get_symbol_volumes(scan_symbols)
+            if _vols:
+                scan_symbols, _illiquid_dropped = filter_illiquid_symbols(
+                    scan_symbols, _vols, _liq_floor, context="live_trading_service"
+                )
+            elif scan_symbols:
+                logger.warning(
+                    "LIQUIDITY gate SKIPPED this scan: volume lookup returned no data; "
+                    "trading {} symbol(s) unfiltered (existing gates still apply)",
+                    len(scan_symbols),
+                )
+        except Exception as _liq_exc:
+            # Graceful degradation, NOT silent (CLAUDE.md §11/§15).
+            logger.warning(f"filter_illiquid_symbols failed: {_liq_exc}")
+
         if getattr(config, "exclude_symbols", None):
             scan_symbols = [s for s in scan_symbols if s not in config.exclude_symbols]
 
