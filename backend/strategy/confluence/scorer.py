@@ -2879,11 +2879,27 @@ def calculate_confluence_score(
         pd_z = smc_snapshot.premium_discount.get(p_tf) or smc_snapshot.premium_discount.get(p_tf.upper())
         if pd_z:
             c_z, z_p = pd_z.get("current_zone", "neutral"), pd_z.get("zone_percentage", 50)
-            if direction in ("bullish", "long"):
-                pd_score = 100.0 if (c_z == "discount" and z_p < 30) else (75.0 if c_z == "discount" else 30.0)
+            # BUG #2 FIX — regime-blind BOS arbitration (decisions/2026-06-18__bugfix-backlog-rescope.md
+            # + 2026-06-13__pd-factor-inverted-in-trends-finding.md). The unconditional fade-the-extreme
+            # (mean-reversion) rule is a category error in a confirmed continuation: a with-trend entry
+            # sits in the "wrong" P/D zone (downtrend SHORT at discount; uptrend LONG advancing into
+            # premium) yet is valid. When an aligned BOS confirms the trade direction (structure = local
+            # trend evidence — no suspect regime label needed, see bug #6), NEUTRALIZE the penalty arm
+            # 30 -> 50 (do NOT reward). Reward arms (discount-for-long / premium-for-short) unchanged.
+            # Symmetric by construction. BOS access mirrors the regime-alignment CHoCH loops (:259-298).
+            _long = direction in ("bullish", "long")
+            _aligned_bos = any(
+                getattr(_sb, "break_type", "").upper() == "BOS"
+                and (getattr(_sb, "direction", "") in ("bullish", "up", "LONG")) == _long
+                for _sb in smc_snapshot.structural_breaks
+            )
+            _pen = 50.0 if _aligned_bos else 30.0  # continuation neutralizes the mean-reversion penalty
+            if _long:
+                pd_score = 100.0 if (c_z == "discount" and z_p < 30) else (75.0 if c_z == "discount" else _pen)
             else:
-                pd_score = 100.0 if (c_z == "premium" and z_p > 70) else (75.0 if c_z == "premium" else 30.0)
-            pd_rat = f"{c_z.capitalize()} zone ({z_p:.0f}%)"
+                pd_score = 100.0 if (c_z == "premium" and z_p > 70) else (75.0 if c_z == "premium" else _pen)
+            _neutralized = _aligned_bos and ((_long and c_z != "discount") or (not _long and c_z != "premium"))
+            pd_rat = f"{c_z.capitalize()} zone ({z_p:.0f}%)" + (" [continuation]" if _neutralized else "")
             # Phase 5B (Q2): tag dealing-range provenance for post-deploy cohort
             # detection (4F-style code signature). Direction-agnostic; score unchanged.
             _anchor = pd_z.get("range_anchor", "window")
