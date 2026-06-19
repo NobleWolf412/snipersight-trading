@@ -406,6 +406,50 @@ def filter_stale_symbols(
     return kept, dropped
 
 
+def filter_illiquid_symbols(
+    symbols: List[str],
+    volume_by_symbol: Dict[str, float],
+    min_volume_usdt: float,
+    *,
+    context: str = "",
+) -> Tuple[List[str], List[str]]:
+    """Partition a symbol list into (kept, dropped) by 24h quote-volume floor.
+
+    Companion to `filter_stale_symbols` for the LIQUIDITY rule (regime-strategy-router §9-A, the
+    operator's #1 named rule: "don't trade illiquid pairs"). Both bot services call this after
+    building `scan_symbols`, so the liquidity gate covers BOTH the auto-selected universe AND
+    user-pinned symbols. Operator decision 2026-06-18: pinned symbols ARE liquidity-filtered — a
+    pinned illiquid pair is still a capital risk (illiquid fills blow through stops on exit).
+
+    A symbol with no volume entry (or null/zero) is treated as 0 volume -> dropped (fail-safe: never
+    trade unknown liquidity). Per CLAUDE.md §11 (loud failures): one INFO log per scan on drop.
+
+    Returns:
+        (kept, dropped) — ordered, complementary, no overlap. Mass-conservation:
+        len(kept) + len(dropped) == len(symbols) always.
+    """
+    kept: List[str] = []
+    dropped: List[str] = []
+    for s in symbols:
+        vol = volume_by_symbol.get(s, 0.0) or 0.0
+        (kept if vol >= min_volume_usdt else dropped).append(s)
+
+    # Mass-conservation runtime assertion (CLAUDE.md §16 Rubric 3).
+    assert len(kept) + len(dropped) == len(symbols), (
+        f"filter_illiquid_symbols mass-conservation violated: "
+        f"kept={len(kept)} dropped={len(dropped)} input={len(symbols)}"
+    )
+
+    if dropped:
+        tag = f"[{context}] " if context else ""
+        logger.info(
+            "{}LOW_LIQUIDITY_SKIP: dropping {} symbol(s) below ${:,.0f} 24h volume this scan: {}",
+            tag, len(dropped), min_volume_usdt, dropped,
+        )
+
+    return kept, dropped
+
+
 def get_stale_counters_snapshot() -> Dict[str, int]:
     """Return a shallow copy of the counter dict — for diagnostics + tests."""
     with _no_data_counter_lock:

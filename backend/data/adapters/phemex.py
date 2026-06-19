@@ -6,7 +6,7 @@ Works with US IPs - no geo-blocking for public endpoints.
 
 import os
 import time
-from typing import Optional, Dict, Any, List, cast
+from typing import Optional, Dict, Any, List, Tuple, cast
 import pandas as pd
 import ccxt
 import random
@@ -346,9 +346,65 @@ class PhemexAdapter:
             logger.error(f"Exchange error fetching markets: {e}")
             raise
 
+    @staticmethod
+    def partition_by_volume_floor(
+        symbols: List[str], tickers: Dict[str, Any], min_volume_usdt: float
+    ) -> Tuple[List[str], List[str]]:
+        """Pure partition of candidate symbols into (kept, dropped) by 24h quote-volume floor.
+
+        Extracted from get_top_symbols so the liquidity floor is unit-testable without a live
+        exchange. A symbol with no ticker (or null/zero volume) is treated as 0 volume → dropped
+        (fail-safe: never admit an unknown-liquidity pair). Loud-rejection accounting (the
+        LOW_LIQUIDITY_SKIP log) lives in the caller. Mass-conservation guaranteed.
+        """
+        kept: List[str] = []
+        dropped: List[str] = []
+        for s in symbols:
+            vol = (tickers.get(s) or {}).get("quoteVolume", 0) or 0
+            (kept if vol >= min_volume_usdt else dropped).append(s)
+        assert len(kept) + len(dropped) == len(symbols), (
+            f"partition_by_volume_floor mass-conservation violated: "
+            f"kept={len(kept)} dropped={len(dropped)} input={len(symbols)}"
+        )
+        return kept, dropped
+
+    @retry_on_rate_limit(max_retries=3)
+    def get_symbol_volumes(self, symbols: List[str]) -> Dict[str, float]:
+        """Return {symbol: 24h quote-volume USDT} for the given symbols (missing/error -> 0.0).
+
+        One batch fetch_tickers() call. Used by the liquidity gate to score BOTH auto-selected and
+        USER-PINNED symbols — pinned symbols bypass get_top_symbols, so they need their own volume
+        lookup to be liquidity-filtered.
+
+        Failure semantics (matters for the gate):
+        - Per-symbol miss (tickers fetched OK but a symbol absent): 0.0 -> the gate drops it
+          (fail-safe; never trade a pair we can't price).
+        - TOTAL fetch failure (infra/network): returns {} -> the caller SKIPS the filter loudly for
+          that scan rather than dropping the whole universe and halting the bot on a transient glitch.
+        """
+        if not symbols:
+            return {}
+        try:
+            tickers = self.exchange.fetch_tickers(symbols)
+        except Exception:
+            # Some venues reject a symbol-scoped fetch; fall back to the full ticker pull.
+            try:
+                tickers = self.exchange.fetch_tickers()
+            except Exception as e:
+                logger.warning(
+                    "get_symbol_volumes: ticker fetch failed ({}); liquidity gate will SKIP this "
+                    "scan (returning empty — caller trades unfiltered rather than halting)", e,
+                )
+                return {}
+        return {
+            s: float((tickers.get(s) or {}).get("quoteVolume", 0) or 0)
+            for s in symbols
+        }
+
     @retry_on_rate_limit(max_retries=3)
     def get_top_symbols(
-        self, n: int = 20, quote_currency: str = "USDT", market_type: Optional[str] = None
+        self, n: int = 20, quote_currency: str = "USDT", market_type: Optional[str] = None,
+        min_volume_usdt: Optional[float] = None,
     ) -> List[str]:
         """
         Get top N trading pairs ranked by volume × volatility × momentum from Phemex.
@@ -356,7 +412,9 @@ class PhemexAdapter:
         Scoring: volume * (1 + volatility) * (1 + momentum_factor)
         - volatility = (24h high - low) / close   — range expansion signal
         - momentum_factor = min(abs(24h pct_change) / 20, 1.0) × 0.5  — trending pairs score up to 50% higher
-        Minimum volume floor: 500,000 USDT daily — filters out illiquid micro-caps.
+        Liquidity floor: 24h quote-volume >= `min_volume_usdt` (default 5,000,000 USDT) — filters
+        illiquid micro-caps. Dropped pairs are logged loudly (LOW_LIQUIDITY_SKIP), not silently
+        discarded. Pass `min_volume_usdt` to override per scanner mode.
         """
         mt = market_type or self.default_type
         markets = None
@@ -368,19 +426,27 @@ class PhemexAdapter:
             # Try it first; on failure, fall through to the curated fallback.
             tickers = self.exchange.fetch_tickers()
 
-            # Filter: active, correct quote currency, correct market type, has ticker data
-            MIN_VOLUME_USDT = 5_000_000  # $5M daily minimum — filters out pump-and-dump micro-caps
-            valid_symbols = []
-            for symbol, market in markets.items():
+            # Candidates: active, correct quote currency, correct market type, has ticker data.
+            candidates = [
+                symbol for symbol, market in markets.items()
                 if (
                     market.get("active", False)
                     and market.get("quote") == quote_currency
                     and market.get("type") == mt
                     and symbol in tickers
-                ):
-                    vol = tickers[symbol].get("quoteVolume", 0) or 0
-                    if vol >= MIN_VOLUME_USDT:
-                        valid_symbols.append(symbol)
+                )
+            ]
+            # Liquidity floor — promoted from a SILENT drop to a loud, configurable gate
+            # (CLAUDE.md §11: no silent skips). Default $5M 24h quote-volume; override per mode.
+            volume_floor = min_volume_usdt if min_volume_usdt is not None else 5_000_000
+            valid_symbols, dropped_low_vol = self.partition_by_volume_floor(
+                candidates, tickers, volume_floor
+            )
+            if dropped_low_vol:
+                logger.info(
+                    "LOW_LIQUIDITY_SKIP: dropped {} pair(s) below ${:,.0f} 24h volume (e.g. {})",
+                    len(dropped_low_vol), volume_floor, dropped_low_vol[:5],
+                )
 
             def calculate_score(symbol: str) -> float:
                 ticker = tickers[symbol]

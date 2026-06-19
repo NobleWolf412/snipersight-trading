@@ -170,6 +170,12 @@ class ScannerMode:
     # Per-mode overrides (min_rr_ratio, atr_floor, gating thresholds, etc.)
     overrides: Optional[Dict[str, Any]] = None
 
+    # Liquidity admission floor — minimum 24h quote-volume (USDT) for a pair to be tradeable
+    # (regime-strategy-router §9-A, "don't trade illiquid pairs"). Applied by both bot services
+    # via filter_illiquid_symbols, covering auto-selected AND user-pinned symbols. Default $5M
+    # matches the prior silent adapter floor; raise per mode for stricter liquidity discipline.
+    min_24h_volume_usdt: float = 5_000_000.0
+
     # NEW: Top-down nested entry timeframe hierarchy
     # bias_timeframes: For direction bias (HH/HL/LH/LL analysis)
     # zone_timeframes: For entry zone OBs (where we want to trade from)
