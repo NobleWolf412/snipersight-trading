@@ -69,6 +69,32 @@ def test_no_bos_keeps_penalty():
     assert _pd_score(False, "discount", 20, aligned_bos=False) == 30.0
 
 
+# ── (5) HTF-gate secondary site — the -40 PremiumDiscount_VIOLATION suppression ──
+def test_htf_gate_suppression_present_in_source():
+    # The -40 violation must be guarded by `not _aligned_bos` (completes the factor fix).
+    assert "structure_type\": \"PremiumDiscount_VIOLATION\"" in _SCORER_SRC \
+        or 'structure_type": "PremiumDiscount_VIOLATION"' in _SCORER_SRC
+    assert "min_aligned_distance > 1.0 and not _aligned_bos" in _SCORER_SRC, \
+        "HTF-gate -40 violation no longer suppressed by an aligned BOS"
+
+
+def _htf_violation_fires(in_optimal_zone: bool, min_aligned_dist: float, aligned_bos: bool) -> bool:
+    # faithful reimplementation of scorer.py:1158-1169 elif guard
+    return (not in_optimal_zone) and (min_aligned_dist > 1.0) and (not aligned_bos)
+
+
+def test_htf_gate_bos_suppresses_violation():
+    # with-trend continuation past equilibrium (not optimal) + aligned BOS -> NO -40 violation
+    assert _htf_violation_fires(in_optimal_zone=False, min_aligned_dist=2.0, aligned_bos=False) is True
+    assert _htf_violation_fires(in_optimal_zone=False, min_aligned_dist=2.0, aligned_bos=True) is False
+
+
+def test_htf_gate_optimal_zone_never_violates():
+    # in the optimal zone the violation never fires, BOS or not (non-regression)
+    assert _htf_violation_fires(in_optimal_zone=True, min_aligned_dist=2.0, aligned_bos=False) is False
+    assert _htf_violation_fires(in_optimal_zone=True, min_aligned_dist=2.0, aligned_bos=True) is False
+
+
 def test_reward_arm_unchanged_by_fix():
     # The with-trend reward arms must be identical with or without BOS (fix only touches the penalty).
     assert _pd_score(True, "discount", 20, aligned_bos=True) == 100.0   # deep discount long

@@ -1155,11 +1155,24 @@ def evaluate_htf_structural_proximity(
                 not is_bullish and entry_price >= pd_zone.equilibrium
             )
 
+            # BUG #2 HTF-gate secondary site — completes the factor-level P/D fix
+            # (decisions/2026-06-18__bugfix-backlog-rescope.md). This equilibrium check is pure
+            # fade-the-extreme: it -40/blocks a VALID with-trend continuation that has advanced past
+            # equilibrium (uptrend LONG into premium; downtrend SHORT into discount). Regime-blind BOS
+            # arbitration: when an aligned BOS confirms the trade direction, suppress the
+            # PremiumDiscount_VIOLATION. BOS access mirrors the regime-alignment CHoCH loops (:259-298)
+            # and the P/D factor block. Symmetric by construction.
+            _aligned_bos = any(
+                getattr(_sb, "break_type", "").upper() == "BOS"
+                and (getattr(_sb, "direction", "") in ("bullish", "up", "LONG")) == is_bullish
+                for _sb in getattr(smc, "structural_breaks", []) or []
+            )
+
             if in_optimal_zone and eq_distance_atr < min_aligned_distance:
                 min_aligned_distance = eq_distance_atr
                 nearest_aligned = f"{htf} Equilibrium @ {pd_zone.equilibrium:.5f}"
                 aligned_type = "PremiumDiscount"
-            elif not in_optimal_zone and min_aligned_distance > 1.0:
+            elif not in_optimal_zone and min_aligned_distance > 1.0 and not _aligned_bos:
                 return {
                     "valid": False,
                     "score_adjustment": -40.0,
