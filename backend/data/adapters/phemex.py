@@ -368,38 +368,46 @@ class PhemexAdapter:
         )
         return kept, dropped
 
+    @staticmethod
+    def _quote_volume_for(symbol: str, tickers: Dict[str, Any]) -> float:
+        """24h quote-volume for a symbol, measured on its PERP ticker.
+
+        The bot's universe is spot-style 'BASE/USDT' but it TRADES PERPS, whose liquidity lives on
+        the ':USDT' (swap) ticker — Phemex spot volume is thin and wrongly failed the floor
+        (e.g. BNB spot $1.1M vs perp $28M; 2026-06-22 universe-collapse fix). Resolve to the perp
+        ticker; fall back to the symbol as given (covers already-perp symbols and spot-only
+        listings). Take the max so tradeable liquidity is never understated.
+        """
+        perp = symbol if ":" in symbol else f"{symbol}:USDT"
+        return max(
+            float((tickers.get(perp) or {}).get("quoteVolume", 0) or 0),
+            float((tickers.get(symbol) or {}).get("quoteVolume", 0) or 0),
+        )
+
     @retry_on_rate_limit(max_retries=3)
     def get_symbol_volumes(self, symbols: List[str]) -> Dict[str, float]:
-        """Return {symbol: 24h quote-volume USDT} for the given symbols (missing/error -> 0.0).
+        """Return {symbol: 24h PERP quote-volume USDT} for the given symbols (missing/error -> 0.0).
 
-        One batch fetch_tickers() call. Used by the liquidity gate to score BOTH auto-selected and
-        USER-PINNED symbols — pinned symbols bypass get_top_symbols, so they need their own volume
-        lookup to be liquidity-filtered.
+        Used by the liquidity gate to score auto-selected AND user-pinned symbols. The bot trades
+        perps, so liquidity is measured on the ':USDT' ticker (see _quote_volume_for) — measuring the
+        thin spot ticker collapsed the universe to majors-only (BTC/ETH/SOL/XRP), the 2026-06-22 bug.
 
-        Failure semantics (matters for the gate):
-        - Per-symbol miss (tickers fetched OK but a symbol absent): 0.0 -> the gate drops it
-          (fail-safe; never trade a pair we can't price).
-        - TOTAL fetch failure (infra/network): returns {} -> the caller SKIPS the filter loudly for
-          that scan rather than dropping the whole universe and halting the bot on a transient glitch.
+        Failure semantics: a per-symbol miss -> 0.0 (fail-safe drop). TOTAL fetch failure -> {} so the
+        caller SKIPS the filter for that scan rather than dropping the whole universe.
         """
         if not symbols:
             return {}
         try:
-            tickers = self.exchange.fetch_tickers(symbols)
-        except Exception:
-            # Some venues reject a symbol-scoped fetch; fall back to the full ticker pull.
-            try:
-                tickers = self.exchange.fetch_tickers()
-            except Exception as e:
-                logger.warning(
-                    "get_symbol_volumes: ticker fetch failed ({}); liquidity gate will SKIP this "
-                    "scan (returning empty — caller trades unfiltered rather than halting)", e,
-                )
-                return {}
-        return {
-            s: float((tickers.get(s) or {}).get("quoteVolume", 0) or 0)
-            for s in symbols
-        }
+            # Full pull: tickers carry BOTH 'BASE/USDT' (spot) and 'BASE/USDT:USDT' (perp) keys, so
+            # _quote_volume_for resolves the perp without risking BadSymbol on a per-symbol fetch.
+            tickers = self.exchange.fetch_tickers()
+        except Exception as e:
+            logger.warning(
+                "get_symbol_volumes: ticker fetch failed ({}); liquidity gate will SKIP this "
+                "scan (returning empty — caller trades unfiltered rather than halting)", e,
+            )
+            return {}
+        return {s: self._quote_volume_for(s, tickers) for s in symbols}
 
     @retry_on_rate_limit(max_retries=3)
     def get_top_symbols(

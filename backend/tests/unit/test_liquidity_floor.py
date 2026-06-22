@@ -76,3 +76,29 @@ def test_every_mode_has_a_liquidity_floor():
     # The config home exists on every scanner mode (default $5M), so Chunk 2b can read it.
     for name, mode in MODES.items():
         assert mode.min_24h_volume_usdt >= 5_000_000.0, f"{name} missing/low liquidity floor"
+
+
+# ---- perp-vs-spot volume resolution (the 2026-06-22 universe-collapse fix) ----
+
+def test_quote_volume_uses_perp_not_spot():
+    # Bot passes spot-style 'BNB/USDT' but trades the perp; must measure PERP liquidity,
+    # not the thin spot ticker (the bug that collapsed the universe to majors-only).
+    tickers = {
+        "BNB/USDT": {"quoteVolume": 1_136_100.0},        # thin spot -> would wrongly fail $5M
+        "BNB/USDT:USDT": {"quoteVolume": 28_299_403.0},  # liquid perp -> the real liquidity
+    }
+    assert PhemexAdapter._quote_volume_for("BNB/USDT", tickers) == 28_299_403.0
+
+
+def test_quote_volume_perp_symbol_passthrough():
+    tickers = {"SOL/USDT:USDT": {"quoteVolume": 55_000_000.0}}
+    assert PhemexAdapter._quote_volume_for("SOL/USDT:USDT", tickers) == 55_000_000.0
+
+
+def test_quote_volume_takes_max_of_spot_and_perp():
+    tickers = {"BTC/USDT": {"quoteVolume": 277_000_000.0}, "BTC/USDT:USDT": {"quoteVolume": 276_000_000.0}}
+    assert PhemexAdapter._quote_volume_for("BTC/USDT", tickers) == 277_000_000.0
+
+
+def test_quote_volume_missing_is_zero():
+    assert PhemexAdapter._quote_volume_for("NOPE/USDT", {}) == 0.0
