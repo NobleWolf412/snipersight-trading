@@ -60,6 +60,7 @@ from backend.analysis.macro_context import MacroContext
 from backend.analysis.htf_levels import HTFLevelDetector
 
 from backend.engine.cooldown_manager import CooldownManager
+from backend.engine.decision import DecisionPolicy, LegacyScorePolicy
 
 # Domain Services
 from backend.services.indicator_service import configure_indicator_service
@@ -193,6 +194,11 @@ class Orchestrator:
                 orchestrator so the live scan path is never contaminated.
         """
         self.config = config
+
+        # Decision-core seam (heart-change): the DecisionPolicy is the source of truth for
+        # direction. Default LegacyScorePolicy reproduces the current argmax decision; swapping in
+        # ThesisPolicy (chunk 3) changes WHAT decides without touching downstream consumers.
+        self.decision_policy: DecisionPolicy = LegacyScorePolicy()
 
         # Replay-mode state (immutable per instance — enforced via @property
         # below; symmetry-guard 2026-05-25 flagged that a plain `self.replay_mode`
@@ -1937,6 +1943,18 @@ class Orchestrator:
             # Merge diagnostics
             rejections = self.confluence_service.diagnostics.get("confluence_rejections", [])
             self.diagnostics["confluence_rejections"].extend(rejections)
+
+            # --- Decision seam (heart-change chunk 2, behavior-preserving) ---
+            # confluence_service.score() has set context.metadata['chosen_direction'] via the legacy
+            # argmax + tiebreakers. Run the DecisionPolicy as the source of truth and reflect its
+            # verdict back into chosen_direction so ALL downstream consumers (gate, direction guard,
+            # planner) act on the policy. With LegacyScorePolicy this is a no-op (it reads the same
+            # chosen_direction); swapping ThesisPolicy (chunk 3) changes the decision here without
+            # touching consumers. FLAT-in-happy-path routing lands in chunk 4.
+            decision = self.decision_policy.decide(context)
+            context.metadata["decision"] = decision
+            if decision.legacy_str:
+                context.metadata["chosen_direction"] = decision.legacy_str
 
         except Exception as e:
             import traceback as _tb
