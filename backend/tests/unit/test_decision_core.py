@@ -11,6 +11,7 @@ from backend.engine.decision import (
     active_decision_policy,
     decision_mode,
     is_thesis_mode,
+    regime_type_rank,
 )
 
 
@@ -213,6 +214,38 @@ def test_decision_mode_unknown_value_is_failsafe_legacy(monkeypatch):
 def test_decision_mode_is_case_insensitive(monkeypatch):
     monkeypatch.setenv("SS_DECISION_POLICY", "THESIS")
     assert is_thesis_mode() is True
+
+
+# ---- regime_type_rank (chunk 5b — the cascade winner criterion, replaces score+swing bonus) ----
+
+def test_regime_type_rank_range_prefers_scalp():
+    # range/chop -> scalp beats intraday (fade the edges; no move to ride)
+    assert regime_type_rank("sideways", "scalp") > regime_type_rank("sideways", "intraday")
+
+
+def test_regime_type_rank_trend_prefers_intraday():
+    # trend (normal OR strong) -> intraday beats scalp (with-trend continuation)
+    for trend in ("up", "down", "strong_up", "strong_down"):
+        assert regime_type_rank(trend, "intraday") > regime_type_rank(trend, "scalp"), trend
+
+
+def test_regime_type_rank_swing_is_deferred_everywhere():
+    # swing rank 0 in every regime (operator-deferred 2026-06-24) — never preferred
+    for trend in ("sideways", "up", "down", "strong_up", "strong_down"):
+        assert regime_type_rank(trend, "swing") == 0
+        assert regime_type_rank(trend, "scalp") > regime_type_rank(trend, "swing")
+        assert regime_type_rank(trend, "intraday") > regime_type_rank(trend, "swing")
+
+
+def test_regime_type_rank_unknowns_failsafe():
+    assert regime_type_rank("garbage", "scalp") >= 1      # unknown regime -> neutral, not crash
+    assert regime_type_rank("down", "weirdtype") == 0     # unknown type -> 0
+    assert regime_type_rank(None, None) == 0
+
+
+def test_regime_type_rank_direction_agnostic():
+    # rank depends only on (regime, type) — never on direction (it's a TYPE selector)
+    assert regime_type_rank("DOWN", "INTRADAY") == regime_type_rank("down", "intraday")
 
 
 def test_thesis_meta_basis_for_chunk4b_threading():

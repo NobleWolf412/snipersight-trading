@@ -234,3 +234,31 @@ def is_thesis_mode() -> bool:
 def active_decision_policy() -> DecisionPolicy:
     """The policy selected by SS_DECISION_POLICY. Default LegacyScorePolicy (no behavior change)."""
     return ThesisPolicy() if is_thesis_mode() else LegacyScorePolicy()
+
+
+# --- Regime -> trade-type preference (heart-change chunk 5b) ------------------
+# Replaces the cascade's score+swing bonus (_CASCADE_TYPE_BONUS, which preferred the proven-loser
+# swing) for selecting WHICH trade type to take. SEEDED HYPOTHESIS from operator priors (2026-06-24),
+# every cell MUST-EARN — validated forward, no real capital until a per-cell Deflated-Sharpe gate
+# clears (project_v1_salvage_regime_router §11.6 guardrails). Direction-AGNOSTIC (type only).
+#   - range/chop (sideways) -> SCALP (fade the edges; no sustained move to ride)
+#   - trend, normal OR strong (up/down/strong_*) -> INTRADAY (with-trend continuation; strong-trend
+#     reversals are already vetoed upstream by ThesisPolicy rule 3, so a trend here means with-trend)
+#   - SWING is DEFERRED (operator decision 2026-06-24): rank 0 everywhere, never preferred — it earns
+#     its way back only at a confirmed cycle extreme via the (unbuilt) sweep->CHoCH sequence.
+_REGIME_TYPE_PREF = {
+    "sideways":    {"scalp": 2, "intraday": 1, "swing": 0},
+    "up":          {"intraday": 2, "scalp": 1, "swing": 0},
+    "down":        {"intraday": 2, "scalp": 1, "swing": 0},
+    "strong_up":   {"intraday": 2, "scalp": 1, "swing": 0},
+    "strong_down": {"intraday": 2, "scalp": 1, "swing": 0},
+}
+
+
+def regime_type_rank(regime_trend: Any, trade_type: Any) -> int:
+    """Preference rank (higher = more preferred) of a trade TYPE for a regime — the chunk-5b
+    cascade winner criterion. Unknown regime -> neutral scalp/intraday; swing or unknown type -> 0
+    (deferred / never preferred). Direction-agnostic."""
+    rt = str(regime_trend or "sideways").strip().lower()
+    tt = str(trade_type or "").strip().lower()
+    return _REGIME_TYPE_PREF.get(rt, {"scalp": 1, "intraday": 1}).get(tt, 0)

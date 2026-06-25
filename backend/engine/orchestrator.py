@@ -64,6 +64,7 @@ from backend.engine.decision import (
     DecisionPolicy,
     active_decision_policy,
     is_thesis_mode,
+    regime_type_rank,
 )
 
 # Domain Services
@@ -3618,6 +3619,14 @@ class Orchestrator:
         cfg = copy.copy(self.config)
         for attr, val in self._CASCADE_SCALE_SETTINGS.get(trade_type, {}).items():
             setattr(cfg, attr, val)
+        # Chunk 5b (thesis mode): do NOT pin a scale to a single allowed trade-type. The legacy
+        # cascade rejected a scale whose geometry classified as a NEIGHBORING type (the ADA dead
+        # zone: intraday scale -> 1.0-ATR LTF-anchored geometry -> classified scalp -> rejected by
+        # allowed=('intraday',)). Thesis mode accepts the honest geometry-derived type among
+        # (intraday, scalp); the regime->type winner pick decides which candidate wins. SWING stays
+        # excluded (operator-deferred 2026-06-24) so a swing-classified geometry is still dropped.
+        if is_thesis_mode():
+            cfg.allowed_trade_types = ("intraday", "scalp")
         return cfg
 
     def _cascade_plan_generation(
@@ -3716,7 +3725,9 @@ class Orchestrator:
                     config_override=scale_cfg,
                 )
                 if plan:
-                    bonus = self._CASCADE_TYPE_BONUS.get(
+                    # Chunk 5b: the swing-preferring bonus (proven-loser bias) is NEUTRALIZED in
+                    # thesis mode — type selection is the regime->type rank below, not score+bonus.
+                    bonus = 0.0 if is_thesis_mode() else self._CASCADE_TYPE_BONUS.get(
                         getattr(plan, "trade_type", "intraday"), 0.0
                     )
                     effective = plan.confidence_score + bonus
@@ -3753,15 +3764,35 @@ class Orchestrator:
         if not candidates:
             return None
 
-        best_plan, best_score, best_type = max(candidates, key=lambda x: x[1])
-        if len(candidates) > 1:
-            logger.info(
-                "🔀 %s CASCADE winner: %s (effective=%.1f, %d candidates)",
-                context.symbol,
-                best_type,
-                best_score,
-                len(candidates),
+        if is_thesis_mode():
+            # Chunk 5b: pick by REGIME->TYPE preference (seeded hypothesis), NOT score+bonus.
+            # Range -> scalp, trend -> intraday; swing rank 0 (deferred). Tiebreak by confluence
+            # score. Direction-agnostic (type-only). The regime is the symbol regime fetched above.
+            _rt = str(getattr(_c_regime, "trend", "sideways") or "sideways").strip().lower()
+            best_plan, best_score, best_type = max(
+                candidates,
+                key=lambda x: (
+                    regime_type_rank(_rt, getattr(x[0], "trade_type", "")),
+                    x[0].confidence_score,
+                ),
             )
+            if len(candidates) > 1:
+                logger.info(
+                    "🔀 %s CASCADE winner (thesis regime->type): %s | regime=%s | rank=%d conf=%.1f | %d candidates",
+                    context.symbol, best_type, _rt,
+                    regime_type_rank(_rt, getattr(best_plan, "trade_type", "")),
+                    best_plan.confidence_score, len(candidates),
+                )
+        else:
+            best_plan, best_score, best_type = max(candidates, key=lambda x: x[1])
+            if len(candidates) > 1:
+                logger.info(
+                    "🔀 %s CASCADE winner: %s (effective=%.1f, %d candidates)",
+                    context.symbol,
+                    best_type,
+                    best_score,
+                    len(candidates),
+                )
         return best_plan
 
     def _classify_setup_type(self, smc_snapshot: SMCSnapshot) -> str:
