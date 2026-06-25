@@ -2391,7 +2391,22 @@ class PaperTradingService:
             (_ct_trend in ("up", "strong_up", "up_compressed") and _ct_dir == "SHORT") or
             (_ct_trend in ("down", "strong_down", "down_compressed") and _ct_dir == "LONG")
         )
-        if _is_ct:
+        # Heart-change chunk 4b: honor a thesis CHoCH-reversal across the gate axis collision.
+        # This gate works the GLOBAL regime; ThesisPolicy works PER-SYMBOL structure and only emits a
+        # counter-trend LONG/SHORT off a genuine CHoCH (change-of-character) — it already vetoed
+        # BOS-vs-strong-opposite to FLAT upstream. Re-blocking that reversal here on the global axis
+        # would force a down-only bot (the adversarial-review finding). So in thesis mode, exempt a
+        # CHoCH-basis reversal from the block — but HALF-SIZE it (a counter-trend reversal carries
+        # risk). Legacy mode: decision_basis is absent -> _thesis_reversal False -> byte-identical.
+        _ct_basis = (getattr(plan, "metadata", None) or {}).get("decision_basis")
+        _thesis_reversal = is_thesis_mode() and _ct_basis == "choch"
+        if _is_ct and _thesis_reversal:
+            size_modifier *= 0.5
+            logger.info(
+                f"THESIS REVERSAL (counter-trend CHoCH, half-sized): {plan.symbol} {_ct_dir} "
+                f"| global regime={_ct_trend} | per-symbol CHoCH override | size_modifier → {size_modifier:.2f}"
+            )
+        elif _is_ct:
             if _ct_trend in ("strong_up", "strong_down"):
                 # Decisive momentum — counter-trend has near-zero EV at any timeframe
                 _ct_reason = (

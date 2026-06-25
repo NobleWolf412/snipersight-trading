@@ -200,3 +200,13 @@ def test_decision_mode_unknown_value_is_failsafe_legacy(monkeypatch):
 def test_decision_mode_is_case_insensitive(monkeypatch):
     monkeypatch.setenv("SS_DECISION_POLICY", "THESIS")
     assert is_thesis_mode() is True
+
+
+def test_thesis_meta_basis_for_chunk4b_threading():
+    # chunk 4b threads decision.meta['basis'] -> plan.metadata['decision_basis'] -> the bot
+    # counter-trend gate exempts basis=='choch'. Pin the exact values that get threaded.
+    pol = ThesisPolicy()
+    assert pol.decide(_tctx([_brk("CHoCH", "bullish")])).meta["basis"] == "choch"
+    assert pol.decide(_tctx([_brk("CHoCH", "bearish")])).meta["basis"] == "choch"
+    assert pol.decide(_tctx([_brk("BOS", "bullish")])).meta["basis"] == "bos"
+    assert pol.decide(_tctx([_brk("BOS", "bearish")])).meta["basis"] == "bos"

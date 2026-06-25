@@ -3260,6 +3260,19 @@ class Orchestrator:
                         "score": symbol_regime.score,
                     }
 
+            # Heart-change chunk 4b: carry the decision basis (bos/choch) onto the plan so the bot's
+            # counter-trend gate can honor a CHoCH-reversal the thesis deliberately allowed.
+            # ThesisPolicy reconciles structure-vs-regime PER-SYMBOL (it already vetoed BOS-vs-strong-
+            # opposite to FLAT; only genuine CHoCH change-of-character reversals reach here); the bot
+            # gate works the GLOBAL regime axis and would otherwise re-block the reversal — the
+            # cross-axis collision flagged by adversarial-review. None in legacy mode (LegacyScorePolicy
+            # decisions carry no basis), so this is inert with the flag off.
+            if plan is not None:
+                _decision = context.metadata.get("decision")
+                _basis = (getattr(_decision, "meta", None) or {}).get("basis") if _decision else None
+                if _basis:
+                    plan.metadata["decision_basis"] = _basis
+
             # Tier 2 (analysis enrichment): snapshot macro context numerics at
             # entry time so the journal carries them per-trade. Lets the
             # post-run autopsy answer "was BTC moving counter-macro when this
