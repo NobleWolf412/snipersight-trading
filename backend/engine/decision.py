@@ -132,8 +132,11 @@ class ThesisPolicy(DecisionPolicy):
          turn EARLIER than either a stale BOS or the lagging regime label.
       2. BOS (continuation) decides when there is no CHoCH.
       3. FLAT (first-class abstain) when: no structure · conflicting structure (both directions) ·
-         a BOS-continuation that fights a STRONG opposite regime (a CHoCH may still call the
-         reversal; a mere continuation may not override a strong opposing trend).
+         ANY counter-trend entry (BOS continuation OR CHoCH reversal) that fights a STRONG trend
+         (chunk 5a: "never trade against the trend" is strongest in a strong trend — a bare CHoCH
+         against it is usually a trap; a genuine cycle-low reversal needs the sweep->CHoCH sequence,
+         not yet built). In NORMAL/sideways trends, structure wins — the lag-prone label does not
+         override confirmed structure when the trend is not decisive.
       4. Any internal failure -> FLAT with a clear reason (NOT a raise — the orchestrator's
          exception handler would miscategorize a raise; backend-integrity guard, chunk-2 note).
 
@@ -181,16 +184,19 @@ class ThesisPolicy(DecisionPolicy):
             else:
                 return Decision(Direction.FLAT, reason="no_directional_structure", source=self.name)
 
-            # 3: regime veto — a BOS-continuation may NOT fight a STRONG opposite regime
-            # (a CHoCH may; that is the change-of-character calling the turn). Symmetric.
+            # 3: strong-trend discipline (chunk 5a) — in a STRONG trend, WITH-TREND ONLY. Veto ANY
+            # counter-trend entry, BOS continuation OR CHoCH reversal. "Never trade against the trend"
+            # is strongest here; a bare CHoCH against a strong trend is usually a trap, and a genuine
+            # cycle-low reversal needs the sweep->CHoCH sequence (not yet built). In NORMAL/sideways
+            # trends there is NO veto — structure wins (the lag-prone label must not override confirmed
+            # structure when the trend is not decisive). Symmetric; basis-agnostic.
             meta = getattr(context, "metadata", None) or {}
             regime = meta.get("symbol_regime")
             regime_trend = str(getattr(regime, "trend", "sideways") or "sideways").strip().lower()
-            if basis == "bos":
-                if struct_dir is Direction.LONG and regime_trend == "strong_down":
-                    return Decision(Direction.FLAT, reason="bos_long_vs_strong_down", source=self.name)
-                if struct_dir is Direction.SHORT and regime_trend == "strong_up":
-                    return Decision(Direction.FLAT, reason="bos_short_vs_strong_up", source=self.name)
+            if struct_dir is Direction.LONG and regime_trend == "strong_down":
+                return Decision(Direction.FLAT, reason=f"counter_strong_down:{basis}", source=self.name)
+            if struct_dir is Direction.SHORT and regime_trend == "strong_up":
+                return Decision(Direction.FLAT, reason=f"counter_strong_up:{basis}", source=self.name)
 
             return Decision(
                 struct_dir,

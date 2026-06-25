@@ -132,26 +132,39 @@ def test_thesis_conflicting_structure_is_flat():
 
 def test_thesis_bos_vetoed_by_strong_opposite_regime_symmetry():
     pol = ThesisPolicy()
-    # BOS-long fighting a strong_down regime -> FLAT (continuation can't override strong opposite)
+    # BOS-long fighting a strong_down regime -> FLAT (with-trend only in a strong trend)
     assert pol.decide(_tctx([_brk("BOS", "bullish")], trend="strong_down")).is_flat
     # mirror: BOS-short vs strong_up -> FLAT
     assert pol.decide(_tctx([_brk("BOS", "bearish")], trend="strong_up")).is_flat
 
 
-def test_thesis_choch_NOT_vetoed_by_strong_opposite_regime():
+def test_thesis_choch_ALSO_vetoed_by_strong_opposite_regime():
+    # chunk 5a: a bare CHoCH reversal is NOW vetoed against a STRONG trend too (was allowed in
+    # chunk 3). "Never trade against the trend" — strong-trend reversals need the sweep->CHoCH
+    # sequence (not yet built). Symmetric.
     pol = ThesisPolicy()
-    # a CHoCH IS allowed to call the reversal against a strong opposite regime (basis=choch, no veto)
-    d = pol.decide(_tctx([_brk("CHoCH", "bullish")], trend="strong_down"))
-    assert d.direction is Direction.LONG
-    d2 = pol.decide(_tctx([_brk("CHoCH", "bearish")], trend="strong_up"))
-    assert d2.direction is Direction.SHORT
+    assert pol.decide(_tctx([_brk("CHoCH", "bullish")], trend="strong_down")).is_flat
+    assert pol.decide(_tctx([_brk("CHoCH", "bearish")], trend="strong_up")).is_flat
+    # the FLAT reason names the counter-strong path + the basis
+    assert "counter_strong_down" in pol.decide(_tctx([_brk("CHoCH", "bullish")], trend="strong_down")).reason
 
 
-def test_thesis_bos_with_aligned_regime_passes():
+def test_thesis_normal_trend_no_veto_structure_wins_both_basis():
     pol = ThesisPolicy()
-    # BOS-long with an up regime is fine (only a STRONG opposite vetoes)
-    assert pol.decide(_tctx([_brk("BOS", "bullish")], trend="up")).direction is Direction.LONG
-    assert pol.decide(_tctx([_brk("BOS", "bearish")], trend="down")).direction is Direction.SHORT
+    # NORMAL (non-strong) opposite trend: structure WINS — neither BOS nor CHoCH is vetoed.
+    # BOS-long in a normal 'down' regime -> LONG (structure broke up; lag-prone label doesn't override)
+    assert pol.decide(_tctx([_brk("BOS", "bullish")], trend="down")).direction is Direction.LONG
+    assert pol.decide(_tctx([_brk("BOS", "bearish")], trend="up")).direction is Direction.SHORT
+    # CHoCH reversal in a normal trend -> allowed (both directions)
+    assert pol.decide(_tctx([_brk("CHoCH", "bullish")], trend="down")).direction is Direction.LONG
+    assert pol.decide(_tctx([_brk("CHoCH", "bearish")], trend="up")).direction is Direction.SHORT
+
+
+def test_thesis_with_trend_in_strong_regime_passes():
+    pol = ThesisPolicy()
+    # WITH-trend entries in a strong trend are fine: SHORT in strong_down, LONG in strong_up
+    assert pol.decide(_tctx([_brk("BOS", "bearish")], trend="strong_down")).direction is Direction.SHORT
+    assert pol.decide(_tctx([_brk("BOS", "bullish")], trend="strong_up")).direction is Direction.LONG
 
 
 def test_thesis_never_raises_returns_flat():
