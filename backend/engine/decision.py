@@ -93,3 +93,109 @@ class LegacyScorePolicy(DecisionPolicy):
         if d is Direction.FLAT:
             return Decision(d, reason=f"legacy_no_directional_edge:{raw!r}", source=self.name)
         return Decision(d, reason=f"legacy_argmax:{d.value.lower()}", source=self.name)
+
+
+# Break direction vocabulary — mirrors the scorer's regime-blind BOS arbitration
+# (scorer.py:2903-2908, the P/D bug #2 fix). Direction comes from STRUCTURE, never the
+# (lag-prone) regime label.
+_BULL_WORDS = ("bullish", "up", "long")
+_BEAR_WORDS = ("bearish", "down", "short")
+
+
+def _break_dir(sb: Any) -> Optional[Direction]:
+    """LONG/SHORT for a StructuralBreak's .direction, or None if unrecognized."""
+    d = str(getattr(sb, "direction", "") or "").strip().lower()
+    if d in _BULL_WORDS:
+        return Direction.LONG
+    if d in _BEAR_WORDS:
+        return Direction.SHORT
+    return None
+
+
+def _break_type(sb: Any) -> str:
+    return str(getattr(sb, "break_type", "") or "").strip().upper()
+
+
+class ThesisPolicy(DecisionPolicy):
+    """Structure-led, CHoCH-aware, abstain-capable direction thesis (heart-change chunk 3).
+
+    Replaces argmax-of-confluence-score for DIRECTION. Rationale (operator-approved config
+    2026-06-24, see project_v1_salvage_regime_router): the confluence score has measured no edge
+    (1/26 factors predict); the one profitable cohort ever found was the BOS-continuation override
+    (decisions/2026-06-13__pd-factor-inverted-in-trends-finding.md). So direction comes from
+    confirmed market STRUCTURE, NOT the regime label (which lags at trend flips — "41/44 swings
+    were shorts in the bottom 20% of range", §11.5).
+
+    Rules (symmetric by construction — bull/bear mirror):
+      1. CHoCH (reversal) takes priority over BOS (continuation) — a change-of-character catches the
+         turn EARLIER than either a stale BOS or the lagging regime label.
+      2. BOS (continuation) decides when there is no CHoCH.
+      3. FLAT (first-class abstain) when: no structure · conflicting structure (both directions) ·
+         a BOS-continuation that fights a STRONG opposite regime (a CHoCH may still call the
+         reversal; a mere continuation may not override a strong opposing trend).
+      4. Any internal failure -> FLAT with a clear reason (NOT a raise — the orchestrator's
+         exception handler would miscategorize a raise; backend-integrity guard, chunk-2 note).
+
+    This is a STEP toward the §11.5 sequence setup (sweep->CHoCH->OB->retest), not the destination:
+    it is structure-LED direction, still largely a snapshot. trade_type is left None (the cascade
+    decides geometry). The score is intentionally NOT read — demoting it from gate to context is
+    the whole point.
+    """
+
+    name = "thesis_structure"
+
+    def decide(self, context: Any) -> Decision:
+        try:
+            smc = getattr(context, "smc_snapshot", None)
+            breaks = list(getattr(smc, "structural_breaks", None) or []) if smc else []
+            if not breaks:
+                return Decision(Direction.FLAT, reason="no_structure", source=self.name)
+
+            # Classify confirmed breaks by (type, direction). Direction is regime-blind.
+            choch = {Direction.LONG: False, Direction.SHORT: False}
+            bos = {Direction.LONG: False, Direction.SHORT: False}
+            for sb in breaks:
+                d = _break_dir(sb)
+                if d is None:
+                    continue
+                t = _break_type(sb)
+                if t == "CHOCH":
+                    choch[d] = True
+                elif t == "BOS":
+                    bos[d] = True
+
+            # 1+2: CHoCH (reversal) priority, else BOS (continuation).
+            if choch[Direction.LONG] and choch[Direction.SHORT]:
+                return Decision(Direction.FLAT, reason="conflicting_choch", source=self.name)
+            if choch[Direction.LONG]:
+                struct_dir, basis = Direction.LONG, "choch"
+            elif choch[Direction.SHORT]:
+                struct_dir, basis = Direction.SHORT, "choch"
+            elif bos[Direction.LONG] and bos[Direction.SHORT]:
+                return Decision(Direction.FLAT, reason="conflicting_bos", source=self.name)
+            elif bos[Direction.LONG]:
+                struct_dir, basis = Direction.LONG, "bos"
+            elif bos[Direction.SHORT]:
+                struct_dir, basis = Direction.SHORT, "bos"
+            else:
+                return Decision(Direction.FLAT, reason="no_directional_structure", source=self.name)
+
+            # 3: regime veto — a BOS-continuation may NOT fight a STRONG opposite regime
+            # (a CHoCH may; that is the change-of-character calling the turn). Symmetric.
+            meta = getattr(context, "metadata", None) or {}
+            regime = meta.get("symbol_regime")
+            regime_trend = str(getattr(regime, "trend", "sideways") or "sideways").strip().lower()
+            if basis == "bos":
+                if struct_dir is Direction.LONG and regime_trend == "strong_down":
+                    return Decision(Direction.FLAT, reason="bos_long_vs_strong_down", source=self.name)
+                if struct_dir is Direction.SHORT and regime_trend == "strong_up":
+                    return Decision(Direction.FLAT, reason="bos_short_vs_strong_up", source=self.name)
+
+            return Decision(
+                struct_dir,
+                reason=f"structure_led:{basis}:regime={regime_trend}",
+                source=self.name,
+                meta={"basis": basis, "regime_trend": regime_trend},
+            )
+        except Exception as e:  # never raise — orchestrator would miscategorize it
+            return Decision(Direction.FLAT, reason=f"thesis_error:{type(e).__name__}:{e}", source=self.name)
