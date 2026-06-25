@@ -17,6 +17,7 @@ the orchestrator is wired to consume a Decision and a non-legacy policy is enabl
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
@@ -199,3 +200,31 @@ class ThesisPolicy(DecisionPolicy):
             )
         except Exception as e:  # never raise — orchestrator would miscategorize it
             return Decision(Direction.FLAT, reason=f"thesis_error:{type(e).__name__}:{e}", source=self.name)
+
+
+# --- Flag (heart-change chunk 4) ---------------------------------------------
+# SS_DECISION_POLICY selects the decision core AND couples the gate behavior:
+#   "legacy" (default) -> LegacyScorePolicy + the score>=min_confluence_score gate is authoritative
+#                         (byte-identical to pre-heart-change behavior).
+#   "thesis"           -> ThesisPolicy is the go/no-go authority: FLAT rejects, actionable proceeds,
+#                         and the score-gate is DEMOTED to logged context at BOTH gate sites
+#                         (orchestrator + paper_trading_service). The 4 pre-scoring gates still apply.
+# Env-var (not config) on purpose: no SniperContext/ScanConfig field => no contract drift. Enabling
+# requires a hard backend restart (the bot's long-lived parent stays stale), which matches the
+# "flip on in a deliberate, watched paper session" plan.
+_THESIS = "thesis"
+_LEGACY = "legacy"
+
+
+def decision_mode() -> str:
+    """'thesis' or 'legacy' (default). Single source of truth for the heart-change flag."""
+    return _THESIS if os.getenv("SS_DECISION_POLICY", _LEGACY).strip().lower() == _THESIS else _LEGACY
+
+
+def is_thesis_mode() -> bool:
+    return decision_mode() == _THESIS
+
+
+def active_decision_policy() -> DecisionPolicy:
+    """The policy selected by SS_DECISION_POLICY. Default LegacyScorePolicy (no behavior change)."""
+    return ThesisPolicy() if is_thesis_mode() else LegacyScorePolicy()

@@ -60,7 +60,11 @@ from backend.analysis.macro_context import MacroContext
 from backend.analysis.htf_levels import HTFLevelDetector
 
 from backend.engine.cooldown_manager import CooldownManager
-from backend.engine.decision import DecisionPolicy, LegacyScorePolicy
+from backend.engine.decision import (
+    DecisionPolicy,
+    active_decision_policy,
+    is_thesis_mode,
+)
 
 # Domain Services
 from backend.services.indicator_service import configure_indicator_service
@@ -196,9 +200,12 @@ class Orchestrator:
         self.config = config
 
         # Decision-core seam (heart-change): the DecisionPolicy is the source of truth for
-        # direction. Default LegacyScorePolicy reproduces the current argmax decision; swapping in
-        # ThesisPolicy (chunk 3) changes WHAT decides without touching downstream consumers.
-        self.decision_policy: DecisionPolicy = LegacyScorePolicy()
+        # direction, selected by the SS_DECISION_POLICY flag (default 'legacy' = LegacyScorePolicy,
+        # byte-identical to pre-heart-change). 'thesis' -> ThesisPolicy + the score-gate is demoted
+        # (see the decision gate in _process_symbol). _thesis_mode is cached at construction so the
+        # gate and the policy agree for the whole session.
+        self.decision_policy: DecisionPolicy = active_decision_policy()
+        self._thesis_mode: bool = is_thesis_mode()
 
         # Replay-mode state (immutable per instance — enforced via @property
         # below; symmetry-guard 2026-05-25 flagged that a plain `self.replay_mode`
@@ -2181,10 +2188,47 @@ class Orchestrator:
         except Exception:
             pass
 
+        # ── Decision gate (heart-change chunk 4, flag-gated) ─────────────────────
+        # In thesis mode the DecisionPolicy is the go/no-go authority for direction:
+        #   FLAT       -> reject (the engine abstains — no structural thesis; loud, telemeterized)
+        #   LONG/SHORT -> proceed, and the score < min_confluence_score gate below is DEMOTED
+        #                 (skipped). The 4 pre-scoring gates already ran upstream; the confluence
+        #                 score becomes logged context, not a go/no-go gate.
+        # Legacy mode (default, flag off) is byte-identical: _thesis_mode is False, this block is
+        # skipped, and the score-gate below is authoritative exactly as before.
+        _decision = context.metadata.get("decision")
+        if self._thesis_mode and _decision is not None and _decision.is_flat:
+            _flat_score = float(getattr(context.confluence_breakdown, "total_score", 0.0))
+            self.telemetry.log_event(
+                create_signal_rejected_event(
+                    run_id=run_id,
+                    symbol=symbol,
+                    reason=f"Thesis abstained: {_decision.reason}",
+                    gate_name="thesis",
+                    score=_flat_score,
+                    threshold=self.config.min_confluence_score,
+                )
+            )
+            self._progress(
+                "GATE_FAIL",
+                {"symbol": symbol, "gate": "thesis", "score": _flat_score, "threshold": 0.0},
+            )
+            logger.info("%s: ❌ REJECTED (thesis) | %s", symbol, _decision.reason)
+            return None, {
+                "symbol": symbol,
+                "direction": "FLAT",
+                "reason_type": "no_thesis",
+                "reason": f"Thesis abstained ({_decision.reason}) — no structural setup; sitting out.",
+                "score": _flat_score,
+                "threshold": self.config.min_confluence_score,
+                "__telemeterized": True,
+                "top_factors": [],
+            }
+
         # Check quality gate (round to 1 decimal to avoid floating point precision issues)
         score_rounded = round(context.confluence_breakdown.total_score, 1)
         threshold_rounded = round(self.config.min_confluence_score, 1)
-        if score_rounded < threshold_rounded:
+        if (not self._thesis_mode) and score_rounded < threshold_rounded:
             top_factors_str = " | ".join(
                 [f"{f.name}={f.score:.1f}" for f in context.confluence_breakdown.factors[:3]]
             )

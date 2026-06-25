@@ -29,6 +29,7 @@ from backend.bot.executor.position_manager import PositionManager, PositionStatu
 from backend.bot.telemetry.storage import TelemetryStorage
 from backend.bot.telemetry.events import TelemetryEvent, EventType
 from backend.engine.orchestrator import Orchestrator
+from backend.engine.decision import is_thesis_mode
 from backend.shared.config.scanner_modes import get_mode, ScannerMode
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.models.planner import TradePlan
@@ -2340,6 +2341,18 @@ class PaperTradingService:
             logger.info(
                 f"NEAR-MISS ENTRY: {plan.symbol} {plan.direction} "
                 f"| confluence {score_r:.1f}% in band [{floor_r:.0f}–{gate_r:.0f}%]{_adj_note} "
+                f"| taking at 50% position size"
+            )
+        elif is_thesis_mode():
+            # Heart-change chunk 4: in thesis mode the confluence score is DEMOTED — the orchestrator
+            # already gated go/no-go on the structural thesis (FLAT rejects upstream). A below-floor
+            # score no longer SKIPS here; it takes at minimum (half) size — the score informs SIZING,
+            # not the trade/no-trade decision. This is the bot's half of the dual-gate demotion
+            # (must move WITH the orchestrator gate or it secretly re-score-gates the thesis trades).
+            size_modifier = 0.5
+            logger.info(
+                f"THESIS ENTRY: {plan.symbol} {plan.direction} "
+                f"| confluence {score_r:.1f}% below floor {floor_r:.0f}% (score demoted) "
                 f"| taking at 50% position size"
             )
         else:

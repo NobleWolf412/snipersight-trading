@@ -8,6 +8,9 @@ from backend.engine.decision import (
     Direction,
     LegacyScorePolicy,
     ThesisPolicy,
+    active_decision_policy,
+    decision_mode,
+    is_thesis_mode,
 )
 
 
@@ -169,3 +172,31 @@ def test_thesis_leaves_trade_type_none_and_is_a_policy():
     d = pol.decide(_tctx([_brk("BOS", "bullish")]))
     assert d.trade_type is None  # cascade decides geometry
     assert d.source == "thesis_structure" and d.reason
+
+
+# ---- SS_DECISION_POLICY flag (chunk 4) — default off = legacy = no behavior change ----
+
+def test_decision_mode_defaults_to_legacy(monkeypatch):
+    monkeypatch.delenv("SS_DECISION_POLICY", raising=False)
+    assert decision_mode() == "legacy"
+    assert is_thesis_mode() is False
+    assert isinstance(active_decision_policy(), LegacyScorePolicy)
+
+
+def test_decision_mode_thesis_flag_selects_thesis(monkeypatch):
+    monkeypatch.setenv("SS_DECISION_POLICY", "thesis")
+    assert decision_mode() == "thesis"
+    assert is_thesis_mode() is True
+    assert isinstance(active_decision_policy(), ThesisPolicy)
+
+
+def test_decision_mode_unknown_value_is_failsafe_legacy(monkeypatch):
+    # an unrecognized flag value must NOT silently enable the behavioral change
+    monkeypatch.setenv("SS_DECISION_POLICY", "garbage")
+    assert decision_mode() == "legacy"
+    assert isinstance(active_decision_policy(), LegacyScorePolicy)
+
+
+def test_decision_mode_is_case_insensitive(monkeypatch):
+    monkeypatch.setenv("SS_DECISION_POLICY", "THESIS")
+    assert is_thesis_mode() is True
