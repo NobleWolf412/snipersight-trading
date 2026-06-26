@@ -87,6 +87,37 @@ def _entry_realized_rr(entry: float, stop: float, targets: List[float]) -> float
     return reward / risk
 
 
+def _rr_bounded_snap(
+    side: str,
+    desired_limit: float,
+    raw_limit: float,
+    stop: float,
+    nearest_tp: float,
+    rr_floor: float,
+) -> float:
+    """Clamp a snapped limit price so realized RR stays >= ``rr_floor`` (heart-change Form-B fix).
+
+    The limit snap chases the entry toward market to improve fill odds; it keeps $-risk constant
+    but SHRINKS reward (entry nears TP1, stop widens), which can invert geometry to a sub-floor RR
+    the entry gate then rejects — wasting a valid setup. This caps the snap at the price where
+    realized RR == rr_floor, so it goes as far toward market as the floor allows and no further.
+
+    Geometry: RR == rr_floor  <=>  |tp - limit| / |limit - stop| == rr_floor
+              =>  limit == (rr_floor*stop + tp) / (1 + rr_floor)   (one root, both directions).
+    BUY (long): higher limit -> lower RR, so cap ABOVE at the bound, never snap BELOW the OB.
+    SELL (short): lower limit -> lower RR, so floor BELOW at the bound, never snap ABOVE the OB.
+    If even ``raw_limit`` (the OB edge) is already sub-floor, the clamp returns ``raw_limit`` (no
+    snap) and the downstream RR gate correctly rejects (genuinely bad geometry, not snap-induced).
+    Symmetric by construction; returns ``desired_limit`` unchanged when geometry is unusable.
+    """
+    if rr_floor <= 0 or stop <= 0 or nearest_tp <= 0 or raw_limit <= 0:
+        return desired_limit
+    rr_bound = (rr_floor * stop + nearest_tp) / (1.0 + rr_floor)
+    if str(side).upper() == "BUY":
+        return max(min(desired_limit, rr_bound), raw_limit)
+    return min(max(desired_limit, rr_bound), raw_limit)
+
+
 def _pool_price_swept(node: Any) -> "tuple[Optional[float], Optional[bool]]":
     """Resolve (price, swept) from a single KeyLevels.to_dict() pool node.
 
@@ -2569,6 +2600,28 @@ class PaperTradingService:
                     limit_price = current_price * (1 - _max_dist / 100)
                 else:
                     limit_price = current_price * (1 + _max_dist / 100)
+
+                # ── Form-B fix (thesis mode, paper-only): bound the snap by the RR floor ──
+                # Unbounded, the snap manufactures a sub-floor geometry the RR gate below then
+                # rejects (planned RR 2.70 -> realized 0.60). Cap the snap at the RR-floor price so
+                # it goes as far toward market as the floor allows and still fills. If even the OB
+                # (_raw_limit) is sub-floor, the clamp is a no-op (no snap) and the gate rejects.
+                # Paper-only: the live snap (live_trading_service) is separate code, NOT touched.
+                _rr_floor_snap = float(getattr(self.config, "rr_floor_at_entry", 1.0) or 0.0)
+                _stop_lvl = float(plan.stop_loss.level) if plan.stop_loss else 0.0
+                if is_thesis_mode() and _rr_floor_snap > 0 and plan.targets and _stop_lvl:
+                    _near_tp = min(
+                        (float(t.level) for t in plan.targets), key=lambda t: abs(t - _raw_limit)
+                    )
+                    _pre_bound = limit_price
+                    limit_price = _rr_bounded_snap(
+                        side, limit_price, _raw_limit, _stop_lvl, _near_tp, _rr_floor_snap
+                    )
+                    if abs(limit_price - _pre_bound) > 1e-12:
+                        logger.info(
+                            "LIMIT SNAP RR-BOUND: %s %s | %.6g → %.6g (preserve RR floor %.2f)",
+                            plan.symbol, plan.direction, _pre_bound, limit_price, _rr_floor_snap,
+                        )
 
                 # ── Recalculate position size for the wider stop distance ──
                 # The snap moved entry away from the OB, increasing the distance
