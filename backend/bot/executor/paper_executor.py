@@ -173,6 +173,11 @@ class PaperExecutor:
 
         self.balance = initial_balance
         self.initial_balance = initial_balance
+        # Per-symbol cumulative net realized cash — shadows EVERY balance mutation for the symbol's
+        # position lifecycle (-fee on each fill, +realized on closes). pop_position_realized() returns
+        # this at trade close so the journal P&L equals the ACTUAL account delta (net of fees, on the
+        # actually-filled qty), not the modeled gross/planned figure. 2026-06-27 journal-vs-executor fix.
+        self._realized_by_symbol: dict = {}
         self.fee_rate = fee_rate
         self.slippage_bps = slippage_bps
         self.major_slippage_bps = major_slippage_bps
@@ -315,6 +320,7 @@ class PaperExecutor:
         fill = Fill(order_id=order_id, quantity=fill_qty, price=fill_price, fee=fee)
         self.fills.append(fill)
         self.balance -= fee
+        self._realized_by_symbol[order.symbol] = self._realized_by_symbol.get(order.symbol, 0.0) - fee
 
         order.filled_quantity += fill_qty
         # Update average fill price using weighted average
@@ -355,6 +361,7 @@ class PaperExecutor:
                 realized_pnl = (current_avg - fill_price) * close_qty
                 
             self.balance += realized_pnl
+            self._realized_by_symbol[order.symbol] = self._realized_by_symbol.get(order.symbol, 0.0) + realized_pnl
             new_pos = current_pos + trade_qty
             
             # Flipped direction (e.g. Long 1, Sold 2 -> Short 1)
@@ -419,6 +426,7 @@ class PaperExecutor:
         fill = Fill(order_id=order_id, quantity=fill_qty, price=fill_price, fee=fee)
         self.fills.append(fill)
         self.balance -= fee
+        self._realized_by_symbol[order.symbol] = self._realized_by_symbol.get(order.symbol, 0.0) - fee
 
         # Update order state
         total_filled = order.filled_quantity + fill_qty
@@ -449,6 +457,7 @@ class PaperExecutor:
             close_qty = min(fill_qty, abs(current_pos))
             realized_pnl = (fill_price - current_avg) * close_qty if current_pos > 0 else (current_avg - fill_price) * close_qty
             self.balance += realized_pnl
+            self._realized_by_symbol[order.symbol] = self._realized_by_symbol.get(order.symbol, 0.0) + realized_pnl
             new_pos = current_pos + trade_qty
             
             if (current_pos > 0 and new_pos < 0) or (current_pos < 0 and new_pos > 0):
@@ -514,6 +523,14 @@ class PaperExecutor:
     def get_position(self, symbol: str) -> float:
         """Get current position for symbol."""
         return self.positions.get(symbol, 0.0)
+
+    def pop_position_realized(self, symbol: str):
+        """Return AND clear the cumulative net realized cash for a symbol's just-closed position
+        (net of fees, on the actually-filled qty — it shadows every balance mutation for the
+        symbol). The journal reads this so its P&L equals the real account delta instead of the
+        modeled gross/planned figure. Returns None when the symbol has no tracked realized (the
+        caller falls back to pos.total_pnl — e.g. the live executor / simulation paths)."""
+        return self._realized_by_symbol.pop(symbol, None)
 
     def get_balance(self) -> float:
         """Get current balance."""

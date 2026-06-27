@@ -3216,6 +3216,18 @@ class PaperTradingService:
 
         return positions
 
+    def _journal_pnl_for(self, pos) -> float:
+        """Journal P&L = the executor's ACTUAL realized cash for this position (net of fees, on the
+        actually-filled qty), so the journal matches the account and edge measurement is trustworthy.
+        Falls back to pos.total_pnl when the executor doesn't track it (live executor / simulation),
+        leaving those paths unchanged. (2026-06-27 journal-vs-executor reconciliation, paper-only.)"""
+        _exec = getattr(self, "executor", None)
+        if _exec is not None and hasattr(_exec, "pop_position_realized"):
+            _actual = _exec.pop_position_realized(getattr(pos, "symbol", None))
+            if _actual is not None:
+                return float(_actual)
+        return pos.total_pnl
+
     async def _sync_closed_positions(self):
         """Check for positions that have been closed and record them."""
         if not self.position_manager:
@@ -3258,7 +3270,7 @@ class PaperTradingService:
                     quantity=pos.quantity,
                     entry_time=pos.created_at,
                     exit_time=pos.updated_at,
-                    pnl=pos.total_pnl,
+                    pnl=self._journal_pnl_for(pos),
                     pnl_pct=pos.pnl_percentage,
                     exit_reason=exit_reason,
                     targets_hit=[i for i, _ in enumerate(pos.targets_hit)],
