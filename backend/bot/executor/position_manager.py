@@ -886,8 +886,19 @@ class PositionManager:
                     position.exit_reason = "target"
                     position.exit_price = current_price  # Record at trigger time, not sync time
                     position.remaining_quantity = 0.0  # Zero out any residue
+                    # P&L DOUBLE-COUNT FIX (2026-06-27): clear the stale cycle-top unrealized_pnl now
+                    # that the whole position is realized into realized_pnl. EVERY other exit path
+                    # (stop/stagnation/max-hours/close_position) does this; the target path was the
+                    # only one that omitted it, so total_pnl (= realized + unrealized) read 2x the
+                    # true P&L on target exits — overstating journal/edge measurement. The closed
+                    # slice's profit is already in realized_pnl (line above); unrealized must be 0.
+                    position.unrealized_pnl = 0.0
                 else:
                     position.status = PositionStatus.PARTIAL
+                    # Partial exit: recompute unrealized on the REDUCED remaining_quantity so
+                    # total_pnl reflects only the surviving slice, not the stale full-qty value the
+                    # cycle-top update computed before this partial close.
+                    position.update_unrealized_pnl(current_price)
 
             # Check if should move to breakeven
             if len(position.targets_hit) >= self.breakeven_after_target:
@@ -1120,8 +1131,10 @@ class PositionManager:
             # any environment (unit-test sandbox without SQLite path, etc.)
             # never breaks the executor hot path.
             try:
-                from datetime import datetime, timezone
-
+                # NOTE: datetime/timezone come from the MODULE import (top of file). A local
+                # `from datetime import ...` here shadowed them function-wide, making the
+                # datetime.now() at the top of _check_targets_hit (the order_executor-is-None
+                # simulation/replay branch) raise UnboundLocalError. Removed 2026-06-27.
                 from backend.bot.telemetry.events import EventType, TelemetryEvent
                 from backend.bot.telemetry.logger import get_telemetry_logger
 
