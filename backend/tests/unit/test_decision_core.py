@@ -10,6 +10,7 @@ from backend.engine.decision import (
     ThesisPolicy,
     active_decision_policy,
     decision_mode,
+    is_fresh_entry_price,
     is_thesis_mode,
     regime_type_rank,
 )
@@ -214,6 +215,34 @@ def test_decision_mode_unknown_value_is_failsafe_legacy(monkeypatch):
 def test_decision_mode_is_case_insensitive(monkeypatch):
     monkeypatch.setenv("SS_DECISION_POLICY", "THESIS")
     assert is_thesis_mode() is True
+
+
+# ---- SS_FRESH_ENTRY_PRICE flag (Form-A) — independent of thesis, default off ----
+
+def test_fresh_entry_price_defaults_off(monkeypatch):
+    monkeypatch.delenv("SS_FRESH_ENTRY_PRICE", raising=False)
+    assert is_fresh_entry_price() is False
+
+
+def test_fresh_entry_price_on_values(monkeypatch):
+    for v in ("1", "true", "TRUE", "yes", "on"):
+        monkeypatch.setenv("SS_FRESH_ENTRY_PRICE", v)
+        assert is_fresh_entry_price() is True, v
+
+
+def test_fresh_entry_price_unknown_is_off(monkeypatch):
+    monkeypatch.setenv("SS_FRESH_ENTRY_PRICE", "garbage")
+    assert is_fresh_entry_price() is False
+
+
+def test_fresh_entry_price_independent_of_thesis(monkeypatch):
+    # the two flags are decoupled (clean attribution)
+    monkeypatch.setenv("SS_DECISION_POLICY", "thesis")
+    monkeypatch.delenv("SS_FRESH_ENTRY_PRICE", raising=False)
+    assert is_thesis_mode() is True and is_fresh_entry_price() is False
+    monkeypatch.setenv("SS_FRESH_ENTRY_PRICE", "1")
+    monkeypatch.delenv("SS_DECISION_POLICY", raising=False)
+    assert is_fresh_entry_price() is True and is_thesis_mode() is False
 
 
 # ---- regime_type_rank (chunk 5b — the cascade winner criterion, replaces score+swing bonus) ----

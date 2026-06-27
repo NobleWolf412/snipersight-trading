@@ -63,6 +63,7 @@ from backend.engine.cooldown_manager import CooldownManager
 from backend.engine.decision import (
     DecisionPolicy,
     active_decision_policy,
+    is_fresh_entry_price,
     is_thesis_mode,
     regime_type_rank,
 )
@@ -2445,13 +2446,54 @@ class Orchestrator:
             context.confluence_breakdown.total_score,
             list(cascade_types) if cascade_types else "off",
         )
+        # ── Form-A fresh-price entry geometry (heart-change, SS_FRESH_ENTRY_PRICE, default OFF) ──
+        # Build the plan (OB selection, entry zone, stop, targets) against a FRESH tick instead of
+        # the stale scan-time candle close, so a retrace zone the market has already walked through
+        # stops qualifying. Scoring already ran on the candle close above — only the PLAN geometry
+        # uses the fresh price. Falls back to current_price on fetch failure (loud, never silent).
+        # Flag OFF -> plan_price == current_price -> byte-identical. §15 design entry 2026-06-25.
+        plan_price = current_price
+        if is_fresh_entry_price() and self.exchange_adapter is not None and current_price > 0:
+            _fresh_px = self._fetch_fresh_price(context.symbol)
+            if _fresh_px and _fresh_px > 0:
+                # Outlier guard (adversarial-review): use the fresh tick ONLY for MODEST drift.
+                # current_price is an OB-SELECTION filter downstream (entry_engine max_pullback_atr),
+                # so re-anchoring on a BIG move or a painted/wick tick could swap the scored OB or
+                # flip to a market chase. If the fresh tick deviates > k*ATR from the candle close,
+                # fall back to the close → behaves exactly as today and the existing post-plan
+                # revalidation handles a genuinely stranded zone. Confines fresh-price to where it is
+                # coherent with the just-scored structure.
+                _g_atr = self._guard_atr(context, current_price)
+                _g_mult = float(getattr(self.config, "fresh_entry_max_dev_atr", 1.0) or 1.0)
+                if self._fresh_within_guard(_fresh_px, current_price, _g_atr, _g_mult):
+                    if abs(_fresh_px - current_price) / current_price > 1e-9:
+                        logger.info(
+                            "%s [%s]: FRESH ENTRY PRICE %.6g -> %.6g (Δ%.4g <= %.2f*ATR; plan geometry only)",
+                            symbol, trace_id, current_price, _fresh_px,
+                            abs(_fresh_px - current_price), _g_mult,
+                        )
+                    plan_price = _fresh_px
+                else:
+                    # WARNING (not INFO) so a recurring outlier-reject pattern (mispriced ATR window
+                    # or a venue painting wicks) is grep-able — §10 diagnosability.
+                    logger.warning(
+                        "%s [%s]: FRESH ENTRY PRICE %.6g rejected as outlier (Δ%.4g > %.2f*ATR=%.4g) — "
+                        "using candle close %.6g; revalidation handles any stranded zone",
+                        symbol, trace_id, _fresh_px, abs(_fresh_px - current_price),
+                        _g_mult, _g_mult * _g_atr, current_price,
+                    )
+            else:
+                logger.warning(
+                    "%s [%s]: SS_FRESH_ENTRY_PRICE fetch failed — falling back to candle close %.6g",
+                    symbol, trace_id, current_price,
+                )
         if cascade_types:
             context.plan = self._cascade_plan_generation(
-                context, current_price, cascade_types, tick_size=tick_size, lot_size=lot_size
+                context, plan_price, cascade_types, tick_size=tick_size, lot_size=lot_size
             )
         else:
             context.plan = self._generate_trade_plan(
-                context, current_price, tick_size=tick_size, lot_size=lot_size
+                context, plan_price, tick_size=tick_size, lot_size=lot_size
             )
         logger.info(
             "%s [%s]: 🎯 _generate_trade_plan returned: %s",
@@ -2861,6 +2903,60 @@ class Orchestrator:
             # Counter-trend dump in confirmed bull → relief rally fade → block LONG alts
             return "strong_down"
         return None
+
+    def _fetch_fresh_price(self, symbol: str) -> Optional[float]:
+        """Freshest available tick via the direct ccxt adapter — mirrors the post-plan revalidation
+        fetch (~:3443). Returns None on ANY failure so the caller falls back to the candle close
+        (loud at the call site). Used only by the SS_FRESH_ENTRY_PRICE plan-geometry path
+        (heart-change Form-A); the revalidation keeps its own inline fetch unchanged."""
+        try:
+            if hasattr(self.exchange_adapter, "exchange") and hasattr(
+                self.exchange_adapter.exchange, "fetch_ticker"
+            ):
+                fetch_symbol = symbol
+                # OKX swap symbol format handling (mirror the revalidation fetch)
+                if (
+                    "okx" in str(type(self.exchange_adapter)).lower()
+                    and "/USDT" in fetch_symbol
+                    and ":USDT" not in fetch_symbol
+                ):
+                    fetch_symbol = fetch_symbol.replace("/USDT", "/USDT:USDT")
+                ticker = self.exchange_adapter.exchange.fetch_ticker(fetch_symbol)
+                px = ticker.get("last") or ticker.get("close")
+                return float(px) if px else None
+        except Exception:
+            return None
+        return None
+
+    def _guard_atr(self, context: "SniperContext", current_price: float) -> float:
+        """Primary-TF ATR for the fresh-entry-price outlier guard. Defaults to 1% of price when the
+        indicator set is missing (never 0). Robust to both IndicatorSet access patterns."""
+        atr = current_price * 0.01
+        try:
+            inds = getattr(context, "multi_tf_indicators", None)
+            ptf = self.config.primary_planning_timeframe
+            iset = None
+            if inds is not None:
+                if hasattr(inds, "get_indicator"):
+                    iset = inds.get_indicator(ptf)
+                elif hasattr(inds, "by_timeframe"):
+                    iset = inds.by_timeframe.get(ptf)
+            a = getattr(iset, "atr", 0.0) if iset else 0.0
+            if a and float(a) > 0:
+                atr = float(a)
+        except Exception:
+            pass
+        return atr if atr > 0 else current_price * 0.01
+
+    @staticmethod
+    def _fresh_within_guard(fresh: float, close: float, atr: float, mult: float) -> bool:
+        """True if a fresh tick is within mult*ATR of the candle close — the SS_FRESH_ENTRY_PRICE
+        outlier guard. Only MODEST drift re-anchors plan geometry; a big/painted tick (where
+        current_price acts as an OB-selection filter) is rejected so it cannot swap the scored OB.
+        No usable ATR/mult -> False (don't trust the fresh tick; fall back to the candle close)."""
+        if atr <= 0 or mult <= 0 or close <= 0:
+            return False
+        return abs(fresh - close) <= mult * atr
 
     def _generate_trade_plan(
         self,

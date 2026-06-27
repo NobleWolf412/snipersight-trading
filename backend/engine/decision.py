@@ -236,6 +236,17 @@ def active_decision_policy() -> DecisionPolicy:
     return ThesisPolicy() if is_thesis_mode() else LegacyScorePolicy()
 
 
+def is_fresh_entry_price() -> bool:
+    """SS_FRESH_ENTRY_PRICE flag (default OFF, heart-change Form-A). When on, the plan geometry
+    (OB selection, entry zone, stop, targets) is built against a FRESH tick at plan time instead of
+    the stale scan-time candle close, so a retrace zone the market has already walked through stops
+    qualifying. INDEPENDENT of SS_DECISION_POLICY (separate flag = clean attribution of which lever
+    moved the needle). Default off -> live byte-identical. §15 design entry 2026-06-25-DESIGN-fresh-
+    entry-price-geometry. Touches shared/live entry-geometry code → gated; promotion to live default
+    is a separate approval."""
+    return os.getenv("SS_FRESH_ENTRY_PRICE", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
 # --- Regime -> trade-type preference (heart-change chunk 5b) ------------------
 # Replaces the cascade's score+swing bonus (_CASCADE_TYPE_BONUS, which preferred the proven-loser
 # swing) for selecting WHICH trade type to take. SEEDED HYPOTHESIS from operator priors (2026-06-24),

@@ -115,5 +115,42 @@ clean paper sample + (eventually) the per-cell Deflated-Sharpe gate.
 4. Confirm the **limit-snap RR-bound (Form B, paper-only)** is handled separately, not here.
 
 ---
+
+## 11. IMPLEMENTATION RECORD (operator-approved 2026-06-26)
+
+Built behind `SS_FRESH_ENTRY_PRICE` (default off, independent of `SS_DECISION_POLICY`). Injection at
+the orchestrator plan-gen dispatch (`_process_symbol`); `_fetch_fresh_price` helper. Deviations &
+hardening from the original design, all operator-approved:
+
+- **+1 fetch ACCEPTED (not net-zero, R2 revised):** the revalidation keeps its own inline fetch; the
+  plan-time fetch is an additional ccxt `fetch_ticker`, only on the plan-gen path, flag-on only.
+  Operator accepted the +1 over touching the shared revalidation.
+- **OUTLIER GUARD added (adversarial-review hardening):** `current_price` is an OB-SELECTION filter
+  downstream (entry_engine `max_pullback_atr`), so a big/painted fresh tick could swap the scored OB
+  or flip to a market chase. The fresh price is now used ONLY when within `fresh_entry_max_dev_atr`
+  (default 1.0) × primary-TF ATR of the candle close; otherwise it falls back to the close (loud
+  WARNING) and the existing revalidation handles any stranded zone. This resolves the scored-vs-
+  planned-OB divergence and the painted-tick steering for the dangerous (>1·ATR) cases.
+
+### Gate results
+- symmetry-guard PASS (guard direction-agnostic via abs(); flag-off byte-identical; ATR is the
+  ABSOLUTE IndicatorSet.atr, not the percentage-ATR standing-fix trap).
+- backend-integrity CLEAN (flag-off live byte-identical; flag-ON changes live entry geometry too —
+  documented; no contract change).
+- adversarial-review CHALLENGE → resolved to "ship-behind-flag-for-paper, ZERO must-fix." Challenges
+  2 & 3 closed for the dangerous cases.
+
+### PRE-LIVE-PROMOTION conditions (NOT required for paper; required before SS_FRESH_ENTRY_PRICE
+### becomes a live default — a separate approval):
+1. **Cross-TF ATR:** the guard reads PRIMARY-TF ATR while the OB filter uses ENTRY-TF ATR. Moot for
+   STEALTH (primary 1h ≈ entry), but in STRIKE/SURGICAL (5m/15m entries) the guard is looser than
+   "1·ATR" implies. Either switch the guard to entry-TF ATR or a percentage bound before live.
+2. **Integration coverage:** the pure predicate `_fresh_within_guard` is unit-tested; add an
+   integration assertion that a >1·ATR fresh tick lands `plan_price == current_price` at the
+   injection site before live.
+3. **Residual:** a sub-1·ATR painted tick can still nudge OB selection at a boundary OB — small but
+   invisible; consider logging scored-OB-vs-planned-OB identity to make a re-anchor that swaps the
+   OB observable.
+
 **On approval:** implement behind the flag, with symmetry-guard + backend-integrity +
-adversarial-review + a regression test, default-off proven byte-identical, before any commit.
+adversarial-review + a regression test, default-off proven byte-identical, before any commit. ✅ DONE.
