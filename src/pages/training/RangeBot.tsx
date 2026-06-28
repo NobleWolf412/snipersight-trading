@@ -636,9 +636,15 @@ const DEFAULT_SETUP: PaperConfig = {
   meme_mode: false,
   universe_size: 20,
   slippage_bps: 5,
-  fee_rate: 0.1,
-  execution_mode: 'snap_taker',
-  macro_overlay_enabled: true,
+  fee_rate: 0.1, // testnet/live-path only; the normal paper path uses real Phemex maker/taker (see §6 note)
+  // CORRECT defaults for the heart-change strategy (2026-06-28):
+  // - rest_maker: rest the limit AT the order block, fill on the pullback — that retrace IS the SMC
+  //   edge — at Phemex maker fees (0.01%). snap_taker fills at market: it abandons the OB entry AND
+  //   pays taker (0.06%), where this strategy is net-negative. rest_maker is the only correct test mode.
+  // - macro overlay OFF: it biases direction off BTC.D/stable.D, which fights the structure-led thesis
+  //   that now owns direction; ON injects a competing signal.
+  execution_mode: 'rest_maker',
+  macro_overlay_enabled: false,
 };
 
 function SetupTab({
@@ -762,7 +768,10 @@ function SetupTab({
       <SectionPanel num="06" title="Simulated Fill Realism" desc="slippage + fee model applied to all paper trades">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
           <Slider label="Slippage" value={cfg.slippage_bps} min={0} max={50} step={1} onChange={(v) => set('slippage_bps', v)} suffix=" bps" hint="basis points per fill — models market impact" />
-          <Slider label="Taker Fee" value={cfg.fee_rate} min={0} max={0.5} step={0.05} onChange={(v) => set('fee_rate', v)} suffix="%" hint="% fee on each simulated fill" />
+          <Slider label="Legacy / Testnet Fee" value={cfg.fee_rate} min={0} max={0.5} step={0.05} onChange={(v) => set('fee_rate', v)} suffix="%" hint="testnet/live path only — NOT used by the normal paper sim" />
+        </div>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginTop: 8 }}>
+          paper fills use REAL Phemex fees automatically — <span style={{ color: cfg.execution_mode === 'rest_maker' ? '#22d3ee' : 'var(--fg-3)' }}>maker 0.01% (rest/maker)</span> · <span style={{ color: cfg.execution_mode === 'snap_taker' ? '#f5a623' : 'var(--fg-3)' }}>taker 0.06% (snap/taker)</span> — picked by execution mode below. The slider above only applies to testnet/live.
         </div>
       </SectionPanel>
 
@@ -784,12 +793,12 @@ function SetupTab({
             </button>
           ))}
         </div>
-        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginBottom: thesis && cfg.execution_mode === 'rest_maker' ? 6 : 14 }}>
-          snap/taker = fill at market now · rest/maker = rest the limit at the OB, fill on pullback (paper-only — ignored under testnet)
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginBottom: cfg.execution_mode === 'snap_taker' ? 6 : 14 }}>
+          rest/maker (recommended) = rest the limit AT the order block, fill on the pullback — that retrace IS the SMC edge — at maker fees (0.01%) · snap/taker = fill at market now at taker fees (0.06%) · (paper-only — ignored under testnet)
         </div>
-        {thesis && cfg.execution_mode === 'rest_maker' && (
+        {cfg.execution_mode === 'snap_taker' && (
           <div className="mono" style={{ fontSize: 9, color: '#f5a623', letterSpacing: '.1em', marginBottom: 14 }}>
-            ⚠ REST/MAKER rests the limit and fills only on a pullback — low fill rate in choppy ranges. Use SNAP/TAKER to generate trades; switch back to MAKER for fee-sensitive runs.
+            ⚠ SNAP/TAKER fills at market — it abandons the order-block retrace entry (the SMC edge) and pays taker fees, where this strategy is net-negative. REST/MAKER is the correct mode. Sparse fills in chop = the market offering no clean retrace, not a setting to change.
           </div>
         )}
         <Toggle
