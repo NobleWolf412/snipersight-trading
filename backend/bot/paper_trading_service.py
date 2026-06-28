@@ -29,7 +29,7 @@ from backend.bot.executor.position_manager import PositionManager, PositionStatu
 from backend.bot.telemetry.storage import TelemetryStorage
 from backend.bot.telemetry.events import TelemetryEvent, EventType
 from backend.engine.orchestrator import Orchestrator
-from backend.engine.decision import is_thesis_mode
+from backend.engine.decision import is_fresh_entry_price, is_thesis_mode
 from backend.shared.config.scanner_modes import get_mode, ScannerMode
 from backend.shared.config.defaults import ScanConfig
 from backend.shared.models.planner import TradePlan
@@ -1034,6 +1034,11 @@ class PaperTradingService:
             "current_scan": self.current_scan,
             "active_mode": self.active_mode,
             "active_profile": self.active_profile,
+            # Heart-change flag surface (so the UI can reflect the actual decision core): in thesis
+            # mode the confluence score is DEMOTED (the structure-led thesis decides direction; the
+            # min_confluence "gate" no longer rejects). Lets the setup page relabel/grey that control.
+            "decision_mode": "thesis" if is_thesis_mode() else "legacy",
+            "fresh_entry_price": is_fresh_entry_price(),
             "regime": {
                 "composite": self._current_regime_composite,
                 "score": self._current_regime_score,

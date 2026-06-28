@@ -646,12 +646,17 @@ function SetupTab({
   onArm,
   working,
   armErr,
+  decisionMode,
 }: {
   sniperMode: string;
   onArm: (cfg: PaperConfig) => void;
   working: boolean;
   armErr: string | null;
+  decisionMode?: string;
 }) {
+  // Heart-change: in thesis mode the structure thesis decides direction and the confluence score
+  // is DEMOTED (no longer a go/no-go gate). Reflect that so the setup controls don't mislead.
+  const thesis = decisionMode === 'thesis';
   const [cfg, setCfg] = useState<PaperConfig>(DEFAULT_SETUP);
   const set = useCallback(<K extends keyof PaperConfig>(key: K, val: PaperConfig[K]) => {
     setCfg((prev) => ({ ...prev, [key]: val }));
@@ -676,6 +681,7 @@ function SetupTab({
         <span className="mono" style={{ fontSize: 10, color: 'var(--fg-3)', letterSpacing: '.14em' }}>
           ◉ BOT MODE · <span style={{ color: '#22d3ee' }}>{sniperMode.toUpperCase()}</span> · detection set in Scanner · this page configures paper execution only
         </span>
+        {thesis && <Chip kind="green">DECISION · THESIS (structure-led)</Chip>}
         <Chip kind="cyan">PAPER ONLY — NO REAL FUNDS</Chip>
       </div>
 
@@ -704,10 +710,27 @@ function SetupTab({
       </SectionPanel>
 
       {/* § 3 — Confluence */}
-      <SectionPanel num="03" title="Confluence Gate" desc="minimum score for a signal to be taken">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 12 }}>
-          <Slider label="Min Confluence Score" value={cfg.min_confluence} min={50} max={95} step={1} onChange={(v) => set('min_confluence', v)} hint="signals below this score are rejected" />
+      <SectionPanel
+        num="03"
+        title="Confluence Gate"
+        desc={thesis ? 'DEMOTED in thesis mode — the structure thesis decides direction; this score no longer rejects signals' : 'minimum score for a signal to be taken'}
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 12, opacity: thesis ? 0.4 : 1 }}>
+          <Slider
+            label="Min Confluence Score"
+            value={cfg.min_confluence}
+            min={50}
+            max={95}
+            step={1}
+            onChange={(v) => set('min_confluence', v)}
+            hint={thesis ? 'context only — NOT a gate in thesis mode (at most nudges size tier)' : 'signals below this score are rejected'}
+          />
         </div>
+        {thesis && (
+          <div className="mono" style={{ fontSize: 9, color: '#f5a623', letterSpacing: '.1em', marginTop: 8 }}>
+            ⚠ thesis mode active — direction comes from confirmed market structure, not this score. This slider does not gate trades.
+          </div>
+        )}
       </SectionPanel>
 
       {/* § 4 — Position management toggles */}
@@ -761,9 +784,14 @@ function SetupTab({
             </button>
           ))}
         </div>
-        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginBottom: 14 }}>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginBottom: thesis && cfg.execution_mode === 'rest_maker' ? 6 : 14 }}>
           snap/taker = fill at market now · rest/maker = rest the limit at the OB, fill on pullback (paper-only — ignored under testnet)
         </div>
+        {thesis && cfg.execution_mode === 'rest_maker' && (
+          <div className="mono" style={{ fontSize: 9, color: '#f5a623', letterSpacing: '.1em', marginBottom: 14 }}>
+            ⚠ REST/MAKER rests the limit and fills only on a pullback — low fill rate in choppy ranges. Use SNAP/TAKER to generate trades; switch back to MAKER for fee-sensitive runs.
+          </div>
+        )}
         <Toggle
           label="Macro / Dominance Overlay"
           value={cfg.macro_overlay_enabled}
@@ -1324,6 +1352,7 @@ export function RangeBot() {
           onArm={handleArm}
           working={working}
           armErr={armErr}
+          decisionMode={status?.decision_mode}
         />
       ) : (
         <StatusTab

@@ -109,6 +109,10 @@ export interface PaperTradingStatus {
   config: PaperTradingConfigRequest | null;
   last_scan_at: string | null;
   next_scan_in_seconds: number | null;
+  // Heart-change decision-core flags (so the UI reflects the actual core): "thesis" = structure-led
+  // direction + confluence score DEMOTED (not a gate); "legacy" = the classic score-gate path.
+  decision_mode?: 'thesis' | 'legacy';
+  fresh_entry_price?: boolean;
   positions: PaperPosition[];
   balance: {
     initial: number;
