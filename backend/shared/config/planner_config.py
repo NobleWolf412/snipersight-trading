@@ -129,6 +129,15 @@ class PlannerConfig:
     # trade is declined as unreachable. Operator-selected 1.3 ATR (good-window TP1
     # ~0.8 ATR reachable; median favorable excursion ~0.6 ATR). §15 baseline:
     # decisions/2026-05-30__fix-design__tp1-reachability.md.
+    #
+    # TRADE-TYPE-AWARE (2026-06-28, §15 sign-off): this 1.3 default is the SCALP ceiling; it was
+    # mis-applied to ALL types and over-declined intraday (wide structural stops 1.9-3.5 ATR all
+    # exceed 1.3 -> 67/0 conversion). defaults_for_mode now overrides per type: scalp 1.3 (here),
+    # intraday family 2.0, swing 3.0 — grounded in the per-type p75 MFE (reachable distance the
+    # market actually offered): scalp 1.01, intraday 2.18, swing 3.02 ATR. This is the deferred
+    # Stage-2/Lever-A from 2026-06-02__reachability-clamp-overdecline.md, scoped per-type to keep
+    # the scalp anti-stagnation property. Baseline + reasoning:
+    # decisions/2026-06-28__tp1-reachable-ceiling-per-trade-type.md.
     tp1_reachable_ceiling_atr: float = 1.3
 
     # Smart Entry Upgrade (Phase 4)
@@ -186,6 +195,7 @@ class PlannerConfig:
             # Similar to Scalp but slightly looser stops for volatility
             return cls(
                 min_rr=1.8,
+                tp1_reachable_ceiling_atr=2.0,  # intraday family — see §15 baseline note below
                 target_rr_ladder=[2.0, 3.5, 5.0],
                 entry_zone_offset_atr=0.15,
                 stop_buffer_atr=0.75,
@@ -204,6 +214,7 @@ class PlannerConfig:
         elif mode_lower == "swing" or mode_lower == "overwatch":
             return cls(
                 min_rr=2.5,  # Higher standard for swing
+                tp1_reachable_ceiling_atr=3.0,  # see §15 baseline note below (deferred in 5b)
                 target_rr_ladder=[2.0, 4.0, 8.0],  # Big runners
                 entry_zone_offset_atr=0.25,  # Patient entries (limit orders)
                 stop_buffer_atr=1.5,  # Wide stops for noise
@@ -240,9 +251,10 @@ class PlannerConfig:
                 consolidation_min_duration_candles=10,  # Balanced duration
             )
 
-        else:  # "intraday" or default (balanced)
+        else:  # "intraday" or default (balanced) — incl. the cascade "intraday_cascade" scale
             return cls(
                 min_rr=2.0,
+                tp1_reachable_ceiling_atr=2.0,  # intraday family — see §15 baseline note below
                 target_rr_ladder=[2.0, 3.0, 5.0],
                 entry_zone_offset_atr=0.2,
                 stop_buffer_atr=1.0,

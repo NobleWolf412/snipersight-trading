@@ -74,3 +74,53 @@ def test_stop_1_2atr_accepted_at_new_min_rr_short():
         _call(1.0, is_bullish=False)
     except ReachabilityDecline:
         pytest.fail("1.2-ATR stop (SHORT) should be clamp-accepted at min_rr_after_clip=1.0")
+
+
+# ── Trade-type-aware ceiling (2026-06-28 §15, Stage 2 / Lever A scoped per-type) ──
+
+def test_defaults_for_mode_ceiling_is_trade_type_aware():
+    # scalp keeps 1.3 (anti-stagnation); intraday family 2.0; swing 3.0
+    assert PlannerConfig.defaults_for_mode("scalp").tp1_reachable_ceiling_atr == 1.3
+    assert PlannerConfig.defaults_for_mode("precision").tp1_reachable_ceiling_atr == 1.3
+    assert PlannerConfig.defaults_for_mode("intraday").tp1_reachable_ceiling_atr == 2.0
+    assert PlannerConfig.defaults_for_mode("intraday_cascade").tp1_reachable_ceiling_atr == 2.0  # cascade scale
+    assert PlannerConfig.defaults_for_mode("intraday_aggressive").tp1_reachable_ceiling_atr == 2.0
+    assert PlannerConfig.defaults_for_mode("swing").tp1_reachable_ceiling_atr == 3.0
+
+
+def _call_stop(stop_atr: float, ceiling: float, is_bullish: bool = True):
+    """Drive _calculate_targets with a given stop (atr=1.0) and reachable ceiling, ladder 1.5R."""
+    if is_bullish:
+        ez = EntryZone(near_entry=100.0, far_entry=99.9, rationale="t")
+        sl = StopLoss(level=100.0 - stop_atr, distance_atr=stop_atr, rationale="t")
+    else:
+        ez = EntryZone(near_entry=100.0, far_entry=100.1, rationale="t")
+        sl = StopLoss(level=100.0 + stop_atr, distance_atr=stop_atr, rationale="t")
+    pcfg = PlannerConfig()
+    pcfg.tp1_reachable_ceiling_atr = ceiling
+    pcfg.target_min_rr_after_clip = 1.0
+    pcfg.target_rr_ladder = [1.5, 2.5, 4.0]
+    return _calculate_targets(
+        is_bullish=is_bullish, entry_zone=ez, stop_loss=sl,
+        smc_snapshot=SMCSnapshot([], [], [], []), atr=1.0, config=ScanConfig(),
+        planner_cfg=pcfg, setup_archetype="TREND_OB_PULLBACK", regime_label="normal",
+    )
+
+
+def test_wide_intraday_stop_declined_at_scalp_ceiling_admitted_at_intraday():
+    # the binding cohort: a 1.9-ATR intraday stop. At the scalp ceiling 1.3 -> clamped_rr 1.3/1.9=0.68
+    # < 1.0 -> DECLINE (the 67/0 over-decline). At the intraday ceiling 2.0 -> 2.0/1.9=1.05 -> ADMIT.
+    for is_bull in (True, False):  # LONG + SHORT symmetry
+        with pytest.raises(ReachabilityDecline):
+            _call_stop(1.9, ceiling=1.3, is_bullish=is_bull)
+        try:
+            _call_stop(1.9, ceiling=2.0, is_bullish=is_bull)
+        except ReachabilityDecline:
+            pytest.fail(f"1.9-ATR stop (bull={is_bull}) should admit at intraday ceiling 2.0")
+
+
+def test_too_wide_stop_still_declines_at_intraday_ceiling():
+    # the genuinely-too-wide tail (3.53 ATR) must STILL decline at 2.0 (2.0/3.53=0.57 < 1.0) —
+    # the fix admits the reachable cohort, not everything.
+    with pytest.raises(ReachabilityDecline):
+        _call_stop(3.53, ceiling=2.0, is_bullish=True)
