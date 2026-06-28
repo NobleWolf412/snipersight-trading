@@ -2904,28 +2904,38 @@ class Orchestrator:
             return "strong_down"
         return None
 
+    @staticmethod
+    def _ticker_candidates(symbol: str) -> list:
+        """Symbols to try for a perp ticker fetch, in order. The bot universe carries spot-style
+        BASE/USDT but TRADES the perp (BASE/USDT:USDT on Phemex/OKX/Bybit) — same class as the
+        2026-06-22 universe-collapse fix. Try the PERP symbol first (the price we actually trade),
+        then spot. The old OKX-only remap left Phemex perps fetching spot -> fetch failed -> Form-A
+        silently fell back to the stale candle close (2026-06-27 finding: 'SS_FRESH_ENTRY_PRICE
+        fetch failed' on every NEAR/ADA tick)."""
+        if "/USDT" in symbol and ":USDT" not in symbol:
+            return [symbol.replace("/USDT", "/USDT:USDT"), symbol]
+        return [symbol]
+
     def _fetch_fresh_price(self, symbol: str) -> Optional[float]:
-        """Freshest available tick via the direct ccxt adapter — mirrors the post-plan revalidation
-        fetch (~:3443). Returns None on ANY failure so the caller falls back to the candle close
+        """Freshest available tick via the direct ccxt adapter — PERP-SYMBOL AWARE (tries the perp
+        symbol then spot). Returns None on ANY failure so the caller falls back to the candle close
         (loud at the call site). Used only by the SS_FRESH_ENTRY_PRICE plan-geometry path
         (heart-change Form-A); the revalidation keeps its own inline fetch unchanged."""
         try:
-            if hasattr(self.exchange_adapter, "exchange") and hasattr(
-                self.exchange_adapter.exchange, "fetch_ticker"
-            ):
-                fetch_symbol = symbol
-                # OKX swap symbol format handling (mirror the revalidation fetch)
-                if (
-                    "okx" in str(type(self.exchange_adapter)).lower()
-                    and "/USDT" in fetch_symbol
-                    and ":USDT" not in fetch_symbol
-                ):
-                    fetch_symbol = fetch_symbol.replace("/USDT", "/USDT:USDT")
-                ticker = self.exchange_adapter.exchange.fetch_ticker(fetch_symbol)
-                px = ticker.get("last") or ticker.get("close")
-                return float(px) if px else None
+            ex = getattr(self.exchange_adapter, "exchange", None)
+            if ex is None or not hasattr(ex, "fetch_ticker"):
+                return None
+            for sym in self._ticker_candidates(symbol):
+                try:
+                    ticker = ex.fetch_ticker(sym)
+                    px = ticker.get("last") or ticker.get("close")
+                    if px:
+                        return float(px)
+                except Exception:
+                    continue
         except Exception:
             return None
+        return None
         return None
 
     def _guard_atr(self, context: "SniperContext", current_price: float) -> float:

@@ -7,6 +7,15 @@ from backend.engine.orchestrator import Orchestrator
 G = Orchestrator._fresh_within_guard  # staticmethod — no instance needed
 
 
+def test_ticker_candidates_tries_perp_first():
+    # Form-A fetch fix (2026-06-28): spot-style BASE/USDT must try the PERP (:USDT) symbol first so
+    # the Phemex ticker fetch succeeds (the bug that left Form-A inert, falling back to candle close).
+    assert Orchestrator._ticker_candidates("NEAR/USDT") == ["NEAR/USDT:USDT", "NEAR/USDT"]
+    assert Orchestrator._ticker_candidates("ADA/USDT") == ["ADA/USDT:USDT", "ADA/USDT"]
+    assert Orchestrator._ticker_candidates("BTC/USDT:USDT") == ["BTC/USDT:USDT"]  # already perp
+    assert Orchestrator._ticker_candidates("FOO/USD") == ["FOO/USD"]              # non-USDT untouched
+
+
 def test_modest_drift_within_guard():
     # |fresh-close| = 1.0, atr=2.0, mult=1.0 -> 1.0 <= 2.0 -> use fresh
     assert G(101.0, 100.0, 2.0, 1.0) is True
