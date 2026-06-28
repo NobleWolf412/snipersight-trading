@@ -588,6 +588,80 @@ def filter_by_min_order_risk(
     return kept, dropped
 
 
+def filter_by_liquidation_safety(
+    symbols: List[str],
+    leverage: float,
+    book_by_symbol: Dict[str, Dict[str, float]],
+    position_notional: float,
+    *,
+    min_stop_pct: float,
+    mmr: float = 0.004,
+    base_cushion_pct: float = 30.0,
+    thin_cushion_pct: float = 50.0,
+    thin_depth_mult: float = 10.0,
+    context: str = "",
+) -> Tuple[List[str], List[str]]:
+    """Partition by whether a viable stop can sit SAFELY inside the liquidation price at this leverage.
+
+    Gate 3 (decisions/2026-06-28__account-aware-liquidity-admission.md). Admission-level complement to
+    the existing plan-time `risk_engine._adjust_stop_for_leverage` (which tightens an admitted trade's
+    stop to a cushion): here we DROP, pre-plan, symbols where no viable stop could be liquidation-safe
+    at the configured leverage — covering BOTH the no-leverage user and the leverage user:
+
+      - Liquidation distance from entry (fraction) = 1/leverage - mmr  (Phemex isolated-linear; the
+        SAME magnitude for long and short — liq below entry for a long, above for a short — so this is
+        direction-agnostic). At leverage <= 1 the distance is ~1.0 (liquidation effectively impossible)
+        and EVERY symbol is kept — the gate is correctly inert for the no-leverage user.
+      - Required cushion: `base_cushion_pct`, bumped to `thin_cushion_pct` for THIN books (near-touch
+        depth < position_notional * thin_depth_mult) — thin books wick violently and can liquidate a
+        leveraged position before a stop fills (the adversarial wick-liquidation case). Unknown book →
+        treated as thin (conservative).
+      - A symbol is KEPT iff the tightest plausible stop fits inside the cushion:
+            min_stop_pct <= (1/leverage - mmr) * (1 - cushion_pct/100)
+        else DROP (reason liquidation_unsafe). If 1/leverage - mmr <= 0 (absurd leverage) every symbol
+        drops.
+
+    Mass-conservation asserted (§16 Rubric 3). The per-trade `_adjust_stop_for_leverage` remains the
+    backstop for the symbols this admits.
+    """
+    kept: List[str] = []
+    dropped: List[str] = []
+
+    if leverage <= 1.0:  # no leverage -> no liquidation -> gate inert (keep all), the no-leverage user
+        return list(symbols), []
+
+    liq_distance = (1.0 / leverage) - mmr
+    needed = max(0.0, position_notional) * max(0.0, thin_depth_mult)
+    for s in symbols:
+        if liq_distance <= 0:  # leverage so high liquidation is at/through entry — untradeable
+            dropped.append(s)
+            continue
+        q = book_by_symbol.get(s)
+        depth = q.get("depth_usd", 0.0) if q else 0.0  # unknown book -> thin -> bigger cushion
+        thin = depth < needed
+        cushion = thin_cushion_pct if thin else base_cushion_pct
+        max_stop_frac = liq_distance * (1.0 - cushion / 100.0)
+        if min_stop_pct <= max_stop_frac:
+            kept.append(s)
+        else:
+            dropped.append(s)
+
+    assert len(kept) + len(dropped) == len(symbols), (
+        f"filter_by_liquidation_safety mass-conservation violated: "
+        f"kept={len(kept)} dropped={len(dropped)} input={len(symbols)}"
+    )
+
+    if dropped:
+        tag = f"[{context}] " if context else ""
+        logger.info(
+            "{}LIQUIDATION_UNSAFE_DROP: {} symbol(s) where a {:.1%} min stop can't clear the "
+            "liquidation cushion at {:g}x leverage: {}",
+            tag, len(dropped), min_stop_pct, leverage, dropped,
+        )
+
+    return kept, dropped
+
+
 def get_stale_counters_snapshot() -> Dict[str, int]:
     """Return a shallow copy of the counter dict — for diagnostics + tests."""
     with _no_data_counter_lock:

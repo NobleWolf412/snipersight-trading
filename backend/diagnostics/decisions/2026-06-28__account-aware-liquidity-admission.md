@@ -134,6 +134,31 @@ SAFETY NET (and future-proofs other venues / large-min pairs), not a frequent ga
 - Config: `min_order_risk_guard` (True). The precise per-plan check (real stop%) is DEFERRED — given
   the tiny measured mins it adds marginal value over the coarse universe gate.
 
+## Gate 3 (path 3, shipped 2026-06-28) — liquidation-safety guard, ADMISSION-LEVEL (covers all leverage)
+"All edge cases covered" (operator): some users trade leverage, some don't. Gate 3 covers both — at the
+ADMISSION level, so it did NOT require editing the §15 planner/risk_engine.
+
+**Scoping finding (measured):** plan-time liquidation safety ALREADY EXISTS —
+`risk_engine._adjust_stop_for_leverage` (entry×(1±mmr∓1/lev), 30% cushion, long/short symmetric) +
+`high_liquidation_risk` reject. And at **leverage ≤ 1 liquidation is mathematically impossible**
+(liq_price = entry×(1+mmr−1/lev) → entry×0.004 at 1×). So Gate 3 is a leverage-driven ADMISSION
+pre-screen that complements (does not replace) the existing plan-time backstop:
+
+- `pair_selection.filter_by_liquidation_safety(symbols, leverage, book, position_notional, *,
+  min_stop_pct, mmr=0.004, base_cushion_pct=30, thin_cushion_pct=50, thin_depth_mult=10)`:
+  - leverage ≤ 1 → keep ALL (inert; the no-leverage user).
+  - else KEEP iff `min_stop_pct <= (1/leverage − mmr) × (1 − cushion/100)` — the tightest plausible stop
+    must fit inside the liquidation cushion. Cushion = base, bumped to thin_cushion for THIN books
+    (depth < notional × thin_depth_mult — wick-liquidation; unknown book → treated thin, conservative).
+  - `1/leverage − mmr ≤ 0` (absurd leverage) → drop all. Direction-agnostic (the liq-distance magnitude
+    is identical long/short). Mass-conservation asserted.
+- Reuses the SAME `_book` fetch as the depth gate (call-site hoisted: fetch once if depth OR liquidation
+  active). Config: `liquidation_safety_guard` (True), `liquidation_min_stop_pct` (0.015).
+
+Edge cases covered: (1) no leverage → inert/keep-all; (2) leverage + deep book → kept, plan-time 30%
+cushion backstops; (3) leverage + thin book → dropped pre-plan (wick-liquidation); (4) leverage so high
+no stop is viable → dropped. Two layers (admission exclusion + plan-time tighten) = all angles.
+
 ## Open / forward
 - `participation_rate` (0.5%), `hard_min` ($500k), `max_spread_bps` (15), `min_depth_mult` (3.0) are
   initial values — calibrate from the depth/spread telemetry, not paper P&L.

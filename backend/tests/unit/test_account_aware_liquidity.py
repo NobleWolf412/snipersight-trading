@@ -12,6 +12,7 @@ from __future__ import annotations
 from backend.analysis.pair_selection import (
     derive_account_aware_floor,
     filter_by_book_quality,
+    filter_by_liquidation_safety,
     filter_by_min_order_risk,
     filter_illiquid_symbols,
 )
@@ -191,3 +192,51 @@ def test_min_order_mass_conservation():
     kept, dropped = filter_by_min_order_risk(list(_MINS.keys()), _MINS, 3.0, 0.01)
     assert len(kept) + len(dropped) == len(_MINS)
     assert not (set(kept) & set(dropped))
+
+
+# ── Gate 3 — liquidation-safety guard (filter_by_liquidation_safety) ──
+
+_LIQBOOK = {
+    "DEEP/USDT": {"depth_usd": 1_000_000.0, "spread_bps": 1.0},   # deep -> base cushion
+    "THIN/USDT": {"depth_usd": 100.0, "spread_bps": 5.0},          # thin -> bigger cushion
+}
+_LIQSYMS = list(_LIQBOOK.keys())
+NOTIONAL = 1_000.0  # thin_depth_mult 10 -> needed $10k; DEEP passes, THIN is thin
+
+
+def test_liquidation_inert_at_1x_no_leverage_user():
+    # leverage <= 1: liquidation impossible — EVERY symbol kept (the no-leverage user, covered).
+    kept, dropped = filter_by_liquidation_safety(_LIQSYMS, 1.0, _LIQBOOK, NOTIONAL, min_stop_pct=0.015)
+    assert set(kept) == set(_LIQSYMS) and dropped == []
+    # even a thin/unknown book is kept at 1x
+    kept2, _ = filter_by_liquidation_safety(["X/USDT"], 1.0, {}, NOTIONAL, min_stop_pct=0.015)
+    assert kept2 == ["X/USDT"]
+
+
+def test_liquidation_drops_thin_keeps_deep_at_high_leverage():
+    # leverage 30: liq_distance = 1/30 - 0.004 = 0.0293. DEEP (30% cushion) max_stop 0.0205 >= 0.015 -> KEEP;
+    # THIN (50% cushion) max_stop 0.0147 < 0.015 -> DROP. The wick-liquidation case, covered.
+    kept, dropped = filter_by_liquidation_safety(_LIQSYMS, 30.0, _LIQBOOK, NOTIONAL, min_stop_pct=0.015)
+    assert "DEEP/USDT" in kept
+    assert "THIN/USDT" in dropped
+
+
+def test_liquidation_unknown_book_treated_thin():
+    # a symbol with no book entry → treated as thin (conservative) → dropped at 30x like THIN
+    kept, dropped = filter_by_liquidation_safety(["NOBOOK/USDT"], 30.0, {}, NOTIONAL, min_stop_pct=0.015)
+    assert dropped == ["NOBOOK/USDT"]
+
+
+def test_liquidation_extreme_leverage_drops_all():
+    # leverage so high that 1/lev <= mmr → liquidation at/through entry → every symbol dropped
+    kept, dropped = filter_by_liquidation_safety(_LIQSYMS, 300.0, _LIQBOOK, NOTIONAL, min_stop_pct=0.015)
+    assert kept == [] and set(dropped) == set(_LIQSYMS)
+
+
+def test_liquidation_mass_conservation_and_direction_agnostic():
+    kept, dropped = filter_by_liquidation_safety(_LIQSYMS, 30.0, _LIQBOOK, NOTIONAL, min_stop_pct=0.015)
+    assert len(kept) + len(dropped) == len(_LIQSYMS)
+    assert not (set(kept) & set(dropped))
+    # direction-agnostic: liq distance magnitude (1/lev - mmr) is identical for long/short → same result
+    kept2, dropped2 = filter_by_liquidation_safety(_LIQSYMS, 30.0, _LIQBOOK, NOTIONAL, min_stop_pct=0.015)
+    assert kept == kept2 and dropped == dropped2

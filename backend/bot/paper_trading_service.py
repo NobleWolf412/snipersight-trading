@@ -330,6 +330,12 @@ class PaperTradingConfig:
     # Gate 2 — min-order risk guard: drop a pair whose smallest allowed order × stop% exceeds the
     # per-trade risk budget (balance × risk%). Leverage-independent. Near-inert on Phemex (mins $1-60).
     min_order_risk_guard: bool = True  # apply the min-order risk gate inside account_aware
+    # Gate 3 — liquidation-safety guard (leverage-driven): drop a pair where no viable stop could sit
+    # safely inside the liquidation price at the configured leverage (thin books need a bigger cushion —
+    # wick-liquidation). INERT at leverage<=1 (no liquidation). Complements the plan-time
+    # _adjust_stop_for_leverage backstop. Covers both the no-leverage and the leverage user.
+    liquidation_safety_guard: bool = True  # apply the liquidation-safety gate inside account_aware
+    liquidation_min_stop_pct: float = 0.015  # tightest plausible stop for the universe pre-screen
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -1666,7 +1672,7 @@ class PaperTradingService:
             try:
                 from backend.analysis.pair_selection import (
                     filter_illiquid_symbols, derive_account_aware_floor, filter_by_book_quality,
-                    filter_by_min_order_risk,
+                    filter_by_min_order_risk, filter_by_liquidation_safety,
                 )
                 # Liquidity floor: "fixed" (default) is BYTE-IDENTICAL to the prior behavior; only
                 # "account_aware" (Gate 1) derives the floor from the account's balance×leverage
@@ -1696,17 +1702,21 @@ class PaperTradingService:
                         "trading {} symbol(s) unfiltered (existing gates still apply)",
                         len(scan_symbols),
                     )
-                # Depth-aware admission (account_aware only): volume is a cheap first screen, but
-                # volume != depth (NEAR $5M/24h, ~$2 at the touch). Fetch the order book for the
-                # bounded SURVIVOR set and drop wide-spread / thin-depth books vs position notional.
-                if (getattr(self.config, "liquidity_mode", "fixed") == "account_aware"
-                        and getattr(self.config, "depth_aware_admission", True)
-                        and scan_symbols):
-                    _pos_notional = ((getattr(self.config, "initial_balance", 0.0) or 0.0)
-                                     * (getattr(self.config, "leverage", 1) or 1))
+                # Account-aware order-book gates (depth + liquidation) share ONE book fetch for the
+                # bounded survivor set — fetched once if either gate is active.
+                _aware = getattr(self.config, "liquidity_mode", "fixed") == "account_aware"
+                _pos_notional = ((getattr(self.config, "initial_balance", 0.0) or 0.0)
+                                 * (getattr(self.config, "leverage", 1) or 1))
+                _want_depth = _aware and getattr(self.config, "depth_aware_admission", True)
+                _want_liq = _aware and getattr(self.config, "liquidation_safety_guard", True)
+                _book: Dict[str, Dict[str, float]] = {}
+                if (_want_depth or _want_liq) and scan_symbols:
                     _book = self.orchestrator.exchange_adapter.get_book_quality(
                         scan_symbols, band_bps=getattr(self.config, "depth_band_bps", 10.0)
                     )
+                # Depth-aware admission: volume is a cheap first screen, but volume != depth (NEAR
+                # $5M/24h, ~$2 at the touch). Drop wide-spread / thin-depth books vs position notional.
+                if _want_depth and scan_symbols:
                     if _book:
                         scan_symbols, _book_dropped = filter_by_book_quality(
                             scan_symbols, _book, _pos_notional,
@@ -1722,8 +1732,7 @@ class PaperTradingService:
                 # Gate 2 — min-order risk guard (account_aware only): drop a pair whose smallest allowed
                 # order × stop% would exceed the per-trade risk budget (forced over-risk). Leverage-
                 # independent. Near-inert on Phemex (mins $1-60); protects tiny accounts / other venues.
-                if (getattr(self.config, "liquidity_mode", "fixed") == "account_aware"
-                        and getattr(self.config, "min_order_risk_guard", True)
+                if (_aware and getattr(self.config, "min_order_risk_guard", True)
                         and scan_symbols):
                     _risk_budget = ((getattr(self.config, "initial_balance", 0.0) or 0.0)
                                     * (getattr(self.config, "risk_per_trade", 1.0) or 0.0) / 100.0)
@@ -1745,6 +1754,27 @@ class PaperTradingService:
                                 "MIN_ORDER gate SKIPPED: would have dropped ALL {} survivor(s) "
                                 "(likely missing min-order specs, not a real verdict)", len(_pre),
                             )
+                # Gate 3 — liquidation-safety guard (leverage-driven; INERT at leverage<=1). Drop a pair
+                # where no viable stop could sit safely inside the liquidation price at the configured
+                # leverage (thin books need a bigger cushion — wick-liquidation). Reuses the _book fetch;
+                # complements the plan-time _adjust_stop_for_leverage backstop.
+                if _want_liq and scan_symbols:
+                    _lev = getattr(self.config, "leverage", 1) or 1
+                    # At lev<=1 the gate is inert (keep-all, no book needed). At lev>1 we NEED real book
+                    # data — if the fetch failed (_book empty), SKIP loudly (parity with the depth gate)
+                    # rather than treating every symbol as thin and over-dropping on a transient glitch;
+                    # the plan-time _adjust_stop_for_leverage cushion still backstops admitted trades.
+                    if _lev <= 1 or _book:
+                        scan_symbols, _liq_dropped = filter_by_liquidation_safety(
+                            scan_symbols, _lev, _book, _pos_notional,
+                            min_stop_pct=getattr(self.config, "liquidation_min_stop_pct", 0.015),
+                            context="paper_trading_service",
+                        )
+                    else:
+                        logger.warning(
+                            "LIQUIDATION gate SKIPPED this scan: leverage {}x but order-book lookup "
+                            "returned no data; relying on the plan-time liquidation cushion", _lev,
+                        )
             except Exception as _liq_exc:
                 # Graceful degradation, NOT silent (CLAUDE.md §11/§15): a ticker/order-book fetch or
                 # mass-conservation regression stays visible; scan continues on existing gates. Covers
