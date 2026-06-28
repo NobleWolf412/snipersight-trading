@@ -450,6 +450,39 @@ def filter_illiquid_symbols(
     return kept, dropped
 
 
+def derive_account_aware_floor(
+    balance: float,
+    leverage: float,
+    participation_rate: float,
+    hard_min: float,
+) -> float:
+    """24h-quote-volume floor scaled to the account's market FOOTPRINT (Gate 1).
+
+    The slippage / stop-blowthrough risk a liquidity floor guards against scales with POSITION
+    NOTIONAL, not account capital — and leverage multiplies notional ("$1k at 20× IS a $20k position"
+    to the order book). So the safe floor is the volume at which the position is a small slice of
+    daily flow:
+
+        floor = max(hard_min, (balance * leverage) / participation_rate)
+
+    A $20 order can't move a $2M book, so a small/unleveraged account clears thinner pairs; a
+    leveraged or large account is pinned to deeper books. The `hard_min` clamp ensures NO account
+    ever trades a genuinely dead / wash-traded market (where a stop can't fill at any sane price) —
+    for small accounts the hard-min governs. Direction-agnostic by design (admission is a universe
+    filter, applied identically to long and short theses).
+
+    Inputs are defensive: a non-positive balance/leverage/participation collapses the formula term to
+    0 so the result is simply `hard_min` (fail-safe to the floor, never to "trade everything").
+
+    See decisions/2026-06-28__account-aware-liquidity-admission.md (§15/§9-A baseline).
+    """
+    if balance > 0 and leverage > 0 and participation_rate > 0:
+        scaled = (balance * leverage) / participation_rate
+    else:
+        scaled = 0.0
+    return max(hard_min, scaled)
+
+
 def get_stale_counters_snapshot() -> Dict[str, int]:
     """Return a shallow copy of the counter dict — for diagnostics + tests."""
     with _no_data_counter_lock:

@@ -307,6 +307,18 @@ class PaperTradingConfig:
     # breakpoint where the historical cohort flips net-negative (baseline n=101: <1.0 avg -1.27,
     # >=1.0 avg +5.02). 0 disables the gate.
     rr_floor_at_entry: float = 1.0
+    # Account-aware symbol admission (decisions/2026-06-28__account-aware-liquidity-admission.md).
+    # Replaces the fixed liquidity floor with one scaled to the user's market FOOTPRINT
+    # (balance × leverage) — a $20 order can't move a $2M book, so a small account may trade thinner
+    # Phemex pairs, while a leveraged/large account is held to deeper books ("$1k at 20× IS a $20k
+    # position"). Flag-gated: "fixed" (default) runs the existing scanner_modes.min_24h_volume_usdt
+    # path BYTE-IDENTICALLY; "account_aware" derives the floor + applies the min-order / liquidation
+    # guards. §15/§9-A "don't trade illiquid pairs" standing rule — paper-only first (live deferred).
+    liquidity_mode: str = "fixed"  # "fixed" | "account_aware"
+    participation_rate: float = 0.005  # position should be <= 0.5% of 24h volume (Gate 1)
+    hard_min_volume_usdt: float = 500_000.0  # absolute floor; small accounts governed by this (never a dead/wash market)
+    min_order_stop_pct_assumption: float = 0.01  # Gate 2 coarse universe pre-filter stop% (precise check is per-plan)
+    thin_book_liq_buffer_mult: float = 1.5  # Gate 3 extra liquidation cushion on thin-book symbols
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -1641,8 +1653,24 @@ class PaperTradingService:
             # liquidity-filtered; an illiquid pinned pair blows through stops on exit).
             # regime-strategy-router §9-A "don't trade illiquid pairs". Loud per CLAUDE.md §11.
             try:
-                from backend.analysis.pair_selection import filter_illiquid_symbols
-                _liq_floor = getattr(self.mode, "min_24h_volume_usdt", 5_000_000.0)
+                from backend.analysis.pair_selection import filter_illiquid_symbols, derive_account_aware_floor
+                # Liquidity floor: "fixed" (default) is BYTE-IDENTICAL to the prior behavior; only
+                # "account_aware" (Gate 1) derives the floor from the account's balance×leverage
+                # footprint. decisions/2026-06-28__account-aware-liquidity-admission.md (§15/§9-A).
+                if getattr(self.config, "liquidity_mode", "fixed") == "account_aware":
+                    _liq_floor = derive_account_aware_floor(
+                        balance=getattr(self.config, "initial_balance", 0.0) or 0.0,
+                        leverage=getattr(self.config, "leverage", 1) or 1,
+                        participation_rate=getattr(self.config, "participation_rate", 0.005),
+                        hard_min=getattr(self.config, "hard_min_volume_usdt", 500_000.0),
+                    )
+                    logger.info(
+                        "LIQUIDITY mode=account_aware: floor=${:,.0f} (balance ${:,.0f} x lev {} / {:.2%})",
+                        _liq_floor, getattr(self.config, "initial_balance", 0.0),
+                        getattr(self.config, "leverage", 1), getattr(self.config, "participation_rate", 0.005),
+                    )
+                else:
+                    _liq_floor = getattr(self.mode, "min_24h_volume_usdt", 5_000_000.0)
                 _vols = self.orchestrator.exchange_adapter.get_symbol_volumes(scan_symbols)
                 if _vols:
                     scan_symbols, _illiquid_dropped = filter_illiquid_symbols(
