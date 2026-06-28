@@ -85,7 +85,37 @@ fill quality). Full depth probe + slippage-model fix = the gate before live (own
 Secondary (noted): the floor uses CONFIG leverage, not per-trade effective leverage; if they diverge,
 the notional is computed off the wrong number. In-scope only if the planner ever overrides config lev.
 
+## Depth-aware admission (path 1, shipped 2026-06-28) — addresses the adversarial finding directly
+Operator chose "1 → 2 → 3": fix the metric the review discredited FIRST. Within `account_aware` mode,
+after the cheap volume floor cuts the universe, the BOUNDED survivor set is checked against the LIVE
+order book (the thing volume only proxies):
+- `phemex.get_book_quality(symbols, band_bps)` — per-symbol `fetch_order_book`, returns
+  `{spread_bps, depth_usd}` where depth = MIN(bid-side, ask-side) resting notional within `band_bps`
+  of mid (MIN = the thinner side governs → direction-agnostic). Per-symbol fetch failure →
+  `{spread_bps: inf, depth_usd: 0}` = fail-safe DROP. Runs only for volume-survivors (not raw
+  universe), only in `account_aware` mode → bounded fetch count on a 2-min scan.
+- `pair_selection.filter_by_book_quality(...)` — pure partition: KEEP iff `spread_bps <=
+  max_spread_bps` (15 default) AND `depth_usd >= position_notional × min_depth_mult` (3.0 default).
+  Mass-conservation asserted. Missing/sentinel book → drop.
+- New config: `depth_aware_admission` (True), `max_spread_bps` (15), `min_depth_mult` (3.0),
+  `depth_band_bps` (10). With `liquidity_mode="fixed"` (default) NONE of this runs.
+
+Why this is the real fix (measured): the diagnostic shows the depth gate is DYNAMIC — it cut INJ
+($2,797 depth < $3k needed at $1k×1×) on one snapshot; NEAR read ~$2 depth on an earlier snapshot
+(would be cut) and ~$10k on a later one (admitted). A live per-scan depth check catches whatever is
+thin AT THAT MOMENT — strictly better than the static volume floor, which admitted NEAR at $5M-vol /
+$2-depth. This is the adversarial reviewer's alternative #1, implemented.
+
+NOTE the depth gate does NOT fully close the §15 live-gate prerequisite: the PAPER SLIPPAGE MODEL is
+still flat-35bps-blind (the validation-instrument gap). Depth-aware ADMISSION + a depth-aware
+SLIPPAGE model are both needed before live. Admission is done; the slippage-model fix remains the
+binding live prerequisite.
+
 ## Open / forward
-- `participation_rate` (0.5%) and `hard_min` ($500k) NOT yet calibratable from paper P&L (see above) —
-  calibrate from a depth/spread probe, not paper fills.
-- Rollback: set `liquidity_mode="fixed"` (the default) — zero behavior change.
+- `participation_rate` (0.5%), `hard_min` ($500k), `max_spread_bps` (15), `min_depth_mult` (3.0) are
+  initial values — calibrate from the depth/spread telemetry, not paper P&L.
+- Order-book fetch adds ~N calls/scan (N = volume-survivors, ~16) — acceptable at 2-min cadence with
+  ccxt rate-limiting; graceful-degrades (DEPTH gate SKIPPED, volume floor alone) if the book lookup
+  returns nothing.
+- Rollback: `liquidity_mode="fixed"` (default) — zero behavior change; or `depth_aware_admission=False`
+  to keep the volume floor without the book gate.

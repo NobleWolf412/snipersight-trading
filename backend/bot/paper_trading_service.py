@@ -319,6 +319,14 @@ class PaperTradingConfig:
     hard_min_volume_usdt: float = 500_000.0  # absolute floor; small accounts governed by this (never a dead/wash market)
     min_order_stop_pct_assumption: float = 0.01  # Gate 2 coarse universe pre-filter stop% (precise check is per-plan)
     thin_book_liq_buffer_mult: float = 1.5  # Gate 3 extra liquidation cushion on thin-book symbols
+    # Depth-aware admission (the real fix for volume!=depth — NEAR ran $5M/24h with ~$2 at the touch).
+    # Within account_aware mode, after the volume floor, fetch the order book for the SURVIVORS and
+    # require an acceptable spread + near-touch depth vs position notional. depth_aware_admission=False
+    # falls back to the volume-floor-only gate. Only runs in account_aware mode (bounded survivor set).
+    depth_aware_admission: bool = True  # apply the order-book spread/depth gate inside account_aware
+    max_spread_bps: float = 15.0  # drop books wider than this at the touch
+    min_depth_mult: float = 3.0  # require near-touch depth >= position_notional × this
+    depth_band_bps: float = 10.0  # measure resting depth within this band of mid
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -1653,7 +1661,9 @@ class PaperTradingService:
             # liquidity-filtered; an illiquid pinned pair blows through stops on exit).
             # regime-strategy-router §9-A "don't trade illiquid pairs". Loud per CLAUDE.md §11.
             try:
-                from backend.analysis.pair_selection import filter_illiquid_symbols, derive_account_aware_floor
+                from backend.analysis.pair_selection import (
+                    filter_illiquid_symbols, derive_account_aware_floor, filter_by_book_quality,
+                )
                 # Liquidity floor: "fixed" (default) is BYTE-IDENTICAL to the prior behavior; only
                 # "account_aware" (Gate 1) derives the floor from the account's balance×leverage
                 # footprint. decisions/2026-06-28__account-aware-liquidity-admission.md (§15/§9-A).
@@ -1682,10 +1692,34 @@ class PaperTradingService:
                         "trading {} symbol(s) unfiltered (existing gates still apply)",
                         len(scan_symbols),
                     )
+                # Depth-aware admission (account_aware only): volume is a cheap first screen, but
+                # volume != depth (NEAR $5M/24h, ~$2 at the touch). Fetch the order book for the
+                # bounded SURVIVOR set and drop wide-spread / thin-depth books vs position notional.
+                if (getattr(self.config, "liquidity_mode", "fixed") == "account_aware"
+                        and getattr(self.config, "depth_aware_admission", True)
+                        and scan_symbols):
+                    _pos_notional = ((getattr(self.config, "initial_balance", 0.0) or 0.0)
+                                     * (getattr(self.config, "leverage", 1) or 1))
+                    _book = self.orchestrator.exchange_adapter.get_book_quality(
+                        scan_symbols, band_bps=getattr(self.config, "depth_band_bps", 10.0)
+                    )
+                    if _book:
+                        scan_symbols, _book_dropped = filter_by_book_quality(
+                            scan_symbols, _book, _pos_notional,
+                            max_spread_bps=getattr(self.config, "max_spread_bps", 15.0),
+                            min_depth_mult=getattr(self.config, "min_depth_mult", 3.0),
+                            context="paper_trading_service",
+                        )
+                    elif scan_symbols:
+                        logger.warning(
+                            "DEPTH gate SKIPPED this scan: order-book lookup returned no data; "
+                            "trading {} symbol(s) on the volume floor alone", len(scan_symbols),
+                        )
             except Exception as _liq_exc:
-                # Graceful degradation, NOT silent (CLAUDE.md §11/§15): a ticker-fetch or
-                # mass-conservation regression stays visible; scan continues on existing gates.
-                logger.warning(f"filter_illiquid_symbols failed: {_liq_exc}")
+                # Graceful degradation, NOT silent (CLAUDE.md §11/§15): a ticker/order-book fetch or
+                # mass-conservation regression stays visible; scan continues on existing gates. Covers
+                # BOTH the volume floor and the depth gate (don't mis-attribute a depth fault).
+                logger.warning(f"liquidity/depth admission gate failed: {_liq_exc}")
 
             # Filter out excluded symbols
             if self.config.exclude_symbols:

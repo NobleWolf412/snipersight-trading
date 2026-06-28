@@ -9,7 +9,11 @@ Baseline: decisions/2026-06-28__account-aware-liquidity-admission.md.
 """
 from __future__ import annotations
 
-from backend.analysis.pair_selection import derive_account_aware_floor, filter_illiquid_symbols
+from backend.analysis.pair_selection import (
+    derive_account_aware_floor,
+    filter_by_book_quality,
+    filter_illiquid_symbols,
+)
 
 PR = 0.005          # participation_rate 0.5%
 HARD_MIN = 500_000.0
@@ -97,3 +101,57 @@ def test_admission_is_direction_agnostic():
     kept_long, dropped_long = filter_illiquid_symbols(list(_UNIVERSE), _VOLS, floor)
     kept_short, dropped_short = filter_illiquid_symbols(list(_UNIVERSE), _VOLS, floor)
     assert kept_long == kept_short and dropped_long == dropped_short
+
+
+# ── Depth-aware admission (filter_by_book_quality) — the real fix for volume != depth ──
+
+# Live order-book snapshot (probe 2026-06-28): spread_bps + near-touch depth_usd.
+_BOOK = {
+    "BTC/USDT": {"spread_bps": 0.0, "depth_usd": 1_200_000.0},
+    "ADA/USDT": {"spread_bps": 7.0, "depth_usd": 56_130.0},
+    "NEAR/USDT": {"spread_bps": 5.5, "depth_usd": 2.0},     # $5M VOLUME but ~$2 depth — the trap
+    "DOT/USDT": {"spread_bps": 24.9, "depth_usd": 56_040.0},  # deep but BLOWN-OUT spread
+    "ARB/USDT": {"spread_bps": 13.7, "depth_usd": 4_576.0},
+}
+
+
+def test_depth_gate_drops_near_despite_high_volume():
+    # NEAR clears the $5M VOLUME floor but has ~$2 depth — the depth gate must DROP it.
+    # $1k × 1× position, min_depth_mult 3 → need >= $3,000 depth.
+    kept, dropped = filter_by_book_quality(
+        list(_BOOK.keys()), _BOOK, position_notional=1_000.0,
+        max_spread_bps=15.0, min_depth_mult=3.0,
+    )
+    assert "NEAR/USDT" in dropped       # $2 depth << $3,000 needed
+    assert "DOT/USDT" in dropped        # 24.9 bps spread > 15 cap (even though depth is fine)
+    assert "BTC/USDT" in kept and "ADA/USDT" in kept and "ARB/USDT" in kept
+
+
+def test_depth_gate_scales_with_position_notional():
+    # A bigger position needs more depth: at $1k×20× ($20k notional) ARB's $4,576 depth (need $60k) drops.
+    kept, dropped = filter_by_book_quality(
+        list(_BOOK.keys()), _BOOK, position_notional=20_000.0,
+        max_spread_bps=15.0, min_depth_mult=3.0,
+    )
+    assert "ARB/USDT" in dropped        # 4,576 << 60,000 needed
+    assert "BTC/USDT" in kept           # 1.2M depth >> 60k
+
+
+def test_depth_gate_missing_or_failed_book_fails_safe_drop():
+    # absent entry, or the adapter's fetch-failure sentinel (inf spread / 0 depth) → DROP (§9-A)
+    book = {"FOO/USDT": {"spread_bps": float("inf"), "depth_usd": 0.0}}
+    kept, dropped = filter_by_book_quality(
+        ["FOO/USDT", "BAR/USDT"], book, position_notional=1_000.0,
+        max_spread_bps=15.0, min_depth_mult=3.0,
+    )
+    assert kept == [] and set(dropped) == {"FOO/USDT", "BAR/USDT"}
+
+
+def test_depth_gate_mass_conservation_and_symmetry():
+    syms = list(_BOOK.keys())
+    kept, dropped = filter_by_book_quality(syms, _BOOK, 1_000.0, max_spread_bps=15.0, min_depth_mult=3.0)
+    assert len(kept) + len(dropped) == len(syms)
+    assert not (set(kept) & set(dropped))
+    # direction-agnostic: depth_usd is already MIN of both sides — identical result regardless of side
+    kept2, dropped2 = filter_by_book_quality(syms, _BOOK, 1_000.0, max_spread_bps=15.0, min_depth_mult=3.0)
+    assert kept == kept2 and dropped == dropped2

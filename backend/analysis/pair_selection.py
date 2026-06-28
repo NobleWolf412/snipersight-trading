@@ -483,6 +483,61 @@ def derive_account_aware_floor(
     return max(hard_min, scaled)
 
 
+def filter_by_book_quality(
+    symbols: List[str],
+    book_by_symbol: Dict[str, Dict[str, float]],
+    position_notional: float,
+    *,
+    max_spread_bps: float,
+    min_depth_mult: float,
+    context: str = "",
+) -> Tuple[List[str], List[str]]:
+    """Partition symbols into (kept, dropped) by ORDER-BOOK quality, not 24h volume.
+
+    The depth-aware admission gate (decisions/2026-06-28__account-aware-liquidity-admission.md). 24h
+    volume is a poor proxy for the depth that actually governs slippage/stop-blowthrough — NEAR ran
+    $5M/24h with ~$2 at the touch. A symbol is KEPT iff BOTH hold:
+      - spread_bps <= max_spread_bps           (book isn't blown out), AND
+      - depth_usd  >= position_notional * min_depth_mult   (your order is a small slice of resting
+                                                            near-touch liquidity, so a stop can fill).
+
+    Fail-safe DROP semantics (consistent with §9-A "unknown liquidity -> drop"): a symbol absent from
+    `book_by_symbol`, or carrying inf spread / 0 depth (the adapter's fetch-failure sentinel), is
+    dropped. Direction-agnostic — `depth_usd` is already the MIN of both book sides.
+
+    Mass-conservation (CLAUDE.md §16 Rubric 3): len(kept)+len(dropped)==len(symbols).
+    """
+    kept: List[str] = []
+    dropped: List[str] = []
+    needed_depth = max(0.0, position_notional) * max(0.0, min_depth_mult)
+    for s in symbols:
+        q = book_by_symbol.get(s)
+        if not q:
+            dropped.append(s)
+            continue
+        spread = q.get("spread_bps", float("inf"))
+        depth = q.get("depth_usd", 0.0)
+        if spread <= max_spread_bps and depth >= needed_depth:
+            kept.append(s)
+        else:
+            dropped.append(s)
+
+    assert len(kept) + len(dropped) == len(symbols), (
+        f"filter_by_book_quality mass-conservation violated: "
+        f"kept={len(kept)} dropped={len(dropped)} input={len(symbols)}"
+    )
+
+    if dropped:
+        tag = f"[{context}] " if context else ""
+        logger.info(
+            "{}BOOK_QUALITY_DROP: {} symbol(s) failed spread<={:.0f}bps or depth>=${:,.0f} "
+            "(position ${:,.0f} x {:g}): {}",
+            tag, len(dropped), max_spread_bps, needed_depth, position_notional, min_depth_mult, dropped,
+        )
+
+    return kept, dropped
+
+
 def get_stale_counters_snapshot() -> Dict[str, int]:
     """Return a shallow copy of the counter dict — for diagnostics + tests."""
     with _no_data_counter_lock:

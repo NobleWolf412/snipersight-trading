@@ -16,7 +16,11 @@ from __future__ import annotations
 import argparse
 from typing import Dict, List
 
-from backend.analysis.pair_selection import derive_account_aware_floor, filter_illiquid_symbols
+from backend.analysis.pair_selection import (
+    derive_account_aware_floor,
+    filter_by_book_quality,
+    filter_illiquid_symbols,
+)
 
 # Representative current STEALTH-ish universe (majors + liquid alts) for the side-by-side.
 _UNIVERSE: List[str] = [
@@ -29,34 +33,20 @@ _FIXED_FLOOR = 5_000_000.0
 
 
 def _fetch_live_volumes_and_book(symbols: List[str]) -> tuple[Dict[str, float], Dict[str, float], Dict[str, float]]:
-    """Live Phemex 24h perp quote-volume + actual order-book SPREAD (bps) + near-touch DEPTH ($).
+    """Live Phemex 24h perp quote-volume + order-book SPREAD (bps) + near-touch DEPTH ($).
 
     Spread and depth are the quantities that ACTUALLY determine slippage/stop-blowthrough — the thing
-    24h volume only proxies (adversarial-review 2026-06-28: volume != instantaneous depth; bulk
-    fetch_tickers carries no bid/ask on Phemex). A per-symbol order-book fetch is fine here — this is
-    a one-shot diagnostic, NOT the hot scan path. depth = $ resting within 10 bps of mid on the side
-    you'd HIT (asks for a buy, but symmetric enough as a thin-book signal). NaN on fetch failure.
+    24h volume only proxies (adversarial-review 2026-06-28: volume != instantaneous depth). Uses the
+    SAME production `get_book_quality` (MIN of bid/ask depth within 10 bps of mid) so this diagnostic
+    and the live gate share one depth definition — the instrument can't drift from the gate it
+    validates. get_book_quality returns inf spread / 0 depth on a per-symbol fetch failure.
     """
     from backend.data.adapters.phemex import PhemexAdapter
     adapter = PhemexAdapter(testnet=False, default_type="swap")
     vols = adapter.get_symbol_volumes(symbols)
-    spreads: Dict[str, float] = {}
-    depths: Dict[str, float] = {}
-    for s in symbols:
-        perp = s if ":" in s else f"{s}:USDT"
-        try:
-            ob = adapter.exchange.fetch_order_book(perp, limit=25)
-            bids, asks = ob.get("bids") or [], ob.get("asks") or []
-            if not bids or not asks:
-                raise ValueError("empty book")
-            best_bid, best_ask = bids[0][0], asks[0][0]
-            mid = (best_bid + best_ask) / 2.0
-            spreads[s] = (best_ask - best_bid) / mid * 10_000.0 if mid > 0 else float("nan")
-            band = mid * 0.0010  # 10 bps
-            depths[s] = sum(p * q for p, q in asks if p <= best_ask + band)
-        except Exception:
-            spreads[s] = float("nan")
-            depths[s] = float("nan")
+    book = adapter.get_book_quality(symbols, band_bps=10.0)
+    spreads = {s: book.get(s, {}).get("spread_bps", float("nan")) for s in symbols}
+    depths = {s: book.get(s, {}).get("depth_usd", float("nan")) for s in symbols}
     return vols, spreads, depths
 
 
@@ -69,6 +59,12 @@ def run(balance: float, leverage: float, participation: float, hard_min: float) 
     fixed_kept, fixed_dropped = filter_illiquid_symbols(list(_UNIVERSE), vols, _FIXED_FLOOR, context="diag_fixed")
     aware_kept, aware_dropped = filter_illiquid_symbols(list(_UNIVERSE), vols, aware_floor, context="diag_aware")
 
+    # Depth gate (the real fix): apply spread/depth on the volume-survivors at default thresholds.
+    _book = {s: {"spread_bps": spreads.get(s, float("inf")), "depth_usd": depths.get(s, 0.0)} for s in aware_kept}
+    final_kept, depth_dropped = filter_by_book_quality(
+        list(aware_kept), _book, notional, max_spread_bps=15.0, min_depth_mult=3.0, context="diag_depth",
+    )
+
     newly_admitted = [s for s in aware_kept if s not in fixed_kept]
 
     # ── Summary ──
@@ -77,30 +73,34 @@ def run(balance: float, leverage: float, participation: float, hard_min: float) 
     print(f"account: balance ${balance:,.0f} x leverage {leverage:g} => position notional ${notional:,.0f}")
     print(f"derived floor: ${aware_floor:,.0f}  (clamp branch: {clamp}; participation {participation:.2%}, hard_min ${hard_min:,.0f})")
     print(f"fixed baseline floor: ${_FIXED_FLOOR:,.0f}")
-    print(f"universe {len(_UNIVERSE)}: fixed admits {len(fixed_kept)} | account-aware admits {len(aware_kept)} "
-          f"(+{len(newly_admitted)} newly admitted)")
+    print(f"universe {len(_UNIVERSE)}: fixed admits {len(fixed_kept)} | volume-floor admits {len(aware_kept)} "
+          f"| +depth gate admits {len(final_kept)}  (depth gate cut {len(depth_dropped)} thin/wide books)")
     print()
 
     # ── Table (spread + near-touch depth = the thin-book signal the volume floor misses) ──
-    print(f"{'symbol':12s} {'24h_vol_usd':>14s} {'spread_bps':>10s} {'depth10bp_$':>12s}  {'fixed':>6s}  {'aware':>6s}")
+    print(f"{'symbol':12s} {'24h_vol_usd':>14s} {'spread_bps':>10s} {'depth10bp_$':>12s}  {'fixed':>6s}  {'vol':>5s}  {'+depth':>7s}")
     for s in sorted(_UNIVERSE, key=lambda x: -(vols.get(x, 0.0) or 0.0)):
         v = vols.get(s, 0.0) or 0.0
         sp = spreads.get(s, float("nan"))
         dp = depths.get(s, float("nan"))
-        sp_str = (f"{sp:.1f}" + ("*" if sp >= 15.0 else " ")) if sp == sp else "n/a "  # * = wide (>=15bps)
-        dp_str = f"{dp:,.0f}" if dp == dp else "n/a"
+        finite_sp = (sp == sp) and (sp != float("inf"))  # nan/inf (fetch failure) → n/a
+        sp_str = (f"{sp:.1f}" + ("*" if sp >= 15.0 else " ")) if finite_sp else "n/a "  # * = wide (>=15bps)
+        dp_str = f"{dp:,.0f}" if (dp == dp) else "n/a"
         f = "ADMIT" if s in fixed_kept else "drop"
         a = "ADMIT" if s in aware_kept else "drop"
-        flag = "  <- new" if s in newly_admitted else ""
-        print(f"{s:12s} {v:>14,.0f} {sp_str:>10s} {dp_str:>12s}  {f:>6s}  {a:>6s}{flag}")
-    print("  (spread * = >=15bps wide; depth10bp_$ = ask liquidity within 10bps of mid — thin-book signal)")
+        d = "ADMIT" if s in final_kept else ("DROP" if s in depth_dropped else "-")
+        flag = "  <- depth CUT" if s in depth_dropped else ""
+        print(f"{s:12s} {v:>14,.0f} {sp_str:>10s} {dp_str:>12s}  {f:>6s}  {a:>5s}  {d:>7s}{flag}")
+    print("  (spread * = >=15bps wide; depth10bp_$ = MIN-side liquidity within 10bps of mid; "
+          "+depth = final admit after spread/depth gate)")
     print()
 
     # ── Raw ──
     print("raw:")
-    print(f"  newly_admitted = {newly_admitted}")
-    print(f"  aware_dropped  = {aware_dropped}")
-    print(f"  fixed_dropped  = {fixed_dropped}")
+    print(f"  final_admit (vol floor + depth gate) = {final_kept}")
+    print(f"  depth_gate_cut                       = {depth_dropped}")
+    print(f"  newly_admitted_vs_fixed              = {newly_admitted}")
+    print(f"  fixed_dropped                        = {fixed_dropped}")
 
 
 def main() -> None:

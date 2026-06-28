@@ -409,6 +409,45 @@ class PhemexAdapter:
             return {}
         return {s: self._quote_volume_for(s, tickers) for s in symbols}
 
+    def get_book_quality(self, symbols: List[str], band_bps: float = 10.0) -> Dict[str, Dict[str, float]]:
+        """Return {symbol: {"spread_bps", "depth_usd"}} from the live PERP order book per symbol.
+
+        The depth-aware admission signal (decisions/2026-06-28__account-aware-liquidity-admission.md):
+        24h volume is NOT instantaneous depth (NEAR printed $5M/24h with ~$2 at the touch). This
+        measures what actually determines slippage/stop-blowthrough:
+          - spread_bps = (best_ask - best_bid) / mid * 10_000
+          - depth_usd  = MIN(bid-side, ask-side) resting notional within `band_bps` of mid — the MIN
+            so the thinner side (the one that hurts whichever way you exit) governs (direction-agnostic).
+
+        Per-symbol fetch (no bulk book endpoint on Phemex). Intended for the BOUNDED volume-survivor
+        set, not the raw universe. A per-symbol failure -> {spread_bps: inf, depth_usd: 0.0} (fail-safe
+        DROP, consistent with the §9-A "unknown liquidity -> drop" stance). A TOTAL inability to fetch
+        is the caller's concern (it skips the depth gate that scan, like the empty-volume path).
+        """
+        out: Dict[str, Dict[str, float]] = {}
+        for s in symbols:
+            perp = s if ":" in s else f"{s}:USDT"
+            try:
+                ob = self.exchange.fetch_order_book(perp, limit=25)
+                bids, asks = ob.get("bids") or [], ob.get("asks") or []
+                if not bids or not asks:
+                    raise ValueError("empty book")
+                best_bid, best_ask = bids[0][0], asks[0][0]
+                mid = (best_bid + best_ask) / 2.0
+                if mid <= 0:
+                    raise ValueError("non-positive mid")
+                band = mid * (band_bps / 10_000.0)
+                bid_depth = sum(p * q for p, q in bids if p >= best_bid - band)
+                ask_depth = sum(p * q for p, q in asks if p <= best_ask + band)
+                out[s] = {
+                    "spread_bps": (best_ask - best_bid) / mid * 10_000.0,
+                    "depth_usd": min(bid_depth, ask_depth),
+                }
+            except Exception as e:
+                logger.warning("get_book_quality: {} book fetch failed ({}); fail-safe DROP", s, e)
+                out[s] = {"spread_bps": float("inf"), "depth_usd": 0.0}
+        return out
+
     @retry_on_rate_limit(max_retries=3)
     def get_top_symbols(
         self, n: int = 20, quote_currency: str = "USDT", market_type: Optional[str] = None,
