@@ -632,7 +632,7 @@ const DEFAULT_SETUP: PaperConfig = {
   trailing_activation: 1.5,
   breakeven_after_target: 1,
   majors: true,
-  altcoins: false,
+  altcoins: true, // ON — more symbols => more retrace setups => more data (liquidity floor still filters illiquid)
   meme_mode: false,
   universe_size: 20,
   slippage_bps: 5,
@@ -781,13 +781,13 @@ function SetupTab({
           ORDER EXECUTION
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-          {([['snap_taker', 'SNAP / TAKER'], ['rest_maker', 'REST / MAKER']] as const).map(([m, lbl]) => (
+          {([['rest_maker', 'REST / MAKER ★'], ['snap_taker', 'SNAP / TAKER']] as const).map(([m, lbl]) => (
             <button
               key={m}
               type="button"
               className={`btn ${cfg.execution_mode === m ? 'btn-cyan' : ''}`}
               onClick={() => set('execution_mode', m)}
-              style={{ flex: 1, fontSize: 11, letterSpacing: '.12em', padding: '10px 0' }}
+              style={{ flex: 1, fontSize: 11, letterSpacing: '.12em', padding: '10px 0', opacity: m === 'snap_taker' ? 0.7 : 1 }}
             >
               {lbl}
             </button>
@@ -801,12 +801,19 @@ function SetupTab({
             ⚠ SNAP/TAKER fills at market — it abandons the order-block retrace entry (the SMC edge) and pays taker fees, where this strategy is net-negative. REST/MAKER is the correct mode. Sparse fills in chop = the market offering no clean retrace, not a setting to change.
           </div>
         )}
-        <Toggle
-          label="Macro / Dominance Overlay"
-          value={cfg.macro_overlay_enabled}
-          onChange={(v) => set('macro_overlay_enabled', v)}
-          hint="BTC.D / stable.D / alt.D bias on direction · OFF = pure technicals"
-        />
+        <div style={{ opacity: thesis ? 0.4 : 1 }}>
+          <Toggle
+            label="Macro / Dominance Overlay"
+            value={cfg.macro_overlay_enabled}
+            onChange={(v) => set('macro_overlay_enabled', v)}
+            hint="BTC.D / stable.D / alt.D bias on direction · OFF = pure technicals"
+          />
+        </div>
+        {thesis && (
+          <div className="mono" style={{ fontSize: 9, color: '#f5a623', letterSpacing: '.1em', marginTop: 6 }}>
+            ⚠ no effect on direction in thesis mode — the structure thesis owns direction; this only nudges the now-demoted score. Keep OFF. (Active in legacy mode.)
+          </div>
+        )}
       </SectionPanel>
 
       {/* ARM button */}
