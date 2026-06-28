@@ -1946,7 +1946,15 @@ class PaperTradingService:
             # the next scan rather than entered immediately as a correlated batch — prevents
             # 5 correlated shorts from opening in 90 seconds on a single BTC move.
             _MAX_SAME_DIR_PER_SCAN = 3
-            _sorted_plans = sorted(trade_plans, key=lambda p: p.confidence_score, reverse=True)
+            # Heart-change leftover-gate demotion #8 — KEEP the per-direction correlation cap, but in
+            # thesis mode rank which signals survive it by RR (geometry), not the demoted confluence
+            # score. Legacy mode still ranks by confidence_score.
+            if is_thesis_mode():
+                _sorted_plans = sorted(
+                    trade_plans, key=lambda p: getattr(p, "risk_reward_ratio", 0.0) or 0.0, reverse=True
+                )
+            else:
+                _sorted_plans = sorted(trade_plans, key=lambda p: p.confidence_score, reverse=True)
             _dir_counts: dict = {}
             _capped_plans = []
             for _p in _sorted_plans:
@@ -2255,8 +2263,11 @@ class PaperTradingService:
                     "new_confluence": plan.confidence_score,
                     "limit_price": plan.entry_zone.near_entry,
                 })
-            elif plan.confidence_score <= existing_plan.confidence_score:
-                # Same direction, equal or lower confluence — keep existing
+            elif is_thesis_mode() or plan.confidence_score <= existing_plan.confidence_score:
+                # Same direction: keep existing. Heart-change leftover-gate demotion #7 — in thesis
+                # mode the demoted confluence score must NOT arbitrate between two thesis-approved
+                # same-direction signals; keep the existing pending (no score-churn). Legacy mode
+                # still replaces on higher confluence.
                 reason = (
                     f"Pending order already exists with equal/higher confluence "
                     f"({existing_plan.confidence_score:.1f}% >= {plan.confidence_score:.1f}%)"
@@ -2295,7 +2306,11 @@ class PaperTradingService:
         try:
             from backend.ml.model_store import get_model_store
             _ml_store = get_model_store()
-            if _ml_store.status().get("trained"):
+            # Heart-change leftover-gate demotion #1 — the ML edge model is trained on the OLD
+            # score>=70 distribution (confidence_score / conviction_class features), so in thesis
+            # mode it silently re-gates thesis-approved low-score trades on a stale prior. Skip it in
+            # thesis mode (legacy unchanged). Re-introduce once retrained on thesis-era fills.
+            if not is_thesis_mode() and _ml_store.status().get("trained"):
                 _ml_record = {
                     "confidence_score": plan.confidence_score,
                     "risk_reward_ratio": plan.risk_reward if hasattr(plan, "risk_reward") else 0,
@@ -2467,8 +2482,12 @@ class PaperTradingService:
                 })
                 return
             else:
-                # Counter-trend scalp in directional regime — allowed at ≥70% only, half-sized
-                if plan.confidence_score < 70.0:
+                # Counter-trend scalp in directional regime — allowed at ≥70% only, half-sized.
+                # Heart-change leftover-gate demotion #2 (operator-flagged): in thesis mode the
+                # demoted confluence score must NOT gate a counter-trend scalp the thesis already
+                # adjudicated (structure-led + the strong-trend block above + CHoCH exemption are the
+                # controls); the trade still takes at half size. Legacy keeps the ≥70% floor.
+                if not is_thesis_mode() and plan.confidence_score < 70.0:
                     _ct_reason = (
                         f"Counter-trend {_ct_dir} scalp requires ≥70% confluence in "
                         f"{_ct_trend} regime (got {plan.confidence_score:.1f}%)"
