@@ -1191,6 +1191,15 @@ class PaperTradingConfigRequest(BaseModel):
     execution_mode: str = "snap_taker"  # "snap_taker" (default) | "rest_maker" (maker experiment T14, paper-only)
     universe_size: int = Field(default=20, ge=5, le=100)  # How many pairs to scan per cycle
     macro_overlay_enabled: bool = True  # Macro/dominance overlay (scorer.py:3114). True = back-compat; False = pure technicals (T19)
+    # Account-aware symbol admission (decisions/2026-06-28__account-aware-liquidity-admission.md).
+    # "fixed" (default) = the legacy $5M volume floor, byte-identical. "account_aware" = floor scales
+    # with balance×leverage + live order-book depth/spread + min-order + liquidation gates.
+    liquidity_mode: str = "fixed"  # "fixed" | "account_aware"
+    participation_rate: float = Field(default=0.005, gt=0, le=1)  # position <= this fraction of 24h volume
+    hard_min_volume_usdt: float = Field(default=500_000.0, ge=0)  # absolute floor (never a dead market)
+    depth_aware_admission: bool = True   # order-book spread/depth gate (account_aware)
+    min_order_risk_guard: bool = True    # min-order risk gate (account_aware)
+    liquidation_safety_guard: bool = True  # liquidation-safety gate (account_aware)
 
 
 @app.post("/api/paper-trading/start")
@@ -1235,6 +1244,12 @@ async def start_paper_trading(config: PaperTradingConfigRequest):
             execution_mode=config.execution_mode,
             universe_size=config.universe_size,
             macro_overlay_enabled=config.macro_overlay_enabled,
+            liquidity_mode=config.liquidity_mode,
+            participation_rate=config.participation_rate,
+            hard_min_volume_usdt=config.hard_min_volume_usdt,
+            depth_aware_admission=config.depth_aware_admission,
+            min_order_risk_guard=config.min_order_risk_guard,
+            liquidation_safety_guard=config.liquidation_safety_guard,
         )
 
         result = await service.start(paper_config)

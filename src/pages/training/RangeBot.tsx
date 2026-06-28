@@ -614,6 +614,12 @@ interface PaperConfig {
   fee_rate: number;
   execution_mode: 'snap_taker' | 'rest_maker';
   macro_overlay_enabled: boolean;
+  liquidity_mode: 'fixed' | 'account_aware';
+  participation_rate: number;
+  hard_min_volume_usdt: number;
+  depth_aware_admission: boolean;
+  min_order_risk_guard: boolean;
+  liquidation_safety_guard: boolean;
 }
 
 const DEFAULT_SETUP: PaperConfig = {
@@ -645,6 +651,14 @@ const DEFAULT_SETUP: PaperConfig = {
   //   that now owns direction; ON injects a competing signal.
   execution_mode: 'rest_maker',
   macro_overlay_enabled: false,
+  // Account-aware admission defaults to OFF (fixed $5M floor = byte-identical legacy). Toggle on to
+  // scale the universe to your balance×leverage + live order-book depth (see §08).
+  liquidity_mode: 'fixed',
+  participation_rate: 0.005,
+  hard_min_volume_usdt: 500000,
+  depth_aware_admission: true,
+  min_order_risk_guard: true,
+  liquidation_safety_guard: true,
 };
 
 function SetupTab({
@@ -813,6 +827,42 @@ function SetupTab({
           <div className="mono" style={{ fontSize: 9, color: '#f5a623', letterSpacing: '.1em', marginTop: 6 }}>
             ⚠ no effect on direction in thesis mode — the structure thesis owns direction; this only nudges the now-demoted score. Keep OFF. (Active in legacy mode.)
           </div>
+        )}
+      </SectionPanel>
+
+      {/* § 8 — Account-aware admission */}
+      <SectionPanel num="08" title="Account-Aware Admission" desc="scale the tradeable universe to YOUR balance × leverage + live order-book depth">
+        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          {([['fixed', 'FIXED · $5M FLOOR'], ['account_aware', 'ACCOUNT-AWARE ★']] as const).map(([m, lbl]) => (
+            <button
+              key={m}
+              type="button"
+              className={`btn ${cfg.liquidity_mode === m ? 'btn-cyan' : ''}`}
+              onClick={() => set('liquidity_mode', m)}
+              style={{ flex: 1, fontSize: 11, letterSpacing: '.12em', padding: '10px 0' }}
+            >
+              {lbl}
+            </button>
+          ))}
+        </div>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--fg-4)', letterSpacing: '.1em', marginBottom: 14 }}>
+          fixed = legacy single $5M 24h-volume floor (same for every account) · account-aware = floor scales to your footprint (balance × leverage), then live order-book depth/spread + min-order + liquidation gates admit only what your size can trade safely
+        </div>
+        {cfg.liquidity_mode === 'account_aware' && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
+              <Slider label="Participation Cap" value={cfg.participation_rate * 100} min={0.1} max={2} step={0.1} onChange={(v) => set('participation_rate', v / 100)} suffix="%" hint="your position stays under this % of 24h volume" />
+              <Slider label="Hard Min Volume" value={cfg.hard_min_volume_usdt / 1000} min={100} max={5000} step={100} onChange={(v) => set('hard_min_volume_usdt', v * 1000)} suffix="k USD" hint="absolute floor — never trade a deader market than this" />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
+              <Toggle label="Depth Gate" value={cfg.depth_aware_admission} onChange={(v) => set('depth_aware_admission', v)} hint="live order-book spread/depth (volume ≠ depth)" />
+              <Toggle label="Min-Order Guard" value={cfg.min_order_risk_guard} onChange={(v) => set('min_order_risk_guard', v)} hint="skip pairs whose min order over-risks budget" />
+              <Toggle label="Liquidation Guard" value={cfg.liquidation_safety_guard} onChange={(v) => set('liquidation_safety_guard', v)} hint="leverage-safe stops (inert at 1×)" />
+            </div>
+            <div className="mono" style={{ fontSize: 9, color: '#22d3ee', letterSpacing: '.1em' }}>
+              ◉ at ${cfg.initial_balance.toLocaleString()} × {cfg.leverage}× → volume floor ≈ ${Math.max(cfg.hard_min_volume_usdt, (cfg.initial_balance * cfg.leverage) / (cfg.participation_rate || 0.005)).toLocaleString(undefined, { maximumFractionDigits: 0 })} (then live depth/spread admits the final set)
+            </div>
+          </>
         )}
       </SectionPanel>
 
@@ -1261,6 +1311,12 @@ export function RangeBot() {
         sensitivity_preset: 'custom',
         execution_mode: cfg.execution_mode,
         macro_overlay_enabled: cfg.macro_overlay_enabled,
+        liquidity_mode: cfg.liquidity_mode,
+        participation_rate: cfg.participation_rate,
+        hard_min_volume_usdt: cfg.hard_min_volume_usdt,
+        depth_aware_admission: cfg.depth_aware_admission,
+        min_order_risk_guard: cfg.min_order_risk_guard,
+        liquidation_safety_guard: cfg.liquidation_safety_guard,
       };
       await paperTradingService.start(req);
       await Promise.all([loadStatus(), loadTrades()]);

@@ -49,6 +49,12 @@ export interface PaperTradingConfigRequest {
   universe_size?: number;
   execution_mode?: 'snap_taker' | 'rest_maker';
   macro_overlay_enabled?: boolean;
+  liquidity_mode?: 'fixed' | 'account_aware';
+  participation_rate?: number;
+  hard_min_volume_usdt?: number;
+  depth_aware_admission?: boolean;
+  min_order_risk_guard?: boolean;
+  liquidation_safety_guard?: boolean;
 }
 
 export interface PaperPosition {
