@@ -538,6 +538,56 @@ def filter_by_book_quality(
     return kept, dropped
 
 
+def filter_by_min_order_risk(
+    symbols: List[str],
+    min_notional_by_symbol: Dict[str, "float | None"],
+    risk_budget_usd: float,
+    stop_pct: float,
+    *,
+    context: str = "",
+) -> Tuple[List[str], List[str]]:
+    """Partition by whether the venue's SMALLEST order can be sized within the per-trade risk budget.
+
+    Gate 2 (decisions/2026-06-28__account-aware-liquidity-admission.md). The smallest order the venue
+    accepts implies a minimum RISK = min_notional × stop_pct. If that exceeds the trader's per-trade
+    budget (balance × risk%), the pair CANNOT be traded without over-risking — DROP it (reason
+    min_order_risk). Leverage-INDEPENDENT: risk is notional×stop%, not margin, so leverage doesn't
+    change it. Direction-agnostic (a min order is a property of the contract, not the side).
+
+    `stop_pct` here is a CONSERVATIVE universe-level assumption (the real per-plan stop is only known at
+    planner time); this is the coarse pre-filter. Missing/None/<=0 min_notional -> fail-safe DROP (O5,
+    consistent with §9-A "unknown -> drop"). Mass-conservation asserted (§16 Rubric 3).
+    """
+    kept: List[str] = []
+    dropped: List[str] = []
+    budget = max(0.0, risk_budget_usd)
+    sp = max(0.0, stop_pct)
+    for s in symbols:
+        mn = min_notional_by_symbol.get(s)
+        if mn is None or mn <= 0:
+            dropped.append(s)
+            continue
+        if mn * sp <= budget:
+            kept.append(s)
+        else:
+            dropped.append(s)
+
+    assert len(kept) + len(dropped) == len(symbols), (
+        f"filter_by_min_order_risk mass-conservation violated: "
+        f"kept={len(kept)} dropped={len(dropped)} input={len(symbols)}"
+    )
+
+    if dropped:
+        tag = f"[{context}] " if context else ""
+        logger.info(
+            "{}MIN_ORDER_RISK_DROP: {} symbol(s) whose min order × {:.1%} stop exceeds the ${:,.2f} "
+            "risk budget (or min unknown): {}",
+            tag, len(dropped), sp, budget, dropped,
+        )
+
+    return kept, dropped
+
+
 def get_stale_counters_snapshot() -> Dict[str, int]:
     """Return a shallow copy of the counter dict — for diagnostics + tests."""
     with _no_data_counter_lock:

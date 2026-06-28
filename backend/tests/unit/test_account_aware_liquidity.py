@@ -12,6 +12,7 @@ from __future__ import annotations
 from backend.analysis.pair_selection import (
     derive_account_aware_floor,
     filter_by_book_quality,
+    filter_by_min_order_risk,
     filter_illiquid_symbols,
 )
 
@@ -155,3 +156,38 @@ def test_depth_gate_mass_conservation_and_symmetry():
     # direction-agnostic: depth_usd is already MIN of both sides — identical result regardless of side
     kept2, dropped2 = filter_by_book_quality(syms, _BOOK, 1_000.0, max_spread_bps=15.0, min_depth_mult=3.0)
     assert kept == kept2 and dropped == dropped2
+
+
+# ── Gate 2 — min-order risk guard (filter_by_min_order_risk) ──
+
+# Measured Phemex effective min-order notionals ($): cheap alts ~$1, BTC ~$60 (lot step binds).
+_MINS = {"BTC/USDT": 60.0, "ADA/USDT": 1.0, "BIGMIN/USDT": 400.0, "NOSPEC/USDT": None}
+
+
+def test_min_order_drops_pair_that_forces_overrisk():
+    # $150 account × 2% = $3 budget, 1% stop assumption. BIGMIN ($400 min) × 1% = $4 > $3 → DROP.
+    kept, dropped = filter_by_min_order_risk(
+        list(_MINS.keys()), _MINS, risk_budget_usd=3.0, stop_pct=0.01,
+    )
+    assert "BIGMIN/USDT" in dropped       # $4 implied risk > $3 budget
+    assert "BTC/USDT" in kept             # $0.60 << $3
+    assert "ADA/USDT" in kept             # $0.01 << $3
+
+
+def test_min_order_missing_spec_fails_safe_drop():
+    # None / unknown min → fail-safe DROP (O5, §9-A "unknown -> drop")
+    kept, dropped = filter_by_min_order_risk(list(_MINS.keys()), _MINS, 3.0, 0.01)
+    assert "NOSPEC/USDT" in dropped
+
+
+def test_min_order_is_phemex_near_inert_at_realistic_size():
+    # Documents the measured reality: at $1k × 2% = $20 budget, even BTC ($60 min) × 1% = $0.60 passes.
+    # The guard is a thin safety net on Phemex (mins $1-60), proving the "$150 can't trade" worry false.
+    kept, _ = filter_by_min_order_risk(["BTC/USDT", "ADA/USDT"], _MINS, risk_budget_usd=20.0, stop_pct=0.01)
+    assert set(kept) == {"BTC/USDT", "ADA/USDT"}
+
+
+def test_min_order_mass_conservation():
+    kept, dropped = filter_by_min_order_risk(list(_MINS.keys()), _MINS, 3.0, 0.01)
+    assert len(kept) + len(dropped) == len(_MINS)
+    assert not (set(kept) & set(dropped))

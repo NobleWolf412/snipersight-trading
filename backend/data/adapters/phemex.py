@@ -448,6 +448,46 @@ class PhemexAdapter:
                 out[s] = {"spread_bps": float("inf"), "depth_usd": 0.0}
         return out
 
+    def get_min_order_specs(self, symbols: List[str]) -> Dict[str, "float | None"]:
+        """Return {symbol: min_order_notional_usdt} — the smallest order the venue will accept, in USDT.
+
+        Gate 2 (min-order risk guard). Phemex via ccxt leaves market['limits']['amount'/'cost']['min']
+        EMPTY (measured 2026-06-28: all None). The REAL floor lives in the raw market info:
+          - info['minOrderValueRv'] = absolute $ floor (~1 USDT), AND
+          - the lot step = precision['amount'] (or info['qtyStepSize']) × contractSize × price.
+        min_notional = max(min_order_value, lot_step × contractSize × price). Measured effective mins:
+        BTC ~\$59.67 (lot step binds), ETH ~\$15.73, cheap alts ~\$1 (minOrderValue floor) — so on Phemex
+        this guard rarely binds. Missing price / no min data -> None (caller fail-safe DROPs, §9-A/O5).
+        """
+        if not self.exchange.markets:
+            self.exchange.load_markets()
+        try:
+            tickers = self.exchange.fetch_tickers()
+        except Exception as e:
+            # TOTAL failure -> {} so the CALLER skips the gate (matches get_symbol_volumes /
+            # get_book_quality), rather than dropping the whole universe on a transient ticker error.
+            logger.warning("get_min_order_specs: ticker fetch failed ({}); gate will SKIP this scan", e)
+            return {}
+        out: Dict[str, "float | None"] = {}
+        for s in symbols:
+            perp = s if ":" in s else f"{s}:USDT"
+            m = self.exchange.markets.get(perp) or self.exchange.markets.get(s) or {}
+            info = m.get("info") or {}
+            prec = m.get("precision") or {}
+            t = tickers.get(perp) or tickers.get(s) or {}
+            price = t.get("last") or t.get("close")
+            try:
+                min_value = float(info.get("minOrderValueRv") or 0.0)
+                step = float(prec.get("amount") or info.get("qtyStepSize") or 0.0)
+                csize = float(m.get("contractSize") or 1.0)
+                if not price or price <= 0 or (min_value <= 0 and step <= 0):
+                    out[s] = None
+                else:
+                    out[s] = max(min_value, step * csize * price)
+            except (TypeError, ValueError):
+                out[s] = None
+        return out
+
     @retry_on_rate_limit(max_retries=3)
     def get_top_symbols(
         self, n: int = 20, quote_currency: str = "USDT", market_type: Optional[str] = None,

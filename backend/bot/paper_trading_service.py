@@ -327,6 +327,9 @@ class PaperTradingConfig:
     max_spread_bps: float = 15.0  # drop books wider than this at the touch
     min_depth_mult: float = 3.0  # require near-touch depth >= position_notional × this
     depth_band_bps: float = 10.0  # measure resting depth within this band of mid
+    # Gate 2 — min-order risk guard: drop a pair whose smallest allowed order × stop% exceeds the
+    # per-trade risk budget (balance × risk%). Leverage-independent. Near-inert on Phemex (mins $1-60).
+    min_order_risk_guard: bool = True  # apply the min-order risk gate inside account_aware
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -1663,6 +1666,7 @@ class PaperTradingService:
             try:
                 from backend.analysis.pair_selection import (
                     filter_illiquid_symbols, derive_account_aware_floor, filter_by_book_quality,
+                    filter_by_min_order_risk,
                 )
                 # Liquidity floor: "fixed" (default) is BYTE-IDENTICAL to the prior behavior; only
                 # "account_aware" (Gate 1) derives the floor from the account's balance×leverage
@@ -1715,6 +1719,32 @@ class PaperTradingService:
                             "DEPTH gate SKIPPED this scan: order-book lookup returned no data; "
                             "trading {} symbol(s) on the volume floor alone", len(scan_symbols),
                         )
+                # Gate 2 — min-order risk guard (account_aware only): drop a pair whose smallest allowed
+                # order × stop% would exceed the per-trade risk budget (forced over-risk). Leverage-
+                # independent. Near-inert on Phemex (mins $1-60); protects tiny accounts / other venues.
+                if (getattr(self.config, "liquidity_mode", "fixed") == "account_aware"
+                        and getattr(self.config, "min_order_risk_guard", True)
+                        and scan_symbols):
+                    _risk_budget = ((getattr(self.config, "initial_balance", 0.0) or 0.0)
+                                    * (getattr(self.config, "risk_per_trade", 1.0) or 0.0) / 100.0)
+                    _specs = self.orchestrator.exchange_adapter.get_min_order_specs(scan_symbols)
+                    if _specs:
+                        _pre = list(scan_symbols)
+                        _kept, _minord_dropped = filter_by_min_order_risk(
+                            scan_symbols, _specs, _risk_budget,
+                            getattr(self.config, "min_order_stop_pct_assumption", 0.01),
+                            context="paper_trading_service",
+                        )
+                        # Guard: a min-order gate that drops EVERY survivor is almost certainly a
+                        # spec-data glitch (Phemex always carries minOrderValueRv), not a real verdict —
+                        # skip it loudly rather than trading nothing (volume+depth already vetted these).
+                        if _kept or not _pre:
+                            scan_symbols = _kept
+                        else:
+                            logger.warning(
+                                "MIN_ORDER gate SKIPPED: would have dropped ALL {} survivor(s) "
+                                "(likely missing min-order specs, not a real verdict)", len(_pre),
+                            )
             except Exception as _liq_exc:
                 # Graceful degradation, NOT silent (CLAUDE.md §11/§15): a ticker/order-book fetch or
                 # mass-conservation regression stays visible; scan continues on existing gates. Covers

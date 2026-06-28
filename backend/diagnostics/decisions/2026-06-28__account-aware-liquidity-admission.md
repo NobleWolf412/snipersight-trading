@@ -111,6 +111,29 @@ still flat-35bps-blind (the validation-instrument gap). Depth-aware ADMISSION + 
 SLIPPAGE model are both needed before live. Admission is done; the slippage-model fix remains the
 binding live prerequisite.
 
+## Gate 2 (path 2, shipped 2026-06-28) — min-order risk guard, NEAR-INERT on Phemex (measured)
+Drop a pair whose SMALLEST allowed order, sized at a conservative stop%, would force more risk than
+the per-trade budget (`min_notional × stop_pct > balance × risk%`). Leverage-INDEPENDENT (risk =
+notional×stop%, not margin). Direction-agnostic.
+
+**Fundamentals-first finding (measured, do not assume):** ccxt leaves Phemex
+`market['limits']['amount'/'cost']['min']` EMPTY (all None). The real floor is in the raw market info:
+`info['minOrderValueRv']` = a **$1** absolute floor, plus the lot step `precision['amount'] ×
+contractSize × price`. Measured effective minimums: **BTC ~$59.67** (lot step binds), **ETH ~$15.73**,
+**cheap alts ~$1** (the $1 floor binds). So at any realistic account size the guard barely fires — at
+$150 × 2% ($3 budget) you'd need a >5% stop to block even BTC. This is the honest answer to "can I
+trade with $150": YES — Phemex minimums are $1–60, tiny vs your positions. Gate 2 is therefore a thin
+SAFETY NET (and future-proofs other venues / large-min pairs), not a frequent gate.
+
+- `phemex.get_min_order_specs(symbols) -> {sym: min_notional|None}` (reads the real info fields; total
+  ticker failure -> {} so the caller SKIPS, never nukes the universe; per-symbol unknown -> None).
+- `pair_selection.filter_by_min_order_risk(...)` — pure, fail-safe DROP on None, mass-conservation assert.
+- Call site: account_aware-only, after the depth gate; uses `min_order_stop_pct_assumption` (1%).
+  DROP-ALL guard: if the gate would drop every survivor (a spec-data glitch, since Phemex always has
+  minOrderValueRv), it SKIPS loudly rather than trading nothing (volume+depth already vetted them).
+- Config: `min_order_risk_guard` (True). The precise per-plan check (real stop%) is DEFERRED — given
+  the tiny measured mins it adds marginal value over the coarse universe gate.
+
 ## Open / forward
 - `participation_rate` (0.5%), `hard_min` ($500k), `max_spread_bps` (15), `min_depth_mult` (3.0) are
   initial values — calibrate from the depth/spread telemetry, not paper P&L.
