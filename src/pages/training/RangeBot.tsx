@@ -761,7 +761,7 @@ function SetupTab({
         </div>
         {cfg.trailing_stop && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-            <Slider label="Trailing Activation" value={cfg.trailing_activation} min={0.5} max={5} step={0.5} onChange={(v) => set('trailing_activation', v)} suffix="%" hint="profit % before trailing activates" />
+            <Slider label="Trailing Activation" value={cfg.trailing_activation} min={0.5} max={5} step={0.5} onChange={(v) => set('trailing_activation', v)} suffix="R" hint="profit in R (multiples of stop distance) before trailing arms — NOT a percent" />
           </div>
         )}
       </SectionPanel>
