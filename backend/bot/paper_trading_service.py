@@ -391,6 +391,12 @@ class CompletedTrade:
     targets_hit: List[int] = field(default_factory=list)
     max_favorable: float = 0.0
     max_adverse: float = 0.0
+    # Trailing-stop observability (decisions/2026-06-29): did the trail ARM, and where did the stop
+    # end up vs its INITIAL level — so /autopsy can finally see whether trailing fired + trailed
+    # (previously un-journaled — we were blind to it). trailing_final_stop != initial_stop_loss => trailed.
+    trailing_activated: bool = False
+    initial_stop_loss: float = 0.0
+    trailing_final_stop: float = 0.0
     trade_type: str = "intraday"  # "scalp", "intraday", "swing"
 
     # ML feature snapshot — populated from PositionState (which captures from TradePlan at open)
@@ -480,6 +486,9 @@ class CompletedTrade:
             "targets_hit": self.targets_hit,
             "max_favorable": self.max_favorable,
             "max_adverse": self.max_adverse,
+            "trailing_activated": self.trailing_activated,
+            "initial_stop_loss": self.initial_stop_loss,
+            "trailing_final_stop": self.trailing_final_stop,
             "trade_type": self.trade_type,
             "confidence_score": self.confidence_score,
             "conviction_class": self.conviction_class,
@@ -3428,6 +3437,9 @@ class PaperTradingService:
                     plan_type=getattr(pos, "plan_type", "SMC"),
                     risk_reward_ratio=getattr(pos, "risk_reward_ratio", 0.0),
                     stop_distance_atr=getattr(pos, "stop_distance_atr", 0.0),
+                    trailing_activated=getattr(pos, "trailing_active", False),
+                    initial_stop_loss=getattr(pos, "initial_stop_loss", 0.0),
+                    trailing_final_stop=getattr(pos, "stop_loss", 0.0),
                     timeframe=getattr(pos, "timeframe", "1h"),
                     # Bucket by ENTRY regime, not the close-time value the stagnation
                     # updater clobbers into regime_trend/regime_volatility every scan.
