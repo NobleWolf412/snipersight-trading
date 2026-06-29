@@ -1170,7 +1170,7 @@ class PaperTradingConfigRequest(BaseModel):
     duration_hours: int = Field(default=24, ge=0, le=168)  # 0 = manual, max 1 week
     scan_interval_minutes: int = Field(default=2, ge=1, le=60)
     trailing_stop: bool = True
-    trailing_activation: float = Field(default=1.5, ge=1.0, le=5.0)
+    trailing_activation: float = Field(default=1.0, ge=1.0, le=5.0)  # R-multiple (paper); lowered 1.5->1.0 2026-06-29
     breakeven_after_target: int = Field(default=1, ge=1, le=3)
     min_confluence: Optional[float] = Field(default=None, ge=0, le=100)
     # Signal Sensitivity — preset drives gate + floor automatically.

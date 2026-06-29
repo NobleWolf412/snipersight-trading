@@ -635,7 +635,7 @@ const DEFAULT_SETUP: PaperConfig = {
   // feedback data. This is a paper-only tuning choice — not a live gate change.
   min_confluence: 68,
   trailing_stop: true,
-  trailing_activation: 1.5,
+  trailing_activation: 1.0, // R-multiple (lowered 1.5->1.0 2026-06-29 — 1.5R rarely armed; trades peak 0.7-1.2R)
   breakeven_after_target: 1,
   majors: true,
   altcoins: true, // ON — more symbols => more retrace setups => more data (liquidity floor still filters illiquid)
@@ -761,7 +761,7 @@ function SetupTab({
         </div>
         {cfg.trailing_stop && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-            <Slider label="Trailing Activation" value={cfg.trailing_activation} min={0.5} max={5} step={0.5} onChange={(v) => set('trailing_activation', v)} suffix="R" hint="profit in R (multiples of stop distance) before trailing arms — NOT a percent" />
+            <Slider label="Trailing Activation" value={cfg.trailing_activation} min={1} max={5} step={0.5} onChange={(v) => set('trailing_activation', v)} suffix="R" hint="profit in R (multiples of stop distance) before trailing arms — NOT a percent" />
           </div>
         )}
       </SectionPanel>

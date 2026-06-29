@@ -269,7 +269,7 @@ class PaperTradingConfig:
     duration_hours: int = 24
     scan_interval_minutes: int = 2
     trailing_stop: bool = True
-    trailing_activation: float = 1.5
+    trailing_activation: float = 1.0  # R-multiple; lowered 1.5->1.0 2026-06-29 (1.5R rarely armed; trades peak 0.7-1.2R). Measured via trailing journaling.
     breakeven_after_target: int = 1
     min_confluence: Optional[float] = None
     confluence_soft_floor: Optional[float] = None
