@@ -425,6 +425,13 @@ class CompletedTrade:
     btc_velocity_1h_at_entry: float = 0.0
     alt_velocity_1h_at_entry: float = 0.0
     macro_state_at_entry: str = "unknown"
+    # Order-flow (CVD) snapshot at entry — OBSERVATIONAL (decisions/2026-06-30__cvd-experiment).
+    cvd_slope_1h_at_entry: float = 0.0
+    cvd_divergence_at_entry: float = 0.0
+    cvd_z_at_entry: float = 0.0
+    cvd_coverage_at_entry: float = 0.0
+    cvd_n_trades_at_entry: float = 0.0
+    open_interest_at_entry: float = 0.0
     regime_trend_at_entry: str = "sideways"  # global regime.dimensions.trend at open
     # Provenance marker (decisions/2026-06-16 §11.6 bug #1): "entry" = `regime` and
     # `regime_trend_at_entry` were captured at OPEN (correct). Journal rows written
@@ -509,6 +516,12 @@ class CompletedTrade:
             "final_targets_remaining": self.final_targets_remaining,
             "targets_stripped_count": self.targets_stripped_count,
             "btc_velocity_1h_at_entry": self.btc_velocity_1h_at_entry,
+            "cvd_slope_1h_at_entry": self.cvd_slope_1h_at_entry,
+            "cvd_divergence_at_entry": self.cvd_divergence_at_entry,
+            "cvd_z_at_entry": self.cvd_z_at_entry,
+            "cvd_coverage_at_entry": self.cvd_coverage_at_entry,
+            "cvd_n_trades_at_entry": self.cvd_n_trades_at_entry,
+            "open_interest_at_entry": self.open_interest_at_entry,
             "alt_velocity_1h_at_entry": self.alt_velocity_1h_at_entry,
             "macro_state_at_entry": self.macro_state_at_entry,
             "regime_trend_at_entry": self.regime_trend_at_entry,
@@ -618,6 +631,13 @@ class PaperTradingService:
         self.mode: Optional[ScannerMode] = None
         self.active_mode: str = "stealth"  # Current adaptive mode (e.g. overwatch)
         self.active_profile: str = "stealth"  # Current logic fusion profile (e.g. surgical)
+
+        # Order-flow (CVD) forward-capture — OBSERVATIONAL ONLY (decisions/2026-06-30__cvd-experiment).
+        # Polled by a dedicated task; snapshotted into the journal at entry; read by NO decision path.
+        from backend.bot.cvd import CvdTracker
+        self._cvd_tracker = CvdTracker()
+        self._cvd_poll_symbols: List[str] = []  # candidate universe to poll (set each scan)
+        self._cvd_task: Optional[asyncio.Task] = None
 
         # Tracking
         self.completed_trades: List[CompletedTrade] = []
@@ -907,6 +927,11 @@ class PaperTradingService:
             self._monitor_loop(), name=f"paper_monitor_loop_{self.session_id}"
         )
         self._monitor_task.add_done_callback(self._task_done_callback)
+        # Observational CVD poller (decisions/2026-06-30__cvd-experiment) — feeds the journal, not decisions.
+        self._cvd_task = asyncio.create_task(
+            self._cvd_poll_loop(), name=f"paper_cvd_poll_{self.session_id}"
+        )
+        self._cvd_task.add_done_callback(self._task_done_callback)
 
         logger.info(f"Paper trading started: session={self.session_id}, mode={config.sniper_mode}")
 
@@ -938,6 +963,14 @@ class PaperTradingService:
                 await self._scan_task
             except asyncio.CancelledError:
                 pass
+
+        if self._cvd_task:
+            self._cvd_task.cancel()
+            try:
+                await self._cvd_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._cvd_task = None
 
         if self._monitor_task:
             self._monitor_task.cancel()
@@ -1275,6 +1308,45 @@ class PaperTradingService:
             # Wait for next interval
             await asyncio.sleep(interval)
 
+    async def _cvd_poll_loop(self):
+        """OBSERVATIONAL order-flow poller (decisions/2026-06-30__cvd-experiment). Polls recent taker
+        trades for the candidate universe and feeds the CvdTracker so CVD-at-entry is warm when a symbol
+        fires. Reads NOTHING into the decision path; failures are swallowed (never affects trading)."""
+        _CVD_POLL_INTERVAL = 60  # seconds; bounded per-symbol fetch like the depth gate
+        while self._running:
+            try:
+                syms = list(self._cvd_poll_symbols)[:25]  # bounded call budget
+                adapter = self.orchestrator.exchange_adapter if self.orchestrator else None
+                if adapter:
+                    for sym in syms:
+                        try:
+                            perp = sym if ":" in sym else f"{sym}:USDT"
+                            trades = adapter.fetch_recent_trades(perp, limit=200)
+                            if trades:
+                                self._cvd_tracker.ingest(sym, trades)
+                        except Exception as _se:
+                            logger.debug(f"cvd poll {sym} skipped: {_se}")
+            except Exception as _e:
+                logger.debug(f"cvd poll loop iteration error: {_e}")
+            await asyncio.sleep(_CVD_POLL_INTERVAL)
+
+    def _inject_cvd_snapshot(self, plan) -> None:
+        """Attach the entry-time CVD + OI snapshot to plan.metadata['cvd'] (observational; NEVER raises —
+        a CVD failure must not block a trade opening). Mirrors the macro-metadata carrier pattern."""
+        try:
+            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+            feats = self._cvd_tracker.snapshot_features(plan.symbol, plan.direction, now_ms)
+            try:
+                perp = plan.symbol if ":" in plan.symbol else f"{plan.symbol}:USDT"
+                oi = self.orchestrator.exchange_adapter.get_open_interest(perp)
+                feats["open_interest"] = float(oi) if oi is not None else 0.0
+            except Exception:
+                feats["open_interest"] = 0.0
+            meta = getattr(plan, "metadata", None)
+            plan.metadata = {**(meta if isinstance(meta, dict) else {}), "cvd": feats}
+        except Exception as _e:
+            logger.debug(f"CVD snapshot inject skipped: {_e}")
+
     async def _monitor_loop(self):
         """Background loop for monitoring positions."""
         while self._running:
@@ -1333,6 +1405,7 @@ class PaperTradingService:
                                                         "cap": cap,
                                                     })
                                                 else:
+                                                    self._inject_cvd_snapshot(plan)  # observational entry snapshot
                                                     position_id = self.position_manager.open_position(
                                                         trade_plan=plan,
                                                         entry_price=fill.price,
@@ -1793,6 +1866,10 @@ class PaperTradingService:
             # Filter out excluded symbols
             if self.config.exclude_symbols:
                 scan_symbols = [s for s in scan_symbols if s not in self.config.exclude_symbols]
+
+            # Feed the candidate universe to the observational CVD poller (so CVD-at-entry is warm
+            # when a symbol fires). Pure assignment — no decision impact. decisions/2026-06-30__cvd.
+            self._cvd_poll_symbols = list(scan_symbols)
 
             # Prioritise symbols whose pending order just expired — they need fresh
             # analysis with current price immediately rather than being shuffled to
@@ -2884,6 +2961,7 @@ class PaperTradingService:
 
             if fill and order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
                 # Open position in manager using the ACTUALLY filled quantity
+                self._inject_cvd_snapshot(plan)  # observational entry snapshot
                 position_id = position_manager.open_position(
                     trade_plan=plan,
                     entry_price=fill.price,
@@ -3452,6 +3530,12 @@ class PaperTradingService:
                     # Tier 2 macro snapshot pass-through (populated at open_position
                     # from plan.metadata["macro"] / ["global_regime"]).
                     btc_velocity_1h_at_entry=getattr(pos, "btc_velocity_1h_at_entry", 0.0),
+                    cvd_slope_1h_at_entry=getattr(pos, "cvd_slope_1h_at_entry", 0.0),
+                    cvd_divergence_at_entry=getattr(pos, "cvd_divergence_at_entry", 0.0),
+                    cvd_z_at_entry=getattr(pos, "cvd_z_at_entry", 0.0),
+                    cvd_coverage_at_entry=getattr(pos, "cvd_coverage_at_entry", 0.0),
+                    cvd_n_trades_at_entry=getattr(pos, "cvd_n_trades_at_entry", 0.0),
+                    open_interest_at_entry=getattr(pos, "open_interest_at_entry", 0.0),
                     alt_velocity_1h_at_entry=getattr(pos, "alt_velocity_1h_at_entry", 0.0),
                     macro_state_at_entry=getattr(pos, "macro_state_at_entry", "unknown"),
                     regime_trend_at_entry=getattr(pos, "entry_regime_trend", "sideways"),

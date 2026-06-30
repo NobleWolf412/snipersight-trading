@@ -456,7 +456,7 @@ class PhemexAdapter:
           - info['minOrderValueRv'] = absolute $ floor (~1 USDT), AND
           - the lot step = precision['amount'] (or info['qtyStepSize']) × contractSize × price.
         min_notional = max(min_order_value, lot_step × contractSize × price). Measured effective mins:
-        BTC ~\$59.67 (lot step binds), ETH ~\$15.73, cheap alts ~\$1 (minOrderValue floor) — so on Phemex
+        BTC ~$59.67 (lot step binds), ETH ~$15.73, cheap alts ~$1 (minOrderValue floor) — so on Phemex
         this guard rarely binds. Missing price / no min data -> None (caller fail-safe DROPs, §9-A/O5).
         """
         if not self.exchange.markets:
@@ -487,6 +487,45 @@ class PhemexAdapter:
             except (TypeError, ValueError):
                 out[s] = None
         return out
+
+    def fetch_recent_trades(self, symbol: str, limit: int = 200) -> List[Tuple[int, float, float]]:
+        """Return recent taker trades as [(timestamp_ms, signed_volume, price)], ASC by ts.
+
+        CVD forward-capture (decisions/2026-06-30__cvd-experiment). signed_volume = +amount when the
+        TAKER aggressor lifted the ask (side=='buy'), -amount when it hit the bid (side=='sell') — the
+        raw aggressive buy/sell FORCE. NOTE: Phemex via ccxt does NOT populate trade `id` (measured
+        None), so the caller must de-dup / gap-detect by TIMESTAMP, not id. fetchTrades is recent-only
+        (no deep history) — a poll gap loses the trades that fell off the window (handled by the caller's
+        coverage flag). Per-symbol fetch (no bulk endpoint); failure -> [] (fail-safe, observational).
+        """
+        try:
+            raw = self.exchange.fetch_trades(symbol, limit=limit)
+        except Exception as e:
+            logger.warning("fetch_recent_trades {} failed ({})", symbol, e)
+            return []
+        out: List[Tuple[int, float, float]] = []
+        for t in raw:
+            ts = t.get("timestamp"); side = t.get("side"); amt = t.get("amount"); px = t.get("price")
+            if ts is None or amt is None or side not in ("buy", "sell"):
+                continue
+            out.append((int(ts), float(amt) if side == "buy" else -float(amt), float(px or 0.0)))
+        out.sort(key=lambda x: x[0])
+        return out
+
+    def get_open_interest(self, symbol: str) -> "float | None":
+        """Live open interest (base-asset amount) for a perp symbol, or None on failure.
+
+        fetchOpenInterest works LIVE on Phemex (history does NOT — fetchOpenInterestHistory is absent),
+        so OI is a forward-capture-only signal, snapshotted at entry alongside CVD. Uses
+        openInterestAmount (openInterestValue is None on Phemex).
+        """
+        try:
+            oi = self.exchange.fetch_open_interest(symbol)
+            v = oi.get("openInterestAmount")
+            return float(v) if v is not None else None
+        except Exception as e:
+            logger.warning("get_open_interest {} failed ({})", symbol, e)
+            return None
 
     @retry_on_rate_limit(max_retries=3)
     def get_top_symbols(

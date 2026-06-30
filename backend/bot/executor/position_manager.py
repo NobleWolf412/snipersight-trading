@@ -151,6 +151,15 @@ class PositionState:
     btc_velocity_1h_at_entry: float = 0.0
     alt_velocity_1h_at_entry: float = 0.0
     macro_state_at_entry: str = "unknown"
+    # Order-flow (CVD) snapshot at ENTRY — OBSERVATIONAL ONLY (decisions/2026-06-30__cvd-experiment).
+    # Read from plan.metadata["cvd"] at open_position; pure journal columns for the noise-floor test,
+    # NOT read by any decision path. Direction-signed (flow agreeing with the trade is positive).
+    cvd_slope_1h_at_entry: float = 0.0
+    cvd_divergence_at_entry: float = 0.0
+    cvd_z_at_entry: float = 0.0
+    cvd_coverage_at_entry: float = 0.0
+    cvd_n_trades_at_entry: float = 0.0
+    open_interest_at_entry: float = 0.0
 
     # HTF + setup-archetype snapshot at ENTRY. htf_aligned read from
     # plan.confluence_breakdown.htf_aligned at open_position. setup_qualifier
@@ -384,6 +393,15 @@ class PositionManager:
         _ml_btc_vel = float(_macro_meta.get("btc_velocity_1h", 0.0) or 0.0)
         _ml_alt_vel = float(_macro_meta.get("alt_velocity_1h", 0.0) or 0.0)
         _ml_macro_state = str(_macro_meta.get("macro_state", "unknown") or "unknown")
+        # CVD order-flow snapshot (observational; decisions/2026-06-30__cvd-experiment). Same
+        # metadata-carrier pattern as macro; safe zeros if absent.
+        _cvd_meta = _meta.get("cvd", {}) or {}
+        _cvd_slope = float(_cvd_meta.get("cvd_slope_1h", 0.0) or 0.0)
+        _cvd_div = float(_cvd_meta.get("cvd_divergence", 0.0) or 0.0)
+        _cvd_z = float(_cvd_meta.get("cvd_z", 0.0) or 0.0)
+        _cvd_cov = float(_cvd_meta.get("cvd_coverage", 0.0) or 0.0)
+        _cvd_ntr = float(_cvd_meta.get("cvd_n_trades", 0.0) or 0.0)
+        _cvd_oi = float(_cvd_meta.get("open_interest", 0.0) or 0.0)
 
         # Tier 2 — HTF + setup-archetype snapshot.
         # htf_aligned: read off the cached confluence breakdown (the plan
@@ -451,6 +469,12 @@ class PositionManager:
             btc_velocity_1h_at_entry=_ml_btc_vel,
             alt_velocity_1h_at_entry=_ml_alt_vel,
             macro_state_at_entry=_ml_macro_state,
+            cvd_slope_1h_at_entry=_cvd_slope,
+            cvd_divergence_at_entry=_cvd_div,
+            cvd_z_at_entry=_cvd_z,
+            cvd_coverage_at_entry=_cvd_cov,
+            cvd_n_trades_at_entry=_cvd_ntr,
+            open_interest_at_entry=_cvd_oi,
             htf_aligned_at_entry=_ml_htf_aligned,
             setup_qualifier=_ml_setup_qualifier,
             # Calculated stop/target provenance for the journal (auditability).
