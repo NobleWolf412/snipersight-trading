@@ -724,7 +724,7 @@ function SetupTab({
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
           <Slider label="Max Concurrent Positions" value={cfg.max_positions} min={1} max={10} step={1} onChange={(v) => set('max_positions', v)} hint="positions open simultaneously" />
           <Slider label="Leverage" value={cfg.leverage} min={1} max={20} step={1} onChange={(v) => set('leverage', v)} suffix="×" hint="applied to each simulated position" />
-          <Slider label="Session Duration" value={cfg.duration_hours} min={1} max={168} step={1} onChange={(v) => set('duration_hours', v)} suffix="h" hint="auto-stop the paper bot after this duration" />
+          <Slider label="Session Duration" value={cfg.duration_hours} min={0} max={168} step={1} onChange={(v) => set('duration_hours', v)} suffix="h" hint="auto-stop after this many hours · 0 = run until manually stopped (best for long capture — no restart)" />
           <Slider label="Scan Interval" value={cfg.scan_interval_minutes} min={1} max={30} step={1} onChange={(v) => set('scan_interval_minutes', v)} suffix="m" hint="minutes between scanner sweeps" />
         </div>
       </SectionPanel>
