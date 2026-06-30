@@ -59,6 +59,24 @@ in kind" is a reason to look, NOT evidence of edge. Expected outcome: **NOISE, a
 enrich autopsy regardless), the test is rigorous enough that a PASS would be believable (unlike the prior
 four weak bars), and the kill criterion stops us fast. One more shot, taken rigorously.
 
+## VERDICT (2026-06-30, same day) — NOISE. Fifth strike. Retroactive path used.
+Operator asked "can we use historical data?" — YES: Phemex keeps no trade history, but
+data.binance.vision (free dumps, reachable; the Binance API is geo-blocked here) has historical klines
+with taker-buy volume. `cvd_historical_edge.py` computes Binance CVD (cross-venue proxy) at all journaled
+entries and runs the full kill-criterion. Collapsed the 2-4 week forward wait into ONE DAY.
+
+Result (n=341, PEPE/SHIB excluded — no Binance futures): noise floor ±0.106, Bonferroni ±0.130.
+- cvd_slope_1h: r_all -0.018, **r_train +0.122 / r_test -0.031 (SIGN FLIP)** — the textbook mirage the
+  train/test split exists to catch; would have "passed" on the training half alone.
+- cvd_divergence: r_test +0.008. cvd_z: r_test +0.029 (<< 0.130 bar).
+NONE clears the Bonferroni floor on the held-out fold with consistent sign. **KILL CRITERION MET — do
+NOT build a CVD gate.** Phase B/C/D cancelled. Phase A capture infra retained (enriches autopsy; harmless).
+
+This is the FIFTH independent signal class tested and found to be noise (after SMC factors, direction
+cohort, trailing/exit, funding). Order flow was the last "different in kind" lead. The honest conclusion:
+the SMC-structure entry approach on Phemex has NO measured edge in any input we can access — price
+geometry, positioning, OR order flow. The machine is well-built; the signal isn't predictive.
+
 ## Follow-ups
 - db_contracts re-baseline (additive CVD keys) via `/contract-check` with this decisions entry AFTER the
   first trade journals on this code (NOT from the audit path; the current 45→25 delta is pre-existing
