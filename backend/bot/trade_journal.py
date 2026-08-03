@@ -11,6 +11,8 @@ import csv
 import io
 import logging
 import threading
+
+from .exit_classification import enrich
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -40,8 +42,20 @@ class TradeJournalService:
     # ------------------------------------------------------------------
 
     def append(self, trade_dict: Dict[str, Any], session_id: str) -> None:
-        """Persist a completed trade.  trade_dict is the output of CompletedTrade.to_dict()."""
-        record = {**trade_dict, "session_id": session_id}
+        """Persist a completed trade.  trade_dict is the output of CompletedTrade.to_dict().
+
+        Every row is classified on the way in (see `exit_classification`), so
+        `outcome` — the field every win rate should read — is arithmetic on the
+        P&L rather than a restatement of whatever `exit_reason` claims. Before
+        2026-05-20, 306 of 460 `target` rows carried a negative P&L. That source
+        defect is fixed; a journal that can only be trusted while every writer
+        behaves is still not a record, it is an assumption.
+
+        A contradictory row is written and FLAGGED, never dropped. The trade
+        happened; discarding it would swap an overstated win rate for a missing
+        trade, which is the worse of the two lies.
+        """
+        record = self._classified(trade_dict, session_id)
         with self._lock:
             with self._path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(record, default=str) + "\n")
@@ -67,10 +81,23 @@ class TradeJournalService:
             existing_ids = self._existing_trade_ids_unlocked()
             if trade_id in existing_ids:
                 return False
-            record = {**trade_dict, "session_id": session_id}
+            record = self._classified(trade_dict, session_id)
             with self._path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(record, default=str) + "\n")
             return True
+
+    def _classified(self, trade_dict: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+        """Stamp the honest fields, and say so out loud when they disagree with
+        the engine. Both write paths go through here — a second writer that
+        skipped the classification is exactly how the original defect stayed
+        invisible for a month."""
+        record = enrich({**trade_dict, "session_id": session_id})
+        if record.get("label_conflict"):
+            logger.warning(
+                "EXIT_LABEL_CONFLICT %s %s: %s (trade_id=%s session=%s)",
+                record.get("symbol"), record.get("trade_type"),
+                record.get("conflict_note"), record.get("trade_id"), session_id)
+        return record
 
     def _existing_trade_ids_unlocked(self) -> set:
         """Return the set of trade_ids currently in the journal. Caller holds the lock."""
@@ -126,14 +153,30 @@ class TradeJournalService:
         return trades[offset : offset + limit]
 
     def aggregate(self) -> Dict[str, Any]:
-        """Compute summary stats over the entire journal."""
-        trades = self._load_all()
+        """Compute summary stats over the entire journal.
+
+        Rows written before the classifier existed carry no `outcome`, so it is
+        derived on read for those. Two numbers are surfaced that were not here
+        before, and both exist because this journal was believed for a month
+        while it was wrong:
+
+          `scratches`      — trades whose P&L is inside the round-trip fee. They
+                             were counted as wins whenever they closed a cent up,
+                             which is most of how a 37% strategy showed 50%.
+          `label_conflicts` — rows whose exit_reason contradicts their money. A
+                             non-zero count here means a stretch of this history
+                             cannot be trusted, and the operator should be told
+                             rather than shown an average over it.
+        """
+        trades = [t if "outcome" in t else enrich(t) for t in self._load_all()]
         if not trades:
             return self._empty_aggregate()
 
         total = len(trades)
-        wins = [t for t in trades if (t.get("pnl") or 0) > 0]
-        losses = [t for t in trades if (t.get("pnl") or 0) <= 0]
+        wins = [t for t in trades if t.get("outcome") == "WIN"]
+        losses = [t for t in trades if t.get("outcome") == "LOSS"]
+        scratches = [t for t in trades if t.get("outcome") == "SCRATCH"]
+        conflicts = [t for t in trades if t.get("label_conflict")]
         pnls = [t.get("pnl", 0) for t in trades]
         win_pnls = [t.get("pnl", 0) for t in wins]
         loss_pnls = [t.get("pnl", 0) for t in losses]
@@ -196,7 +239,14 @@ class TradeJournalService:
             "total_trades": total,
             "winning_trades": len(wins),
             "losing_trades": len(losses),
-            "win_rate": round(len(wins) / total * 100, 1) if total else 0,
+            "scratches": len(scratches),
+            "label_conflicts": len(conflicts),
+            # Denominator excludes scratches: a trade that paid the fee and went
+            # home is not a coin that landed. Reported as `decided_trades` so the
+            # figure can never be read against the wrong base.
+            "decided_trades": len(wins) + len(losses),
+            "win_rate": round(len(wins) / (len(wins) + len(losses)) * 100, 1)
+                        if (wins or losses) else 0,
             "total_pnl": round(sum(pnls), 2),
             "avg_win": round(avg_win, 2),
             "avg_loss": round(avg_loss, 2),
@@ -249,6 +299,9 @@ class TradeJournalService:
             "total_trades": 0,
             "winning_trades": 0,
             "losing_trades": 0,
+            "scratches": 0,
+            "label_conflicts": 0,
+            "decided_trades": 0,
             "win_rate": 0,
             "total_pnl": 0,
             "avg_win": 0,
