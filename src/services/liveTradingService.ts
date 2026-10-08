@@ -81,8 +81,46 @@ export interface CompletedLiveTrade {
   confidence_score: number;
 }
 
+export interface LiveLifecycle {
+  phase: 'idle' | 'starting' | 'running' | 'stopping' | 'recovering' | 'stopped';
+  entry_admission_enabled: boolean;
+  recovery_required: boolean;
+  /** Last complete observation; Start/Reset always obtain a fresh one. */
+  account_state: 'unknown' | 'exposure_present' | 'flat_confirmed';
+  scope: string;
+  observed_at: string | null;
+  reset_allowed: boolean;
+  unresolved_requests: { order_id: string; exchange_id?: string; symbol: string; purpose: string; status: string; filled_quantity: number | null; reason: string }[];
+  unmanaged_symbols: string[];
+  account_open_orders: { exchange_id: string; symbol: string }[];
+  reason: string | null;
+}
+
+export function liveSessionNeedsAttention(status?: {
+  status?: string; lifecycle?: LiveLifecycle; session_id?: string | null;
+  positions?: unknown[]; pending_orders?: unknown[];
+} | null): boolean {
+  if (!status) return false;
+  if (status.status === 'running') return true;
+  const state = status.lifecycle;
+  if (!state) return !!status.session_id || !!status.positions?.length || !!status.pending_orders?.length;
+  return ['starting', 'stopping', 'recovering'].includes(state.phase) || state.recovery_required
+    || state.unresolved_requests.length > 0 || state.account_state === 'exposure_present';
+}
+
+export function liveShutdownMessage(state?: LiveLifecycle): string {
+  if (!state) return 'Shutdown requested. Account closure has not been confirmed.';
+  const scope = state.scope === 'simulation' ? 'Simulated account' : 'USDT contracts';
+  if (state.phase === 'stopped' && state.account_state === 'flat_confirmed' && !state.recovery_required) {
+    return `${scope} observed flat${state.observed_at ? ` at ${state.observed_at}` : ''}.`;
+  }
+  if (state.account_state === 'exposure_present') return 'Scanning stopped. Orders or positions remain; recovery is required.';
+  return `Scanning stopped. Account closure is unconfirmed; recovery remains required.${state.reason ? ` ${state.reason}` : ''}`;
+}
+
 export interface LiveTradingStatus {
   status: 'idle' | 'running' | 'stopped' | 'error' | 'kill_switched';
+  lifecycle?: LiveLifecycle;
   trading_mode: 'idle' | 'dry_run' | 'testnet' | 'live';
   session_id: string | null;
   started_at: string | null;
@@ -176,13 +214,19 @@ class LiveTradingService {
 
   async stop(): Promise<any> {
     const res = await fetch(`${BASE}/live-trading/stop`, { method: 'POST' });
-    if (!res.ok) throw new Error(`Stop failed: ${res.status}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Stop failed: ${res.status}`);
+    }
     return res.json();
   }
 
   async killSwitch(): Promise<any> {
     const res = await fetch(`${BASE}/live-trading/kill-switch`, { method: 'POST' });
-    if (!res.ok) throw new Error(`Kill switch failed: ${res.status}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Kill switch failed: ${res.status}`);
+    }
     return res.json();
   }
 

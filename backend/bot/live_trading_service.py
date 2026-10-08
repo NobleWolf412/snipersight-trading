@@ -10,10 +10,12 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone, timedelta
 from enum import Enum
+from decimal import Decimal
 from pathlib import Path
 import asyncio
 import json
 import logging
+import math
 import uuid
 import time
 
@@ -46,6 +48,10 @@ class LiveBotStatus(Enum):
     STOPPED = "stopped"
     ERROR = "error"
     KILL_SWITCHED = "kill_switched"
+
+
+class LifecycleConflict(ValueError):
+    """A lifecycle command would discard execution ownership or recovery."""
 
 
 class LiveTradingService:
@@ -83,6 +89,19 @@ class LiveTradingService:
         self._backfill_task: Optional[asyncio.Task] = None
         self._ws_client: Optional[PhemexWebSocketClient] = None
         self._running = False
+        self._lifecycle_busy = False
+        self._phase = "idle"
+        self._generation = 0
+        self._shutdown_task: Optional[asyncio.Task] = None
+        self._shutdown_step_task: Optional[asyncio.Task] = None
+        self._shutdown_reason: Optional[str] = None
+        self._account_state = "unknown"
+        self._account_observed_at = None
+        self._account_revision = None
+        self._account_observed_monotonic = 0.0
+        self._account_orders = []
+        self._unmanaged_symbols = []
+        self._recovery_error = None
 
         # Phemex fill backfill state — persisted between sessions so a restart
         # does not re-scan history from epoch.
@@ -99,8 +118,11 @@ class LiveTradingService:
         self._fills_log_path: Optional[Path] = None
 
         self._price_cache: Dict[str, float] = {}
+        self._price_cache_observed_at: Dict[str, float] = {}
         self._price_cache_refreshed_at: Optional[datetime] = None
         self._pending_plans: Dict[str, TradePlan] = {}
+        self._pending_exit_orders = {}
+        self._pending_stop_orders = {}
         self._pending_placed_at: Dict[str, datetime] = {}
         self._pending_placed_price: Dict[str, float] = {}
         self._pending_extended: set = set()
@@ -108,6 +130,8 @@ class LiveTradingService:
         self._current_regime_composite: str = "unknown"
         self._current_regime_score: float = 50.0
         self._last_reconcile_at: float = 0.0
+        self._exchange_state_known = False
+        self._startup_reconciled = False
 
         self.signal_log: List[Dict[str, Any]] = []
 
@@ -121,6 +145,8 @@ class LiveTradingService:
         # Exchange-native stop order tracking (position_id → internal order_id / level)
         self._exchange_stop_orders: Dict[str, str] = {}
         self._exchange_stop_levels: Dict[str, float] = {}
+        self._exchange_stop_retry_at: Dict[str, float] = {}
+        self._adopted_entry_orders: Dict[str, str] = {}
         # Exchange-native TP order tracking (position_id → internal order_id)
         self._exchange_tp_orders: Dict[str, str] = {}
         # Exchange-native trailing stop tracking (position_id → internal order_id)
@@ -131,6 +157,42 @@ class LiveTradingService:
     # ------------------------------------------------------------------
 
     async def start(self, config: LiveTradingConfig) -> Dict[str, Any]:
+        if self._lifecycle_busy or self._phase not in ("idle", "stopped"):
+            raise LifecycleConflict("Start blocked: stop and resolve the existing session first")
+        self._lifecycle_busy = True
+        try:
+            if self.executor:
+                await self._verify_resettable()
+                self.executor.close()
+                self.executor = None
+                self.position_manager = None
+            self._phase = "starting"
+            self._generation += 1
+            self._account_state = "unknown"
+            self._account_observed_at = None
+            self._recovery_error = None
+            self._shutdown_reason = None
+            self._shutdown_task = None
+            self._account_orders = []
+            self._unmanaged_symbols = []
+            result = await self._start_session(config)
+            if self._phase == "recovering":
+                return self.get_status()
+            self._phase = "running"
+            self.executor.set_entry_admission(self._entry_reconciliation_ready())
+            return {**result, "lifecycle": self._lifecycle_status()}
+        except BaseException:
+            if self._phase == "starting":
+                self._running = False
+                self.status = LiveBotStatus.ERROR
+                self._phase = "recovering" if self.executor else "idle"
+                if self.executor:
+                    self.executor.set_entry_admission(False)
+            raise
+        finally:
+            self._lifecycle_busy = False
+
+    async def _start_session(self, config: LiveTradingConfig) -> Dict[str, Any]:
         if self.status == LiveBotStatus.RUNNING:
             raise ValueError("Live trading already running")
 
@@ -160,7 +222,14 @@ class LiveTradingService:
             min_balance_usd=config.min_balance_usd,
             dry_run=config.dry_run,
             target_leverage=config.leverage,
+            owner="live_service", generation=f"{self.session_id}:{self._generation}",
         )
+        self.executor.set_entry_admission(False)
+
+        # Do not construct a strategy manager over recovered account exposure.
+        # The old plans are not serialized; only original request recovery is safe.
+        if self.executor.recovery_snapshot().get("recovery_only"):
+            return self._begin_restart_recovery("Interrupted execution session restored; strategy resumption blocked")
 
         # Preflight
         preflight = self.executor.preflight_check()
@@ -218,13 +287,21 @@ class LiveTradingService:
         self._session_log_dir = None
         self._orphaned_symbols = set()
         self._price_cache = {}
+        self._price_cache_observed_at = {}
+        self._price_cache_refreshed_at = None
         self._pending_plans = {}
+        self._pending_exit_orders = {}
+        self._pending_stop_orders = {}
         self._pending_placed_at = {}
         self._pending_placed_price = {}
         self._pending_extended = set()
         self._last_reconcile_at = 0.0
+        self._exchange_state_known = False
+        self._startup_reconciled = False
         self._exchange_stop_orders = {}
         self._exchange_stop_levels = {}
+        self._exchange_stop_retry_at = {}
+        self._adopted_entry_orders = {}
         self._exchange_tp_orders = {}
         self._exchange_trailing_orders = {}
         self._ws_task = None
@@ -260,11 +337,15 @@ class LiveTradingService:
 
         # Reconcile exchange state before first scan to prevent double-entry
         await self._startup_reconcile()
+        if not self._entry_reconciliation_ready():
+            return self._begin_restart_recovery("Startup account state requires reconciliation")
+        self.executor.initialize_trading()
 
         self._scan_task = asyncio.create_task(self._scan_loop(), name=f"live_scan_{self.session_id}")
-        self._scan_task.add_done_callback(self._task_done_callback)
+        generation = self._generation
+        self._scan_task.add_done_callback(lambda task: self._task_done_callback(task, generation))
         self._monitor_task = asyncio.create_task(self._monitor_loop(), name=f"live_monitor_{self.session_id}")
-        self._monitor_task.add_done_callback(self._task_done_callback)
+        self._monitor_task.add_done_callback(lambda task: self._task_done_callback(task, generation))
 
         # Start WebSocket order feed for real-time fill detection (skipped in dry_run)
         if not config.dry_run and api_key and api_secret:
@@ -277,7 +358,7 @@ class LiveTradingService:
             self._ws_task = asyncio.create_task(
                 self._ws_client.run(), name=f"live_ws_{self.session_id}"
             )
-            self._ws_task.add_done_callback(self._task_done_callback)
+            self._ws_task.add_done_callback(lambda task: self._task_done_callback(task, generation))
             logger.info("Phemex WS order feed started")
         else:
             self._ws_client = None
@@ -290,7 +371,7 @@ class LiveTradingService:
             self._backfill_task = asyncio.create_task(
                 self._backfill_loop(), name=f"live_backfill_{self.session_id}"
             )
-            self._backfill_task.add_done_callback(self._task_done_callback)
+            self._backfill_task.add_done_callback(lambda task: self._task_done_callback(task, generation))
             logger.info("Phemex fill backfill loop started (every 5 min)")
 
         return {
@@ -303,26 +384,211 @@ class LiveTradingService:
         }
 
     async def stop(self) -> Dict[str, Any]:
-        if self.status not in (LiveBotStatus.RUNNING, LiveBotStatus.KILL_SWITCHED):
-            return {"status": self.status.value, "message": "Not running"}
+        return await self._request_shutdown("session_stopped")
 
+    def _begin_restart_recovery(self, reason):
         self._running = False
-        self.status = LiveBotStatus.STOPPED
-        self.stopped_at = datetime.now(timezone.utc)
+        self._phase = "recovering"
+        self.status = LiveBotStatus.ERROR
+        self.started_at = self.started_at or datetime.now(timezone.utc)
+        self._recovery_error = reason
+        self._shutdown_reason = "restart_recovery"
+        self.executor.set_entry_admission(False)
+        self._shutdown_task = asyncio.create_task(self._shutdown_loop(self._generation))
+        return self.get_status()
 
-        for task in (self._scan_task, self._monitor_task, self._ws_task, self._backfill_task):
-            if task:
-                task.cancel()
+    async def kill_switch(self) -> Dict[str, Any]:
+        return await self._request_shutdown("kill_switch")
+
+    async def _request_shutdown(self, reason: str) -> Dict[str, Any]:
+        if self._lifecycle_busy:
+            raise LifecycleConflict("Lifecycle transition in progress; retry shutdown")
+        if not self.executor and self._phase == "idle":
+            return self.get_status()
+        # No await before admission is frozen and shutdown ownership is published.
+        self._running = False
+        if self.executor:
+            self.executor.set_entry_admission(False)
+        if reason == "kill_switch" or not self._shutdown_reason:
+            self._shutdown_reason = reason
+        self.status = (LiveBotStatus.KILL_SWITCHED if self._shutdown_reason == "kill_switch"
+                       else LiveBotStatus.STOPPED)
+        if not self._shutdown_task or self._shutdown_task.done():
+            self._phase = "stopping"
+            self._account_state = "unknown"
+            self._log_activity("shutdown_requested", {"reason": self._shutdown_reason})
+            self._shutdown_task = asyncio.create_task(self._shutdown_loop(self._generation))
+        # A caller timeout/disconnect must not cancel execution recovery.
+        await asyncio.wait({self._shutdown_task}, timeout=0.25)
+        return self.get_status()
+
+    async def _shutdown_loop(self, generation: int):
+        try:
+            for task in (self._scan_task, self._monitor_task, self._backfill_task):
+                if task:
+                    task.cancel()
+            for task in (self._scan_task, self._monitor_task, self._backfill_task):
+                if task:
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception:
+                        logger.exception("Background task failed during shutdown")
+            self._phase = "recovering"
+            while generation == self._generation:
                 try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+                    # The REST adapter is synchronous. Keep recovery IO off the
+                    # API event loop; there is only one shutdown mutation owner.
+                    if self._shutdown_step_task is None:
+                        self._shutdown_step_task = asyncio.create_task(asyncio.to_thread(self._shutdown_step))
+                    try:
+                        await asyncio.shield(self._shutdown_step_task)
+                    finally:
+                        if self._shutdown_step_task.done():
+                            self._shutdown_step_task = None
+                    if (self._local_shutdown_settled() or
+                            self.executor and self.executor.recovery_snapshot().get("recovery_only")):
+                        await self._observe_account()
+                        if self._account_state == "flat_confirmed" and self._local_shutdown_settled():
+                            if self._ws_task:
+                                self._ws_task.cancel()
+                                try:
+                                    await self._ws_task
+                                except asyncio.CancelledError:
+                                    pass
+                            self.executor.checkpoint_flat(self._account_observed_at, self._account_revision)
+                            self._phase = "stopped"
+                            self.stopped_at = datetime.now(timezone.utc)
+                            self._recovery_error = None
+                            self._log_activity("shutdown_confirmed", {
+                                "scope": "simulation" if self.config and self.config.dry_run else "phemex:swap:USDT",
+                            })
+                            self._write_session_report()
+                            return
+                except Exception as exc:
+                    self._account_state = "unknown"
+                    self._recovery_error = str(exc)
+                    logger.exception("Shutdown recovery incomplete; retaining session")
+                    self._log_activity("shutdown_recovery_required", {"reason": str(exc)})
+                await asyncio.sleep(5 if not self._local_shutdown_settled() else 60)
+        except asyncio.CancelledError:
+            self._phase = "recovering"
+            self._account_state = "unknown"
+            self._recovery_error = "Recovery task interrupted; request Stop again to resume"
+            raise
+        except Exception as exc:
+            self._phase = "recovering"
+            self._account_state = "unknown"
+            self._recovery_error = str(exc)
+            logger.exception("Shutdown supervisor failed; session retained")
 
-        await self._close_all_positions("session_stopped")
-        self._log_activity("session_stopped", {"session_id": self.session_id})
-        logger.info(f"Live trading stopped: session={self.session_id}")
+    def _shutdown_step(self):
+        async def recover():
+            if not self.executor:
+                return
+            self.executor.recover_uncertain_orders()
+            for order in self.executor.get_open_orders():
+                self.executor.refresh_order(order.order_id)
+            for order in self.executor.get_open_entry_orders():
+                self.executor.cancel_order(order.order_id)
+            if self.executor.recovery_snapshot().get("recovery_only"):
+                # Publish account positions, but never replay historical fills into
+                # fresh strategy positions or flatten exposure of unknown ownership.
+                self.executor.reconcile_positions()
+                return
+            await self._monitor_pending_entries()
+            await self._close_all_positions(self._shutdown_reason)
+            await self._sync_closed_positions()
+        asyncio.run(recover())
 
-        # Write final session report
+    def _local_shutdown_settled(self) -> bool:
+        snap = self.executor.recovery_snapshot() if self.executor else {}
+        return not (snap.get("requests") or snap.get("storage_error") or snap.get("inflight_mutations")) and not (
+            self._pending_plans or self._pending_exit_orders or self._pending_stop_orders
+            or (self.position_manager and self.position_manager.get_open_positions()))
+
+    async def _observe_account(self):
+        self._account_state = "unknown"
+        self._account_observed_at = None
+        ex = self.executor
+        if not ex:
+            raise LifecycleConflict("No executor available to verify account state")
+        revision = ex.recovery_snapshot()["revision"]
+        if ex.dry_run:
+            positions = [{"symbol": s, "contracts": abs(ex.get_position(s))}
+                         for s in ex.get_open_position_symbols()]
+            orders = [{"id": o.order_id, "symbol": o.symbol} for o in ex.get_open_orders()]
+        else:
+            snapshot = await asyncio.to_thread(self.adapter.fetch_account_snapshot)
+            if not isinstance(snapshot, dict) or snapshot.get("complete") is not True or snapshot.get("scope") != "phemex:swap:USDT":
+                raise ValueError("Complete USDT contract account snapshot unavailable")
+            positions, orders = snapshot.get("positions"), snapshot.get("orders")
+        if not isinstance(positions, list) or not isinstance(orders, list):
+            raise ValueError("Incomplete account snapshot collections")
+        symbols = set()
+        for row in positions:
+            if not isinstance(row, dict) or not isinstance(row.get("symbol"), str) or not row["symbol"]:
+                raise ValueError("Invalid account position")
+            qty = row.get("contracts")
+            if isinstance(qty, bool) or not isinstance(qty, (float, int)) or not math.isfinite(qty) or qty < 0:
+                raise ValueError("Invalid account position quantity")
+            if qty > 1e-9:
+                symbols.add(row["symbol"])
+        for row in orders:
+            if not isinstance(row, dict) or not row.get("id") or not isinstance(row.get("symbol"), str) or not row["symbol"]:
+                raise ValueError("Invalid account order")
+        if ex is not self.executor or revision != ex.recovery_snapshot()["revision"]:
+            raise ValueError("Execution changed during account observation; retry required")
+        managed = {p.symbol for p in self.position_manager.get_open_positions()} if self.position_manager else set()
+        self._unmanaged_symbols = sorted((symbols | {o["symbol"] for o in orders}) - managed)
+        self._account_orders = [{"exchange_id": o["id"], "symbol": o["symbol"]} for o in orders]
+        self._account_state = "exposure_present" if symbols or orders else "flat_confirmed"
+        self._account_observed_at = datetime.now(timezone.utc).isoformat()
+        self._account_observed_monotonic = time.monotonic()
+        self._account_revision = revision
+
+    async def _verify_resettable(self):
+        if (self._phase != "stopped" or (self._shutdown_task and not self._shutdown_task.done())
+                or not self._local_shutdown_settled()):
+            raise LifecycleConflict("Start/Reset blocked: shutdown recovery is incomplete")
+        try:
+            await self._observe_account()
+        except Exception as exc:
+            raise LifecycleConflict(f"Start/Reset blocked: {exc}") from exc
+        if self._account_state != "flat_confirmed":
+            raise LifecycleConflict("Start/Reset blocked: USDT contract exposure remains")
+
+    def _lifecycle_status(self) -> Dict[str, Any]:
+        snap = self.executor.recovery_snapshot() if self.executor else {"requests": [], "revision": None, "entry_admission_enabled": False}
+        state = self._account_state
+        # This is the last observation, displayed with its timestamp. Start and
+        # Reset always re-observe; elapsed time alone is not a new incident.
+        if self._account_revision != snap["revision"]:
+            state = "unknown"
+        requests = list(snap["requests"])
+        known = {r["order_id"] for r in requests}
+        for symbol, oid in self._pending_exit_orders.items():
+            if oid not in known:
+                order = self.executor.get_order(oid) if self.executor else None
+                requests.append({"order_id": oid, "symbol": symbol, "purpose": "exit",
+                                 "status": order.status.value if order else "UNKNOWN",
+                                 "filled_quantity": order.filled_quantity if order else None,
+                                 "reason": "Exit quantity requires reconciliation"})
+        recovery = bool(snap.get("storage_error")) or self._phase in ("stopping", "recovering") or (self._phase == "stopped" and (state != "flat_confirmed" or bool(requests)))
+        return {
+            "phase": self._phase, "entry_admission_enabled": snap["entry_admission_enabled"] and self._running,
+            "recovery_required": recovery, "account_state": state,
+            "scope": "simulation" if self.config and self.config.dry_run else "phemex:swap:USDT",
+            "observed_at": self._account_observed_at,
+            "reset_allowed": not self._lifecycle_busy and (self._phase == "idle" or
+                (self._phase == "stopped" and state == "flat_confirmed" and self._local_shutdown_settled()
+                 and (not self._shutdown_task or self._shutdown_task.done()))),
+            "unresolved_requests": requests, "unmanaged_symbols": self._unmanaged_symbols,
+            "account_open_orders": self._account_orders, "reason": snap.get("storage_error") or self._recovery_error,
+        }
+
+    def _write_session_report(self):
         if self._session_log_dir:
             try:
                 with open(self._session_log_dir / "stats.json", "w", encoding="utf-8") as f:
@@ -341,43 +607,29 @@ class LiveTradingService:
             except Exception as e:
                 logger.warning(f"Failed to write session report: {e}")
 
-        return self.get_status()
+    async def reset(self) -> Dict[str, Any]:
+        if self._lifecycle_busy or self._phase not in ("idle", "stopped") or self.status == LiveBotStatus.RUNNING:
+            raise LifecycleConflict("Reset blocked: stop and resolve execution recovery first")
+        self._lifecycle_busy = True
+        try:
+            if self.executor:
+                await self._verify_resettable()
+            return self._reset_session()
+        finally:
+            self._lifecycle_busy = False
 
-    async def kill_switch(self) -> Dict[str, Any]:
-        """Emergency stop — cancel all orders and close all positions immediately."""
-        logger.critical(f"KILL SWITCH ACTIVATED — session={self.session_id}")
-        self._log_activity("kill_switch_activated", {"session_id": self.session_id})
-
-        self._running = False
-        self.status = LiveBotStatus.KILL_SWITCHED
-
-        for task in (self._scan_task, self._monitor_task, self._ws_task, self._backfill_task):
-            if task:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
-
-        # Cancel all pending entry orders on exchange (don't cancel stops — _close_all_positions
-        # handles that as part of the exit sequence for each position).
+    def _reset_session(self) -> Dict[str, Any]:
         if self.executor:
-            for order in self.executor.get_open_orders():
-                try:
-                    self.executor.cancel_order(order.order_id)
-                except Exception as e:
-                    logger.error(f"Failed to cancel order {order.order_id}: {e}")
-
-        # Flatten all positions on the exchange with market orders.
-        # _close_all_positions cancels exchange stops/TPs and sends reduce-only market exits.
-        await self._close_all_positions("kill_switch")
-
-        self.stopped_at = datetime.now(timezone.utc)
-        return self.get_status()
-
-    def reset(self) -> Dict[str, Any]:
-        if self.status == LiveBotStatus.RUNNING:
-            raise ValueError("Cannot reset while running. Stop first.")
+            self.executor.close()
+        self._generation += 1
+        self._phase = "idle"
+        self._shutdown_task = None
+        self._shutdown_reason = None
+        self._account_state = "unknown"
+        self._account_observed_at = None
+        self._account_orders = []
+        self._unmanaged_symbols = []
+        self._recovery_error = None
 
         self.config = None
         self.session_id = None
@@ -391,10 +643,18 @@ class LiveTradingService:
         self.stats = PaperTradingStats()
         self.signal_log = []
         self._price_cache = {}
+        self._price_cache_observed_at = {}
+        self._price_cache_refreshed_at = None
         self._pending_plans = {}
+        self._pending_exit_orders = {}
+        self._pending_stop_orders = {}
         self.started_at = None
         self.stopped_at = None
         self.status = LiveBotStatus.IDLE
+        self._exchange_stop_retry_at = {}
+        self._adopted_entry_orders = {}
+        self._exchange_state_known = False
+        self._startup_reconciled = False
         return {"status": "reset", "message": "Live trading reset"}
 
     # ------------------------------------------------------------------
@@ -429,6 +689,7 @@ class LiveTradingService:
             "next_scan_in_seconds": next_scan_in,
             "current_scan": self.current_scan,
             "regime": {"composite": self._current_regime_composite, "score": self._current_regime_score},
+            "lifecycle": self._lifecycle_status(),
         }
 
         active_positions = self._get_active_positions()
@@ -439,7 +700,7 @@ class LiveTradingService:
             initial = self.executor._initial_balance
             unrealized = sum(
                 pos.unrealized_pnl
-                for pos in self.position_manager.positions.values()
+                for pos in list(self.position_manager.positions.values())
                 if pos.status in (PositionStatus.OPEN, PositionStatus.PARTIAL)
             ) if self.position_manager else 0.0
             equity = current + unrealized
@@ -458,9 +719,9 @@ class LiveTradingService:
         result["signal_log"] = self.signal_log[-100:]
         result["pending_orders"] = []
         if self.executor:
-            for order_id, plan in self._pending_plans.items():
+            for order_id, plan in list(self._pending_plans.items()):
                 order = self.executor.get_order(order_id)
-                if order and order.status in (OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED):
+                if order and order.status in (OrderStatus.PENDING, OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED):
                     result["pending_orders"].append({
                         "order_id": order_id,
                         "symbol": order.symbol,
@@ -746,84 +1007,100 @@ class LiveTradingService:
     # Startup reconciliation
     # ------------------------------------------------------------------
 
-    async def _startup_reconcile(self):
-        """
-        Sync exchange state on session start to prevent double-entry after restart.
+    def _set_exchange_state_known(self, known: bool, reason: str):
+        """Report state transitions without treating a failed observation as flat."""
+        changed = (getattr(self, "_exchange_state_known", False) != known
+                   or getattr(self, "_exchange_state_reason", None) != reason)
+        self._exchange_state_known = known
+        self._exchange_state_reason = reason
+        if changed:
+            self._log_activity("exchange_reconciliation", {"known": known, "reason": reason})
 
-        Order of operations matters:
-        1. Fetch open positions FIRST — build the set of protected symbols.
-        2. Cancel orphaned orders, but PRESERVE stops/trailing-stops on symbols
-           that still have an open position (those orders protect the position).
-           Only limit entry orders are always cancelled (no TradePlan to manage them).
-        3. Register orphaned position symbols in _orphaned_symbols so _has_position()
-           blocks new entries for the remainder of the session.
+    def _entry_reconciliation_ready(self) -> bool:
+        return (getattr(self, "_startup_reconciled", False)
+                and getattr(self, "_exchange_state_known", False))
+
+    async def _startup_reconcile(self) -> bool:
+        """Verify positions and orphan orders before permitting new entries.
+
+        Unknown snapshots/cancellations leave admission blocked and are retried
+        by the monitor. Protective orders are preserved; their symbols remain
+        blocked for this session rather than inheriting an old stop on a new entry.
         """
-        if not self.adapter or not self.executor or (self.config and self.config.dry_run):
-            return
+        self._startup_reconciled = False
+        self._set_exchange_state_known(False, "startup reconciliation pending")
+        if not self.adapter or not self.executor:
+            return False
+        if self.config and self.config.dry_run:
+            self._startup_reconciled = True
+            self._set_exchange_state_known(True, "dry-run reconciliation")
+            return True
 
         loop = asyncio.get_running_loop()
-
-        # ── 1. Fetch open positions first ─────────────────────────────────────
-        protected_symbols: set = set()
         try:
-            positions = await loop.run_in_executor(None, self.adapter.fetch_positions)
-            for pos in positions:
-                qty = float(pos.get("contracts", 0) or 0)
-                if abs(qty) < 1e-6:
-                    continue
-                symbol = pos.get("symbol", "")
-                side = pos.get("side", "long")
-                entry_price = float(pos.get("entryPrice", 0) or 0)
-                protected_symbols.add(symbol)
-                self._orphaned_symbols.add(symbol)
-                logger.warning(
-                    f"Startup reconcile: orphaned position detected — {symbol} "
-                    f"{side.upper()} qty={qty:.4f} @ {entry_price:.4f}. "
-                    f"Exchange-native stop preserved. Bot will not add to this position."
-                )
+            protected_symbols = await loop.run_in_executor(None, self.executor.reconcile_positions)
+            if protected_symbols is None:
+                raise ValueError("Position snapshot unavailable; order cleanup deferred")
+            self._orphaned_symbols.update(protected_symbols)
+            for symbol in sorted(protected_symbols):
+                qty = self.executor.get_position(symbol)
                 self._log_activity("orphaned_position_detected", {
                     "symbol": symbol,
-                    "side": side,
-                    "quantity": qty,
-                    "entry_price": entry_price,
-                    "note": "Exchange stop preserved. No new entries will be placed.",
+                    "side": "long" if qty > 0 else "short",
+                    "quantity": abs(qty),
+                    "entry_price": self.executor._position_avg_price.get(symbol, 0.0),
+                    "note": "Existing position blocked from new entries; protective orders preserved.",
                 })
+
+            snapshot = await loop.run_in_executor(None, self.adapter.fetch_account_snapshot)
+            if not isinstance(snapshot, dict) or snapshot.get("complete") is not True or snapshot.get("scope") != "phemex:swap:USDT":
+                raise ValueError("Complete USDT contract open-order snapshot unavailable")
+            raw_orders = snapshot.get("orders")
+            if not isinstance(raw_orders, list):
+                raise ValueError("Open-order snapshot must be a list")
+            # Validate the entire list before the first cancellation.
+            orders = []
+            for row in raw_orders:
+                if not isinstance(row, dict):
+                    raise ValueError("Open-order snapshot contains a non-object row")
+                symbol, order_type, oid = row.get("symbol"), row.get("type"), row.get("id")
+                if (not isinstance(symbol, str) or not symbol.strip()
+                        or not isinstance(order_type, str) or not order_type.strip()
+                        or oid is None or not str(oid).strip()):
+                    raise ValueError("Open-order snapshot lacks symbol, type or id")
+                info = row.get("info") if isinstance(row.get("info"), dict) else {}
+                protective = order_type.lower() != "limit" or any(
+                    str(value).lower() in ("true", "1")
+                    for value in (row.get("reduceOnly"), info.get("reduceOnly"),
+                                  info.get("closeOnTrigger"))
+                )
+                orders.append((symbol, str(oid), protective))
+
+            # Foreign orders are never safe to cancel just because they are limit
+            # orders. Known requests are recovered through the journaled executor.
+            for symbol, oid, protective in orders:
+                self._orphaned_symbols.add(symbol)
+                logger.warning("Startup preserves existing order %s on %s; reconciliation required", oid, symbol)
+            await self._observe_account()
+            if self._account_state != "flat_confirmed":
+                raise ValueError("Existing USDT contract exposure requires recovery before a new session")
+
+            # An entry may fill while cleanup is in flight, even when the open
+            # order list is empty by the time it arrives. Observe positions again.
+            final_symbols = await loop.run_in_executor(None, self.executor.reconcile_positions)
+            if final_symbols is None:
+                raise ValueError("Post-cleanup position snapshot unavailable")
+            self._orphaned_symbols.update(final_symbols)
+            if final_symbols:
+                raise ValueError("Position exposure appeared during startup reconciliation")
         except Exception as e:
-            logger.warning(f"Startup reconcile: could not fetch positions: {e}")
+            logger.warning("Startup reconciliation incomplete; new entries blocked: %s", e)
+            self._set_exchange_state_known(False, str(e))
+            return False
 
-        # ── 2. Cancel orphaned orders (preserving stops on open positions) ─────
-        try:
-            raw_orders = await loop.run_in_executor(
-                None, lambda: self.adapter.exchange.fetch_open_orders()
-            )
-            protective_types = {"stop_market", "stop", "trailing_stop_market"}
-            for o in raw_orders:
-                order_type = o.get("type", "").lower()
-                symbol = o.get("symbol", "")
-                oid = str(o.get("id", ""))
-
-                if order_type not in ("limit",) | protective_types:
-                    continue  # ignore other order types (e.g. take_profit_market)
-
-                # Preserve stop/trailing orders that are protecting an open position.
-                # Cancelling them would leave the position unguarded on the exchange.
-                if order_type in protective_types and symbol in protected_symbols:
-                    logger.info(
-                        f"Startup reconcile: preserving {order_type} {oid} on {symbol} "
-                        f"(protects orphaned position)"
-                    )
-                    continue
-
-                try:
-                    await loop.run_in_executor(
-                        None, lambda s=symbol, i=oid: self.adapter.cancel_order(i, s)
-                    )
-                    logger.warning(f"Startup reconcile: cancelled orphaned order {oid} {symbol} ({order_type})")
-                    self._log_activity("orphaned_order_cancelled", {"order_id": oid, "symbol": symbol, "type": order_type})
-                except Exception as e:
-                    logger.error(f"Startup reconcile: could not cancel {oid} {symbol}: {e}")
-        except Exception as e:
-            logger.warning(f"Startup reconcile: could not fetch open orders: {e}")
+        self._startup_reconciled = True
+        self._set_exchange_state_known(True, "startup reconciliation complete")
+        return True
 
     # ------------------------------------------------------------------
     # Background loops
@@ -860,120 +1137,63 @@ class LiveTradingService:
 
             await asyncio.sleep(interval)
 
+    def _clear_pending_entry(self, order_id: str):
+        self._pending_plans.pop(order_id, None)
+        self._pending_placed_at.pop(order_id, None)
+        self._pending_placed_price.pop(order_id, None)
+        self._pending_extended.discard(order_id)
+
+    async def _monitor_pending_entries(self):
+        """Poll active entries, then adopt terminal fills regardless of event source."""
+        terminal = {OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED}
+        for order_id, plan in list(self._pending_plans.items()):
+            try:
+                order = self.executor.get_order(order_id)
+                if order is None:
+                    logger.error("Pending entry %s has no executor order; retaining plan", order_id)
+                    continue
+                if order.status not in terminal:
+                    price = self._price_cache.get(order.symbol)
+                    if price and order.order_type == OrderType.LIMIT:
+                        self.executor.execute_limit_order(order_id, price)
+                    placed_at = self._pending_placed_at.get(order_id)
+                    age = (datetime.now(timezone.utc) - placed_at).total_seconds() if placed_at else 0
+                    if order.status not in terminal and placed_at and self.config:
+                        trade_type = getattr(plan, "trade_type", "intraday") or "intraday"
+                        ttl_seconds = 60 * _PENDING_TTL_MINUTES.get(trade_type, 10.0)
+                        if age > ttl_seconds:
+                            self.executor.cancel_order(order_id)
+                            if order.status not in terminal:
+                                logger.warning("Cancel unconfirmed for expired entry %s; will retry", order_id)
+
+                # WS may have already finalized this order before polling starts.
+                # A terminal partial cancellation owns only the quantity actually filled.
+                if order.status == OrderStatus.FILLED or (
+                    order.status in terminal and order.filled_quantity > 0
+                ):
+                    await self._open_filled_entry(
+                        order_id, plan,
+                        order.average_fill_price or order.price or 0.0,
+                        order.filled_quantity,
+                    )
+                elif order.status in (OrderStatus.CANCELLED, OrderStatus.REJECTED):
+                    self._clear_pending_entry(order_id)
+                    event = "order_rejected" if order.status == OrderStatus.REJECTED else "order_cancelled"
+                    logger.warning("Entry %s %s without fills; dropping pending plan", order_id, order.status.value)
+                    self._log_activity(event, {"symbol": plan.symbol, "order_id": order_id})
+            except Exception:
+                # Retain the plan for retry, and keep monitoring other positions.
+                logger.exception("Pending entry reconciliation failed for %s; retaining plan", order_id)
+
     async def _monitor_loop(self):
         while self._running:
             try:
                 if self.position_manager:
                     await self._refresh_price_cache()
 
-                    executor = self.executor
-                    if executor:
-                        # Poll open orders for fills
-                        for order in executor.get_open_orders():
-                            if order.order_type == OrderType.LIMIT:
-                                # Immediately drop rejected entry orders — no fill, no position.
-                                if order.status == OrderStatus.REJECTED:
-                                    if order.order_id in self._pending_plans:
-                                        plan = self._pending_plans.pop(order.order_id, None)
-                                        self._pending_placed_at.pop(order.order_id, None)
-                                        self._pending_placed_price.pop(order.order_id, None)
-                                        sym = getattr(plan, "symbol", order.symbol) if plan else order.symbol
-                                        logger.warning(
-                                            "Entry order REJECTED by exchange — dropping plan: "
-                                            "%s %s", order.order_id, sym
-                                        )
-                                        self._log_activity("order_rejected", {
-                                            "symbol": sym,
-                                            "order_id": order.order_id,
-                                        })
-                                    continue
-                                price = self._price_cache.get(order.symbol)
-                                if price:
-                                    fill = executor.execute_limit_order(order.order_id, price)
-                                    # Fallback: fetch_order can return stale "open"/filled=0 on Phemex.
-                                    # After ≥2 minutes of pending with no fill detected, cross-check
-                                    # via fetch_positions — if a live position exists the order filled.
-                                    if fill is None and order.status not in (
-                                        OrderStatus.FILLED, OrderStatus.CANCELLED
-                                    ):
-                                        placed_at = self._pending_placed_at.get(order.order_id)
-                                        if placed_at:
-                                            pending_secs = (
-                                                datetime.now(timezone.utc) - placed_at
-                                            ).total_seconds()
-                                            if pending_secs >= 120:
-                                                fill = executor.check_fill_via_positions(order.order_id)
-                                    # Also check order.status directly — Phemex may return filled=0
-                                    # on a closed order causing fill=None, but executor still updates status.
-                                    order_done = fill or order.status == OrderStatus.FILLED
-                                    if order_done and order.order_id in self._pending_plans:
-                                        plan = self._pending_plans[order.order_id]
-                                        if order.status == OrderStatus.FILLED:
-                                            # Wait for full fill before opening — avoids opening on a
-                                            # partial qty. On full fill, use average_fill_price + total
-                                            # filled qty. The order has ALREADY filled on the exchange,
-                                            # so _open_filled_entry adopts it even over cap rather than
-                                            # dropping it (a filled-but-unmonitored order is a stranded
-                                            # naked position); over-subscription is prevented upstream
-                                            # at the placement gate by counting pending orders.
-                                            entry_px = order.average_fill_price or (fill.price if fill else 0.0) or order.price or 0.0
-                                            entry_qty = order.filled_quantity or (fill.quantity if fill else 0.0) or order.quantity
-                                            await self._open_filled_entry(order.order_id, plan, entry_px, entry_qty)
-                                        # Partially filled — keep in _pending_plans, wait for full fill
-
-                        # Expire stale pending orders
-                        if self._pending_plans and self.config:
-                            now = datetime.now(timezone.utc)
-                            for order_id in list(self._pending_plans.keys()):
-                                placed_at = self._pending_placed_at.get(order_id)
-                                if not placed_at:
-                                    continue
-                                plan = self._pending_plans[order_id]
-                                trade_type = getattr(plan, "trade_type", "intraday") or "intraday"
-                                ttl = timedelta(minutes=_PENDING_TTL_MINUTES.get(trade_type, 10.0))
-                                if (now - placed_at) > ttl:
-                                    try:
-                                        cancelled = executor.cancel_order(order_id)
-                                    except Exception:
-                                        cancelled = False
-                                    if cancelled:
-                                        self._pending_plans.pop(order_id, None)
-                                        self._pending_placed_at.pop(order_id, None)
-                                        logger.info(f"Pending order expired and cancelled: {order_id} {plan.symbol}")
-                                    else:
-                                        # Cancel failed — check if the order filled or was rejected.
-                                        # cancel_order() calls _process_exchange_order() when it detects a
-                                        # fill, so order.status == FILLED means we have fill data recorded.
-                                        expired_order = executor.get_order(order_id)
-                                        if expired_order and expired_order.status == OrderStatus.REJECTED:
-                                            # Exchange rejected the order — it never filled; drop cleanly.
-                                            self._pending_plans.pop(order_id, None)
-                                            self._pending_placed_at.pop(order_id, None)
-                                            self._pending_placed_price.pop(order_id, None)
-                                            logger.warning(
-                                                f"Expired order was REJECTED by exchange, dropping: "
-                                                f"{order_id} {plan.symbol}"
-                                            )
-                                        elif expired_order and expired_order.status == OrderStatus.FILLED:
-                                            # Expired order actually filled — adopt it (even over cap)
-                                            # rather than dropping a filled, unmonitored position.
-                                            entry_px = expired_order.average_fill_price or expired_order.price or 0.0
-                                            entry_qty = expired_order.filled_quantity or expired_order.quantity
-                                            pos_id = await self._open_filled_entry(order_id, plan, entry_px, entry_qty)
-                                            if pos_id:
-                                                logger.info(
-                                                    f"Recovered fill for expired order {order_id} {plan.symbol} "
-                                                    f"@ {entry_px} — position opened"
-                                                )
-                                            else:
-                                                # Invalid fill price — drop to avoid an infinite
-                                                # expiry-retry loop; surfaced loudly by the helper.
-                                                self._pending_plans.pop(order_id, None)
-                                                self._pending_placed_at.pop(order_id, None)
-                                                self._pending_placed_price.pop(order_id, None)
-                                        else:
-                                            # Genuine cancel failure — retry next cycle.
-                                            logger.warning(f"Cancel failed for expired order {order_id} {plan.symbol} — will retry")
+                    if self.executor:
+                        self.executor.recover_uncertain_orders()
+                        await self._monitor_pending_entries()
 
                     # Run position monitoring
                     await self.position_manager.monitor_all_positions()
@@ -985,8 +1205,19 @@ class LiveTradingService:
                         now_ts = time.monotonic()
                         if now_ts - self._last_reconcile_at >= self.config.balance_reconcile_interval:
                             self.executor.reconcile_balance()
-                            ex_open_symbols = self.executor.reconcile_positions()
-                            await self._detect_exchange_closed_positions(ex_open_symbols)
+                            if not self._startup_reconciled:
+                                await self._startup_reconcile()
+                                self.executor.set_entry_admission(self._running and self._entry_reconciliation_ready())
+                            else:
+                                ex_open_symbols = self.executor.reconcile_positions()
+                                if ex_open_symbols is None:
+                                    self._set_exchange_state_known(False, "position snapshot unavailable")
+                                else:
+                                    managed = {p.symbol for p in self.position_manager.get_open_positions()}
+                                    pending = {p.symbol for p in self._pending_plans.values()}
+                                    self._orphaned_symbols.update(ex_open_symbols - managed - pending)
+                                    await self._detect_exchange_closed_positions(ex_open_symbols)
+                                    self._set_exchange_state_known(True, "position snapshot verified")
                             self._last_reconcile_at = now_ts
 
                             # Auto kill switch on low balance
@@ -1007,8 +1238,10 @@ class LiveTradingService:
     # ------------------------------------------------------------------
 
     async def _run_scan(self):
-        if not self.orchestrator or not self.config:
+        if not self._running or not self.orchestrator or not self.config:
             return
+        generation = self._generation
+        orchestrator = self.orchestrator
 
         self.last_scan_at = datetime.now(timezone.utc)
         self.stats.scans_completed += 1
@@ -1091,6 +1324,8 @@ class LiveTradingService:
         }
 
         def _progress_callback(completed: int, total: int, symbol: str, passed: bool, _extra=None):
+            if generation != self._generation or not self._running:
+                return
             if self.current_scan:
                 self.current_scan["completed"] = completed
                 self.current_scan["current_symbol"] = symbol
@@ -1107,7 +1342,7 @@ class LiveTradingService:
             loop = asyncio.get_running_loop()
             trade_plans, rejection_summary = await loop.run_in_executor(
                 None,
-                lambda: self.orchestrator.scan_with_heartbeat(
+                lambda: orchestrator.scan_with_heartbeat(
                     symbols=scan_symbols,
                     progress_callback=_progress_callback,
                 ),
@@ -1116,6 +1351,9 @@ class LiveTradingService:
             logger.error(f"Orchestrator scan failed: {e}")
             if self.current_scan:
                 self.current_scan["status"] = "error"
+            return
+
+        if generation != self._generation or not self._running:
             return
 
         # Update regime from scan result
@@ -1183,6 +1421,11 @@ class LiveTradingService:
         if not config or not self.executor or not self.position_manager:
             return
 
+        if not self._entry_reconciliation_ready():
+            self._log_signal(plan, "filtered", "Exchange state unverified; waiting for reconciliation",
+                             reason_type="exchange_state_unknown")
+            return
+
         symbol = plan.symbol
         score = getattr(plan, "confidence_score", 0.0)
 
@@ -1219,59 +1462,39 @@ class LiveTradingService:
             self._log_signal(plan, "filtered", f"Confluence {score:.1f} < gate {gate:.1f}", reason_type="confluence", threshold=gate)
             return
 
-        # Position sizing — use current equity
-        current_price = self._price_cache.get(symbol)
-        if not current_price:
-            try:
-                current_price = await self._fetch_price(symbol)
-                self._price_cache[symbol] = current_price
-            except Exception:
-                self._log_signal(plan, "filtered", f"Could not fetch price for {symbol}", reason_type="price_fetch")
-                return
+        # Resolve the final entry geometry before calculating quantity.
+        prices = self._fresh_price_cache()
+        required = {symbol} | self.executor.get_open_position_symbols()
+        if not required.issubset(prices):
+            await self._refresh_price_cache(extra_symbols={symbol})
+            prices = self._fresh_price_cache()
+        current_price = prices.get(symbol)
+        if current_price is None:
+            self._log_signal(plan, "filtered", f"Recent price unavailable for {symbol}",
+                             reason_type="price_fetch")
+            return
+
+        def positive_number(value):
+            return (
+                not isinstance(value, bool) and isinstance(value, (int, float))
+                and math.isfinite(value) and value > 0
+            )
 
         sl_obj = getattr(plan, "stop_loss", None)
         stop_level = getattr(sl_obj, "level", None) if sl_obj is not None else None
-        if not stop_level or stop_level <= 0:
-            self._log_signal(plan, "filtered", "Invalid stop loss level", reason_type="risk_validation")
+        if (not positive_number(current_price) or not positive_number(stop_level)
+                or plan.direction not in ("LONG", "SHORT")):
+            self._log_signal(plan, "filtered", "Invalid market price, stop or direction",
+                             reason_type="risk_validation")
             return
-
-        stop_distance = abs(current_price - stop_level)
-        if stop_distance <= 0:
-            self._log_signal(plan, "filtered", "Zero stop distance", reason_type="risk_validation")
-            return
-
-        equity = self.executor.get_equity(self._price_cache)
-        risk_amount = equity * (config.risk_per_trade / 100.0)
-        quantity = risk_amount / stop_distance
-
-        # Apply lot rounding if available
-        try:
-            market_info = self.adapter.get_market_info(symbol) if self.adapter else {}
-            lot_size = market_info.get("lot_size", 0.0)
-            if lot_size > 0:
-                quantity = round_to_lot(quantity, lot_size)
-        except Exception:
-            pass
-
-        if quantity <= 0:
-            self._log_signal(plan, "filtered", "Position size rounds to zero", reason_type="position_size")
-            return
-
-        # Check position size cap
-        if hasattr(config, "max_position_size_usd") and config.max_position_size_usd:
-            position_value = quantity * current_price
-            if position_value > config.max_position_size_usd:
-                self._log_signal(
-                    plan, "filtered",
-                    f"Position size ${position_value:.2f} exceeds cap ${config.max_position_size_usd:.2f}",
-                    reason_type="position_size",
-                )
-                return
 
         # Entry price — use OB near_entry or current price
         ez_obj = getattr(plan, "entry_zone", None)
         near = getattr(ez_obj, "near_entry", None)
         far = getattr(ez_obj, "far_entry", None)
+        if any(value is not None and not positive_number(value) for value in (near, far)):
+            self._log_signal(plan, "filtered", "Invalid entry zone", reason_type="risk_validation")
+            return
         if near and far:
             entry_price = (near + far) / 2
         elif near:
@@ -1295,22 +1518,42 @@ class LiveTradingService:
                 entry_price = current_price * (1 - _max_dist / 100)
             else:
                 entry_price = current_price * (1 + _max_dist / 100)
-            _stop = stop_level
-            _new_risk = abs(entry_price - _stop) if _stop else 0
-            _old_risk = abs(_raw_limit - _stop) if _stop else 0
-            if _new_risk > 0 and _old_risk > 0:
-                quantity = quantity * (_old_risk / _new_risk)
-                try:
-                    market_info = self.adapter.get_market_info(symbol) if self.adapter else {}
-                    lot_size = market_info.get("lot_size", 0.0)
-                    if lot_size > 0:
-                        quantity = round_to_lot(quantity, lot_size)
-                except Exception:
-                    pass
             logger.info(
                 "LIMIT SNAP: %s %s | %.4f → %.4f (gap %.2f%% > max %.2f%%)",
                 symbol, plan.direction, _raw_limit, entry_price, _gap_pct, _max_dist,
             )
+
+        # Use the exchange's local precision routines, the same ones used when
+        # building the request. Metadata failure must not send an unrounded order.
+        planned_stop = stop_level
+        try:
+            if not self.adapter:
+                raise ValueError("exchange adapter unavailable")
+            self.adapter.get_market_info(symbol)  # loads/retries the market cache
+            exchange = self.adapter.exchange
+            market = exchange.market(symbol)
+            # Executor/PositionManager quantities and USD caps currently assume
+            # one base unit per contract. Do not silently size inverse/non-unit lots.
+            if (market.get("linear") is not True or market.get("contract") is not True
+                    or market.get("settle") not in ("USDT", "USDC")
+                    or market.get("quote") != market.get("settle")
+                    or Decimal(str(market.get("contractSize"))) != Decimal("1")):
+                raise ValueError("unsupported contract units for live risk sizing")
+            entry_price = float(exchange.price_to_precision(symbol, entry_price))
+            stop_level = float(exchange.price_to_precision(symbol, planned_stop))
+            if not positive_number(entry_price) or not positive_number(stop_level):
+                raise ValueError("price precision produced an invalid entry or stop")
+        except Exception as exc:
+            logger.warning("Entry precision unavailable for %s: %s", symbol, exc)
+            self._log_signal(plan, "filtered", f"Entry precision unavailable: {exc}",
+                             reason_type="risk_validation")
+            return
+
+        if ((is_long and (stop_level >= entry_price or planned_stop >= entry_price))
+                or (not is_long and (stop_level <= entry_price or planned_stop <= entry_price))):
+            self._log_signal(plan, "filtered", "Stop must remain on the loss side of final entry",
+                             reason_type="risk_validation")
+            return
 
         # Stale-entry guard: reject only when the OB zone has already been blown through
         # by price in the wrong direction. A valid OB entry is always "on the other side"
@@ -1331,12 +1574,67 @@ class LiveTradingService:
                 reason_type="stale_entry")
             return
 
+        if symbol not in self._fresh_price_cache():
+            self._log_signal(plan, "filtered", "Entry price expired while preparing order",
+                             reason_type="price_fetch")
+            return
+        equity = self._valuation_equity()
+        if not positive_number(equity) or not positive_number(config.risk_per_trade):
+            self._log_signal(plan, "filtered", "Equity unavailable or invalid risk percentage",
+                             reason_type="risk_validation")
+            return
+
+        # Decimal arithmetic avoids rounding a budget-bound quantity up by a lot.
+        # Software monitoring retains the planned stop: budget for the farther of
+        # that level and the precision-normalized native stop.
+        risk_budget = Decimal(str(equity)) * Decimal(str(config.risk_per_trade)) / Decimal("100")
+        entry_decimal = Decimal(str(entry_price))
+        risk_distance = max(
+            abs(entry_decimal - Decimal(str(stop_level))),
+            abs(entry_decimal - Decimal(str(planned_stop))),
+        )
+        try:
+            quantity = float(exchange.amount_to_precision(symbol, str(risk_budget / risk_distance)))
+            if not positive_number(quantity):
+                raise ValueError("position size rounds to zero or is invalid")
+            planned_risk = Decimal(str(quantity)) * risk_distance
+            if planned_risk > risk_budget:
+                raise ValueError("rounded quantity exceeds the risk budget")
+        except Exception as exc:
+            logger.warning("Entry sizing rejected for %s: %s", symbol, exc)
+            self._log_signal(plan, "filtered", f"Entry sizing rejected: {exc}",
+                             reason_type="position_size")
+            return
+
+        position_value = Decimal(str(quantity)) * entry_decimal
+        cap = getattr(config, "max_position_size_usd", None)
+        if not positive_number(cap) or position_value > Decimal(str(cap)):
+            self._log_signal(
+                plan, "filtered",
+                f"Final position size ${position_value:.2f} exceeds or has invalid cap ${cap}",
+                reason_type="position_size",
+            )
+            return
+        self._log_activity("entry_risk_sized", {
+            "symbol": symbol, "direction": plan.direction, "equity": equity,
+            "risk_per_trade": config.risk_per_trade, "risk_budget": float(risk_budget),
+            "planned_stop_risk": float(planned_risk), "risk_distance": float(risk_distance),
+            "entry": entry_price, "stop": stop_level, "planned_stop": planned_stop,
+            "quantity": quantity, "notional": float(position_value),
+        })
+
         # Inline SL only: attached to the entry order for atomic crash protection.
         # The SL fires on the exchange even if our server goes down before
         # _place_exchange_stop() runs.  TP1 is NOT attached inline because
         # _place_exchange_stop() places an explicit reduce-only limit order for TP1;
         # having both would create two overlapping TP orders at the same price and
         # quantity, risking a 2× exit on TP hit.
+        # Price fetching above can yield to a failed reconciliation. Check again
+        # immediately before committing a new entry to the executor.
+        if not self._entry_reconciliation_ready():
+            self._log_signal(plan, "filtered", "Exchange state changed during sizing; entry deferred",
+                             reason_type="exchange_state_unknown")
+            return
         order = self.executor.place_order(
             symbol=symbol,
             side="BUY" if is_long else "SELL",
@@ -1356,8 +1654,11 @@ class LiveTradingService:
         self._pending_placed_at[order.order_id] = datetime.now(timezone.utc)
         self._pending_placed_price[order.order_id] = current_price
 
-        self._log_signal(plan, "pending", f"Waiting for limit fill @ {entry_price:.4f}", reason_type="pending_fill")
-        self._log_activity("signal_taken", {
+        uncertain = order.status == OrderStatus.PENDING
+        self._log_signal(plan, "pending", "Order acknowledgment unavailable; reconciling original request" if uncertain
+                         else f"Waiting for limit fill @ {entry_price:.4f}",
+                         reason_type="order_outcome_unknown" if uncertain else "pending_fill")
+        self._log_activity("order_submission_unknown" if uncertain else "signal_taken", {
             "symbol": symbol,
             "direction": plan.direction,
             "score": score,
@@ -1477,29 +1778,38 @@ class LiveTradingService:
     async def _open_filled_entry(
         self, order_id: str, plan: "TradePlan", entry_px: float, entry_qty: float
     ) -> Optional[str]:
-        """Open a PositionManager entry for a CONFIRMED fill and place its native stop.
+        """Adopt a confirmed terminal fill once per entry order in this session."""
+        if not self.position_manager:
+            logger.error("Cannot adopt filled entry %s without a position manager", order_id)
+            return None
+        pos_id = self._adopted_entry_orders.get(order_id)
+        if not pos_id:
+            existing = self.position_manager.find_position_by_order_id(order_id)
+            pos_id = existing.position_id if existing else None
+        if pos_id:
+            self._adopted_entry_orders[order_id] = pos_id
+            self._clear_pending_entry(order_id)
+            return pos_id
 
-        The entry order has ALREADY filled on the exchange, so this NEVER drops it
-        on a cap breach — a filled-but-unmonitored order is a stranded naked live
-        position (audit bug #2). Over-cap fills are adopted with a loud warning;
-        over-subscription is prevented upstream by counting pending orders toward
-        the cap at the placement gate (see _process_signal). Returns the position_id,
-        or None if the fill price was invalid (caller decides whether to drop/retry).
-        See decisions/2026-05-30__fix-design__overcap-filled-order-stranded.md.
-        """
-        if not self.position_manager or entry_px <= 0:
+        if any(
+            isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(value) or value <= 0
+            for value in (entry_px, entry_qty)
+        ):
             logger.error(
-                "Cannot open filled entry for %s (order %s) — invalid entry price %s; "
-                "not adopting", getattr(plan, "symbol", "?"), order_id, entry_px,
+                "Cannot adopt filled entry %s %s: invalid price=%s quantity=%s; retaining plan",
+                plan.symbol, order_id, entry_px, entry_qty,
             )
+            self._log_activity("entry_adoption_deferred", {
+                "symbol": plan.symbol, "order_id": order_id, "reason": "invalid_fill",
+            })
             return None
 
         cap = self.config.max_positions if self.config else 3
         active_count = len(self._get_active_positions())
         if active_count >= cap:
             logger.warning(
-                "Over-cap fill ADOPTED for %s (active=%d cap=%d) — entry already filled "
-                "on exchange; opening + stopping to avoid a stranded naked position",
+                "Over-cap fill ADOPTED for %s (active=%d cap=%d); entry already filled",
                 plan.symbol, active_count, cap,
             )
             self._log_activity("over_cap_adopted", {
@@ -1512,23 +1822,17 @@ class LiveTradingService:
             quantity=entry_qty,
             entry_order_id=order_id,
         )
+        # Publish before any await: duplicate events cannot open a second position.
+        # Keep the marker after closure so a replay cannot resurrect a closed trade.
+        self._adopted_entry_orders[order_id] = pos_id
         self.stats.signals_taken += 1
-        self._pending_plans.pop(order_id, None)
-        self._pending_placed_at.pop(order_id, None)
-        self._pending_placed_price.pop(order_id, None)
-        # Place exchange-native stop immediately after entry fills. If the
-        # exchange call throws, the position is STILL adopted and protected: it
-        # carries a software stop (open_position sets position.stop_loss) and
-        # _sync_exchange_stops re-places a missing native stop on the next monitor
-        # cycle. Swallow-with-a-loud-log so the throw can't escape the adoption
-        # path and skip monitor_all_positions/_sync_* for this cycle.
+        self._clear_pending_entry(order_id)
         try:
             await self._place_exchange_stop(pos_id, plan, entry_px, entry_qty)
-        except Exception as e:
-            logger.error(
-                "Native stop placement FAILED for %s (pos %s) after adopting fill: %s "
-                "— software stop active; _sync_exchange_stops will retry next cycle",
-                plan.symbol, pos_id, e,
+        except Exception:
+            logger.exception(
+                "Native exit placement failed for %s (pos %s); local monitoring continues, "
+                "missing fixed stop will be retried", plan.symbol, pos_id,
             )
         self._log_activity("trade_opened", {
             "position_id": pos_id,
@@ -1539,51 +1843,58 @@ class LiveTradingService:
         return pos_id
 
     async def _execute_exit_order(self, symbol: str, side: str, quantity: float, price: float) -> bool:
-        if not self.executor:
+        """Keep protection and the original request until the entire requested exit is confirmed."""
+        if not self.executor or any(not isinstance(v, (int, float)) or isinstance(v, bool)
+                                   or not math.isfinite(v) or v <= 0 for v in (quantity, price)):
             return False
-        if quantity <= 0 or price <= 0:
-            return False
-
-        # Cancel exchange-native stop, TP, and trailing stop before firing software market exit
-        if self.position_manager:
-            for pos in self.position_manager.get_open_positions():
-                if pos.symbol == symbol:
-                    await self._cancel_exchange_stop(pos.position_id)
-                    await self._cancel_exchange_tp(pos.position_id)
-                    await self._cancel_exchange_trailing(pos.position_id)
-                    break
-
         try:
-            order = self.executor.place_order(symbol=symbol, side=side, order_type="MARKET", quantity=quantity, price=price, reduce_only=True)
+            order_id = self._pending_exit_orders.get(symbol)
+            order = self.executor.get_order(order_id) if order_id else None
+            if order_id and order is None:
+                logger.error("EXIT_OUTCOME_UNKNOWN %s: missing local order %s", symbol, order_id)
+                return False
             if order is None:
+                order = self.executor.place_order(
+                    symbol=symbol, side=side, order_type="MARKET",
+                    quantity=quantity, price=price, reduce_only=True,
+                )
+                if order is None:
+                    return False
+                self._pending_exit_orders[symbol] = order.order_id
+            if order.status not in (OrderStatus.FILLED, OrderStatus.REJECTED, OrderStatus.CANCELLED):
+                self.executor.execute_market_order(order.order_id, price)
+            if order.status in (OrderStatus.REJECTED, OrderStatus.CANCELLED) and order.filled_quantity <= 0:
+                self._pending_exit_orders.pop(symbol, None)
                 return False
-            if order.status == OrderStatus.REJECTED:
-                # Exchange rejected the exit — check if the position still exists on exchange.
-                # If not, the exchange-native stop already fired and there is nothing to close.
-                # Return True so position_manager marks this position closed and stops retrying.
-                if self.adapter and not self.executor.dry_run:
-                    try:
-                        loop = asyncio.get_running_loop()
-                        ex_positions = await loop.run_in_executor(
-                            None, lambda: self.adapter.fetch_positions([symbol])
-                        )
-                        still_open = any(
-                            float(p.get("contracts", 0) or 0) > 1e-9
-                            for p in ex_positions if p.get("symbol") == symbol
-                        )
-                        if not still_open:
-                            logger.info(
-                                f"Exit rejected for {symbol} — position already closed on exchange "
-                                f"(native stop fired or liquidation). Marking closed."
-                            )
-                            return True
-                    except Exception as chk_e:
-                        logger.debug(f"Could not verify {symbol} position status: {chk_e}")
+            # A partial cancellation can be terminal without completing this exit.
+            # A changed caller quantity also requires reconciliation, not a duplicate send.
+            complete = (order.status == OrderStatus.FILLED
+                        and order.side.value == side.upper()
+                        and abs(order.quantity - quantity) <= 1e-9
+                        and order.filled_quantity >= quantity - 1e-9)
+            if not complete:
+                logger.warning("EXIT_UNCONFIRMED %s order=%s status=%s filled=%.8f requested=%.8f",
+                               symbol, order.order_id, order.status.value, order.filled_quantity, quantity)
+                self._log_activity("exit_unconfirmed", {
+                    "symbol": symbol, "order_id": order.order_id, "status": order.status.value,
+                    "filled_quantity": order.filled_quantity, "requested_quantity": quantity,
+                })
                 return False
-            fill = self.executor.execute_market_order(order.order_id, price)
-            return fill is not None
-        except Exception as e:
-            logger.exception(f"Exit order failed for {symbol}: {e}")
+            self._pending_exit_orders.pop(symbol, None)
+            # Partial target exits leave the remaining position's protection in place.
+            try:
+                if self.position_manager:
+                    for pos in self.position_manager.get_open_positions():
+                        if pos.symbol == symbol and quantity >= pos.remaining_quantity - 1e-9:
+                            await self._cancel_exchange_stop(pos.position_id)
+                            await self._cancel_exchange_tp(pos.position_id)
+                            await self._cancel_exchange_trailing(pos.position_id)
+                            break
+            except Exception:
+                logger.exception("Confirmed exit %s needs protection cleanup", order.order_id)
+            return True
+        except Exception as exc:
+            logger.exception("Exit order failed for %s: %s", symbol, exc)
             return False
 
     async def _place_exchange_stop(
@@ -1599,21 +1910,7 @@ class LiveTradingService:
         if not stop_level or stop_level <= 0:
             return
         stop_side = "SELL" if plan.direction == "LONG" else "BUY"
-        stop_order = self.executor.place_stop_order(
-            symbol=plan.symbol,
-            side=stop_side,
-            quantity=quantity,
-            stop_price=stop_level,
-        )
-        if stop_order.status.value != "REJECTED":
-            self._exchange_stop_orders[position_id] = stop_order.order_id
-            self._exchange_stop_levels[position_id] = stop_level
-            self._log_activity("exchange_stop_placed", {
-                "position_id": position_id,
-                "symbol": plan.symbol,
-                "stop_price": stop_level,
-                "direction": plan.direction,
-            })
+        self._ensure_exchange_stop(position_id, plan.symbol, plan.direction, quantity, stop_level)
 
         # --- Take Profit (TP1 only) ---
         # Place TP1 as a reduce-only limit order so it shows in the Phemex position
@@ -1641,7 +1938,7 @@ class LiveTradingService:
                 )
                 if tp_order.status.value != "REJECTED":
                     self._exchange_tp_orders[position_id] = tp_order.order_id
-                    self._log_activity("exchange_tp_placed", {
+                    self._log_activity("exchange_tp_pending" if tp_order.status == OrderStatus.PENDING else "exchange_tp_placed", {
                         "position_id": position_id,
                         "symbol": plan.symbol,
                         "tp_price": tp1.level,
@@ -1671,7 +1968,7 @@ class LiveTradingService:
             )
             if trail_order.status.value != "REJECTED":
                 self._exchange_trailing_orders[position_id] = trail_order.order_id
-                self._log_activity("exchange_trailing_placed", {
+                self._log_activity("exchange_trailing_pending" if trail_order.status == OrderStatus.PENDING else "exchange_trailing_placed", {
                     "position_id": position_id,
                     "symbol": plan.symbol,
                     "activation_price": _activation,
@@ -1679,50 +1976,98 @@ class LiveTradingService:
                     "direction": plan.direction,
                 })
 
+    def _ensure_exchange_stop(
+        self, position_id: str, symbol: str, direction: str, quantity: float, stop_level: float
+    ) -> bool:
+        """Attempt fixed-stop placement at most once per five seconds after a failure."""
+        if not self.executor:
+            return False
+        last_stop = self._exchange_stop_levels.get(position_id)
+        old_order_id = self._exchange_stop_orders.get(position_id)
+        if (old_order_id and last_stop is not None
+                and isinstance(stop_level, (int, float)) and math.isfinite(stop_level)
+                and abs(stop_level - last_stop) < 1e-8):
+            return True
+        now = time.monotonic()
+        if now < self._exchange_stop_retry_at.get(position_id, 0.0):
+            return False
+        self._exchange_stop_retry_at[position_id] = now + 5.0
+        try:
+            if any(
+                isinstance(value, bool) or not isinstance(value, (int, float))
+                or not math.isfinite(value) or value <= 0
+                for value in (quantity, stop_level)
+            ):
+                raise ValueError("invalid stop quantity or level")
+            pending_id = self._pending_stop_orders.get(position_id)
+            order = self.executor.get_order(pending_id) if pending_id else None
+            if pending_id and order is None:
+                raise ValueError(f"missing unresolved stop {pending_id}")
+            if order is None:
+                order = self.executor.place_stop_order(
+                    symbol=symbol, side="SELL" if direction == "LONG" else "BUY",
+                    quantity=quantity, stop_price=stop_level,
+                )
+            elif order.status == OrderStatus.PENDING:
+                self.executor.refresh_order(order.order_id)
+            if order.status == OrderStatus.PENDING:
+                self._pending_stop_orders[position_id] = order.order_id
+            elif order.status in (OrderStatus.CANCELLED, OrderStatus.REJECTED):
+                self._pending_stop_orders.pop(position_id, None)
+            if order.status not in (OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED) or not order.order_id:
+                raise ValueError(f"stop not accepted: {order.status.value}")
+        except Exception as exc:
+            logger.error(
+                "Native stop unavailable for %s (pos %s): %s; retry in 5s",
+                symbol, position_id, exc,
+            )
+            self._log_activity("exchange_stop_failed", {
+                "position_id": position_id, "symbol": symbol,
+                "stop_price": stop_level, "reason": str(exc), "retry_seconds": 5,
+            })
+            return False
+
+        # Record the replacement before attempting cancellation. A rejected replacement
+        # must leave the old protection reference intact.
+        self._exchange_stop_orders[position_id] = order.order_id
+        self._exchange_stop_levels[position_id] = order.stop_price or stop_level
+        self._pending_stop_orders.pop(position_id, None)
+        self._exchange_stop_retry_at.pop(position_id, None)
+        if old_order_id and old_order_id != order.order_id:
+            try:
+                if not self.executor.cancel_order(old_order_id):
+                    logger.warning("Old exchange stop cancellation unconfirmed: %s", old_order_id)
+            except Exception:
+                logger.exception("Could not cancel old exchange stop %s", old_order_id)
+        event = "exchange_stop_updated" if old_order_id else "exchange_stop_placed"
+        self._log_activity(event, {
+            "position_id": position_id, "symbol": symbol, "direction": direction,
+            "stop_price": self._exchange_stop_levels[position_id], "old_stop": last_stop,
+            "new_stop": self._exchange_stop_levels[position_id],
+        })
+        return abs(self._exchange_stop_levels[position_id] - stop_level) < 1e-8
+
     async def _sync_exchange_stops(self):
-        """Detect stop level changes from PositionManager and update Phemex stop orders."""
+        """Retry missing fixed stops and replace moved stops, without repeating TP/trailing."""
         if not self.position_manager or not self.executor:
             return
-        for pos in self.position_manager.get_open_positions():
-            pid = pos.position_id
-            current_stop = pos.stop_loss
-            if not current_stop or current_stop <= 0:
-                continue
-            last_stop = self._exchange_stop_levels.get(pid)
-            if last_stop is None or abs(current_stop - last_stop) < 1e-8:
-                continue
-            # Stop level moved — place new stop FIRST, then cancel old one.
-            # Reversing the order eliminates the gap window where no exchange stop
-            # exists if the process dies between cancel and place.
-            stop_side = "SELL" if pos.direction == "LONG" else "BUY"
-            qty = getattr(pos, "remaining_quantity", None) or pos.quantity
-            order = self.executor.place_stop_order(
-                symbol=pos.symbol,
-                side=stop_side,
-                quantity=qty,
-                stop_price=current_stop,
+        positions = self.position_manager.get_open_positions()
+        active_ids = {pos.position_id for pos in positions}
+        for pid in list(self._pending_stop_orders):
+            if pid not in active_ids:
+                await self._cancel_exchange_stop(pid)
+        for pid in list(self._exchange_stop_retry_at):
+            if pid not in active_ids:
+                self._exchange_stop_retry_at.pop(pid, None)
+        for pos in positions:
+            qty = getattr(pos, "remaining_quantity", None)
+            if qty is None:
+                qty = pos.quantity
+            self._ensure_exchange_stop(
+                pos.position_id, pos.symbol, pos.direction, qty, pos.stop_loss,
             )
-            if order.status.value != "REJECTED":
-                old_order_id = self._exchange_stop_orders.get(pid)
-                if old_order_id:
-                    try:
-                        self.executor.cancel_order(old_order_id)
-                    except Exception as e:
-                        logger.warning(f"Could not cancel old exchange stop {old_order_id}: {e}")
-                self._exchange_stop_orders[pid] = order.order_id
-                self._exchange_stop_levels[pid] = current_stop
-                logger.info(
-                    f"Exchange stop updated: {pos.symbol} {last_stop:.5f} → {current_stop:.5f} "
-                    f"(pos={pid})"
-                )
-                self._log_activity("exchange_stop_updated", {
-                    "position_id": pid,
-                    "symbol": pos.symbol,
-                    "old_stop": last_stop,
-                    "new_stop": current_stop,
-                })
 
-    async def _detect_exchange_closed_positions(self, ex_open_symbols: set):
+    async def _detect_exchange_closed_positions(self, ex_open_symbols: Optional[set]):
         """
         Detect positions that are OPEN in the position manager but no longer exist on
         the exchange (exchange-native stop fired, liquidation, or manual close).
@@ -1730,6 +2075,9 @@ class LiveTradingService:
         Marks them as STOPPED_OUT so _sync_closed_positions() creates a CompletedTrade
         and stops the monitor from repeatedly sending invalid exit orders.
         """
+        if ex_open_symbols is None:
+            self._set_exchange_state_known(False, "position snapshot unavailable")
+            return
         if not self.position_manager:
             return
         for pos in self.position_manager.get_open_positions():
@@ -1757,16 +2105,18 @@ class LiveTradingService:
                 })
 
     async def _cancel_exchange_stop(self, position_id: str):
-        """Cancel Phemex native stop for a position — called before software exits."""
+        """Request cleanup after a confirmed exit; executor retains unconfirmed cancellations."""
+        pending_id = self._pending_stop_orders.pop(position_id, None)
         order_id = self._exchange_stop_orders.pop(position_id, None)
         self._exchange_stop_levels.pop(position_id, None)
-        if not order_id or not self.executor:
+        if not self.executor:
             return
-        try:
-            self.executor.cancel_order(order_id)
-            logger.info(f"Exchange stop cancelled before software exit: pos={position_id}")
-        except Exception as e:
-            logger.warning(f"Could not cancel exchange stop {order_id} (may have already fired): {e}")
+        for oid in {pending_id, order_id} - {None}:
+            try:
+                confirmed = self.executor.cancel_order(oid)
+                logger.info("Exchange stop cancellation requested: pos=%s order=%s confirmed=%s", position_id, oid, confirmed)
+            except Exception as exc:
+                logger.warning("Could not request stop cleanup for %s: %s", oid, exc)
 
     async def _cancel_exchange_tp(self, position_id: str):
         """Cancel Phemex native TP limit order — called before software exits and on final close."""
@@ -1790,21 +2140,53 @@ class LiveTradingService:
         except Exception as e:
             logger.warning(f"Could not cancel exchange trailing {order_id} (may have already fired): {e}")
 
-    async def _refresh_price_cache(self):
-        if not self.position_manager:
-            return
-        open_positions = self.position_manager.get_open_positions()
-        pending_symbols = {plan.symbol for plan in self._pending_plans.values()}
-        symbols = {pos.symbol for pos in open_positions} | pending_symbols
-        for symbol in symbols:
+    def _fresh_price_cache(self) -> Dict[str, float]:
+        """Only successful local observations within 30 seconds can value new risk."""
+        now = time.monotonic()
+        return {
+            symbol: price for symbol, price in self._price_cache.items()
+            if symbol in self._price_cache_observed_at
+            and 0 <= now - self._price_cache_observed_at[symbol] <= 30.0
+        }
+
+    def _valuation_equity(self) -> Optional[float]:
+        if not self.executor:
+            return None
+        # Allow two scheduled balance intervals; a failed query blocks immediately
+        # through balance_known, and a stalled monitor cannot reuse cash forever.
+        observed = self.executor.last_balance_observed_at
+        interval = getattr(self.config, "balance_reconcile_interval", 60) if self.config else 60
+        if (observed is None or not isinstance(interval, (int, float))
+                or not math.isfinite(interval) or interval <= 0
+                or not 0 <= time.monotonic() - observed <= 2 * interval):
+            self.executor.last_equity_error = "Balance observation expired or unavailable"
+            return None
+        return self.executor.get_equity(self._fresh_price_cache())
+
+    async def _refresh_price_cache(self, extra_symbols=()):
+        symbols = set(extra_symbols) | {plan.symbol for plan in self._pending_plans.values()}
+        if self.position_manager:
+            symbols.update(pos.symbol for pos in self.position_manager.get_open_positions())
+        if self.executor:
+            symbols.update(self.executor.get_open_position_symbols())
+        succeeded = set()
+        for symbol in sorted(symbols):
             try:
                 price = await self._fetch_price(symbol)
-                if price > 0:
-                    self._price_cache[symbol] = price
-            except Exception:
-                pass
-        if symbols:
-            self._price_cache_refreshed_at = datetime.now(timezone.utc)
+                if (isinstance(price, bool) or not isinstance(price, (int, float))
+                        or not math.isfinite(price) or price <= 0):
+                    raise ValueError("Invalid ticker price")
+                self._price_cache[symbol] = price
+                self._price_cache_observed_at[symbol] = time.monotonic()
+                succeeded.add(symbol)
+            except Exception as exc:
+                # Retain last-known display/monitor data, but invalidate it for sizing.
+                self._price_cache_observed_at.pop(symbol, None)
+                logger.warning("Valuation price refresh failed for %s: %s", symbol, exc)
+                self._log_activity("valuation_price_unavailable", {"symbol": symbol, "reason": str(exc)})
+        self._price_cache_refreshed_at = (
+            datetime.now(timezone.utc) if symbols and succeeded == symbols else None
+        )
 
     def _has_position(self, symbol: str) -> bool:
         # Also block entry on symbols with pre-session exchange positions/orders
@@ -1812,7 +2194,7 @@ class LiveTradingService:
             return True
         if not self.position_manager:
             return False
-        for pos in self.position_manager.positions.values():
+        for pos in list(self.position_manager.positions.values()):
             if pos.symbol == symbol and pos.status in (PositionStatus.OPEN, PositionStatus.PARTIAL):
                 return True
         return False
@@ -1873,6 +2255,7 @@ class LiveTradingService:
             # that fired while software was lagging).  Pop AFTER attempting cancel so
             # the order_id is still available for the cancel call.
             for _cancel_dict, _label in [
+                (self._pending_stop_orders, "pending stop"),
                 (self._exchange_stop_orders, "stop"),
                 (self._exchange_tp_orders, "tp"),
                 (self._exchange_trailing_orders, "trailing"),
@@ -1971,23 +2354,27 @@ class LiveTradingService:
                 })
 
     async def _close_all_positions(self, reason: str):
-        """Send market exit orders to the exchange for every open position, then mark closed."""
+        """Request exits; retain positions whose full exit has not been confirmed."""
         if not self.position_manager or not self.executor:
             return
         for pos in self.position_manager.get_open_positions():
             try:
                 close_side = "SELL" if pos.direction == "LONG" else "BUY"
-                qty = getattr(pos, "remaining_quantity", None) or pos.quantity
+                qty = getattr(pos, "remaining_quantity", None)
+                if qty is None:
+                    qty = pos.quantity
+                if qty <= 0:
+                    continue
                 price = self._price_cache.get(pos.symbol, pos.entry_price)
-                # _execute_exit_order cancels exchange stop/TP/trailing and places
-                # a reduce-only market order — actually flattens on the exchange.
+                # The callback retains native protection until the exit is confirmed.
                 success = await self._execute_exit_order(pos.symbol, close_side, qty, price)
                 if not success:
                     logger.warning(
                         f"Market exit failed for {pos.symbol} {pos.position_id} — "
-                        f"exchange-native stop remains active as fallback."
+                        f"position remains locally open; exit requires reconciliation."
                     )
-                self.position_manager.close_position(pos.position_id, reason)
+                    continue
+                self.position_manager.close_position(pos.position_id, reason, current_price=price)
             except Exception as e:
                 logger.error(f"Failed to close position {pos.position_id}: {e}")
 
@@ -2017,7 +2404,10 @@ class LiveTradingService:
 
         # Update max drawdown
         if self.executor:
-            equity = self.executor.get_equity(self._price_cache)
+            equity = self._valuation_equity()
+            if equity is None:
+                logger.warning("Skipping drawdown update: equity unavailable")
+                return
             self._peak_equity = max(self._peak_equity, equity)
             if self._peak_equity > 0:
                 drawdown = (self._peak_equity - equity) / self._peak_equity * 100
@@ -2045,13 +2435,20 @@ class LiveTradingService:
         end = self.stopped_at or datetime.now(timezone.utc)
         return int((end - self.started_at).total_seconds())
 
-    def _task_done_callback(self, task: asyncio.Task):
+    def _task_done_callback(self, task: asyncio.Task, generation: Optional[int] = None):
+        if generation is not None and generation != self._generation:
+            return
         if task.cancelled():
             return
         exc = task.exception()
         if exc:
             logger.error(f"Live trading task {task.get_name()} crashed: {exc}")
             self.status = LiveBotStatus.ERROR
+            if self.executor:
+                self.executor.set_entry_admission(False)
+            self._running = False
+            self._phase = "recovering"
+            self._recovery_error = f"Background task failed: {task.get_name()}"
 
 
 # Global singleton

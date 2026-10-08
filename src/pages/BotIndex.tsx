@@ -24,6 +24,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchActiveSession } from '@/services/activeSession';
+import { liveSessionNeedsAttention } from '@/services/liveTradingService';
 
 export function BotIndex() {
   const navigate = useNavigate();
@@ -36,7 +37,7 @@ export function BotIndex() {
     fetchActiveSession()
       .then((session) => {
         if (cancelled) return;
-        if (session.status?.status === 'running') {
+        if (session.status?.status === 'running' || (!session.isPaper && liveSessionNeedsAttention(session.status))) {
           navigate('/bot/status', { replace: true });
         } else {
           navigate('/bot/setup', { replace: true });

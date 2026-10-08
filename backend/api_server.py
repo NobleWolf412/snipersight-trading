@@ -36,7 +36,7 @@ from backend.bot.paper_trading_service import (
     get_paper_trading_service,
     PaperTradingConfig,
 )
-from backend.bot.live_trading_service import get_live_trading_service
+from backend.bot.live_trading_service import get_live_trading_service, LifecycleConflict
 from backend.shared.config.live_trading_config import LiveTradingConfig
 from backend.data.adapters.phemex import PhemexAdapter
 from backend.data.adapters.bybit import BybitAdapter
@@ -3135,12 +3135,11 @@ async def live_trading_preflight():
         if not api_key:
             return {"ok": False, "issues": ["PHEMEX_API_KEY not set"], "balance": 0, "open_positions": []}
         from backend.data.adapters.phemex import PhemexAdapter
-        from backend.bot.executor.live_executor import LiveExecutor
+        from backend.bot.executor.live_preflight import read_only_preflight
         import os
         testnet = os.getenv("PHEMEX_TESTNET", "true").lower() != "false"
         adapter = PhemexAdapter(testnet=testnet, api_key=api_key, api_secret=api_secret)
-        executor = LiveExecutor(adapter=adapter, dry_run=False)
-        return executor.preflight_check()
+        return await asyncio.to_thread(read_only_preflight, adapter)
     except Exception as e:
         logger.error(f"Preflight check failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -3196,6 +3195,8 @@ async def start_live_trading(config: LiveTradingConfigRequest):
         result = await service.start(live_config)
         return result
 
+    except LifecycleConflict as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -3209,6 +3210,8 @@ async def stop_live_trading():
     try:
         service = get_live_trading_service()
         return await service.stop()
+    except LifecycleConflict as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to stop live trading: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -3216,10 +3219,12 @@ async def stop_live_trading():
 
 @app.post("/api/live-trading/kill-switch")
 async def live_trading_kill_switch():
-    """Emergency stop — cancels all orders and closes all positions immediately."""
+    """Freeze entries and request shutdown; lifecycle reports unconfirmed recovery."""
     try:
         service = get_live_trading_service()
         return await service.kill_switch()
+    except LifecycleConflict as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         logger.error(f"Kill switch failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -3295,9 +3300,11 @@ async def get_live_trading_activity(limit: int = Query(default=100, ge=1, le=500
 
 @app.post("/api/live-trading/reset")
 async def reset_live_trading():
-    """Reset live trading to idle state. Must be stopped first."""
+    """Reset only after shutdown and a fresh confirmed flat account observation."""
     try:
-        return get_live_trading_service().reset()
+        return await get_live_trading_service().reset()
+    except LifecycleConflict as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

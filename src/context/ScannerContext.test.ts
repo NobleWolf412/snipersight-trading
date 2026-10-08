@@ -24,6 +24,7 @@
  * a refactor outside 3z.f scope).
  */
 import { describe, it, expect, beforeEach } from 'vitest';
+import { liveSessionNeedsAttention } from '@/services/liveTradingService';
 
 class LocalStorageMock {
   store: Record<string, string> = {};
@@ -43,13 +44,13 @@ class LocalStorageMock {
 
 globalThis.localStorage = new LocalStorageMock() as any;
 
-// Inline mirror of ScannerContext.tsx:235-244 derivation.
+// Use the production live lifecycle predicate; keep paper derivation unchanged.
 function deriveFlagsFromAllSettled(
   liveRes: PromiseSettledResult<{ status?: string } | undefined>,
   paperRes: PromiseSettledResult<{ status?: string } | undefined>,
 ): { liveRunning: boolean; paperRunning: boolean } {
   const liveRunning =
-    liveRes.status === 'fulfilled' && liveRes.value?.status === 'running';
+    liveRes.status === 'fulfilled' && liveSessionNeedsAttention(liveRes.value);
   const paperRunning =
     paperRes.status === 'fulfilled' && paperRes.value?.status === 'running';
   return { liveRunning, paperRunning };

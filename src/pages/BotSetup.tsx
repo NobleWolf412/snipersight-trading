@@ -67,6 +67,7 @@ import {
 import { useScanner } from '@/context/ScannerContext';
 import {
   liveTradingService,
+  liveSessionNeedsAttention,
   type LiveTradingConfigRequest,
   type PreflightResult,
 } from '@/services/liveTradingService';
@@ -416,7 +417,7 @@ export function BotSetup() {
     liveTradingService
       .getStatus()
       .then((s) => {
-        if (s.status === 'running') navigate('/bot/status');
+        if (liveSessionNeedsAttention(s)) navigate('/bot/status');
       })
       .catch(() => {});
     runPreflight();

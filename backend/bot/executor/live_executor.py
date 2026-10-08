@@ -9,12 +9,19 @@ risk management work without modification.
 from typing import Dict, List, Optional
 from datetime import datetime, timezone
 import logging
+import math
+import time
+import uuid
+from threading import RLock
 import ccxt
 
 from backend.bot.executor.paper_executor import (
     Order, Fill, OrderType, OrderStatus, OrderSide
 )
 from backend.data.adapters.phemex import PhemexAdapter
+from backend.bot.executor.execution_journal import (
+    ExecutionJournal, JournalError, credential_binding, default_store,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +44,9 @@ class LiveExecutor:
         min_balance_usd: float = 50.0,
         dry_run: bool = False,
         target_leverage: int = 1,
+        journal: Optional[ExecutionJournal] = None,
+        owner: str = "live",
+        generation: Optional[str] = None,
     ):
         if not adapter.supports_trading() and not dry_run:
             raise ValueError(
@@ -51,6 +61,24 @@ class LiveExecutor:
         self.min_balance_usd = min_balance_usd
         self.dry_run = dry_run
         self.target_leverage = max(1, int(target_leverage))
+        self._journal = None
+        self._journal_error = None
+        self._journaled_ids = set()
+        self._restored_ids = set()
+        self._recovery_only = False
+        self._inflight_mutations = 0
+        self._execution_owner = owner
+        self._execution_generation = generation or uuid.uuid4().hex
+
+        # Serialize admission and fill accounting so reservations move atomically.
+        self._state_lock = RLock()
+        self._entry_admission_enabled = True
+        self._execution_revision = 0
+        self._reduce_only_order_ids: set = set()
+        self._unacknowledged_orders: Dict[str, str] = {}
+        self._cancel_requested_orders: set = set()
+        self._last_order_recovery_at = 0.0
+        self._order_id_prefix = uuid.uuid4().hex[:16]
 
         # Internal state
         self._orders: Dict[str, Order] = {}
@@ -70,10 +98,12 @@ class LiveExecutor:
         # (and /healthz) can distinguish "balance is zero" from "we don't know".
         self.balance_known: bool = False
         self.last_balance_error: Optional[str] = None
+        self.last_balance_observed_at: Optional[float] = None
+        self.last_equity_error: Optional[str] = None
 
-        # Fill-source counters for /api/integrations/phemex/healthz so the operator
-        # can see whether fills are arriving via WS, REST poll, or the position-check
-        # fallback. A stuck-at-zero counter is a strong smoke signal.
+        # Fill-source counters for /api/integrations/phemex/healthz. Retain the
+        # legacy position-check key at zero for compatibility; positions cannot
+        # attribute execution to an individual order.
         self.metrics: Dict[str, int] = {
             "fills_recorded_via_ws": 0,
             "fills_recorded_via_rest": 0,
@@ -81,19 +111,17 @@ class LiveExecutor:
             "balance_fetch_failures": 0,
         }
 
-        # Switch to one-way position mode at startup.
-        # Phemex TE_ERR_INCONSISTENT_POS_MODE fires when the account is in hedge mode
-        # but orders don't include positionSide. The bot uses one-way mode exclusively.
+        # Acquire ownership and restore identities before any account mutation.
+        # Position mode is initialized only after complete flat reconciliation.
         if not dry_run:
-            one_way_ok = self._adapter.set_position_mode_one_way()
-            if not one_way_ok:
-                # Could not switch — account may already have open positions.
-                # Flag hedge mode so every order includes positionSide as fallback.
-                self._hedge_mode = True
-                logger.warning(
-                    "Could not confirm one-way position mode — will include positionSide "
-                    "in all orders to handle hedge-mode accounts."
-                )
+            self._journal = journal or ExecutionJournal(
+                default_store(adapter.testnet), credential_binding(adapter.testnet, adapter.exchange.apiKey))
+            try:
+                self._restore_execution()
+            except BaseException:
+                self._journal.close()
+                raise
+            self._entry_admission_enabled = False
 
         # Fetch initial balance
         self._cached_balance = self._fetch_balance_from_exchange()
@@ -104,18 +132,288 @@ class LiveExecutor:
         )
 
     def _generate_order_id(self) -> str:
-        self._order_counter += 1
-        return f"LIVE_{self._order_counter:08d}"
+        with self._state_lock:
+            self._order_counter += 1
+            return f"LIVE_{self._order_id_prefix}_{self._order_counter:08d}"
+
+    def _restore_execution(self):
+        self._recovery_only = not self._journal.was_clean
+        for intent, state in self._journal.records():
+            oid = intent["order_id"]
+            order = Order(oid, intent["symbol"], OrderSide(intent["side"]),
+                          OrderType(intent["order_type"]), intent["quantity"],
+                          price=intent["price"], stop_price=intent["stop_price"],
+                          status=OrderStatus(state["status"]), filled_quantity=state["filled_quantity"],
+                          average_fill_price=state["average_fill_price"],
+                          rejection_reason=state["rejection_reason"],
+                          created_at=datetime.fromisoformat(state["created_at"]),
+                          updated_at=datetime.fromisoformat(state["updated_at"]))
+            self._orders[oid] = order
+            self._journaled_ids.add(oid)
+            self._restored_ids.add(oid)
+            if intent["purpose"] == "exit":
+                self._reduce_only_order_ids.add(oid)
+            if state["exchange_id"]:
+                self._exchange_order_map[oid] = state["exchange_id"]
+                self._reverse_order_map[state["exchange_id"]] = oid
+            if state["cancel_requested"]:
+                self._cancel_requested_orders.add(oid)
+            if order.status in (OrderStatus.OPEN, OrderStatus.PENDING, OrderStatus.PARTIALLY_FILLED):
+                self._unacknowledged_orders[oid] = state["unknown_reason"] or "Restored request requires exchange observation"
+                self._recovery_only = True
+
+    def _durable_state(self, order):
+        return {"status": order.status.value, "filled_quantity": order.filled_quantity,
+                "average_fill_price": order.average_fill_price,
+                "exchange_id": self._exchange_order_map.get(order.order_id),
+                "cancel_requested": order.order_id in self._cancel_requested_orders,
+                "unknown_reason": self._unacknowledged_orders.get(order.order_id),
+                "rejection_reason": order.rejection_reason,
+                "created_at": order.created_at.isoformat(), "updated_at": order.updated_at.isoformat()}
+
+    def _storage_failure(self, exc):
+        self._journal_error = str(exc)
+        self._entry_admission_enabled = False
+        self._recovery_only = True
+        logger.error("EXECUTION_STORAGE_BLOCKED: %s", exc)
+
+    def _require_storage(self, new_request=False):
+        if self.dry_run:
+            return
+        journal = getattr(self, "_journal", None)
+        if journal is None:
+            raise JournalError("Real execution requires a durable journal")
+        journal.assert_writable()
+        if getattr(self, "_journal_error", None):
+            raise JournalError(self._journal_error)
+        if new_request and getattr(self, "_recovery_only", False):
+            raise JournalError("Restart recovery cannot submit new orders or resume strategy positions")
+
+    def _persist_order(self, order, source="local", kind="observation"):
+        if self.dry_run or order.order_id not in getattr(self, "_journaled_ids", set()):
+            return
+        try:
+            self._require_storage()
+            self._journal.observe(order.order_id, self._durable_state(order), source, kind)
+        except Exception as exc:
+            self._storage_failure(exc)
+            raise JournalError(str(exc)) from exc
+
+    def _send_journaled_order(self, order, **wire):
+        with self._state_lock:
+            try:
+                self._require_storage(new_request=True)
+                purpose = ("exit" if order.order_id in self._reduce_only_order_ids else
+                           "entry" if order.order_type in (OrderType.LIMIT, OrderType.MARKET) else "protection")
+                intent = {"order_id": order.order_id, "symbol": order.symbol, "side": order.side.value,
+                          "order_type": order.order_type.value, "quantity": order.quantity,
+                          "price": order.price, "stop_price": order.stop_price, "purpose": purpose,
+                          "reduce_only": purpose != "entry", "owner": self._execution_owner,
+                          "generation": self._execution_generation, "wire": wire}
+                self._journal.submit_intent(intent, self._durable_state(order))
+                self._journaled_ids.add(order.order_id)
+                self._inflight_mutations = getattr(self, "_inflight_mutations", 0) + 1
+            except Exception as exc:
+                self._storage_failure(exc)
+                raise JournalError(str(exc)) from exc
+        try:
+            return self._adapter.create_order(**wire)
+        finally:
+            with self._state_lock:
+                self._inflight_mutations -= 1
+
+    def initialize_trading(self):
+        """Caller must first verify a complete flat account; no writes in preflight."""
+        if not self.dry_run:
+            self._require_storage(new_request=True)
+            self._hedge_mode = not self._adapter.set_position_mode_one_way()
+
+    def verify_flat_account(self):
+        """Read a complete account snapshot for the shared paper-testnet owner."""
+        revision = self.recovery_snapshot()["revision"]
+        snapshot = self._adapter.fetch_account_snapshot()
+        if (not isinstance(snapshot, dict) or snapshot.get("complete") is not True
+                or snapshot.get("scope") != "phemex:swap:USDT"
+                or not isinstance(snapshot.get("orders"), list)
+                or not isinstance(snapshot.get("positions"), list)):
+            raise JournalError("Complete USDT account snapshot unavailable")
+        if snapshot["orders"]:
+            raise JournalError("Existing exchange orders require recovery")
+        for row in snapshot["positions"]:
+            if not isinstance(row, dict) or not isinstance(row.get("symbol"), str) or not row["symbol"]:
+                raise JournalError("Invalid account position")
+            qty = row.get("contracts")
+            if type(qty) not in (int, float) or not math.isfinite(qty) or qty != 0:
+                raise JournalError("Account exposure unknown or present; recovery required")
+        with self._state_lock:
+            if revision != self.recovery_snapshot()["revision"]:
+                raise JournalError("Execution changed during account observation")
+            self._flat_snapshot_revision = revision
+        return datetime.now(timezone.utc).isoformat()
+
+    def checkpoint_flat(self, observed_at, expected_revision=None):
+        with self._state_lock:
+            if not self.dry_run:
+                self._require_storage()
+                if expected_revision is None:
+                    expected_revision = getattr(self, "_flat_snapshot_revision", None)
+                snap = self.recovery_snapshot()
+                if (expected_revision != snap["revision"] or snap["requests"]
+                        or snap["inflight_mutations"]):
+                    raise JournalError("Execution changed or remains unresolved after flat account observation")
+                try:
+                    self._journal.mark_flat(observed_at)
+                except Exception as exc:
+                    self._storage_failure(exc)
+                    raise
+
+    def close(self):
+        with self._state_lock:
+            self.set_entry_admission(False)
+            if getattr(self, "_inflight_mutations", 0):
+                raise JournalError("Cannot release execution ownership during a transport call")
+            if getattr(self, "_journal", None):
+                self._journal.close()
+
+    def set_entry_admission(self, enabled: bool) -> None:
+        """Freeze new entry risk; already admitted requests still need recovery."""
+        with self._state_lock:
+            self._entry_admission_enabled = bool(enabled) and not (
+                getattr(self, "_recovery_only", False) or getattr(self, "_journal_error", None))
+
+    def recovery_snapshot(self) -> Dict:
+        with self._state_lock:
+            ids = {o.order_id for o in self.get_open_orders()}
+            ids.update(self._unacknowledged_orders)
+            ids.update(self._cancel_requested_orders)
+            return {
+                "revision": getattr(self, "_execution_revision", 0),
+                "recovery_only": getattr(self, "_recovery_only", False),
+                "storage_error": getattr(self, "_journal_error", None),
+                "inflight_mutations": getattr(self, "_inflight_mutations", 0),
+                "entry_admission_enabled": getattr(self, "_entry_admission_enabled", True),
+                "requests": [{
+                    "order_id": oid, "exchange_id": self._exchange_order_map.get(oid),
+                    "symbol": self._orders[oid].symbol, "status": self._orders[oid].status.value,
+                    "quantity": self._orders[oid].quantity,
+                    "filled_quantity": self._orders[oid].filled_quantity,
+                    "purpose": ("exit" if oid in self._reduce_only_order_ids else
+                                "entry" if self._orders[oid].order_type in (OrderType.LIMIT, OrderType.MARKET)
+                                else "protection"),
+                    "reason": self._unacknowledged_orders.get(oid, "cancellation pending" if oid in self._cancel_requested_orders else "working order"),
+                } for oid in sorted(ids)],
+            }
+
+    def _submission_unknown(self, order: Order, reason: str, log_level: int = logging.ERROR) -> None:
+        """Retain exposure until an identified exchange observation resolves it."""
+        with self._state_lock:
+            self._execution_revision = getattr(self, "_execution_revision", 0) + 1
+            if order.status in (OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
+                return
+            self._unacknowledged_orders[order.order_id] = reason
+            order.status = OrderStatus.PARTIALLY_FILLED if order.filled_quantity > 0 else OrderStatus.PENDING
+            self._persist_order(order, kind="outcome_unknown")
+        logger.log(log_level, "ORDER_OUTCOME_UNKNOWN %s %s: %s", order.order_id, order.symbol, reason)
+
+    def _accept_submission(self, order: Order, response: Dict, require_client_id: bool = False) -> Optional[Fill]:
+        if not isinstance(response, dict):
+            raise ValueError("Order acknowledgment is not an object")
+        exchange_id = response.get("id")
+        client_id = response.get("clientOrderId")
+        if not isinstance(exchange_id, str) or not exchange_id.strip():
+            raise ValueError("Order acknowledgment has no exchange ID")
+        if (require_client_id and client_id != order.order_id) or (client_id and client_id != order.order_id):
+            raise ValueError("Order acknowledgment has a different client ID")
+        with self._state_lock:
+            existing_id = self._exchange_order_map.get(order.order_id)
+            if existing_id and existing_id != exchange_id:
+                raise ValueError("Order acknowledgment changed the exchange identity")
+            existing_owner = self._reverse_order_map.get(exchange_id)
+            if existing_owner and existing_owner != order.order_id:
+                raise ValueError("Exchange identity already belongs to another request")
+            self._exchange_order_map[order.order_id] = exchange_id
+            self._reverse_order_map[exchange_id] = order.order_id
+            # A create response with an ID establishes acceptance, not a fill.
+            if response.get("status") is None:
+                if require_client_id:
+                    raise ValueError("Recovery response has no order status")
+                response = {**response, "status": "open"}
+            return self._process_exchange_order(order, response)
+
+    def refresh_order(self, order_id: str) -> Optional[Fill]:
+        """Recover by client ID when the submission response did not provide an ID."""
+        order = self._orders.get(order_id)
+        if order is None or self.dry_run or order.status in (
+                OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
+            return None
+        try:
+            exchange_id = self._exchange_order_map.get(order_id)
+            if not exchange_id:
+                response = self._adapter.fetch_order_by_client_id(order_id, order.symbol)
+                return self._accept_submission(order, response, require_client_id=True)
+            response = self._adapter.fetch_order(exchange_id, order.symbol)
+            if not isinstance(response, dict) or response.get("id", exchange_id) != exchange_id:
+                raise ValueError("Order lookup returned a different identity")
+            return self._process_exchange_order(order, response)
+        except Exception as exc:
+            # OrderNotFound is not proof of rejection: history can lag acceptance.
+            self._submission_unknown(order, str(exc))
+            return None
+
+    def _recover_uncertain_protection(self, symbol: str, side: str, order_type: OrderType) -> Optional[Order]:
+        with self._state_lock:
+            pending = next((self._orders[oid] for oid in self._unacknowledged_orders
+                            if self._orders[oid].symbol == symbol
+                            and self._orders[oid].side.value == side.upper()
+                            and self._orders[oid].order_type == order_type), None)
+        if pending is not None:
+            self.refresh_order(pending.order_id)
+        return pending
+
+    def recover_uncertain_orders(self) -> None:
+        """Poll unresolved entries/exits/protection even without an active entry plan."""
+        now = time.monotonic()
+        if now - self._last_order_recovery_at < 5:
+            return
+        self._last_order_recovery_at = now
+        with self._state_lock:
+            order_ids = list(self._unacknowledged_orders.keys() | self._cancel_requested_orders)
+        for order_id in order_ids:
+            self.refresh_order(order_id)
+            if order_id in self._cancel_requested_orders:
+                if (getattr(self, "_recovery_only", False)
+                        and self._orders[order_id].order_type not in (OrderType.LIMIT, OrderType.MARKET)):
+                    continue  # Observe an old cancellation, but preserve native protection on restart.
+                self.cancel_order(order_id)
+
+    def _reject_submission(self, order: Order, reason: str) -> None:
+        with self._state_lock:
+            if order.filled_quantity > 0 or order.status == OrderStatus.FILLED:
+                logger.error("REJECTION_AFTER_FILL %s: %s", order.order_id, reason)
+                return
+            self._unacknowledged_orders.pop(order.order_id, None)
+            self._cancel_requested_orders.discard(order.order_id)
+            order.status = OrderStatus.REJECTED
+            order.rejection_reason = reason
+            self._persist_order(order, kind="rejection")
+
 
     def _fetch_balance_from_exchange(self) -> float:
         if self.dry_run:
             self.balance_known = True
+            self.last_balance_observed_at = time.monotonic()
             return 0.0
         try:
             balance = self._adapter.fetch_balance()
-            usdt_free = balance.get("free", {}).get("USDT", 0.0) or 0.0
+            raw_free = balance["free"]["USDT"]
+            if isinstance(raw_free, bool):
+                raise ValueError("Invalid USDT free balance")
+            usdt_free = float(raw_free)
+            if not math.isfinite(usdt_free) or usdt_free < 0:
+                raise ValueError("Invalid USDT free balance")
             self.balance_known = True
             self.last_balance_error = None
+            self.last_balance_observed_at = time.monotonic()
             return float(usdt_free)
         except Exception as e:
             # Returning 0.0 here makes the risk manager think the account is empty,
@@ -130,15 +428,41 @@ class LiveExecutor:
             # this number is stale.
             return self._cached_balance if self._cached_balance else 0.0
 
-    def _total_exposure_usd(self) -> float:
-        """Estimate total open exposure in USD based on current positions."""
-        total = 0.0
-        for symbol, qty in self._positions.items():
-            if abs(qty) < 1e-9:
-                continue
-            avg = self._position_avg_price.get(symbol, 0.0)
-            total += abs(qty) * avg
-        return total
+    def _total_exposure_usd(self, exclude_order_id: Optional[str] = None) -> float:
+        """Open entry-cost exposure plus unfilled, non-reduce-only entry commitments."""
+        with self._state_lock:
+            total = 0.0
+            for symbol, qty in self._positions.items():
+                if isinstance(qty, bool) or not isinstance(qty, (int, float)) or not math.isfinite(qty):
+                    raise ValueError(f"Invalid position quantity for {symbol}")
+                if abs(qty) < 1e-9:
+                    continue
+                avg = self._position_avg_price.get(symbol)
+                if (isinstance(avg, bool) or not isinstance(avg, (int, float))
+                        or not math.isfinite(avg) or avg <= 0):
+                    raise ValueError(f"Unknown position cost for {symbol}")
+                total += abs(qty) * avg
+            for order_id, order in self._orders.items():
+                if (order_id == exclude_order_id or order_id in self._reduce_only_order_ids
+                        or order.order_type not in (OrderType.LIMIT, OrderType.MARKET)
+                        or order.status not in (OrderStatus.PENDING, OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED)):
+                    continue
+                if (any(isinstance(v, bool) or not isinstance(v, (int, float))
+                        for v in (order.quantity, order.filled_quantity))
+                        or not math.isfinite(order.quantity) or not math.isfinite(order.filled_quantity)
+                        or order.quantity <= 0 or order.filled_quantity < 0):
+                    raise ValueError(f"Invalid pending quantity for {order_id}")
+                remaining = max(0.0, order.quantity - order.filled_quantity)
+                if remaining <= 1e-9:
+                    continue
+                price = order.price
+                if (isinstance(price, bool) or not isinstance(price, (int, float))
+                        or not math.isfinite(price) or price <= 0):
+                    raise ValueError(f"Unknown pending entry price for {order_id}")
+                total += remaining * price
+            if not math.isfinite(total):
+                raise ValueError("Nonfinite exposure")
+            return total
 
     # ------------------------------------------------------------------
     # Public interface (identical signatures to PaperExecutor)
@@ -168,7 +492,8 @@ class LiveExecutor:
         Runs pre-flight safety checks before sending to the exchange.
         Returns an Order with status=REJECTED if any check fails.
         """
-        if quantity <= 0:
+        if (isinstance(quantity, bool) or not isinstance(quantity, (int, float))
+                or not math.isfinite(quantity) or quantity <= 0):
             raise ValueError("Quantity must be positive")
 
         try:
@@ -179,44 +504,51 @@ class LiveExecutor:
 
         if order_type_enum == OrderType.LIMIT and price is None:
             raise ValueError("Limit orders require a price")
+        if not self.dry_run and getattr(self, "_recovery_only", False):
+            self._require_storage(new_request=True)
 
-        order_id = self._generate_order_id()
-        order = Order(
-            order_id=order_id,
-            symbol=symbol,
-            side=order_side,
-            order_type=order_type_enum,
-            quantity=quantity,
-            price=price,
-            stop_price=stop_price,
-            status=OrderStatus.OPEN,
-        )
-        self._orders[order_id] = order
-
-        # Safety checks — reject without touching the exchange
-        ref_price = price or self._position_avg_price.get(symbol, 0.0)
-        if ref_price > 0:
-            position_usd = quantity * ref_price
-            if position_usd > self.max_position_size_usd:
-                msg = f"Position size ${position_usd:.2f} exceeds cap ${self.max_position_size_usd:.2f}"
-                logger.warning(f"Order REJECTED: {msg}")
-                order.status = OrderStatus.REJECTED
-                order.rejection_reason = msg
-                return order
-
-            if self._total_exposure_usd() + position_usd > self.max_total_exposure_usd:
-                msg = f"Total exposure would exceed ${self.max_total_exposure_usd:.2f}"
-                logger.warning(f"Order REJECTED: {msg}")
-                order.status = OrderStatus.REJECTED
-                order.rejection_reason = msg
-                return order
-
-        if self._cached_balance < self.min_balance_usd:
-            msg = f"Balance ${self._cached_balance:.2f} below minimum ${self.min_balance_usd:.2f}"
-            logger.warning(f"Order REJECTED: {msg}")
-            order.status = OrderStatus.REJECTED
-            order.rejection_reason = msg
-            return order
+        with self._state_lock:
+            order_id = self._generate_order_id()
+            order = Order(
+                order_id=order_id, symbol=symbol, side=order_side,
+                order_type=order_type_enum, quantity=quantity, price=price,
+                stop_price=stop_price, status=OrderStatus.OPEN,
+            )
+            self._orders[order_id] = order
+            if reduce_only:
+                self._reduce_only_order_ids.add(order_id)
+            else:
+                # Reserve this request before releasing the lock / sending it.
+                # The candidate is excluded from existing exposure to count it once.
+                try:
+                    if not getattr(self, "_entry_admission_enabled", True):
+                        raise ValueError("Session stopping; new entry blocked")
+                    if self._unacknowledged_orders:
+                        raise ValueError("Unresolved exchange order outcome; new entry blocked")
+                    if not self.balance_known or not math.isfinite(self._cached_balance):
+                        raise ValueError("Balance unavailable; new entry blocked")
+                    ref_price = price
+                    if (ref_price is None or isinstance(ref_price, bool)
+                            or not math.isfinite(ref_price) or ref_price <= 0):
+                        raise ValueError("Entry price unavailable for exposure checks")
+                    position_usd = quantity * ref_price
+                    if (not math.isfinite(position_usd)
+                            or not math.isfinite(self.max_position_size_usd)
+                            or self.max_position_size_usd <= 0
+                            or position_usd > self.max_position_size_usd):
+                        raise ValueError(f"Position size exceeds cap ${self.max_position_size_usd:.2f}")
+                    total = self._total_exposure_usd(exclude_order_id=order_id) + position_usd
+                    if (not math.isfinite(self.max_total_exposure_usd)
+                            or self.max_total_exposure_usd <= 0
+                            or total > self.max_total_exposure_usd):
+                        raise ValueError(f"Total committed exposure ${total:.2f} would exceed ${self.max_total_exposure_usd:.2f}")
+                    if self._cached_balance < self.min_balance_usd:
+                        raise ValueError(f"Balance ${self._cached_balance:.2f} below minimum ${self.min_balance_usd:.2f}")
+                except (ValueError, TypeError) as exc:
+                    order.status = OrderStatus.REJECTED
+                    order.rejection_reason = str(exc)
+                    logger.warning("Order REJECTED: %s", exc)
+                    return order
 
         if self.dry_run:
             logger.info(
@@ -231,6 +563,7 @@ class LiveExecutor:
         # Ensure margin mode and leverage are set correctly before the first order
         # per symbol. Phemex persists these settings per symbol on the account,
         # so we only need to set them once per session.
+        self._require_storage(new_request=True)
         if symbol not in self._leverage_confirmed:
             self._adapter.set_margin_mode(symbol, mode="isolated")
             try:
@@ -277,7 +610,7 @@ class LiveExecutor:
             extra_params["tpTrigger"] = "ByMarkPrice"
 
         def _send_order(params: dict) -> dict:
-            return self._adapter.create_order(
+            return self._send_journaled_order(order,
                 symbol=symbol,
                 order_type=ccxt_type,
                 side=ccxt_side,
@@ -286,23 +619,26 @@ class LiveExecutor:
                 params=params if params else None,
             )
 
+        with self._state_lock:
+            # Margin/leverage setup may have yielded to a shutdown in another thread.
+            if not reduce_only and not getattr(self, "_entry_admission_enabled", True):
+                self._reject_submission(order, "Session stopping; new entry blocked")
+                return order
+            self._submission_unknown(order, "Awaiting submission acknowledgment", log_level=logging.DEBUG)
         try:
             exchange_order = _send_order(extra_params)
-            exchange_id = str(exchange_order.get("id", ""))
-            self._exchange_order_map[order_id] = exchange_id
-            self._reverse_order_map[exchange_id] = order_id
+            self._accept_submission(order, exchange_order)
+            exchange_id = self._exchange_order_map.get(order_id, "")
             logger.info(
                 f"Order sent: {order_id} → exchange_id={exchange_id} "
                 f"{side} {quantity} {symbol} @ {price}"
             )
         except ccxt.InsufficientFunds as e:
             logger.error(f"Insufficient funds for {order_id}")
-            order.status = OrderStatus.REJECTED
-            order.rejection_reason = f"Insufficient funds: {e}"
+            self._reject_submission(order, f"Insufficient funds: {e}")
         except ccxt.InvalidOrder as e:
             logger.error(f"Invalid order {order_id}: {e}")
-            order.status = OrderStatus.REJECTED
-            order.rejection_reason = f"Invalid order: {e}"
+            self._reject_submission(order, f"Invalid order: {e}")
         except Exception as e:
             err_str = str(e)
             # Phemex 20004 TE_ERR_INCONSISTENT_POS_MODE: the account is in hedge mode
@@ -317,9 +653,8 @@ class LiveExecutor:
                 hedge_params["posSide"] = "Long" if ccxt_side == "buy" else "Short"
                 try:
                     exchange_order = _send_order(hedge_params)
-                    exchange_id = str(exchange_order.get("id", ""))
-                    self._exchange_order_map[order_id] = exchange_id
-                    self._reverse_order_map[exchange_id] = order_id
+                    self._accept_submission(order, exchange_order)
+                    exchange_id = self._exchange_order_map.get(order_id, "")
                     self._hedge_mode = True  # all future orders will include positionSide
                     logger.info(
                         f"Order sent (hedge-mode retry): {order_id} → {exchange_id} "
@@ -327,12 +662,10 @@ class LiveExecutor:
                     )
                 except Exception as retry_e:
                     logger.error(f"Failed to send {order_id} after hedge-mode retry: {retry_e}")
-                    order.status = OrderStatus.REJECTED
-                    order.rejection_reason = str(retry_e)
+                    self._submission_unknown(order, str(retry_e))
             else:
                 logger.error(f"Failed to send order {order_id} to exchange: {e}")
-                order.status = OrderStatus.REJECTED
-                order.rejection_reason = str(e)
+                self._submission_unknown(order, str(e))
 
         return order
 
@@ -357,17 +690,7 @@ class LiveExecutor:
             order.status = OrderStatus.FILLED
             return fill
 
-        exchange_id = self._exchange_order_map.get(order_id)
-        if not exchange_id:
-            logger.warning(f"No exchange ID for order {order_id}")
-            return None
-
-        try:
-            ex_order = self._adapter.fetch_order(exchange_id, order.symbol)
-            return self._process_exchange_order(order, ex_order)
-        except Exception as e:
-            logger.error(f"Failed to poll market order {order_id}: {e}")
-            return None
+        return self.refresh_order(order_id)
 
     def execute_limit_order(self, order_id: str, current_price: float) -> Optional[Fill]:
         """
@@ -392,149 +715,105 @@ class LiveExecutor:
             order.status = OrderStatus.FILLED
             return fill
 
-        exchange_id = self._exchange_order_map.get(order_id)
-        if not exchange_id:
-            return None
-
-        try:
-            ex_order = self._adapter.fetch_order(exchange_id, order.symbol)
-            return self._process_exchange_order(order, ex_order)
-        except Exception as e:
-            logger.error(f"Failed to poll limit order {order_id}: {e}")
-            return None
+        return self.refresh_order(order_id)
 
     def check_fill_via_positions(self, order_id: str) -> Optional[Fill]:
+        """Legacy entry point: recover only through the original order identity.
+
+        Account positions can include unrelated/manual activity and cannot prove
+        this order's quantity, price or completion. When order history lags, keep
+        its unresolved state and reservation. Restored requests use the same
+        identity recovery without replaying local cash or position accounting.
         """
-        Secondary fill confirmation using exchange positions.
+        return self.refresh_order(order_id)
 
-        Phemex's fetch_order can return stale data (status="open", filled=0) for
-        an already-filled limit order. This method cross-checks by fetching the
-        actual position for the symbol — if a non-zero position exists, the order
-        must have filled. Called only after the primary poll has failed for ≥2 minutes
-        to avoid unnecessary round-trips.
-        """
-        if order_id not in self._orders:
-            return None
-        order = self._orders[order_id]
-        if order.status in (OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
-            return None
-        if self.dry_run:
-            return None
+    def _process_exchange_order(self, order: Order, ex_order: Dict, source: str = "rest") -> Optional[Fill]:
+        """Apply explicit cumulative execution facts; incomplete terminal data stays unresolved."""
+        with self._state_lock:
+            self._execution_revision = getattr(self, "_execution_revision", 0) + 1
+            if order.status in (OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
+                return None
+            try:
+                status = ex_order.get("status")
+                if status not in ("open", "new", "partiallyfilled", "closed", "filled",
+                                  "canceled", "cancelled", "rejected"):
+                    raise ValueError(f"Unrecognized order status: {status}")
+                raw_filled = ex_order.get("filled")
+                if raw_filled is None:
+                    if status not in ("open", "new"):
+                        raise ValueError("Terminal/partial order response lacks filled quantity")
+                    # An accepted resting order is not evidence of execution.
+                    filled = order.filled_quantity
+                else:
+                    if isinstance(raw_filled, bool):
+                        raise ValueError("Invalid filled quantity")
+                    filled = float(raw_filled)
+                if (not math.isfinite(filled) or filled < order.filled_quantity - 1e-9
+                        or filled < 0 or filled > order.quantity + 1e-9):
+                    raise ValueError("Invalid or regressing cumulative filled quantity")
+                if status in ("closed", "filled") and filled <= 1e-9:
+                    raise ValueError("Closed order has no confirmed fill")
+                incremental = filled - order.filled_quantity
+                raw_price = ex_order.get("average")
+                if raw_price is None:
+                    raw_price = ex_order.get("price")
+                price = float(raw_price) if raw_price is not None and not isinstance(raw_price, bool) else 0.0
+                if incremental > 1e-9 and (not math.isfinite(price) or price <= 0):
+                    raise ValueError("Execution price unavailable")
+            except (ValueError, TypeError, AttributeError) as exc:
+                self._submission_unknown(order, str(exc))
+                return None
 
-        try:
-            ex_positions = self._adapter.fetch_positions([order.symbol])
-            for pos in ex_positions:
-                if pos.get("symbol", "") != order.symbol:
-                    continue
-                ex_qty = float(pos.get("contracts", 0.0) or 0.0)
-                if ex_qty < 1e-9:
-                    continue
-                # Live position confirmed — the order filled on the exchange.
-                entry_price = (
-                    float(pos.get("entryPrice", 0.0) or 0.0)
-                    or float(pos.get("entry_price", 0.0) or 0.0)
-                    or order.price
-                    or 0.0
-                )
-                fill_qty = ex_qty - order.filled_quantity
-                if fill_qty < 1e-9:
-                    # Already accounted for in a prior poll — just sync status.
-                    order.status = OrderStatus.FILLED
-                    return None
-                logger.info(
-                    f"Position-fill recovery: {order_id} {order.symbol} "
-                    f"qty={ex_qty:.6f} @ {entry_price:.5f} — confirmed via fetch_positions"
-                )
-                fill = self._record_fill(order, fill_qty, entry_price)
-                self.metrics["fills_recovered_via_position_check"] += 1
+            fill = None
+            if incremental > 1e-9:
+                if (order.order_type in (OrderType.LIMIT, OrderType.MARKET)
+                        and order.order_id not in getattr(self, "_restored_ids", set())):
+                    fill = self._record_fill(order, incremental, price)
+                    self.metrics[f"fills_recorded_via_{source}"] += 1
+                else:
+                    # Native protection is reflected in position reconciliation.
+                    order.filled_quantity = filled
+                    order.average_fill_price = price
+            if status in ("canceled", "cancelled", "rejected"):
+                order.status = (OrderStatus.FILLED if filled > 1e-9 else
+                                OrderStatus.REJECTED if status == "rejected" else OrderStatus.CANCELLED)
+            elif status in ("closed", "filled"):
                 order.status = OrderStatus.FILLED
-                return fill
-        except Exception as e:
-            logger.debug(f"check_fill_via_positions failed for {order_id}: {e}")
-        return None
-
-    def _process_exchange_order(self, order: Order, ex_order: Dict) -> Optional[Fill]:
-        """Map a CCXT order response to our internal Order/Fill state."""
-        ex_status = ex_order.get("status", "open")
-        ex_filled = float(ex_order.get("filled", 0.0) or 0.0)
-        ex_avg_price = float(ex_order.get("average", 0.0) or ex_order.get("price", 0.0) or 0.0)
-        ex_remaining = float(ex_order.get("remaining", 0.0) or 0.0)
-        ex_amount = float(ex_order.get("amount", order.quantity) or order.quantity)
-
-        # Cross-check: if remaining < amount and filled is still 0, infer filled from remaining.
-        # Phemex can report leavesQty correctly before cumQty normalizes through CCXT.
-        if ex_filled < 1e-9 and ex_amount > 0 and ex_remaining < ex_amount - 1e-9:
-            inferred = ex_amount - ex_remaining
-            if inferred > 1e-9:
-                ex_filled = inferred
-                logger.debug(
-                    f"Order {order.order_id} filled inferred from remaining: "
-                    f"amount={ex_amount:.6f} remaining={ex_remaining:.6f} → filled={ex_filled:.6f}"
-                )
-
-        # Phemex sometimes reports filled=0/null on a closed order (uses cumQty internally,
-        # CCXT normalization may not catch it). When the exchange says the order is done but
-        # filled qty is still zero, treat the full order quantity as filled.
-        if ex_status in ("closed", "filled") and ex_filled < 1e-9:
-            ex_filled = order.quantity
-            if ex_avg_price <= 0:
-                ex_avg_price = order.price or 0.0
-            logger.info(
-                f"Order {order.order_id} closed on exchange with filled=0 — "
-                f"assuming full fill of {ex_filled:.6f} @ {ex_avg_price}"
-            )
-
-        # How much was filled since we last checked
-        new_qty = ex_filled - order.filled_quantity
-        if new_qty < 1e-9:
-            # Fully accounted for — keep status in sync
-            if ex_status in ("closed", "filled"):
-                order.status = OrderStatus.FILLED
-            return None
-
-        fill_price = ex_avg_price if ex_avg_price > 0 else (order.price or 0.0)
-        fill = self._record_fill(order, new_qty, fill_price)
-        self.metrics["fills_recorded_via_rest"] += 1
-
-        if ex_status in ("closed", "filled"):
-            order.status = OrderStatus.FILLED
-            logger.info(
-                f"Order {order.order_id} fully filled: {order.filled_quantity:.6f}/{order.quantity:.6f} "
-                f"@ avg {order.average_fill_price:.5f}"
-            )
-        elif ex_filled > 0:
-            order.status = OrderStatus.PARTIALLY_FILLED
-            logger.info(
-                f"Partial fill: {order.order_id} +{new_qty:.6f} "
-                f"({order.filled_quantity:.6f}/{order.quantity:.6f} filled, "
-                f"remaining={ex_remaining:.6f}) @ {fill_price:.5f}"
-            )
-
-        return fill
+            else:
+                order.status = OrderStatus.PARTIALLY_FILLED if filled > 1e-9 else OrderStatus.OPEN
+            order.updated_at = datetime.now(timezone.utc)
+            if order.status in (OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
+                self._cancel_requested_orders.discard(order.order_id)
+            if self._unacknowledged_orders.pop(order.order_id, None) is not None:
+                logger.info("ORDER_OUTCOME_RESOLVED %s status=%s filled=%.8f",
+                            order.order_id, order.status.value, order.filled_quantity)
+            self._persist_order(order, source=source)
+            return fill
 
     def _record_fill(self, order: Order, qty: float, price: float) -> Fill:
         """Record a fill, update order state, positions, and balance."""
-        fee = qty * price * self.fee_rate
-        self._cached_balance -= fee
+        with self._state_lock:
+            fee = qty * price * self.fee_rate
+            self._cached_balance -= fee
 
-        fill = Fill(order_id=order.order_id, quantity=qty, price=price, fee=fee)
-        self._fills.append(fill)
+            fill = Fill(order_id=order.order_id, quantity=qty, price=price, fee=fee)
+            self._fills.append(fill)
 
-        # Update order average fill price
-        total_filled = order.filled_quantity + qty
-        if order.average_fill_price == 0:
-            order.average_fill_price = price
-        else:
-            order.average_fill_price = (
-                order.average_fill_price * order.filled_quantity + price * qty
-            ) / total_filled
-        order.filled_quantity = total_filled
-        order.updated_at = datetime.now(timezone.utc)
+            # Update order average fill price
+            total_filled = order.filled_quantity + qty
+            if order.average_fill_price == 0:
+                order.average_fill_price = price
+            else:
+                order.average_fill_price = (
+                    order.average_fill_price * order.filled_quantity + price * qty
+                ) / total_filled
+            order.filled_quantity = total_filled
+            order.updated_at = datetime.now(timezone.utc)
 
-        # Update position accounting (same logic as PaperExecutor)
-        self._update_position(order.symbol, order.side, qty, price)
+            # Update position accounting (same logic as PaperExecutor)
+            self._update_position(order.symbol, order.side, qty, price)
 
-        return fill
+            return fill
 
     def _update_position(self, symbol: str, side: OrderSide, qty: float, price: float) -> None:
         """Mirror of PaperExecutor margin accounting logic."""
@@ -573,19 +852,37 @@ class LiveExecutor:
             return False
 
         if not self.dry_run:
+            with self._state_lock:
+                self._require_storage()
+                if order_id not in getattr(self, "_journaled_ids", set()):
+                    raise JournalError("Cannot cancel an order without durable request identity")
+                self._execution_revision = getattr(self, "_execution_revision", 0) + 1
+                self._cancel_requested_orders.add(order_id)
+                self._persist_order(order, kind="cancel_intent")
             exchange_id = self._exchange_order_map.get(order_id)
+            if not exchange_id:
+                self.refresh_order(order_id)
+                exchange_id = self._exchange_order_map.get(order_id)
+                if not exchange_id or order.status in (OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
+                    return False
             if exchange_id:
                 try:
-                    result = self._adapter.cancel_order(exchange_id, order.symbol)
-                    # If the exchange says it was already filled, record the fill so the
-                    # caller can open the position. Without this, the fill is lost when
-                    # get_open_orders() excludes FILLED orders from future poll cycles.
-                    if result.get("status") in ("closed", "filled"):
-                        logger.info(f"Order {order_id} was filled on exchange — recording fill")
-                        self._process_exchange_order(order, result)
+                    with self._state_lock:
+                        self._require_storage()
+                        self._inflight_mutations = getattr(self, "_inflight_mutations", 0) + 1
+                    try:
+                        result = self._adapter.cancel_order(exchange_id, order.symbol)
+                    finally:
+                        with self._state_lock:
+                            self._inflight_mutations -= 1
+                    status = result.get("status")
+                    if status not in ("closed", "filled", "canceled", "cancelled", "rejected"):
+                        self._submission_unknown(order, f"Cancellation unconfirmed: {status}")
                         return False
+                    self._process_exchange_order(order, result)
+                    return order.status in (OrderStatus.CANCELLED, OrderStatus.REJECTED)
                 except Exception as e:
-                    logger.error(f"Failed to cancel {order_id} on exchange: {e}")
+                    self._submission_unknown(order, f"Cancellation failed: {e}")
                     return False
 
         order.status = OrderStatus.CANCELLED
@@ -609,8 +906,9 @@ class LiveExecutor:
         return self._orders.get(order_id)
 
     def get_open_orders(self, symbol: Optional[str] = None) -> List[Order]:
-        open_statuses = {OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED}
-        orders = [o for o in self._orders.values() if o.status in open_statuses]
+        open_statuses = {OrderStatus.PENDING, OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED}
+        with self._state_lock:
+            orders = [o for o in self._orders.values() if o.status in open_statuses]
         if symbol:
             orders = [o for o in orders if o.symbol == symbol]
         return orders
@@ -618,24 +916,55 @@ class LiveExecutor:
     def get_position(self, symbol: str) -> float:
         return self._positions.get(symbol, 0.0)
 
+    def get_open_entry_orders(self) -> List[Order]:
+        with self._state_lock:
+            return [order for order in self.get_open_orders()
+                    if order.order_type in (OrderType.LIMIT, OrderType.MARKET)
+                    and order.order_id not in self._reduce_only_order_ids]
+
     def get_balance(self) -> float:
         return self._cached_balance
 
-    def get_equity(self, market_prices: Dict[str, float]) -> float:
-        unrealized_pnl = 0.0
-        for symbol, qty in self._positions.items():
-            if abs(qty) < 1e-9:
-                continue
-            current_price = market_prices.get(symbol, 0.0)
-            avg_price = self._position_avg_price.get(symbol, 0.0)
-            if qty > 0:
-                unrealized_pnl += (current_price - avg_price) * qty
-            else:
-                unrealized_pnl += (avg_price - current_price) * abs(qty)
-        return self._cached_balance + unrealized_pnl
+    def get_open_position_symbols(self) -> set:
+        """Include exchange-reconciled exposure even without a PositionManager entry."""
+        with self._state_lock:
+            return {symbol for symbol, qty in self._positions.items() if qty != 0}
 
-    def get_pnl(self, market_prices: Dict[str, float]) -> float:
-        return self.get_equity(market_prices) - self._initial_balance
+    def get_equity(self, market_prices: Dict[str, float]) -> Optional[float]:
+        """Return unavailable rather than valuing an unpriced position at zero.
+
+        Price freshness belongs to the caller; the live service supplies only
+        recent successful observations. The existing balance basis is unchanged.
+        """
+        with self._state_lock:
+            try:
+                if not self.balance_known or not math.isfinite(self._cached_balance):
+                    raise ValueError("Balance unavailable")
+                unrealized_pnl = 0.0
+                for symbol, qty in self._positions.items():
+                    if isinstance(qty, bool) or not isinstance(qty, (int, float)) or not math.isfinite(qty):
+                        raise ValueError(f"Invalid position quantity for {symbol}")
+                    if abs(qty) < 1e-9:
+                        continue
+                    current = market_prices.get(symbol)
+                    average = self._position_avg_price.get(symbol)
+                    for value in (current, average):
+                        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                                or not math.isfinite(value) or value <= 0):
+                            raise ValueError(f"Valuation price unavailable for {symbol}")
+                    unrealized_pnl += (current - average) * qty
+                equity = self._cached_balance + unrealized_pnl
+                if not math.isfinite(equity):
+                    raise ValueError("Nonfinite equity")
+            except (ValueError, TypeError) as exc:
+                self.last_equity_error = str(exc)
+                return None
+            self.last_equity_error = None
+            return equity
+
+    def get_pnl(self, market_prices: Dict[str, float]) -> Optional[float]:
+        equity = self.get_equity(market_prices)
+        return None if equity is None else equity - self._initial_balance
 
     def get_trade_history(self) -> List[Fill]:
         return self._fills.copy()
@@ -673,6 +1002,11 @@ class LiveExecutor:
         down. Complement to PositionManager's software polling, not a replacement.
         Side should be the CLOSING side: SELL for a LONG, BUY for a SHORT.
         """
+        pending = self._recover_uncertain_protection(symbol, side, OrderType.STOP_LOSS)
+        if pending is not None:
+            return pending
+        if not self.dry_run:
+            self._require_storage(new_request=True)
         order_id = self._generate_order_id()
         try:
             order_side = OrderSide(side.upper())
@@ -689,7 +1023,8 @@ class LiveExecutor:
             stop_price=stop_price,
             status=OrderStatus.OPEN,
         )
-        self._orders[order_id] = order
+        with self._state_lock:
+            self._orders[order_id] = order
 
         if self.dry_run:
             logger.info(
@@ -698,6 +1033,7 @@ class LiveExecutor:
             )
             return order
 
+        self._submission_unknown(order, "Awaiting protective-order acknowledgment", log_level=logging.DEBUG)
         try:
             # Phemex stop-market via CCXT:
             #   order_type="market" + params["stopPrice"] → CCXT sets ordType="Stop" + stopPxRp
@@ -720,7 +1056,7 @@ class LiveExecutor:
                 # CCXT Phemex reads posSide (not positionSide) at line 2660 of ccxt/phemex.py.
                 # SELL stop closes a LONG → posSide=Long; BUY stop closes SHORT → posSide=Short.
                 stop_params["posSide"] = "Long" if side.upper() == "SELL" else "Short"
-            exchange_order = self._adapter.create_order(
+            exchange_order = self._send_journaled_order(order,
                 symbol=symbol,
                 order_type="market",    # CCXT converts to "Stop" ordType when stopPrice is set
                 side=side.lower(),
@@ -728,19 +1064,21 @@ class LiveExecutor:
                 price=None,             # No limit price for a stop-market
                 params=stop_params,
             )
-            exchange_id = str(exchange_order.get("id", ""))
-            self._exchange_order_map[order_id] = exchange_id
-            self._reverse_order_map[exchange_id] = order_id
+            self._accept_submission(order, exchange_order)
+            exchange_id = self._exchange_order_map.get(order_id, "")
             logger.info(
                 f"Exchange stop placed: {order_id} → exchange_id={exchange_id} "
                 f"{side} {quantity} {symbol} trigger @ {stop_price}"
             )
+        except (ccxt.InsufficientFunds, ccxt.InvalidOrder) as exc:
+            self._reject_submission(order, str(exc))
+            logger.warning("Protective order rejected: %s", exc)
         except Exception as e:
             logger.warning(
                 f"Exchange stop placement failed for {symbol} @ {stop_price} — "
                 f"software monitoring remains active. Error: {e}"
             )
-            order.status = OrderStatus.REJECTED
+            self._submission_unknown(order, str(e))
 
         return order
 
@@ -758,6 +1096,11 @@ class LiveExecutor:
         position card's TP/SL section on Phemex and fills at the exact price
         rather than market-slipping through it.
         """
+        pending = self._recover_uncertain_protection(symbol, side, OrderType.TAKE_PROFIT)
+        if pending is not None:
+            return pending
+        if not self.dry_run:
+            self._require_storage(new_request=True)
         order_id = self._generate_order_id()
         order = Order(
             order_id=order_id,
@@ -769,7 +1112,8 @@ class LiveExecutor:
             stop_price=tp_price,
             status=OrderStatus.OPEN,
         )
-        self._orders[order_id] = order
+        with self._state_lock:
+            self._orders[order_id] = order
 
         if self.dry_run:
             logger.info(
@@ -778,6 +1122,7 @@ class LiveExecutor:
             )
             return order
 
+        self._submission_unknown(order, "Awaiting protective-order acknowledgment", log_level=logging.DEBUG)
         try:
             # TP is a plain reduce-only limit order. closeOnTrigger is only meaningful
             # on Phemex conditional orders (Stop, StopLimit) — on a resting limit it is
@@ -788,7 +1133,7 @@ class LiveExecutor:
             }
             if self._hedge_mode:
                 tp_params["posSide"] = "Long" if side.upper() == "SELL" else "Short"
-            exchange_order = self._adapter.create_order(
+            exchange_order = self._send_journaled_order(order,
                 symbol=symbol,
                 order_type="limit",
                 side=side.lower(),
@@ -796,19 +1141,21 @@ class LiveExecutor:
                 price=tp_price,
                 params=tp_params,
             )
-            exchange_id = str(exchange_order.get("id", ""))
-            self._exchange_order_map[order_id] = exchange_id
-            self._reverse_order_map[exchange_id] = order_id
+            self._accept_submission(order, exchange_order)
+            exchange_id = self._exchange_order_map.get(order_id, "")
             logger.info(
                 f"TP placed: {order_id} → {exchange_id} "
                 f"{side} {quantity} {symbol} @ {tp_price}"
             )
+        except (ccxt.InsufficientFunds, ccxt.InvalidOrder) as exc:
+            self._reject_submission(order, str(exc))
+            logger.warning("Protective order rejected: %s", exc)
         except Exception as e:
             logger.warning(
                 f"TP placement failed for {symbol} @ {tp_price} — "
                 f"software monitoring remains active. Error: {e}"
             )
-            order.status = OrderStatus.REJECTED
+            self._submission_unknown(order, str(e))
 
         return order
 
@@ -831,6 +1178,11 @@ class LiveExecutor:
         Phemex manages the moving stop on their servers — survives server restarts.
         Placed alongside the fixed SL; closeOnTrigger ensures only one fires.
         """
+        pending = self._recover_uncertain_protection(symbol, side, OrderType.TRAILING_STOP)
+        if pending is not None:
+            return pending
+        if not self.dry_run:
+            self._require_storage(new_request=True)
         order_id = self._generate_order_id()
         order = Order(
             order_id=order_id,
@@ -842,7 +1194,8 @@ class LiveExecutor:
             stop_price=activation_price,
             status=OrderStatus.OPEN,
         )
-        self._orders[order_id] = order
+        with self._state_lock:
+            self._orders[order_id] = order
 
         if self.dry_run:
             logger.info(
@@ -851,6 +1204,7 @@ class LiveExecutor:
             )
             return order
 
+        self._submission_unknown(order, "Awaiting protective-order acknowledgment", log_level=logging.DEBUG)
         try:
             # Phemex trailing stop parameters (NOT Binance's callbackRate API):
             #   pegPriceType="TrailingStopPeg" enables server-managed trailing.
@@ -873,7 +1227,7 @@ class LiveExecutor:
             }
             if self._hedge_mode:
                 trail_params["posSide"] = "Long" if side.upper() == "SELL" else "Short"
-            exchange_order = self._adapter.create_order(
+            exchange_order = self._send_journaled_order(order,
                 symbol=symbol,
                 order_type="market",    # CCXT converts to trailing stop ordType via pegPriceType
                 side=side.lower(),
@@ -881,21 +1235,23 @@ class LiveExecutor:
                 price=None,
                 params=trail_params,
             )
-            exchange_id = str(exchange_order.get("id", ""))
-            self._exchange_order_map[order_id] = exchange_id
-            self._reverse_order_map[exchange_id] = order_id
+            self._accept_submission(order, exchange_order)
+            exchange_id = self._exchange_order_map.get(order_id, "")
             logger.info(
                 f"Trailing stop placed: {order_id} → {exchange_id} "
                 f"{side} {quantity} {symbol} "
                 f"activation={activation_price:.5f} callback={callback_rate:.2f}%"
             )
+        except (ccxt.InsufficientFunds, ccxt.InvalidOrder) as exc:
+            self._reject_submission(order, str(exc))
+            logger.warning("Protective order rejected: %s", exc)
         except Exception as e:
             logger.warning(
                 f"Trailing stop placement failed for {symbol} "
                 f"(activation={activation_price:.5f}, callback={callback_rate:.2f}%) — "
                 f"fixed stop remains active. Error: {e}"
             )
-            order.status = OrderStatus.REJECTED
+            self._submission_unknown(order, str(e))
 
         return order
 
@@ -904,91 +1260,29 @@ class LiveExecutor:
     # ------------------------------------------------------------------
 
     def apply_ws_fill(
-        self,
-        exchange_id: str,
-        client_order_id: str,
-        status: str,
-        filled_qty: float,
-        avg_price: float,
+        self, exchange_id: str, client_order_id: str, status: str, filled_qty: float, avg_price: float
     ) -> None:
-        """
-        Apply a WebSocket AOP order update to internal state.
-
-        Called by PhemexWebSocketClient on every aop_p order event.  Updates
-        order status and fill data synchronously so the monitor loop (which
-        polls every 1 second) can open the position on its very next tick
-        without issuing an extra REST fetch_order call.
-
-        Only LIMIT and MARKET entry orders trigger full position accounting via
-        _record_fill.  Stop/TP/trailing orders have their status updated so the
-        reconcile loop knows they fired; position closure is handled by
-        _detect_exchange_closed_positions / reconcile_positions.
-        """
-        # Resolve internal order_id from exchange_id first, then fall back to
-        # client_order_id (which equals our internal order_id, e.g. "LIVE_00000001").
-        order_id = self._reverse_order_map.get(exchange_id)
-        if not order_id and client_order_id and client_order_id in self._orders:
-            order_id = client_order_id
-
-        if not order_id or order_id not in self._orders:
-            return  # Unknown order — manual trade or residual from prior session
-
-        order = self._orders[order_id]
-        if order.status in (OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
-            return  # Already finalised; polling loop won't re-process
-
-        ws_status = status.lower()
-
-        if ws_status in ("filled", "closed"):
-            # Full fill: record the incremental quantity above what we already tracked
-            entry_order = order.order_type in (OrderType.LIMIT, OrderType.MARKET)
-            prev_filled = order.filled_quantity
-            total_filled = filled_qty if filled_qty > 1e-9 else order.quantity
-            incremental = total_filled - prev_filled
-            fill_price = avg_price if avg_price > 0 else (order.price or 0.0)
-
-            if incremental > 1e-9 and entry_order:
-                self._record_fill(order, incremental, fill_price)
-                self.metrics["fills_recorded_via_ws"] += 1
-            elif incremental > 1e-9:
-                # Stop/TP/trailing stop fired — just record qty/price without touching
-                # position accounting (reconcile_positions handles the position side)
-                order.filled_quantity = total_filled
-                order.average_fill_price = fill_price
-
-            order.status = OrderStatus.FILLED
-            logger.info(
-                "WS fill: %s %s %s qty=%.6f @ %.5f",
-                order_id, order.symbol, order.side.value,
-                order.filled_quantity, order.average_fill_price or fill_price,
-            )
-
-        elif ws_status == "partiallyfilled":
-            if filled_qty > order.filled_quantity + 1e-9:
-                entry_order = order.order_type in (OrderType.LIMIT, OrderType.MARKET)
-                incremental = filled_qty - order.filled_quantity
-                fill_price = avg_price if avg_price > 0 else (order.price or 0.0)
-                if entry_order:
-                    self._record_fill(order, incremental, fill_price)
-                    self.metrics["fills_recorded_via_ws"] += 1
-                else:
-                    order.filled_quantity = filled_qty
-                order.status = OrderStatus.PARTIALLY_FILLED
-                logger.info(
-                    "WS partial fill: %s %s cumfilled=%.6f @ %.5f",
-                    order_id, order.symbol, order.filled_quantity, fill_price,
-                )
-
-        elif ws_status in ("canceled", "cancelled"):
-            if order.filled_quantity > 1e-9:
-                order.status = OrderStatus.FILLED   # partial fill before cancel
-            else:
-                order.status = OrderStatus.CANCELLED
-            logger.debug("WS cancel: %s %s status=%s", order_id, order.symbol, order.status)
-
-        elif ws_status == "rejected":
-            order.status = OrderStatus.REJECTED
-            logger.warning("WS rejected: %s %s", order_id, order.symbol)
+        """Recover order identity and apply only explicit WebSocket execution facts."""
+        with self._state_lock:
+            order_id = self._reverse_order_map.get(exchange_id)
+            if not order_id and client_order_id in self._orders:
+                order_id = client_order_id
+            if not order_id:
+                return
+            if client_order_id and client_order_id != order_id:
+                logger.error("WS_ORDER_ID_MISMATCH %s %s", order_id, client_order_id)
+                return
+            order = self._orders[order_id]
+            if exchange_id:
+                existing_id = self._exchange_order_map.get(order_id)
+                if existing_id and existing_id != exchange_id:
+                    self._submission_unknown(order, "WebSocket exchange identity mismatch")
+                    return
+                self._exchange_order_map[order_id] = exchange_id
+                self._reverse_order_map[exchange_id] = order_id
+            self._process_exchange_order(order, {
+                "status": status.lower(), "filled": filled_qty, "average": avg_price,
+            }, source="ws")
 
     def reconcile_balance(self) -> float:
         """Fetch balance from exchange and update local cache."""
@@ -1001,46 +1295,67 @@ class LiveExecutor:
         self._cached_balance = new_balance
         return new_balance
 
-    def reconcile_positions(self) -> set:
-        """
-        Fetch positions from exchange, sync local state, and return the set of symbols
-        with open positions on the exchange.
+    def reconcile_positions(self) -> Optional[set]:
+        """Sync a complete validated snapshot; return None when state is unknown.
 
-        Callers use the returned set to detect positions that were closed natively on the
-        exchange (e.g., exchange-native stop fired, liquidation) but are still OPEN in
-        the position manager — so they can be marked closed in software.
+        A valid empty set means the exchange reported no open positions. Fetch,
+        parsing and unsupported multi-position failures must not clear local state
+        or be interpreted by callers as evidence that a position closed.
         """
         if self.dry_run:
             return {sym for sym, qty in self._positions.items() if abs(qty) > 1e-9}
-        ex_open_symbols: set = set()
         try:
-            ex_positions = self._adapter.fetch_positions()
-            for pos in ex_positions:
-                symbol = pos.get("symbol", "")
-                ex_qty = float(pos.get("contracts", 0.0) or 0.0)
-                local_qty = self._positions.get(symbol, 0.0)
-                if abs(ex_qty - abs(local_qty)) > 1e-6:
-                    logger.warning(
-                        f"Position discrepancy for {symbol}: "
-                        f"local={local_qty:.6f} exchange={ex_qty:.6f} — syncing"
-                    )
-                    # Sync: adjust local quantity and entry price to match exchange reality.
-                    # Use the exchange's own side field as source of truth — local state
-                    # may be stale (e.g. after a restart) and its sign cannot be trusted.
-                    if ex_qty > 1e-9:
-                        ex_side = pos.get("side", "long").lower()
-                        self._positions[symbol] = ex_qty if ex_side == "long" else -ex_qty
-                        entry_px = float(pos.get("entryPrice", 0.0) or 0.0)
-                        if entry_px > 0:
-                            self._position_avg_price[symbol] = entry_px
-                    else:
-                        self._positions[symbol] = 0.0
-                        self._position_avg_price[symbol] = 0.0
-                if ex_qty > 1e-9:
-                    ex_open_symbols.add(symbol)
+            rows = self._adapter.fetch_positions()
+            if not isinstance(rows, list):
+                raise ValueError("Position snapshot must be a list")
+
+            quantities: Dict[str, float] = {}
+            prices: Dict[str, float] = {}
+            for row in rows:
+                if not isinstance(row, dict):
+                    raise ValueError("Position snapshot contains a non-object row")
+                symbol = row.get("symbol")
+                if not isinstance(symbol, str) or not symbol or symbol != symbol.strip():
+                    raise ValueError("Position snapshot contains an invalid symbol")
+                raw_qty = row["contracts"]
+                if isinstance(raw_qty, bool):
+                    raise ValueError(f"Invalid position quantity for {symbol}")
+                qty = float(raw_qty)
+                if not math.isfinite(qty) or qty < 0:
+                    raise ValueError(f"Invalid position quantity for {symbol}")
+                if qty <= 1e-9:
+                    continue
+                side = row.get("side")
+                if not isinstance(side, str) or side.lower() not in ("long", "short"):
+                    raise ValueError(f"Unknown position side for {symbol}")
+                raw_price = row["entryPrice"]
+                if isinstance(raw_price, bool):
+                    raise ValueError(f"Invalid position entry price for {symbol}")
+                entry_price = float(raw_price)
+                if not math.isfinite(entry_price) or entry_price <= 0:
+                    raise ValueError(f"Invalid position entry price for {symbol}")
+                if symbol in quantities:
+                    raise ValueError(f"Multiple open positions for {symbol} cannot be reconciled")
+                quantities[symbol] = qty if side.lower() == "long" else -qty
+                prices[symbol] = entry_price
         except Exception as e:
-            logger.error(f"Failed to reconcile positions: {e}")
-        return ex_open_symbols
+            logger.error("Position reconciliation unavailable; preserving local state: %s", e)
+            return None
+
+        # Publish only after every row validates, including clearing symbols that
+        # are absent from this successful full snapshot.
+        with self._state_lock:
+            for symbol in self._positions.keys() | quantities.keys():
+                old_qty = self._positions.get(symbol, 0.0)
+                qty = quantities.get(symbol, 0.0)
+                if abs(qty - old_qty) > 1e-6:
+                    logger.warning(
+                        "Position discrepancy for %s: local=%.6f exchange=%.6f — syncing",
+                        symbol, old_qty, qty,
+                    )
+                self._positions[symbol] = qty
+                self._position_avg_price[symbol] = prices.get(symbol, 0.0)
+            return set(quantities)
 
     def preflight_check(self) -> Dict:
         """Run connectivity + balance + position check before session start."""

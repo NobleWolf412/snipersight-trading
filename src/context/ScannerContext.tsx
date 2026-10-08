@@ -5,7 +5,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import type { SniperMode } from '@/types/sniperMode';
 import { api } from '@/utils/api';
 import type { ScannerMode } from '@/utils/api';
-import { liveTradingService } from '@/services/liveTradingService';
+import { liveTradingService, liveSessionNeedsAttention } from '@/services/liveTradingService';
 import { paperTradingService } from '@/services/paperTradingService';
 
 export interface ScanConfig {
@@ -239,7 +239,7 @@ export function ScannerProvider({ children }: { children: ReactNode }) {
         ]);
         if (cancelled) return;
         const liveRunning =
-          liveRes.status === 'fulfilled' && liveRes.value?.status === 'running';
+          liveRes.status === 'fulfilled' && liveSessionNeedsAttention(liveRes.value);
         const paperRunning =
           paperRes.status === 'fulfilled' && paperRes.value?.status === 'running';
         setLiveBotRunning(liveRunning);

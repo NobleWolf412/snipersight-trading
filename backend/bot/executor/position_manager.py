@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 import asyncio
 import logging
+import math
 from threading import Lock
 
 from backend.shared.models.planner import TradePlan, Target
@@ -593,39 +594,32 @@ class PositionManager:
             except Exception as e:
                 logger.error(f"Error monitoring position {position.position_id}: {e}")
 
-        # Orphan detection: if a position's price feed has been silent for more than
-        # 2x its adaptive stagnation budget, force-close at last known price.
+        # Missing prices cannot prove an exit. Retain exposure for monitoring and
+        # reconciliation; a fabricated terminal state would also let the services
+        # archive the trade and cancel exchange-native protection.
         # Uses _last_monitored_at (set only on successful price-feed delivery) rather
         # than updated_at (which is reset every cycle by update_unrealized_pnl and
         # therefore can never measure real staleness).
         now = datetime.now(timezone.utc)
         for position in open_positions:
             try:
+                if position.status not in (PositionStatus.OPEN, PositionStatus.PARTIAL):
+                    continue
                 stagnation_hours = self._get_adaptive_stagnation_hours(position)
                 staleness_limit = timedelta(hours=stagnation_hours * 2)
                 # Use _last_monitored_at; fall back to created_at for brand-new positions
                 # that haven't received their first successful price tick yet.
                 _last_seen = position._last_monitored_at or position.created_at
                 if (now - _last_seen) > staleness_limit:
-                    try:
-                        last_price = self.price_fetcher(position.symbol)
-                    except Exception:
-                        last_price = position.entry_price
                     _stale_hours = (now - _last_seen).total_seconds() / 3600
                     logger.error(
-                        f"ORPHAN DETECTED: {position.position_id} | {position.symbol} | "
-                        f"No price feed for {_stale_hours:.1f}h "
-                        f"(limit: {stagnation_hours*2:.1f}h). Force-closing at {last_price}."
+                        "ORPHAN_PRICE_FEED_UNAVAILABLE position_id=%s symbol=%s "
+                        "stale_hours=%.1f limit_hours=%.1f remaining_quantity=%s; "
+                        "position retained, exit unconfirmed; restore price feed "
+                        "or reconcile execution before closing",
+                        position.position_id, position.symbol, _stale_hours,
+                        stagnation_hours * 2, position.remaining_quantity,
                     )
-                    with self._lock:
-                        position.update_unrealized_pnl(last_price)
-                        position.realized_pnl += position.unrealized_pnl
-                        position.unrealized_pnl = 0.0
-                        position.status = PositionStatus.EMERGENCY_EXIT
-                        position.exit_reason = "orphan_price_feed_failure"
-                        position.exit_price = last_price
-                        position.remaining_quantity = 0.0
-                        position.updated_at = now
             except Exception as e:
                 logger.error(f"Orphan check failed for {position.position_id}: {e}")
 
@@ -647,7 +641,8 @@ class PositionManager:
             logger.error(f"Failed to fetch price for {position.symbol}: {e}")
             return
 
-        if current_price <= 0:
+        if (isinstance(current_price, bool) or not isinstance(current_price, (int, float))
+                or not math.isfinite(current_price) or current_price <= 0):
             logger.warning(
                 f"Skipping monitor cycle for {position.symbol}: "
                 f"invalid price {current_price} (cache miss or feed error)"

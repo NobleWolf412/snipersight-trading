@@ -5,6 +5,7 @@ Works with US IPs - no geo-blocking for public endpoints.
 """
 
 import os
+import math
 import time
 from typing import Optional, Dict, Any, List, Tuple, cast
 import pandas as pd
@@ -691,6 +692,101 @@ class PhemexAdapter:
     # Authenticated trading methods (require API keys)
     # ------------------------------------------------------------------
 
+    def fetch_account_observation(self):
+        """Opt-in FV1 reader; no current startup/monitor path calls this method.
+
+        One combined response, no fallback or retry storm. The later coordinator
+        owns scheduling, execution-revision checks and freshness eligibility.
+        """
+        from datetime import datetime, timezone
+        import uuid
+        from backend.bot.executor.accounting_models import AccountingError, ObservationContext
+        from backend.bot.executor.execution_journal import credential_binding
+        from backend.data.adapters.phemex_accounting import normalize_account
+
+        if not self.supports_trading() or self.default_type != "swap":
+            raise AccountingError("ACCOUNT_READER_UNAVAILABLE")
+        markets = self.exchange.markets
+        if not isinstance(markets, dict) or not markets:
+            raise AccountingError("MARKET_INVENTORY_UNAVAILABLE")
+        started = time.monotonic()
+        response = self.exchange.privateGetGAccountsPositions({"currency": "USDT"})
+        ended = time.monotonic()
+        context = ObservationContext(
+            "testnet" if self.testnet else "production",
+            credential_binding(self.testnet, self.exchange.apiKey), "phemex:rest:account",
+            uuid.uuid4().hex, datetime.now(timezone.utc).isoformat(), started, ended,
+        )
+        return normalize_account(response, markets, context)
+
+    def fetch_account_snapshot(self) -> Dict[str, Any]:
+        """Complete REST sweep for this bot's USDT perpetual account scope.
+
+        Phemex activeList is per-symbol and includes untriggered orders. Do not
+        use CCXT's symbol-less call or silently parsed missing rows as flatness.
+        This can be slow: run off the event loop, only at lifecycle boundaries.
+        """
+        if not self.supports_trading() or self.default_type != "swap":
+            raise ValueError("USDT perpetual account snapshot unavailable")
+        markets = self.exchange.load_markets(reload=True)
+        if not isinstance(markets, dict) or not markets:
+            raise ValueError("Market inventory unavailable")
+        selected = {}
+        for market in markets.values():
+            if not isinstance(market, dict):
+                raise ValueError("Invalid market inventory row")
+            if market.get("swap") and market.get("settle") == "USDT":
+                if not market.get("id") or not market.get("symbol"):
+                    raise ValueError("USDT market has no identity")
+                selected[market["id"]] = market
+        if not selected:
+            raise ValueError("No USDT perpetual market inventory")
+
+        def data(response):
+            if (not isinstance(response, dict) or type(response.get("code")) is not int
+                    or response["code"] != 0 or "data" not in response):
+                raise ValueError("Incomplete account snapshot response")
+            return response["data"]
+
+        orders = []
+        seen = set()
+        for market_id, market in selected.items():
+            body = data(self.exchange.privateGetGOrdersActiveList({"symbol": market_id}))
+            rows = body if isinstance(body, list) else body.get("rows") if isinstance(body, dict) else None
+            if not isinstance(rows, list):
+                raise ValueError(f"Missing active orders for {market_id}")
+            if isinstance(body, dict):
+                if "total" in body and (type(body["total"]) is not int or body["total"] != len(rows)):
+                    raise ValueError(f"Truncated active orders for {market_id}")
+                if body.get("hasMore") or body.get("nextPage") or body.get("nextCursor"):
+                    raise ValueError(f"Paginated active orders unsupported for {market_id}")
+            for row in rows:
+                if not isinstance(row, dict) or row.get("symbol") != market_id:
+                    raise ValueError("Invalid active-order symbol")
+                order = self.exchange.parse_order(row, market)
+                if (not order.get("id") or order.get("symbol") != market["symbol"]
+                        or not order.get("type") or order.get("status") != "open"
+                        or order["id"] in seen):
+                    raise ValueError("Invalid or duplicate active order")
+                seen.add(order["id"])
+                orders.append(order)
+        body = data(self.exchange.privateGetGAccountsAccountPositions({"currency": "USDT"}))
+        if (not isinstance(body, dict) or not isinstance(body.get("positions"), list)
+                or not isinstance(body.get("account"), dict)
+                or body["account"].get("currency") != "USDT"):
+            raise ValueError("Incomplete USDT account positions")
+        positions = []
+        for row in body["positions"]:
+            if not isinstance(row, dict) or row.get("symbol") not in selected:
+                raise ValueError("Position outside the observed market inventory")
+            position = self.exchange.parse_position(row, selected[row["symbol"]])
+            qty = position.get("contracts")
+            if (isinstance(qty, bool) or not isinstance(qty, (int, float))
+                    or not math.isfinite(qty) or qty < 0):
+                raise ValueError("Invalid account position quantity")
+            positions.append(position)
+        return {"complete": True, "scope": "phemex:swap:USDT", "positions": positions, "orders": orders}
+
     @retry_on_rate_limit(max_retries=3)
     def create_order(
         self,
@@ -758,6 +854,13 @@ class PhemexAdapter:
         if not self.supports_trading():
             raise ccxt.AuthenticationError("API keys required to fetch orders")
         return self.exchange.fetch_order(order_id, symbol)
+
+    @retry_on_rate_limit(max_retries=3)
+    def fetch_order_by_client_id(self, client_order_id: str, symbol: str) -> Dict[str, Any]:
+        """Look up the original request; absence does not establish rejection."""
+        if not self.supports_trading():
+            raise ccxt.AuthenticationError("API keys required to fetch orders")
+        return self.exchange.fetch_order(None, symbol, {"clientOrderId": client_order_id})
 
     @retry_on_rate_limit(max_retries=3)
     def fetch_balance(self) -> Dict[str, Any]:

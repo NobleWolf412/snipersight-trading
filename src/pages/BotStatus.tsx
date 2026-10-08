@@ -94,7 +94,7 @@ import {
   type LivePosition,
   type LiveTradingStatus,
 } from '@/services/liveTradingService';
-import { liveTradingService } from '@/services/liveTradingService';
+import { liveTradingService, liveSessionNeedsAttention, liveShutdownMessage } from '@/services/liveTradingService';
 import { paperTradingService } from '@/services/paperTradingService';
 import {
   fetchActiveSession,
@@ -491,9 +491,15 @@ type SessionStatusValue =
   | 'stopped'
   | 'error'
   | 'kill_switched'
+  | 'starting'
+  | 'stopping'
+  | 'recovering'
   | 'paused';
 
 function StatusPill({ status }: { status: SessionStatusValue }) {
+  if (status === 'starting') return <Chip kind="amber">● VERIFYING ACCOUNT</Chip>;
+  if (status === 'stopping') return <Chip kind="amber">● STOPPING</Chip>;
+  if (status === 'recovering') return <Chip kind="red">● RECOVERY REQUIRED</Chip>;
   if (status === 'running') return <Chip kind="green">● RUNNING</Chip>;
   if (status === 'kill_switched') return <Chip kind="red">● KILL-SWITCHED</Chip>;
   if (status === 'error') return <Chip kind="red">● ERROR</Chip>;
@@ -518,6 +524,7 @@ export function BotStatus() {
   const [trades, setTrades] = useState<CompletedLiveTrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [stopping, setStopping] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [killing, setKilling] = useState(false);
   const [showKillConfirm, setShowKillConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -593,7 +600,8 @@ export function BotStatus() {
       const data = next.status;
       const hasCurrentScan =
         data && 'current_scan' in data && data.current_scan?.status === 'running';
-      fastPollRef.current = (data?.positions?.length ?? 0) > 0 || !!hasCurrentScan;
+      fastPollRef.current = (data?.positions?.length ?? 0) > 0 || !!hasCurrentScan
+        || (!!data && 'lifecycle' in data && !!data.lifecycle?.recovery_required);
       fetchFailCount.current = 0;
       if (connectionErrorRef.current) setConnectionError(null);
     } catch (e) {
@@ -689,11 +697,14 @@ export function BotStatus() {
   };
 
   const handleReset = async () => {
+    setResetting(true);
     try {
       await activeServiceRef.current.reset();
       navigate('/bot/setup');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -715,8 +726,12 @@ export function BotStatus() {
     }
   };
 
-  const isRunning = status?.status === 'running';
+  const lifecycle = status && 'lifecycle' in status ? status.lifecycle : undefined;
+  const isStarting = lifecycle?.phase === 'starting';
+  const isRunning = status?.status === 'running' && !isStarting;
   const isKilled = status?.status === 'kill_switched';
+  const liveServiceSelected = session?.service === liveTradingService;
+  const needsRecovery = liveServiceSelected && liveSessionNeedsAttention(status) && !isRunning && !isStarting;
   const tradingMode: ActiveMode = session?.mode ?? 'idle';
   const isLive = session?.isLive ?? false;
   const isPaper = session?.isPaper ?? false;
@@ -771,7 +786,8 @@ export function BotStatus() {
         badges={
           <>
             <ModePill mode={tradingMode} />
-            <StatusPill status={(status?.status ?? 'idle') as SessionStatusValue} />
+            <StatusPill status={(lifecycle && ['starting', 'stopping', 'recovering'].includes(lifecycle.phase)
+              ? lifecycle.phase : status?.status ?? 'idle') as SessionStatusValue} />
           </>
         }
       />
@@ -968,7 +984,7 @@ export function BotStatus() {
                         className="btn btn-red"
                         onClick={() => setShowKillConfirm(true)}
                         style={{ fontSize: 11 }}
-                        aria-label="Kill switch — immediately close all positions"
+                        aria-label="Kill switch — stop entries and request closure"
                       >
                         ☠ KILL
                       </button>
@@ -976,12 +992,18 @@ export function BotStatus() {
                   </>
                 ) : (
                   <>
+                    {needsRecovery && (
+                      <button type="button" className="btn btn-red" onClick={handleStop} disabled={stopping}>
+                        {stopping ? 'CHECKING RECOVERY' : 'RETRY SHUTDOWN'}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn btn-green"
                       onClick={() => navigate('/bot/setup')}
                       style={{ fontSize: 11 }}
                       aria-label="Reconfigure bot — return to setup page"
+                      disabled={!!needsRecovery || isStarting}
                     >
                       ▶ RECONFIGURE
                     </button>
@@ -991,8 +1013,9 @@ export function BotStatus() {
                       onClick={handleReset}
                       style={{ fontSize: 11 }}
                       aria-label="Reset bot session"
+                      disabled={resetting || (liveServiceSelected && !lifecycle?.reset_allowed)}
                     >
-                      ↺ RESET
+                      {resetting ? 'VERIFYING ACCOUNT' : '↺ RESET'}
                     </button>
                   </>
                 )}
@@ -1036,7 +1059,7 @@ export function BotStatus() {
                   ☠ CONFIRM KILL SWITCH
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--fg-2)', marginBottom: 10 }}>
-                  Immediately cancel all orders and close all positions at market price.
+                  Stop new entries, cancel pending entries, and request market exits. Unconfirmed orders and exits remain under recovery.
                   {isLive && ' This uses real money.'}
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -1056,7 +1079,7 @@ export function BotStatus() {
                     onClick={handleKillSwitch}
                     disabled={killing}
                     style={{ fontSize: 10 }}
-                    aria-label={killing ? 'Executing kill switch' : 'Confirm kill switch — close all positions immediately'}
+                    aria-label={killing ? 'Executing kill switch' : 'Confirm kill switch — request shutdown'}
                   >
                     {killing ? '↻ EXECUTING' : '☠ CONFIRM KILL SWITCH'}
                   </button>
@@ -1064,7 +1087,7 @@ export function BotStatus() {
               </div>
             )}
 
-            {isKilled && (
+            {(isKilled || needsRecovery || (liveServiceSelected && lifecycle?.phase === 'stopped')) && (
               <div
                 style={{
                   marginTop: 14,
@@ -1077,7 +1100,19 @@ export function BotStatus() {
                   fontWeight: 700,
                 }}
               >
-                ☠ KILL SWITCH ACTIVATED — all positions closed
+                {liveShutdownMessage(lifecycle)}
+                {!!lifecycle?.unresolved_requests.length && (
+                  <ul style={{ marginTop: 8 }}>
+                    {lifecycle.unresolved_requests.map((request) => (
+                      <li key={request.order_id}>
+                        {request.symbol} · {request.purpose} · {request.status} · {request.reason}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {!!lifecycle?.unmanaged_symbols.length && (
+                  <div>Unmanaged exposure: {lifecycle.unmanaged_symbols.join(', ')}</div>
+                )}
               </div>
             )}
 

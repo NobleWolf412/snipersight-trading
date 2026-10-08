@@ -17,17 +17,27 @@ Per CLAUDE.md §11 (never destroy a rejection reason), §14 rubric 4 (negative+p
 from __future__ import annotations
 
 from unittest.mock import MagicMock
+from threading import RLock
+import pytest
+from backend.tests.unit.execution_fixtures import attach_journal
 
 from backend.bot.executor import live_executor as le_mod
 from backend.bot.executor.live_executor import LiveExecutor
 from backend.bot.executor.paper_executor import OrderStatus
 
 
-def _executor():
+@pytest.fixture
+def _executor(tmp_path, request):
     """A LiveExecutor with only the attrs place_order reads up to (and through)
     the leverage block (bypasses __init__, which builds a real Phemex adapter)."""
     ex = object.__new__(LiveExecutor)
     ex._orders = {}
+    ex._state_lock = RLock()
+    ex._reduce_only_order_ids = set()
+    ex._unacknowledged_orders = {}
+    ex._cancel_requested_orders = set()
+    ex._order_id_prefix = "fixture"
+    ex.balance_known = True
     ex.max_position_size_usd = 1e12          # size/exposure checks pass
     ex.max_total_exposure_usd = 1e12
     ex._position_avg_price = {}
@@ -40,16 +50,18 @@ def _executor():
     ex._exchange_order_map = {}
     ex._reverse_order_map = {}
     ex._generate_order_id = lambda: "test-order-1"
-    ex._total_exposure_usd = lambda: 0.0
+    ex._total_exposure_usd = lambda **kwargs: 0.0
     ex._adapter = MagicMock()
     ex._adapter.set_margin_mode.return_value = None
+    attach_journal(ex, tmp_path / "execution.sqlite3")
+    request.addfinalizer(ex._journal.close)
     return ex
 
 
-def test_leverage_mismatch_records_rejection_reason():
+def test_leverage_mismatch_records_rejection_reason(_executor):
     """set_leverage raises (open position exists) → order REJECTED WITH a reason
     (was None before the fix → cause lost on the persisted record)."""
-    ex = _executor()
+    ex = _executor
     ex._adapter.set_leverage.side_effect = RuntimeError("open position exists")
 
     order = ex.place_order(
@@ -61,10 +73,10 @@ def test_leverage_mismatch_records_rejection_reason():
     assert "everage" in order.rejection_reason  # mentions leverage mismatch
 
 
-def test_leverage_success_no_spurious_rejection():
+def test_leverage_success_no_spurious_rejection(_executor):
     """Positive pair: set_leverage succeeds and the order sends → NOT rejected, no
     spurious rejection_reason."""
-    ex = _executor()
+    ex = _executor
     ex._adapter.set_leverage.side_effect = None
     ex._adapter.create_order.return_value = {"id": "exch-123"}
 

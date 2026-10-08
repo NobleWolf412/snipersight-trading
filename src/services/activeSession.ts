@@ -12,8 +12,8 @@
  *
  * This helper:
  *   1. Probes both endpoints in parallel.
- *   2. Picks the running one. Both-running ties go to live (real-money
- *      priority — defensive since the bot should be one-at-a-time).
+ *   2. Keeps live startup or unresolved execution visible before considering
+ *      a running paper session. Both-running ties also go to live.
  *   3. If neither is running, prefers live's idle state for display
  *      continuity (live service is the historical primary).
  *   4. Returns the dispatch service so callers route stop/reset/history
@@ -26,6 +26,7 @@
  */
 import {
   liveTradingService,
+  liveSessionNeedsAttention,
   type LiveTradingStatus,
 } from './liveTradingService';
 import {
@@ -87,11 +88,10 @@ export async function fetchActiveSession(): Promise<ActiveSession> {
     throw err instanceof Error ? err : new Error(String(err));
   }
 
-  const liveRunning = live?.status === 'running';
+  const liveRunning = liveSessionNeedsAttention(live);
   const paperRunning = paper?.status === 'running';
 
-  // Live wins on both-running. Real money is the loudest state — and a paper
-  // session running alongside a live one shouldn't visually displace it.
+  // Live startup/recovery must remain visible even after scanning stops.
   if (liveRunning) {
     const tradingMode = live!.trading_mode ?? 'live';
     return {

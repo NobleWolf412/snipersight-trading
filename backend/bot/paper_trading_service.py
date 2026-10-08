@@ -694,6 +694,15 @@ class PaperTradingService:
         logger.info("PaperTradingService initialized")
 
     async def start(self, config: PaperTradingConfig) -> Dict[str, Any]:
+        if getattr(self, "_execution_lifecycle_busy", False):
+            raise ValueError("Execution lifecycle transition in progress")
+        self._execution_lifecycle_busy = True
+        try:
+            return await self._start_session(config)
+        finally:
+            self._execution_lifecycle_busy = False
+
+    async def _start_session(self, config: PaperTradingConfig) -> Dict[str, Any]:
         """
         Start paper trading session.
 
@@ -705,6 +714,10 @@ class PaperTradingService:
         """
         if self.status == PaperBotStatus.RUNNING:
             raise ValueError("Paper trading already running")
+
+        # Guard replacement before overwriting the previous session's metadata.
+        if self.executor and hasattr(self.executor, "recovery_snapshot"):
+            await asyncio.to_thread(self._release_testnet_owner)
 
         self.config = config
         self.session_id = str(uuid.uuid4())[:8]
@@ -755,7 +768,20 @@ class PaperTradingService:
                 max_total_exposure_usd=100000.0,
                 min_balance_usd=0.0,
                 dry_run=False,
+                owner="paper_testnet", generation=self.session_id,
             )
+            try:
+                if self.executor.recovery_snapshot()["recovery_only"]:
+                    raise ValueError("Testnet execution recovery required; use the live-trading testnet recovery service")
+                await asyncio.to_thread(self.executor.verify_flat_account)
+                self.executor.initialize_trading()
+                self.executor.set_entry_admission(True)
+            except BaseException:
+                # No tasks or orders were started. Release the lock so the live
+                # recovery service can inspect the same retained durable records.
+                self.executor.close()
+                self.executor = None
+                raise
             logger.info("Paper trading using PHEMEX TESTNET executor")
             if getattr(config, "execution_mode", "snap_taker") == "rest_maker":
                 logger.warning(
@@ -943,13 +969,26 @@ class PaperTradingService:
         }
 
     async def stop(self) -> Dict[str, Any]:
+        if getattr(self, "_execution_lifecycle_busy", False):
+            raise ValueError("Execution lifecycle transition in progress")
+        self._execution_lifecycle_busy = True
+        try:
+            return await self._stop_session()
+        finally:
+            self._execution_lifecycle_busy = False
+
+    async def _stop_session(self) -> Dict[str, Any]:
         """
         Stop paper trading session.
 
         Returns:
             Final session statistics
         """
+        if self.executor and hasattr(self.executor, "set_entry_admission"):
+            self.executor.set_entry_admission(False)
         if self.status != PaperBotStatus.RUNNING:
+            if self.executor and hasattr(self.executor, "recovery_snapshot"):
+                return self.get_status()
             return {"status": self.status.value, "message": "Not running"}
 
         self._running = False
@@ -1037,6 +1076,16 @@ class PaperTradingService:
         logger.info(f"Paper trading stopped: session={self.session_id}")
 
         status = self.get_status()
+        if self.executor and hasattr(self.executor, "recovery_snapshot"):
+            snap = self.executor.recovery_snapshot()
+            status["execution_recovery"] = snap
+            status["recovery_required"] = True
+            try:
+                await asyncio.to_thread(self._release_testnet_owner)
+                status["recovery_required"] = False
+            except Exception as exc:
+                status["recovery_reason"] = str(exc)
+                logger.error("Testnet shutdown recovery required: %s", exc)
         if report_path:
             status["report_path"] = str(report_path)
         return status
@@ -1048,8 +1097,12 @@ class PaperTradingService:
         Returns:
             Reset confirmation
         """
+        if getattr(self, "_execution_lifecycle_busy", False):
+            raise ValueError("Execution lifecycle transition in progress")
         if self.status == PaperBotStatus.RUNNING:
             raise ValueError("Cannot reset while running. Stop first.")
+        if self.executor and hasattr(self.executor, "recovery_snapshot"):
+            self._release_testnet_owner()
 
         self.config = None
         self.session_id = None
@@ -1077,6 +1130,20 @@ class PaperTradingService:
         logger.info("Paper trading reset")
 
         return {"status": "reset", "message": "Paper trading reset to initial state"}
+
+    def _release_testnet_owner(self):
+        """Never drop a real executor on an unconfirmed paper-testnet shutdown."""
+        ex = self.executor
+        snap = ex.recovery_snapshot()
+        if (snap["requests"] or snap.get("storage_error") or snap.get("inflight_mutations")
+                or self.position_manager and self.position_manager.get_open_positions()
+                or any(task and not task.done() for task in
+                       (getattr(self, "_scan_task", None), getattr(self, "_monitor_task", None)))):
+            raise ValueError("Testnet recovery required; unresolved execution prevents Start/Reset")
+        observed_at = ex.verify_flat_account()
+        ex.checkpoint_flat(observed_at)
+        ex.close()
+        self.executor = None
 
     def get_status(self) -> Dict[str, Any]:
         """
@@ -1222,6 +1289,14 @@ class PaperTradingService:
         except Exception:
             result["cache_stats"] = None
 
+        if self.executor and hasattr(self.executor, "recovery_snapshot"):
+            snap = self.executor.recovery_snapshot()
+            result["execution_recovery"] = snap
+            result["recovery_required"] = bool(snap.get("storage_error") or snap.get("recovery_only")
+                                               or self.status != PaperBotStatus.RUNNING)
+            if result["recovery_required"]:
+                result["recovery_reason"] = (snap.get("storage_error") or
+                    "Testnet execution requires reconciliation before Start/Reset; durable records are retained")
         return result
 
     def get_positions(self) -> List[Dict[str, Any]]:
@@ -3778,7 +3853,7 @@ class PaperTradingService:
         """Write a crash-recovery checkpoint to state.json in the session log dir.
 
         Called after every position open/close and on session stop so that a server
-        restart can show what was happening. Uses an atomic write (tmp → rename) to
+        restart can show what was happening. Uses an atomic write (tmp → replace) to
         avoid a corrupt checkpoint if the process dies mid-write.
 
         Restoring from this file is a manual/future operation — it does not
@@ -3828,7 +3903,9 @@ class PaperTradingService:
             tmp_path = state_path.with_suffix(".tmp")
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(state, f, indent=2, default=str)
-            tmp_path.rename(state_path)
+            # replace() also overwrites an existing checkpoint on Windows;
+            # rename() raises FileExistsError there after the first successful save.
+            tmp_path.replace(state_path)
 
         except Exception as e:
             logger.warning(f"State checkpoint save failed: {e}")

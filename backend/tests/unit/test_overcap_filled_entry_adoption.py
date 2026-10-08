@@ -39,10 +39,15 @@ def _bare_service(max_positions: int = 2, active_count: int = 0) -> LiveTradingS
     """A LiveTradingService with only the attributes _open_filled_entry touches
     (bypasses __init__, which connects to the exchange)."""
     svc = object.__new__(LiveTradingService)
+    svc._startup_reconciled = True
+    svc._exchange_state_known = True
     svc.config = SimpleNamespace(max_positions=max_positions)
     svc.stats = SimpleNamespace(signals_taken=0)
     svc.position_manager = MagicMock()
     svc.position_manager.open_position.return_value = "pos-1"
+    svc.position_manager.find_position_by_order_id.return_value = None
+    svc._adopted_entry_orders = {}
+    svc._pending_extended = set()
     svc._pending_plans = {}
     svc._pending_placed_at = {}
     svc._pending_placed_price = {}
@@ -143,6 +148,8 @@ def test_open_filled_entry_rejects_invalid_price():
 
 def _signal_service(max_positions=2, active_count=0, pending=0, has_position=False):
     svc = object.__new__(LiveTradingService)
+    svc._startup_reconciled = True
+    svc._exchange_state_known = True
     svc.config = SimpleNamespace(max_positions=max_positions)
     svc.executor = MagicMock()
     svc.position_manager = MagicMock()
